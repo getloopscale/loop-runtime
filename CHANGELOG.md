@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The `cli/` TypeScript CLI (`@loopzero/cli`) was extracted to the standalone repository `github.com/getloopscale/loopzero-cli` (`@loopzero/cli`) via `git filter-repo` (history preserved) and removed from this monorepo — M2 of the decomposition roadmap. The cli↔engine seam is now the OpenAPI contract frozen in M1.4; the engine-side consumer-drift guard (`api/internal/contract/cli_consumer_test.go`) skips gracefully now that `cli/src` is absent. Build/test wiring referencing `cli/` removed from `taskfiles/{test,dev}.yml` (`test:unit`, `test:coverage*`, `dead-code`, `jscpd`/`jscpd:strict`, `vuln-scan*`, `lint`) and `infra/scripts/ci/coverage-cli.sh` deleted. (M2 — plan m2-extract-loopzero-cli)
 - Multi-framework monorepo build ("30 frameworks") and the `loopzero-packs` Dockerfile generator — replaced by canonical Python/Node Dockerfiles. (simplify-deploy-loopzerokit-only v2.0)
 - BYO-Dockerfile build mode (`build: dockerfile` → user-supplied Dockerfile). The platform always builds from its canonical Dockerfile. (D4)
 - Static-frontend delivery (`type: frontend` + `render: static`, S3/CF-Worker path). Service shapes are `server`/`worker` only. (D5)

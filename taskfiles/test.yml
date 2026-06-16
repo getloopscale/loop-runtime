@@ -109,7 +109,6 @@ tasks:
       - cd operators && go test ./... -short
       - cd api && go test ./... -short
       - cd infra/tests && go test ./unit/... -short
-      - cd cli && npm test
 
   test:integration:
     desc: Run integration tests (requires running clusters)
@@ -158,12 +157,10 @@ tasks:
       - cd pkg && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
       - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
       - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
-      - cd cli && npm test -- --coverage 2>/dev/null || true
       - 'echo "Coverage reports generated:"'
       - echo "  pkg/coverage.html"
       - echo "  api/coverage.html"
       - echo "  operators/coverage.html"
-      - echo "  cli/coverage/"
 
   test:coverage:summary:
     desc: Show per-package coverage summary (no HTML)
@@ -323,9 +320,6 @@ tasks:
       - |
         echo "=== Go Operators ==="
         cd operators && deadcode -test ./... 2>&1 | grep "^internal/" || echo "(none)"
-      - |
-        echo "=== TypeScript CLI ==="
-        cd cli && npx knip --production --no-exit-code 2>&1 || echo "(knip not installed — run: cd cli && npm i -D knip)"
 
   dead-code:strict:
     desc: Dead code check that fails on new findings (CI gate)
@@ -405,31 +399,9 @@ tasks:
         fi
         echo "PASS: Dupl count ($TOTAL) within baseline ($BASELINE)"
 
-  jscpd:
-    desc: Detect duplicate code in TypeScript CLI (report only)
-    cmds:
-      - |
-        cd cli && npx --no-install jscpd src --min-tokens 50 --silent 2>&1 \
-          | grep -E "Found|exact clones" || echo "(no jscpd output)"
-
-  jscpd:strict:
-    desc: TypeScript duplicate-code check that fails on increases (CI gate)
-    cmds:
-      - |
-        # Quality-Gate Phase 3 — jscpd baseline tracker (CLI TS).
-        # Same rationale as dupl:strict — aggressive threshold + baseline-
-        # tracking until incremental refactors eliminate clones.
-        CLI_CLONES=$(cd cli && npx --no-install jscpd src --min-tokens 50 --silent 2>&1 \
-          | sed 's/\x1b\[[0-9;]*m//g' \
-          | grep -oP 'Found \K[0-9]+' || echo 0)
-        BASELINE=116  # Phase 3 baseline (raised from 112 after 76-commit upstream merge added 4 CLI clones — flagged for future decrement)
-        echo "jscpd CLI: clones=$CLI_CLONES Baseline=$BASELINE"
-        if [ "$CLI_CLONES" -gt "$BASELINE" ]; then
-          echo "FAIL: Clone count ($CLI_CLONES) exceeds baseline ($BASELINE)"
-          echo "New code duplication introduced in cli/. Run 'task jscpd' for details."
-          exit 1
-        fi
-        echo "PASS: Clone count ($CLI_CLONES) within baseline ($BASELINE)"
+  # jscpd / jscpd:strict (TypeScript CLI duplicate-code gates) removed 2026-06-16:
+  # the CLI was extracted to the standalone github.com/getloopscale/loopzero-cli repo
+  # (M2 of the decomposition roadmap), which carries its own knip/jscpd config.
 
   vuln-scan:
     desc: Vulnerability scan — govulncheck (Go) + npm audit (CLI)
@@ -450,9 +422,6 @@ tasks:
       - |
         echo "=== Go vulnerabilities (cloud) ==="
         cd cloud && govulncheck ./... 2>&1 | tail -5
-      - |
-        echo "=== npm vulnerabilities (cli) ==="
-        cd cli && npm audit --audit-level=moderate 2>&1 | tail -5
 
   vuln-scan:strict:
     desc: Vulnerability gate — fails on MEDIUM+ CVE in Go or CLI deps
@@ -473,11 +442,6 @@ tasks:
             FAIL=1
           fi
         done
-        if ! (cd cli && npm audit --audit-level=moderate 2>&1 | grep -q "found 0 vulnerabilities"); then
-          echo "FAIL: npm audit found vulnerability in cli/"
-          cd cli && npm audit --audit-level=moderate 2>&1 | tail -10
-          FAIL=1
-        fi
         if [ "$FAIL" -eq 1 ]; then
           exit 1
         fi
@@ -531,7 +495,6 @@ tasks:
         else
           echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
         fi
-      - cd cli && npx eslint src/
   validate:helm-deps:
     desc: |
       Run `helm dependency build` on every chart with file:// deps so
@@ -760,7 +723,6 @@ tasks:
         - task validate:helmfile-scripts (3 shell tests with mock-kubectl)
         - task validate:layered-bootstrap (aggregate offline)
         - go test ./infra/tests/load/ regression
-        - cd cli && npm test (CLI 1114 tests)
         - cd infra/pulumi && npx vitest run (Pulumi 75 tests)
     cmds:
       - task: lint
@@ -770,7 +732,6 @@ tasks:
       - task: validate:helmfile-scripts
       - task: validate:layered-bootstrap
       - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
-      - cd cli && npm test -- --silent 2>&1 | tail -3
       - cd infra/pulumi && npx vitest run 2>&1 | tail -3
       - echo "✓ All CHG-2026-04-28-LAYERED-BOOTSTRAP validations PASS"
 
@@ -1224,23 +1185,18 @@ tasks:
     cmds:
       - bash infra/scripts/ci/coverage-go.sh
 
-  test:coverage:cli:
-    desc: |
-      Run CLI (TS/JS) coverage via jest --coverage. Output: /tmp/cli-coverage.lcov.
-      Excludes node_modules.
-    cmds:
-      - bash infra/scripts/ci/coverage-cli.sh
+  # test:coverage:cli removed 2026-06-16 — the CLI was extracted to the standalone
+  # github.com/getloopscale/loopzero-cli repo (M2), which runs its own jest --coverage in CI.
 
   test:coverage:
     desc: |
-      Run both Go + CLI coverage + merge into unified lcov.
-      Output: /tmp/coverage-merged.lcov (consumable by codecov, diff-cover, etc).
-      Phase 2 gates (diff + baseline) consume this output.
+      Run Go coverage. Output: /tmp/coverage-merged.lcov (consumable by codecov,
+      diff-cover, etc). Phase 2 gates (diff + baseline) consume this output.
+      (CLI coverage moved to the standalone loopzero-cli repo — M2 decomposition.)
     cmds:
       - task: test:coverage:go
-      - task: test:coverage:cli
-      # T migrated to pure-Go gate (pkg/quality/coveragemerge) per plan 2026-05-23.
-      - cd cmd/loopzero-ops && go run . quality coverage-merge --go-profile /tmp/coverage.out --cli-lcov /tmp/cli-coverage.lcov --output /tmp/coverage-merged.lcov
+      # Go-only merge after CLI extraction (M2). Was: --cli-lcov /tmp/cli-coverage.lcov.
+      - cd cmd/loopzero-ops && go run . quality coverage-merge --go-profile /tmp/coverage.out --output /tmp/coverage-merged.lcov
 
   # ---------------------------------------------------------------------------
   # Helm chart render-time tests (Plan 2026-05-20 v1.2 T4.2)
