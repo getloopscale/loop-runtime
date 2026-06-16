@@ -77,8 +77,9 @@ START_EPOCH="$(date +%s)"
 # (engine API requires Authorization: Bearer JWT, NOT raw Kratos session cookie).
 JWT=""
 
+TMP_JWT=""
 mint_jwt() {
-  if [[ -n "$TMP_JWT" ]]; then echo "$TMP_JWT"; return 0; fi
+  if [[ -n "${TMP_JWT:-}" ]]; then echo "$TMP_JWT"; return 0; fi
   # CANONICAL 2026-06-15 dev-public LIVE: prefer HMAC session JWT (carries
   # tenant_id from active session; passes loopzero-cloud /engine proxy guard
   # per MEET-2026-04-07-039 B7). Bootstrap RSA JWT remains the fallback
@@ -163,8 +164,9 @@ seed_session() {
 project_create() {
   log "step 4/13 — POST /api/v1/projects {name: $PROJECT_NAME} (T4.1 auto-creates production env)"
 
+  # Canonical 2026-06-16: mint_jwt prints token to stdout; capture into $JWT.
   if [ -z "$JWT" ]; then
-    mint_jwt || return 1
+    JWT="$(mint_jwt)" || return 1
   fi
 
   local response
@@ -174,11 +176,16 @@ project_create() {
     --data "{\"name\":\"$PROJECT_NAME\"}" \
     "${PUBLIC_CLOUD_URL}/engine/api/v1/projects" 2>&1)" || true
 
-  if ! echo "$response" | grep -qE '"id"|"name"'; then
+  # Accept (a) successful create with "id"/"name" OR (b) idempotent already-exists
+  # 409 conflict (project already created by an earlier seed/connect chain).
+  if echo "$response" | grep -qE '"id"|"name"'; then
+    log "project_create OK"
+  elif echo "$response" | grep -qE 'PROJECT_EXISTS|already_exists|ALREADY_EXISTS|conflict'; then
+    log "project_create OK (idempotent — project '$PROJECT_NAME' already exists)"
+  else
     log "FAIL project_create: unexpected response: $response"
     return 1
   fi
-  log "project_create OK"
 }
 
 # --- Connect canonical fixture (step 5) ------------------------------------
