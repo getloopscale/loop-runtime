@@ -6,6 +6,9 @@
   "bin": {
     "loopzero": "./bin/loopzero"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "jest",
