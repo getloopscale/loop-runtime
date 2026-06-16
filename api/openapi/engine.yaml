@@ -55,7 +55,7 @@ paths:
           description: version info
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { $ref: "#/components/schemas/VersionResponse" }
 
   /api/v1/auth/whoami:
     get:
@@ -589,6 +589,16 @@ components:
     Health:
       type: object
       additionalProperties: true
+    VersionResponse:
+      type: object
+      additionalProperties: false
+      required: [version, commit, build_date, go_version, platform]
+      properties:
+        version:    { type: string }
+        commit:     { type: string }
+        build_date: { type: string }
+        go_version: { type: string }
+        platform:   { type: string }
     Project:
       type: object
       additionalProperties: true

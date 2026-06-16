@@ -88,3 +88,7 @@ paths:
           content:
             application/json:
               schema: { type: object, additionalProperties: true }
+        "404":
+          description: >
+            endpoint absent at the frozen OSS P0 — the client falls back to an
+            empty result (client.go Entities 404 fallback, plan D1).
