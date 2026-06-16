@@ -33,7 +33,16 @@ afterEach(() => {
 
 describe('getPlatformStatus — chart inventory pinning', () => {
   it('LOOPZERO_COMPONENTS only references charts that exist on disk', () => {
+    // M2 (plan m2-extract-loopzero-cli): this is a MONOREPO-coupling check — it reaches
+    // ../../../infra/helm, which exists only while the CLI is co-located in loopzero/.
+    // After extraction into the standalone loopzero-cli repo there is no infra/helm, so
+    // the on-disk assertion no-ops (the chart inventory is the engine repo's concern;
+    // the polyrepo seam is the OpenAPI contract, not the chart tree). When co-located
+    // (loopzero/ monorepo) the assertion runs as before.
     const helmDir = path.resolve(__dirname, '../../../infra/helm');
+    if (!fs.existsSync(helmDir)) {
+      return; // polyrepo (loopzero-cli standalone) — infra/helm not present
+    }
     for (const name of LOOPZERO_COMPONENTS) {
       const chartPath = path.join(helmDir, name);
       expect(fs.existsSync(chartPath)).toBe(true);
