@@ -19,7 +19,7 @@ import (
 // before allowing mutations. Returns HTTP 402 Payment Required when a
 // tenant has reached its per-metric cap.
 //
-// T1.9 of plans/2026-05-12-launch-readiness-waves-planpkg.md (v1.4).
+// T1.9 of plans/2026-05-12-launch-readiness-waves-plan.md (v1.4).
 //
 // Each protected route maps to a single metric:
 //

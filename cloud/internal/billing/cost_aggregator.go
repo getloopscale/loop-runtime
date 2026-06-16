@@ -14,7 +14,7 @@ import (
 	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
-// T1.9 of plans/2026-05-12-launch-readiness-waves-planpkg.md (v1.4).
+// T1.9 of plans/2026-05-12-launch-readiness-waves-plan.md (v1.4).
 //
 // CostAggregator runs every 5 minutes (per plan), reads Prometheus counters
 // for the three cost metrics, and UPSERTs `cost_counters` rows. The

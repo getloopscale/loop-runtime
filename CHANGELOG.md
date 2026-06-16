@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `pkg/plan` — new package holding the cost/plan value vocabulary (`Plan`, `CostMetric`, `CostCounter`, `CapFor`, `Unlimited`, `ExceededError`, `ProjectStatus`, `CurrentPeriod`) extracted from `pkg/enforcement`. It is the contracts-bound surface (M3 `loopzero-contracts/plan` target) with zero engine-internal dependencies. Cap-enforcement logic (`CapChecker`, `CostStore`) and the `statemachine`→`ProjectStatus` mapper stay in `pkg/enforcement` (ISP). `enforcement` re-exports the vocabulary via transitional aliases so existing call-sites stay green. (M1.2/M1.3 — plan m1-decouple-in-place; ADR D3)
+- `pkg/plan` — new package holding the cost/plan value vocabulary (`Plan`, `CostMetric`, `CostCounter`, `CapFor`, `Unlimited`, `ExceededError`, `ProjectStatus`, `CurrentPeriod`) extracted from `pkg/enforcement`. It is the contracts-bound surface (M3 `loopzero-contracts/plan` target) with zero engine-internal dependencies. Cap-enforcement logic (`CapChecker`, `CostStore`) and the `statemachine`→`ProjectStatus` mapper stay in `pkg/enforcement` (ISP). All external consumers import `pkg/plan` directly; `enforcement` keeps the vocabulary as type aliases for its own internal shorthand. (M1.2/M1.3 — plan m1-decouple-in-place; ADR D3)
 
 ### Changed
 

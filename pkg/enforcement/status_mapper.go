@@ -17,7 +17,9 @@ import (
 // ProjectStatus is the dashboard-facing deploy-status enum. M1.2/M1.3: the
 // enum moved to pkg/plan (value vocabulary); the MAPPING below stays
 // engine-side because it imports pkg/statemachine, which must NEVER reach the
-// contracts surface (plan m1-decouple-in-place D3). Aliases are transitional.
+// contracts surface (plan m1-decouple-in-place D3). The aliases are retained as
+// enforcement-internal shorthand (external consumers import plan.ProjectStatus*
+// directly); not a re-export path (v1.2 amendment).
 type ProjectStatus = plan.ProjectStatus
 
 const (

@@ -147,7 +147,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.AdminPinner != nil {
 		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner))
 	}
-	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-planpkg.md:
+	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. The handler
 	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
@@ -230,7 +230,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Distinct from buildEnforcement (rate-style builds/month).
 			buildCostGate := cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
 
-			// D5 of plan 2026-06-07-preview-as-category-single-slot-planpkg.md
+			// D5 of plan 2026-06-07-preview-as-category-single-slot-plan.md
 			// (Bug A fix): CountPermanentEnvironments filters by
 			// `kind = 'permanent'` so previews (single-slot model via
 			// preview_slot table) NEVER count against

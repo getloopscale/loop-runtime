@@ -10,8 +10,9 @@ import (
 )
 
 // CurrentPeriod returns the start and end of the current calendar month (UTC).
-// M1.2: moved to pkg/plan (value vocabulary); re-exported here transitionally
-// (plan m1-decouple-in-place D4).
+// M1.2 (v1.2 amendment): moved to pkg/plan (value vocabulary); retained here as
+// enforcement-internal shorthand — external consumers import plan.CurrentPeriod
+// directly (plan m1-decouple-in-place D4).
 var CurrentPeriod = plan.CurrentPeriod
 
 // formatPeriodImpl is the helper invoked by formatPeriod() in cost_cap.go.
