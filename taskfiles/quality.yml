@@ -122,10 +122,18 @@ tasks:
       - npm run build
       - npm run size
 
+  contract:
+    desc: >
+      Consumer-driven contract gates (M1.4 — plan m1-4-openapi-contract-tests):
+      engine OpenAPI spec conformance + cli<->engine + cloud<->loopzero-data.
+    cmds:
+      - cd api && go test ./internal/contract/...
+      - cd cloud && go test ./internal/themory/...
+
   all:
-    desc: Standard quality suite — hermetic tests + full-scan gates
-    deps: [hermetic, gates]
+    desc: Standard quality suite — hermetic tests + full-scan gates + contract
+    deps: [hermetic, gates, contract]
 
   all-with-frontend:
     desc: Full quality suite including frontend bundle gate (slower; for pre-release)
-    deps: [hermetic, gates, dashboard-bundle]
+    deps: [hermetic, gates, contract, dashboard-bundle]
