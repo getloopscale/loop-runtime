@@ -94,8 +94,8 @@ WRAPPERS=(
   "infra/scripts/local/dogfood-secrets-openbao.sh"   # J-22 OpenBao Transit
   "infra/scripts/local/dogfood-preview.sh"           # J-23
   "infra/scripts/local/dogfood-live-url.sh"          # J-25
+  "infra/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
-  #   J-01 dogfood-login-polish.sh
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh
   #   J-06 dogfood-overview.sh

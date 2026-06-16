@@ -877,6 +877,22 @@ tasks:
     cmds:
       - bash infra/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
 
+  test:dogfood:login:
+    desc: |
+      T5.2 of plan 2026-06-16-m0-j01-login-polish v1.1 SHIPPABLE 100.0 —
+      aggregate dogfood wrapper for J-01 Login polish (M0 Plan A v0.19.0).
+      Suite 0 pre-flight gates (per ADR D5):
+        - patch-kratos --check-only (read-only Cleanroom-survival gate, EC-9)
+        - Hydra OAuth clients probe ≥ 3 clients
+      Suites:
+        1. T4.4 hermetic syntax (19 assertions)
+        2. vitest J-01 (error-mapper + return-to + safe-redirect + 3 components, 46+ specs)
+        3. T4.2 LIVE bash dev-public scenarios A-E (OPERATOR HARD STOP)
+        4. Playwright OAuth denial (SKIP when no chromium)
+      Flags: --hermetic-only --live-only --skip-playwright --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
+
   test:dogfood:domains:
     desc: |
       T5.2 of plan 2026-06-06-dashboard-journey-j11-domains v1.1 SHIPPABLE
