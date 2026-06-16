@@ -145,14 +145,61 @@ sign() {
 }
 
 read_counter() {
+  # CANONICAL FIX 2026-06-16: loopzero-api runs multi-replica (replicaCount=2 per
+  # infra/helm/loopzero-api/values.yaml — chaos C01 hardening). svc/loopzero-api
+  # round-robins ClusterIP, so a single /metrics scrape sees the counter
+  # from ONE pod. Before/after delta becomes incoherent (POST hits pod A,
+  # post-scrape may hit pod B). Canonical Prometheus pattern: scrape each
+  # pod IP + sum. Kubernetes monitoring stack does this via PodMonitor;
+  # here we enumerate pods directly via kubectl, port-forward each pod's
+  # metrics port, and sum the counter values.
   local event_type="$1" status="$2"
-  curl -fsS --max-time 5 "$METRICS_URL" 2>/dev/null \
-    | awk -v ev="$event_type" -v st="$status" '
-        $0 ~ "^loopzero_github_webhook_deliveries_total\\{" && $0 ~ "event_type=\""ev"\"" && $0 ~ "status=\""st"\"" {
-          print $NF; found=1; exit
-        }
-        END { if (!found) print "0" }
-      '
+  local total=0
+  local pods
+  pods=$(kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system \
+    get pods -l app=loopzero-api -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+  if [[ -z "$pods" ]]; then
+    # Fallback to svc-level scrape if pod enum fails — preserves prior
+    # behavior + emits the SAME race observed by the original tests.
+    curl -fsS --max-time 5 "$METRICS_URL" 2>/dev/null \
+      | awk -v ev="$event_type" -v st="$status" '
+          $0 ~ "^loopzero_github_webhook_deliveries_total\\{" && $0 ~ "event_type=\""ev"\"" && $0 ~ "status=\""st"\"" {
+            print $NF; found=1; exit
+          }
+          END { if (!found) print "0" }
+        '
+    return
+  fi
+  local pod
+  for pod in $pods; do
+    # Per-pod port-forward to avoid svc round-robin. Use a high random
+    # local port to avoid colliding with METRICS_LOCAL_PORT.
+    local pport=$((20000 + RANDOM % 10000))
+    kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system \
+      port-forward "pod/${pod}" "${pport}:9090" >/dev/null 2>&1 &
+    local pid=$!
+    local ready=0
+    for _ in 1 2 3 4 5; do
+      if curl -fsS --max-time 1 -o /dev/null "http://localhost:${pport}/metrics" 2>/dev/null; then
+        ready=1; break
+      fi
+      sleep 0.5
+    done
+    if [[ $ready -eq 1 ]]; then
+      local val
+      val=$(curl -fsS --max-time 5 "http://localhost:${pport}/metrics" 2>/dev/null \
+        | awk -v ev="$event_type" -v st="$status" '
+            $0 ~ "^loopzero_github_webhook_deliveries_total\\{" && $0 ~ "event_type=\""ev"\"" && $0 ~ "status=\""st"\"" {
+              print $NF; found=1; exit
+            }
+            END { if (!found) print "0" }
+          ')
+      total=$(awk -v a="$total" -v b="${val:-0}" 'BEGIN{print a+b}')
+    fi
+    kill $pid 2>/dev/null || true
+    wait $pid 2>/dev/null || true
+  done
+  printf '%s\n' "$total"
 }
 
 scenario_A_accepted_push() {
