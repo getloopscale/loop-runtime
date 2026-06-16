@@ -77,10 +77,20 @@ if [[ "$HERMETIC_ONLY" -ne 1 ]]; then
   else
     record "T5.3-patch-kratos-check-only" "PASS" "skipped — script unavailable in this env"
   fi
-  # T5.4 — Hydra OAuth clients probe.
+  # T5.4 — Hydra OAuth clients probe. Canonical 2026-06-16: spawn the
+  # Hydra admin port-forward inline (the wrapper cannot assume an operator
+  # already opened it). Cleanup via trap on Suite-0 exit.
   HYDRA_ADMIN_LOCAL="${HYDRA_ADMIN_LOCAL:-http://localhost:14445}"
+  HYDRA_PF=""
+  if ! curl -sS --max-time 1 "$HYDRA_ADMIN_LOCAL/health/alive" >/dev/null 2>&1; then
+    kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" -n "${HYDRA_NAMESPACE:-loopzero-auth}" \
+      port-forward svc/ory-hydra-admin 14445:4445 >/dev/null 2>&1 &
+    HYDRA_PF=$!
+    sleep 2
+  fi
   CLIENT_COUNT=$(curl -sS --max-time 5 "$HYDRA_ADMIN_LOCAL/admin/clients?limit=10" 2>/dev/null \
     | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d) if isinstance(d,list) else 0)" 2>/dev/null || echo 0)
+  [[ -n "$HYDRA_PF" ]] && kill "$HYDRA_PF" 2>/dev/null || true
   if [[ "$CLIENT_COUNT" -ge 3 ]]; then
     record "T5.4-hydra-clients" "PASS" "$CLIENT_COUNT clients live"
   else

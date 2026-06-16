@@ -129,13 +129,17 @@ for n in d.get('ui',{}).get('nodes',[]):
     return
   fi
   # POST without following — assert 303 with github.com Location.
-  local resp_code resp_loc
-  resp_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+  # Canonical 2026-06-16: single POST captures both code + Location via
+  # -D <hdrfile> -w %{http_code}. The earlier two-POST pattern consumed the
+  # Kratos flow on the first call, leaving the second POST with no flow
+  # state -> empty Location -> FAIL even when redirect was canonical.
+  local resp_code resp_loc hdrf
+  hdrf=$(mktemp /tmp/j01-hdr.XXXXXX)
+  resp_code=$(curl -sS -o /dev/null -D "$hdrf" -w '%{http_code}' --max-time 10 \
     -b /tmp/j01-cookies.txt \
     -X POST -d "csrf_token=$csrf&method=oidc&provider=github" "$action") || resp_code=000
-  resp_loc=$(curl -sSI --max-time 10 \
-    -b /tmp/j01-cookies.txt \
-    -X POST -d "csrf_token=$csrf&method=oidc&provider=github" "$action" | awk 'tolower($1)=="location:"{print $2; exit}' | tr -d '\r')
+  resp_loc=$(awk 'tolower($1)=="location:"{print $2; exit}' "$hdrf" | tr -d '\r')
+  rm -f "$hdrf"
   if [[ "$resp_code" == "303" || "$resp_code" == "302" ]] && [[ "$resp_loc" == *"github.com"* ]]; then
     record "A_github_oidc_redirect" "PASS" "redirect to $resp_loc"
   else
@@ -165,13 +169,14 @@ for n in d.get('ui',{}).get('nodes',[]):
     record "B_google_oidc_redirect" "FAIL" "missing action or csrf"
     return
   fi
-  local resp_code resp_loc
-  resp_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+  # Canonical 2026-06-16: same single-POST pattern as Scenario A.
+  local resp_code resp_loc hdrf
+  hdrf=$(mktemp /tmp/j01-hdr.XXXXXX)
+  resp_code=$(curl -sS -o /dev/null -D "$hdrf" -w '%{http_code}' --max-time 10 \
     -b /tmp/j01-cookies.txt \
     -X POST -d "csrf_token=$csrf&method=oidc&provider=google" "$action") || resp_code=000
-  resp_loc=$(curl -sSI --max-time 10 \
-    -b /tmp/j01-cookies.txt \
-    -X POST -d "csrf_token=$csrf&method=oidc&provider=google" "$action" | awk 'tolower($1)=="location:"{print $2; exit}' | tr -d '\r')
+  resp_loc=$(awk 'tolower($1)=="location:"{print $2; exit}' "$hdrf" | tr -d '\r')
+  rm -f "$hdrf"
   if [[ "$resp_code" == "303" || "$resp_code" == "302" ]] && [[ "$resp_loc" == *"google.com"* || "$resp_loc" == *"accounts.google"* ]]; then
     record "B_google_oidc_redirect" "PASS" "redirect to $resp_loc"
   else
