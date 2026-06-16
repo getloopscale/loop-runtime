@@ -161,13 +161,24 @@ preflight() {
 TMP_JWT=""
 mint_jwt() {
   if [[ -n "$TMP_JWT" ]]; then echo "$TMP_JWT"; return 0; fi
+  # CANONICAL 2026-06-15 dev-public LIVE: prefer HMAC session JWT (carries
+  # tenant_id from active session; passes loopzero-cloud /engine proxy guard
+  # per MEET-2026-04-07-039 B7). Bootstrap RSA JWT remains the fallback
+  # for engine-direct (localhost:13001) but lacks tenant_id claim so the
+  # /engine/* proxy rejects it.
+  if [[ -f "$HOME/.loopzero/local-dogfood-session-jwt.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-session-jwt.txt")
+    echo "$TMP_JWT"
+    return 0
+  fi
   # Local dogfood path: reuse the seeded token file when available
   if [[ -f "$HOME/.loopzero/local-dogfood-token.txt" ]]; then
     TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-token.txt")
     echo "$TMP_JWT"
     return 0
   fi
-  printf 'ABORT: no JWT available; run seed-local-user.sh or set TMP_JWT\n' >&2
+  printf 'ABORT: no JWT available; run seed-admin-loopzero-dev.sh + seed-local-user.sh
+' >&2
   return 1
 }
 
@@ -244,7 +255,10 @@ scenario_b() {
     assert "Content-Type is text/event-stream" 0
   fi
   # The stream should yield at least one event (any type) before the
-  # timeout. Empty body in 15s = Caddy/BFF buffering bug.
+  # timeout. Empty body in ${TIMEOUT_SSE}s with HTTP 200 indicates either
+  # (a) Caddy/BFF buffering bug OR (b) no real builds emitting events.
+  # Both are CORRECTLY FAIL — the test asserts the real event flow,
+  # not just the wire shape.
   if [[ -s "$sse_tmp" ]] && grep -qE '^event:|^data:' "$sse_tmp"; then
     assert "at least one SSE event arrives within ${TIMEOUT_SSE}s" 1
   else

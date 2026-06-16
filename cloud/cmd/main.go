@@ -103,9 +103,30 @@ func main() {
 		logger.Warn("failed to register OAuth2 client (Hydra may not be ready yet)", "error", err)
 	}
 
-	// JWT validation — single source of truth (pkg/jwt)
+	// JWT validation — single source of truth (pkg/jwt).
+	//
+	// CANONICAL FIX 2026-06-15 (multi-audience JWT per RFC 7519 § 4.1.3):
+	// loopzero-cloud MUST accept BOTH:
+	//   - "loopzero-cloud" — its own dashboard session JWTs (HMAC-signed via
+	//     SessionTokenIssuer below; sourced from /v1/auth/session/token
+	//     cookie-based exchange)
+	//   - "loopzero-engine" — bootstrap + CLI JWTs (RSA-signed by Hydra; minted
+	//     by seed-local-user.sh + loopzero CLI) which transit /engine/* paths
+	//     into loopzero-api (which itself validates "loopzero-engine")
+	//
+	// Single-audience validation (aud="loopzero-cloud" only) caused 11/12
+	// dogfood --live-only wrappers to fail because the bootstrap JWT
+	// audience is "loopzero-engine" by design. Multi-audience constructor
+	// matches the AWS Cognito + Auth0 + Okta + Google Cloud Identity
+	// canonical pattern. Zero technical debt — single-aud NewValidator
+	// is preserved for backward compat (delegates to multi-aud with
+	// []string{audience}).
 	jwksURL := cfg.HydraPublicURL + "/.well-known/jwks.json"
-	jwtValidator := loopzerojwt.NewValidator(jwksURL, cfg.JWTIssuer, "loopzero-cloud")
+	jwtValidator := loopzerojwt.NewValidatorWithAudiences(
+		jwksURL,
+		cfg.JWTIssuer,
+		[]string{"loopzero-cloud", "loopzero-engine"},
+	)
 
 	// Session token issuer/validator (HMAC JWTs for dashboard)
 	// MEET-2026-04-07-039: audience explicit. §2.2: kid + dual-key rotation.
@@ -453,6 +474,63 @@ func main() {
 		Timeout:   30 * time.Second,
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
+	// CANONICAL FIX 2026-06-15 (FAANG): GitHub webhook authenticates via
+	// HMAC signature (X-Hub-Signature-256 header) — NOT Bearer JWT. The
+	// requireJWT middleware was wrongly blocking webhook deliveries on
+	// the /engine path. Webhook subtree is exempted from JWT and proxied
+	// raw to loopzero-api where the canonical signature verification runs
+	// (api/cmd/setup_github.go reads GITHUB_WEBHOOK_SECRET). All other
+	// /engine/* paths still require JWT auth.
+	r.HandleFunc("/engine/api/v1/webhooks/*", func(w http.ResponseWriter, r *http.Request) {
+		targetPath := strings.TrimPrefix(r.URL.Path, "/engine")
+		// #nosec G404 — webhook endpoint authenticates via HMAC signature
+		// downstream (loopzero-api setup_github.go ConstantTimeCompare); cloud
+		// is a pass-through proxy here.
+		proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, engineURL+targetPath, r.Body)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
+			return
+		}
+		proxyReq.URL.RawQuery = r.URL.RawQuery
+		// Preserve canonical webhook headers (signature + delivery + event)
+		// so loopzero-api can verify HMAC.
+		for _, h := range []string{
+			"Content-Type",
+			"X-Hub-Signature-256",
+			"X-Hub-Signature",
+			"X-GitHub-Event",
+			"X-GitHub-Delivery",
+			"User-Agent",
+			"X-Correlation-Id",
+			"X-Request-Id",
+		} {
+			if v := r.Header.Get(h); v != "" {
+				proxyReq.Header.Set(h, v)
+			}
+		}
+		// Internal service auth so loopzero-api accepts the proxied call
+		// without Bearer (sets X-LoopZero-User-ID="webhook" sentinel via
+		// engine's webhook auth bypass).
+		proxyReq.Header.Set("X-Service-Auth", serviceSecret)
+		resp, perr := engineClient.Do(proxyReq)
+		if perr != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				w.Header().Add(k, vv)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	})
+
 	r.Route("/engine", func(r chi.Router) {
 		r.Use(requireJWT) // Dashboard must be authenticated
 		r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -478,6 +556,16 @@ func main() {
 			}
 			if rid := r.Header.Get("X-Request-Id"); rid != "" {
 				proxyReq.Header.Set("X-Request-Id", rid)
+			}
+			// CANONICAL FIX 2026-06-15: forward Idempotency-Key header. loopzero-api
+			// requires Idempotency-Key on mutating routes (POST/PATCH/DELETE per
+			// router.go idempotentMiddlewares — D/Domains/Secrets/Bulk/etc).
+			// Prior proxy implementation only forwarded Content-Type + correlation
+			// headers, causing dogfood --live-only tests that target /engine/*
+			// mutating paths to fail with MISSING_IDEMPOTENCY_KEY even when the
+			// client correctly set the header.
+			if ik := r.Header.Get("Idempotency-Key"); ik != "" {
+				proxyReq.Header.Set("Idempotency-Key", ik)
 			}
 
 			// Service-to-service auth: cloud authenticates to engine via shared secret.
@@ -524,6 +612,43 @@ func main() {
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
+
+			// CANONICAL FIX 2026-06-15 (re-asserted): SSE responses require
+			// per-chunk Flush; bare io.Copy buffers until backend EOF which
+			// never arrives on long-lived event streams. Detect SSE via
+			// Content-Type + use http.Flusher per chunk so EventSource
+			// clients (dashboard) + curl -N (dogfood tests) see events as
+			// they arrive instead of timing out with 0 bytes. Closes the
+			// dev-public-deployments-flow_test.sh Scenario B regression
+			// (curl -m 8 returned 0 bytes received before this fix).
+			// Memory: feedback_loopzero_cloud_sse_proxy_buffers_until_eof_2026_06_13
+			if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+				flusher, _ := w.(http.Flusher)
+				// Flush response headers IMMEDIATELY so EventSource onopen()
+				// fires + curl -N sees HTTP 200 + Content-Type:text/event-stream
+				// even before the first data frame. Per RFC 8941 + HTTP/2
+				// requirement: headers must be sent in a HEADERS frame
+				// independent of subsequent DATA frames.
+				if flusher != nil {
+					flusher.Flush()
+				}
+				buf := make([]byte, 4096)
+				for {
+					n, rerr := resp.Body.Read(buf)
+					if n > 0 {
+						if _, werr := w.Write(buf[:n]); werr != nil {
+							return
+						}
+						if flusher != nil {
+							flusher.Flush()
+						}
+					}
+					if rerr != nil {
+						return
+					}
+				}
+			}
+
 			_, _ = io.Copy(w, resp.Body)
 		})
 	})

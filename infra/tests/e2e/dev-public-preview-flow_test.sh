@@ -44,8 +44,8 @@
 
 set -euo pipefail
 
-CLOUD_URL="${CLOUD_URL:-http://localhost:13001}"
-API_PREFIX="${API_PREFIX:-}"
+CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
+API_PREFIX="${API_PREFIX:-/engine}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 PREVIEW_PUBLIC_DOMAIN="${PREVIEW_PUBLIC_DOMAIN:-preview-dev.loopzero.example}"
 MGMT_CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
@@ -136,9 +136,15 @@ scenario_B() {
     return
   fi
   local rbac
+  # Canonical SA name 2026-05-04 4-binary operator split (ADR-0023) is
+  # `loopzero-tenant-operator` (NOT `tenant-operator` — that was the legacy
+  # monolith name pre-split). The preview-operator binary owns the
+  # PreviewEnvironment CR per the same ADR; tenant-operator still
+  # needs LIST access for cross-CR consistency checks at the parent
+  # Tenant reconcile boundary.
   rbac=$(kubectl --context "$MGMT_CTX" auth can-i list previewenvironments.loopzero.io \
-    --as=system:serviceaccount:loopzero-system:tenant-operator 2>/dev/null || true)
-  assert "tenant-operator SA can list previewenvironments.loopzero.io" "$([ "$rbac" = "yes" ] && echo 1 || echo 0)"
+    --as=system:serviceaccount:loopzero-system:loopzero-tenant-operator 2>/dev/null || true)
+  assert "loopzero-tenant-operator SA can list previewenvironments.loopzero.io" "$([ "$rbac" = "yes" ] && echo 1 || echo 0)"
 }
 
 # Scenario C — SA `loopzero-app` on canonical preview namespace (#67)

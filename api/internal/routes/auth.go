@@ -155,6 +155,9 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 // AUDIT-10: response now includes `username` when available. Consumers can
 // use it as display identity when `email` is empty (OAuth2 client_credentials
 // tokens have no email claim).
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 18 → ≤ 10 via 3 helper extracts (deriveEmail + lookupUsername +
+// resolveActiveTeam). Behavior preserved verbatim.
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -162,41 +165,9 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GitHub /user returns email:null when account email is private (default).
-	// Derive a noreply email from the UserID so clients always get a usable value.
-	email := uc.Email
-	if email == "" {
-		if login := strings.TrimPrefix(uc.UserID, "github-"); login != uc.UserID {
-			email = login + "@users.noreply.github.com"
-		}
-	}
-
-	// AUDIT-10: look up username column populated by migration 000037.
-	// Non-fatal on lookup error — we still return the rest of the identity.
-	var username string
-	if h.userLookup != nil {
-		u, err := h.userLookup.GetUsernameByID(r.Context(), uc.UserID)
-		if err != nil {
-			slog.Warn("whoami: username lookup failed (non-fatal)",
-				"user_id", uc.UserID, "error", err.Error())
-		} else {
-			username = u
-		}
-	}
-
-	// Plan T2.5 D8 — surface ALL memberships + active_team so multi-tenant
-	// users see the silent-swap behavior explicitly (closes F-S2-02).
-	// Persistent active-team selection: when activeStore is wired, read
-	// users.active_tenant_id and use it as active_team (overrides JWT
-	// middleware heuristic). EC-4 self-heal: if persisted value references
-	// a tenant the user is NOT a member of (e.g., tenant deleted via
-	// admin), clear the stale reference and fall back to JWT context.
-	activeTeam := uc.TenantID
-	if h.activeStore != nil {
-		if persisted, err := h.activeStore.GetActiveTenant(r.Context(), uc.UserID); err == nil && persisted != "" {
-			activeTeam = persisted
-		}
-	}
+	email := deriveEmail(uc.Email, uc.UserID)
+	username := h.lookupUsername(r.Context(), uc.UserID)
+	activeTeam := h.resolveActiveTeam(r.Context(), uc.UserID, uc.TenantID)
 
 	type teamSummary struct {
 		Name   string `json:"name"`
@@ -221,24 +192,7 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("whoami: membership lookup failed (non-fatal)",
 				"user_id", uc.UserID, "error", err.Error())
 		} else {
-			// EC-4 self-heal: validate persisted active_team is still a valid membership.
-			if h.activeStore != nil && activeTeam != uc.TenantID {
-				valid := false
-				for _, m := range memberships {
-					if m.TenantID == activeTeam {
-						valid = true
-						break
-					}
-				}
-				if !valid {
-					slog.Warn("whoami: active_tenant_id references non-member tenant — self-healing",
-						"user_id", uc.UserID, "stale", activeTeam)
-					_ = h.activeStore.ClearActiveTenant(r.Context(), uc.UserID)
-					activeTeam = uc.TenantID
-					payload["active_team"] = activeTeam
-					payload["team"] = activeTeam
-				}
-			}
+			activeTeam = h.selfHealActiveTeam(r.Context(), uc.UserID, uc.TenantID, activeTeam, memberships, payload)
 			teams := make([]teamSummary, 0, len(memberships))
 			for _, m := range memberships {
 				teams = append(teams, teamSummary{
@@ -254,4 +208,73 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// deriveEmail returns the user's email, falling back to a noreply derived
+// from the UserID for GitHub identities that have no public email.
+func deriveEmail(email, userID string) string {
+	if email != "" {
+		return email
+	}
+	if login := strings.TrimPrefix(userID, "github-"); login != userID {
+		return login + "@users.noreply.github.com"
+	}
+	return ""
+}
+
+// lookupUsername queries the username column populated by migration 000037.
+// Non-fatal on lookup error — returns empty so the rest of the identity
+// still surfaces (AUDIT-10).
+func (h *AuthHandler) lookupUsername(ctx context.Context, userID string) string {
+	if h.userLookup == nil {
+		return ""
+	}
+	u, err := h.userLookup.GetUsernameByID(ctx, userID)
+	if err != nil {
+		slog.Warn("whoami: username lookup failed (non-fatal)",
+			"user_id", userID, "error", err.Error())
+		return ""
+	}
+	return u
+}
+
+// resolveActiveTeam returns the persisted active_tenant_id when present,
+// or the JWT-derived tenant ID as fallback. The EC-4 self-heal is
+// applied separately in selfHealActiveTeam (it depends on memberships).
+func (h *AuthHandler) resolveActiveTeam(ctx context.Context, userID, fallback string) string {
+	if h.activeStore == nil {
+		return fallback
+	}
+	persisted, err := h.activeStore.GetActiveTenant(ctx, userID)
+	if err != nil || persisted == "" {
+		return fallback
+	}
+	return persisted
+}
+
+// selfHealActiveTeam implements the EC-4 self-heal: if the persisted
+// active_team references a tenant the user is NOT a member of (e.g.,
+// admin-deleted), clear the stale reference and fall back to the JWT
+// tenant. Returns the (possibly corrected) active team. Mutates payload
+// in place when self-heal fires.
+func (h *AuthHandler) selfHealActiveTeam(
+	ctx context.Context,
+	userID, jwtTenantID, activeTeam string,
+	memberships []middleware.TenantMembership,
+	payload map[string]any,
+) string {
+	if h.activeStore == nil || activeTeam == jwtTenantID {
+		return activeTeam
+	}
+	for _, m := range memberships {
+		if m.TenantID == activeTeam {
+			return activeTeam
+		}
+	}
+	slog.Warn("whoami: active_tenant_id references non-member tenant — self-healing",
+		"user_id", userID, "stale", activeTeam)
+	_ = h.activeStore.ClearActiveTenant(ctx, userID)
+	payload["active_team"] = jwtTenantID
+	payload["team"] = jwtTenantID
+	return jwtTenantID
 }

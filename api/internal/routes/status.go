@@ -182,6 +182,10 @@ type statusResponse struct {
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.
+//
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 22 → ≤ 12 via 3 helper extracts (findLastBuild + buildActiveRelease +
+// computeScalingInfo). Behavior preserved verbatim.
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -195,18 +199,11 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Backend defaults env to "production" so dashboard / CLI consumers
-	// can call /projects/{name}/status without remembering the canonical
-	// environment name. Callers querying preview / staging MUST pass
-	// ?env=<name> explicitly. The URL still answers the question
-	// "what's the live status of this project?" -- which in almost every
-	// deploy in the platform means production.
 	env := r.URL.Query().Get("env")
 	if env == "" {
 		env = "production"
 	}
 
-	// Look up project by name to get projectID
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
@@ -223,70 +220,26 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		SyncStatus:  "unknown",
 	}
 
-	// Get last build for this project+env.
-	// Builds use the project NAME (from CLI) as project_id, not the internal UUID.
-	// This is a known inconsistency — builds are keyed by name, projects table by UUID.
 	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, name, 50, 0)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	// Filter by environment and take the first match (already sorted by created_at DESC)
-	for i := range builds {
-		if builds[i].Environment == env {
-			b := builds[i]
-			lb := &lastBuildResponse{
-				ID:        b.ID,
-				Status:    b.Status,
-				CommitSHA: b.CommitSHA,
-				CreatedAt: b.CreatedAt.UTC().Format(time.RFC3339),
-				Error:     b.ErrorMessage,
-			}
-			if b.FinishedAt != nil {
-				lb.FinishedAt = b.FinishedAt.UTC().Format(time.RFC3339)
-			}
-			if b.DurationSeconds != nil {
-				lb.DurationSeconds = *b.DurationSeconds
-			}
-			resp.LastBuild = lb
-			break
-		}
-	}
+	resp.LastBuild = findLastBuildForEnv(builds, env)
 
-	// Get active release — uses project name (consistent with build records)
 	release, err := h.releases.GetActiveByEnv(r.Context(), uc.TenantID, name, env)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if release != nil {
-		resp.ActiveRelease = &activeReleaseResponse{
-			ID:        release.ID,
-			BuildID:   release.BuildID,
-			Status:    release.Status,
-			GitCommit: release.GitCommit,
-			CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),
-		}
+		resp.ActiveRelease = buildActiveReleaseResponse(release)
 		resp.SyncStatus = "synced"
 	}
 
-	// Scaling info — extracted from the last build's app spec.
-	// Uses configured min/max replicas. Actual replica count requires K8s API (future).
 	if resp.LastBuild != nil {
-		for i := range builds {
-			if builds[i].Environment == env && builds[i].Scaling != nil {
-				s := builds[i].Scaling
-				replicas := s.MinReplicas
-				resp.Scaling = &scalingStatusResponse{
-					Replicas:     replicas,
-					Min:          s.MinReplicas,
-					Max:          s.MaxReplicas,
-					ScaledToZero: s.MinReplicas == 0 && s.MaxReplicas > 0,
-				}
-				break
-			}
-		}
+		resp.Scaling = findScalingForEnv(builds, env)
 	}
 
 	// Build URL — FAANG canonical (J-25 sponsor walkthrough catch 2026-06-12).
@@ -337,4 +290,65 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// findLastBuildForEnv returns the most recent build for `env`, formatted
+// as a *lastBuildResponse. Returns nil when no matching build exists.
+// Builds use the project NAME (from CLI) as project_id, not the internal
+// UUID — known inconsistency: builds are keyed by name, projects table
+// by UUID.
+func findLastBuildForEnv(builds []StatusBuild, env string) *lastBuildResponse {
+	for i := range builds {
+		if builds[i].Environment != env {
+			continue
+		}
+		b := builds[i]
+		lb := &lastBuildResponse{
+			ID:        b.ID,
+			Status:    b.Status,
+			CommitSHA: b.CommitSHA,
+			CreatedAt: b.CreatedAt.UTC().Format(time.RFC3339),
+			Error:     b.ErrorMessage,
+		}
+		if b.FinishedAt != nil {
+			lb.FinishedAt = b.FinishedAt.UTC().Format(time.RFC3339)
+		}
+		if b.DurationSeconds != nil {
+			lb.DurationSeconds = *b.DurationSeconds
+		}
+		return lb
+	}
+	return nil
+}
+
+// buildActiveReleaseResponse converts the domain release record to the
+// canonical response shape.
+func buildActiveReleaseResponse(release *StatusRelease) *activeReleaseResponse {
+	return &activeReleaseResponse{
+		ID:        release.ID,
+		BuildID:   release.BuildID,
+		Status:    release.Status,
+		GitCommit: release.GitCommit,
+		CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+// findScalingForEnv extracts scaling info from the last build's app spec
+// matching `env`. Returns nil when no env-matching build with non-nil
+// Scaling exists. Uses configured min/max replicas — actual replica
+// count requires K8s API (future).
+func findScalingForEnv(builds []StatusBuild, env string) *scalingStatusResponse {
+	for i := range builds {
+		if builds[i].Environment != env || builds[i].Scaling == nil {
+			continue
+		}
+		s := builds[i].Scaling
+		return &scalingStatusResponse{
+			Replicas:     s.MinReplicas,
+			Min:          s.MinReplicas,
+			Max:          s.MaxReplicas,
+			ScaledToZero: s.MinReplicas == 0 && s.MaxReplicas > 0,
+		}
+	}
+	return nil
 }

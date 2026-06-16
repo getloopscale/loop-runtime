@@ -190,6 +190,50 @@ spec:
                   name: vault-spki-pin
                   key: LOOPZERO_VAULT_SPKI_PIN
                   optional: true
+            # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): api/internal/
+            # config/config.go:429 reads env var `OPENBAO_SPKI_PIN_SHA256`
+            # (NOT `LOOPZERO_VAULT_SPKI_PIN`). The pin Secret created by
+            # vault-bootstrap-dev.sh Step 10b is canonical-named
+            # `openbao-spki-pin` with key `OPENBAO_SPKI_PIN_SHA256`. Map
+            # that into the env var name config.go reads — closes the
+            # silent SPKI-pin-ignored regression that left loopzero-api falling
+            # back to standard TLS verify against cert-manager self-signed
+            # CA (x509: certificate signed by unknown authority).
+            - name: OPENBAO_SPKI_PIN_SHA256
+              valueFrom:
+                secretKeyRef:
+                  name: openbao-spki-pin
+                  key: OPENBAO_SPKI_PIN_SHA256
+                  optional: true
+            # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): GitHub
+            # webhook HMAC signing secret. api/cmd/setup_github.go:147
+            # reads GITHUB_WEBHOOK_SECRET env. Without it the webhook
+            # handler short-circuits ("webhook disabled" log) and the
+            # dogfood-project-connect test cannot exercise the chain.
+            # Mirrors the tilt/api-deployment.yaml:140 binding so chart
+            # consumers (dev-public + prod via ESO) get parity.
+            - name: GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-github-webhook
+                  key: value
+                  optional: true
+            # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): GitHub App
+            # private key (PKCS1 RSA PEM). api/cmd/setup_github.go:75
+            # calls github.NewAppClient(appID, GITHUB_APP_PRIVATE_KEY); the
+            # client is required by the autoDeployer construction guard at
+            # setup_github.go:121 ("if ghAppClient != nil && buildSub !=
+            # nil"). Without it, autoDeployer stays nil and the webhook
+            # handler short-circuits ("webhook stays disabled" WARN log)
+            # leaving POST /api/v1/webhooks/github at 404. Mirrors the
+            # tilt/api-deployment.yaml:146 binding so chart consumers
+            # (dev-public + prod via ESO) get parity.
+            - name: GITHUB_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-github
+                  key: GITHUB_APP_PRIVATE_KEY
+                  optional: true
             # Ed25519 dual-control public keys (ADR 2026-05-13-service-auth-
             # ed25519-adoption). Materialized by ESO from the Pulumi
             # ServiceAuthEd25519 component into Secret
@@ -269,6 +313,21 @@ spec:
             # the secret wasn't created.
             - secretRef:
                 name: loopzero-openbao-approle
+                optional: true
+            # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): loopzero-broker-token
+            # envFrom binding for the Layer 2 ESO sync broker (plan
+            # 2026-06-10-j22-openbao-transit-eso-sync v1.2 D3). The broker
+            # endpoint `/internal/v1/secret-fetch/{tenant_id}/{secret_name}`
+            # validates Bearer auth via const-time compare against
+            # LOOPZERO_BROKER_TOKEN; without this env var loopzero-api logs
+            # "secret-fetch broker disabled" + the route stays unregistered
+            # (router.go:122 guard), causing ESO ExternalSecret reconciles
+            # to 404 in tenant workload namespaces — blocks the entire
+            # J-22 secrets canonical chain. Mirrors tilt/api-deployment.yaml
+            # binding. Secret key MUST be `LOOPZERO_BROKER_TOKEN` (envFrom
+            # 1:1 mapping).
+            - secretRef:
+                name: loopzero-broker-token
                 optional: true
             # Phase 3.3 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
             # 5 NEW Secrets created por ExternalSecret CRs (chart

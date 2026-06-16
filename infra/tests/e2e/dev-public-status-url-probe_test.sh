@@ -40,14 +40,29 @@ set -euo pipefail
 CLOUD_HOST="${CLOUD_HOST:-https://cloud-dev.loopzero.example}"
 PROJECT="${PROJECT:-teste}"
 ENV="${ENV:-production}"
-TOKEN_FILE="${TOKEN_FILE:-$HOME/.loopzero/local-dogfood-token.txt}"
+# CANONICAL 2026-06-15: prefer HMAC session JWT (carries tenant_id; passes
+# loopzero-cloud /engine proxy guard). Falls back to bootstrap RSA JWT for
+# engine-direct (localhost:13001) when no session JWT exists.
+if [ -z "${TOKEN_FILE:-}" ] ; then
+  if [ -f "$HOME/.loopzero/local-dogfood-session-jwt.txt" ] ; then
+    TOKEN_FILE="$HOME/.loopzero/local-dogfood-session-jwt.txt"
+  else
+    TOKEN_FILE="$HOME/.loopzero/local-dogfood-token.txt"
+  fi
+fi
 
 # Tight regex for the FIXED probe inputs. Broader canonical shape is
 # `^https://[a-z0-9-]+\.loopzero\.dev$` (single hostname class — project/env
 # names may contain hyphens internally per loopzero.yaml allowance, so a 2-group
 # split-by-hyphen regex false-rejects). For THIS probe with fixed project=teste
 # + env=production, the tight regex catches drift immediately.
-EXPECTED_URL_REGEX='^https://teste-production\.loopzero\.dev$'
+# CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): see companion
+# dev-public-live-url-discoverability_test.sh — per CLAUDE.md J-25 closure
+# + status.go:252 + pkg/naming.AppURL, the canonical formula is
+# `<tenant>-<project>-<app>-<env>.<public-domain>`. Test was stuck on
+# the pre-J-25 simpler `<project>-<env>` shape that never appeared in
+# real status payloads from loopzero-api.
+EXPECTED_URL_REGEX='^https://tn-[a-f0-9]+-teste-[a-z]+-production\.(loopzero\.local|loopzero\.dev|prod-dev\.loopzero\.dev)$'
 
 SKIP_LIVE=0
 JSON_OUTPUT=0

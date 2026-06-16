@@ -130,7 +130,10 @@ func TestMiddleware_HappyPath_Passes(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", srv.URL, nil)
 	req.Header.Set("X-Cell-ID", "cell-default")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("want 200, got %d", resp.StatusCode)
@@ -155,7 +158,10 @@ func TestMiddleware_RateLimited_Returns429(t *testing.T) {
 
 	req2, _ := http.NewRequest("POST", srv.URL, nil)
 	req2.Header.Set("X-Cell-ID", "cell-x")
-	resp2, _ := http.DefaultClient.Do(req2)
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp2.Body.Close()
 
 	if resp2.StatusCode != http.StatusTooManyRequests {
@@ -216,7 +222,10 @@ func TestMiddleware_MissingCellID_Returns429(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest("POST", srv.URL, nil)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("want 429, got %d", resp.StatusCode)

@@ -102,10 +102,16 @@ mint_app_jwt() {
   # from the K8s Secret the cluster uses (no hardcode, no env var
   # duplication), mint a short-lived JWT, query the canonical endpoint.
   local app_id private_key
-  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" get pod -l app=loopzero-api \
-    -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="GITHUB_APP_ID")].value}' 2>/dev/null)"
+  # Canonical 2026-06-16: read GITHUB_APP_ID from the running pod's effective env
+  # via `kubectl exec`. The earlier `jsonpath=spec.containers[0].env[GITHUB_APP_ID]`
+  # query only sees STATIC env declarations — it misses envFrom sources
+  # (configMapRef/secretRef), which is how GITHUB_APP_ID is wired canonical
+  # (via loopzero-api-runtime-config ConfigMap). The running env is authoritative.
+  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c api -- \
+    sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
   if [ -z "$app_id" ]; then
-    log "ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID from loopzero-api pod env"
+    log "ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID from loopzero-api pod running env"
+    log "       (try: kubectl --context=$CONTEXT -n $PG_NAMESPACE exec deployment/loopzero-api -- env | grep GITHUB_APP_ID)"
     return 2
   fi
   private_key="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" get secret loopzero-api-github \
@@ -259,7 +265,16 @@ except Exception:
   fi
 
   log "Creating project ${PROJECT_NAME} via LoopZero CLI"
-  LOOPZERO_TOKEN="$token" "$LOOPZERO_BIN" project create "$PROJECT_NAME" \
+  # Canonical 2026-06-16: use $jwt (the canonical Bearer token from
+  # /v1/auth/session/token exchange above). The stale $token reference was
+  # from an earlier refactor — `set -u` correctly traps as unbound.
+  # LOOPZERO_URL canonical for dev-public: ${PUBLIC_CLOUD_URL}/engine — the
+  # Caddy edge routes cloud-dev.loopzero.example/* → loopzero-cloud:13002, which
+  # in turn proxies /engine/* → loopzero-api engine. The CLI's default
+  # localhost:8080 is for production-like topology (Traefik direct).
+  # Per j05-aprendizado-cli-loopzero-url-subshell-env-propagation memory.
+  LOOPZERO_URL="${PUBLIC_CLOUD_URL}/engine" LOOPZERO_TOKEN="$jwt" \
+    "$LOOPZERO_BIN" project create "$PROJECT_NAME" \
     --json > /tmp/connect-fixture-project-create.json 2>&1 || {
     log "ERROR: loopzero project create failed; output:"
     head -c 500 /tmp/connect-fixture-project-create.json >&2

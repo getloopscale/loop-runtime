@@ -26,14 +26,9 @@ package db
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // =========================================================================
@@ -142,89 +137,20 @@ func (s *TenantStoreSqlc) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs 
 
 // TenantDeletionStoreSqlc is the sqlc-backed soft-delete lifecycle
 // store.
-type TenantDeletionStoreSqlc struct {
-	q    *generated.Queries
-	pool DBTX
-}
 
-// NewTenantDeletionStoreSqlc constructs a sqlc-backed deletion-
 // lifecycle store. `pool` MUST implement SqlcBridge.
-func NewTenantDeletionStoreSqlc(pool DBTX) *TenantDeletionStoreSqlc {
-	return &TenantDeletionStoreSqlc{
-		q:    generated.New(),
-		pool: pool,
-	}
-}
 
-func (s *TenantDeletionStoreSqlc) gen(tx DBTX) generated.DBTX {
-	target := tx
-	if target == nil {
-		target = s.pool
-	}
-	bridge, ok := target.(SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"tenant_deletion_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
-}
 
 // RequestDeletion inserts a pending deletion record. Idempotent: if
 // the tenant already has a pending deletion, returns the EXISTING
 // record without error (matches legacy behavior — ON CONFLICT DO
 // NOTHING preserves the original requested_at/requested_by).
-func (s *TenantDeletionStoreSqlc) RequestDeletion(ctx context.Context, input domain.DeletionRequest) (*domain.DeletionRecord, error) {
-	err := s.q.InsertPendingDeletion(ctx, s.gen(nil), generated.InsertPendingDeletionParams{
-		TenantID:    input.TenantID,
-		RequestedBy: input.RequestedBy,
-		Reason:      input.Reason,
-		// timePtrToTimestamptz handles nil → Valid=false (NULL).
-		GraceUntil: timePtrToTimestamptz(input.GraceUntil),
-		Force:      input.Force,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("tenant deletion store: insert pending: %w", err)
-	}
-
-	return s.GetPendingDeletion(ctx, input.TenantID)
-}
 
 // CancelDeletion removes the pending deletion record for a tenant.
 // Idempotent: returns nil if no pending deletion exists.
-func (s *TenantDeletionStoreSqlc) CancelDeletion(ctx context.Context, tenantID string) error {
-	if err := s.q.CancelPendingDeletion(ctx, s.gen(nil), tenantID); err != nil {
-		return fmt.Errorf("tenant deletion store: cancel: %w", err)
-	}
-	return nil
-}
 
 // GetPendingDeletion returns the pending deletion record for a
 // tenant, or nil if no pending deletion exists.
-func (s *TenantDeletionStoreSqlc) GetPendingDeletion(ctx context.Context, tenantID string) (*domain.DeletionRecord, error) {
-	row, err := s.q.GetPendingDeletion(ctx, s.gen(nil), tenantID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("tenant deletion store: get pending: %w", err)
-	}
-	record := &domain.DeletionRecord{
-		TenantID:     row.TenantID,
-		RequestedAt:  row.RequestedAt.Time,
-		RequestedBy:  row.RequestedBy,
-		Reason:       row.Reason,
-		Force:        row.Force,
-		AttemptCount: int(row.AttemptCount),
-	}
-	// GraceUntil is *time.Time per domain — surface NULL as nil pointer.
-	if row.GraceUntil.Valid {
-		v := row.GraceUntil.Time
-		record.GraceUntil = &v
-	}
-	return record, nil
-}
 
 // WriteTombstone writes the permanent audit record AFTER tenant
 // deletion completes, and removes the pending deletion entry. The two
@@ -232,35 +158,6 @@ func (s *TenantDeletionStoreSqlc) GetPendingDeletion(ctx context.Context, tenant
 // responsibility — this store keeps the legacy 2-statement contract;
 // in practice both are idempotent so a partial failure is recoverable
 // on retry).
-func (s *TenantDeletionStoreSqlc) WriteTombstone(ctx context.Context, tombstone domain.TombstoneRecord) error {
-	cleanedJSON, err := json.Marshal(tombstone.ResourcesCleaned)
-	if err != nil {
-		cleanedJSON = []byte("{}")
-	}
-	var failedJSON []byte
-	if tombstone.ResourcesFailed != nil {
-		failedJSON, err = json.Marshal(tombstone.ResourcesFailed)
-		if err != nil {
-			failedJSON = nil
-		}
-	}
-
-	if err := s.q.InsertTombstone(ctx, s.gen(nil), generated.InsertTombstoneParams{
-		TenantID:         tombstone.TenantID,
-		TenantSlug:       tombstone.TenantSlug,
-		RequestedBy:      tombstone.RequestedBy,
-		Reason:           tombstone.Reason,
-		ResourcesCleaned: cleanedJSON,
-		ResourcesFailed:  failedJSON,
-	}); err != nil {
-		return fmt.Errorf("tenant deletion store: write tombstone: %w", err)
-	}
-
-	if err := s.q.CancelPendingDeletion(ctx, s.gen(nil), tombstone.TenantID); err != nil {
-		return fmt.Errorf("tenant deletion store: cleanup pending after tombstone: %w", err)
-	}
-	return nil
-}
 
 // NOTE: conversion helpers (timePtrToTimestamptz, etc.) live in
 // release_wrapper.go and are shared across all sqlc-backed stores in

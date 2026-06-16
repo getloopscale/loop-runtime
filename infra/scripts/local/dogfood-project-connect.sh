@@ -131,7 +131,15 @@ fi
 if [[ "$HERMETIC_ONLY" -ne 1 ]]; then
   log "▶ Suite 7: T4.1 LIVE bash (4 cenários A/B/C/D against dev-public)"
   if [[ -z "${LOOPZERO_GITHUB_WEBHOOK_SECRET:-}" ]]; then
-    record "T4.1-live-bash" "SKIP" "LOOPZERO_GITHUB_WEBHOOK_SECRET unset (operator action required)"
+    # CANONICAL 2026-06-16: resolve from K8s Secret loopzero-github-webhook (loopzero-system).
+    # Seeded post-Cleanroom by seed-github-app-dev.sh per
+    # feedback_post_cleanroom_seed_github_app_canonical. NO env-var-only path.
+    LOOPZERO_GITHUB_WEBHOOK_SECRET="$(kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system \
+      get secret loopzero-github-webhook -o jsonpath='{.data.value}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+    export LOOPZERO_GITHUB_WEBHOOK_SECRET
+  fi
+  if [[ -z "${LOOPZERO_GITHUB_WEBHOOK_SECRET:-}" ]]; then
+    record "T4.1-live-bash" "SKIP" "loopzero-github-webhook Secret not seeded (run seed-github-app-dev.sh)"
   else
     if bash "$REPO_ROOT/infra/tests/e2e/dev-public-github-webhook_test.sh" >/tmp/dogfood-project-connect-live.log 2>&1; then
       record "T4.1-live-bash" "PASS" "4/4 cenários GREEN"

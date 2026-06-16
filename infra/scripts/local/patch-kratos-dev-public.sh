@@ -39,6 +39,10 @@
 #   --skip-restart skip rollout-restart (test workflows)
 #   --verify       after restart, curl /self-service/login/api and assert
 #                  providers exposed + action url uses KRATOS_PUBLIC_URL
+#   --check-only   read-only canonical check: alias for --dry-run --skip-restart.
+#                  Exits 0 when the desired patches can be derived from .env;
+#                  used by dogfood-login Suite 0 T5.3 as Cleanroom-survival
+#                  gate (per ADR D5 + EC-14).
 
 set -euo pipefail
 
@@ -59,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --skip-restart) SKIP_RESTART=1; shift ;;
     --verify) VERIFY=1; shift ;;
+    --check-only) DRY_RUN=1; SKIP_RESTART=1; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0"; exit 0 ;;
     *) printf 'unknown flag: %s\n' "$1" >&2; exit 1 ;;
   esac

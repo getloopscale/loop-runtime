@@ -33,6 +33,13 @@ var reservedEnvironmentNames = map[string]bool{
 	pkgdomain.DefaultPermanentEnv:  true, // M2 v1.2 — EC-8 cross-project reserved
 }
 
+// envDeleteCleanupWarning is the user-facing warning emitted when the
+// deleted environment still has an active release. Reaping is async on
+// the operator side; the message uses product language (Rule 3 — no
+// "ArgoCD", "Gitea", "MinIO", etc. in user-facing strings).
+// Plan: 2026-06-15-code-review-49-findings-remediation T0.1 (R2-F1 BLOCKER).
+const envDeleteCleanupWarning = "environment removed but cleanup may take a few seconds; run 'loopzero platform status' to verify"
+
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 + find_dep_routes_type_hub partial):
 // canonical types live in domain/. Aliases preserve back-compat with
 // handler code in this file.
@@ -512,9 +519,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	var warnings []string
 	if h.relLookup != nil {
 		if hasRel, _ := h.relLookup.HasActiveRelease(ctx, uc.TenantID, project, name); hasRel {
-			warnings = append(warnings,
-				"environment removed but ArgoCD App may persist briefly; run 'loopzero platform status' to verify cleanup",
-			)
+			warnings = append(warnings, envDeleteCleanupWarning)
 		}
 	}
 

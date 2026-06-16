@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { Alert, Button, Card, PinInput } from '@loopzero/ui';
 import { API_URL, AUTH_URL } from '@/lib/config';
+import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { enrichKratosError } from '@/lib/kratos';
 
 const KRATOS_URL = AUTH_URL || API_URL;
@@ -10,6 +11,7 @@ const KRATOS_URL = AUTH_URL || API_URL;
 type Status = 'loading' | 'input' | 'success' | 'error';
 
 export function VerificationPage() {
+  useSetPageTitle('Verify email');
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<Status>('loading');
   const [code, setCode] = useState(searchParams.get('code') ?? '');

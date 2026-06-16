@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Github, Loader2, Mail, Zap } from 'lucide-react';
 import { Alert, Button, Card, Input } from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
+import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { getSession } from '@/lib/auth';
 import { API_URL, AUTH_URL } from '@/lib/config';
 
@@ -25,6 +26,7 @@ interface Flow {
 }
 
 export function RegisterPage() {
+  useSetPageTitle('Sign up');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [flow, setFlow] = useState<Flow | null>(null);

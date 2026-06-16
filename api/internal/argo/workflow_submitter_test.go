@@ -169,9 +169,12 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Submit a workflow
+	// Submit a workflow.
+	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
+	// frontends are CDN-static via Cloudflare Worker (ADR D5) and do not flow
+	// through Argo. Use a single server app for cancel testing.
 	apps := []services.AppSpec{
-		{Name: "web", Type: "frontend", Port: 0, Rendering: "static"},
+		{Name: "api", Type: "server", Port: 3000},
 	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-cancel-001",
@@ -204,9 +207,11 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
+	// frontend apps removed (CDN-static path, ADR D5). Multi-app fixture now
+	// exercises server + worker only.
 	apps := []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
-		{Name: "web", Type: "frontend", Port: 0, Rendering: "static"},
 		{Name: "worker", Type: "worker", Port: 0},
 	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
