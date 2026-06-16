@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/loopzero/loopzero/pkg/quality/acyclicgraph"
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/clusterrolenosecretsstar"
 	"github.com/loopzero/loopzero/pkg/quality/contractconsumers"
@@ -349,6 +350,8 @@ func runQuality(args []string) int {
 		return runDashboardPromtool(args[1:])
 	case "cli-exit-codes":
 		return runCLIExitCodes(args[1:])
+	case "acyclic-graph":
+		return runAcyclicGraph(args[1:])
 	case "shell-hygiene":
 		return runShellHygiene(args[1:])
 	case "sqlc-sync":
@@ -1111,6 +1114,43 @@ func runCLIExitCodes(args []string) int {
 		return 1
 	}
 	fmt.Println("cli-exit-codes: PASS — all cli/src exit codes within 0-5 contract (signal handlers exempt)")
+	return 0
+}
+
+// runAcyclicGraph is the Go home for the acyclic-graph gate (M5 — plan
+// m5-governance-durable). Enforces the decomposition DAG: loopzero-contracts imports
+// nothing from the engine/cloud/cli; the engine never imports the cloud; the
+// cloud never imports engine-internal pkg/*. Sibling repos are resolved relative
+// to the engine root and skipped when absent.
+func runAcyclicGraph(args []string) int {
+	fs := flag.NewFlagSet("acyclic-graph", flag.ContinueOnError)
+	root := fs.String("root", ".", "engine repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := acyclicgraph.Check(acyclicgraph.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "acyclic-graph: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "acyclic-graph: FAIL — %d forbidden upward import edge(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Decomposition invariant (ADP): loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli. Arrows never point at a more-stable node.")
+		return 1
+	}
+	msg := fmt.Sprintf("acyclic-graph: PASS — graph is acyclic (checked: %s", strings.Join(outcome.Checked, ", "))
+	if len(outcome.Skipped) > 0 {
+		msg += fmt.Sprintf("; skipped absent: %s", strings.Join(outcome.Skipped, ", "))
+	}
+	fmt.Println(msg + ")")
 	return 0
 }
 
