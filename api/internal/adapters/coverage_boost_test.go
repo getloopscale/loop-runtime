@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
 // =============================================================================
@@ -70,7 +69,6 @@ func TestRollbackServiceAdapter_StructExists(t *testing.T) {
 // Verify compile-time interface assertions
 // =============================================================================
 
-var _ routes.AuditLogger = (*AuditAdapter)(nil)
 
 // =============================================================================
 // BuildOrchestratorAdapter - OnBuildCompleted (covers app translation)

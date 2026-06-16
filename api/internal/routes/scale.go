@@ -103,15 +103,6 @@ func (h *ScaleHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
 	h.planTierStore = s
 }
 
-// SetPodCostPerHour overrides the default per-pod hourly cost (USD). Tests
-// + per-cluster pricing tuning use this to inject deterministic values.
-// Non-positive values fall back to DefaultPodCostPerHour (defensive).
-func (h *ScaleHandler) SetPodCostPerHour(usd float64) {
-	if usd > 0 {
-		h.podCostPerHour = usd
-	}
-}
-
 // EnsureProductionWired panics if the handler was constructed without a
 // non-nil ScaleApplyFunc. Call this from production boot (after wiring
 // everything) so a regression that drops the apply closure crashes the

@@ -107,12 +107,6 @@ func NewArgoStepWatcher(source WorkflowNodeSource, store sse.EventStore, termina
 	}
 }
 
-// withClock overrides the time source for deterministic tests.
-func (w *ArgoStepWatcher) withClock(now func() time.Time) *ArgoStepWatcher {
-	w.now = now
-	return w
-}
-
 // Start kicks off the watcher loop. Returns when ctx is cancelled OR
 // the source.Run returns. Populates the terminal-ID cache once before
 // running so initial-list events for already-done builds get skipped.

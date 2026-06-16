@@ -57,11 +57,6 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 	}
 }
 
-// --- AuditAdapter compile-time check ---
-
-func TestAuditAdapter_ImplementsInterface(t *testing.T) {
-	var _ routes.AuditLogger = (*AuditAdapter)(nil)
-}
 
 // --- BuildOrchestratorAdapter additional tests ---
 

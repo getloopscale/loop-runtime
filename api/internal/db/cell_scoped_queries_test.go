@@ -35,6 +35,13 @@ func osReadFile(relPath string) ([]byte, error) {
 // recordingDBTX is a DBTX fake that captures queries without executing them.
 // Every Query call records the SQL + args and returns an empty result set so
 // the caller's scan loop exits cleanly.
+//
+// Canonical compile-time interface satisfaction (Go idiom): if DBTX evolves
+// (new method added), this assertion fails compilation rather than at runtime.
+// Also signals to deadcode tooling that recordingDBTX's methods are called
+// via interface dispatch.
+var _ DBTX = (*recordingDBTX)(nil)
+
 type recordingDBTX struct {
 	lastSQL  string
 	lastArgs []any
