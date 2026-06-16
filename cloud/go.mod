@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/getkin/kin-openapi v0.140.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jackc/pgx/v5 v5.9.2
@@ -54,6 +55,14 @@ require (
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 )
 
-require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+require (
+	github.com/go-openapi/jsonpointer v0.22.5 // indirect
+	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
+	github.com/oasdiff/yaml v0.1.0 // indirect
+	github.com/oasdiff/yaml3 v0.0.13 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+)
 
 replace github.com/loopzero/loopzero/pkg => ../pkg
