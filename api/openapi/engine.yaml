@@ -199,6 +199,30 @@ paths:
             text/event-stream:
               schema: { type: string }
 
+  /api/v1/builds/{id}/stream:
+    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    get:
+      tags: [builds]
+      summary: Stream build events (SSE)
+      responses:
+        "200":
+          description: event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /api/v1/projects/{name}/logs/stream:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    get:
+      tags: [projects]
+      summary: Stream runtime logs (SSE)
+      responses:
+        "200":
+          description: event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
   /api/v1/secrets:
     get:
       tags: [secrets]
@@ -371,6 +395,165 @@ paths:
             application/json:
               schema: { type: object, additionalProperties: true }
 
+  /api/v1/builds/{id}/logs:
+    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    get:
+      tags: [builds]
+      summary: Build logs (non-streaming)
+      responses:
+        "200":
+          description: logs
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/v1/secrets/{name}:
+    parameters: [{ $ref: "#/components/parameters/SecretName" }]
+    delete:
+      tags: [secrets]
+      summary: Delete a secret
+      responses:
+        "200": { description: deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/domains/{domain}/verify:
+    parameters:
+      - { name: domain, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [domains]
+      summary: Trigger domain verification
+      responses:
+        "200":
+          description: verification result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "429": { description: rate limited }
+
+  /api/v1/projects/{name}/connect:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    get:
+      tags: [projects]
+      summary: Get repository connection
+      responses:
+        "200":
+          description: connection
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+    post:
+      tags: [projects]
+      summary: Connect a repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: connected }
+    delete:
+      tags: [projects]
+      summary: Disconnect the repository
+      responses:
+        "200": { description: disconnected }
+
+  /api/v1/projects/{name}/environments/{env}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectName" }
+      - { name: env, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [environments]
+      summary: Delete a project environment
+      responses:
+        "200": { description: deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/projects/{name}/promote:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    post:
+      tags: [projects]
+      summary: Promote a release between environments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: promoted }
+        "409": { description: conflict }
+
+  /api/v1/projects/{name}/rollback:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    post:
+      tags: [projects]
+      summary: Roll back to the previous release
+      responses:
+        "200": { description: rolled back }
+        "409": { description: no previous release }
+
+  /api/v1/projects/{name}/scale:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    post:
+      tags: [projects]
+      summary: Scale a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: scaled }
+        "402": { description: plan upgrade required }
+
+  /api/v1/projects/{project}/previews:
+    parameters:
+      - { name: project, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [projects]
+      summary: List preview environments
+      responses:
+        "200":
+          description: preview list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, additionalProperties: true }
+
+  /api/v1/projects/{project}/previews/{id}:
+    parameters:
+      - { name: project, in: path, required: true, schema: { type: string } }
+      - { $ref: "#/components/parameters/BuildID" }
+    get:
+      tags: [projects]
+      summary: Get one preview environment
+      responses:
+        "200":
+          description: preview
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/teams/members/{username}:
+    parameters:
+      - { name: username, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [teams]
+      summary: Remove a team member
+      responses:
+        "200": { description: removed }
+    patch:
+      tags: [teams]
+      summary: Update a team member's role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: updated }
+
 components:
   parameters:
     ProjectName:
@@ -385,6 +568,11 @@ components:
       schema: { type: string }
     BuildID:
       name: id
+      in: path
+      required: true
+      schema: { type: string }
+    SecretName:
+      name: name
       in: path
       required: true
       schema: { type: string }
