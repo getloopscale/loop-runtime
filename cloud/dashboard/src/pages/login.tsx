@@ -10,10 +10,16 @@ import {
   Input,
 } from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
+import { LoginErrorBanner } from '@/components/login/login-error-banner';
+import { CookieBlockedAlert } from '@/components/login/cookie-blocked-alert';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
 import { API_URL, AUTH_URL } from '@/lib/config';
+import { safeErrorDetail, isEnumerationCollision } from '@/lib/auth/kratos-error-detail';
+import { mapKratosError } from '@/lib/auth/error-mapper';
+import { isSafeRedirectUrl } from '@/lib/auth/safe-redirect';
+import type { Flow } from '@/lib/auth/kratos-flow';
 import {
   reportEvent,
   viewportBucket,
@@ -23,68 +29,9 @@ import {
   type AuthTelemetryPayload,
 } from '@/lib/rum';
 
+export { classifyKratosErrorReason } from '@/lib/auth/kratos-error-detail';
+
 const KRATOS_URL = AUTH_URL || API_URL;
-
-interface FlowNode {
-  group: string;
-  attributes: { name?: string; type?: string; value?: string };
-  messages?: { text: string; type: string }[];
-  meta?: { label?: { text?: string } };
-}
-
-interface Flow {
-  id: string;
-  ui: {
-    action: string;
-    method: string;
-    nodes: FlowNode[];
-    messages?: { text: string; type: string }[];
-  };
-}
-
-/**
- * safeErrorDetail — OWASP A07: never expose raw Kratos error text to UI.
- *
- * Priority order (first match wins, EC-2 from edge-case review):
- *   1. csrf            → "Your session expired. Try again."
- *   2. locked          → "This account is locked. Reset your password to continue."
- *   3. provider (OIDC) → "Try a different sign-in method."
- *   4. default         → undefined (no description, generic title only)
- *
- * EC-3: tolerates null/empty text without TypeError via (text ?? '').
- */
-function safeErrorDetail(
-  errors: { text: string | null }[] | undefined,
-): string | undefined {
-  if (!errors || errors.length === 0) return undefined;
-  const haystack = errors
-    .map((e) => (e.text ?? '').toLowerCase())
-    .join(' ');
-  if (haystack.includes('csrf')) return 'Your session expired. Try again.';
-  if (haystack.includes('locked'))
-    return 'This account is locked. Reset your password to continue.';
-  if (haystack.includes('provider')) return 'Try a different sign-in method.';
-  return undefined;
-}
-
-/**
- * Classify Kratos validation error into a discriminated reason for telemetry.
- * Currently unused because submitPassword switched from inline-XHR to
- * top-level form POST (2026-06-01 SameSite-Lax security fix); the landing
- * page after submission classifies via flow.ui.messages on remount.
- * Kept exported so the type contract is still available for the post-mount
- * classification code path when it lands.
- */
-export function classifyKratosErrorReason(
-  errors: { text: string | null }[] | undefined,
-): AuthFailureReason {
-  if (!errors || errors.length === 0) return 'kratos_validation';
-  const haystack = errors
-    .map((e) => (e.text ?? '').toLowerCase())
-    .join(' ');
-  if (haystack.includes('csrf')) return 'csrf_expired';
-  return 'kratos_validation';
-}
 
 export function LoginPage() {
   useSetPageTitle('Login');
@@ -394,6 +341,12 @@ export function LoginPage() {
             </p>
           </div>
 
+          {/* CookieBlockedAlert (T2.2 + EC-8 absorption): renders when
+              navigator.cookieEnabled === false OR post-OIDC session.whoami
+              returns 401 (Safari ITP / Firefox strict mode third-party
+              cookie drop). */}
+          <CookieBlockedAlert />
+
           {/* Session expired notice (§3.6) */}
           {searchParams.get('reason') === 'expired' && allErrors.length === 0 && !networkError && (
             <Alert
@@ -411,13 +364,14 @@ export function LoginPage() {
             />
           )}
 
-          {/* T1.1: OWASP-aligned generic title + safe-detail allow-list (D2). */}
-          {!networkError && allErrors.length > 0 && (
-            <Alert
-              intent="destructive"
-              title="We couldn't sign you in."
-              description={safeErrorDetail(allErrors)}
-            />
+          {/* T3.2 (EC-J01-1 collision): canonical LoginErrorBanner via
+              mapKratosError when the error set indicates a pre-seeded
+              identity collision; otherwise pre-existing Alert taxonomy. */}
+          {!networkError && allErrors.length > 0 && isEnumerationCollision(allErrors) && (
+            <LoginErrorBanner error={mapKratosError({ error: { id: 'account_enumeration_mitigation' } })} />
+          )}
+          {!networkError && allErrors.length > 0 && !isEnumerationCollision(allErrors) && (
+            <Alert intent="destructive" title="We couldn't sign you in." description={safeErrorDetail(allErrors)} />
           )}
 
           {/* Social login — T0.1 J-04: `?provider=` autofocus + visual ring */}
