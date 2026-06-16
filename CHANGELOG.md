@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `pkg/plan` — new package holding the cost/plan value vocabulary (`Plan`, `CostMetric`, `CostCounter`, `CapFor`, `Unlimited`, `ExceededError`, `ProjectStatus`, `CurrentPeriod`) extracted from `pkg/enforcement`. It is the contracts-bound surface (M3 `loopzero-contracts/plan` target) with zero engine-internal dependencies. Cap-enforcement logic (`CapChecker`, `CostStore`) and the `statemachine`→`ProjectStatus` mapper stay in `pkg/enforcement` (ISP). `enforcement` re-exports the vocabulary via transitional aliases so existing call-sites stay green. (M1.2/M1.3 — plan m1-decouple-in-place; ADR D3)
+
 ### Changed
 
 - `pkg/jwt` now depends on a consumer-defined `Breaker` interface (2 methods: `PreCheck`/`RecordResult`) instead of the concrete `pkg/circuitbreaker`, so the JWT validator no longer drags an engine-internal package — first decouple toward the `loopzero-contracts` extraction. The concrete `*circuitbreaker.Breaker` still satisfies the interface structurally; behavior (open → serve cached keys) is unchanged. (M1.1 — plan m1-decouple-in-place; ADR `decisions/2026-06-16-monorepo-decomposition.md` D3)
