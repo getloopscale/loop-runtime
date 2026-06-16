@@ -37,7 +37,7 @@ var CriticalPackages = []string{
 	"github.com/loopzero/loopzero/pkg/errors/http",
 	"github.com/loopzero/loopzero/pkg/healthcheck",
 	"github.com/loopzero/loopzero/pkg/id",
-	"github.com/loopzero/loopzero/pkg/jwt",
+	"github.com/getloopscale/loopzero-contracts/jwt",
 	"github.com/loopzero/loopzero/pkg/lock",
 	"github.com/loopzero/loopzero/pkg/logging",
 	"github.com/loopzero/loopzero/pkg/naming",

@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 	"github.com/loopzero/loopzero/cloud/internal/billing"

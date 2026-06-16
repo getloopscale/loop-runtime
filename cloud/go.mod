@@ -63,6 +63,9 @@ require (
 	github.com/oasdiff/yaml v0.1.0 // indirect
 	github.com/oasdiff/yaml3 v0.0.13 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/getloopscale/loopzero-contracts v0.0.0
 )
 
 replace github.com/loopzero/loopzero/pkg => ../pkg
+
+replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts

@@ -36,7 +36,7 @@ import (
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 )
 
 // mockKratosServer simulates Kratos /sessions/whoami. behavior is configured

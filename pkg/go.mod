@@ -2,7 +2,7 @@ module github.com/loopzero/loopzero/pkg
 
 go 1.26.1
 
-require github.com/golang-jwt/jwt/v5 v5.3.1
+require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -34,8 +34,11 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
+	github.com/getloopscale/loopzero-contracts v0.0.0
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )
+
+replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts

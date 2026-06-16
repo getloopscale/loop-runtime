@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/middleware"

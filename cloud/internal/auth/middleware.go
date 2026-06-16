@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 )
 
 // UserContext holds authenticated user info, set by the auth middleware.

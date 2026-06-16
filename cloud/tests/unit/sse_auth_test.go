@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 )
 
 const (

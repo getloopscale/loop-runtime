@@ -32,6 +32,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require github.com/gorilla/mux v1.8.0 // indirect
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -82,6 +84,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/getloopscale/loopzero-contracts v0.0.0
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -111,3 +114,5 @@ require (
 )
 
 replace github.com/loopzero/loopzero/pkg => ../pkg
+
+replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts
