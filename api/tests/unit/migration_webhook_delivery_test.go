@@ -24,8 +24,8 @@ import (
 // hold because 000033 carries the identical consolidated DDL. (Reconciled at the
 // M3 merge of origin/develop, 2026-06-16.)
 const (
-	pathMigration029 = "../../../api/internal/db/migrations/000033_consolidate_pending_migrations.up.sql"
-	pathMigration030 = "../../../api/internal/db/migrations/000033_consolidate_pending_migrations.up.sql"
+	pathMigration029 = "../../internal/db/migrations/000033_consolidate_pending_migrations.up.sql"
+	pathMigration030 = "../../internal/db/migrations/000033_consolidate_pending_migrations.up.sql"
 )
 
 func readWebhookDeliveryMigration(t *testing.T, rel string) string {
@@ -184,7 +184,7 @@ func TestMigration030_WebhookHistoryIndex(t *testing.T) {
 // Forward-only invariant — no .down.sql for the consolidated migration.
 func TestMigrations_WebhookDelivery_NoDownFiles(t *testing.T) {
 	for _, rel := range []string{
-		"../../../api/internal/db/migrations/000033_consolidate_pending_migrations.down.sql",
+		"../../internal/db/migrations/000033_consolidate_pending_migrations.down.sql",
 	} {
 		abs, _ := filepath.Abs(rel)
 		if _, err := os.Stat(abs); err == nil {

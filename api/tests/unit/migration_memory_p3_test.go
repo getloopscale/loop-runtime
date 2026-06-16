@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	pathMemoryWebhooksMigration = "../../../api/internal/db/migrations/000025_memory_webhooks.up.sql"
-	pathMemoryExportsMigration  = "../../../api/internal/db/migrations/000026_memory_exports.up.sql"
+	pathMemoryWebhooksMigration = "../../internal/db/migrations/000025_memory_webhooks.up.sql"
+	pathMemoryExportsMigration  = "../../internal/db/migrations/000026_memory_exports.up.sql"
 )
 
 func readMigrationFile(t *testing.T, rel string) string {
@@ -179,8 +179,8 @@ func TestMigration026_ExportsListingIndex(t *testing.T) {
 
 func TestMigrations_P3_NoDownFiles(t *testing.T) {
 	for _, rel := range []string{
-		"../../../api/internal/db/migrations/000025_memory_webhooks.down.sql",
-		"../../../api/internal/db/migrations/000026_memory_exports.down.sql",
+		"../../internal/db/migrations/000025_memory_webhooks.down.sql",
+		"../../internal/db/migrations/000026_memory_exports.down.sql",
 	} {
 		abs, _ := filepath.Abs(rel)
 		if _, err := os.Stat(abs); err == nil {

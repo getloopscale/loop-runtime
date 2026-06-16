@@ -22,7 +22,7 @@ import (
 	"testing"
 )
 
-const migrationPath = "../../../api/internal/db/migrations/000024_loopzero_api_keys.up.sql"
+const migrationPath = "../../internal/db/migrations/000024_loopzero_api_keys.up.sql"
 
 func readMigration(t *testing.T) string {
 	t.Helper()
@@ -152,7 +152,7 @@ func TestMigration024_TenantPartialIndex(t *testing.T) {
 func TestMigration024_NoDownFile(t *testing.T) {
 	// Forward-only convention per CLAUDE.md migration rules. Ensure no
 	// .down.sql shipped by accident.
-	abs, err := filepath.Abs("../../../api/internal/db/migrations/000024_loopzero_api_keys.down.sql")
+	abs, err := filepath.Abs("../../internal/db/migrations/000024_loopzero_api_keys.down.sql")
 	if err != nil {
 		t.Fatalf("resolve path: %v", err)
 	}

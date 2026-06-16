@@ -16,7 +16,7 @@ import (
 	"testing"
 )
 
-const pathMigration031 = "../../../api/internal/db/migrations/000031_loopzero_api_keys_rotated_from.up.sql"
+const pathMigration031 = "../../internal/db/migrations/000031_loopzero_api_keys_rotated_from.up.sql"
 
 func readRotationMigration(t *testing.T) string {
 	t.Helper()
@@ -81,7 +81,7 @@ func TestMigration031_CommentDocumentsAudit(t *testing.T) {
 }
 
 func TestMigration031_NoDownFile(t *testing.T) {
-	abs, _ := filepath.Abs("../../../api/internal/db/migrations/000031_loopzero_api_keys_rotated_from.down.sql")
+	abs, _ := filepath.Abs("../../internal/db/migrations/000031_loopzero_api_keys_rotated_from.down.sql")
 	if _, err := os.Stat(abs); err == nil {
 		t.Errorf("forward-only convention violated: .down.sql exists at %s", abs)
 	}
