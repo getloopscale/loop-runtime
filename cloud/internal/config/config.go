@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // Secret is a string that redacts itself in logs, fmt output, and JSON serialization.
@@ -125,6 +126,12 @@ type Config struct {
 	// empty so the cookie is host-only on localhost.
 	// Env: AUTH_COOKIE_DOMAIN (default: "")
 	AuthCookieDomain string
+
+	// BFFKeyTTLHours is the TTL (in hours) for BFF-minted API keys held by the
+	// server-side key vault (auth.NewBFFKeyVault). Range validation [1,168] is
+	// enforced fail-loud in the vault constructor, not here — Load only parses.
+	// Env: LOOPZEROCLOUD_BFF_KEY_TTL_HOURS (default: 24; fallback 24 on parse error)
+	BFFKeyTTLHours int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -158,6 +165,7 @@ func Load() Config {
 
 	cfg.ThemoryBaseURL = envOr("THEMORY_BASE_URL", "")
 	cfg.ThemoryAPIKey = Secret(envOr("THEMORY_API_KEY", ""))
+	cfg.BFFKeyTTLHours = envOrInt("LOOPZEROCLOUD_BFF_KEY_TTL_HOURS", 24)
 	return cfg
 }
 
@@ -200,6 +208,21 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envOrInt reads an integer env var, returning fallback when the var is unset
+// or cannot be parsed. It does NOT range-check — that is the consumer's job
+// (e.g. auth.NewBFFKeyVault enforces [1,168] fail-loud).
+func envOrInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // devSecretFor returns an auto-generated secret in non-production environments,
