@@ -126,9 +126,28 @@ paths:
               schema: { type: object, additionalProperties: true }
 
   /api/v1/builds:
+    post:
+      tags: [builds]
+      summary: Submit a build (deploy)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "202":
+          description: build accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Build" }
+        "409":
+          description: concurrent build rejected
+
+  /api/v1/projects/{name}/builds:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
     get:
       tags: [builds]
-      summary: List builds
+      summary: List builds for a project
       responses:
         "200":
           description: build list
