@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Pre-push git hook (`infra/scripts/local/git-hooks/pre-push` + idempotent `install-git-hooks.sh`) that runs `task quality:gates` before every push — the cheap CI substitute for a project with no CI platform (gates now run unconditionally on push, not only when an operator remembers). Escapes: `git push --no-verify` or `LOOPZERO_SKIP_PREPUSH=1`. Hermetic test `infra/tests/check-install-git-hooks_test.sh`. (M8 — plan prepush-hook-and-api-crd-typed-schema Phase 0)
+
+
 - Completed the M6 acyclic-graph gate node for `operators/api` (`loopzero-ops quality acyclic-graph`): the CRD contract module is now a checked base that must import nothing engine-internal (`operators/internal`, `api`, `pkg`, `cloud`) — only k8s. Hermetic tests prove the node PASSES on the real layout and FAILS on a synthetic upward import. The gate now checks 4 nodes (loopzero-contracts, engine, loopzero-cloud, operators-api). (M6 — plan extract-crd-types-contract-module Phase 3)
 
 
