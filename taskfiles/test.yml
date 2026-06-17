@@ -1380,3 +1380,43 @@ tasks:
       Validates Options + Outcome + Run wiring at the Go layer.
     cmds:
       - go test ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1m
+
+  # T3.2 + T3.3 + T3.4 of plan canonical-tests-rewrite-v2 v1.0 — v2 dogfood / chaos / contra-prova
+  dogfood:v2:hermetic:
+    desc: |
+      T3.2 v2 dogfood helper unit tests (hermetic). Validates Env + JWT loader +
+      CurlJSON + KubectlGetJSON + Pause helpers. No LIVE infra needed.
+    cmds:
+      - go test ./infra/tests/livetest/dogfood/... -count=1 -timeout 1m
+
+  dogfood:v2:
+    desc: |
+      T3.2 v2 dogfood per-journey LIVE Ginkgo specs. Requires dev-public UP +
+      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated por build tag `live`.
+    cmds:
+      - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v
+
+  chaos:v2:hermetic:
+    desc: |
+      T3.3 v2 chaos helper unit tests (hermetic). Validates Manifest + ChaosResult
+      type contracts + AssertSpanCoverage stub behavior. No LIVE chaos-mesh needed.
+    cmds:
+      - go test ./infra/tests/livetest/chaos/... -count=1 -timeout 1m
+
+  contraprova:v2:hermetic:
+    desc: |
+      T3.4 v2 contra-prova helper unit tests (hermetic). Validates 8 camadas
+      (chaos summary byte-grep / JUnit XML parse / git state / live-proof
+      absorption per ADR D3). No LIVE deploy needed.
+    cmds:
+      - go test ./infra/tests/livetest/contraprova/... -count=1 -timeout 1m
+
+  livetest:v2:hermetic:
+    desc: |
+      T3.1+T3.2+T3.3+T3.4 aggregate v2 livetest helper unit tests (hermetic).
+      All 4 packages exercised without LIVE infra.
+    cmds:
+      - task: cleanroom:v2:hermetic
+      - task: dogfood:v2:hermetic
+      - task: chaos:v2:hermetic
+      - task: contraprova:v2:hermetic
