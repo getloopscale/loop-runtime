@@ -8,7 +8,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // ErrCellAtCapacity is returned when the cell has reached its maximum

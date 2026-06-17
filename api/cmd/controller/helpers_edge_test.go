@@ -16,9 +16,9 @@ import (
 
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/leader"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/leader"
 )
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
 )
 
 // DeferReadinessSummary returns a deferred function suitable for `defer` at

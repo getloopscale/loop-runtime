@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestExposedRoutePhase_Values(t *testing.T) {
@@ -158,14 +157,14 @@ func TestExposedRoute_StatusDegraded(t *testing.T) {
 func TestExposedRoute_SetCondition(t *testing.T) {
 	route := ExposedRoute{}
 
-	conditions.SetCondition(&route.Status.Conditions, conditions.TypeCertificateIssued, metav1.ConditionTrue, "Issued", "certificate ready", 1)
-	conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable, metav1.ConditionFalse, "Probing", "waiting for probe", 1)
+	SetCondition(&route.Status.Conditions, TypeCertificateIssued, metav1.ConditionTrue, "Issued", "certificate ready", 1)
+	SetCondition(&route.Status.Conditions, TypeRouteReachable, metav1.ConditionFalse, "Probing", "waiting for probe", 1)
 
 	if len(route.Status.Conditions) != 2 {
 		t.Fatalf("expected 2 conditions, got %d", len(route.Status.Conditions))
 	}
 
-	c := conditions.GetCondition(route.Status.Conditions, conditions.TypeCertificateIssued)
+	c := GetCondition(route.Status.Conditions, TypeCertificateIssued)
 	if c == nil {
 		t.Fatal("expected to find CertificateIssued condition")
 	}
@@ -176,10 +175,10 @@ func TestExposedRoute_SetCondition(t *testing.T) {
 
 func TestExposedRoute_ConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
-		conditions.TypeCertificateIssued,
-		conditions.TypeRouteReachable,
-		conditions.TypeServiceResolved,
-		conditions.TypeIngressReady,
+		TypeCertificateIssued,
+		TypeRouteReachable,
+		TypeServiceResolved,
+		TypeIngressReady,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

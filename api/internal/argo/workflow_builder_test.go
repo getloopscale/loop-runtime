@@ -9,7 +9,7 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 func testInfraParams() InfraParams {
@@ -28,7 +28,7 @@ func testInfraParams() InfraParams {
 // AFTER calling testSpec(), and may also overwrite spec.Apps independently.
 func testSpec() services.WorkflowSpec {
 	apps := []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 	}
 	return services.WorkflowSpec{
 		BuildID:       "build-001",
@@ -272,32 +272,6 @@ func TestWorkflowBuilder_Build_NodeStrategy_HasSaveCache(t *testing.T) {
 		t.Error("Node strategy should include save-cache in finalize DAG")
 	}
 }
-
-func TestWorkflowBuilder_Build_CustomStrategy_NoSaveCache(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParams())
-	spec := testSpec()
-	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "custom"}}
-	spec.Plan = planFromApps(spec.Apps)
-	wf, err := builder.Build(spec)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-
-	// Custom strategy has no cache key/dirs, so finalize DAG should not exist at all.
-	// When there are no cache tasks, buildOnExitDAG returns nil and no finalize DAG is added.
-	for _, tmpl := range wf.Templates {
-		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == "finalize" {
-			t.Error("Custom strategy should NOT have a finalize DAG — no cache to save")
-		}
-	}
-	if wf.OnExit != "" {
-		t.Errorf("OnExit = %q, want empty string for custom strategy (no cache)", wf.OnExit)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// CWT refs
-// ---------------------------------------------------------------------------
 
 func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
@@ -550,23 +524,13 @@ func TestWorkflowBuilder_Build_DAGDependencies(t *testing.T) {
 // Language label
 // ---------------------------------------------------------------------------
 
-func TestWorkflowBuilder_Build_GoStrategy_LanguageLabel(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParams())
-	spec := testSpec()
-	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Framework: "go"}}
-	spec.Plan = planFromApps(spec.Apps)
-	wf, err := builder.Build(spec)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-
-	assertLabel(t, wf, "loopzero.io/language", "go")
-}
+// T2.1: TestWorkflowBuilder_Build_GoStrategy_LanguageLabel removed — Go is no
+// longer a supported runtime (fixed node/python stack).
 
 func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
-	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
+	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
@@ -576,65 +540,14 @@ func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 	assertLabel(t, wf, "loopzero.io/language", "python")
 }
 
-func TestWorkflowBuilder_Build_MixedLanguage_PerLanguageSteps(t *testing.T) {
-	// REVIEW-AP-3: Mixed-language monorepos generate per-language build steps.
-	// An app with Framework="" defaults to Node, and Framework="go" gets Go steps.
-	// Both get independent pipelines in the same workflow.
-	builder := NewWorkflowBuilder(testInfraParams())
-	spec := testSpec()
-	// T1.3 (CR-2): legacy spec.Apps fallback resolved Framework="" via
-	// ResolveStrategyForApp's defaulting to "node". The Plan-driven path
-	// goes through NormalizeApp which canonicalizes "" → "custom". To assert
-	// the per-language-step contract for node, the fixture must declare
-	// Framework explicitly.
-	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "node"},
-		{Name: "worker", Type: "worker", Port: 0, Framework: "go"},
-	}
-	spec.Plan = planFromApps(spec.Apps)
-	wf, err := builder.Build(spec)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-
-	// Primary language label is first group (Node from default)
-	assertLabel(t, wf, "loopzero.io/language", "node")
-
-	// Both languages should have their own install-deps step
-	dag := findDAG(t, wf, "build-pipeline")
-	taskNames := make(map[string]bool)
-	for _, task := range dag.Tasks {
-		taskNames[task.Name] = true
-	}
-
-	// Per-language steps with suffix
-	for _, expected := range []string{
-		"install-deps-node", "install-deps-go",
-		"build-apps-node", "build-apps-go",
-		"generate-dockerfile-node", "generate-dockerfile-go",
-		"build-image-api", "build-image-worker",
-	} {
-		if !taskNames[expected] {
-			t.Errorf("missing DAG task for mixed-language: %s", expected)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Multi-app monorepo
-// ---------------------------------------------------------------------------
-
-// C-02 fix: generate-manifests was removed from the workflow.
-// Manifest generation now happens in the API (control plane).
-// This test verifies multi-app workflows end at build-image step.
 func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Framework: "express"},
-		// NormalizeApp requires Rendering: "static" for frontends (CDN delivery).
-		{Name: "web", Type: "frontend", Port: 0, Path: "apps/web", Framework: "nextjs", Rendering: "static"},
-		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Framework: "node"},
+		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Runtime: "node"},
+		// T3.3: frontend removed — web is a node server (the LoopZeroKit shape).
+		{Name: "web", Type: "server", Port: 3001, Path: "apps/web", Runtime: "node"},
+		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Runtime: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
@@ -712,7 +625,7 @@ func TestAppsJSON_EmptyApps(t *testing.T) {
 
 func TestAppsJSON_SingleApp(t *testing.T) {
 	apps := []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Path: ".", Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node"},
 	}
 	result := appsJSON(apps)
 	assertStringContains(t, result, `"name":"api"`)
@@ -1030,8 +943,8 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		{Name: "worker", Type: "worker", Port: 0, Framework: "node"},
+		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
+		{Name: "worker", Type: "worker", Port: 0, Runtime: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
@@ -1066,8 +979,8 @@ func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 	// "build-image-{app}". The assertion here is about per-app metadata file
 	// paths in build-image containers, so both apps must be container-delivered.
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		{Name: "web", Type: "server", Port: 4000, Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
+		{Name: "web", Type: "server", Port: 4000, Runtime: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
@@ -1197,6 +1110,7 @@ func testBuildPlan() *services.BuildPlan {
 				BuildArgs:        map[string]string{"NODE_ENV": "production", "COMMIT_SHA": "abc123", "APP_NAME": "api"},
 				CacheRef:         "reg.io/acme/my-app/api:buildcache",
 				LanguageStrategy: "node",
+				Runtime:          "node",
 				Build:            "buildpack",
 				AppType:          "server",
 				Port:             3000,
@@ -1262,149 +1176,6 @@ func TestWorkflowBuilder_BuildPlan_NoCache(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // BuildPlan — multi-language monorepo (M5 Tarefa 5.5)
-// ---------------------------------------------------------------------------
-
-func TestWorkflowBuilder_BuildPlan_MultiLanguageMonorepo(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParams())
-	spec := testSpec()
-	spec.Plan = &services.BuildPlan{
-		Apps: []services.AppBuildPlan{
-			{
-				AppName:          "api",
-				ImageTag:         "reg.io/acme/my-app/api:abc123",
-				DockerfilePath:   "/workspace/apps/api/Dockerfile",
-				ContextPath:      "/workspace/apps/api",
-				BuildArgs:        map[string]string{"COMMIT_SHA": "abc123", "APP_NAME": "api"},
-				CacheRef:         "reg.io/acme/my-app/api:buildcache",
-				LanguageStrategy: "node",
-				Build:            "buildpack",
-				AppType:          "server",
-				Port:             3000,
-			},
-			{
-				AppName:          "gateway",
-				ImageTag:         "reg.io/acme/my-app/gateway:abc123",
-				DockerfilePath:   "/workspace/apps/gateway/Dockerfile",
-				ContextPath:      "/workspace/apps/gateway",
-				BuildArgs:        map[string]string{"COMMIT_SHA": "abc123", "APP_NAME": "gateway"},
-				CacheRef:         "reg.io/acme/my-app/gateway:buildcache",
-				LanguageStrategy: "go",
-				Build:            "buildpack",
-				AppType:          "server",
-				Port:             8080,
-			},
-			{
-				AppName:          "ml-worker",
-				ImageTag:         "reg.io/acme/my-app/ml-worker:abc123",
-				DockerfilePath:   "/workspace/apps/ml-worker/Dockerfile",
-				ContextPath:      "/workspace/apps/ml-worker",
-				BuildArgs:        map[string]string{"COMMIT_SHA": "abc123", "APP_NAME": "ml-worker"},
-				CacheRef:         "reg.io/acme/my-app/ml-worker:buildcache",
-				LanguageStrategy: "python",
-				Build:            "buildpack",
-				AppType:          "worker",
-				Port:             0,
-			},
-		},
-	}
-	// Also set spec.Apps for the language-grouping pass which still mirrors
-	// spec.Plan via planFromApps in modern tests. This test sets spec.Plan
-	// explicitly above (with the reg.io registry and per-app paths the
-	// assertions depend on), so we do NOT overwrite it via planFromApps —
-	// language grouping reads spec.Plan.Apps after the T1.3 refactor.
-	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		{Name: "gateway", Type: "server", Port: 8080, Framework: "go"},
-		{Name: "ml-worker", Type: "worker", Port: 0, Framework: "python"},
-	}
-
-	wf, err := builder.Build(spec)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-
-	// Find the main DAG
-	var mainDAG *forge.DAG
-	for _, tmpl := range wf.Templates {
-		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == "build-pipeline" {
-			mainDAG = dag
-			break
-		}
-	}
-	if mainDAG == nil {
-		t.Fatal("build-pipeline DAG not found")
-	}
-
-	// Helper to find a task in the DAG
-	findTask := func(name string) *forge.Task {
-		for _, task := range mainDAG.Tasks {
-			if task.Name == name {
-				return task
-			}
-		}
-		return nil
-	}
-
-	// Should have per-language steps with suffixes (multi-language → suffixed)
-	for _, suffix := range []string{"-node", "-go", "-python"} {
-		for _, step := range []string{"validate-workspace", "install-deps", "build-apps", "generate-dockerfile", "security-scan"} {
-			taskName := step + suffix
-			if findTask(taskName) == nil {
-				t.Errorf("missing per-language DAG task: %s", taskName)
-			}
-		}
-	}
-
-	// Should have per-app build-image tasks
-	for _, appName := range []string{"build-image-api", "build-image-gateway", "build-image-ml-worker"} {
-		if findTask(appName) == nil {
-			t.Errorf("missing per-app DAG task: %s", appName)
-		}
-	}
-
-	// build-image-api should depend on generate-dockerfile-node
-	apiTask := findTask("build-image-api")
-	if apiTask != nil {
-		assertDependencies(t, apiTask, []string{"generate-dockerfile-node"})
-	}
-
-	// build-image-gateway should depend on generate-dockerfile-go
-	gwTask := findTask("build-image-gateway")
-	if gwTask != nil {
-		assertDependencies(t, gwTask, []string{"generate-dockerfile-go"})
-	}
-
-	// build-image-ml-worker should depend on generate-dockerfile-python
-	mlTask := findTask("build-image-ml-worker")
-	if mlTask != nil {
-		assertDependencies(t, mlTask, []string{"generate-dockerfile-python"})
-	}
-
-	// Each build-image should use its plan's resolved paths
-	apiContainer := findContainer(t, wf, "build-image-api")
-	if apiContainer != nil {
-		argsStr := strings.Join(apiContainer.Args, " ")
-		assertStringContains(t, argsStr, "--local context=/workspace/apps/api")
-		assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/api:abc123")
-	}
-
-	gwContainer := findContainer(t, wf, "build-image-gateway")
-	if gwContainer != nil {
-		argsStr := strings.Join(gwContainer.Args, " ")
-		assertStringContains(t, argsStr, "--local context=/workspace/apps/gateway")
-		assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/gateway:abc123")
-	}
-
-	mlContainer := findContainer(t, wf, "build-image-ml-worker")
-	if mlContainer != nil {
-		argsStr := strings.Join(mlContainer.Args, " ")
-		assertStringContains(t, argsStr, "--local context=/workspace/apps/ml-worker")
-		assertStringContains(t, argsStr, "--output type=image,name=reg.io/acme/my-app/ml-worker:abc123")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// --no-cache flag
 // ---------------------------------------------------------------------------
 
 func TestWorkflowBuilder_BuildKit_NoCache_OmitsCacheArgs(t *testing.T) {
@@ -1545,7 +1316,7 @@ func TestWorkflowBuilder_Build_RejectsNilPlan(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123",
 		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 		},
 		Plan: nil, // legacy path — must be rejected
 	}

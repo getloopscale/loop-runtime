@@ -29,7 +29,7 @@ Elas existem para centralizar contratos que precisam permanecer iguais em múlti
 
 ## Real Usage Matrix
 
-Tabela gerada via grep de `import "github.com/loopzero/loopzero/pkg/X"` em **2026-05-15**.
+Tabela gerada via grep de `import "github.com/getloopscale/loopzero/pkg/X"` em **2026-05-15**.
 Atualizar via `task pkg:usage-matrix:write` (script: `infra/scripts/pkg-usage-matrix.sh`).
 CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).
 

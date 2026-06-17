@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -270,7 +270,7 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain string) []Activ
 	apps := make([]ActivationAppInfo, 0, len(specs))
 	for _, s := range specs {
 		url := ""
-		if (s.Type == "server" || s.Type == "frontend") && baseDomain != "" {
+		if s.Type == "server" && baseDomain != "" {
 			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
 				release.TenantID, release.ProjectID, s.Name, release.Environment, baseDomain)
 		}

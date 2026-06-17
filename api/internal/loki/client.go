@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // Client queries Grafana Loki for build logs via the HTTP API.

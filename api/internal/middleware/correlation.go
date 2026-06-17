@@ -6,7 +6,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/loopzero/loopzero/pkg/correlation"
+	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
 // CorrelationID is an HTTP middleware that ensures every request has a Correlation-ID.

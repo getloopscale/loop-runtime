@@ -4,9 +4,9 @@ description: LoopZero platform PrometheusRules and Grafana dashboards
 type: application
 version: 0.2.0
 appVersion: "dev"
-home: https://github.com/loopzero/loopzero
+home: https://github.com/getloopscale/loopzero
 sources:
-  - https://github.com/loopzero/loopzero
+  - https://github.com/getloopscale/loopzero
 maintainers:
   - name: LoopZero Team
     url: https://loopzero.example

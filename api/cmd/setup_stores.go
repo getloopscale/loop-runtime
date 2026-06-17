@@ -7,14 +7,14 @@ import (
 	"encoding/hex"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/adapters"
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/source"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
-	"github.com/loopzero/loopzero/pkg/vault"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
+	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
 // StoreDeps holds all store instances created from the database adapter.

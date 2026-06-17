@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // PGCircuitBreakerConfig controls the PG pool circuit breaker.

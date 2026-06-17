@@ -33,7 +33,7 @@ set -euo pipefail
 CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
 API_PREFIX="${API_PREFIX:-/engine}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
-TEST_ENV="${TEST_ENV:-j22-test-$(date +%s)}"
+TEST_ENV="${TEST_ENV:-production}"
 CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loopzero-mgmt}"
 CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopzero-workload}"
 ESO_BUDGET_SECONDS="${ESO_BUDGET_SECONDS:-30}"
@@ -97,12 +97,24 @@ skip() {
 TMP_JWT=""
 mint_jwt() {
   if [[ -n "$TMP_JWT" ]]; then echo "$TMP_JWT"; return 0; fi
+  # CANONICAL 2026-06-15 dev-public LIVE: prefer HMAC session JWT (carries
+  # tenant_id from active session; passes loopzero-cloud /engine proxy guard
+  # per MEET-2026-04-07-039 B7). Bootstrap RSA JWT remains the fallback
+  # for engine-direct (localhost:13001) but lacks tenant_id claim so the
+  # /engine/* proxy rejects it.
+  if [[ -f "$HOME/.loopzero/local-dogfood-session-jwt.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-session-jwt.txt")
+    echo "$TMP_JWT"
+    return 0
+  fi
+  # Local dogfood path: reuse the seeded token file when available
   if [[ -f "$HOME/.loopzero/local-dogfood-token.txt" ]]; then
     TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-token.txt")
     echo "$TMP_JWT"
     return 0
   fi
-  printf 'ABORT: no JWT available; run seed-admin-loopzero-dev.sh or set TMP_JWT\n' >&2
+  printf 'ABORT: no JWT available; run seed-admin-loopzero-dev.sh + seed-local-user.sh
+' >&2
   return 1
 }
 
@@ -140,18 +152,23 @@ scenario_a_create() {
   local body
   body=$(printf '{"name":"%s","value":"sk_live_x","environment":"%s","app":"api"}' "$key" "$TEST_ENV")
   local code
+  # Canonical 2026-06-16: POST /api/v1/secrets handler reads project from
+  # `?project=<name>` query string (secrets.go:651), not JSON body. Without
+  # the query param, the FK constraint on environments rejects with 500.
   code=$(curl -sS -o /tmp/secrets-a.json -w "%{http_code}" -m 10 \
     -H "Authorization: Bearer $jwt" \
     -H "Content-Type: application/json" \
-    -X POST "${CLOUD_URL}${API_PREFIX}/api/v1/secrets" -d "$body" 2>/dev/null || echo 000)
+    -X POST "${CLOUD_URL}${API_PREFIX}/api/v1/secrets?project=${PROJECT_NAME}" -d "$body" 2>/dev/null || echo 000)
   case "$code" in
     200|201) assert "POST /api/v1/secrets returns 200/201" 1 ;;
     *) assert "POST /api/v1/secrets returns 200/201 (got $code)" 0; return 1 ;;
   esac
 
-  # Verify list contains the key
+  # Verify list contains the key. Canonical 2026-06-16: GET /secrets handler
+  # filters by ?project= same as POST does — system-wide list (project="")
+  # would not include the just-created project-scoped row.
   if curl -sS -m 10 -H "Authorization: Bearer $jwt" \
-      "${CLOUD_URL}${API_PREFIX}/api/v1/secrets?env=${TEST_ENV}" 2>/dev/null \
+      "${CLOUD_URL}${API_PREFIX}/api/v1/secrets?project=${PROJECT_NAME}&env=${TEST_ENV}" 2>/dev/null \
       | grep -q "\"$key\""; then
     assert "GET /api/v1/secrets list contains $key" 1
   else
@@ -167,16 +184,17 @@ scenario_b_rotate() {
   fi
   local jwt; jwt=$(mint_jwt) || return 1
   local key="J22_ROTATE_$(date +%s)"
-  # First create
+  # First create. Canonical 2026-06-16: ?project=<name> query string per
+  # secrets.go:651.
   curl -sS -o /dev/null -m 10 \
     -H "Authorization: Bearer $jwt" -H "Content-Type: application/json" \
-    -X POST "${CLOUD_URL}${API_PREFIX}/api/v1/secrets" \
+    -X POST "${CLOUD_URL}${API_PREFIX}/api/v1/secrets?project=${PROJECT_NAME}" \
     -d "{\"name\":\"$key\",\"value\":\"v1\",\"environment\":\"$TEST_ENV\",\"app\":\"api\"}" || true
   # Re-POST same name — upsert path serves as "rotate" until dedicated endpoint ships
   local code
   code=$(curl -sS -o /dev/null -w "%{http_code}" -m 10 \
     -H "Authorization: Bearer $jwt" -H "Content-Type: application/json" \
-    -X POST "${CLOUD_URL}${API_PREFIX}/api/v1/secrets" \
+    -X POST "${CLOUD_URL}${API_PREFIX}/api/v1/secrets?project=${PROJECT_NAME}" \
     -d "{\"name\":\"$key\",\"value\":\"v2-rotated\",\"environment\":\"$TEST_ENV\",\"app\":\"api\"}" 2>/dev/null || echo 000)
   case "$code" in
     200|201) assert "Re-POST same key updates row (upsert path; expected_version coming in follow-up)" 1 ;;

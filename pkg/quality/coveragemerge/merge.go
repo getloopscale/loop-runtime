@@ -39,7 +39,7 @@ import (
 	"strconv"
 	"strings"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Config holds the merger inputs.

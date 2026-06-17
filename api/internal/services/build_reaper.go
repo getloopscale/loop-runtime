@@ -11,8 +11,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // BuildReaperConfig configures the build reaper thresholds.

@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestClusterCredential_SpecFields(t *testing.T) {
@@ -131,7 +130,7 @@ func TestClusterCredential_StatusDisconnected(t *testing.T) {
 func TestClusterCredential_StatusConditions(t *testing.T) {
 	cc := ClusterCredential{}
 
-	conditions.SetCondition(&cc.Status.Conditions, "Reachable", metav1.ConditionTrue, "Connected", "cluster API server is reachable", 1)
+	SetCondition(&cc.Status.Conditions, "Reachable", metav1.ConditionTrue, "Connected", "cluster API server is reachable", 1)
 
 	if len(cc.Status.Conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d", len(cc.Status.Conditions))

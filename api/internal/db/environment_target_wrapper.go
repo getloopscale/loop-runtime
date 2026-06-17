@@ -39,7 +39,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // resolveSqlcDBTX selects the right db.DBTX (caller tx → fallback to

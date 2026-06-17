@@ -28,8 +28,8 @@ import (
 	"strconv"
 	"strings"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/quality/coverageparse"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/quality/coverageparse"
 )
 
 // DefaultThreshold (matches bash 80%).

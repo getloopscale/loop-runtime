@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# Phase 3+6 of plan 2026-06-15-100pct-dashboard-coverage-roadmap — umbrella
+# dogfood runner that invokes EVERY per-journey wrapper currently registered.
+#
+# Maps to sponsor goal "Dogfood --full → all 12 dogfood wrappers --live-only"
+# (currently 12 wrappers for delivered journeys; will grow to 23 when the
+# 10 backlog journeys + J-25 live-url ship — see roadmap Phase 3).
+#
+# Modes (mutually exclusive):
+#   --hermetic-only  CI-safe mode: invoke each wrapper with --hermetic-only.
+#                    No cluster + no LIVE HTTP probes. Fast (~5min total).
+#   --live-only      Operator + sponsor JUNTOS mode: invoke each wrapper
+#                    with --live-only against dev-public. Requires Cleanroom
+#                    TOTAL precedence + sponsor visual verification per
+#                    .claude/rules/cleanroom-up-live-test-mandate.md
+#                    INQUEBRÁVEL. SLOW (~60-90min total).
+#
+# Flags:
+#   --json           Machine-readable verdict aggregation.
+#   --bail-on-fail   Stop at first failing wrapper (default: continue + sum).
+#   --help|-h        Print usage.
+#
+# Exit codes (Rule 4 contract):
+#   0  All wrappers exit 0 (full chain PASS).
+#   1  At least one wrapper exited non-zero (chain FAIL — see summary).
+#   2  Usage error or flag combination invalid.
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+HERMETIC_ONLY=0
+LIVE_ONLY=0
+JSON_OUTPUT=0
+BAIL_ON_FAIL=0
+
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME --hermetic-only|--live-only [--json] [--bail-on-fail]
+
+Umbrella dogfood runner — invokes every dev-public journey wrapper
+in one chain. Maps to sponsor goal "Dogfood --full".
+
+REQUIRED: pick exactly one of --hermetic-only or --live-only.
+
+  --hermetic-only  Hermetic mode (CI-safe; no cluster needed).
+  --live-only      LIVE mode (requires Cleanroom + sponsor JUNTOS per
+                   .claude/rules/cleanroom-up-live-test-mandate.md
+                   INQUEBRÁVEL).
+  --json           Machine-readable JSON verdict.
+  --bail-on-fail   Stop at first failing wrapper.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hermetic-only) HERMETIC_ONLY=1 ;;
+    --live-only) LIVE_ONLY=1 ;;
+    --json) JSON_OUTPUT=1 ;;
+    --bail-on-fail) BAIL_ON_FAIL=1 ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+  shift
+done
+
+if [[ $HERMETIC_ONLY -eq 0 && $LIVE_ONLY -eq 0 ]]; then
+  echo "ERROR: must specify exactly one of --hermetic-only or --live-only" >&2
+  usage
+  exit 2
+fi
+
+if [[ $HERMETIC_ONLY -eq 1 && $LIVE_ONLY -eq 1 ]]; then
+  echo "ERROR: --hermetic-only and --live-only are mutually exclusive" >&2
+  usage
+  exit 2
+fi
+
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$REPO_ROOT"
+
+# Canonical per-journey wrapper list (sorted by journey ID for deterministic
+# ordering). NEW journeys: add the wrapper here when its 3-script triplet
+# ships per roadmap Phase 3 + matching `task test:dogfood:{slug}` target.
+WRAPPERS=(
+  "infra/scripts/local/dogfood-recovery.sh"          # J-04
+  "infra/scripts/local/dogfood-device.sh"            # J-05
+  "infra/scripts/local/dogfood-project-connect.sh"   # J-09
+  "infra/scripts/local/dogfood-environments.sh"      # J-10
+  "infra/scripts/local/dogfood-domains.sh"           # J-11
+  "infra/scripts/local/dogfood-deployments.sh"       # J-17 + J-19
+  "infra/scripts/local/dogfood-scale.sh"             # J-20
+  "infra/scripts/local/dogfood-readiness.sh"         # J-21
+  "infra/scripts/local/dogfood-secrets.sh"           # J-22
+  "infra/scripts/local/dogfood-secrets-openbao.sh"   # J-22 OpenBao Transit
+  "infra/scripts/local/dogfood-preview.sh"           # J-23
+  "infra/scripts/local/dogfood-live-url.sh"          # J-25
+  "infra/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
+  # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
+  #   J-02 dogfood-register.sh
+  #   J-03 dogfood-verification.sh
+  #   J-06 dogfood-overview.sh
+  #   J-12 dogfood-team-rbac.sh
+  #   J-13 dogfood-billing.sh
+  #   J-14 dogfood-audit-log.sh
+  #   J-15 dogfood-profile.sh
+  #   J-16 dogfood-settings.sh
+  #   J-24 dogfood-configuration.sh
+  #   J-18 dogfood-status-health.sh
+)
+
+PASS=0
+FAIL=0
+SKIP=0
+RESULTS=()
+
+MODE_FLAG=""
+[[ $HERMETIC_ONLY -eq 1 ]] && MODE_FLAG="--hermetic-only"
+[[ $LIVE_ONLY -eq 1 ]] && MODE_FLAG="--live-only"
+
+[[ $JSON_OUTPUT -eq 0 ]] && echo "=== dogfood-all umbrella — mode=$MODE_FLAG — ${#WRAPPERS[@]} wrappers ==="
+
+for wrapper in "${WRAPPERS[@]}"; do
+  label="$(basename "$wrapper" .sh)"
+
+  if [[ ! -f "$wrapper" ]]; then
+    SKIP=$((SKIP+1))
+    RESULTS+=("SKIP: $label (script missing on disk)")
+    [[ $JSON_OUTPUT -eq 0 ]] && echo "⊘ $label (script missing)"
+    continue
+  fi
+
+  if bash "$wrapper" "$MODE_FLAG" >/tmp/dogfood-all-${label}.log 2>&1; then
+    PASS=$((PASS+1))
+    RESULTS+=("PASS: $label")
+    [[ $JSON_OUTPUT -eq 0 ]] && echo "✓ $label"
+  else
+    FAIL=$((FAIL+1))
+    RESULTS+=("FAIL: $label (see /tmp/dogfood-all-${label}.log)")
+    [[ $JSON_OUTPUT -eq 0 ]] && echo "✗ $label (see /tmp/dogfood-all-${label}.log)"
+    if [[ $BAIL_ON_FAIL -eq 1 ]]; then
+      [[ $JSON_OUTPUT -eq 0 ]] && echo "[bail-on-fail] stopping at first failure"
+      break
+    fi
+  fi
+done
+
+echo
+if [[ $JSON_OUTPUT -eq 1 ]]; then
+  jq -n \
+    --argjson pass "$PASS" \
+    --argjson fail "$FAIL" \
+    --argjson skip "$SKIP" \
+    --argjson total "${#WRAPPERS[@]}" \
+    --arg mode "$MODE_FLAG" \
+    --arg verdict "$([[ $FAIL -eq 0 ]] && echo PASS || echo FAIL)" \
+    --argjson results "$(printf '%s\n' "${RESULTS[@]}" | jq -R . | jq -s .)" \
+    '{mode:$mode,pass:$pass,fail:$fail,skip:$skip,total:$total,verdict:$verdict,results:$results}'
+else
+  echo "=== summary: $PASS pass / $FAIL fail / $SKIP skip / ${#WRAPPERS[@]} total ==="
+  if [[ $FAIL -gt 0 ]]; then
+    echo
+    echo "Failing wrappers (see /tmp/dogfood-all-*.log for diagnostics):"
+    for r in "${RESULTS[@]}"; do
+      [[ "$r" == FAIL:* ]] && echo "  $r"
+    done
+  fi
+fi
+
+exit $(( FAIL > 0 ? 1 : 0 ))

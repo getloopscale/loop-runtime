@@ -7,11 +7,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // BuildOrchestratorAdapter implements routes.BuildOrchestratorService by
@@ -38,8 +38,9 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Type:      appType,
 			Port:      appPort,
 			Path:      app.Path,
-			Framework: app.Framework,
+			Runtime:   app.Runtime, // F-dom-2: services.json runtime is the build-strategy key
 			Build:     app.Build,
+			Start:     app.Start, // T0.2: declared start → canonical Dockerfile CMD
 			Rendering: app.Rendering,
 			Secrets:   app.Secrets,
 			// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): forward scaling
@@ -156,12 +157,11 @@ func (a *BuildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 // dashboard would race the in-flight build's own concurrent-build
 // guard).
 //
-// The source's apps_spec is converted back to AppInput. Path /
-// Framework / Build cannot be recovered because the schema does not
-// persist them; loopzero-packs autodetect at build time covers the
-// single-app monorepo case (the dominant Vercel-grade use case).
-// Multi-app monorepos with non-root app paths need a schema migration
-// to persist Path — tracked as a follow-up.
+// The source's apps_spec is converted back to AppInput. Path / Build /
+// Runtime / Start ARE recovered from the persisted apps_spec (T0.2/T0.1 —
+// the schema persists them). The legacy `framework` field was removed
+// (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): the build strategy is
+// keyed on the persisted `runtime` (python|node).
 func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenantID, buildID string) (*routes.RedeploySource, error) {
 	build, err := a.BuildStore.GetByIDForTenant(ctx, tenantID, buildID)
 	if err != nil {
@@ -184,6 +184,9 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 			Name:      s.Name,
 			Type:      s.Type,
 			Port:      s.Port,
+			Path:      s.Path,  // T0.2: now persisted → redeploy preserves monorepo path
+			Build:     s.Build, // T0.2: now persisted → redeploy preserves build mode
+			Start:     s.Start, // T0.2: now persisted → redeploy preserves start command
 			Rendering: s.Rendering,
 			Secrets:   s.Secrets,
 			Replicas:  s.Replicas,

@@ -101,7 +101,7 @@ func TestCheck_AllowsHelperReceiver(t *testing.T) {
 
 import (
 	"net/http"
-	"github.com/loopzero/loopzero/api/internal/correlation"
+	"github.com/getloopscale/loopzero/api/internal/correlation"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {

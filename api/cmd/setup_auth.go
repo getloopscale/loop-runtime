@@ -12,10 +12,10 @@ import (
 	"os"
 	"strings"
 
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // AuthDeps holds authentication and authorization components.
@@ -53,11 +53,21 @@ func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
 
 // setupAuth configures JWT validation (RSA-only) and service-to-service auth secrets.
 // MEET-2026-04-07-039: B3+B4 — engine uses RSA-only with strict audience.
+//
+// CANONICAL FIX 2026-06-15 (multi-audience per RFC 7519 § 4.1.3): loopzero-api
+// MUST accept BOTH "loopzero-engine" (CLI + bootstrap JWTs minted directly by
+// Hydra for engine-direct access) AND "loopzero-cloud" (HMAC session JWTs
+// minted by loopzero-cloud's /v1/auth/session/token endpoint for browser flows
+// proxied via /engine/* paths). Single-audience validation forced
+// bifurcated test patterns (different JWT shapes per CLOUD_URL target);
+// multi-audience accepts EITHER shape. Mirrors the canonical pattern
+// adopted by AWS Cognito, Auth0, Okta, Google Cloud Identity.
 func setupAuth(logger *slog.Logger) *AuthDeps {
 	// JWT-only auth — uses pkg/jwt (single source of truth).
 	jwksURL := os.Getenv("JWKS_URL")
 	jwtIssuer := os.Getenv("JWT_ISSUER")
-	rsaValidator := loopzerojwt.NewValidator(jwksURL, jwtIssuer, "loopzero-engine")
+	rsaValidator := loopzerojwt.NewValidatorWithAudiences(jwksURL, jwtIssuer,
+		[]string{"loopzero-engine", "loopzero-cloud"})
 
 	// B3: Engine drops HMAC entirely — RSA-only validation.
 	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, nil)

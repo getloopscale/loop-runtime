@@ -368,7 +368,7 @@ if ! kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api >/
 else
   declare -A IMG_OVERRIDES=(
     [LOOPZERO_CLONE_IMAGE]="${REGISTRY_HOST}:5000/loopzero-clone-runner:latest"
-    [LOOPZERO_PACKS_IMAGE]="${REGISTRY_HOST}:5000/loopzero-packs-runner:latest"
+    # T4.1: LOOPZERO_PACKS_IMAGE removed — loopzero-api no longer uses loopzero-packs.
     [LOOPZERO_SYFT_IMAGE]="${REGISTRY_HOST}:5000/loopzero-syft-scanner:latest"
     [LOOPZERO_COSIGN_IMAGE]="${REGISTRY_HOST}:5000/loopzero-cosign-signer:latest"
   )
@@ -935,35 +935,12 @@ kubectl --context "$MGMT_CTX" -n argocd rollout status statefulset argocd-applic
 
 
 # ---------------------------------------------------------------------------
-# H16: build-mode-dispatch-and-dockerfile-security-plan T3.3 (2026-05-07).
-# Ensure k3d-loopzero-registry has the canonical loopzero-packs-runner v0.4.0 (lenient
-# user-Dockerfile contract) AND loopzero-dockerfile-lint v0.1.0 (security linter
-# for `build: dockerfile` apps). Without these, fresh-cleanroom builds either
-# (a) fail because loopzero-packs at :latest is stale-strict, or (b) succeed but
-# skip the linter step rendering UserDockerfileStrategy a no-op.
-#
-# Idempotent: scripts no-op if image already present in registry (or skip
-# entirely if LOOPZERO_PACKS_SRC=skip).
+# T4.1 (simplify-deploy-loopzerokit-only v2.0): H16 loopzero-packs-runner +
+# loopzero-dockerfile-lint registry seeding removed — those images are no longer
+# used (canonical in-process Dockerfile generation replaced loopzero-packs; the
+# BYO-Dockerfile lint path was deleted). SCRIPT_DIR retained for H17+ below.
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-if [[ -x "$SCRIPT_DIR/../build/build-and-push-loopzero-packs.sh" ]]; then
-  log "H16: ensuring loopzero-packs-runner v0.4.0 in k3d-loopzero-registry"
-  if bash "$SCRIPT_DIR/../build/build-and-push-loopzero-packs.sh" >/dev/null 2>&1; then
-    log "  loopzero-packs-runner: v0.4.0 + latest published"
-  else
-    warn "  loopzero-packs-runner build/push failed — set LOOPZERO_PACKS_SRC=skip if you've pre-loaded the image"
-  fi
-fi
-
-if [[ -x "$SCRIPT_DIR/../build/build-and-push-dockerfile-lint.sh" ]]; then
-  log "H16: ensuring loopzero-dockerfile-lint v0.1.0 in k3d-loopzero-registry"
-  if bash "$SCRIPT_DIR/../build/build-and-push-dockerfile-lint.sh" >/dev/null 2>&1; then
-    log "  loopzero-dockerfile-lint: v0.1.0 + latest published"
-  else
-    warn "  loopzero-dockerfile-lint build/push failed — workflow with build:dockerfile apps will fail"
-  fi
-fi
 
 # ---------------------------------------------------------------------------
 # H17: dogfood-2026-05-08-fixes T1.3 (2026-05-08).

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -108,7 +108,7 @@ func maybeAutoscaler(docs []string, ri RenderInput, app AppManifestInput) []stri
 	}
 	if isScaleToZero(app.Autoscaling) {
 		docs = append(docs, marshalResource(buildScaledObject(ri, app)))
-		if app.Type == "server" || app.Type == "frontend" || app.Type == "" {
+		if app.Type == "server" || app.Type == "" {
 			docs = append(docs, marshalResource(buildHTTPScaledObject(ri, app)))
 		}
 		return docs
@@ -190,46 +190,5 @@ func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
 	return docs
 }
 
-// renderFrontendApp generates Deployment + PDB + Service + IngressRoute for a frontend app.
-// The container serves static assets via a lightweight HTTP server.
-//
-// Progressive delivery: same shape as renderServerApp (Rollout + 2 Services
-// + TraefikService + AnalysisTemplate).
-func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
-	port := app.Port
-	if port == 0 {
-		port = 80 // typical for frontend static servers
-	}
-
-	pdb := buildPDB(ri, app)
-	ingressResources := buildIngressResources(ri, app, port)
-
-	var docs []string
-	if ri.ProgressiveDelivery {
-		rollout := buildRollout(ri, app, port)
-		stableSvc := buildStableService(ri, app, port)
-		canarySvc := buildCanaryService(ri, app, port)
-		traefikSvc := buildTraefikService(ri, app, port)
-		docs = []string{
-			marshalResource(rollout),
-			marshalResource(pdb),
-			marshalResource(stableSvc),
-			marshalResource(canarySvc),
-			marshalResource(traefikSvc),
-		}
-		if ri.PrometheusAddress != "" {
-			docs = append(docs, marshalResource(buildAnalysisTemplate(ri, app)))
-		}
-	} else {
-		deployment := buildDeployment(ri, app, port)
-		service := buildService(ri, app, port)
-		docs = []string{
-			marshalResource(deployment),
-			marshalResource(pdb),
-			marshalResource(service),
-		}
-	}
-	docs = append(docs, ingressResources...)
-	docs = maybeAutoscaler(docs, ri, app)
-	return docs
-}
+// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): renderFrontendApp removed —
+// frontend/static delivery is no longer supported (server|worker only).

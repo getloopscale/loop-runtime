@@ -26,6 +26,7 @@ MELHORIAS.txt
 ralph-loop.local.md
 .claude/ralph-loop.local.md
 *.tgz
+code-review-output-infra-tests/
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------
@@ -204,3 +205,23 @@ infra/local/secrets/
 # caught untracked during 2026-06-14 housekeeping). Glob form catches future siblings.
 **/*.local.md
 api/.claude/
+
+# loop-code-review plugin scratch artifacts. The `final_report.md` per run IS the
+# canonical audit trail (cited by ADRs + review reports at known paths) so it stays
+# tracked; everything else under code-review-output-*/ is reproducible plugin state:
+#   - code-review.db  → SQLite DB, regenerated on each /loop-code-review invocation
+#   - analysis/audit/baseline/figures/findings/state/ → per-phase scratch dirs
+# Keeping these out of git avoids binary noise + repo bloat across audit cycles.
+code-review-output-*/code-review.db
+code-review-output-*/analysis/
+code-review-output-*/audit/
+code-review-output-*/baseline/
+code-review-output-*/figures/
+code-review-output-*/findings/
+code-review-output-*/state/
+
+# compiled loopzero-ops binary (build artifact; source is cmd/loopzero-ops/)
+/loopzero-ops
+
+# compiled helper binary (regenerable via go build)
+tools/gen-service-auth-ed25519/gen-service-auth-ed25519

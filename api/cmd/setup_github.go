@@ -12,12 +12,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/github"
-	ghwebhook "github.com/loopzero/loopzero/api/internal/github/webhook"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/github"
+	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // ErrPreviewNotImplemented is returned by the GitHub PR webhook handler

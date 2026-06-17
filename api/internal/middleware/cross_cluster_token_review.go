@@ -141,13 +141,6 @@ func (c *crossClusterCache) put(key string, result *TokenReviewResult) {
 	c.mu.Unlock()
 }
 
-// Size returns the number of cached entries (for test introspection).
-func (c *crossClusterCache) Size() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.m)
-}
-
 // NewCrossClusterMiddleware returns an http.Handler middleware function.
 // On success the handler chain sees the validated identity via
 // CrossClusterFromContext(ctx).

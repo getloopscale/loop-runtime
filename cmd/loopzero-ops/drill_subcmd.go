@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/loopzero/loopzero/pkg/quality/drillcost"
+	"github.com/getloopscale/loopzero/pkg/quality/drillcost"
 )
 
 const drillHelpText = `loopzero-ops drill — pure-logic helpers for the drill/DR orchestrators

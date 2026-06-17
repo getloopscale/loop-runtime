@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/operators/internal/httpclient"
+	"github.com/getloopscale/loopzero/operators/internal/httpclient"
 )
 
 // renewalThreshold is the minimum remaining TTL before a robot account is

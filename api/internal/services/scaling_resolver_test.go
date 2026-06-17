@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // fakeScalingStore is a stub implementing db.ScalingStore for tests.

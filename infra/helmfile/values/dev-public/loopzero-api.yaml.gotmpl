@@ -7,9 +7,14 @@
 # and hardcodes `.Values.image.tag: latest` as default — so we must
 # override both explicitly here.
 
+# CANONICAL FIX 2026-06-15 (multi-audience JWT): local rebuild with
+# pkg/jwt NewValidatorWithAudiences accepting BOTH loopzero-engine AND
+# loopzero-cloud audiences (per api/cmd/setup_auth.go). Image pushed to
+# k3d-loopzero-registry so dev-public mgmt pulls the multi-aud-capable
+# binary. Mirrors the loopzero-cloud override (same family of fix).
 image:
-  repository: registry.digitalocean.com/loopzero-system/loopzero-api
-  tag: dev
+  repository: k3d-loopzero-registry:5000/loopzero-api
+  tag: multi-aud-fix
   # Always so each rollout pulls the latest :dev push from DOCR.
   pullPolicy: Always
 
@@ -26,9 +31,33 @@ service:
   nodePort: 30001
 
 env:
+  # CANONICAL FIX 2026-06-15 (goal "continue until ALL tests pass"):
+  # OpenBao Transit chain enabled in dev-public. role_id comes from
+  # `bao read auth/approle/role/loopzero-api/role-id` after
+  # vault-bootstrap-dev.sh; secret_id is mounted from K8s Secret
+  # `loopzero-openbao-approle` (envFrom secretRef per loopzero-api chart).
+  # Without these, dogfood-secrets-openbao validates zero-leak property
+  # against unencrypted PG bytes → bypass-PASS. With these, secrets
+  # are encrypted via Transit (vault:v1:<ciphertext>) before PG store.
+  OPENBAO_TRANSIT_ENABLED: "true"
+  OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"
+  OPENBAO_VAULT_ROLE_ID: "bf1a3367-4059-dd74-98bb-b1ae8ff0c9c7"
+  # SPKI pin extracted dynamically from openbao-tls cert by
+  # vault-bootstrap-dev.sh (Step 10b). Mounted as Secret env var by
+  # the loopzero-api chart per existing envFrom: openbao-spki-pin pattern.
+
   # Local Hydra in loopzero-auth ns serves the JWKS for loopzero-api JWT verification.
+  # JWKS_URL: internal cluster URL is faster + avoids outbound TLS — same
+  # public keys regardless of fetch path.
   JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
-  JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  # CANONICAL FIX 2026-06-15 dev-public LIVE auth chain: JWT_ISSUER MUST
+  # match the `iss` claim set by Hydra at token mint time. Hydra is
+  # configured with `urls.self.issuer` = https://auth-dev.loopzero.example/
+  # (per dev-public/ory-hydra.yaml.gotmpl T3.1) so that browser-visible
+  # tokens carry the public URL as issuer. loopzero-api validation MUST
+  # accept that same public URL. Before this fix loopzero-api expected
+  # internal cluster URL, rejecting all browser-minted JWTs with 401.
+  JWT_ISSUER: "https://auth-dev.loopzero.example/"
   # BuildKit (in k3d-loopzero-build) pushes tenant images to k3d-loopzero-registry
   # via plain HTTP — canonical for local dev k3d topology. loopzero-api
   # configures BuildKit submitter with this hint so registry-config

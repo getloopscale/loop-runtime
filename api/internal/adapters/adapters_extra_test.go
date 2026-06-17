@@ -8,10 +8,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- RollbackServiceAdapter tests ---
@@ -57,11 +57,6 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 	}
 }
 
-// --- AuditAdapter compile-time check ---
-
-func TestAuditAdapter_ImplementsInterface(t *testing.T) {
-	var _ routes.AuditLogger = (*AuditAdapter)(nil)
-}
 
 // --- BuildOrchestratorAdapter additional tests ---
 

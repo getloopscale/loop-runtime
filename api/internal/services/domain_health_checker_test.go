@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // --- Test doubles for DomainHealthChecker ---

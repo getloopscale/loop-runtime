@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/source"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // maxBundleSize is the maximum allowed bundle size (500MB).
@@ -198,8 +198,11 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate services.json via embedded JSON Schema 7 validator.
-	cfg, appNames, err := source.ValidateServicesJSON(servicesJSONContent)
+	// Validate services.json via the embedded JSON Schema 7 native validator.
+	// T3.1 (plan simplify-deploy-loopzerokit-only v2.0): replaces the deprecated
+	// *LoopZeroYAML bridge. The handler needs only project name + sorted app names,
+	// both derived from the native manifest below.
+	manifest, err := source.ValidateServicesJSONNative(servicesJSONContent)
 	if err != nil {
 		var ve *source.ValidationError
 		if errors.As(err, &ve) {
@@ -245,11 +248,10 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract project name from loopzero.yaml (supports both 'project' and 'name' fields)
-	projectName := cfg.Project
-	if projectName == "" {
-		projectName = cfg.Name
-	}
+	// Project name + sorted app names derived from the native manifest (T3.1).
+	// ProjectNameFromManifest preserves the v1 "services-bundle" legacy fallback.
+	projectName := source.ProjectNameFromManifest(manifest)
+	appNames := source.AppNamesFromManifest(manifest)
 
 	// Rewind temp file for Gitea push
 	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {

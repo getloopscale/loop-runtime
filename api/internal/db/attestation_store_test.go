@@ -31,7 +31,7 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // TestAttestationStore_EmptyBuildID_ReturnsErrBuildNotFound —

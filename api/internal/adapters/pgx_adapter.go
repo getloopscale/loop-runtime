@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/lock"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/lock"
 )
 
 // PgxTxDBTX adapts a pgx.Tx to the db.DBTX interface.

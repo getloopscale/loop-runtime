@@ -10,7 +10,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // T2.3 (Test 2 + Test 7) of plan 2026-05-28-meet-001-engineering-closure-plan.md.

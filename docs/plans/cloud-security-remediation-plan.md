@@ -4,7 +4,7 @@
 
 ## Context
 
-The `cloud/` module is a separate Go module (`github.com/loopzero/loopzero/cloud`, chi + pgx + otel) plus a React/Vite dashboard. It was **not covered by the repo-root `CLAUDE.md`** and, critically, is **absent from the CI quality gate** — `.github/workflows/ci.yml` lints/tests only `[pkg, operators, api]`. Seven unit-test files already exist under `cloud/tests/unit/` but never execute in CI. Signed (cosign) images with SBOMs are produced from source that no automated gate validates.
+The `cloud/` module is a separate Go module (`github.com/getloopscale/loopzero/cloud`, chi + pgx + otel) plus a React/Vite dashboard. It was **not covered by the repo-root `CLAUDE.md`** and, critically, is **absent from the CI quality gate** — `.github/workflows/ci.yml` lints/tests only `[pkg, operators, api]`. Seven unit-test files already exist under `cloud/tests/unit/` but never execute in CI. Signed (cosign) images with SBOMs are produced from source that no automated gate validates.
 
 Evidence base (all traceable to `review-output/review.db`):
 - **Privilege-escalation chain (CHAIN-1):** `find_infra_003` (no default-deny NetworkPolicy in `ory` namespace → Hydra admin :4445 reachable cluster-wide) + `find_sec_002`/`find_infra_002` (`consent/handler.go:251` auto-approves *any* `client_id` and injects `tenant_id`) + `find_sec_003` (`RequireRole` wired on zero routes, `UserContext.Role` never populated) → forged JWT with arbitrary `tenant_id` reaches billing endpoints.

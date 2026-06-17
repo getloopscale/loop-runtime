@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // Beta Logs Gate Criterion 6 — release reaper reason messages must

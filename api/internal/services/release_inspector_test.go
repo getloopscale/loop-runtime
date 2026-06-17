@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md.

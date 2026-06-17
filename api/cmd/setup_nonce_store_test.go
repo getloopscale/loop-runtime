@@ -10,8 +10,8 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/pkg/serviceauth"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 
 // TestSetupServiceAuthNonceStore_DefaultsToInMemory — when no Redis

@@ -5,9 +5,25 @@ package services
 
 import "testing"
 
+// TestNormalizeApp_CopiesRuntime locks the T0.1 (F-dom-2) wiring: NormalizeApp
+// MUST carry the services.json `runtime` onto the AppUnit so the build-strategy
+// resolution (Phase 1) can dispatch on it. Given a raw AppSpec declaring
+// runtime "python", When normalized, Then AppUnit.Runtime == "python".
+func TestNormalizeApp_CopiesRuntime(t *testing.T) {
+	for _, rt := range []string{"python", "node"} {
+		unit, err := NormalizeApp("api", AppSpec{Path: ".", Runtime: rt, Port: 8080})
+		if err != nil {
+			t.Fatalf("runtime %q: unexpected error: %v", rt, err)
+		}
+		if unit.Runtime != rt {
+			t.Errorf("Runtime = %q, want %q (NormalizeApp must carry services.json runtime — T0.1/F-dom-2)", unit.Runtime, rt)
+		}
+	}
+}
+
 func TestNormalizeApp_ServerExpress(t *testing.T) {
 	unit, err := NormalizeApp("api", AppSpec{
-		Path: "apps/api", Framework: "express", Port: 3000,
+		Path: "apps/api", Runtime: "node", Port: 3000,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -26,44 +42,9 @@ func TestNormalizeApp_ServerExpress(t *testing.T) {
 	}
 }
 
-// Plan B v3.1 T-B.1 (2026-06-05) — framework-string heuristic removed
-// post LoopZeroKit-only cutover. Frontends now declare `type: "frontend"`
-// explicitly em services.json (or em the legacy AppSpec). Tests below
-// updated to assert the explicit-type contract.
-func TestNormalizeApp_FrontendNextjsStatic(t *testing.T) {
-	// MEET-2026-03-29-016 (updated 2026-06-05): Frontend MUST have render: static
-	// AND explicit type: frontend (no more framework-string auto-detect).
-	unit, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "nextjs", Type: "frontend", Rendering: "static",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if unit.Type != "frontend" {
-		t.Errorf("Type = %q, want frontend", unit.Type)
-	}
-	if unit.Rendering != "static" {
-		t.Errorf("Rendering = %q, want static", unit.Rendering)
-	}
-}
-
-func TestNormalizeApp_FrontendWithoutStaticRejected(t *testing.T) {
-	// MEET-2026-03-29-016 (updated 2026-06-05): Frontend type WITHOUT
-	// render: static must be rejected. Type must be explicit post T-B.1.
-	_, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "nextjs", Type: "frontend",
-	})
-	if err == nil {
-		t.Fatal("expected error for frontend without render: static")
-	}
-}
-
-// Plan B v3.1 T-B.1 — when neither Type nor Framework auto-detect applies,
-// the default falls through to "server" (safe default for the polyglot
-// services flow). Frontends must be opt-in via explicit Type.
 func TestNormalizeApp_NextjsWithoutExplicitType_DefaultsServer(t *testing.T) {
 	unit, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "nextjs", Port: 3000,
+		Path: "apps/web", Port: 3000,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -76,7 +57,7 @@ func TestNormalizeApp_NextjsWithoutExplicitType_DefaultsServer(t *testing.T) {
 func TestNormalizeApp_RemixIsServer(t *testing.T) {
 	// MEET-2026-03-29-016: Remix is SSR-first, classified as server
 	unit, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "remix", Port: 3000,
+		Path: "apps/web", Port: 3000,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -88,7 +69,7 @@ func TestNormalizeApp_RemixIsServer(t *testing.T) {
 
 func TestNormalizeApp_WorkerExplicit(t *testing.T) {
 	unit, err := NormalizeApp("worker", AppSpec{
-		Path: "apps/worker", Framework: "node", Type: "worker", Port: 3000,
+		Path: "apps/worker", Type: "worker", Port: 3000,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -101,18 +82,24 @@ func TestNormalizeApp_WorkerExplicit(t *testing.T) {
 	}
 }
 
-func TestNormalizeApp_CustomDockerfile(t *testing.T) {
+// TestNormalizeApp_UserDockerfileIgnored_D4 locks the D4 security invariant
+// (plan simplify-deploy-loopzerokit-only): BYO is deleted, so a user-supplied
+// Build="dockerfile" + Dockerfile is NOT honored — NormalizeApp pins build to
+// the platform-canonical "buildpack" and clears the dockerfile path. Given a
+// raw app declaring a custom Dockerfile, When normalized, Then build is
+// "buildpack" and dockerfile is empty.
+func TestNormalizeApp_UserDockerfileIgnored_D4(t *testing.T) {
 	unit, err := NormalizeApp("api", AppSpec{
-		Path: ".", Framework: "custom", Build: "dockerfile", Dockerfile: "Dockerfile.prod",
+		Path: ".", Build: "dockerfile", Dockerfile: "Dockerfile.prod",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if unit.Build != "dockerfile" {
-		t.Errorf("Build = %q, want dockerfile", unit.Build)
+	if unit.Build != "buildpack" {
+		t.Errorf("Build = %q, want buildpack (user Build=dockerfile must be ignored — D4)", unit.Build)
 	}
-	if unit.Dockerfile != "Dockerfile.prod" {
-		t.Errorf("Dockerfile = %q, want Dockerfile.prod", unit.Dockerfile)
+	if unit.Dockerfile != "" {
+		t.Errorf("Dockerfile = %q, want empty (user Dockerfile must be ignored — D4)", unit.Dockerfile)
 	}
 }
 
@@ -127,14 +114,11 @@ func TestNormalizeApp_DefaultsWhenEmpty(t *testing.T) {
 	if unit.Path != "." {
 		t.Errorf("Path = %q, want . (default)", unit.Path)
 	}
-	if unit.Framework != "custom" {
-		t.Errorf("Framework = %q, want custom (default)", unit.Framework)
+	if unit.Build != "buildpack" {
+		t.Errorf("Build = %q, want buildpack (fixed LoopZeroKit stack always uses the canonical platform Dockerfile — D4)", unit.Build)
 	}
-	if unit.Build != "dockerfile" {
-		t.Errorf("Build = %q, want dockerfile (custom framework)", unit.Build)
-	}
-	if unit.Dockerfile != "Dockerfile" {
-		t.Errorf("Dockerfile = %q, want Dockerfile (default)", unit.Dockerfile)
+	if unit.Dockerfile != "" {
+		t.Errorf("Dockerfile = %q, want empty (no user Dockerfile path — D4)", unit.Dockerfile)
 	}
 	if unit.Port != 8080 {
 		t.Errorf("Port = %d, want 8080 (default server port)", unit.Port)
@@ -149,9 +133,9 @@ func TestNormalizeApp_DefaultsWhenEmpty(t *testing.T) {
 
 func TestNormalizeApp_WithEnvAndSecrets(t *testing.T) {
 	unit, err := NormalizeApp("api", AppSpec{
-		Framework: "express",
-		Port:      3000,
-		Env:       map[string]string{"NODE_ENV": "production"},
+		Runtime: "node",
+		Port:    3000,
+		Env:     map[string]string{"NODE_ENV": "production"},
 		Secrets:   []string{"DATABASE_URL"},
 	})
 	if err != nil {
@@ -165,20 +149,8 @@ func TestNormalizeApp_WithEnvAndSecrets(t *testing.T) {
 	}
 }
 
-func TestNormalizeApp_GoFramework(t *testing.T) {
-	unit, err := NormalizeApp("api", AppSpec{
-		Framework: "gin", Port: 8080,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if unit.Type != "server" {
-		t.Errorf("Type = %q, want server", unit.Type)
-	}
-	if unit.Build != "buildpack" {
-		t.Errorf("Build = %q, want buildpack", unit.Build)
-	}
-}
+// TestNormalizeApp_GoFramework removed — go is not in the fixed LoopZeroKit stack
+// (F-dom-2). NormalizeApp Type/Build defaults are covered by the tests above.
 
 func TestNormalizeApp_InvalidType(t *testing.T) {
 	_, err := NormalizeApp("api", AppSpec{Type: "invalid"})

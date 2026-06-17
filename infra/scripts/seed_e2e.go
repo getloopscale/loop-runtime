@@ -23,7 +23,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/loopzero/loopzero/infra/tests/seed"
+	"github.com/getloopscale/loopzero/infra/tests/seed"
 )
 
 func main() {

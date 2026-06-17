@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // releaseMachine is the release state machine singleton. Used to validate

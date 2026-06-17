@@ -8,7 +8,7 @@ The LoopZero team takes security vulnerabilities seriously. We appreciate your e
 
 Instead, please report them via one of the following channels:
 
-1. **GitHub Security Advisories** (preferred): [Report a vulnerability](https://github.com/loopzero/loopzero/security/advisories/new)
+1. **GitHub Security Advisories** (preferred): [Report a vulnerability](https://github.com/getloopscale/loopzero/security/advisories/new)
 2. **Email**: security@loopzero.example
 
 ### What to Include

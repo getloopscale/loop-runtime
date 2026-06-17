@@ -9,7 +9,19 @@ package argo
 // ---------------------------------------------------------------------------
 
 const (
-	imageNode     = "node:20.11.1-alpine"
+	// Canonical 2026-06-16: Node 22.12.0 LTS is the minimum supported by
+	// `loopzerokit` (LoopZeroKit's package preflight rejects Node < 22.12 with
+	// "requires Node >= 22.12.0" because it uses AsyncLocalStorage + native
+	// fetch + structured WHATWG streams optimizations that depend on Node 22
+	// internals — older Node versions silently miscompile SSR streaming and
+	// NODE_MODULE_VERSION mismatch breaks native bindings). Bumping to 22.12
+	// to match the canonical LoopZeroKit framework requirement.
+	// Canonical 2026-06-16: node:22.12.0 (full Debian bookworm) for glibc
+	// compatibility with rollup native binaries (Alpine + musl breaks them
+	// per npm bug #4828). The dash-incompat `set -euo pipefail` from
+	// shellgen.SetE is sanitized in wrapWithLoopZeroMarkers (loopzero_log.go) so
+	// every step works under /bin/sh -> dash on Debian.
+	imageNode     = "node:22.12.0"
 	imageGolang   = "golang:1.22-alpine"
 	imagePython   = "python:3.12-alpine"
 	imageAlpine   = "alpine:3.21.3"
@@ -27,26 +39,10 @@ const (
 	// Built from: infra/images/syft-scanner/Dockerfile — CI builds via build-images.yml.
 	// Sprint 6 / T0.2 — used by sbom-{app} step to generate CycloneDX SBOMs.
 	imageSyftScanner = "registry.digitalocean.com/loopzero-system/loopzero-syft-scanner:v0.1.0"
-
-	// loopzero-packs-runner generates optimized Dockerfiles by analyzing source code.
-	// Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
-	// Built from: loopzero-packs repo — CI builds via build-runner.yml.
-	// build-mode-dispatch-and-dockerfile-security-plan T3.1 (2026-05-07):
-	// pinned to v0.4.0 — first version with lenient user-Dockerfile contract
-	// canonically documented. v0.2.0/v0.3.x had implicit-strict regression
-	// that errored on user-supplied Dockerfile.
-	// Local dev: override via LOOPZERO_PACKS_IMAGE env or use k3d-loopzero-registry:5000/loopzero-packs-runner:v0.4.0
-	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-system/loopzero-packs-runner:v0.4.0"
-
-	// loopzero-dockerfile-lint: static analyzer for user-supplied Dockerfiles.
-	// build-mode-dispatch-and-dockerfile-security-plan Phase 2 (2026-05-07).
-	// Runs as a step in user-Dockerfile builds BEFORE BuildKit. Hard rejection
-	// rules (FROM allow-list, RUN flag prohibitions, bind mount escape, reserved
-	// env keys, seccomp/apparmor unconfined) cause build to Fail. Soft warnings
-	// captured by Loki for audit.
-	// Built from: tools/loopzero-dockerfile-lint/Dockerfile — CI builds via build-images.yml.
-	// Local dev: override via LOOPZERO_DOCKERFILE_LINT_IMAGE env.
-	imageDockerfileLint = "registry.digitalocean.com/loopzero-system/loopzero-dockerfile-lint:v0.1.0"
+	// T4.1 (plan simplify-deploy-loopzerokit-only v2.0): imageLoopZeroPacks +
+	// imageDockerfileLint removed — loopzero-packs generation (T2.1) and the
+	// BYO-Dockerfile lint path (T2.2) are gone. The build uses canonical
+	// platform Dockerfiles generated in-process (canonical_dockerfile.go).
 )
 
 // ---------------------------------------------------------------------------

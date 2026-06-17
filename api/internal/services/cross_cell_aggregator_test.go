@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 func testLogger() *slog.Logger {

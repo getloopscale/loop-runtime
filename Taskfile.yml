@@ -81,6 +81,16 @@ tasks:
   # QA Tooling — Environment verification and diagnostics
   # ===========================================================================
 
+  check:
+    desc: >
+      Sprint canonical post-cleanroom check — aggregates the 8 category probes
+      (helmfile · configmaps · networking · auth · webhook · observability ·
+      integrity · cleanroom-guards) into a PASS/WARN/FAIL report. COMPLEMENTAR
+      a `task doctor` (per ADR D3 of cleanroom-canonical-5-defense-layers).
+      Wired in the Cleanroom skill Phase 4.5. Flags: --json --category=<id>
+      --hermetic --fail-fast.
+    cmds:
+      - bash infra/scripts/local/check-sprint.sh {{.CLI_ARGS}}
 
   # ===========================================================================
   # QA Tooling — E2E test preparation
@@ -209,16 +219,51 @@ tasks:
       - task: infra:install
       - task: networking:setup
       - task: crds:install
+      # CANONICAL ORDER FIX 2026-06-15 (dev-public Cleanroom chain-gap closure):
+      #
+      # ORIGINAL chain (broken): infra:install → db:migrate ❌ (loopzero-api in
+      #   CrashLoopBackOff because Secrets missing) → dev:seed → tokens:provision
+      #   → bootstrap:standalone (creates Secrets + CCs + seed-local-user).
+      #
+      # The reorder MUST split bootstrap:standalone into 2 phases:
+      #   pre-db (Secrets + ClusterCredentials + ArgoCD wiring; no DB tables
+      #     needed) — these make loopzero-api Ready so db:migrate works.
+      #   post-db (seed-local-user + bootstrap-seed-tenant-cr) — these write
+      #     to `users`/`tenants` tables which only exist after db:migrate.
+      #
+      # NEW chain (canonical):
+      #   infra:install (wait:false on bootstrap-deps charts so helmfile
+      #     completes; loopzero-api/operators/cloud cycle CrashLoopBackOff until
+      #     deps arrive)
+      #   bootstrap:standalone:pre-db (provisions Secrets + CCs → loopzero-api Ready)
+      #   db:migrate (kubectl exec loopzero-api works — Ready)
+      #   bootstrap:standalone:post-db (seed-local-user + tenant CR)
+      #   dev:seed (extra dev fixtures)
+      #   tokens:provision (idempotent — script already invoked inside pre-db)
+      #
+      # Sponsor "sem WORKAROUNDs" closure of [[feedback_task_setup_chain_gap_helm_timeout]].
+      - task: bootstrap:standalone:pre-db
       - task: db:migrate
+      - task: bootstrap:standalone:post-db
       - task: dev:seed
       - task: tokens:provision
-      - task: bootstrap:standalone
 
   bootstrap:standalone:
     desc: |
-      Standalone-mode bootstrap that closes gaps left by `task setup` for
-      cleanroom dogfood. Production helmfile sync runs all of these as
-      post-sync hooks; standalone (k3d) does not, so we run them explicitly.
+      Legacy alias for the FULL bootstrap chain (pre-db + post-db). Kept for
+      operator backwards compatibility (some runbooks invoke `task
+      bootstrap:standalone` directly). Internally now delegates to the 2-phase
+      canonical order. Per CANONICAL ORDER FIX 2026-06-15 — see `task setup`.
+    cmds:
+      - task: bootstrap:standalone:pre-db
+      - task: bootstrap:standalone:post-db
+
+  bootstrap:standalone:pre-db:
+    desc: |
+      PRE-DB phase of standalone bootstrap (CANONICAL ORDER FIX 2026-06-15).
+      Provisions Secrets + ClusterCredentials + ArgoCD wiring + Sigstore + cells
+      — everything that does NOT touch DB tables. Makes loopzero-api Ready so the
+      next step (db:migrate) can `kubectl exec` to apply migrations.
 
       Full B-patch index (B9-B82+) lives in CHANGELOG.md under
       "Cleanroom Dogfood Loop" / "Drill L2 Phase 2 (drill-l2-phase2)"
@@ -263,6 +308,14 @@ tasks:
       # 2026-05-14 (plan T0.1): bootstrap all three cells atomically
       # (cell-default + cell-1 + cell-2). Closes CTO Golden Rule #1 gap.
       - task: k3d:bootstrap-cells
+
+  bootstrap:standalone:post-db:
+    desc: |
+      POST-DB phase of standalone bootstrap (CANONICAL ORDER FIX 2026-06-15).
+      Steps that write to DB tables — MUST run AFTER db:migrate has created
+      schema (users, tenants, etc.). Idempotent: re-running on existing
+      rows is safe (UPSERT semantics + ON CONFLICT).
+    cmds:
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/seed-local-user.sh
       - bash infra/scripts/local/bootstrap-seed-tenant-cr.sh
 

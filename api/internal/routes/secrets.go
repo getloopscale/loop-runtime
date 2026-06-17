@@ -15,12 +15,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/correlation"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/correlation"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
@@ -287,6 +287,9 @@ const secretBulkMaxKeys = 100
 // - EC-11 (ESO sync_status polling)
 // - EC-12 (audit log atomicity)
 // - EC-14/15 (duplicate keys + whitespace preservation handled by Set)
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 19 → ≤ 10 via 3 helper extracts (decodeAndValidateBulkRequest +
+// assertSecretProjectBinding + assertSecretPlanLimit).
 func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -297,34 +300,9 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req secretBulkRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+	req, ok := decodeAndValidateBulkRequest(w, r)
+	if !ok {
 		return
-	}
-
-	if len(req.Secrets) > secretBulkMaxKeys {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{
-			"code":    "PAYLOAD_TOO_LARGE",
-			"message": fmt.Sprintf("bulk request exceeds %d keys; split into multiple uploads", secretBulkMaxKeys),
-		})
-		return
-	}
-
-	// EC-14 (backend defense in depth): reject 400 if a key appears more
-	// than once in the same batch. Browser-side parseDotenv (T3.5) also
-	// catches this pre-flight; backend rejects independently so API
-	// consumers cannot bypass.
-	seen := make(map[string]struct{}, len(req.Secrets))
-	for _, e := range req.Secrets {
-		if _, dup := seen[e.Name]; dup {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"code":    "DUPLICATE_KEY_IN_BATCH",
-				"message": fmt.Sprintf("key %q appears more than once in the same batch", e.Name),
-			})
-			return
-		}
-		seen[e.Name] = struct{}{}
 	}
 
 	project := req.Project
@@ -332,68 +310,11 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 		project = r.URL.Query().Get("project")
 	}
 
-	// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2) — cross-tenant
-	// binding check. Resolves the owning tenant of the requested project via
-	// the tenant-scoped GetByName query. EC-03 absorption: a nil result
-	// returns 404 PROJECT_NOT_FOUND with BYTE-IDENTICAL body whether the
-	// project belongs to another tenant OR does not exist at all. This is
-	// the canonical defense against CWE-204 (observable response
-	// discrepancy / existence-leak) — without it, an attacker could probe
-	// project names by distinguishing 403-vs-404 responses.
-	//
-	// Audit row distinction (cross_tenant_attempt vs project_not_found) is
-	// internal: with only the tenant-scoped lookup we cannot determine
-	// which case fired without a SECOND query, so we log a single
-	// PROJECT_LOOKUP_FAILED action with the requested project name +
-	// tenant_id; forensics can run `SELECT tenant_id FROM projects WHERE
-	// name='X'` to disambiguate post-hoc. A separate unscoped lookup adds
-	// timing-leak surface and is rejected on Don't Reinvent + KISS.
-	if h.projectChecker != nil && project != "" {
-		proj, err := h.projectChecker.GetByName(ctx, uc.TenantID, project)
-		if err != nil || proj == nil {
-			if h.audit != nil {
-				if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "PROJECT_LOOKUP_FAILED",
-					uc.UserID, "secret", project, "",
-					map[string]any{"reason": "cross_tenant_or_not_found"}); auditErr != nil {
-					slog.Error("failed to write audit log for cross-tenant lookup",
-						"project", project, "error", auditErr)
-				}
-			}
-			writeJSON(w, http.StatusNotFound, map[string]string{
-				"code":    "PROJECT_NOT_FOUND",
-				"message": "project not found",
-			})
-			return
-		}
+	if !h.assertSecretProjectBinding(ctx, w, uc.TenantID, uc.UserID, project) {
+		return
 	}
-
-	// J-22 T1.3 — plan-limit gate. EC-10 (pg_advisory_xact_lock race-safe)
-	// remains DEFERRED to a follow-up iteration; existing SecretEnvLocker
-	// pattern can be reused without redesigning the limiter contract.
-	if h.planLimits != nil {
-		// Counts each valid (key × env) tuple toward the cap. Invalid keys
-		// are subtracted later inside the loop (they don't materialize).
-		var adding int
-		for _, e := range req.Secrets {
-			if !secretNameRegex.MatchString(e.Name) {
-				continue
-			}
-			adding += len(e.Envs)
-		}
-		if adding > 0 {
-			allowed, current, max, plan := h.planLimits.IsAllowedToCreate(ctx, uc.TenantID, adding)
-			if !allowed {
-				writeJSON(w, http.StatusPaymentRequired, map[string]any{
-					"code":    "PLAN_LIMIT_EXCEEDED",
-					"message": fmt.Sprintf("plan %q allows %d secrets, currently at %d", plan, max, current),
-					"current": current,
-					"limit":   "secrets",
-					"max":     max,
-					"plan":    plan,
-				})
-				return
-			}
-		}
+	if !h.assertSecretPlanLimit(ctx, w, uc.TenantID, req.Secrets) {
+		return
 	}
 
 	results := make([]secretBulkResult, 0, len(req.Secrets))
@@ -402,6 +323,108 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, secretBulkResponse{Results: results})
+}
+
+// decodeAndValidateBulkRequest decodes the JSON body + enforces:
+//   - PAYLOAD_TOO_LARGE when over secretBulkMaxKeys
+//   - DUPLICATE_KEY_IN_BATCH (EC-14 backend defense in depth)
+//
+// Returns (req, true) to continue OR (zero, false) when the response was
+// already written.
+func decodeAndValidateBulkRequest(w http.ResponseWriter, r *http.Request) (secretBulkRequest, bool) {
+	var req secretBulkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		return req, false
+	}
+	if len(req.Secrets) > secretBulkMaxKeys {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{
+			"code":    "PAYLOAD_TOO_LARGE",
+			"message": fmt.Sprintf("bulk request exceeds %d keys; split into multiple uploads", secretBulkMaxKeys),
+		})
+		return req, false
+	}
+	seen := make(map[string]struct{}, len(req.Secrets))
+	for _, e := range req.Secrets {
+		if _, dup := seen[e.Name]; dup {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"code":    "DUPLICATE_KEY_IN_BATCH",
+				"message": fmt.Sprintf("key %q appears more than once in the same batch", e.Name),
+			})
+			return req, false
+		}
+		seen[e.Name] = struct{}{}
+	}
+	return req, true
+}
+
+// assertSecretProjectBinding implements T1.2 cross-tenant binding check.
+// Returns true to continue, false when 404 was written. Per EC-03,
+// emits byte-identical PROJECT_NOT_FOUND whether the project belongs to
+// another tenant OR does not exist — canonical defense against CWE-204
+// (observable response discrepancy / existence-leak).
+func (h *SecretHandler) assertSecretProjectBinding(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantID, userID, project string,
+) bool {
+	if h.projectChecker == nil || project == "" {
+		return true
+	}
+	proj, err := h.projectChecker.GetByName(ctx, tenantID, project)
+	if err == nil && proj != nil {
+		return true
+	}
+	if h.audit != nil {
+		if auditErr := h.audit.LogAudit(ctx, tenantID, "PROJECT_LOOKUP_FAILED",
+			userID, "secret", project, "",
+			map[string]any{"reason": "cross_tenant_or_not_found"}); auditErr != nil {
+			slog.Error("failed to write audit log for cross-tenant lookup",
+				"project", project, "error", auditErr)
+		}
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{
+		"code":    "PROJECT_NOT_FOUND",
+		"message": "project not found",
+	})
+	return false
+}
+
+// assertSecretPlanLimit implements J-22 T1.3 plan-limit gate. Returns
+// true to continue, false when 402 PLAN_LIMIT_EXCEEDED was written.
+// EC-10 race-safe lock remains DEFERRED.
+func (h *SecretHandler) assertSecretPlanLimit(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantID string,
+	secrets []secretBulkEntry,
+) bool {
+	if h.planLimits == nil {
+		return true
+	}
+	var adding int
+	for _, e := range secrets {
+		if !secretNameRegex.MatchString(e.Name) {
+			continue
+		}
+		adding += len(e.Envs)
+	}
+	if adding == 0 {
+		return true
+	}
+	allowed, current, max, plan := h.planLimits.IsAllowedToCreate(ctx, tenantID, adding)
+	if allowed {
+		return true
+	}
+	writeJSON(w, http.StatusPaymentRequired, map[string]any{
+		"code":    "PLAN_LIMIT_EXCEEDED",
+		"message": fmt.Sprintf("plan %q allows %d secrets, currently at %d", plan, max, current),
+		"current": current,
+		"limit":   "secrets",
+		"max":     max,
+		"plan":    plan,
+	})
+	return false
 }
 
 // bulkEnvAggregates collects per-env outcomes for a single bulk entry.

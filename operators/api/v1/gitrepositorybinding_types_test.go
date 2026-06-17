@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestGitRepositoryBinding_SpecFields(t *testing.T) {
@@ -113,14 +112,14 @@ func TestGitRepositoryBinding_StatusDefaults(t *testing.T) {
 func TestGitRepositoryBinding_SetCondition(t *testing.T) {
 	grb := GitRepositoryBinding{}
 
-	conditions.SetCondition(&grb.Status.Conditions, conditions.TypeCredentialsResolved, metav1.ConditionTrue, "Resolved", "credentials found", 1)
-	conditions.SetCondition(&grb.Status.Conditions, conditions.TypeRepositoryRegistered, metav1.ConditionTrue, "Registered", "repo registered in ArgoCD", 1)
+	SetCondition(&grb.Status.Conditions, TypeCredentialsResolved, metav1.ConditionTrue, "Resolved", "credentials found", 1)
+	SetCondition(&grb.Status.Conditions, TypeRepositoryRegistered, metav1.ConditionTrue, "Registered", "repo registered in ArgoCD", 1)
 
 	if len(grb.Status.Conditions) != 2 {
 		t.Fatalf("expected 2 conditions, got %d", len(grb.Status.Conditions))
 	}
 
-	c := conditions.GetCondition(grb.Status.Conditions, conditions.TypeCredentialsResolved)
+	c := GetCondition(grb.Status.Conditions, TypeCredentialsResolved)
 	if c == nil {
 		t.Fatal("expected to find CredentialsResolved condition")
 	}
@@ -131,10 +130,10 @@ func TestGitRepositoryBinding_SetCondition(t *testing.T) {
 
 func TestGitRepositoryBinding_ConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
-		conditions.TypeCredentialsResolved,
-		conditions.TypeRepositoryRegistered,
-		conditions.TypeRepositoryReachable,
-		conditions.TypeConsumerHealthy,
+		TypeCredentialsResolved,
+		TypeRepositoryRegistered,
+		TypeRepositoryReachable,
+		TypeConsumerHealthy,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

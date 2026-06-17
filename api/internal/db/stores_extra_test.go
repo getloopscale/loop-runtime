@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // =============================================================================

@@ -14,9 +14,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // StreamLogQuerier — alias to domain.StreamLogQuerier (T1.3 of
@@ -217,6 +218,9 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 // For build logs (isBuild=true), it stops when the build reaches a terminal state
 // and no new logs arrive for two consecutive polls.
 // For runtime logs, it streams until client disconnect or max duration.
+//
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 17 → ≤ 10 via 2 helper extracts (streamEntries + checkBuildTerminalDone).
 func (h *LogStreamHandler) streamLoop(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -256,61 +260,80 @@ func (h *LogStreamHandler) streamLoop(
 					return
 				}
 				h.logger.Warn("log stream: loki query failed", "key", queryKey, "error", err)
-				// Continue polling -- Loki may recover
 				continue
 			}
 
-			// Emit each log line as an SSE event
-			for _, entry := range entries {
-				ts := entry.Timestamp
-				nsID := timestampToNano(ts)
-
-				evt := sseLogEvent{
-					Timestamp: ts,
-					Line:      entry.Content,
-					Step:      entry.Step,
-				}
-
-				data, _ := json.Marshal(evt)
-				if writeErr := h.writeSSELogEvent(w, flusher, fmt.Sprintf("%d", nsID), data); writeErr != nil {
-					return
-				}
-
-				// Advance cursor past this entry
-				if nsID > sinceNano {
-					sinceNano = nsID
-				}
+			if !h.streamEntries(w, flusher, entries, &sinceNano) {
+				return
 			}
 
-			// For build logs: check if build is terminal and no more logs arriving.
-			// Internal polling loop AFTER auth gate; safe to use GetByID since
-			// the caller's tenant was already validated at handler entry.
-			if isBuild {
-				build, buildErr := h.builds.GetByID(ctx, queryKey)
-				if buildErr != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					continue
-				}
-				if build != nil && statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-					if len(entries) == 0 {
-						emptyPollsAfterTerminal++
-					} else {
-						emptyPollsAfterTerminal = 0
-					}
-
-					if emptyPollsAfterTerminal >= maxEmptyPollsAfterTerminal {
-						h.logger.Info("log stream: build terminal, no more logs",
-							"build_id", queryKey, "status", build.Status)
-						h.writeStreamEvent(w, flusher, "stream.done",
-							fmt.Sprintf(`{"status":"%s"}`, build.Status))
-						return
-					}
-				}
+			if isBuild && h.checkBuildTerminalDone(ctx, queryKey, len(entries), &emptyPollsAfterTerminal, maxEmptyPollsAfterTerminal, w, flusher) {
+				return
 			}
 		}
 	}
+}
+
+// streamEntries emits each Loki entry as an SSE log event + advances the
+// cursor. Returns true to continue the outer loop, false when a write
+// error occurs (client likely disconnected).
+func (h *LogStreamHandler) streamEntries(
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	entries []domain.LogEntry,
+	sinceNano *int64,
+) bool {
+	for _, entry := range entries {
+		ts := entry.Timestamp
+		nsID := timestampToNano(ts)
+		evt := sseLogEvent{Timestamp: ts, Line: entry.Content, Step: entry.Step}
+		data, _ := json.Marshal(evt)
+		if writeErr := h.writeSSELogEvent(w, flusher, fmt.Sprintf("%d", nsID), data); writeErr != nil {
+			return false
+		}
+		if nsID > *sinceNano {
+			*sinceNano = nsID
+		}
+	}
+	return true
+}
+
+// checkBuildTerminalDone returns true when the build is terminal AND no
+// new logs have arrived for `maxEmptyPolls` consecutive polls. Writes
+// the stream.done event when terminal. Internal polling loop AFTER
+// auth gate; safe to use GetByID since the caller's tenant was already
+// validated at handler entry.
+func (h *LogStreamHandler) checkBuildTerminalDone(
+	ctx context.Context,
+	queryKey string,
+	entriesLen int,
+	emptyPolls *int,
+	maxEmptyPolls int,
+	w http.ResponseWriter,
+	flusher http.Flusher,
+) bool {
+	build, buildErr := h.builds.GetByID(ctx, queryKey)
+	if buildErr != nil {
+		// On ctx cancel return true (caller will exit on next iteration).
+		// On transient err return false to continue polling.
+		return ctx.Err() != nil
+	}
+	if build == nil || !statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
+		return false
+	}
+	if entriesLen == 0 {
+		*emptyPolls++
+	} else {
+		*emptyPolls = 0
+	}
+	if *emptyPolls < maxEmptyPolls {
+		return false
+	}
+	h.logger.Info("log stream: build terminal, no more logs",
+		"build_id", queryKey, "status", build.Status)
+	h.writeStreamEvent(w, flusher, "stream.done",
+		fmt.Sprintf(`{"status":"%s"}`, build.Status))
+	return true
 }
 
 // writeSSELogEvent writes a single log SSE event.

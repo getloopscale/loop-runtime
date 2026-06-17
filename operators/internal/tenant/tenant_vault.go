@@ -18,9 +18,9 @@ import (
 	"errors"
 	"fmt"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/conditions"
-	"github.com/loopzero/loopzero/operators/internal/vault"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/internal/vault"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

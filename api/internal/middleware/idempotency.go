@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

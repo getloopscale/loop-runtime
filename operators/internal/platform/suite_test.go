@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	"github.com/loopzero/loopzero/operators/operatortest"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 const (

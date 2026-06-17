@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- Test doubles for ReleaseConvergenceLoop ---

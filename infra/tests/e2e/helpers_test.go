@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/loopzero/loopzero/infra/tests/seed"
+	"github.com/getloopscale/loopzero/infra/tests/seed"
 )
 
 // fixturesPath returns the absolute path to the E2E fixtures directory.

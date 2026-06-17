@@ -30,10 +30,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/pkg/enforcement"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // GenerateProjectID generates a project ID in the format

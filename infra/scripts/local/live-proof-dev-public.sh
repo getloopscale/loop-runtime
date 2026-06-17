@@ -535,21 +535,11 @@ esac
 printf '\n[live-proof] summary PASS=%d FAIL=%d\n' "$PASS" "$FAIL"
 
 if [[ $EMIT_JSON -eq 1 ]]; then
-  python3 -c "
-import json, os
-r = {}
-for k, v in os.environ.items():
-    if k.startswith('LP_'):
-        r[k[3:]] = v
-" || true
-  python3 <<EOF
-import json
-results = {
-$(for k in "${!RESULTS[@]}"; do printf "    '%s': '%s',\n" "$k" "${RESULTS[$k]}"; done)
-}
-verdict = 'GREEN' if all(v=='PROOF' for v in results.values()) else 'RED'
-print(json.dumps({'env': '$ENV_NAME', 'pass': $PASS, 'fail': $FAIL, 'verdict': verdict, 'results': results}, indent=2))
-EOF
+  LP_TMP="$(mktemp)"
+  for k in "${!RESULTS[@]}"; do printf '%s\t%s\n' "$k" "${RESULTS[$k]}"; done > "$LP_TMP"
+  LP_RESULTS_FILE="$LP_TMP" LP_ENV_NAME="$ENV_NAME" LP_PASS="$PASS" LP_FAIL="$FAIL" \
+    python3 "$(dirname "$0")/live_proof_dev_public.py"
+  rm -f "$LP_TMP"
 fi
 
 [[ "$FAIL" -eq 0 ]] || exit 1

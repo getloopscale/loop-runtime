@@ -6,7 +6,7 @@ package adapters
 import (
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // TestPgxTxDBTX_ImplementsSqlcBridge — regression test for the LIVE

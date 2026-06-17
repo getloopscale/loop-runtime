@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 )
 
 func TestJWTOnlyValidator_NilValidators_ReturnsError(t *testing.T) {

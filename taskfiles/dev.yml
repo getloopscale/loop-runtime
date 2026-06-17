@@ -1,7 +1,8 @@
 version: "3"
 
-# taskfiles/dev.yml — developer loop: dev:up, doctor, status, logs, cli:link/build, images.
-# Migration target: dev:up, doctor, status, logs:*, cli:*, images:*, setup, clean*.
+# taskfiles/dev.yml — developer loop: dev:up, doctor, status, logs, images.
+# Migration target: dev:up, doctor, status, logs:*, images:*, setup, clean*.
+# (CLI extracted to standalone github.com/getloopscale/loopzero-cli — M2 decomposition.)
 
 tasks:
   doctor:
@@ -717,12 +718,7 @@ tasks:
           (cd api && go test ./... -short -v)
           (cd infra/tests && go test ./unit/... -short -v)
         fi
-      - |
-        # CLI tests — Jest supports JUnit via --reporters
-        cd cli && npx jest --reporters=default --reporters=jest-junit 2>/dev/null \
-          || npm test
-        # Move JUnit if created
-        [ -f cli/junit.xml ] && mv cli/junit.xml {{.REPORT_DIR}}/cli-unit.xml 2>/dev/null || true
+      # CLI unit tests + JUnit report moved to the standalone loopzero-cli repo (M2 — 2026-06-16).
 
   test:report:e2e:
     desc: Run E2E tests with JUnit XML output

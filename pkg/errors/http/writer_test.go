@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 func TestWriteJSON_EmitsRFC9457Shape(t *testing.T) {

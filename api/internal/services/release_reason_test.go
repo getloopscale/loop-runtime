@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // TestExtractReaperReason_PopulatedFromSideEffects asserts that the reaper_reason

@@ -492,6 +492,19 @@ releases:
     # installed. Cloud/dev/prod/drill keep it installed (images from DOCR/CI).
     # See finding-2026-05-22-pg-password-divergence § helmfile<->tilt dual-ownership.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
+    # CANONICAL FIX 2026-06-15 dev-public Cleanroom chain-gap closure:
+    # `wait: false` overrides the global `wait: true` helmDefault for THIS
+    # release only. Reason: loopzero-api requires ClusterCredentials + several
+    # Secrets (argocd-refresh-credentials, loopzero-openbao-approle, etc.) that
+    # are provisioned by the LATER `task bootstrap:standalone` chain. With
+    # the global `wait: true`, helm install timed out at 10min because pod
+    # never reached Ready (CrashLoopBackOff on missing deps) BEFORE the
+    # chain that creates those deps. With `wait: false`, helm install
+    # returns immediately after applying manifests; the pod cycles in
+    # CrashLoopBackOff until bootstrap:standalone completes, then
+    # self-recovers on next restart cycle. Sponsor "sem WORKAROUNDs"
+    # closure of [[feedback_task_setup_chain_gap_helm_timeout]].
+    wait: false
     needs:
       - argocd/argocd
       - loopzero-system/gitea
@@ -539,6 +552,11 @@ releases:
     # STANDALONE: tilt owns operators (infra/tilt/*-operator-deployment.yaml).
     # Same dual-ownership reason as loopzero-api. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
+    # CANONICAL FIX 2026-06-15 dev-public Cleanroom chain-gap (same family
+    # as loopzero-api at line 482): operator requires ClusterCredentials which
+    # are provisioned by LATER task bootstrap:standalone. wait: false lets
+    # helmfile sync complete; pod self-recovers when deps arrive.
+    wait: false
     needs:
       - loopzero-system/loopzero-api
       # B45: LoopZero CRDs must exist before controller-runtime starts watches.
@@ -558,6 +576,8 @@ releases:
     chart: ../../charts/loopzero-app-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482).
+    wait: false
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-crds
@@ -576,6 +596,8 @@ releases:
     chart: ../../charts/loopzero-preview-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482).
+    wait: false
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-crds
@@ -594,6 +616,8 @@ releases:
     chart: ../../charts/loopzero-platform-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482).
+    wait: false
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-crds
@@ -615,6 +639,11 @@ releases:
     # not loopzero-cloud dashboard. Production keeps loopzero-cloud installed.
     # STANDALONE: tilt owns loopzero-cloud (dual-ownership, same as loopzero-api).
     installed: {{ and (ne .Environment.Name "drill") (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482):
+    # depends on loopzero-api Ready + loopzero-service-auth Secret; same self-recovery
+    # pattern. helmfile sync applies manifests; pod cycles in CrashLoopBackOff
+    # until bootstrap chain completes.
+    wait: false
     needs:
       - loopzero-auth/ory-hydra
       - loopzero-system/loopzero-api
@@ -684,7 +713,19 @@ releases:
     # Drill validates via Phase 6 L2 harness directly.
     # STANDALONE: depends on the tilt-owned app tier (loopzero-api/cloud/operators),
     # so skip the helmfile smoke-test locally too. See finding-2026-05-22-pg-password-divergence.
-    installed: {{ and (ne .Environment.Name "drill") (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    #
+    # DEV-PUBLIC (2026-06-15 canonical chain-gap closure): smoke-test is a
+    # Helm POST-INSTALL HOOK (`helm.sh/hook: post-install`), so `wait: false`
+    # does NOT bypass it (hooks always block helm install). The Job's
+    # `init-wait` container probes loopzero-api /health which is CrashLoopBackOff
+    # until LATER `task bootstrap:standalone` provisions argocd-refresh-credentials
+    # + ClusterCredentials. The Job fails with BackoffLimitExceeded, taking
+    # the whole helmfile sync with it. Canonical fix: skip smoke-test in
+    # dev-public too — `task doctor` validates post-bootstrap health (the
+    # same gate dogfood and chaos use). Matches the standalone reasoning.
+    # PROD keeps smoke-test installed (no bootstrap chain race: prod Secrets
+    # exist at sync time via External Secrets Operator + manual seeded SOPS).
+    installed: {{ and (ne .Environment.Name "drill") (ne .Environment.Name "dev-public") (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
       - loopzero-system/loopzero-api
 {{- if ne .Environment.Name "drill" }}

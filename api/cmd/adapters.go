@@ -7,14 +7,14 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/adapters"
-	"github.com/loopzero/loopzero/api/internal/admission"
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/pkg/correlation"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/k8s"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/admission"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // buildStoreAdmissionQuerier bridges the db.BuildStore interface to the

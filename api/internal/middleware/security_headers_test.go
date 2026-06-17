@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 func TestSecurityHeaders_SetsAllHeaders(t *testing.T) {

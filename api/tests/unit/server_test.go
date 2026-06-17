@@ -13,8 +13,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
 // fakeTokenValidator implements middleware.TokenValidator for server tests.

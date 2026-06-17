@@ -36,10 +36,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/domain"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/id"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/id"
 )
 
 // =========================================================================

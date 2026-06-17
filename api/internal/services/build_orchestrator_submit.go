@@ -9,10 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -124,6 +124,10 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 				Type:      a.Type,
 				Rendering: a.Rendering,
 				Port:      a.Port,
+				Start:     a.Start, // T0.2: persist declared start (canonical Dockerfile CMD)
+				Path:      a.Path,  // T0.2: persist app path (monorepo target)
+				Build:     a.Build, // T0.2: persist build mode
+				Runtime:   a.Runtime, // T0.1 (F-dom-2 wiring): persist services.json runtime
 				Secrets:   a.Secrets,
 				Replicas:  a.Replicas,
 			}

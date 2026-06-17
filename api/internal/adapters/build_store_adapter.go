@@ -7,9 +7,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // BuildStoreReaderAdapter implements sse.BuildStoreReader using db.BuildStore.

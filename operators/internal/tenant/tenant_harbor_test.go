@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
 func TestHarborQuotaForPlan(t *testing.T) {

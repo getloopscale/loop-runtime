@@ -5,13 +5,12 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // =============================================================================
@@ -64,134 +63,6 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 		return f.queryRowResult
 	}
 	return emptyRow{}
-}
-
-// fakeRowWithData returns preset values on Scan.
-type fakeRowWithData struct {
-	values []any
-	err    error
-}
-
-func (r *fakeRowWithData) Scan(dest ...any) error {
-	if r.err != nil {
-		return r.err
-	}
-	for i, d := range dest {
-		if i >= len(r.values) {
-			break
-		}
-		assignValue(d, r.values[i])
-	}
-	return nil
-}
-
-// fakeRowsMulti supports returning multiple rows via the Rows interface.
-type fakeRowsMulti struct {
-	data  [][]any
-	idx   int
-	err   error
-	scErr error
-}
-
-func (r *fakeRowsMulti) Next() bool {
-	if r.idx >= len(r.data) {
-		return false
-	}
-	r.idx++
-	return true
-}
-
-func (r *fakeRowsMulti) Scan(dest ...any) error {
-	if r.scErr != nil {
-		return r.scErr
-	}
-	row := r.data[r.idx-1]
-	for i, d := range dest {
-		if i >= len(row) {
-			break
-		}
-		assignValue(d, row[i])
-	}
-	return nil
-}
-
-func (r *fakeRowsMulti) Err() error { return r.err }
-func (r *fakeRowsMulti) Close()     {}
-
-// assignValue assigns src into the dest pointer using type assertion.
-func assignValue(dest any, src any) {
-	switch d := dest.(type) {
-	case *string:
-		if v, ok := src.(string); ok {
-			*d = v
-		}
-	case *int:
-		if v, ok := src.(int); ok {
-			*d = v
-		}
-	case *int64:
-		if v, ok := src.(int64); ok {
-			*d = v
-		}
-	case *bool:
-		if v, ok := src.(bool); ok {
-			*d = v
-		}
-	case *time.Time:
-		if v, ok := src.(time.Time); ok {
-			*d = v
-		}
-	case **time.Time:
-		if v, ok := src.(*time.Time); ok {
-			*d = v
-		}
-	case **int:
-		if v, ok := src.(*int); ok {
-			*d = v
-		}
-	case **string:
-		if v, ok := src.(*string); ok {
-			*d = v
-		}
-	case *json.RawMessage:
-		switch v := src.(type) {
-		case json.RawMessage:
-			*d = v
-		case []byte:
-			*d = json.RawMessage(v)
-		case string:
-			*d = json.RawMessage(v)
-		}
-	case *[]byte:
-		switch v := src.(type) {
-		case []byte:
-			*d = v
-		case string:
-			*d = []byte(v)
-		}
-	}
-}
-
-// makeBuildRowValues creates a build row values slice matching scanBuild order.
-func makeBuildRowValues(b Build) []any {
-	return []any{
-		b.ID, b.TenantID, b.ProjectID, b.Environment, b.Status,
-		b.CommitSHA, b.CorrelationID, b.CreatedBy,
-		b.CreatedAt, b.StartedAt, b.FinishedAt, b.ErrorMessage,
-		b.DurationSeconds, b.WorkflowID,
-	}
-}
-
-// makeReleaseRowValues creates a release row values slice matching scanRelease order.
-// CHG-2026-04-25-ATTESTATION-WIRE: includes the 3 nullable signature columns.
-func makeReleaseRowValues(r Release) []any {
-	return []any{
-		r.ID, r.BuildID, r.TenantID, r.ProjectID, r.Environment,
-		r.Status, r.CorrelationID, r.CreatedBy,
-		r.CreatedAt, r.GitCommit, r.GitMirrorStatus,
-		r.Apps, r.Artifacts, r.SideEffects,
-		r.ImageDigest, r.ImageSignature, r.ImageSignedAt,
-	}
 }
 
 // =============================================================================
@@ -436,34 +307,6 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // helper it tested. Username is now a column on users, not derived from
 // the id. See migration 000037 and team_store.go.
 
-// =============================================================================
-// Membership Store tests — DELETED in T2.1 #8a of plan
-// 2026-05-29-sqlc-migration v1.3
-// =============================================================================
-//
-// 3 sub-tests previously here (TestMembershipStore_GetMemberships_
-// Empty, _Success, _QueryError) used fakeDBTX/recordingDBTX stubs.
-// With T2.1 #8a migrating PostgresMembershipStore to sqlc-backed
-// via SqlcBridge, the fake pattern is incompatible.
-//
-// KEEP-INVARIANT preserved structurally by membership_wrapper.go:
-//   - GetMemberships query is tenantpredicate:exempt (user-
-//     principal lookup); result enumerates all tenants the user
-//     belongs to
-//   - Empty result → empty slice via make() pattern
-//   - Error propagation preserved with "membership store: query
-//     failed:" prefix
-//
-// Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
-// is wired.
-//
-// TombFunc keeps the function symbol so the closing `}` of the
-// previous block stays in scope.
-func tombMembershipStoreGetMembershipsTest(t *testing.T) {
-	_ = t
-	// no-op tombstone
-}
 
 // =============================================================================
 // Environment Target Store tests — DELETED in T2.1 #6 of plan

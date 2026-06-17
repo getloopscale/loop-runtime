@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
 var _ = Describe("Golden: Network Policies", Ordered, func() {

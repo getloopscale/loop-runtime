@@ -61,28 +61,9 @@ printf '%s' "$NODEHOSTS_BLOCK" >&2
 # === Diff-then-patch via Python (CoreDNS Corefile structure preservation) ===
 CURRENT=$(kubectl --context "$CONTEXT" -n "$COREDNS_NS" get cm "$COREDNS_CM" -o jsonpath='{.data.NodeHosts}' 2>/dev/null || echo "")
 
-PATCH=$(python3 - <<PYEOF
-import os, sys
-current = """$CURRENT""".strip().splitlines()
-target = """$NODEHOSTS_BLOCK""".strip().splitlines()
-# Index by hostname (col 2)
-def idx(lines):
-    out = {}
-    for ln in lines:
-        parts = ln.split()
-        if len(parts) >= 2: out[parts[1]] = parts[0]
-    return out
-
-c, t = idx(current), idx(target)
-# Merge: keep existing entries, override target hosts
-merged = dict(c)
-for host, ip in t.items():
-    merged[host] = ip
-# Output sorted
-out = '\n'.join(f'{ip} {host}' for host, ip in sorted(merged.items()))
-print(out)
-PYEOF
-)
+# Merge logic homed in networking_cross_cluster_coredns.py (D2 — kubectl stays here).
+HELPER="$(dirname "$0")/networking_cross_cluster_coredns.py"
+PATCH=$(NCC_CURRENT="$CURRENT" NCC_TARGET="$NODEHOSTS_BLOCK" python3 "$HELPER" merge)
 
 if [[ "$PATCH" == "$CURRENT" ]]; then
   log "Skip: CoreDNS NodeHosts already canonical (no diff)"
@@ -91,18 +72,10 @@ fi
 
 log "Applying CoreDNS NodeHosts patch..."
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  kubectl --context "$CONTEXT" -n "$COREDNS_NS" patch cm "$COREDNS_CM" \
-    --type=json \
-    -p "$(python3 -c "import json; print(json.dumps([{'op':'replace','path':'/data/NodeHosts','value':'$PATCH'.replace(chr(10),chr(10))}]))" 2>/dev/null || echo '[]')" \
-    --dry-run=client -o yaml | head -20
-  # Apply for real (separate command for clarity)
+  # Read live ConfigMap → set data.NodeHosts in the .py transform → apply.
   kubectl --context "$CONTEXT" -n "$COREDNS_NS" get cm "$COREDNS_CM" -o yaml | \
-    python3 -c "
-import sys, yaml
-d = yaml.safe_load(sys.stdin)
-d['data']['NodeHosts'] = '''$PATCH'''
-print(yaml.safe_dump(d))
-" | kubectl --context "$CONTEXT" -n "$COREDNS_NS" apply -f -
+    NCC_NODEHOSTS="$PATCH" python3 "$HELPER" set-nodehosts | \
+    kubectl --context "$CONTEXT" -n "$COREDNS_NS" apply -f -
   kubectl --context "$CONTEXT" -n "$COREDNS_NS" rollout restart deployment "$COREDNS_CM"
 fi
 

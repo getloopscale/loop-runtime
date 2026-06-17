@@ -25,9 +25,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
 // newSourceUploadMultipartReq builds a minimal valid-shape multipart request

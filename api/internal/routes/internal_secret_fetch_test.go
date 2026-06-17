@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // --- mocks ---
@@ -81,47 +81,6 @@ func (m *mockAuditWriter) eventTypes() []string {
 
 // --- test helper ---
 
-func newTestServer(t *testing.T, deps SecretFetchHandlerDeps, identity *middleware.TokenReviewResult) *httptest.Server {
-	t.Helper()
-	r := chi.NewRouter()
-	if identity != nil {
-		// Inject identity directly (bypassing real middleware for unit tests).
-		r.Use(func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				ctx := contextWithIdentity(req.Context(), identity)
-				next.ServeHTTP(w, req.WithContext(ctx))
-			})
-		})
-	}
-	r.Post("/internal/v1/secret-fetch/{tenant_id}/{secret_name}", NewSecretFetchHandler(deps))
-	return httptest.NewServer(r)
-}
-
-// contextWithIdentity uses an unexported key shared with the production code.
-// We achieve this by going through the middleware package's exported helper
-// in reverse — set the value via a private exported helper. Since we cannot
-// reach into another package's private key, we use a small trampoline middleware
-// in the production code OR we replicate the key here. For test purposes we
-// inject identity through the cross_cluster middleware's exported context key
-// helper indirectly: we cannot, so we rely on this test using a tiny shim.
-//
-// Implementation note: middleware exports CrossClusterFromContext (read) but
-// not the write helper. To keep the test hermetic, we use httptest's request
-// and reach into the chain after a no-op cross-cluster middleware that just
-// injects the result we want. Easiest: use a test-only middleware that
-// directly puts the same private key — which requires importing the unexported
-// symbol. Workaround: wrap with the real NewCrossClusterMiddleware + a mock
-// Reviewer that returns the desired identity.
-func contextWithIdentity(ctx context.Context, identity *middleware.TokenReviewResult) context.Context {
-	// To set the same private key without exporting it, we use a trampoline:
-	// run the real middleware with a mock reviewer that always returns this
-	// identity.
-	// However, that requires an http.Request; here we wrap with a synthetic
-	// trampoline that sets the value via the middleware's own context.WithValue.
-	// Easiest stable path: use the middleware's NewCrossClusterMiddleware in
-	// the route table directly (see newTestServerWithCrossCluster below).
-	return ctx
-}
 
 // mockReviewer is a programmable CrossClusterTokenReviewer that satisfies the
 // real middleware interface.
@@ -240,7 +199,10 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 			composite := badName + ".testproj.production"
 			url := srv.URL + "/internal/v1/secret-fetch/tenant-a/" + composite
 			req := newAuthedRequest(http.MethodPost, url, "cell-default")
-			resp, _ := http.DefaultClient.Do(req)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("http.DefaultClient.Do: %v", err)
+			}
 			defer resp.Body.Close()
 			// "PATH/TRAVERSAL" + "../../../platform/master" still cause
 			// chi to fail routing (path contains additional '/' segments)
@@ -272,7 +234,10 @@ func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
 
 	req := newAuthedRequest(http.MethodPost,
 		srv.URL+"/internal/v1/secret-fetch/tenant-a/S.testproj.production", "cell-1")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("want 403, got %d", resp.StatusCode)
@@ -313,7 +278,10 @@ func TestSecretFetch_TenantNotFound_404(t *testing.T) {
 
 	req := newAuthedRequest(http.MethodPost,
 		srv.URL+"/internal/v1/secret-fetch/tenant-missing/MY_SECRET.testproj.production", "cell-default")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("want 404, got %d", resp.StatusCode)
@@ -332,7 +300,10 @@ func TestSecretFetch_SecretNotFound_404(t *testing.T) {
 
 	req := newAuthedRequest(http.MethodPost,
 		srv.URL+"/internal/v1/secret-fetch/tenant-a/MISSING.testproj.production", "cell-default")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("want 404, got %d", resp.StatusCode)
@@ -351,7 +322,10 @@ func TestSecretFetch_TenantBindingError_500(t *testing.T) {
 
 	req := newAuthedRequest(http.MethodPost,
 		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-default")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", resp.StatusCode)
@@ -374,7 +348,10 @@ func TestSecretFetch_NoAuth_401(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost,
 		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", nil)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http.DefaultClient.Do: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("want 401, got %d", resp.StatusCode)

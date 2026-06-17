@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 partial):

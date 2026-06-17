@@ -39,9 +39,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/id"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/id"
 )
 
 // Compile-time assertion: AppAttestationStoreSqlc satisfies

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/loopzero/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
 	coreV1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )

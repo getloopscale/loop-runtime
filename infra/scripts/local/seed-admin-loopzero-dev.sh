@@ -280,30 +280,8 @@ ensure_identity_password() {
     return 2
   }
 
-  python3 - <<PY > /tmp/seed-admin-identity-new.json
-import json
-with open("/tmp/seed-admin-identity-current.json") as f:
-    cur = json.load(f)
-out = {
-  "schema_id": cur.get("schema_id", "default"),
-  "traits": cur.get("traits", {}),
-  "verifiable_addresses": cur.get("verifiable_addresses", []),
-  "recovery_addresses": cur.get("recovery_addresses", []),
-  "metadata_public": cur.get("metadata_public"),
-  "metadata_admin": cur.get("metadata_admin"),
-  "state": cur.get("state", "active"),
-  # PUT-with-credentials writes cleartext password; Kratos hashes on save.
-  # Preserves the OIDC credential implicitly because PUT semantics on
-  # /admin/identities/{id} replace only the supplied fields' explicit
-  # contents — credentials NOT listed are retained on the server side.
-  "credentials": {
-    "password": {
-      "config": {"password": "${SEED_PASSWORD}"}
-    }
-  },
-}
-print(json.dumps(out))
-PY
+  CURRENT_IDENTITY_PATH="/tmp/seed-admin-identity-current.json" SEED_PASSWORD="$SEED_PASSWORD" \
+    python3 "$(dirname "$0")/seed_admin_loopzero_dev.py" build-identity > /tmp/seed-admin-identity-new.json
 
   local http
   http="$(curl -s -o /tmp/seed-admin-put.json -w '%{http_code}' \
@@ -522,6 +500,50 @@ except Exception:
   esac
 }
 
+# --- HMAC session JWT persist (2026-06-15 canonical) ------------------------
+#
+# Mints loopzero-cloud HMAC session JWT via /v1/auth/session/token (cookie
+# exchange) and persists to SESSION_JWT_FILE for dogfood --live-only
+# consumption. Returns non-zero on transient failures (cloud unreachable,
+# JWT mint API down); the caller treats as WARN since the Kratos session
+# cookie remains valid and the JWT can be re-derived on demand.
+SESSION_JWT_FILE="${SESSION_JWT_FILE:-$HOME/.loopzero/local-dogfood-session-jwt.txt}"
+
+persist_session_jwt() {
+  local cookie_value
+  cookie_value="$(cat "$SESSION_FILE" 2>/dev/null || true)"
+  if [ -z "$cookie_value" ] ; then
+    return 1
+  fi
+  local jwt_code
+  jwt_code="$(curl -s -o /tmp/seed-admin-jwt-persist.json -w '%{http_code}' \
+    --max-time 5 -X POST \
+    -b "ory_kratos_session=${cookie_value}" \
+    -H "Origin: https://app-dev.loopzero.example" \
+    "${PUBLIC_CLOUD_URL}/v1/auth/session/token" 2>&1 || true)"
+  if [ "$jwt_code" != "200" ] ; then
+    return 1
+  fi
+  local jwt
+  jwt="$(python3 -c '
+import json, sys
+try:
+  d = json.load(open("/tmp/seed-admin-jwt-persist.json"))
+  sys.stdout.write(d.get("token") or d.get("access_token") or d.get("session_token") or "")
+except Exception:
+  pass
+' 2>/dev/null || true)"
+  if [ -z "$jwt" ] ; then
+    return 1
+  fi
+  mkdir -p "$(dirname "$SESSION_JWT_FILE")"
+  chmod 700 "$(dirname "$SESSION_JWT_FILE")" 2>/dev/null || true
+  printf '%s' "$jwt" > "$SESSION_JWT_FILE"
+  chmod 0600 "$SESSION_JWT_FILE"
+  log "Session JWT persisted: ${SESSION_JWT_FILE} (len=${#jwt})"
+  return 0
+}
+
 # --- Main -------------------------------------------------------------------
 
 main() {
@@ -556,6 +578,15 @@ main() {
   if [ "$VERIFY" = "1" ] ; then
     verify_session || exit $?
   fi
+
+  # CANONICAL FIX 2026-06-15: persist HMAC session JWT alongside the
+  # Kratos session cookie. The HMAC JWT (aud="loopzero-cloud", carries
+  # tenant_id from active session) is the only JWT shape that passes
+  # loopzero-cloud's middleware on /engine/* proxy paths. dogfood --live-only
+  # tests now prefer this file over the bootstrap RSA JWT
+  # (~/.loopzero/local-dogfood-token.txt; aud="loopzero-engine", NO tenant_id)
+  # which is engine-direct only.
+  persist_session_jwt || log "WARN: session JWT persist skipped (--verify did not mint OR cloud unreachable)"
 
   log "DONE — session ready at ${SESSION_FILE}"
 }

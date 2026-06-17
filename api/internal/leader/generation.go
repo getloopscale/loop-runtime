@@ -45,8 +45,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // ErrFenced is returned by Heartbeat or Validate when the lease has been

@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
+	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 )
 
 // JWTOnlyValidator validates JWT tokens — RSA (Hydra) + HMAC session (dashboard).

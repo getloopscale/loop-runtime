@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	gh "github.com/loopzero/loopzero/api/internal/github"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	gh "github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // repoStoreAdapter bridges db.PostgresRepositoryStore → routes.RepositoryStore.

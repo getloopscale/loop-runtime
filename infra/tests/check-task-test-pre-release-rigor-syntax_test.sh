@@ -14,7 +14,7 @@
 #
 # Hermetic: NO network, NO kubectl, NO `task --list` invocation (parses YAML
 # directly). Runs in < 1s.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 TF="${REPO_ROOT}/taskfiles/test.yml"

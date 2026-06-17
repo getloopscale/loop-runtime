@@ -15,11 +15,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/argo"
-	"github.com/loopzero/loopzero/api/internal/correlation"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/validation"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/correlation"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/validation"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // environmentRegex validates environment names (DA-10).
@@ -53,8 +52,9 @@ type AppInput struct {
 	Type      string               `json:"type,omitempty"`       // "server", "worker", "frontend"
 	Port      int                  `json:"port,omitempty"`
 	Path      string               `json:"path,omitempty"`
-	Framework string               `json:"framework,omitempty"`  // "express", "go", "fastapi", etc.
+	Runtime   string               `json:"runtime,omitempty"`     // services.json runtime: "python" | "node" — the build-strategy key (T1, F-dom-2)
 	Build     string               `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
+	Start     string               `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Rendering string               `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
 	Secrets   []string             `json:"secrets,omitempty"`
 	// B15: scaling config — either Replicas OR Autoscaling (never both).
@@ -113,11 +113,9 @@ type BuildOrchestratorService interface {
 	// re-submit a build identical to the source: project_id, environment,
 	// commit_sha, and the persisted apps spec. Verifies tenant ownership
 	// inside. Returns ErrBuildNotTerminal if the source build is still
-	// in flight. Path/Framework/Build fields on the returned apps will
-	// be empty because the apps_spec column does not preserve them;
-	// loopzero-packs autodetects at build time for single-app monorepos,
-	// which is the common case. Multi-app monorepos with non-root paths
-	// need a schema migration (deferred).
+	// in flight. Path/Build/Runtime/Start ARE preserved by the apps_spec
+	// column (T0.2/T0.1); the legacy `framework` field was removed
+	// (F-dom-2 — the build strategy is keyed on `runtime`).
 	GetRedeploySource(ctx context.Context, tenantID, buildID string) (*RedeploySource, error)
 }
 
@@ -413,19 +411,6 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// V5: Server-side framework validation — reject unsupported frameworks before pipeline.
-	// Defense-in-depth: CLI validates first, but API is the final gate.
-	for _, app := range req.Apps {
-		if isUnknownFramework(app.Framework) && app.Build != "dockerfile" {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-				"UNSUPPORTED_FRAMEWORK",
-				fmt.Sprintf("App '%s': framework '%s' requires 'build: dockerfile'. Set build to 'dockerfile' and provide a Dockerfile, or use a supported framework.", app.Name, app.Framework),
-				422,
-			))
-			return
-		}
-	}
-
 	// Roadmap 07 — admission gate. Only consulted when configured
 	// (WithAdmission + LOOPZERO_ADMISSION_CONTROL=true). A nil checker
 	// means the feature is off, which is the pre-roadmap default.
@@ -585,13 +570,3 @@ func mapBuildError(w http.ResponseWriter, err error) {
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 }
 
-// isUnknownFramework returns true if the framework is not in the known list.
-//
-// T5.4 of deep-review-2026-05-10-remediation-plan (find_arch_framework_dup MEDIUM):
-// the canonical list now lives in `api/internal/argo/languages.go`
-// (`argo.SupportedFrameworks()`). This wrapper exists so the route handler
-// reads from a single source — the previous inline switch could drift
-// silently from the build pipeline's view of supported frameworks.
-func isUnknownFramework(framework string) bool {
-	return !argo.IsKnownFramework(framework)
-}

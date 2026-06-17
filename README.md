@@ -59,7 +59,7 @@ No infrastructure to manage. No build config required. Just push.
 | Capability | Evidence |
 |------------|----------|
 | `loopzero login` / `logout` / `whoami` | Device Code Flow + Ory Hydra OIDC |
-| `loopzero init` (monorepo detection) | Turbo/Nx/Lerna/pnpm + 30 frameworks |
+| `loopzero init` (LoopZeroKit project) | Fixed LoopZeroKit stack: Python + Node (server/worker) |
 | `loopzero deploy` (full pipeline) | CLI -> upload -> BuildKit -> cosign sign -> ArgoCD sync -> Argo Rollouts canary -> live URL (~4min) |
 | `loopzero deploy` (progressive delivery) | **Default-on** under `LOOPZERO_PROGRESSIVE_DELIVERY=true`. Per-plan canary: Starter (50%/100%), Pro (20%/Analysis/50%/100%), Team & Enterprise (10%/Analysis/30%/60%/100%). TraefikService weighted routing between `<app>-stable` and `<app>-canary` Services. AnalysisTemplate hooks Prometheus success-rate when configured (pro+ tiers). Auto-abort on Degraded/Aborted via `progressDeadlineSeconds=300` + `rollout.aborted` SSE (CLI exit 3). 80/80 GREEN warm dogfood, 71/72 GREEN fresh cleanroom. |
 | `loopzero deploy` (static frontends) | S3 upload + CF Worker KV routing + DO Spaces CDN |
@@ -246,7 +246,7 @@ No infrastructure to manage. No build config required. Just push.
 </tr>
 </table>
 
-Every plan includes: GitHub auto-deploy on push, monorepo support (30+ frameworks), encrypted secrets, `--json` output for CI/CD, and the same CLI experience.
+Every plan includes: GitHub auto-deploy on push, the fixed LoopZeroKit stack (Python + Node), encrypted secrets, `--json` output for CI/CD, and the same CLI experience.
 
 > **Implementation note:** Plan limits enforced by `api/internal/db/migrations/000002_seed_data.up.sql` (plan_limits seed) + 4 enforcement middlewares (HTTP 402 on exceed).
 
@@ -276,7 +276,7 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 |---|:---:|:---:|
 | Auto-deploy on `git push` | Yes | Yes (~4min) |
 | Static frontends (React, Vite) | Yes | Yes (CDN via CF Worker) |
-| API servers (Express, Go, Python) | Serverless only | Any framework (30 supported) |
+| API servers | Serverless only | Fixed LoopZeroKit stack: Python + Node (`server`/`worker`) |
 | Background workers | -- | Yes |
 | Multiple services per repo | -- | Yes (monorepo-native) |
 | Rollback in seconds | Yes | Yes (~3s) |

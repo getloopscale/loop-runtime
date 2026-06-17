@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 // CellQueryResult holds the result of querying a single Cell.

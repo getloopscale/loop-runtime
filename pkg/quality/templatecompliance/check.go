@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"strings"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Default bot/label allowlists (matches bash arrays).

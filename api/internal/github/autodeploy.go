@@ -17,8 +17,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/loopzero/loopzero/api/internal/archive"
-	"github.com/loopzero/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/api/internal/archive"
+	"github.com/getloopscale/loopzero/api/internal/gitclient"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -390,10 +390,27 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 		return "", fmt.Errorf("extract tarball: %w", err)
 	}
 
+	// CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): defense-in-depth
+	// fallback when the upstream author identity is empty. Caught LIVE
+	// dev-public connect-then-deploy 2026-06-15 — git rejected with
+	// "fatal: empty ident name (for <@users.noreply.github.com>) not
+	// allowed" because the GitHub HEAD commit author was empty (the
+	// canonical-fixture repo's last commit had no author.login surfaced
+	// by GetHeadCommit). The author param is purely informational at
+	// bundle level (the deploy chain ultimately credits the real SHA);
+	// substituting a canonical LoopZero author preserves the audit trail
+	// without blocking the deploy. See repositories.go:461 + the LIVE
+	// log line "connect-then-deploy: HandlePush failed: ... empty ident".
+	authorName := author
+	authorEmail := author + "@users.noreply.github.com"
+	if authorName == "" {
+		authorName = "LoopZero Platform"
+		authorEmail = "noreply@loopzero.example"
+	}
 	// Create git repo and bundle using GitRunner (with context for cancellation).
 	git := gitclient.NewGitRunner("", gitclient.WithEnv(
-		"GIT_AUTHOR_NAME="+author,
-		"GIT_AUTHOR_EMAIL="+author+"@users.noreply.github.com",
+		"GIT_AUTHOR_NAME="+authorName,
+		"GIT_AUTHOR_EMAIL="+authorEmail,
 		"GIT_COMMITTER_NAME=LoopZero Platform",
 		"GIT_COMMITTER_EMAIL=noreply@loopzero.example",
 	))

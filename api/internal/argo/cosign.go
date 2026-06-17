@@ -10,7 +10,7 @@ import (
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
 
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // loopzeroCosignImage returns the loopzero-cosign-signer image, allowing override via env var.

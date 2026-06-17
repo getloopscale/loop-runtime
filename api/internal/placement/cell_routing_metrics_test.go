@@ -17,7 +17,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 func TestCellRoutingDecisions_AssignedOnSuccess(t *testing.T) {

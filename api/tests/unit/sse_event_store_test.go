@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // --- Compile-time interface check ---

@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // TestController_IdempotentTransitions — roadmap 02 DoD.

@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
 func ioNopCloser(r io.Reader) io.ReadCloser { return io.NopCloser(r) }

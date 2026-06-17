@@ -149,6 +149,21 @@ spec:
               name: loopzero-api-github
               key: GITHUB_APP_PRIVATE_KEY
               optional: true
+        # Canonical FAANG 2026-06-16: mirror the chart's
+        # OPENBAO_SPKI_PIN_SHA256 binding from
+        # infra/helm/loopzero-api/templates/deployment.yaml:202-207. Closes
+        # the Tilt-owned-vs-chart drift (per memory
+        # feedback_tilt_owned_deployment_yaml_drift). Without this env
+        # var, api/internal/config/config.go:429 reads empty SPKI pin,
+        # loopzero-api falls back to standard CA verification, fails with
+        # "x509: certificate signed by unknown authority" on every
+        # OpenBao AppRole login → secret POST returns 500.
+        - name: OPENBAO_SPKI_PIN_SHA256
+          valueFrom:
+            secretKeyRef:
+              name: openbao-spki-pin
+              key: OPENBAO_SPKI_PIN_SHA256
+              optional: true
         envFrom:
         - secretRef:
             name: loopzero-openbao-approle

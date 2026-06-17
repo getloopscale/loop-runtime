@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/util/retry"
 
-	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 )
 
 var applicationGVR = schema.GroupVersionResource{

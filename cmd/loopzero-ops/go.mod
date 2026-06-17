@@ -1,9 +1,12 @@
-module github.com/loopzero/loopzero/cmd/loopzero-ops
+module github.com/getloopscale/loopzero/cmd/loopzero-ops
 
 go 1.26.1
 
-require github.com/loopzero/loopzero/pkg v0.0.0
+require github.com/getloopscale/loopzero/pkg v0.0.0
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require (
+	github.com/kr/text v0.2.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
 
-replace github.com/loopzero/loopzero/pkg => ../../pkg
+replace github.com/getloopscale/loopzero/pkg => ../../pkg

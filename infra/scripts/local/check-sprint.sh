@@ -129,17 +129,12 @@ ELAPSED=$((END - START))
 
 # === Report ===
 if [[ "$JSON_MODE" -eq 1 ]]; then
-  python3 - <<PYEOF
-import json
-print(json.dumps({
-  "pass": $TOTAL_PASS,
-  "warn": $TOTAL_WARN,
-  "fail": $TOTAL_FAIL,
-  "skip": $TOTAL_SKIP,
-  "elapsed_seconds": $ELAPSED,
-  "results": [r.split(":", 2) for r in """${RESULTS[@]}""".split() if r]
-}, indent=2))
-PYEOF
+  CS_TMP="$(mktemp)"
+  for r in "${RESULTS[@]}"; do printf '%s\n' "$r"; done > "$CS_TMP"
+  CS_RESULTS_FILE="$CS_TMP" CS_PASS="$TOTAL_PASS" CS_WARN="$TOTAL_WARN" \
+    CS_FAIL="$TOTAL_FAIL" CS_SKIP="$TOTAL_SKIP" CS_ELAPSED="$ELAPSED" \
+    python3 "$(dirname "$0")/check_sprint.py"
+  rm -f "$CS_TMP"
 else
   log ""
   log "════════════════════════════════════════════════════════"

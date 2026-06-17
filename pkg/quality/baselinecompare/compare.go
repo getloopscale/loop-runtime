@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"io"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/quality/baseline"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/quality/baseline"
 )
 
 // Config holds the gate inputs.

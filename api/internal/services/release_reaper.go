@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // ReleaseReaperConfig configures the release reaper thresholds.

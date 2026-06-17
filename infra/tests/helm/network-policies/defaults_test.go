@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/loopzero/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
 	netV1 "k8s.io/api/networking/v1"
 	"sigs.k8s.io/yaml"
 )

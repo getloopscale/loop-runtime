@@ -1,9 +1,0 @@
-version: 1
-project: loopzero-dashboard
-
-apps:
-  dashboard:
-    path: .
-    framework: vite
-    type: frontend
-    build: buildpack

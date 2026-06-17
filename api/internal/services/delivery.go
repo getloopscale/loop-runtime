@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // ErrActivationAlreadyHandled is a sentinel error returned by DeliveryActivator.Activate

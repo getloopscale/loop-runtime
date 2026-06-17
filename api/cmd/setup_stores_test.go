@@ -23,7 +23,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // compile-time guarantee: fakeTransit satisfies the same vault.Transit

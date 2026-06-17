@@ -4,7 +4,7 @@
 package routes
 
 import (
-	pkgdomain "github.com/loopzero/loopzero/pkg/domain"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,11 +16,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/correlation"
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loopzero/api/internal/correlation"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 )
 
 var (

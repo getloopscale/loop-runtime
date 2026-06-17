@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // createWithCFZone implements the v2 domain creation flow:
@@ -19,6 +19,10 @@ import (
 // 2. Scan existing DNS records (email preservation)
 // 3. Add CNAME @ → cname.dev.loopzero.example (proxied, CF flattening)
 // 4. Return nameservers for user to configure at registrar
+//
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 16 → ≤ 12 via 2 helper extracts (removeConflictingApexRecords +
+// dedupAndListZoneRecords). Behavior preserved verbatim.
 func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request, ctx context.Context, uc *middleware.UserContext, req domainCreateRequest) {
 	// Step 1: Create CF zone
 	zone, err := h.cfZone.CreateZone(ctx, req.Domain)
@@ -37,17 +41,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Step 3: Remove conflicting apex records (A/AAAA/CNAME at root)
-	// The DNS scan may import existing A records that conflict with our CNAME.
-	if scannedRecords, listErr := h.cfZone.ListDNSRecords(ctx, zone.ZoneID); listErr == nil {
-		for _, rec := range scannedRecords {
-			// Only remove apex records that conflict with our CNAME
-			if (rec.Type == "A" || rec.Type == "AAAA" || rec.Type == "CNAME") &&
-				(rec.Name == req.Domain || rec.Name == "@") {
-				slog.InfoContext(ctx, "cf removing conflicting apex record", "domain", req.Domain, "type", rec.Type, "content", rec.Content)
-				_ = h.cfZone.DeleteDNSRecord(ctx, zone.ZoneID, rec.ID)
-			}
-		}
-	}
+	h.removeConflictingApexRecords(ctx, zone.ZoneID, req.Domain)
 
 	// Step 4: Add routing CNAME (proxied → CF edge → tunnel → Traefik)
 	proxied := true
@@ -69,26 +63,8 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Step 5: List imported records, deduplicate (CF scan sometimes imports duplicates with different quoting)
-	var dnsRecords []CFDNSRecord
-	var recordCount int
-	if records, listErr := h.cfZone.ListDNSRecords(ctx, zone.ZoneID); listErr == nil {
-		seen := make(map[string]bool)
-		for _, rec := range records {
-			// Normalize: strip surrounding quotes for dedup key
-			content := strings.Trim(rec.Content, "\"")
-			key := rec.Type + ":" + rec.Name + ":" + content
-			if seen[key] {
-				// Duplicate — delete from CF zone
-				slog.InfoContext(ctx, "cf removing duplicate record", "domain", req.Domain, "type", rec.Type, "name", rec.Name)
-				_ = h.cfZone.DeleteDNSRecord(ctx, zone.ZoneID, rec.ID)
-				continue
-			}
-			seen[key] = true
-			dnsRecords = append(dnsRecords, rec)
-		}
-		recordCount = len(dnsRecords)
-	}
+	// Step 5: List + deduplicate imported records
+	dnsRecords, recordCount := h.dedupAndListZoneRecords(ctx, zone.ZoneID, req.Domain)
 
 	// Step 6: Save to DB
 	zoneID := zone.ZoneID
@@ -138,4 +114,49 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		DNSRecords:         dnsRecords,
 		ActionRequired:     "Change your nameservers at your DNS provider to activate this domain.",
 	})
+}
+
+// removeConflictingApexRecords deletes A/AAAA/CNAME records at the apex
+// of the zone before our routing CNAME is created. The CF DNS scan may
+// import existing A records from registrar parking — those conflict
+// with the canonical CNAME @ → cname.dev.loopzero.example required for CF
+// proxy + Traefik routing.
+func (h *DomainHandler) removeConflictingApexRecords(ctx context.Context, zoneID, domain string) {
+	scannedRecords, listErr := h.cfZone.ListDNSRecords(ctx, zoneID)
+	if listErr != nil {
+		return
+	}
+	for _, rec := range scannedRecords {
+		if (rec.Type == "A" || rec.Type == "AAAA" || rec.Type == "CNAME") &&
+			(rec.Name == domain || rec.Name == "@") {
+			slog.InfoContext(ctx, "cf removing conflicting apex record",
+				"domain", domain, "type", rec.Type, "content", rec.Content)
+			_ = h.cfZone.DeleteDNSRecord(ctx, zoneID, rec.ID)
+		}
+	}
+}
+
+// dedupAndListZoneRecords lists the zone's DNS records + removes
+// duplicates that CF scan sometimes imports with different quoting.
+// Returns the deduplicated record list + count.
+func (h *DomainHandler) dedupAndListZoneRecords(ctx context.Context, zoneID, domain string) ([]CFDNSRecord, int) {
+	records, listErr := h.cfZone.ListDNSRecords(ctx, zoneID)
+	if listErr != nil {
+		return nil, 0
+	}
+	var deduped []CFDNSRecord
+	seen := make(map[string]bool)
+	for _, rec := range records {
+		content := strings.Trim(rec.Content, "\"")
+		key := rec.Type + ":" + rec.Name + ":" + content
+		if seen[key] {
+			slog.InfoContext(ctx, "cf removing duplicate record",
+				"domain", domain, "type", rec.Type, "name", rec.Name)
+			_ = h.cfZone.DeleteDNSRecord(ctx, zoneID, rec.ID)
+			continue
+		}
+		seen[key] = true
+		deduped = append(deduped, rec)
+	}
+	return deduped, len(deduped)
 }

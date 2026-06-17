@@ -9,30 +9,25 @@ package enforcement
 // authoritative" contract from CLAUDE.md Rule 2: dashboard consumes
 // the mapping but does NOT re-derive it client-side.
 
-import "github.com/loopzero/loopzero/pkg/statemachine"
+import (
+	"github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
+)
 
-// ProjectStatus is the dashboard-facing deploy-status enum (5 values).
-// Wire-format strings are CONTRACT — pinned by status_mapper_test.go.
-type ProjectStatus string
+// ProjectStatus is the dashboard-facing deploy-status enum. M1.2/M1.3: the
+// enum moved to pkg/plan (value vocabulary); the MAPPING below stays
+// engine-side because it imports pkg/statemachine, which must NEVER reach the
+// contracts surface (plan m1-decouple-in-place D3). The aliases are retained as
+// enforcement-internal shorthand (external consumers import plan.ProjectStatus*
+// directly); not a re-export path (v1.2 amendment).
+type ProjectStatus = plan.ProjectStatus
 
 const (
-	// ProjectStatusLive — latest build SUCCEEDED; deployment serving.
-	ProjectStatusLive ProjectStatus = "live"
-
-	// ProjectStatusBuilding — latest build is in flight
-	// (RUNNING / RELEASING / CANCELLING). Dashboard renders a spinner.
-	ProjectStatusBuilding ProjectStatus = "building"
-
-	// ProjectStatusFailed — latest build FAILED or was CANCELLED.
-	// Cancelled is treated as failure (operator intent was abort).
-	ProjectStatusFailed ProjectStatus = "failed"
-
-	// ProjectStatusIdle — project has zero builds OR latest build state
-	// is unknown (defense-in-depth fallback).
-	ProjectStatusIdle ProjectStatus = "idle"
-
-	// ProjectStatusQueued — latest build is QUEUED (not yet started).
-	ProjectStatusQueued ProjectStatus = "queued"
+	ProjectStatusLive     = plan.ProjectStatusLive
+	ProjectStatusBuilding = plan.ProjectStatusBuilding
+	ProjectStatusFailed   = plan.ProjectStatusFailed
+	ProjectStatusIdle     = plan.ProjectStatusIdle
+	ProjectStatusQueued   = plan.ProjectStatusQueued
 )
 
 // MapBuildStatusToProjectStatus is the exhaustive 7-state mapping.

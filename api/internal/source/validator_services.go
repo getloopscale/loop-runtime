@@ -8,8 +8,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log/slog"
-	"sort"
 	"strings"
 	"sync"
 
@@ -148,63 +146,3 @@ func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 	return &manifest, nil
 }
 
-// ValidateServicesJSON parses + validates a services.json payload against the
-// embedded JSON Schema 7 contract, then translates into the existing
-// `LoopZeroYAML` struct shape so downstream code paths stay unchanged during
-// the transition window (per ADR D7 framework field deprecation strategy).
-//
-// Plan v1.2 T3.3 (M6) — DEPRECATED legacy adapter. New callers should
-// consume ValidateServicesJSONNative() instead and read native fields
-// (dependsOn, openapi, type, env) directly. This wrapper stays GREEN for
-// existing routes/source.go callers during the migration window.
-//
-// EC-B3-7 (v3.1): truncated/empty payload returns E-008.
-// EC-B3-8 (v3.1): schema violations include field path em error message.
-//
-// Deprecated: use ValidateServicesJSONNative.
-func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
-	manifest, err := ValidateServicesJSONNative(content)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Plan v1.2 T2.1 — derive project name from manifest.
-	//   v2: project field is REQUIRED + DNS-1123 validated by schema.
-	//   v1: project field absent; fall back to "services-bundle" per ADR D10
-	//        and emit a structured deprecation warning so operators can plan
-	//        the cutover (sunset loopzerokit 0.6.0).
-	projectName := manifest.Project
-	if projectName == "" {
-		projectName = servicesJSONV1LegacyProject
-		if manifest.Version == 1 {
-			slog.Warn("services.json v1 missing project — applying legacy fallback (deprecated)",
-				"code", "SERVICES_JSON_V1_DEPRECATED",
-				"fallback_project", servicesJSONV1LegacyProject,
-				"sunset", "loopzerokit 0.6.0",
-				"action", "Upgrade emit to services.json v2 and set `project` from loopzero.config.ts name")
-		}
-	}
-
-	cfg := &LoopZeroYAML{
-		Version: manifest.Version,
-		Name:    projectName,
-		Project: projectName,
-		Apps:    make(map[string]AppConfig, len(manifest.Services)),
-	}
-
-	appNames := make([]string, 0, len(manifest.Services))
-	for _, svc := range manifest.Services {
-		cfg.Apps[svc.Name] = AppConfig{
-			Type:      "server",
-			Port:      svc.Port,
-			Path:      ".",
-			Framework: svc.Runtime,
-			Build:     "buildpack",
-			Env:       svc.Env,
-		}
-		appNames = append(appNames, svc.Name)
-	}
-
-	sort.Strings(appNames)
-	return cfg, appNames, nil
-}

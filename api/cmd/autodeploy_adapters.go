@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/github"
-	"github.com/loopzero/loopzero/api/internal/k8s"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // buildLookupAdapter bridges db.BuildStore → github.BuildLookup.
@@ -64,8 +64,8 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		} else {
 			app.Type = "server" // default
 		}
-		if v, ok := appCfg["framework"].(string); ok {
-			app.Framework = v
+		if v, ok := appCfg["runtime"].(string); ok {
+			app.Runtime = v // F-dom-2: runtime is the build-strategy key (framework removed)
 		}
 		if v, ok := appCfg["path"].(string); ok {
 			app.Path = v
@@ -80,6 +80,14 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		}
 		if v, ok := appCfg["render"].(string); ok {
 			app.Rendering = v
+		}
+		// Canonical 2026-06-16: extract `start` field from loopzero.yaml apps map.
+		// The canonical Dockerfile generator (canonical_dockerfile.go) requires
+		// an explicit start command — without it, generate-dockerfile fails at
+		// build time with "app 'X' has no declared start command". The
+		// loopzerokit-example fixture declares `start: loopzerokit start`.
+		if v, ok := appCfg["start"].(string); ok {
+			app.Start = v
 		}
 
 		// Auto-infer: frontend → static

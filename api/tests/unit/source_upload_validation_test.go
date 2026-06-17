@@ -22,9 +22,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/server"
-	"github.com/loopzero/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/server"
+	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
 // stubInvalidProjectSourceStore mimics what GiteaSourceStore returns when

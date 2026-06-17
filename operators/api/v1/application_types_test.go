@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestApplicationPhase_Values(t *testing.T) {
@@ -137,13 +136,13 @@ func TestLoopZeroApplication_StatusFields(t *testing.T) {
 func TestLoopZeroApplication_SetCondition(t *testing.T) {
 	app := LoopZeroApplication{}
 
-	conditions.SetCondition(&app.Status.Conditions, conditions.TypeServiceResolved, metav1.ConditionTrue, "Resolved", "service found", 1)
+	SetCondition(&app.Status.Conditions, TypeServiceResolved, metav1.ConditionTrue, "Resolved", "service found", 1)
 
 	if len(app.Status.Conditions) != 1 {
 		t.Fatalf("expected 1 condition, got %d", len(app.Status.Conditions))
 	}
-	if app.Status.Conditions[0].Type != conditions.TypeServiceResolved {
-		t.Errorf("expected condition type %q, got %q", conditions.TypeServiceResolved, app.Status.Conditions[0].Type)
+	if app.Status.Conditions[0].Type != TypeServiceResolved {
+		t.Errorf("expected condition type %q, got %q", TypeServiceResolved, app.Status.Conditions[0].Type)
 	}
 	if app.Status.Conditions[0].Status != metav1.ConditionTrue {
 		t.Errorf("expected condition status True, got %v", app.Status.Conditions[0].Status)
@@ -153,10 +152,10 @@ func TestLoopZeroApplication_SetCondition(t *testing.T) {
 func TestLoopZeroApplication_GetCondition(t *testing.T) {
 	app := LoopZeroApplication{}
 
-	conditions.SetCondition(&app.Status.Conditions, conditions.TypeServiceResolved, metav1.ConditionTrue, "Resolved", "ok", 1)
-	conditions.SetCondition(&app.Status.Conditions, conditions.TypeIngressReady, metav1.ConditionFalse, "Pending", "creating", 1)
+	SetCondition(&app.Status.Conditions, TypeServiceResolved, metav1.ConditionTrue, "Resolved", "ok", 1)
+	SetCondition(&app.Status.Conditions, TypeIngressReady, metav1.ConditionFalse, "Pending", "creating", 1)
 
-	c := conditions.GetCondition(app.Status.Conditions, conditions.TypeIngressReady)
+	c := GetCondition(app.Status.Conditions, TypeIngressReady)
 	if c == nil {
 		t.Fatal("expected to find IngressReady condition")
 	}
@@ -164,7 +163,7 @@ func TestLoopZeroApplication_GetCondition(t *testing.T) {
 		t.Errorf("expected condition status False, got %v", c.Status)
 	}
 
-	missing := conditions.GetCondition(app.Status.Conditions, "NonExistent")
+	missing := GetCondition(app.Status.Conditions, "NonExistent")
 	if missing != nil {
 		t.Error("expected nil for non-existent condition")
 	}
@@ -172,11 +171,11 @@ func TestLoopZeroApplication_GetCondition(t *testing.T) {
 
 func TestLoopZeroApplication_ConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
-		conditions.TypeServiceResolved,
-		conditions.TypeIngressReady,
-		conditions.TypeCertificateIssued,
-		conditions.TypeRouteReachable,
-		conditions.TypeApplicationHealthy,
+		TypeServiceResolved,
+		TypeIngressReady,
+		TypeCertificateIssued,
+		TypeRouteReachable,
+		TypeApplicationHealthy,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

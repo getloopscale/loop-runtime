@@ -1,7 +1,0 @@
-node_modules
-dist
-coverage
-.env*
-*.md
-*.log
-.DS_Store

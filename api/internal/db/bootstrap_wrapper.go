@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 // PostgresBootstrapStore implements domain.BootstrapStore using

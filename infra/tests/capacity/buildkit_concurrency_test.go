@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/infra/tests/load"
+	"github.com/getloopscale/loopzero/infra/tests/load"
 )
 
 // TestCapacityBuildKitConcurrency validates the cell-budget.md assumption:

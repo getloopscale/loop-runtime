@@ -170,9 +170,9 @@ The architectural seam between them is **a single JSON file on disk**: `.loopzer
 │   │  │   "python" → "python-fastapi"                                       │ │    │
 │   │  │   "node"   → "node-hono"                                            │ │    │
 │   │  │                                                                     │ │    │
-│   │  │ resolveServiceType(s.Type)       ←── Plan v1.2 T2.2 (H3 enum)      │ │    │
+│   │  │ resolveServiceType(s.Type)       ←── shape enum: server|worker     │ │    │
 │   │  │   "" → "server" (default Go-side)                                   │ │    │
-│   │  │   frontend SEM Rendering → erro   ←── EC-9                         │ │    │
+│   │  │   type=frontend → REJECTED by schema (D5, simplify v2.0)            │ │    │
 │   │  │                                                                     │ │    │
 │   │  │ opts.ImageRefFor(s.Name)         ←── Plan v1.2 T3.2 (M3 + EC-11)   │ │    │
 │   │  │   sem ref + sem default → erro                                      │ │    │

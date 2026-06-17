@@ -60,8 +60,17 @@ mkdir -p "$(dirname "$UNSEAL_FILE")"
 bao() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_SKIP_VERIFY=true bao "$@"; }
 
 # === Step 2: init (idempotent — skip if already initialized) ===
+# CANONICAL FIX 2026-06-15 Phase 4 dev-public Cleanroom: `bao status` uses
+# exit-code SEMANTICS (rc=0 unsealed, rc=2 sealed-but-init, rc=1 error).
+# Mixing rc with `set -o pipefail` propagated rc=2 as PIPELINE FAILURE,
+# activating `|| echo "false"` fallback regardless of stdout JSON content.
+# Result: even when stdout JSON declared initialized=true, the fallback
+# lowercased the string, mismatching the "True" (Python-cap) compare below.
+# Fix: capture stdout first (always works because bao -format=json emits
+# JSON on both rc=0 AND rc=2), then parse independent of rc.
 log "Step 2: bao operator init (idempotent)"
-INIT_STATUS=$(bao status -format=json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('initialized', False))" 2>/dev/null || echo "false")
+BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
+INIT_STATUS=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('initialized', False))" 2>/dev/null || echo "False")
 if [[ "$INIT_STATUS" != "True" ]]; then
   # LIVE bug fix (T6.2 Cleanroom TOTAL 2026-06-12): when OpenBao is fresh
   # (Initialized=false) post-Cleanroom destroy, any existing unseal file is
@@ -82,8 +91,15 @@ else
 fi
 
 # === Step 3: unseal (idempotent — skip if already unsealed) ===
+# CANONICAL FIX 2026-06-15 (same family as Step 2 above): pipefail + bao rc=2
+# (sealed-but-init normal exit code) was triggering `|| echo "true"` (lowercase)
+# that NEVER matched `"True"` (Python-capitalized) compare → unseal silently
+# SKIPPED on every fresh-init invocation. Vault stayed sealed forever; operator
+# had to manually `bao operator unseal $SHARD x3`. Sponsor "sem WORKAROUNDs"
+# explicit: capture stdout first, parse rc-independent, normalize to "True".
 log "Step 3: bao operator unseal × 3 (idempotent)"
-SEALED=$(bao status -format=json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('sealed', True))" 2>/dev/null || echo "true")
+BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
+SEALED=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('sealed', True))" 2>/dev/null || echo "True")
 if [[ "$SEALED" == "True" ]]; then
   if [[ ! -f "$UNSEAL_FILE" ]]; then
     log "FAIL: $UNSEAL_FILE missing — cannot unseal without shards. Run init first OR restore from backup."
@@ -118,7 +134,7 @@ fi
 # === Step 6+7: approle + policy ===
 log "Step 6+7: approle + loopzero-api policy"
 export BAO_TOKEN="$ROOT_TOKEN"
-bao_auth() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" bao "$@"; }
+bao_auth() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao "$@"; }
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
@@ -130,8 +146,12 @@ path "kv/data/loopzero/*" { capabilities = ["read"] }
 path "kv/metadata/loopzero/*" { capabilities = ["list"] }'
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
+  # LIVE bug fix 2026-06-15 Phase 4 Cleanroom: `policy write` invocation
+  # via stdin pipe was missing BAO_SKIP_VERIFY=true; cert chain x509
+  # verification failed inside the pod (no CA bundle for openbao-tls).
+  # Mirrors the bao() / bao_auth() helper fixes.
   echo "$POLICY" | kubectl --context "$CONTEXT" -n "$NS" exec -i "$POD" -- \
-    env BAO_TOKEN="$ROOT_TOKEN" bao policy write loopzero-api - || true
+    env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao policy write loopzero-api - || true
   bao_auth write auth/approle/role/loopzero-api \
     token_policies=loopzero-api \
     token_ttl=24h \
@@ -159,7 +179,14 @@ log "Step 10b: extract SPKI pin from openbao-tls cert"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   TLS_CRT=$(kubectl --context "$CONTEXT" -n "$NS" get secret openbao-tls -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || true)
   if [[ -n "$TLS_CRT" ]]; then
-    SPKI=$(echo "$TLS_CRT" | openssl x509 -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | base64 | tr -d '\n=' | tr '/+' '_-' || true)
+    # CANONICAL FIX 2026-06-15: pkg/vault/transit_client.go:199 expects
+    # HEX-encoded SHA-256 (via hex.DecodeString). Previous base64url
+    # encoding (`base64 | tr ...`) caused loopzero-api to crash on startup
+    # with "openbao transit client: vault: SPKIPinSHA256 hex decode:
+    # encoding/hex: invalid byte: U+0073 's'". `openssl dgst -sha256`
+    # with no `-binary` flag emits "SHA256(stdin)= <hex>" so we
+    # post-process to strip the prefix; equivalently use `-binary | xxd`.
+    SPKI=$(echo "$TLS_CRT" | openssl x509 -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | xxd -p -c 999 | tr -d '\n' || true)
     if [[ -n "$SPKI" ]]; then
       kubectl --context "$CONTEXT" -n loopzero-system create secret generic openbao-spki-pin \
         --from-literal=OPENBAO_SPKI_PIN_SHA256="$SPKI" \

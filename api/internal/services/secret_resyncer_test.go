@@ -37,7 +37,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // fakeSecretResyncStore implements SecretResyncStore with a configurable

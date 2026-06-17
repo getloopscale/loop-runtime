@@ -11,9 +11,9 @@ import (
 
 	sigsyaml "sigs.k8s.io/yaml"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/id"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/id"
 )
 
 // PromotionReleaseStore abstracts release persistence for the promotion orchestrator (DIP).

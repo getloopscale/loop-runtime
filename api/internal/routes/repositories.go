@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 
-	"github.com/loopzero/loopzero/api/internal/github"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // ProjectRepository represents a project↔repo link (DIP — avoids db import).
@@ -119,6 +119,9 @@ type connectResponse struct {
 }
 
 // Connect links a GitHub repository to a LoopZero project (POST /api/v1/projects/{name}/connect).
+//
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 18 → ≤ 11 via 2 helper extracts (parseConnectRequest + checkRepoLinkConflict).
 func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
@@ -137,37 +140,13 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 
 	projectName := chi.URLParam(r, "name")
 
-	var req connectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
-		return
+	req, branch, ok := parseConnectRequest(w, r)
+	if !ok {
+		return // parseConnectRequest wrote the response
 	}
 
-	if req.Repo == "" || req.InstallationID == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "repo and installation_id are required",
-		})
-		return
-	}
-
-	branch := req.Branch
-	if branch == "" {
-		branch = "main"
-	}
-
-	// Check if repo is already linked to another project
-	existing, err := h.store.GetByRepo(ctx, req.Repo)
-	if err != nil {
-		slog.ErrorContext(ctx, "repository lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
-		return
-	}
-	if existing != nil && (existing.TenantID != uc.TenantID || existing.ProjectName != projectName) {
-		writeJSON(w, http.StatusConflict, map[string]string{
-			"code":    "REPO_ALREADY_LINKED",
-			"message": "Repository is already connected to another project.",
-		})
-		return
+	if !h.checkRepoLinkConflict(ctx, w, req.Repo, uc.TenantID, projectName) {
+		return // checkRepoLinkConflict wrote the response
 	}
 
 	// Ensure installation is saved
@@ -215,6 +194,53 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		Branch:     branch,
 		AutoDeploy: autoDeploy,
 	})
+}
+
+// parseConnectRequest decodes + validates the POST body. Returns the
+// parsed request, default-applied branch, and a bool indicating whether
+// to continue (true) or stop (false — response already written).
+func parseConnectRequest(w http.ResponseWriter, r *http.Request) (connectRequest, string, bool) {
+	var req connectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
+		return req, "", false
+	}
+	if req.Repo == "" || req.InstallationID == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "repo and installation_id are required",
+		})
+		return req, "", false
+	}
+	branch := req.Branch
+	if branch == "" {
+		branch = "main"
+	}
+	return req, branch, true
+}
+
+// checkRepoLinkConflict returns true when the repo is OK to link (either
+// unlinked OR already linked to this same project). Returns false +
+// writes a 409 response when the repo is linked to a different
+// (tenant, project) tuple.
+func (h *RepositoryHandler) checkRepoLinkConflict(
+	ctx context.Context,
+	w http.ResponseWriter,
+	repo, tenantID, projectName string,
+) bool {
+	existing, err := h.store.GetByRepo(ctx, repo)
+	if err != nil {
+		slog.ErrorContext(ctx, "repository lookup failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		return false
+	}
+	if existing != nil && (existing.TenantID != tenantID || existing.ProjectName != projectName) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"code":    "REPO_ALREADY_LINKED",
+			"message": "Repository is already connected to another project.",
+		})
+		return false
+	}
+	return true
 }
 
 // Disconnect unlinks a GitHub repository from a LoopZero project (DELETE /api/v1/projects/{name}/connect).

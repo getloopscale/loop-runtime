@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/manifests"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/pkg/naming"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/manifests"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // onWorkflowSucceeded handles a completed build workflow by creating a release
@@ -327,6 +327,17 @@ func emitSigstoreObservations(status *WorkflowStatus, appName, rekorURL string) 
 		}
 	}
 	metrics.ObserveCosignSign(true /* keyless */, 0, signOK, signComponent)
+
+	// Fulcio cert issuance duration (subset of cosign sign): wired forward-
+	// compatibly. Operator follow-up to surface `fulcio_duration_ms` from the
+	// cosign script will populate this with a real value; until then we observe
+	// only when the workflow has produced the field, so no bucket-0 spike.
+	// EC-NEW guard mirrors the surrounding sign/attest pattern.
+	if out, ok := status.Outputs[signStep]; ok {
+		if fulcioMs, err := strconv.ParseFloat(out["fulcio_duration_ms"], 64); err == nil && fulcioMs > 0 {
+			metrics.ObserveFulcioCertIssuance(fulcioMs / 1000.0)
+		}
+	}
 
 	// attest_total: success when the attest step produced a non-null URL.
 	// Empty / "unknown" URL counts as failure with Rekor attribution.

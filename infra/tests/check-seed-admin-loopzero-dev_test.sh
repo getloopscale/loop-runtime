@@ -13,7 +13,7 @@
 #
 # Usage: bash infra/tests/check-seed-admin-loopzero-dev_test.sh
 # Exit 0 PASS / non-zero FAIL count.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT="${REPO_ROOT}/infra/scripts/local/seed-admin-loopzero-dev.sh"
@@ -61,6 +61,11 @@ assert_not_grep() {
 assert "seed script file exists"     test -f "$SCRIPT"
 assert "seed script is executable"   test -x "$SCRIPT"
 assert "seed script bash -n syntax"  bash -n "$SCRIPT"
+
+# --- De-costume gate (home-unhomed-logic-suspect-keeps T2.1) ----------------
+NO_HEREDOC_SEED() { [ "$(grep -cE 'python3?[[:space:]]+(-[[:space:]]+)?<<|<<[[:space:]]*['\''\"]*?(PY|PYEOF|PYTHON)' "$SCRIPT")" = "0" ] ; }
+assert "no python3 heredoc remains in seed-admin-loopzero-dev.sh" NO_HEREDOC_SEED
+assert "seed_admin_loopzero_dev.py compiles" python3 -m py_compile "${REPO_ROOT}/infra/scripts/local/seed_admin_loopzero_dev.py"
 
 # --- Shebang + strict mode --------------------------------------------------
 

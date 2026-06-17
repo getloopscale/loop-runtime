@@ -81,7 +81,7 @@ export function bootstrapBuildCluster(
   // Registry credentials secret — created by `doctl kubernetes cluster registry add`
   // on the default SA. Workflow pods use loopzero-build-sa, so we must also reference it here.
   // Without this, workflow pods get 401 Unauthorized when pulling private images
-  // (loopzero-clone-runner, loopzero-packs-runner) from the DO container registry.
+  // (loopzero-clone-runner, loopzero-syft-scanner, loopzero-cosign-signer) from the DO container registry.
   const registrySecretName = "loopzero-system";
 
   const buildSA = new k8s.core.v1.ServiceAccount(

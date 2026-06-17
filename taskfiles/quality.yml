@@ -49,6 +49,7 @@ tasks:
       - /tmp/loopzero-ops quality trufflehog-scan
       - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
+      - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
@@ -101,9 +102,29 @@ tasks:
       - bash infra/tests/check-rehearsal-mode-syntax_test.sh                     # iter 26 T4.1 --rehearsal flag shape + early-exit (26 assertions)
       - bash infra/tests/check-write-path-subset-syntax_test.sh                  # iter 31 Option A write-path subset shape (27 assertions)
       - bash infra/tests/check-option-b-eso-deploy-doc_test.sh                   # iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions)
+      - bash infra/tests/check-vault-bootstrap-unseal-loop_test.sh               # 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard)
       - bash infra/tests/check-openbao-transit-quality-gates-wired_test.sh       # iter 27 meta-gate: ensures the 6 above stay wired + uncommented + clustered (extended iter 33 → 6 tests)
       - bash infra/tests/check-allowlist-sunsets_test.sh                         # T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt)
       - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
+      # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
+      # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
+      # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
+      # + live-url-discoverability + status-url-probe (closes R1-F2 HIGH).
+      - bash infra/tests/check-dev-public-scale-syntax_test.sh                     # T1.2 J-20 scale flow companion
+      - bash infra/tests/check-dev-public-billing-portal-syntax_test.sh            # T5.1 ORPHAN companion 1/4
+      - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
+      - bash infra/tests/check-dev-public-live-url-discoverability-syntax_test.sh  # T5.1 ORPHAN companion 3/4
+      - bash infra/tests/check-dev-public-status-url-probe-syntax_test.sh          # T5.1 ORPHAN companion 4/4
+      # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
+      # shell-lint advisory — invokes infra/scripts/local/shellcheck-advisory.sh.
+      # Re-homed from inline `bash -c '...'` after that form broke YAML parsing
+      # (shell metachars + nested quotes). Script is conditional: runs
+      # shellcheck when installed; emits WARN + exits 0 when absent.
+      - bash infra/scripts/local/shellcheck-advisory.sh
+      # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
+      # (R2-F8 HIGH closure): every user-facing API route must be in the
+      # middleware.Auth group OR appear in the explicit public-allowlist.
+      - bash infra/tests/check-route-auth-coverage_test.sh
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'
@@ -115,17 +136,46 @@ tasks:
       - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
       - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
 
-  dashboard-bundle:
-    desc: Dashboard bundle budget gate — size-limit per chunk + total brotli (MEET-ASYNC-002 v1.3)
-    dir: cloud/dashboard
+  # dashboard-bundle gate removed (M4): the dashboard moved to the standalone
+  # loopzero-cloud repo, which runs its own bundle-budget gate in CI.
+
+  contract:
+    desc: >
+      Consumer-driven contract gates (M1.4 — plan m1-4-openapi-contract-tests):
+      engine OpenAPI spec conformance + cli<->engine. (cloud<->loopzero-data moved to
+      the standalone loopzero-cloud repo — M4.)
     cmds:
-      - npm run build
-      - npm run size
+      - cd api && go test ./internal/contract/...
+
+  contract:cross-repo:
+    desc: >
+      M5 — run ALL decomposition seam contract tests across the umbrella repos in
+      one command (cli↔engine, cloud↔engine serviceauth, cloud↔loopzero-data themory).
+      Degrades gracefully (SKIP) when a sibling repo is absent. See
+      docs/cross-repo-contract-matrix.md. The CI platform invokes this target.
+    cmds:
+      - |
+        echo "=== seam engine OpenAPI + cli consumer (loopzero/api) ==="
+        cd api && go test ./internal/contract/...
+      - |
+        echo "=== seam cloud-themory + cloud-serviceauth ==="
+        if [ -d ../loopzero-cloud ]; then
+          (cd ../loopzero-cloud && go test ./internal/themory/... ./internal/auth/...)
+        else
+          echo "SKIP: loopzero-cloud sibling absent (umbrella layout required)"
+        fi
+      - |
+        echo "=== seam: cli↔engine (loopzero-cli engine-contract.test.ts) ==="
+        if [ -d ../loopzero-cli ]; then
+          (cd ../loopzero-cli && npm test --silent -- tests/contract/engine-contract.test.ts 2>&1 | tail -8)
+        else
+          echo "SKIP: loopzero-cli sibling absent (umbrella layout required)"
+        fi
 
   all:
-    desc: Standard quality suite — hermetic tests + full-scan gates
-    deps: [hermetic, gates]
+    desc: Standard quality suite — hermetic tests + full-scan gates + contract
+    deps: [hermetic, gates, contract]
 
   all-with-frontend:
     desc: Full quality suite including frontend bundle gate (slower; for pre-release)
-    deps: [hermetic, gates, dashboard-bundle]
+    deps: [hermetic, gates, contract]

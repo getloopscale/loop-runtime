@@ -119,8 +119,6 @@ spec:
               value: "k3d-loopzero-registry:5000"
             - name: REGISTRY_INSECURE
               value: "true"
-            - name: LOOPZERO_PACKS_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-packs-runner:latest"
             # Workload cluster
             - name: WORKLOAD_INGRESS_URL
               value: "http://172.18.0.14:80"

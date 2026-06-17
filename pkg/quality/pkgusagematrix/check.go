@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // DefaultDocPath — bash default, relative to repo root.
@@ -102,12 +102,12 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 }
 
 // countConsumers walks all *.go files under root looking for the
-// canonical import "github.com/loopzero/loopzero/pkg/<pkg>". Files within
+// canonical import "github.com/getloopscale/loopzero/pkg/<pkg>". Files within
 // pkg/<pkg>/ itself are excluded (mirrors bash `grep -v "^pkg/<pkg>/"`).
 //
 // Returns one row of counts.
 func countConsumers(root, pkg string) (PkgRow, error) {
-	needle := []byte(`"github.com/loopzero/loopzero/pkg/` + pkg + `"`)
+	needle := []byte(`"github.com/getloopscale/loopzero/pkg/` + pkg + `"`)
 	row := PkgRow{Name: pkg}
 	selfPrefix := "pkg/" + pkg + string(filepath.Separator)
 
@@ -180,7 +180,7 @@ func renderTable(rows []PkgRow, now time.Time) string {
 	var sb strings.Builder
 	sb.WriteString("## Real Usage Matrix\n\n")
 	fmt.Fprintf(&sb,
-		"Tabela gerada via grep de `import \"github.com/loopzero/loopzero/pkg/X\"` em **%s**.\n",
+		"Tabela gerada via grep de `import \"github.com/getloopscale/loopzero/pkg/X\"` em **%s**.\n",
 		now.Format("2006-01-02"))
 	sb.WriteString("Atualizar via `task pkg:usage-matrix:write` (script: `loopzero-ops quality pkg-usage-matrix --write`).\n")
 	sb.WriteString("CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).\n\n")

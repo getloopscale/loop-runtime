@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
-LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="harbor-init"
 
 COPY --from=builder /harbor-init /harbor-init

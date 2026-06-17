@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // preview_types.go — public structs for the preview environments

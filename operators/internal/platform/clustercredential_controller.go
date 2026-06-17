@@ -23,12 +23,12 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/conditions"
-	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/metrics"
-	"github.com/loopzero/loopzero/operators/internal/shared"
-	"github.com/loopzero/loopzero/pkg/correlation"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/metrics"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
 const (

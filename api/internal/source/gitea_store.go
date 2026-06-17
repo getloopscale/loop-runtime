@@ -20,7 +20,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/loopzero/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/api/internal/gitclient"
 )
 
 // Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation for

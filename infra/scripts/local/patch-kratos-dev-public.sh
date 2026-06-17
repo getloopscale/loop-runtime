@@ -39,6 +39,10 @@
 #   --skip-restart skip rollout-restart (test workflows)
 #   --verify       after restart, curl /self-service/login/api and assert
 #                  providers exposed + action url uses KRATOS_PUBLIC_URL
+#   --check-only   read-only canonical check: alias for --dry-run --skip-restart.
+#                  Exits 0 when the desired patches can be derived from .env;
+#                  used by dogfood-login Suite 0 T5.3 as Cleanroom-survival
+#                  gate (per ADR D5 + EC-14).
 
 set -euo pipefail
 
@@ -59,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --skip-restart) SKIP_RESTART=1; shift ;;
     --verify) VERIFY=1; shift ;;
+    --check-only) DRY_RUN=1; SKIP_RESTART=1; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0"; exit 0 ;;
     *) printf 'unknown flag: %s\n' "$1" >&2; exit 1 ;;
   esac
@@ -86,118 +91,33 @@ GG_ID=$(load_env LOOPZERO_GOOGLE_CLIENT_ID)
 GG_SEC=$(load_env LOOPZERO_GOOGLE_CLIENT_SECRET)
 RESEND=$(load_env LOOPZERO_RESEND_API_KEY)
 
+# apply_patch keeps ALL kubectl I/O in bash (D2); the YAML transform lives in
+# patch_kratos_dev_public.py. Flow: kubectl get → .py transform (stdin→stdout) →
+# (dry) print diff OR (live) kubectl apply the emitted ConfigMap manifest.
 apply_patch() {
-  KRATOS_PUBLIC_URL="$KRATOS_PUBLIC_URL" \
-  DASHBOARD_URL="$DASHBOARD_URL" \
-  CLOUD_URL="$CLOUD_URL" \
-  COOKIE_DOMAIN="$COOKIE_DOMAIN" \
-  GH_ID="$GH_ID" GH_SEC="$GH_SEC" \
-  GG_ID="$GG_ID" GG_SEC="$GG_SEC" \
-  RESEND="$RESEND" \
-  DRY_RUN="$DRY_RUN" \
-  KUBECTL_CONTEXT="$KUBECTL_CONTEXT" \
-  KRATOS_NAMESPACE="$KRATOS_NAMESPACE" \
-  python3 <<'PY'
-import os, subprocess, sys, tempfile, yaml
+  local helper live_yaml
+  helper="$(dirname "$0")/patch_kratos_dev_public.py"
 
-CTX = os.environ["KUBECTL_CONTEXT"]
-NS = os.environ["KRATOS_NAMESPACE"]
-DRY = os.environ.get("DRY_RUN", "0") == "1"
+  live_yaml="$(kubectl --context "$KUBECTL_CONTEXT" -n "$KRATOS_NAMESPACE" \
+    get configmap ory-kratos-config -o jsonpath='{.data.kratos\.yaml}')"
 
-raw = subprocess.check_output([
-    "kubectl", "--context", CTX, "-n", NS,
-    "get", "configmap", "ory-kratos-config",
-    "-o", "jsonpath={.data.kratos\\.yaml}"
-]).decode()
-cfg = yaml.safe_load(raw)
+  if [ "$DRY_RUN" = "1" ]; then
+    printf '%s' "$live_yaml" | \
+      KRATOS_PUBLIC_URL="$KRATOS_PUBLIC_URL" DASHBOARD_URL="$DASHBOARD_URL" \
+      CLOUD_URL="$CLOUD_URL" COOKIE_DOMAIN="$COOKIE_DOMAIN" \
+      GH_ID="$GH_ID" GH_SEC="$GH_SEC" GG_ID="$GG_ID" GG_SEC="$GG_SEC" \
+      RESEND="$RESEND" DRY_RUN=1 KRATOS_NAMESPACE="$KRATOS_NAMESPACE" \
+      python3 "$helper"
+    return 0
+  fi
 
-# Patch 1 — OIDC providers
-keys = {
-    "github": (os.environ["GH_ID"], os.environ["GH_SEC"]),
-    "google": (os.environ["GG_ID"], os.environ["GG_SEC"]),
-}
-for p in cfg["selfservice"]["methods"]["oidc"]["config"].get("providers", []):
-    if p["id"] in keys:
-        cid, sec = keys[p["id"]]
-        p["client_id"] = cid
-        p["client_secret"] = sec
-
-# Patch 2 — OIDC base_redirect_uri
-cfg["selfservice"]["methods"]["oidc"]["config"]["base_redirect_uri"] = (
-    os.environ["KRATOS_PUBLIC_URL"].rstrip("/") + "/"
-)
-
-# Patch 3 — Resend Authorization
-cfg["courier"]["http"]["request_config"]["headers"]["Authorization"] = (
-    "Bearer " + os.environ["RESEND"]
-)
-
-# Patch 4 — serve.public
-cfg.setdefault("serve", {}).setdefault("public", {})
-cfg["serve"]["public"]["base_url"] = os.environ["KRATOS_PUBLIC_URL"].rstrip("/") + "/"
-cfg["serve"]["public"].setdefault("port", 4433)
-cfg["serve"]["public"]["cors"] = {
-    "enabled": True,
-    "allow_credentials": True,
-    "allowed_origins": [os.environ["DASHBOARD_URL"], os.environ["CLOUD_URL"]],
-    "allowed_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    "allowed_headers": ["Authorization", "Content-Type", "Cookie", "X-Session-Token"],
-    "exposed_headers": ["Content-Type", "Set-Cookie"],
-}
-
-# Patch 5 — cookies + session.cookie
-domain = os.environ["COOKIE_DOMAIN"]
-cfg["cookies"] = {"domain": domain, "same_site": "Lax"}
-cfg.setdefault("session", {}).setdefault("cookie", {})
-cfg["session"]["cookie"]["domain"] = domain
-cfg["session"].setdefault("lifespan", "24h")
-
-# Patch 6 — selfservice flows
-ss = cfg["selfservice"]
-app = os.environ["DASHBOARD_URL"].rstrip("/")
-ss["default_browser_return_url"] = app + "/"
-ss["allowed_return_urls"] = [app, app + "/", os.environ["CLOUD_URL"], os.environ["CLOUD_URL"] + "/"]
-flows = ss["flows"]
-flows.setdefault("login", {})["ui_url"] = app + "/login"
-flows.setdefault("registration", {})["ui_url"] = app + "/register"
-flows.setdefault("verification", {})["ui_url"] = app + "/verification"
-flows.setdefault("recovery", {})["ui_url"] = app + "/recovery"
-flows.setdefault("settings", {})["ui_url"] = app + "/settings"
-flows.setdefault("error", {})["ui_url"] = app + "/login"
-flows.setdefault("logout", {}).setdefault("after", {})["default_browser_return_url"] = app + "/login"
-
-new_yaml = yaml.safe_dump(cfg, default_flow_style=False, sort_keys=False)
-
-if DRY:
-    # Print a unified diff-like summary
-    old_yaml = raw
-    if old_yaml == new_yaml:
-        print("no-op: ConfigMap already in desired state")
-    else:
-        import difflib
-        diff = difflib.unified_diff(
-            old_yaml.splitlines(keepends=True),
-            new_yaml.splitlines(keepends=True),
-            fromfile="ConfigMap (live)",
-            tofile="ConfigMap (desired)",
-            n=2,
-        )
-        sys.stdout.writelines(diff)
-    sys.exit(0)
-
-patched = {
-    "apiVersion": "v1", "kind": "ConfigMap",
-    "metadata": {"name": "ory-kratos-config", "namespace": NS},
-    "data": {"kratos.yaml": new_yaml},
-}
-with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-    yaml.safe_dump(patched, f)
-    fname = f.name
-
-subprocess.run(["kubectl", "--context", CTX, "apply", "-f", fname], check=True)
-os.unlink(fname)
-print("ConfigMap patched (7 fixes applied)")
-PY
+  printf '%s' "$live_yaml" | \
+    KRATOS_PUBLIC_URL="$KRATOS_PUBLIC_URL" DASHBOARD_URL="$DASHBOARD_URL" \
+    CLOUD_URL="$CLOUD_URL" COOKIE_DOMAIN="$COOKIE_DOMAIN" \
+    GH_ID="$GH_ID" GH_SEC="$GH_SEC" GG_ID="$GG_ID" GG_SEC="$GG_SEC" \
+    RESEND="$RESEND" DRY_RUN=0 KRATOS_NAMESPACE="$KRATOS_NAMESPACE" \
+    python3 "$helper" | kubectl --context "$KUBECTL_CONTEXT" apply -f -
+  echo "ConfigMap patched (7 fixes applied)"
 }
 
 main() {
