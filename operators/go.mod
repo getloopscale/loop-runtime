@@ -78,6 +78,7 @@ require (
 	github.com/tinylib/msgp v1.2.5 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
+	github.com/loopzero/loopzero/operators/api v0.0.0
 	github.com/getloopscale/loopzero-forge v0.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
@@ -118,3 +119,5 @@ require (
 )
 
 replace github.com/loopzero/loopzero/pkg => ../pkg
+
+replace github.com/loopzero/loopzero/operators/api => ./api

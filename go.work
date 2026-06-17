@@ -9,5 +9,6 @@ use (
 	./infra/scripts
 	./infra/tests
 	./operators
+	./operators/api
 	./pkg
 )
