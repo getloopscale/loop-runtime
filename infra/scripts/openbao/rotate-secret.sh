@@ -55,6 +55,7 @@ api/secrets/admin/service_auth_secret_previous|loopzero-api|loopzero-api-admin
 api/secrets/argo/callback_secret|loopzero-api|loopzero-api-internal
 api/secrets/bootstrap_secret|loopzero-api|loopzero-api-internal
 api/secrets/secret_encryption_key|loopzero-api|loopzero-api-internal
+api/secrets/github/app_id|loopzero-api|loopzero-api-github
 api/secrets/github/app_private_key|loopzero-api|loopzero-api-github
 api/secrets/github/webhook_secret|loopzero-api|loopzero-api-github
 api/secrets/cf/api_token|loopzero-api|loopzero-api-tokens
