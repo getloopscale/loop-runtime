@@ -13,7 +13,7 @@
 #
 # Usage: bash infra/tests/check-seed-admin-loopzero-dev_test.sh
 # Exit 0 PASS / non-zero FAIL count.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT="${REPO_ROOT}/infra/scripts/local/seed-admin-loopzero-dev.sh"

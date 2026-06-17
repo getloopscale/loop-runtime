@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
+set -euo pipefail
 #
 # migrate-legacy-namespaces.sh — detect + migrate legacy tenant namespaces.
 #
@@ -74,8 +75,6 @@
 #
 # Active release gate refuses --mode=adopt if any in-flight release is detected;
 # this is the EC-7 absorption that resolves Q1 of the plan.
-
-set -uo pipefail
 
 WORKLOAD_CTX="${WORKLOAD_CTX:-k3d-loopzero-workload}"
 MGMT_CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
