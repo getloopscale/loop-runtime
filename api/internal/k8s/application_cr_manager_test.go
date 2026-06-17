@@ -8,11 +8,32 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
+
+// newAppMgr builds an ApplicationCRManager backed by the controller-runtime
+// fake typed client (M8). UNIT test — no live cluster, no envtest.
+func newAppMgr(t *testing.T) *ApplicationCRManager {
+	t.Helper()
+	scheme, err := NewScheme()
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
+	}
+	return NewApplicationCRManager(fake.NewClientBuilder().WithScheme(scheme).Build(), "loopzero-system")
+}
+
+// getApp fetches a LoopZeroApplication CR by name from the manager's fake client.
+func getApp(t *testing.T, m *ApplicationCRManager, name string) *apiv1.LoopZeroApplication {
+	t.Helper()
+	var got apiv1.LoopZeroApplication
+	if err := m.Client.Get(context.Background(), client.ObjectKey{Namespace: "loopzero-system", Name: name}, &got); err != nil {
+		t.Fatalf("expected LoopZeroApplication CR %q to exist: %v", name, err)
+	}
+	return &got
+}
 
 func TestBuildLoopZeroApplicationCR(t *testing.T) {
 	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
@@ -24,54 +45,44 @@ func TestBuildLoopZeroApplicationCR(t *testing.T) {
 		ServicePort: 3001,
 	})
 
-	// Verify GVK
-	if cr.GetAPIVersion() != "loopzero.io/v1" {
-		t.Errorf("expected apiVersion loopzero.io/v1, got %s", cr.GetAPIVersion())
-	}
-	if cr.GetKind() != "LoopZeroApplication" {
-		t.Errorf("expected kind LoopZeroApplication, got %s", cr.GetKind())
-	}
-
-	// Verify deterministic name includes hash suffix
+	// Deterministic name includes hash suffix + human-readable prefix.
 	expectedName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
-	if cr.GetName() != expectedName {
-		t.Errorf("expected name %q, got %q", expectedName, cr.GetName())
+	if cr.Name != expectedName {
+		t.Errorf("expected name %q, got %q", expectedName, cr.Name)
 	}
-	// Name should start with the human-readable prefix
-	if !strings.HasPrefix(cr.GetName(), "tn-loopzero-my-project-api-production-") {
-		t.Errorf("expected name to start with human-readable prefix, got %q", cr.GetName())
+	if !strings.HasPrefix(cr.Name, "tn-loopzero-my-project-api-production-") {
+		t.Errorf("expected name to start with human-readable prefix, got %q", cr.Name)
 	}
-
-	// Verify namespace
-	if cr.GetNamespace() != "loopzero-system" {
-		t.Errorf("expected namespace loopzero-system, got %s", cr.GetNamespace())
+	if cr.Namespace != "loopzero-system" {
+		t.Errorf("expected namespace loopzero-system, got %s", cr.Namespace)
 	}
 
-	// Verify spec fields
-	spec, _ := cr.Object["spec"].(map[string]interface{})
-	if spec["tenantRef"] != "tn-loopzero" {
-		t.Errorf("expected tenantRef tn-loopzero, got %v", spec["tenantRef"])
+	// Typed spec fields — the compiler now enforces these names.
+	if cr.Spec.TenantRef != "tn-loopzero" {
+		t.Errorf("expected tenantRef tn-loopzero, got %q", cr.Spec.TenantRef)
 	}
-	if spec["project"] != "my-project" {
-		t.Errorf("expected project my-project, got %v", spec["project"])
+	if cr.Spec.Project != "my-project" {
+		t.Errorf("expected project my-project, got %q", cr.Spec.Project)
 	}
-	if spec["environment"] != "production" {
-		t.Errorf("expected environment production, got %v", spec["environment"])
+	if cr.Spec.Environment != "production" {
+		t.Errorf("expected environment production, got %q", cr.Spec.Environment)
 	}
-	if spec["serviceName"] != "api" {
-		t.Errorf("expected serviceName api, got %v", spec["serviceName"])
+	if cr.Spec.ServiceName != "api" {
+		t.Errorf("expected serviceName api, got %q", cr.Spec.ServiceName)
 	}
-	if spec["servicePort"] != int64(3001) {
-		t.Errorf("expected servicePort 3001, got %v", spec["servicePort"])
+	if cr.Spec.ServicePort != 3001 {
+		t.Errorf("expected servicePort 3001, got %d", cr.Spec.ServicePort)
+	}
+	if cr.Spec.Replicas != 1 {
+		t.Errorf("expected replicas 1, got %d", cr.Spec.Replicas)
 	}
 
-	// Verify labels for controller selection
-	labels := cr.GetLabels()
-	if labels["loopzero.io/tenant"] != "tn-loopzero" {
-		t.Errorf("expected label loopzero.io/tenant=tn-loopzero, got %v", labels["loopzero.io/tenant"])
+	// Labels for controller selection.
+	if cr.Labels["loopzero.io/tenant"] != "tn-loopzero" {
+		t.Errorf("expected label loopzero.io/tenant=tn-loopzero, got %v", cr.Labels["loopzero.io/tenant"])
 	}
-	if labels["loopzero.io/project"] != "my-project" {
-		t.Errorf("expected label loopzero.io/project=my-project, got %v", labels["loopzero.io/project"])
+	if cr.Labels["loopzero.io/project"] != "my-project" {
+		t.Errorf("expected label loopzero.io/project=my-project, got %v", cr.Labels["loopzero.io/project"])
 	}
 }
 
@@ -92,13 +103,12 @@ func TestBuildLoopZeroApplicationCR_PropagatesCorrelationID(t *testing.T) {
 		CorrelationID: wantID,
 	})
 
-	annotations := cr.GetAnnotations()
-	if annotations == nil {
+	if cr.Annotations == nil {
 		t.Fatal("expected annotations map populated when CorrelationID is supplied")
 	}
-	got, ok := annotations["loopzero.io/correlation-id"]
+	got, ok := cr.Annotations["loopzero.io/correlation-id"]
 	if !ok {
-		t.Errorf("expected annotation loopzero.io/correlation-id to be set; got keys=%v", annotations)
+		t.Errorf("expected annotation loopzero.io/correlation-id to be set; got keys=%v", cr.Annotations)
 	}
 	if got != wantID {
 		t.Errorf("annotation loopzero.io/correlation-id = %q, want %q", got, wantID)
@@ -119,9 +129,8 @@ func TestBuildLoopZeroApplicationCR_OmitsAnnotationWhenCorrelationEmpty(t *testi
 		CorrelationID: "", // explicit empty
 	})
 
-	annotations := cr.GetAnnotations()
-	if _, has := annotations["loopzero.io/correlation-id"]; has {
-		t.Errorf("expected NO loopzero.io/correlation-id annotation when CorrelationID is empty; got annotations=%v", annotations)
+	if _, has := cr.Annotations["loopzero.io/correlation-id"]; has {
+		t.Errorf("expected NO loopzero.io/correlation-id annotation when CorrelationID is empty; got annotations=%v", cr.Annotations)
 	}
 }
 
@@ -135,9 +144,8 @@ func TestBuildLoopZeroApplicationCR_DefaultPort(t *testing.T) {
 		ServicePort: 0, // should default to 80
 	})
 
-	spec, _ := cr.Object["spec"].(map[string]interface{})
-	if spec["servicePort"] != int64(80) {
-		t.Errorf("expected default servicePort 80, got %v", spec["servicePort"])
+	if cr.Spec.ServicePort != 80 {
+		t.Errorf("expected default servicePort 80, got %d", cr.Spec.ServicePort)
 	}
 }
 
@@ -153,7 +161,6 @@ func TestLoopZeroApplicationCRName_LongInputsTruncated(t *testing.T) {
 	if len(name) > 253 {
 		t.Errorf("CR name exceeds K8s 253-char limit: len=%d, name=%q", len(name), name)
 	}
-	// Must still end with 8-char hex suffix
 	parts := strings.Split(name, "-")
 	suffix := parts[len(parts)-1]
 	if len(suffix) != 8 {
@@ -173,27 +180,23 @@ func TestLoopZeroApplicationCRName_TruncatedStillUnique(t *testing.T) {
 }
 
 func TestLoopZeroApplicationCRName(t *testing.T) {
-	// Deterministic: same input always produces same output
+	// Deterministic: same input always produces same output.
 	name1 := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
 	name2 := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
 	if name1 != name2 {
 		t.Errorf("expected deterministic names, got %q and %q", name1, name2)
 	}
 
-	// Collision-free: different inputs that would collide with simple hyphen join
-	// project="my-app", app="web" vs project="my", app="app-web"
+	// Collision-free: different inputs that would collide with simple hyphen join.
 	nameA := loopzeroApplicationCRName("tn-x", "my-app", "web", "prod")
 	nameB := loopzeroApplicationCRName("tn-x", "my", "app-web", "prod")
 	if nameA == nameB {
 		t.Errorf("expected different names for different inputs, both got %q", nameA)
 	}
 
-	// Human-readable prefix preserved
 	if !strings.HasPrefix(name1, "tn-loopzero-my-project-api-production-") {
 		t.Errorf("expected human-readable prefix, got %q", name1)
 	}
-
-	// Hash suffix is 8 hex chars
 	parts := strings.Split(name1, "-")
 	suffix := parts[len(parts)-1]
 	if len(suffix) != 8 {
@@ -201,21 +204,8 @@ func TestLoopZeroApplicationCRName(t *testing.T) {
 	}
 }
 
-// newFakeDynamicClient returns a fake dynamic client with the LoopZeroApplication GVR registered.
-func newFakeDynamicClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
-	scheme := runtime.NewScheme()
-	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme,
-		map[schema.GroupVersionResource]string{
-			loopzeroApplicationGVR: "LoopZeroApplicationList",
-		},
-		objects...,
-	)
-}
-
 func TestEnsureLoopZeroApplication_CreateWhenNotFound(t *testing.T) {
-	client := newFakeDynamicClient()
-	mgr := NewApplicationCRManager(client, "loopzero-system")
-
+	mgr := newAppMgr(t)
 	input := LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "my-project",
@@ -225,71 +215,55 @@ func TestEnsureLoopZeroApplication_CreateWhenNotFound(t *testing.T) {
 		ServicePort: 3001,
 	}
 
-	err := mgr.EnsureLoopZeroApplication(context.Background(), input)
-	if err != nil {
+	if err := mgr.EnsureLoopZeroApplication(context.Background(), input); err != nil {
 		t.Fatalf("EnsureLoopZeroApplication() unexpected error: %v", err)
 	}
 
-	// Verify CR was created
 	crName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
-	got, err := client.Resource(loopzeroApplicationGVR).Namespace("loopzero-system").Get(
-		context.Background(), crName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Get CR after create: %v", err)
+	got := getApp(t, mgr, crName)
+	if got.Spec.ServicePort != 3001 {
+		t.Errorf("servicePort = %d, want 3001", got.Spec.ServicePort)
 	}
-	if got.GetName() != crName {
-		t.Errorf("CR name = %q, want %q", got.GetName(), crName)
-	}
-	spec, _ := got.Object["spec"].(map[string]interface{})
-	if spec["servicePort"] != int64(3001) {
-		t.Errorf("servicePort = %v, want 3001", spec["servicePort"])
+	if got.Spec.TenantRef != "tn-loopzero" {
+		t.Errorf("tenantRef = %q, want tn-loopzero", got.Spec.TenantRef)
 	}
 }
 
 func TestEnsureLoopZeroApplication_UpdateWhenExists(t *testing.T) {
-	// Pre-populate with a CR that has port 80
-	existing := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
+	mgr := newAppMgr(t)
+	// Pre-populate with a CR that has port 80.
+	if err := mgr.Client.Create(context.Background(), buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
 		ServiceName: "api",
 		ServicePort: 80,
-	})
-	client := newFakeDynamicClient(existing)
-	mgr := NewApplicationCRManager(client, "loopzero-system")
+	})); err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
 
-	// Update to port 3001
-	input := LoopZeroApplicationInput{
+	// Update to port 3001.
+	if err := mgr.EnsureLoopZeroApplication(context.Background(), LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
 		ServiceName: "api",
 		ServicePort: 3001,
-	}
-	err := mgr.EnsureLoopZeroApplication(context.Background(), input)
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("EnsureLoopZeroApplication() unexpected error: %v", err)
 	}
 
-	// Verify CR was updated
 	crName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
-	got, err := client.Resource(loopzeroApplicationGVR).Namespace("loopzero-system").Get(
-		context.Background(), crName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Get CR after update: %v", err)
-	}
-	spec, _ := got.Object["spec"].(map[string]interface{})
-	if spec["servicePort"] != int64(3001) {
-		t.Errorf("servicePort after update = %v, want 3001", spec["servicePort"])
+	got := getApp(t, mgr, crName)
+	if got.Spec.ServicePort != 3001 {
+		t.Errorf("servicePort after update = %d, want 3001", got.Spec.ServicePort)
 	}
 }
 
 func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
-	client := newFakeDynamicClient()
-	mgr := NewApplicationCRManager(client, "loopzero-system")
-
+	mgr := newAppMgr(t)
 	input := LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",
 		Project:     "web",
@@ -299,7 +273,6 @@ func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
 		ServicePort: 80,
 	}
 
-	// Call twice — both must succeed
 	if err := mgr.EnsureLoopZeroApplication(context.Background(), input); err != nil {
 		t.Fatalf("first call: %v", err)
 	}
@@ -307,20 +280,12 @@ func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
 		t.Fatalf("second call (idempotent): %v", err)
 	}
 
-	// Verify only one CR exists
-	crName := loopzeroApplicationCRName("tn-loopzero", "web", "frontend", "staging")
-	list, err := client.Resource(loopzeroApplicationGVR).Namespace("loopzero-system").List(
-		context.Background(), metav1.ListOptions{})
-	if err != nil {
+	// Verify exactly one CR exists.
+	var list apiv1.LoopZeroApplicationList
+	if err := mgr.Client.List(context.Background(), &list, client.InNamespace("loopzero-system")); err != nil {
 		t.Fatalf("List CRs: %v", err)
 	}
-	count := 0
-	for _, item := range list.Items {
-		if item.GetName() == crName {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("expected exactly 1 CR named %q, found %d", crName, count)
+	if len(list.Items) != 1 {
+		t.Errorf("expected exactly 1 CR, found %d", len(list.Items))
 	}
 }
