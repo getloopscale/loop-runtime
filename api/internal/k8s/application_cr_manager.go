@@ -89,6 +89,19 @@ func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, in
 		// CR exists — apply desired spec onto the fetched object, preserving its
 		// resourceVersion (carried by `existing`) for optimistic concurrency.
 		applyLoopZeroApplicationSpec(&existing, input)
+		// Audit gap M08 #10 / §6.C.1: refresh the correlation-id annotation on
+		// re-deploy so the CR traces back to the LATEST originating request, not
+		// the first one (parity with the pre-M8 rebuild-on-update behavior).
+		// Unlike that rebuild, this touches ONLY our annotation — operator-set
+		// labels/annotations on the existing object are preserved. Empty
+		// CorrelationID (background goroutine) leaves the last-known trace in
+		// place rather than wiping it.
+		if input.CorrelationID != "" {
+			if existing.Annotations == nil {
+				existing.Annotations = map[string]string{}
+			}
+			existing.Annotations["loopzero.io/correlation-id"] = input.CorrelationID
+		}
 		if err := m.Client.Update(ctx, &existing); err != nil {
 			return err // RetryOnConflict handles Conflict errors automatically
 		}

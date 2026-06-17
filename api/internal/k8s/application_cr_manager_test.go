@@ -262,6 +262,40 @@ func TestEnsureLoopZeroApplication_UpdateWhenExists(t *testing.T) {
 	}
 }
 
+// Audit gap M08 #10 / §6.C.1: on re-deploy the CR's correlation-id annotation
+// must reflect the LATEST originating request (parity with the pre-M8
+// rebuild-on-update behavior) — without clobbering other metadata.
+func TestEnsureLoopZeroApplication_RefreshesCorrelationIDOnUpdate(t *testing.T) {
+	mgr := newAppMgr(t)
+	base := LoopZeroApplicationInput{
+		TenantID:    "tn-loopzero",
+		Project:     "my-project",
+		Environment: "production",
+		AppName:     "api",
+		ServiceName: "api",
+		ServicePort: 3001,
+	}
+	// First deploy carries correlation A.
+	first := base
+	first.CorrelationID = "corr-aaaa"
+	if err := mgr.EnsureLoopZeroApplication(context.Background(), first); err != nil {
+		t.Fatalf("first EnsureLoopZeroApplication: %v", err)
+	}
+
+	// Re-deploy carries correlation B — the annotation must update to B.
+	second := base
+	second.CorrelationID = "corr-bbbb"
+	if err := mgr.EnsureLoopZeroApplication(context.Background(), second); err != nil {
+		t.Fatalf("second EnsureLoopZeroApplication: %v", err)
+	}
+
+	crName := loopzeroApplicationCRName("tn-loopzero", "my-project", "api", "production")
+	got := getApp(t, mgr, crName)
+	if got.Annotations["loopzero.io/correlation-id"] != "corr-bbbb" {
+		t.Errorf("correlation-id after re-deploy = %q, want corr-bbbb (latest request)", got.Annotations["loopzero.io/correlation-id"])
+	}
+}
+
 func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
 	mgr := newAppMgr(t)
 	input := LoopZeroApplicationInput{
