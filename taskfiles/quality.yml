@@ -135,6 +135,11 @@ tasks:
       - /tmp/loopzero-ops quality no-new-bash --base-ref {{.BASE_REF}} --head-ref HEAD
       - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
       - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
+      # T0.2 of plan canonical-tests-rewrite-v2 v1.0 — quarantine-protect gate
+      # blocks PRs touching archive/canonical-tests-v1/** during strangler-fig
+      # window. Per ADR-2026-06-17-T3 D5. PR title env var must be exported by
+      # CI: GITHUB_PR_TITLE="${{ github.event.pull_request.title }}" (or equivalent).
+      - /tmp/loopzero-ops quality quarantine-protect --base-ref {{.BASE_REF}} --head-ref HEAD
 
   # dashboard-bundle gate removed (M4): the dashboard moved to the standalone
   # loopzero-cloud repo, which runs its own bundle-budget gate in CI.

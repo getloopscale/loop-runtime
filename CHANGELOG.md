@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Audit `2026-06-17-canonical-tests-deep-review/` — deep review da suite canonical (cleanroom + dogfood + chaos-test + live-proof + contra-prova) com 9 findings classificados BLOCKER/HIGH/MED/LOW + Change Request T3 + ADR T3 APPROVED para rewrite canonical via strangler-fig com quarentena consultável. Sponsor verbatim "Acheito TUDO" 2026-06-17.
+- Discovery + blueprint + plan v1.0 para `canonical-tests-rewrite-v2` em `.claude/knowledge-base/{discoveries/plans,discoveries/blueprints,plans}/` — 6 patterns (Ginkgo+helpers, Pact-go bilateral, OTel evidence, strangler-fig, contra-prova, steady-state baseline) + 8 ADR sketches + 5 Open Questions + Coverage Matrix completa + 8 risks.
+- `pkg/quality/quarantineprotect/` Go quality gate (T0.2 do plan) — bloqueia PRs editando `archive/canonical-tests-v1/**` durante a janela do strangler-fig per ADR-2026-06-17-T3 D5. DELETE só permitido com marker `[ARCHIVE-DELETE]` no PR title. 7 hermetic tests PASS + wired em `task quality:gates:diff` + `loopzero-ops quality quarantine-protect` subcommand.
 
 ### Changed
 
