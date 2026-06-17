@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Audit `2026-06-17-canonical-tests-deep-review/` — deep review da suite canonical (cleanroom + dogfood + chaos-test + live-proof + contra-prova) com 9 findings classificados BLOCKER/HIGH/MED/LOW + Change Request T3 + ADR T3 APPROVED para rewrite canonical via strangler-fig com quarentena consultável. Sponsor verbatim "Acheito TUDO" 2026-06-17.
+
 ### Changed
+
+- ROADMAP.md: M0-M8 dashboard journeys PAUSED até canonical-tests-rewrite-v2 entregar (ADR T3 Amendment 1). Refactor da suite é prerequisite — validar M0-M8 sobre base com débito conhecido produziria evidência frágil.
 
 ### Deprecated
 

@@ -56,7 +56,30 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-## Milestones
+## Precondition (PAUSE M0-M8) — Canonical Tests Rewrite
+
+> **Sponsor decision 2026-06-17 (verbatim "Acheito TUDO"):** M0-M8 estão **PAUSED** até o refactor canonical-tests-rewrite-v2 entregar. Per ADR `ADR-2026-06-17-T3-canonical-tests-rewrite`.
+
+**Por quê:** A suite canonical atual (cleanroom + dogfood + chaos + live-proof + contra-prova) tem 3 confusões semânticas + cross-repo orphanage + 2.567 LOC bash em débito. Validar M0-M8 sobre essa base produziria evidência frágil. Per audit `.claude/knowledge-base/audits/2026-06-17-canonical-tests-deep-review/SUMMARY.md`.
+
+**Refactor scope:** quarentena consultável da suite atual + construção paralela em Ginkgo + cross-repo Pact-go + OpenTelemetry trace evidence + DELETE pós-validação (3 execuções consecutivas chain 6 etapas + sponsor sign-off).
+
+**Status:** ADR T3 APPROVED 2026-06-17. Plan canonical-tests-rewrite-v2 awaiting `/to-plan` invocation.
+
+**Pre-conditions to unblock M0-M8:**
+
+- [ ] canonical-tests-rewrite-v2 plan emitted with `/plan-confidence` ≥ SHIPPABLE_WITH_CAVEATS
+- [ ] Phase 1 loopzero-contracts greenfield Ginkgo suite GREEN (sponsor checkpoint 1)
+- [ ] Phase 2 loopzero-cli + loopzero-cloud smoke + Pact-go bilateral GREEN
+- [ ] Phase 3 loopzero chain v2 em Ginkgo (cleanroom + dogfood + chaos + contra-prova) GREEN
+- [ ] 3 execuções consecutivas chain 6 etapas verde (sponsor checkpoint 3) → DELETE quarentena
+- [ ] Sponsor verbatim sign-off: "M0-M8 destravado"
+
+**Mandate compliance (per ADR D9):** `cleanroom-up-live-test-mandate.md` continua vigente para features delivered durante a janela do refactor. Features podem rodar contra a chain antiga **consultável read-only** (per D5). Mandate não aplica recursivamente ao refactor do próprio gate.
+
+---
+
+## Milestones (PAUSED until precondition above)
 
 > Cada milestone agrupa 1-5 journeys temáticas. Checkbox `[x]` flipa quando TODAS as journeys do milestone estão LIVE-validated + sponsor-approved. Per-journey checkboxes na DoD list rastreiam progresso granular.
 
