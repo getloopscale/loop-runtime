@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.19.0] - 2026-06-17
+
+### Added
+
 - Pre-push git hook (`infra/scripts/local/git-hooks/pre-push` + idempotent `install-git-hooks.sh`) that runs `task quality:gates` before every push — the cheap CI substitute for a project with no CI platform (gates now run unconditionally on push, not only when an operator remembers). Escapes: `git push --no-verify` or `LOOPZERO_SKIP_PREPUSH=1`. Hermetic test `infra/tests/check-install-git-hooks_test.sh`. (M8 — plan prepush-hook-and-api-crd-typed-schema Phase 0)
 
 
