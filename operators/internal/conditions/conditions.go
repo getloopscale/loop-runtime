@@ -5,58 +5,24 @@ package conditions
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1 "github.com/loopzero/loopzero/operators/api/v1"
 )
 
 // SetCondition sets or updates a condition on a slice of conditions.
-// ObservedGeneration is mandatory and tracks which generation of the resource
-// the condition relates to. If the condition already exists with the same
-// status, only reason, message, and observedGeneration are updated
-// (preserving LastTransitionTime). If the status changes, LastTransitionTime
-// is updated to the current time.
+//
+// M6: the implementation lives in the CRD contract module
+// (operators/api/v1.SetCondition); this is a thin re-export so the 40
+// operator-internal callers keep using `conditions.SetCondition` unchanged.
 func SetCondition(conditions *[]metav1.Condition, conditionType string, status metav1.ConditionStatus, reason, message string, observedGeneration int64) {
-	now := metav1.Now()
-
-	for i, c := range *conditions {
-		if c.Type == conditionType {
-			if c.Status == status {
-				// Status unchanged: update reason/message/generation but preserve transition time.
-				(*conditions)[i].Reason = reason
-				(*conditions)[i].Message = message
-				(*conditions)[i].ObservedGeneration = observedGeneration
-				return
-			}
-			// Status changed: update everything including transition time.
-			(*conditions)[i] = metav1.Condition{
-				Type:               conditionType,
-				Status:             status,
-				LastTransitionTime: now,
-				Reason:             reason,
-				Message:            message,
-				ObservedGeneration: observedGeneration,
-			}
-			return
-		}
-	}
-
-	// Condition not found: append new.
-	*conditions = append(*conditions, metav1.Condition{
-		Type:               conditionType,
-		Status:             status,
-		LastTransitionTime: now,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: observedGeneration,
-	})
+	apiv1.SetCondition(conditions, conditionType, status, reason, message, observedGeneration)
 }
 
 // GetCondition returns the condition with the given type, or nil if not found.
+//
+// M6: re-export of operators/api/v1.GetCondition (see SetCondition).
 func GetCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
-	for i := range conditions {
-		if conditions[i].Type == conditionType {
-			return &conditions[i]
-		}
-	}
-	return nil
+	return apiv1.GetCondition(conditions, conditionType)
 }
 
 // IsConditionTrue returns true if the condition exists and has status True.

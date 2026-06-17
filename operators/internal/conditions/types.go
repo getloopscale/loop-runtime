@@ -5,42 +5,78 @@
 // Conditions follow the Kubernetes API conventions for status conditions
 // (metav1.Condition) with typed constants for condition types and reasons.
 //
-// This package lives in operators/internal/ because it depends on K8s types
-// (metav1.Condition) and should not be exposed via pkg/.
+// M6 (extract-crd-types-contract-module): the CR-status condition TYPE
+// vocabulary + the generic SetCondition/GetCondition helpers were relocated to
+// the versioned CRD contract module `operators/api/v1` (they are part of the CR
+// status contract). This package re-exports them as aliases/delegations so its
+// 40 importers are unaffected, and keeps the operator-internal reason vocabulary
+// + kstatus summary/retry helpers here.
 package conditions
 
-// --- kstatus universal summary conditions ---
-//
-// ADR-0025 D3: every LoopZero CRD exposes Ready / Reconciling / Stalled in its
-// status.conditions, computed by conditions.SetReadinessSummary from the
-// per-step detail conditions defined below. Semantics follow the kpt CRD
-// Status Convention (https://kpt.dev/reference/schema/crd-status-convention/)
-// and are consumed by sigs.k8s.io/cli-utils/pkg/kstatus.Compute:
-//
-//   Ready=True       → kstatus returns "Current"      (fully reconciled)
-//   Reconciling=True → kstatus returns "InProgress"   (controller working)
-//   Stalled=True     → kstatus returns "Failed"       (manual intervention)
-//
-// The three are mutually exclusive in steady state (helper enforces).
-// Polarity: Ready/Reconciling are positive (True = good for Ready;
-// True = working for Reconciling); Stalled is negative (True = bad).
-const (
-	TypeReady       = "Ready"
-	TypeReconciling = "Reconciling"
-	TypeStalled     = "Stalled"
-)
+import apiv1 "github.com/loopzero/loopzero/operators/api/v1"
 
-// --- Tenant conditions ---
+// --- CR-status condition TYPE vocabulary (re-exported from operators/api/v1) ---
+// The canonical definitions live in operators/api/v1/conditions.go (M6). These
+// aliases keep `conditions.TypeX` call sites compiling unchanged.
 const (
-	TypeGitRepoReady        = "GitRepoReady"
-	TypeQuotaEnforced       = "QuotaEnforced"
-	TypeBuildNamespaceReady = "BuildNamespaceReady"
-	TypePriorityClassReady  = "PriorityClassReady"
-	TypeArgoCDAppReady      = "ArgoCDAppReady"
-	TypeHarborProjectReady  = "HarborProjectReady"
-	// T3.3 of openbao-adoption v1.3 — per-tenant Vault Transit key.
-	// EC-15 amendment: when False with reason VaultQuotaExceeded, alarm fires.
-	TypeTransitKeyAvailable = "TransitKeyAvailable"
+	// kstatus universal summary conditions (ADR-0025 D3)
+	TypeReady       = apiv1.TypeReady
+	TypeReconciling = apiv1.TypeReconciling
+	TypeStalled     = apiv1.TypeStalled
+
+	// Tenant conditions
+	TypeGitRepoReady        = apiv1.TypeGitRepoReady
+	TypeQuotaEnforced       = apiv1.TypeQuotaEnforced
+	TypeBuildNamespaceReady = apiv1.TypeBuildNamespaceReady
+	TypePriorityClassReady  = apiv1.TypePriorityClassReady
+	TypeArgoCDAppReady      = apiv1.TypeArgoCDAppReady
+	TypeHarborProjectReady  = apiv1.TypeHarborProjectReady
+	TypeTransitKeyAvailable = apiv1.TypeTransitKeyAvailable
+
+	// PlatformBootstrap conditions
+	TypeGiteaReady        = apiv1.TypeGiteaReady
+	TypeArgoCDReady       = apiv1.TypeArgoCDReady
+	TypeDatabaseSeeded    = apiv1.TypeDatabaseSeeded
+	TypeBootstrapComplete = apiv1.TypeBootstrapComplete
+
+	// GitRepositoryBinding conditions
+	TypeCredentialsResolved  = apiv1.TypeCredentialsResolved
+	TypeRepositoryRegistered = apiv1.TypeRepositoryRegistered
+	TypeRepositoryReachable  = apiv1.TypeRepositoryReachable
+	TypeConsumerHealthy      = apiv1.TypeConsumerHealthy
+
+	// Environment conditions
+	TypeEnvNamespaceReady     = apiv1.TypeEnvNamespaceReady
+	TypeEnvRBACReady          = apiv1.TypeEnvRBACReady
+	TypeEnvNetworkPolicyReady = apiv1.TypeEnvNetworkPolicyReady
+	TypeEnvQuotaReady         = apiv1.TypeEnvQuotaReady
+	TypePullSecretReady       = apiv1.TypePullSecretReady
+
+	// Application conditions
+	TypeServiceResolved    = apiv1.TypeServiceResolved
+	TypeIngressReady       = apiv1.TypeIngressReady
+	TypeCertificateIssued  = apiv1.TypeCertificateIssued
+	TypeRouteReachable     = apiv1.TypeRouteReachable
+	TypeApplicationHealthy = apiv1.TypeApplicationHealthy
+
+	// ClusterCredential conditions
+	TypeSecretNotFound = apiv1.TypeSecretNotFound
+	TypeConnected      = apiv1.TypeConnected
+
+	// Preview conditions
+	TypePreviewNamespaceReady      = apiv1.TypePreviewNamespaceReady
+	TypePreviewNetworkPolicyReady  = apiv1.TypePreviewNetworkPolicyReady
+	TypePreviewResourceQuotaReady  = apiv1.TypePreviewResourceQuotaReady
+	TypePreviewLimitRangeReady     = apiv1.TypePreviewLimitRangeReady
+	TypePreviewServiceAccountReady = apiv1.TypePreviewServiceAccountReady
+	TypePreviewBuildSubmitted      = apiv1.TypePreviewBuildSubmitted
+	TypePreviewBuildCompleted      = apiv1.TypePreviewBuildCompleted
+	TypePreviewWorkloadHealthy     = apiv1.TypePreviewWorkloadHealthy
+	TypePreviewApplicationDeleted  = apiv1.TypePreviewApplicationDeleted
+	TypePreviewNamespaceDeleted    = apiv1.TypePreviewNamespaceDeleted
+
+	// Tenant deletion conditions
+	TypeTenantEnvironmentCleanup = apiv1.TypeTenantEnvironmentCleanup
 )
 
 // --- Tenant condition reasons (T3.3 EC-15) ---
@@ -50,96 +86,13 @@ const (
 	ReasonTransitKeyProvisioned = "TransitKeyProvisioned" // success state
 )
 
-// --- PlatformBootstrap conditions ---
-const (
-	TypeGiteaReady        = "GiteaReady"
-	TypeArgoCDReady       = "ArgoCDReady"
-	TypeDatabaseSeeded    = "DatabaseSeeded"
-	TypeBootstrapComplete = "BootstrapComplete"
-)
-
-// --- GitRepositoryBinding conditions ---
-const (
-	TypeCredentialsResolved  = "CredentialsResolved"
-	TypeRepositoryRegistered = "RepositoryRegistered"
-	TypeRepositoryReachable  = "RepositoryReachable"
-	TypeConsumerHealthy      = "ConsumerHealthy"
-)
-
-// --- Environment conditions ---
-const (
-	TypeEnvNamespaceReady     = "NamespaceReady"
-	TypeEnvRBACReady          = "RBACReady"
-	TypeEnvNetworkPolicyReady = "NetworkPolicyReady"
-	TypeEnvQuotaReady         = "QuotaReady"
-	TypePullSecretReady       = "PullSecretReady" // Informational only — does not block Active transition
-)
-
-// --- Application conditions ---
-const (
-	TypeServiceResolved    = "ServiceResolved"
-	TypeIngressReady       = "IngressReady"
-	TypeCertificateIssued  = "CertificateIssued"
-	TypeRouteReachable     = "RouteReachable"
-	TypeApplicationHealthy = "ApplicationHealthy"
-)
-
-// --- ClusterCredential conditions ---
-const (
-	TypeSecretNotFound = "SecretNotFound"
-	TypeConnected      = "Connected"
-)
-
-// --- Preview conditions ---
-// T4.1 / ARCH-003: previously freeform "NamespaceReady" string in
-// preview_controller.go:119,127. Defined as a separate constant from
-// TypeEnvNamespaceReady because Preview's NamespaceReady has different
-// semantics (per-PR namespace lifecycle).
+// Reason constants are enumerated, not freeform. All condition reasons must use
+// one of these constants to ensure consistency across controllers.
 //
-// Sprint 5 / T1.2 (preview-environments-plan): adds the workload-readiness
-// conditions the controller will set as it reconciles namespace + workload
-// deployment. The deny-all + allow-ingress + allow-egress NetworkPolicy
-// triplet, the ResourceQuota, and the LimitRange each get their own
-// condition for finer-grained operator UX (`kubectl describe pe` shows
-// exactly which resource failed).
-const (
-	TypePreviewNamespaceReady       = "NamespaceReady"
-	TypePreviewNetworkPolicyReady   = "NetworkPolicyReady"
-	TypePreviewResourceQuotaReady   = "ResourceQuotaReady"
-	TypePreviewLimitRangeReady      = "LimitRangeReady"
-	// TypePreviewServiceAccountReady (J-23, 2026-06-07): the `loopzero-app`
-	// ServiceAccount the preview controller creates inside every preview
-	// namespace. Manifests rendered by the API set
-	// `pod.spec.serviceAccountName: loopzero-app` (renderer_deployment.go:146
-	// + renderer_rollout.go:400). Without the SA in the target namespace,
-	// ArgoCD sync succeeds but pods CrashLoop with
-	// `error looking up service account ...: serviceaccounts "loopzero-app"
-	// not found` — the failure surface that broke the very first LIVE
-	// preview. Mirrors TypeServiceAccountReady in tenant/environment land
-	// but scoped to preview's narrower SA shape (no deployer SA needed).
-	TypePreviewServiceAccountReady  = "ServiceAccountReady"
-	TypePreviewBuildSubmitted       = "BuildSubmitted"
-	TypePreviewBuildCompleted       = "BuildCompleted"
-	TypePreviewWorkloadHealthy      = "WorkloadHealthy"
-	TypePreviewApplicationDeleted   = "ApplicationDeleted"
-	TypePreviewNamespaceDeleted     = "NamespaceDeleted"
-)
-
-// --- Tenant deletion conditions ---
-// T4.1 / ARCH-003: previously freeform "EnvironmentCleanup" string in
-// tenant_deletion.go:88. Used by Phase 1 of the deletion lifecycle to
-// surface per-environment Delete failures.
-const (
-	TypeTenantEnvironmentCleanup = "EnvironmentCleanup"
-)
-
-// Reason constants are enumerated, not freeform. All condition reasons
-// must use one of these constants to ensure consistency across controllers.
-//
-// kstatus convention (ADR-0025): the helper SetReadinessSummary classifies
-// each detail condition's Reason as either {Reconciling, Progressing,
-// Waiting} (→ summary Reconciling=True) or {Failed, Stalled} (→ summary
-// Stalled=True; Stalled wins over Reconciling).
+// kstatus convention (ADR-0025): the helper SetReadinessSummary classifies each
+// detail condition's Reason as either {Reconciling, Progressing, Waiting} (→
+// summary Reconciling=True) or {Failed, Stalled} (→ summary Stalled=True;
+// Stalled wins over Reconciling).
 const (
 	ReasonReconciling = "Reconciling"
 	ReasonReady       = "Ready"
@@ -148,15 +101,11 @@ const (
 	ReasonUnreachable = "Unreachable"
 	ReasonWaiting     = "Waiting"
 	// ReasonDegraded marks a partial-failure state where the resource is
-	// observable but not fully healthy. Used by AP-2 fix in
-	// application_controller.go:computePhase to map condition.Reason →
-	// ApplicationPhaseDegraded.
+	// observable but not fully healthy.
 	ReasonDegraded = "Degraded"
 	// ReasonProgressing — generic in-progress reason for kstatus consumers.
-	// Aliases ReasonReconciling for sites that prefer the kpt vocabulary.
 	ReasonProgressing = "Progressing"
-	// ReasonStalled — generic stalled reason. Aliases ReasonFailed for
-	// sites that prefer the kpt vocabulary; kstatus.Compute treats both
-	// identically when classifying the summary.
+	// ReasonStalled — generic stalled reason; kstatus.Compute treats it like
+	// ReasonFailed when classifying the summary.
 	ReasonStalled = "Stalled"
 )
