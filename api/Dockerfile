@@ -3,7 +3,16 @@ WORKDIR /workspace
 
 ENV GOWORK=off
 
+# Sibling loopzero-contracts module: api/go.mod uses `replace => ../../loopzero-contracts`
+# which from /workspace/api/ resolves to /loopzero-contracts. Provided via BuildKit
+# named build context `loopzero-contracts` so the sibling repo is reachable inside
+# the Docker build (per M5 decomposition; see docs/version-pin-cutover-runbook.md).
+# Sponsor-direct-approval 2026-06-17 ("O sistema deve rodar no k3, continue").
+COPY --from=loopzero-contracts . /loopzero-contracts
+
 COPY pkg/go.mod ./pkg/go.mod
+COPY operators/api/go.mod operators/api/go.sum ./operators/api/
+COPY operators/api/v1 ./operators/api/v1
 COPY api/go.mod api/go.sum ./api/
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
