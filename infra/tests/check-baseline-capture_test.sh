@@ -9,7 +9,7 @@
 # 4 mandatory top-level layer keys and shape.
 #
 # Hermetic: NO network, NO kubectl.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CAPTURE="${REPO_ROOT}/infra/scripts/local/baseline-capture.sh"
@@ -105,8 +105,7 @@ assert "baseline_capture.py compiles" python3 -m py_compile "${REPO_ROOT}/infra/
 # --- Run capture with fixture ----------------------------------------------
 
 OUT="$OUT_DIR/snap.json"
-BASELINE_FIXTURE_DIR="$FIX_DIR" bash "$CAPTURE" --output "$OUT" > "$OUT_DIR/stdout.log" 2>&1
-RC=$?
+if BASELINE_FIXTURE_DIR="$FIX_DIR" bash "$CAPTURE" --output "$OUT" > "$OUT_DIR/stdout.log" 2>&1; then RC=0; else RC=$?; fi
 
 assert "fixture run exits 0" test "$RC" = "0"
 assert "output file exists" test -f "$OUT"

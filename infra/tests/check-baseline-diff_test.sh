@@ -14,7 +14,7 @@
 #     metadata.generation → exit 0, verdict OK (normalization strips them)
 #
 # Hermetic: NO network, NO kubectl.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DIFF="${REPO_ROOT}/infra/scripts/local/baseline-diff.sh"
@@ -152,8 +152,7 @@ run_diff() {
 }
 
 # 1. Identical → exit 0
-run_diff "$FIXTURES/a-identical.json" "$FIXTURES/b-identical.json" > "$FIXTURES/r1.json" 2>&1
-RC1=$?
+if run_diff "$FIXTURES/a-identical.json" "$FIXTURES/b-identical.json" > "$FIXTURES/r1.json" 2>&1; then RC1=0; else RC1=$?; fi
 assert_eq "identical → exit 0" "0" "$RC1"
 if [ -s "$FIXTURES/r1.json" ] ; then
   V1=$(python3 -c 'import json,sys; print(json.load(open("'"$FIXTURES/r1.json"'")).get("verdict",""))' 2>/dev/null || echo "")
@@ -161,8 +160,7 @@ if [ -s "$FIXTURES/r1.json" ] ; then
 fi
 
 # 2. Missing → exit 1, classification missing N=1
-run_diff "$FIXTURES/a-missing.json" "$FIXTURES/b-missing.json" > "$FIXTURES/r2.json" 2>&1
-RC2=$?
+if run_diff "$FIXTURES/a-missing.json" "$FIXTURES/b-missing.json" > "$FIXTURES/r2.json" 2>&1; then RC2=0; else RC2=$?; fi
 assert_eq "missing → exit 1" "1" "$RC2"
 if [ -s "$FIXTURES/r2.json" ] ; then
   V2=$(python3 -c 'import json,sys; print(json.load(open("'"$FIXTURES/r2.json"'")).get("verdict",""))' 2>/dev/null || echo "")
@@ -172,8 +170,7 @@ if [ -s "$FIXTURES/r2.json" ] ; then
 fi
 
 # 3. Additive → exit 0
-run_diff "$FIXTURES/a-additive.json" "$FIXTURES/b-additive.json" > "$FIXTURES/r3.json" 2>&1
-RC3=$?
+if run_diff "$FIXTURES/a-additive.json" "$FIXTURES/b-additive.json" > "$FIXTURES/r3.json" 2>&1; then RC3=0; else RC3=$?; fi
 assert_eq "additive → exit 0" "0" "$RC3"
 if [ -s "$FIXTURES/r3.json" ] ; then
   V3=$(python3 -c 'import json,sys; print(json.load(open("'"$FIXTURES/r3.json"'")).get("verdict",""))' 2>/dev/null || echo "")
@@ -183,8 +180,7 @@ if [ -s "$FIXTURES/r3.json" ] ; then
 fi
 
 # 4. Mismatch → exit 1
-run_diff "$FIXTURES/a-mismatch.json" "$FIXTURES/b-mismatch.json" > "$FIXTURES/r4.json" 2>&1
-RC4=$?
+if run_diff "$FIXTURES/a-mismatch.json" "$FIXTURES/b-mismatch.json" > "$FIXTURES/r4.json" 2>&1; then RC4=0; else RC4=$?; fi
 assert_eq "mismatch → exit 1" "1" "$RC4"
 if [ -s "$FIXTURES/r4.json" ] ; then
   M4=$(python3 -c 'import json,sys; print(len(json.load(open("'"$FIXTURES/r4.json"'")).get("classification",{}).get("mismatch",[])))' 2>/dev/null || echo 0)
@@ -194,8 +190,7 @@ if [ -s "$FIXTURES/r4.json" ] ; then
 fi
 
 # 5. Volatile (EC-7) → exit 0
-run_diff "$FIXTURES/a-volatile.json" "$FIXTURES/b-volatile.json" > "$FIXTURES/r5.json" 2>&1
-RC5=$?
+if run_diff "$FIXTURES/a-volatile.json" "$FIXTURES/b-volatile.json" > "$FIXTURES/r5.json" 2>&1; then RC5=0; else RC5=$?; fi
 assert_eq "volatile (EC-7) → exit 0" "0" "$RC5"
 if [ -s "$FIXTURES/r5.json" ] ; then
   V5=$(python3 -c 'import json,sys; print(json.load(open("'"$FIXTURES/r5.json"'")).get("verdict",""))' 2>/dev/null || echo "")
