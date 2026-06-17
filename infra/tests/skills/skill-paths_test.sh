@@ -64,8 +64,11 @@ extract_tasks() {
   for sub in test helm infra dev db k3d security observability; do
     extract_tasks "$REPO_ROOT/taskfiles/${sub}.yml"
   done
-  # Non-flattened (drill): prepend namespace
+  # Non-flattened (namespaced) sub-files: prepend namespace
   extract_tasks "$REPO_ROOT/taskfiles/drill.yml" | sed 's/^/drill:/'
+  # quality.yml is included WITHOUT flatten (Taskfile.yml) → tasks are
+  # namespaced as `quality:<name>` (e.g. `task quality:gates`).
+  extract_tasks "$REPO_ROOT/taskfiles/quality.yml" | sed 's/^/quality:/'
 } | sort -u > "$ALL_TASKS_FILE"
 
 info "Discovered $(wc -l < "$ALL_TASKS_FILE") task names across Taskfile.yml + taskfiles/"
