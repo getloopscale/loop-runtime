@@ -140,6 +140,11 @@ assert "diff script exists"     test -f "$DIFF"
 assert "diff script executable" test -x "$DIFF"
 assert "diff script bash -n ok" bash -n "$DIFF"
 
+# --- De-costume gate (home-unhomed-logic-suspect-keeps T1.2) ----------------
+NO_HEREDOC_DIFF() { [ "$(grep -cE 'python3?[[:space:]]+(-[[:space:]]+)?<<|<<[[:space:]]*['\''\"]*?(PY|PYEOF|PYTHON)' "$DIFF")" = "0" ] ; }
+assert "no python3 heredoc remains in baseline-diff.sh" NO_HEREDOC_DIFF
+assert "baseline_diff.py compiles" python3 -m py_compile "${REPO_ROOT}/infra/scripts/local/baseline_diff.py"
+
 # --- Scenario assertions ----------------------------------------------------
 
 run_diff() {
