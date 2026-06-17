@@ -10,7 +10,7 @@
 # Security: runs as non-root user 1000, no privilege escalation
 FROM mirror.gcr.io/library/alpine:3.21.3
 
-LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-syft-scanner"
 LABEL org.opencontainers.image.description="syft SBOM scanner for LoopZero build pipeline (Sprint 6)"
 
