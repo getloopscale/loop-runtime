@@ -222,3 +222,6 @@ code-review-output-*/state/
 
 # compiled loopzero-ops binary (build artifact; source is cmd/loopzero-ops/)
 /loopzero-ops
+
+# compiled helper binary (regenerable via go build)
+tools/gen-service-auth-ed25519/gen-service-auth-ed25519
