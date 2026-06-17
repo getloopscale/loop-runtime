@@ -40,7 +40,8 @@
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
-REPO_NAME="${REPO_NAME:-loopzero-repotest}"
+REPO_NAME="${REPO_NAME:-loopzerokit-example}"
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
@@ -205,7 +206,7 @@ push_commit() {
   gh api -X PUT "/repos/${REPO_OWNER}/${REPO_NAME}/contents/${marker_file}" \
     -f message="T6.1 marker commit" \
     -f content="$content" \
-    -f branch="main" >/dev/null 2>&1
+    -f branch="${DEFAULT_BRANCH}" >/dev/null 2>&1
 }
 
 # --- Chain assertion (step 7) — webhook -> build -> release ACTIVE --------

@@ -30,7 +30,7 @@ import (
 // TestBaseImages_AreDigestPinned rejects tag-only pins; the real pull is
 // proven at LIVE (Final Phase). Refresh deliberately + record in CHANGELOG.
 const (
-	imageNodeBase   = "node@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293"   // node:20-alpine
+	imageNodeBase   = "node@sha256:0e910f435308c36ea60b4cfd7b80208044d77a074d16b768a81901ce938a62dc"   // node:22.12.0 (canonical 2026-06-16 — full Debian bookworm has bash 5.2 supporting `set -o pipefail`; slim variant uses dash which fails)
 	imagePythonBase = "python@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9" // python:3.12-slim
 )
 
