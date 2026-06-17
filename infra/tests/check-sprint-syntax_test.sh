@@ -7,7 +7,7 @@
 #
 # Hermetic: NO network, NO kubectl. Asserts bash -n, the de-costume invariant
 # (no python3 heredoc), the helper compiles, and the JSON report builder shape.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT="${REPO_ROOT}/infra/scripts/local/check-sprint.sh"

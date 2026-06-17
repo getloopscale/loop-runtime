@@ -8,7 +8,7 @@
 # Hermetic: NO network, NO kubectl, NO docker. Asserts bash -n, the de-costume
 # invariant (no python3 heredoc), the helper compiles, and the merge/set-nodehosts
 # transforms behave (override + keep + add; NodeHosts replaced).
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT="${REPO_ROOT}/infra/scripts/local/networking-cross-cluster-coredns.sh"
