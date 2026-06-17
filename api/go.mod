@@ -29,10 +29,16 @@ require (
 	k8s.io/apimachinery v0.35.2
 	k8s.io/client-go v0.35.2
 	k8s.io/klog/v2 v2.140.0
+	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
-require github.com/gorilla/mux v1.8.0 // indirect
+require (
+	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
+	github.com/onsi/ginkgo/v2 v2.28.1 // indirect
+	github.com/onsi/gomega v1.39.1 // indirect
+)
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -85,6 +91,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/getloopscale/loopzero-contracts v0.0.0
+	github.com/getloopscale/loopzero/operators/api v0.0.0
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -116,3 +123,5 @@ require (
 replace github.com/getloopscale/loopzero/pkg => ../pkg
 
 replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts
+
+replace github.com/getloopscale/loopzero/operators/api => ../operators/api
