@@ -94,6 +94,14 @@ assert "capture script exists"     test -f "$CAPTURE"
 assert "capture script executable" test -x "$CAPTURE"
 assert "capture script bash -n ok" bash -n "$CAPTURE"
 
+# --- De-costume gate (home-unhomed-logic-suspect-keeps T1.1) ----------------
+# The Python data-processing must live in baseline_capture.py, NOT an inline
+# heredoc (the unhomed-logic suspect-keep gate forbids python3 heredocs in
+# KEEP-tagged scripts). Assert zero heredocs remain + the helper compiles.
+NO_HEREDOC() { [ "$(grep -cE 'python3?[[:space:]]+(-[[:space:]]+)?<<|<<[[:space:]]*['\''\"]*?(PY|PYEOF|PYTHON)' "$CAPTURE")" = "0" ] ; }
+assert "no python3 heredoc remains in baseline-capture.sh" NO_HEREDOC
+assert "baseline_capture.py compiles" python3 -m py_compile "${REPO_ROOT}/infra/scripts/local/baseline_capture.py"
+
 # --- Run capture with fixture ----------------------------------------------
 
 OUT="$OUT_DIR/snap.json"
