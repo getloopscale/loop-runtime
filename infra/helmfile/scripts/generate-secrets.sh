@@ -146,6 +146,30 @@ if [[ -z "${LOOPZERO_DB_HOST:-}" ]]; then
   # random broke all of them (e.g. Tiltfile db-migrate SASL auth failure).
   # Env override (LOOPZERO_DB_PASSWORD) still wins for cloud/drill. Root cause:
   # finding-2026-05-22-pg-password-divergence § local-dev-password.
+  # T6.5 of plan 2026-06-02-openbao-adoption — standalone local k3d DB creds are
+  # sourced from the Vault database engine (database/creds/loopzero-api) when
+  # available, falling back to the deterministic dev password BELOW ONLY when
+  # Vault is not reachable (cold-bootstrap before openbao-init runs). Phased
+  # cutover: when BAO_ADDR + BAO_TOKEN are set and the database engine + role
+  # `loopzero-api` exist, mint a fresh 1h-TTL credential; otherwise the cold-bootstrap
+  # fallback keeps the chicken-and-egg working. Long-term (T10.3, post T+60d) the
+  # fallback is removed and Vault becomes the only path. Restored 2026-06-17 after
+  # #69 (a cloud-CI commit) accidentally dropped it — caught by the
+  # check-generate-secrets-vault-fallback hermetic gate. The Vault branch runs
+  # BEFORE the legacy fallback so `${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}` only
+  # applies when Vault did NOT set it.
+  if [[ -n "${BAO_ADDR:-}" ]] && [[ -n "${BAO_TOKEN:-}" ]] && command -v bao >/dev/null 2>&1; then
+    VAULT_DB_RESP="$(BAO_ADDR="${BAO_ADDR}" BAO_TOKEN="${BAO_TOKEN}" bao read -format=json database/creds/loopzero-api 2>/dev/null || true)"
+    if [[ -n "${VAULT_DB_RESP}" ]]; then
+      VAULT_DB_USER="$(echo "${VAULT_DB_RESP}" | jq -r '.data.username // empty')"
+      VAULT_DB_PASS="$(echo "${VAULT_DB_RESP}" | jq -r '.data.password // empty')"
+      if [[ -n "${VAULT_DB_USER}" ]] && [[ -n "${VAULT_DB_PASS}" ]]; then
+        LOOPZERO_DB_USER="${VAULT_DB_USER}"
+        LOOPZERO_DB_PASSWORD="${VAULT_DB_PASS}"
+        log "T6.5: standalone DB creds from Vault engine — user=${VAULT_DB_USER} (TTL 1h)"
+      fi
+    fi
+  fi
   LOOPZERO_DB_PASSWORD="${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}"
   DB_SSLMODE="disable"
   log "B33: standalone fallback — DB at $LOOPZERO_DB_HOST (sslmode=disable)"
