@@ -219,3 +219,6 @@ code-review-output-*/baseline/
 code-review-output-*/figures/
 code-review-output-*/findings/
 code-review-output-*/state/
+
+# compiled loopzero-ops binary (build artifact; source is cmd/loopzero-ops/)
+/loopzero-ops
