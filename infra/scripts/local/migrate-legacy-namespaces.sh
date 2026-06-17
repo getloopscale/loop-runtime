@@ -297,13 +297,13 @@ main() {
     {
       echo "{"
       printf '  "canonical": ['
-      echo "$canonical_list" | grep -v '^$' | awk 'BEGIN{first=1} {if(!first)printf ","; printf "\"%s\"", $0; first=0}'
+      echo "$canonical_list" | { grep -v '^$' || true; } | awk 'BEGIN{first=1} {if(!first)printf ","; printf "\"%s\"", $0; first=0}'
       echo "],"
       printf '  "legacy": ['
-      echo "$legacy_list" | grep -v '^$' | awk 'BEGIN{first=1} {if(!first)printf ","; printf "{\"current\":\"%s\",\"canonical\":\"%s\"}", $2, $3; first=0}'
+      echo "$legacy_list" | { grep -v '^$' || true; } | awk 'BEGIN{first=1} {if(!first)printf ","; printf "{\"current\":\"%s\",\"canonical\":\"%s\"}", $2, $3; first=0}'
       echo "],"
       printf '  "orphaned": ['
-      echo "$orphaned_list" | grep -v '^$' | awk 'BEGIN{first=1} {if(!first)printf ","; printf "\"%s\"", $0; first=0}'
+      echo "$orphaned_list" | { grep -v '^$' || true; } | awk 'BEGIN{first=1} {if(!first)printf ","; printf "\"%s\"", $0; first=0}'
       echo "]"
       echo "}"
     }
@@ -311,14 +311,14 @@ main() {
   fi
 
   echo "=== CANONICAL namespaces (no action) ==="
-  echo "$canonical_list" | grep -v '^$' || echo "  (none)"
+  echo "$canonical_list" | { grep -v '^$' || true; } || echo "  (none)"
   echo
   echo "=== LEGACY namespaces (need migration) ==="
   if [[ -z "$legacy_list" ]]; then
     echo "  (none — all clear!)"
   else
     printf "  %-50s %-50s\n" "CURRENT" "CANONICAL"
-    echo "$legacy_list" | grep -v '^$' | while read -r line; do
+    echo "$legacy_list" | { grep -v '^$' || true; } | while read -r line; do
       local ns_l canon_l
       ns_l="$(echo "$line" | awk '{print $2}')"
       canon_l="$(echo "$line" | awk '{print $3}')"
@@ -327,7 +327,7 @@ main() {
   fi
   echo
   echo "=== ORPHANED namespaces (no matching tenant+project — likely test artifacts) ==="
-  echo "$orphaned_list" | grep -v '^$' || echo "  (none)"
+  echo "$orphaned_list" | { grep -v '^$' || true; } || echo "  (none)"
   echo
 
   # Scope to --tenant if requested
@@ -356,7 +356,7 @@ main() {
   # EC-7 gate (adopt only — cleanroom-dev delete is intentional throwaway)
   if [[ "$MODE" == "adopt" ]]; then
     local affected_tenants
-    affected_tenants="$(echo "$legacy_list" | grep -v '^$' | awk '{print $4}' | sort -u)"
+    affected_tenants="$(echo "$legacy_list" | { grep -v '^$' || true; } | awk '{print $4}' | sort -u)"
     while read -r tid; do
       [[ -z "$tid" ]] && continue
       local active_count
@@ -372,7 +372,7 @@ main() {
 
   # EC-6 PVC warning (adopt only — delete is throwaway)
   if [[ "$MODE" == "adopt" && "$INCLUDE_PVCS" != "true" ]]; then
-    echo "$legacy_list" | grep -v '^$' | while read -r line; do
+    echo "$legacy_list" | { grep -v '^$' || true; } | while read -r line; do
       local ns_l
       ns_l="$(echo "$line" | awk '{print $2}')"
       local pvc_count
@@ -389,18 +389,18 @@ main() {
   case "$MODE" in
     delete)
       echo "MODE=delete — dropping LEGACY + ORPHANED namespaces (irrecoverable)…"
-      echo "$legacy_list" | grep -v '^$' | awk '{print $2}' | while read -r ns_l; do
+      echo "$legacy_list" | { grep -v '^$' || true; } | awk '{print $2}' | while read -r ns_l; do
         echo "  delete $ns_l"
         delete_legacy_ns "$ns_l" | sed 's/^/    /'
       done
-      echo "$orphaned_list" | grep -v '^$' | while read -r ns_l; do
+      echo "$orphaned_list" | { grep -v '^$' || true; } | while read -r ns_l; do
         echo "  delete $ns_l"
         delete_legacy_ns "$ns_l" | sed 's/^/    /'
       done
       ;;
     adopt)
       echo "MODE=adopt — patching AppProject destinations then deleting LEGACY ns (EC-15 order)…"
-      echo "$legacy_list" | grep -v '^$' | while read -r line; do
+      echo "$legacy_list" | { grep -v '^$' || true; } | while read -r line; do
         local legacy_ns canonical_ns tid
         legacy_ns="$(echo "$line" | awk '{print $2}')"
         canonical_ns="$(echo "$line" | awk '{print $3}')"
