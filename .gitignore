@@ -26,6 +26,7 @@ MELHORIAS.txt
 ralph-loop.local.md
 .claude/ralph-loop.local.md
 *.tgz
+code-review-output-infra-tests/
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------
