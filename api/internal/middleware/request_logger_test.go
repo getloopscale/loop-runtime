@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/correlation"
-	"github.com/loopzero/loopzero/pkg/logging"
+	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loopzero/pkg/logging"
 )
 
 // TestRequestLogger_BindsCorrelationIDIntoEnrichedLogger — the load-

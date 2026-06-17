@@ -25,8 +25,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // VaultTransitClient is the minimal interface PostgresSecretStore requires

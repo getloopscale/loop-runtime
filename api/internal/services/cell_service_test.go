@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 type fakeCellQuerier struct {

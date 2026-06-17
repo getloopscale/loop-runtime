@@ -27,17 +27,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/argocd"
-	"github.com/loopzero/loopzero/operators/internal/conditions"
-	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/gitea"
-	"github.com/loopzero/loopzero/operators/internal/harbor"
-	"github.com/loopzero/loopzero/operators/internal/vault"
-	miniop "github.com/loopzero/loopzero/operators/internal/minio"
-	"github.com/loopzero/loopzero/operators/internal/shared"
-	"github.com/loopzero/loopzero/pkg/correlation"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/gitea"
+	"github.com/getloopscale/loopzero/operators/internal/harbor"
+	"github.com/getloopscale/loopzero/operators/internal/vault"
+	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // tenantFinalizer uses the centralized constant.

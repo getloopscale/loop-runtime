@@ -280,30 +280,8 @@ ensure_identity_password() {
     return 2
   }
 
-  python3 - <<PY > /tmp/seed-admin-identity-new.json
-import json
-with open("/tmp/seed-admin-identity-current.json") as f:
-    cur = json.load(f)
-out = {
-  "schema_id": cur.get("schema_id", "default"),
-  "traits": cur.get("traits", {}),
-  "verifiable_addresses": cur.get("verifiable_addresses", []),
-  "recovery_addresses": cur.get("recovery_addresses", []),
-  "metadata_public": cur.get("metadata_public"),
-  "metadata_admin": cur.get("metadata_admin"),
-  "state": cur.get("state", "active"),
-  # PUT-with-credentials writes cleartext password; Kratos hashes on save.
-  # Preserves the OIDC credential implicitly because PUT semantics on
-  # /admin/identities/{id} replace only the supplied fields' explicit
-  # contents — credentials NOT listed are retained on the server side.
-  "credentials": {
-    "password": {
-      "config": {"password": "${SEED_PASSWORD}"}
-    }
-  },
-}
-print(json.dumps(out))
-PY
+  CURRENT_IDENTITY_PATH="/tmp/seed-admin-identity-current.json" SEED_PASSWORD="$SEED_PASSWORD" \
+    python3 "$(dirname "$0")/seed_admin_loopzero_dev.py" build-identity > /tmp/seed-admin-identity-new.json
 
   local http
   http="$(curl -s -o /tmp/seed-admin-put.json -w '%{http_code}' \

@@ -7,9 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/shared"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
 )
 
 // reconcileNetworkPolicies ensures deny-all + allow-ingress + allow-egress policies exist.

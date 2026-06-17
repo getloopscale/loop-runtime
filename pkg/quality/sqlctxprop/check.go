@@ -57,7 +57,7 @@ const (
 	defaultRoutesDir    = "api/internal/routes"
 	defaultServicesDir  = "api/internal/services"
 	lockSentinel        = "withEnvironmentLock"
-	generatedImportPath = "github.com/loopzero/loopzero/api/internal/db/generated"
+	generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // Check is the gate entry point.

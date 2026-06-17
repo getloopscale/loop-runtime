@@ -212,6 +212,19 @@ else
   assert "bash -n parses without error" 0
 fi
 
+# --- De-costume gate (home-unhomed-logic-suspect-keeps T2.3) ----------------
+printf '\n== de-costume (no python heredoc) ==\n'
+if [[ "$(grep -cE 'python3?[[:space:]]+(-[[:space:]]+)?<<|<<[[:space:]]*['\''\"]*?(PY|PYEOF|PYTHON)' "$SCRIPT")" == "0" ]]; then
+  assert "no python3 heredoc remains in live-proof-dev-public.sh" 1
+else
+  assert "no python3 heredoc remains in live-proof-dev-public.sh" 0
+fi
+if python3 -m py_compile "$REPO_ROOT/infra/scripts/local/live_proof_dev_public.py" 2>/dev/null; then
+  assert "live_proof_dev_public.py compiles" 1
+else
+  assert "live_proof_dev_public.py compiles" 0
+fi
+
 printf '\n== summary ==\n'
 printf '  PASS: %d\n' "$PASS"
 printf '  FAIL: %d\n' "$FAIL"

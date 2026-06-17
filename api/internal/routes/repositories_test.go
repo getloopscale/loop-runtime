@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/github"
 )
 
 // --- Fake RepositoryStore ---

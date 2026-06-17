@@ -15,17 +15,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost
 // cap gating the POST /api/v1/builds route. Distinct from PlanLimiter's
 // "builds_per_month" — see Wave 1 T1.9 for the SRP rationale.
-const enforcementMetricBuildMinutes = enforcement.MetricBuildMinutes
+const enforcementMetricBuildMinutes = planpkg.MetricBuildMinutes
 
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {

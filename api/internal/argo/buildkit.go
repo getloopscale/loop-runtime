@@ -19,9 +19,9 @@ import (
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
 
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/shellgen"
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/shellgen"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // buildkitParams holds the resolved parameters for a BuildKit build container.

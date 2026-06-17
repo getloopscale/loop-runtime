@@ -3,11 +3,12 @@ go 1.26.1
 toolchain go1.26.1
 
 use (
+	../loopzero-contracts
 	./api
-	./cloud
 	./cmd/loopzero-ops
 	./infra/scripts
 	./infra/tests
 	./operators
+	./operators/api
 	./pkg
 )

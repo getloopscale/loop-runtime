@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 
 FROM alpine:3.22
 
-LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-api"
 LABEL org.opencontainers.image.description="LoopZero PaaS API server"
 

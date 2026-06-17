@@ -12,10 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	pkgdomain "github.com/loopzero/loopzero/pkg/domain"
-	"github.com/loopzero/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // J-20 Scale plan v1.1 T1.1 absorption — server-authoritative cost preview,

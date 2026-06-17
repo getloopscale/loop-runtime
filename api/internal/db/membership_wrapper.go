@@ -21,8 +21,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // GetMemberships returns all tenant memberships for a given user ID.

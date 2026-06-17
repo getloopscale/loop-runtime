@@ -25,7 +25,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // buildMachine is the build state machine singleton. Used to validate

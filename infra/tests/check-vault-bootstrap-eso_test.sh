@@ -71,6 +71,12 @@ case "\$*" in
     ;;
   *"create namespace"*) exit 0 ;;
   *"create configmap"*"--dry-run=client"*)
+    # Drain stdin (script pipes \`echo "\$VAULT_CA" | kubectl create configmap
+    # --from-file=ca.crt=/dev/stdin\`); without consuming it the upstream echo
+    # gets SIGPIPE → with the script's \`set -o pipefail\` the whole pipeline
+    # fails flakily ("ConfigMap apply failed"). Real kubectl reads stdin, so
+    # the mock must too.
+    cat >/dev/null 2>&1 || true
     # Emit a fake YAML so the | apply -f - pipe succeeds
     echo "apiVersion: v1
 kind: ConfigMap
@@ -78,7 +84,7 @@ metadata:
   name: loopzero-vault-ca"
     exit 0
     ;;
-  *"apply -f -"*) exit "\${MOCK_APPLY_EXIT:-0}" ;;
+  *"apply -f -"*) cat >/dev/null 2>&1 || true; exit "\${MOCK_APPLY_EXIT:-0}" ;;
   *"apply -f"*) exit "\${MOCK_APPLY_EXIT:-0}" ;;
   *"wait clustersecretstore"*) exit "\${MOCK_WAIT_EXIT:-0}" ;;
   *) exit 0 ;;

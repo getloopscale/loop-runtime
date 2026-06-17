@@ -15,72 +15,73 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
-	"github.com/loopzero/loopzero/pkg/quality/clusterrolenosecretsstar"
-	"github.com/loopzero/loopzero/pkg/quality/contractconsumers"
-	"github.com/loopzero/loopzero/pkg/quality/noaesremaining"
-	"github.com/loopzero/loopzero/pkg/quality/noenvvaultsecrets"
-	"github.com/loopzero/loopzero/pkg/quality/nolegacysatoken"
-	"github.com/loopzero/loopzero/pkg/quality/nopulumiinlinesecrets"
-	"github.com/loopzero/loopzero/pkg/quality/transitcoverage"
-	"github.com/loopzero/loopzero/pkg/quality/correlationheader"
-	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
-	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
-	"github.com/loopzero/loopzero/pkg/quality/sqlctxprop"
-	"github.com/loopzero/loopzero/pkg/quality/tenantpredicate"
-	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
-	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
-	"github.com/loopzero/loopzero/pkg/quality/prodimagedigests"
-	"github.com/loopzero/loopzero/pkg/quality/trivyscan"
-	"github.com/loopzero/loopzero/pkg/quality/trufflehogscan"
-	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
-	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
-	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
-	"github.com/loopzero/loopzero/pkg/quality/baselinecompare"
-	"github.com/loopzero/loopzero/pkg/quality/baselineupdate"
-	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
-	"github.com/loopzero/loopzero/pkg/quality/cliexitcodes"
-	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
-	"github.com/loopzero/loopzero/pkg/quality/correctionstxt"
-	"github.com/loopzero/loopzero/pkg/quality/coveragediff"
-	"github.com/loopzero/loopzero/pkg/quality/coveragemerge"
-	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
-	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
-	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
-	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
-	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
-	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
-	"github.com/loopzero/loopzero/pkg/quality/dockerfilemirror"
-	"github.com/loopzero/loopzero/pkg/quality/drillcredisolation"
-	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
-	"github.com/loopzero/loopzero/pkg/quality/gitdiff"
-	"github.com/loopzero/loopzero/pkg/quality/helmdiffstructural"
-	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
-	"github.com/loopzero/loopzero/pkg/quality/migrationtestcoverage"
-	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
-	"github.com/loopzero/loopzero/pkg/quality/nomigrateforce"
-	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
-	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
-	"github.com/loopzero/loopzero/pkg/quality/orphanalerts"
-	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
-	"github.com/loopzero/loopzero/pkg/quality/pkgusagematrix"
-	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
-	"github.com/loopzero/loopzero/pkg/quality/regressionmatrix"
-	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
-	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
-	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
-	"github.com/loopzero/loopzero/pkg/quality/securitycontext"
-	"github.com/loopzero/loopzero/pkg/quality/shellhygiene"
-	"github.com/loopzero/loopzero/pkg/quality/skiplink"
-	"github.com/loopzero/loopzero/pkg/quality/scriptcount"
-	"github.com/loopzero/loopzero/pkg/quality/spotcheck"
-	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
-	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
-	"github.com/loopzero/loopzero/pkg/quality/templatecompliance"
-	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
-	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
-	"github.com/loopzero/loopzero/pkg/quality/testtargets"
-	"github.com/loopzero/loopzero/pkg/quality/unhomedlogic"
+	"github.com/getloopscale/loopzero/pkg/quality/acyclicgraph"
+	"github.com/getloopscale/loopzero/pkg/quality/advisorylock"
+	"github.com/getloopscale/loopzero/pkg/quality/clusterrolenosecretsstar"
+	"github.com/getloopscale/loopzero/pkg/quality/contractconsumers"
+	"github.com/getloopscale/loopzero/pkg/quality/noaesremaining"
+	"github.com/getloopscale/loopzero/pkg/quality/noenvvaultsecrets"
+	"github.com/getloopscale/loopzero/pkg/quality/nolegacysatoken"
+	"github.com/getloopscale/loopzero/pkg/quality/nopulumiinlinesecrets"
+	"github.com/getloopscale/loopzero/pkg/quality/transitcoverage"
+	"github.com/getloopscale/loopzero/pkg/quality/correlationheader"
+	"github.com/getloopscale/loopzero/pkg/quality/anonymousauth"
+	"github.com/getloopscale/loopzero/pkg/quality/sqlcsync"
+	"github.com/getloopscale/loopzero/pkg/quality/sqlctxprop"
+	"github.com/getloopscale/loopzero/pkg/quality/tenantpredicate"
+	"github.com/getloopscale/loopzero/pkg/quality/dashboardpromtool"
+	"github.com/getloopscale/loopzero/pkg/quality/helmoverlapparity"
+	"github.com/getloopscale/loopzero/pkg/quality/prodimagedigests"
+	"github.com/getloopscale/loopzero/pkg/quality/trivyscan"
+	"github.com/getloopscale/loopzero/pkg/quality/trufflehogscan"
+	"github.com/getloopscale/loopzero/pkg/quality/agplisolation"
+	"github.com/getloopscale/loopzero/pkg/quality/alertrunbooks"
+	"github.com/getloopscale/loopzero/pkg/quality/baseimagedigest"
+	"github.com/getloopscale/loopzero/pkg/quality/baselinecompare"
+	"github.com/getloopscale/loopzero/pkg/quality/baselineupdate"
+	"github.com/getloopscale/loopzero/pkg/quality/clibundlesize"
+	"github.com/getloopscale/loopzero/pkg/quality/cliexitcodes"
+	"github.com/getloopscale/loopzero/pkg/quality/clusterimagepolicymode"
+	"github.com/getloopscale/loopzero/pkg/quality/correctionstxt"
+	"github.com/getloopscale/loopzero/pkg/quality/coveragediff"
+	"github.com/getloopscale/loopzero/pkg/quality/coveragemerge"
+	"github.com/getloopscale/loopzero/pkg/quality/crdsemanticdiff"
+	"github.com/getloopscale/loopzero/pkg/quality/danglingdata"
+	"github.com/getloopscale/loopzero/pkg/quality/danglingrefs"
+	"github.com/getloopscale/loopzero/pkg/quality/deadlineratchet"
+	"github.com/getloopscale/loopzero/pkg/quality/decisionsdeletion"
+	"github.com/getloopscale/loopzero/pkg/quality/divergencematrix"
+	"github.com/getloopscale/loopzero/pkg/quality/dockerfilemirror"
+	"github.com/getloopscale/loopzero/pkg/quality/drillcredisolation"
+	"github.com/getloopscale/loopzero/pkg/quality/drilloutputs"
+	"github.com/getloopscale/loopzero/pkg/quality/gitdiff"
+	"github.com/getloopscale/loopzero/pkg/quality/helmdiffstructural"
+	"github.com/getloopscale/loopzero/pkg/quality/helmdrift"
+	"github.com/getloopscale/loopzero/pkg/quality/migrationtestcoverage"
+	"github.com/getloopscale/loopzero/pkg/quality/mockbudget"
+	"github.com/getloopscale/loopzero/pkg/quality/nomigrateforce"
+	"github.com/getloopscale/loopzero/pkg/quality/nonewbash"
+	"github.com/getloopscale/loopzero/pkg/quality/noshellwrap"
+	"github.com/getloopscale/loopzero/pkg/quality/orphanalerts"
+	"github.com/getloopscale/loopzero/pkg/quality/pgpdb"
+	"github.com/getloopscale/loopzero/pkg/quality/pkgusagematrix"
+	"github.com/getloopscale/loopzero/pkg/quality/prodimagetags"
+	"github.com/getloopscale/loopzero/pkg/quality/regressionmatrix"
+	"github.com/getloopscale/loopzero/pkg/quality/regressiontest"
+	"github.com/getloopscale/loopzero/pkg/quality/runtimeslo"
+	"github.com/getloopscale/loopzero/pkg/quality/scriptsaudit"
+	"github.com/getloopscale/loopzero/pkg/quality/securitycontext"
+	"github.com/getloopscale/loopzero/pkg/quality/shellhygiene"
+	"github.com/getloopscale/loopzero/pkg/quality/skiplink"
+	"github.com/getloopscale/loopzero/pkg/quality/scriptcount"
+	"github.com/getloopscale/loopzero/pkg/quality/spotcheck"
+	"github.com/getloopscale/loopzero/pkg/quality/stackcoverage"
+	"github.com/getloopscale/loopzero/pkg/quality/taskfileinterface"
+	"github.com/getloopscale/loopzero/pkg/quality/templatecompliance"
+	"github.com/getloopscale/loopzero/pkg/quality/testdeletion"
+	"github.com/getloopscale/loopzero/pkg/quality/testpyramid"
+	"github.com/getloopscale/loopzero/pkg/quality/testtargets"
+	"github.com/getloopscale/loopzero/pkg/quality/unhomedlogic"
 )
 
 const qualityHelp = `loopzero-ops quality — quality gate orchestrator
@@ -349,6 +350,8 @@ func runQuality(args []string) int {
 		return runDashboardPromtool(args[1:])
 	case "cli-exit-codes":
 		return runCLIExitCodes(args[1:])
+	case "acyclic-graph":
+		return runAcyclicGraph(args[1:])
 	case "shell-hygiene":
 		return runShellHygiene(args[1:])
 	case "sqlc-sync":
@@ -1111,6 +1114,43 @@ func runCLIExitCodes(args []string) int {
 		return 1
 	}
 	fmt.Println("cli-exit-codes: PASS — all cli/src exit codes within 0-5 contract (signal handlers exempt)")
+	return 0
+}
+
+// runAcyclicGraph is the Go home for the acyclic-graph gate (M5 — plan
+// m5-governance-durable). Enforces the decomposition DAG: loopzero-contracts imports
+// nothing from the engine/cloud/cli; the engine never imports the cloud; the
+// cloud never imports engine-internal pkg/*. Sibling repos are resolved relative
+// to the engine root and skipped when absent.
+func runAcyclicGraph(args []string) int {
+	fs := flag.NewFlagSet("acyclic-graph", flag.ContinueOnError)
+	root := fs.String("root", ".", "engine repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := acyclicgraph.Check(acyclicgraph.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "acyclic-graph: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "acyclic-graph: FAIL — %d forbidden upward import edge(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Decomposition invariant (ADP): loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli. Arrows never point at a more-stable node.")
+		return 1
+	}
+	msg := fmt.Sprintf("acyclic-graph: PASS — graph is acyclic (checked: %s", strings.Join(outcome.Checked, ", "))
+	if len(outcome.Skipped) > 0 {
+		msg += fmt.Sprintf("; skipped absent: %s", strings.Join(outcome.Skipped, ", "))
+	}
+	fmt.Println(msg + ")")
 	return 0
 }
 

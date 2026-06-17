@@ -1,20 +1,9 @@
 {
-  "total": 86,
+  "total": 153,
   "by_domain": {
-    "bootstrap": 33,
+    "bootstrap": 35,
     "drill": 16,
-    "other": 8,
-    "test": 29
-  },
-  "_changelog": [
-    {"date": "2026-05-28", "from_total": 85, "to_total": 86, "from_test": 28, "to_test": 29, "reason": "T4.6 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds infra/tests/check-rekor-archive_test.sh (KEEP-CI-WIRED 14/14 PASS hermetic test for rekor-archive-old-entries.sh --manual-procedure-only flag + no-flag LOUD exit-1 + DRY_RUN=1 short-circuit). Categorized 'test' bucket. Cannot migrate to pure-logic Go gate (tests bash extension to bash script)."},
-    {"date": "2026-05-28", "from_total": 83, "to_total": 85, "from_test": 27, "to_test": 28, "from_other": 7, "to_other": 8, "reason": "T4.5 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds 2 scripts — m07-cutover-rollback.sh (categorized 'other' — production rollback orchestration, irreducible live-cluster + Pulumi + psql, KEEP-OPERATOR) + check-m07-rollback-dry-run_test.sh (categorized 'test' filename heuristic, KEEP-CI-WIRED 17/17 PASS hermetic mocks)."},
-    {"date": "2026-05-28", "from_total": 82, "to_total": 83, "from_test": 26, "to_test": 27, "reason": "T3.1 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds infra/tests/helm/sigstore-extras-podselector_test.sh (KEEP-CI-WIRED hermetic NetworkPolicy podSelector contract test: `helm template sigstore-extras` + awk assertions on namespaceSelector+podSelector AND-semantics in Fulcio/Rekor NPs, CTLog exempt for operator-internal traffic. Closes CR-7). Categorized 'test' bucket. Cannot migrate to Go gate without spawning helm CLI."},
-    {"date": "2026-05-28", "from_total": 81, "to_total": 82, "from_test": 25, "to_test": 26, "reason": "T2.3 Test 4 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds infra/tests/helm/sigstore-extras-policy_test.sh (KEEP-CI-WIRED hermetic NetworkPolicy contract test: `helm template sigstore-extras` + grep assertions on rendered target ports + podSelector labels + Ingress policyType count, locks CR-7 port contract independent of T3.1 selector refactor). Categorized 'test' bucket. Cannot migrate to Go gate without spawning helm CLI."},
-    {"date": "2026-05-28", "from_total": 79, "to_total": 81, "from_test": 24, "to_test": 25, "from_other": 6, "to_other": 7, "reason": "T0.3 plan 2026-05-28-meet-001-engineering-closure v1.1: adds 2 scripts — m07-cutover-preflight.sh (categorized 'other' — production cutover orchestration, irreducible live-cluster, KEEP-OPERATOR) + check-m07-cutover-preflight_test.sh (categorized 'test' filename heuristic, KEEP-CI-WIRED hermetic 5/5 PASS)."},
-    {"date": "2026-05-28", "from_total": 78, "to_total": 79, "from_test": 23, "to_test": 24, "reason": "T0.2 plan 2026-05-28-meet-001-engineering-closure v1.1: adds check-cosign-v3-deadline_test.sh (hermetic test 5/5 PASS for ADR-2026-05-28-cosign-v2.4.3-deadline ConfigMap-driven deadline). Categorized as test (filename heuristic: no 'bootstrap' substring, default to test bucket). Tests bash deadline gate via mock kubectl reading MOCK_V3_* env vars. Irreducible to Go gate (tests bash extension to bash script)."},
-    {"date": "2026-05-28", "from_total": 77, "to_total": 78, "from_bootstrap": 32, "to_bootstrap": 33, "reason": "T0.1 plan 2026-05-28-meet-001-engineering-closure v1.1: adds check-bootstrap-sigstore-context_test.sh (hermetic test 7/7 PASS for ADR-2026-05-28-T2.2-LOCAL-EXCEPTION context gate regex allowlist). Categorized as bootstrap by filename heuristic (contains 'bootstrap'). Tests bash gate logic on bootstrap-sigstore-local.sh via mock kubectl + helm — irreducible to Go gate (would need full shell process spawning). KEEP-CI-WIRED in shell-scripts-allowlist.md."},
-    {"date": "2026-05-27", "from_total": 74, "to_total": 75, "from_test": 20, "to_test": 21, "reason": "Cleanroom session: render-loopzero-ci-workflows_test.sh added as T0.2 Cenário B POC hermetic render test. Wires `helm template` into yq queries, not pure-logic; legitimately under infra/tests/ domain (test bucket). Allowlisted in shell-scripts-allowlist.md as KEEP-CI-WIRED."},
-    {"date": "2026-05-28", "from_total": 75, "to_total": 77, "from_test": 21, "to_test": 23, "reason": "M07 Phase 0 (plan 2026-05-28-M07-fulcio-oidc-trust-to-3-85 v1.1): adds 2 hermetic test scripts under infra/tests/ — check-fulcio-oidc-diagnose_test.sh (test runner 9/9 PASS, wired in task quality:gates) + fixtures/fulcio-diagnose/mock-kubectl.sh (mock kubectl helper, sourced only by the test runner). Both are CI-wired hermetic tests (zero network, fixture-driven) for the fulcio-oidc-diagnose live-cluster diagnostic. Cannot be migrated to pure-logic Go gate because they test a bash script + bash mock (Go test would need full shell process spawning). Allowlisted as KEEP-CI-WIRED in shell-scripts-allowlist.md."}
-  ]
+    "other": 9,
+    "test": 93
+  }
 }

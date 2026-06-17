@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/server"
-	"github.com/loopzero/loopzero/api/internal/source"
-	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/server"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // --- Stub implementations for router wiring test ---

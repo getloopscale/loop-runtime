@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // fakeSource emits a scripted sequence of ArgoNodeEvents synchronously.

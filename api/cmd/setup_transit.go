@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/pkg/vault"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
 // setupTransitClient builds the OpenBao Transit client when the resolved

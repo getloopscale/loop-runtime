@@ -9,13 +9,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/adapters"
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/loki"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/loki"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // planLimiterCapAdapter bridges *enforcement.PlanLimiter to the

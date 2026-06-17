@@ -9,7 +9,7 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // Sprint 6 / T1.1 — SBOM scan template tests.

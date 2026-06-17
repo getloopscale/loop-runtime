@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // --- Fakes for SSE stream tests ---

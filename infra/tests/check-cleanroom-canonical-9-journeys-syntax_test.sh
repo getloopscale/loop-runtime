@@ -74,6 +74,22 @@ assert_grep "ADR D6 cited (bash NOT Ginkgo)" 'ADR D6'
 assert_grep "ADR D7 cited (sponsor scheduling)" 'ADR D7'
 assert_grep "ADR D10 cited (auto vs semi-auto)" 'ADR D10'
 
+# === G2: de-costume gate (home-unhomed-logic-suspect-keeps T3.3) ===
+if [[ "$(grep -cE 'python3?[[:space:]]+(-[[:space:]]+)?<<|<<[[:space:]]*['\''\"]*?(PY|PYEOF|PYTHON)' "$TARGET")" == "0" ]]; then
+  log "PASS [no python3 heredoc remains (logic homed in .py)]"
+  pass=$((pass+1))
+else
+  log "FAIL [python3 heredoc still present — suspect-keep]"
+  fail=$((fail+1))
+fi
+if python3 -m py_compile "$SCRIPT_DIR/e2e/dev_public_cleanroom_canonical_9_journeys.py" 2>/dev/null; then
+  log "PASS [dev_public_cleanroom_canonical_9_journeys.py compiles]"
+  pass=$((pass+1))
+else
+  log "FAIL [report helper does not compile]"
+  fail=$((fail+1))
+fi
+
 # === H: anti-patterns absence ===
 if ! grep -q "Co-Authored-By" "$TARGET" 2>/dev/null; then
   log "PASS [no Co-Authored-By trailer in script]"

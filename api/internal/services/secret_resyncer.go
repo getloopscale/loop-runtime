@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // namespaceTerminatingRetryWindow bounds how long ResyncEnv waits for a

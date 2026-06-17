@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // CircuitBreakerWorkflowSubmitter wraps a WorkflowSubmitter with circuit breaker

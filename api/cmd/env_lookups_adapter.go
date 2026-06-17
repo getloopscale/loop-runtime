@@ -6,7 +6,7 @@ package main
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // envProjectLookupAdapter wires the canonical routes.ProjectStore

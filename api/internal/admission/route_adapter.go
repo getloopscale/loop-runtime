@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // RouteAdapter wraps a BuildGate to satisfy the minimal contract the

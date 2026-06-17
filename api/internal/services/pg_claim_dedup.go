@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/loopzero/loopzero/api/internal/processing"
+	"github.com/getloopscale/loopzero/api/internal/processing"
 )
 
 // PGClaimDedup provides a ClaimStore-backed deduplication layer that

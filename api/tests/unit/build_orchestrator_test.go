@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- In-memory fakes for BuildOrchestrator unit tests ---

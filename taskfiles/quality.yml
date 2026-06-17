@@ -49,6 +49,7 @@ tasks:
       - /tmp/loopzero-ops quality trufflehog-scan
       - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
+      - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
@@ -135,17 +136,46 @@ tasks:
       - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
       - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
 
-  dashboard-bundle:
-    desc: Dashboard bundle budget gate — size-limit per chunk + total brotli (MEET-ASYNC-002 v1.3)
-    dir: cloud/dashboard
+  # dashboard-bundle gate removed (M4): the dashboard moved to the standalone
+  # loopzero-cloud repo, which runs its own bundle-budget gate in CI.
+
+  contract:
+    desc: >
+      Consumer-driven contract gates (M1.4 — plan m1-4-openapi-contract-tests):
+      engine OpenAPI spec conformance + cli<->engine. (cloud<->loopzero-data moved to
+      the standalone loopzero-cloud repo — M4.)
     cmds:
-      - npm run build
-      - npm run size
+      - cd api && go test ./internal/contract/...
+
+  contract:cross-repo:
+    desc: >
+      M5 — run ALL decomposition seam contract tests across the umbrella repos in
+      one command (cli↔engine, cloud↔engine serviceauth, cloud↔loopzero-data themory).
+      Degrades gracefully (SKIP) when a sibling repo is absent. See
+      docs/cross-repo-contract-matrix.md. The CI platform invokes this target.
+    cmds:
+      - |
+        echo "=== seam engine OpenAPI + cli consumer (loopzero/api) ==="
+        cd api && go test ./internal/contract/...
+      - |
+        echo "=== seam cloud-themory + cloud-serviceauth ==="
+        if [ -d ../loopzero-cloud ]; then
+          (cd ../loopzero-cloud && go test ./internal/themory/... ./internal/auth/...)
+        else
+          echo "SKIP: loopzero-cloud sibling absent (umbrella layout required)"
+        fi
+      - |
+        echo "=== seam: cli↔engine (loopzero-cli engine-contract.test.ts) ==="
+        if [ -d ../loopzero-cli ]; then
+          (cd ../loopzero-cli && npm test --silent -- tests/contract/engine-contract.test.ts 2>&1 | tail -8)
+        else
+          echo "SKIP: loopzero-cli sibling absent (umbrella layout required)"
+        fi
 
   all:
-    desc: Standard quality suite — hermetic tests + full-scan gates
-    deps: [hermetic, gates]
+    desc: Standard quality suite — hermetic tests + full-scan gates + contract
+    deps: [hermetic, gates, contract]
 
   all-with-frontend:
     desc: Full quality suite including frontend bundle gate (slower; for pre-release)
-    deps: [hermetic, gates, dashboard-bundle]
+    deps: [hermetic, gates, contract]

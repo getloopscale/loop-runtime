@@ -37,7 +37,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // EC-08 MUST FIX P1: secret_name regex validation uses the same

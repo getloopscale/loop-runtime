@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // CircuitBreakerConfig configures the in-memory circuit breaker.

@@ -14,7 +14,7 @@
 #   - exit-1 escalation when diff verdict = FAIL
 #
 # Hermetic: NO network, NO kubectl. Pure grep on SKILL.md.
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL="${REPO_ROOT}/.claude/skills/cleanroom/SKILL.md"

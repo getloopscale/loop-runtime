@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // T2.1 (plan simplify-deploy-loopzerokit-only v2.0) — collapse to node/python.

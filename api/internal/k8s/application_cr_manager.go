@@ -12,17 +12,15 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
-var loopzeroApplicationGVR = schema.GroupVersionResource{
-	Group:    "loopzero.io",
-	Version:  "v1",
-	Resource: "loopzeroapplications",
-}
+// loopzeroApplicationsGroupResource synthesizes Conflict errors for RetryOnConflict.
+var loopzeroApplicationsGroupResource = schema.GroupResource{Group: "loopzero.io", Resource: "loopzeroapplications"}
 
 // LoopZeroApplicationInput holds the parameters for creating a LoopZeroApplication CR.
 type LoopZeroApplicationInput struct {
@@ -46,38 +44,38 @@ type LoopZeroApplicationInput struct {
 }
 
 // ApplicationCRManager manages LoopZeroApplication custom resources on the mgmt cluster.
-// It follows the same pattern as TenantCRManager: dynamic client + unstructured objects.
+// It uses the TYPED controller-runtime client (M8): the api is the second Go
+// consumer of the operators/api contract module, so the compiler checks every
+// CR field at build time (was unstructured map pre-M8).
 type ApplicationCRManager struct {
-	client    dynamic.Interface
+	Client    client.Client
 	namespace string
 }
 
-// NewApplicationCRManager creates an ApplicationCRManager reusing an existing dynamic client.
+// NewApplicationCRManager creates an ApplicationCRManager reusing an existing typed client.
 // If namespace is empty, defaults to tenantNamespace (loopzero-system).
-func NewApplicationCRManager(client dynamic.Interface, namespace string) *ApplicationCRManager {
+func NewApplicationCRManager(c client.Client, namespace string) *ApplicationCRManager {
 	if namespace == "" {
 		namespace = tenantNamespace
 	}
-	return &ApplicationCRManager{client: client, namespace: namespace}
+	return &ApplicationCRManager{Client: c, namespace: namespace}
 }
 
 // EnsureLoopZeroApplication creates or updates a LoopZeroApplication CR for the given app.
 // It is idempotent: calling it multiple times with the same input is safe.
 // The CR name is deterministic: {tenant}-{project}-{app}-{env}.
 func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, input LoopZeroApplicationInput) error {
-	resource := m.client.Resource(loopzeroApplicationGVR).Namespace(m.namespace)
 	crName := loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		existing, err := resource.Get(ctx, crName, metav1.GetOptions{})
+		var existing apiv1.LoopZeroApplication
+		err := m.Client.Get(ctx, client.ObjectKey{Namespace: m.namespace, Name: crName}, &existing)
 		if k8serrors.IsNotFound(err) {
 			desired := buildLoopZeroApplicationCR(m.namespace, input)
-			_, createErr := resource.Create(ctx, desired, metav1.CreateOptions{})
+			createErr := m.Client.Create(ctx, desired)
 			if k8serrors.IsAlreadyExists(createErr) {
-				return k8serrors.NewConflict(
-					schema.GroupResource{Group: "loopzero.io", Resource: "loopzeroapplications"},
-					crName, createErr,
-				)
+				// Another caller created it between our Get and Create — retry as update.
+				return k8serrors.NewConflict(loopzeroApplicationsGroupResource, crName, createErr)
 			}
 			if createErr != nil {
 				return fmt.Errorf("k8s: create LoopZeroApplication CR %q: %w", crName, createErr)
@@ -88,11 +86,26 @@ func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, in
 			return fmt.Errorf("k8s: get LoopZeroApplication CR %q: %w", crName, err)
 		}
 
-		// Update spec, preserving resourceVersion for optimistic concurrency.
-		desired := buildLoopZeroApplicationCR(m.namespace, input)
-		desired.SetResourceVersion(existing.GetResourceVersion())
-		_, err = resource.Update(ctx, desired, metav1.UpdateOptions{})
-		return err
+		// CR exists — apply desired spec onto the fetched object, preserving its
+		// resourceVersion (carried by `existing`) for optimistic concurrency.
+		applyLoopZeroApplicationSpec(&existing, input)
+		// Audit gap M08 #10 / §6.C.1: refresh the correlation-id annotation on
+		// re-deploy so the CR traces back to the LATEST originating request, not
+		// the first one (parity with the pre-M8 rebuild-on-update behavior).
+		// Unlike that rebuild, this touches ONLY our annotation — operator-set
+		// labels/annotations on the existing object are preserved. Empty
+		// CorrelationID (background goroutine) leaves the last-known trace in
+		// place rather than wiping it.
+		if input.CorrelationID != "" {
+			if existing.Annotations == nil {
+				existing.Annotations = map[string]string{}
+			}
+			existing.Annotations["loopzero.io/correlation-id"] = input.CorrelationID
+		}
+		if err := m.Client.Update(ctx, &existing); err != nil {
+			return err // RetryOnConflict handles Conflict errors automatically
+		}
+		return nil
 	})
 }
 
@@ -120,46 +133,46 @@ func loopzeroApplicationCRName(tenant, project, app, env string) string {
 	return prefix + "-" + suffix
 }
 
-// buildLoopZeroApplicationCR constructs an unstructured LoopZeroApplication matching the CRD
-// defined in operators/api/v1/application_types.go.
-func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput) *unstructured.Unstructured {
-	port := int64(input.ServicePort)
-	if port == 0 {
-		port = 80
-	}
-
-	metadata := map[string]interface{}{
-		"name":      loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
-		"namespace": namespace,
-		"labels": map[string]interface{}{
-			"loopzero.io/tenant":      input.TenantID,
-			"loopzero.io/project":     input.Project,
-			"loopzero.io/environment": input.Environment,
-			"loopzero.io/app":         input.AppName,
+// buildLoopZeroApplicationCR constructs a typed LoopZeroApplication CR matching the CRD
+// schema defined in operators/api/v1/application_types.go. The compiler now
+// enforces the spec shape (was an unstructured map pre-M8).
+func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput) *apiv1.LoopZeroApplication {
+	app := &apiv1.LoopZeroApplication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
+			Namespace: namespace,
+			Labels: map[string]string{
+				"loopzero.io/tenant":      input.TenantID,
+				"loopzero.io/project":     input.Project,
+				"loopzero.io/environment": input.Environment,
+				"loopzero.io/app":         input.AppName,
+			},
 		},
 	}
 	// Audit gap M08 #10 / §6.C.1: correlation_id annotation when present.
 	// Operator reconciles read this back into the ctx via correlation.WithID
 	// so the trace persists across the API→K8s→controller boundary.
 	if input.CorrelationID != "" {
-		metadata["annotations"] = map[string]interface{}{
+		app.ObjectMeta.Annotations = map[string]string{
 			"loopzero.io/correlation-id": input.CorrelationID,
 		}
 	}
+	applyLoopZeroApplicationSpec(app, input)
+	return app
+}
 
-	return &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "loopzero.io/v1",
-			"kind":       "LoopZeroApplication",
-			"metadata":   metadata,
-			"spec": map[string]interface{}{
-				"tenantRef":   input.TenantID,
-				"project":     input.Project,
-				"environment": input.Environment,
-				"serviceName": input.ServiceName,
-				"servicePort": port,
-				"replicas":    int64(1),
-			},
-		},
+// applyLoopZeroApplicationSpec writes the desired spec onto a LoopZeroApplication object.
+// Used by both create (fresh object) and update (fetched object, resourceVersion
+// preserved). Labels/annotations are set only at build time (create path).
+func applyLoopZeroApplicationSpec(app *apiv1.LoopZeroApplication, input LoopZeroApplicationInput) {
+	port := input.ServicePort
+	if port == 0 {
+		port = 80
 	}
+	app.Spec.TenantRef = input.TenantID
+	app.Spec.Project = input.Project
+	app.Spec.Environment = input.Environment
+	app.Spec.ServiceName = input.ServiceName
+	app.Spec.ServicePort = port
+	app.Spec.Replicas = 1
 }

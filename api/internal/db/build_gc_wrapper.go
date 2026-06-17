@@ -27,7 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // NOTE on raw subpackage seam (T4.1):

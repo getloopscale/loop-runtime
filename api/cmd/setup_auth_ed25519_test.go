@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // TestLoadServiceAuthEd25519Trust_PopulatesCurrentOnly — happy path with

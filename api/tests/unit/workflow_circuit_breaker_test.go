@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/services"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 func TestWorkflowCircuitBreaker_ClosedState_DelegatesToInner(t *testing.T) {

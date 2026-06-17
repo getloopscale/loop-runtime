@@ -27,19 +27,19 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/argocd"
-	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/tenant"
-	"github.com/loopzero/loopzero/operators/internal/gitea"
-	"github.com/loopzero/loopzero/operators/internal/harbor"
-	miniop "github.com/loopzero/loopzero/operators/internal/minio"
-	"github.com/loopzero/loopzero/operators/internal/shared"
-	"github.com/loopzero/loopzero/operators/internal/tracing"
-	cb "github.com/loopzero/loopzero/pkg/circuitbreaker"
-	"github.com/loopzero/loopzero/pkg/healthcheck"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/tenant"
+	"github.com/getloopscale/loopzero/operators/internal/gitea"
+	"github.com/getloopscale/loopzero/operators/internal/harbor"
+	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/tracing"
+	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
-	_ "github.com/loopzero/loopzero/operators/internal/metrics"
+	_ "github.com/getloopscale/loopzero/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()

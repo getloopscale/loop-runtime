@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestEnvironmentPhase_Values(t *testing.T) {
@@ -134,8 +133,8 @@ func TestEnvironment_StatusFields(t *testing.T) {
 func TestEnvironment_SetCondition(t *testing.T) {
 	env := Environment{}
 
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady, metav1.ConditionTrue, "Created", "namespace created", 1)
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvRBACReady, metav1.ConditionFalse, "Pending", "creating RBAC", 1)
+	SetCondition(&env.Status.Conditions, TypeEnvNamespaceReady, metav1.ConditionTrue, "Created", "namespace created", 1)
+	SetCondition(&env.Status.Conditions, TypeEnvRBACReady, metav1.ConditionFalse, "Pending", "creating RBAC", 1)
 
 	if len(env.Status.Conditions) != 2 {
 		t.Fatalf("expected 2 conditions, got %d", len(env.Status.Conditions))
@@ -145,9 +144,9 @@ func TestEnvironment_SetCondition(t *testing.T) {
 func TestEnvironment_GetCondition(t *testing.T) {
 	env := Environment{}
 
-	conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady, metav1.ConditionTrue, "Created", "ok", 1)
+	SetCondition(&env.Status.Conditions, TypeEnvNamespaceReady, metav1.ConditionTrue, "Created", "ok", 1)
 
-	c := conditions.GetCondition(env.Status.Conditions, conditions.TypeEnvNamespaceReady)
+	c := GetCondition(env.Status.Conditions, TypeEnvNamespaceReady)
 	if c == nil {
 		t.Fatal("expected to find NamespaceReady condition")
 	}
@@ -155,7 +154,7 @@ func TestEnvironment_GetCondition(t *testing.T) {
 		t.Errorf("expected condition status True, got %v", c.Status)
 	}
 
-	missing := conditions.GetCondition(env.Status.Conditions, "NonExistent")
+	missing := GetCondition(env.Status.Conditions, "NonExistent")
 	if missing != nil {
 		t.Error("expected nil for non-existent condition")
 	}
@@ -163,11 +162,11 @@ func TestEnvironment_GetCondition(t *testing.T) {
 
 func TestEnvironment_ConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
-		conditions.TypeEnvNamespaceReady,
-		conditions.TypeEnvRBACReady,
-		conditions.TypeEnvNetworkPolicyReady,
-		conditions.TypeEnvQuotaReady,
-		conditions.TypePullSecretReady,
+		TypeEnvNamespaceReady,
+		TypeEnvRBACReady,
+		TypeEnvNetworkPolicyReady,
+		TypeEnvQuotaReady,
+		TypePullSecretReady,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

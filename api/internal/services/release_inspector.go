@@ -21,8 +21,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // ReleaseInspection is the JSON shape returned by

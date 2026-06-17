@@ -17,8 +17,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/loopzero/loopzero/api/internal/archive"
-	"github.com/loopzero/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/api/internal/archive"
+	"github.com/getloopscale/loopzero/api/internal/gitclient"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

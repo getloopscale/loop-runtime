@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 func TestStatus_KnownCodeUsesRegistry(t *testing.T) {

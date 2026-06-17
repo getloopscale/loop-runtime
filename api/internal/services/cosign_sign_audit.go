@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // T1.2 mitigation #3 of MEET-2026-05-12 launch readiness — per-sign

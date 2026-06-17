@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 func setup(t *testing.T, files map[string]string) string {
@@ -56,16 +56,16 @@ func TestFileContainsImport_Match(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.go")
 	require.NoError(t, os.WriteFile(p, []byte(`package x
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `), 0o600))
-	assert.True(t, fileContainsImport(p, []byte(`"github.com/loopzero/loopzero/pkg/errors"`)))
+	assert.True(t, fileContainsImport(p, []byte(`"github.com/getloopscale/loopzero/pkg/errors"`)))
 }
 
 func TestFileContainsImport_NoMatch(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.go")
 	require.NoError(t, os.WriteFile(p, []byte("package x\n"), 0o600))
-	assert.False(t, fileContainsImport(p, []byte(`"github.com/loopzero/loopzero/pkg/errors"`)))
+	assert.False(t, fileContainsImport(p, []byte(`"github.com/getloopscale/loopzero/pkg/errors"`)))
 }
 
 func TestFileContainsImport_MissingFile(t *testing.T) {
@@ -80,19 +80,19 @@ func TestCountConsumers_AllCategoriesCounted(t *testing.T) {
 	root := setup(t, map[string]string{
 		"pkg/errors/errors.go":              "package errors\n",
 		"api/internal/foo.go":               `package foo
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 		"operators/internal/bar.go":         `package bar
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 		"cloud/main.go":                     `package main
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 		"cli/src/main.go":                   `package main
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 		"cmd/loopzero-ops/main.go":              `package main
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 	})
 	row, err := countConsumers(root, "errors")
@@ -109,7 +109,7 @@ func TestCountConsumers_SelfImportsExcluded(t *testing.T) {
 	root := setup(t, map[string]string{
 		"pkg/errors/errors.go":      "package errors\n",
 		"pkg/errors/errors_test.go": `package errors
-import _ "github.com/loopzero/loopzero/pkg/errors"
+import _ "github.com/getloopscale/loopzero/pkg/errors"
 `,
 	})
 	row, err := countConsumers(root, "errors")
@@ -120,8 +120,8 @@ import _ "github.com/loopzero/loopzero/pkg/errors"
 func TestCountConsumers_NonGoFilesIgnored(t *testing.T) {
 	root := setup(t, map[string]string{
 		"pkg/errors/errors.go": "package errors\n",
-		"docs/notes.md":        `mentions github.com/loopzero/loopzero/pkg/errors as legacy`,
-		"api/internal/x.txt":   `import "github.com/loopzero/loopzero/pkg/errors"`,
+		"docs/notes.md":        `mentions github.com/getloopscale/loopzero/pkg/errors as legacy`,
+		"api/internal/x.txt":   `import "github.com/getloopscale/loopzero/pkg/errors"`,
 	})
 	row, err := countConsumers(root, "errors")
 	require.NoError(t, err)
@@ -131,9 +131,9 @@ func TestCountConsumers_NonGoFilesIgnored(t *testing.T) {
 func TestCountConsumers_VendorAndGitPruned(t *testing.T) {
 	root := setup(t, map[string]string{
 		"pkg/errors/errors.go":              "package errors\n",
-		"vendor/example.com/x.go":           `import "github.com/loopzero/loopzero/pkg/errors"`,
-		".git/hooks/pre-commit.go":          `import "github.com/loopzero/loopzero/pkg/errors"`,
-		"node_modules/x/y.go":               `import "github.com/loopzero/loopzero/pkg/errors"`,
+		"vendor/example.com/x.go":           `import "github.com/getloopscale/loopzero/pkg/errors"`,
+		".git/hooks/pre-commit.go":          `import "github.com/getloopscale/loopzero/pkg/errors"`,
+		"node_modules/x/y.go":               `import "github.com/getloopscale/loopzero/pkg/errors"`,
 	})
 	row, err := countConsumers(root, "errors")
 	require.NoError(t, err)
@@ -209,7 +209,7 @@ func miniRepo(t *testing.T) string {
 		"pkg/errors/errors.go":         "package errors\n",
 		"pkg/naming/naming.go":         "package naming\n",
 		"api/internal/svc.go":          `package svc
-import "github.com/loopzero/loopzero/pkg/errors"
+import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 		"docs/technical/pkg/architecture.md": `# Pkg Architecture
 

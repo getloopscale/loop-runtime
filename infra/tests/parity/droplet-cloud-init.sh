@@ -66,7 +66,7 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 
 # 8) LoopZero repo + CLI.
-git clone --branch "$LOOPZERO_REF" --depth 1 https://github.com/loopzero/loopzero.git /opt/loopzero
+git clone --branch "$LOOPZERO_REF" --depth 1 https://github.com/getloopscale/loopzero.git /opt/loopzero
 cd /opt/loopzero/cli
 npm ci
 npm run build

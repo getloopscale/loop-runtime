@@ -77,16 +77,8 @@ capture_code_state() {
   else
     clean=False
   fi
-  python3 - <<PY
-import json
-print(json.dumps({
-  "commit": "${commit}",
-  "branch": "${branch}",
-  "ahead": int("${ahead}"),
-  "behind": int("${behind}"),
-  "working_tree_clean": ${clean}
-}, sort_keys=True))
-PY
+  BC_COMMIT="$commit" BC_BRANCH="$branch" BC_AHEAD="$ahead" BC_BEHIND="$behind" BC_CLEAN="$clean" \
+    python3 "$(dirname "$0")/baseline_capture.py" code
 }
 
 # --- Layer 2 — Runtime state ------------------------------------------------
@@ -108,51 +100,7 @@ capture_runtime_state() {
     kubectl --context="$CONTEXT" get applications.argoproj.io -n argocd -o json 2>/dev/null > "$tmp/apps.json" || echo '{"items":[]}' > "$tmp/apps.json"
     kubectl --context="$CONTEXT" get tenants.loopzero.io -A -o json 2>/dev/null > "$tmp/tens.json" || echo '{"items":[]}' > "$tmp/tens.json"
   fi
-  TMP_DIR="$tmp" python3 - <<'PY'
-import json, os, sys
-
-tmp = os.environ["TMP_DIR"]
-with open(f"{tmp}/pods.json") as f: pods = json.load(f)
-with open(f"{tmp}/helm.json") as f: helm = json.load(f)
-with open(f"{tmp}/apps.json") as f: apps = json.load(f)
-with open(f"{tmp}/tens.json") as f: tenants = json.load(f)
-
-pods_out = [
-  {"namespace": p.get("metadata",{}).get("namespace",""),
-   "name":      p.get("metadata",{}).get("name",""),
-   "phase":     p.get("status",{}).get("phase","")}
-  for p in pods.get("items", [])
-]
-helm_out = [
-  {"name": r.get("name",""), "namespace": r.get("namespace",""),
-   "chart": r.get("chart","")}
-  for r in (helm if isinstance(helm, list) else [])
-]
-apps_out = [
-  {"name": a.get("metadata",{}).get("name",""),
-   "sync_status":   a.get("status",{}).get("sync",{}).get("status",""),
-   "health_status": a.get("status",{}).get("health",{}).get("status","")}
-  for a in apps.get("items", [])
-]
-tenants_out = [
-  {"name":  t.get("metadata",{}).get("name",""),
-   "phase": t.get("status",{}).get("phase",""),
-   "plan":  t.get("spec",{}).get("plan","")}
-  for t in tenants.get("items", [])
-]
-# Sort arrays by name for deterministic ordering
-pods_out.sort(key=lambda x: (x["namespace"], x["name"]))
-helm_out.sort(key=lambda x: (x["namespace"], x["name"]))
-apps_out.sort(key=lambda x: x["name"])
-tenants_out.sort(key=lambda x: x["name"])
-
-print(json.dumps({
-  "pods":          pods_out,
-  "helm_releases": helm_out,
-  "argocd_apps":   apps_out,
-  "tenants":       tenants_out
-}, sort_keys=True))
-PY
+  TMP_DIR="$tmp" python3 "$(dirname "$0")/baseline_capture.py" runtime
 }
 
 # --- Layer 3 — Config state -------------------------------------------------
@@ -184,14 +132,8 @@ capture_config_state() {
     true|True|TRUE|1)   plp_py="True" ;;
     *)                  plp_py="False" ;;
   esac
-  python3 - <<PY
-import json
-print(json.dumps({
-  "pg_max_migration":    int("${pg_max}"),
-  "plan_limits_present": ${plp_py},
-  "cosign_mode":         "${cosign_mode}"
-}, sort_keys=True))
-PY
+  BC_PG_MAX="$pg_max" BC_PLP="$plp_py" BC_COSIGN="$cosign_mode" \
+    python3 "$(dirname "$0")/baseline_capture.py" config
 }
 
 # --- Layer 4 — LIVE functional probes ---------------------------------------
@@ -211,17 +153,8 @@ capture_live_probes() {
   r4="$(probe "${PUBLIC_APP_URL}/api/v1/projects")"
   r5="$(probe "${PUBLIC_APP_URL}/health")"
   r6="$(probe -X POST -H 'X-GitHub-Event: ping' -d '{}' "${PUBLIC_CLOUD_URL}/api/v1/webhooks/github")"
-  python3 - <<PY
-import json
-print(json.dumps({
-  "https_app_root":           int("${r1}"),
-  "https_app_projects":       int("${r2}"),
-  "https_app_envs":           int("${r3}"),
-  "https_cloud_api_projects": int("${r4}"),
-  "https_app_health":         int("${r5}"),
-  "https_cloud_webhook":      int("${r6}")
-}, sort_keys=True))
-PY
+  BC_R1="$r1" BC_R2="$r2" BC_R3="$r3" BC_R4="$r4" BC_R5="$r5" BC_R6="$r6" \
+    python3 "$(dirname "$0")/baseline_capture.py" probes
 }
 
 # --- Compose snapshot -------------------------------------------------------
@@ -243,17 +176,6 @@ else
 fi
 
 COMPOSE_DIR="$COMPOSE_TMP" CAPTURED_AT="$CAPTURED_AT" \
-python3 - > "$OUTPUT" <<'PY'
-import json, os
-d = os.environ["COMPOSE_DIR"]
-out = {
-  "captured_at":   os.environ["CAPTURED_AT"],
-  "code_state":    json.load(open(f"{d}/code.json")),
-  "runtime_state": json.load(open(f"{d}/runtime.json")),
-  "config_state":  json.load(open(f"{d}/config.json")),
-  "live_probes":   json.load(open(f"{d}/probes.json")),
-}
-print(json.dumps(out, sort_keys=True, indent=2))
-PY
+  python3 "$(dirname "$0")/baseline_capture.py" compose > "$OUTPUT"
 
 log "Captured 4-layer snapshot → $OUTPUT"

@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
 func newSchemeForTest(t *testing.T) *runtime.Scheme {

@@ -15,8 +15,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
 // fakeSourceStore is a test-only SourceStore that stores bundles in memory.

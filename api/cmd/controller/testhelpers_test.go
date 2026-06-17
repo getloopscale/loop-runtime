@@ -6,8 +6,8 @@ package main
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // fakeDBTX implements db.DBTX for controller-local tests without a real

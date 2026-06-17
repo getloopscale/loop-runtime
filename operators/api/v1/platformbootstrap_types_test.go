@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/loopzero/loopzero/operators/internal/conditions"
 )
 
 func TestPlatformBootstrapPhase_Values(t *testing.T) {
@@ -217,15 +216,15 @@ func TestPlatformBootstrap_StatusFields(t *testing.T) {
 func TestPlatformBootstrap_SetCondition(t *testing.T) {
 	pbs := PlatformBootstrap{}
 
-	conditions.SetCondition(&pbs.Status.Conditions, conditions.TypeGiteaReady, metav1.ConditionTrue, "Ready", "Gitea is reachable", 1)
-	conditions.SetCondition(&pbs.Status.Conditions, conditions.TypeArgoCDReady, metav1.ConditionFalse, "Unreachable", "waiting for ArgoCD", 1)
-	conditions.SetCondition(&pbs.Status.Conditions, conditions.TypeDatabaseSeeded, metav1.ConditionFalse, "Pending", "not yet seeded", 1)
+	SetCondition(&pbs.Status.Conditions, TypeGiteaReady, metav1.ConditionTrue, "Ready", "Gitea is reachable", 1)
+	SetCondition(&pbs.Status.Conditions, TypeArgoCDReady, metav1.ConditionFalse, "Unreachable", "waiting for ArgoCD", 1)
+	SetCondition(&pbs.Status.Conditions, TypeDatabaseSeeded, metav1.ConditionFalse, "Pending", "not yet seeded", 1)
 
 	if len(pbs.Status.Conditions) != 3 {
 		t.Fatalf("expected 3 conditions, got %d", len(pbs.Status.Conditions))
 	}
 
-	c := conditions.GetCondition(pbs.Status.Conditions, conditions.TypeGiteaReady)
+	c := GetCondition(pbs.Status.Conditions, TypeGiteaReady)
 	if c == nil {
 		t.Fatal("expected to find GiteaReady condition")
 	}
@@ -236,10 +235,10 @@ func TestPlatformBootstrap_SetCondition(t *testing.T) {
 
 func TestPlatformBootstrap_ConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
-		conditions.TypeGiteaReady,
-		conditions.TypeArgoCDReady,
-		conditions.TypeDatabaseSeeded,
-		conditions.TypeBootstrapComplete,
+		TypeGiteaReady,
+		TypeArgoCDReady,
+		TypeDatabaseSeeded,
+		TypeBootstrapComplete,
 	}
 	seen := make(map[string]bool)
 	for _, ct := range types {

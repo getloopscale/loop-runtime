@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/loopzero/loopzero/infra/tests/seed"
+	"github.com/getloopscale/loopzero/infra/tests/seed"
 )
 
 var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {

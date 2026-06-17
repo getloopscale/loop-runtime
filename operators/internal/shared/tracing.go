@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/loopzero/loopzero/operators/internal/metrics"
+	"github.com/getloopscale/loopzero/operators/internal/metrics"
 )
 
 var tracer = otel.Tracer("loopzero-operator")

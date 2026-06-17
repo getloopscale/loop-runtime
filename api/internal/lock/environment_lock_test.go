@@ -13,8 +13,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/loopzero/loopzero/api/internal/lock"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/lock"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // testPool creates a pgxpool.Pool for testing. Requires a running PostgreSQL

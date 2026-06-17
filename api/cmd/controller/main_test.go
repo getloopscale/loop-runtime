@@ -11,8 +11,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/leader"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/leader"
 )
 
 // cellID() must default to db.CellDefault when the env var is unset,

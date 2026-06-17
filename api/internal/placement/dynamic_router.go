@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // CellStore is the interface for loading cell configurations.

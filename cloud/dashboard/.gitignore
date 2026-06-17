@@ -1,5 +1,0 @@
-# Block pnpm/yarn lockfiles — this project uses npm (matches monorepo convention).
-# Root .gitignore already covers node_modules/, dist/, etc.
-pnpm-lock.yaml
-yarn.lock
-.npmrc.tmp

@@ -13,9 +13,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // T2.1 of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.

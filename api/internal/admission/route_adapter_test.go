@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // The route adapter's job is to translate a BuildGate Decision into the

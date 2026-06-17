@@ -28,7 +28,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // =========================================================================

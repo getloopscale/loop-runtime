@@ -6,7 +6,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/loopzero/loopzero/pkg/logging"
+	"github.com/getloopscale/loopzero/pkg/logging"
 )
 
 // RequestLogger is HTTP middleware that constructs a request-scoped

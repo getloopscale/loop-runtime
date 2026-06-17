@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // UsernameLookup is the narrow contract AuthHandler.Whoami needs to enrich

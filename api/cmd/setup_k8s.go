@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/k8s"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.
@@ -46,7 +46,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 	}
 
 	// Preview CR manager — creates/queries PreviewEnvironment CRs on
-	// mgmt cluster. Shares the same dynamic client + namespace as
+	// mgmt cluster. Shares the same typed client + namespace as
 	// TenantCRManager (both target loopzero-system in the mgmt cluster).
 	previewCRMgr := k8s.NewPreviewCRManager(tenantCRMgr.Client)
 

@@ -15,8 +15,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // withChiParams sets multiple chi URL parameters at once. Unlike

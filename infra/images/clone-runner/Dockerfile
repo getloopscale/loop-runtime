@@ -9,7 +9,7 @@
 # Security: runs as non-root user 1000 (loopzero)
 FROM mirror.gcr.io/library/alpine:3.21.6
 
-LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-clone-runner"
 
 # mc binary version and checksum — update both when upgrading.

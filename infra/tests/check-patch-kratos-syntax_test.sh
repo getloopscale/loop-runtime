@@ -33,6 +33,10 @@ assert() {
 [[ -f "$SCRIPT" ]] || { printf 'FAIL: %s missing\n' "$SCRIPT"; exit 1; }
 
 CONTENT=$(<"$SCRIPT")
+# T2.2: the 7-patch transform logic moved into the homed .py helper; patch +
+# DRY assertions now read the helper, flag/retry assertions still read the .sh.
+HELPER="$REPO_ROOT/infra/scripts/local/patch_kratos_dev_public.py"
+HELPER_CONTENT=$(<"$HELPER")
 
 # Syntax
 printf '== bash syntax ==\n'
@@ -42,40 +46,53 @@ else
   assert "bash -n parses" 0
 fi
 
+# De-costume gate (home-unhomed-logic-suspect-keeps T2.2)
+printf '\n== de-costume (no python heredoc; logic homed in .py) ==\n'
+if [[ "$(grep -cE 'python3?[[:space:]]+(-[[:space:]]+)?<<|<<[[:space:]]*['\''\"]*?(PY|PYEOF|PYTHON)' "$SCRIPT")" == "0" ]]; then
+  assert "no python3 heredoc remains in patch-kratos-dev-public.sh" 1
+else
+  assert "no python3 heredoc remains in patch-kratos-dev-public.sh" 0
+fi
+if python3 -m py_compile "$REPO_ROOT/infra/scripts/local/patch_kratos_dev_public.py" 2>/dev/null; then
+  assert "patch_kratos_dev_public.py compiles" 1
+else
+  assert "patch_kratos_dev_public.py compiles" 0
+fi
+
 # 7 patches per documentation
 printf '\n== 7 documented patches in Python embedded code ==\n'
 
-if printf '%s' "$CONTENT" | grep -q 'Patch 1 — OIDC providers'; then
+if printf '%s' "$HELPER_CONTENT" | grep -q 'Patch 1 — OIDC providers'; then
   assert "Patch 1: OIDC providers" 1
 else
   assert "Patch 1: OIDC providers" 0
 fi
 
-if printf '%s' "$CONTENT" | grep -q 'Patch 2 — OIDC base_redirect_uri'; then
+if printf '%s' "$HELPER_CONTENT" | grep -q 'Patch 2 — OIDC base_redirect_uri'; then
   assert "Patch 2: base_redirect_uri" 1
 else
   assert "Patch 2: base_redirect_uri" 0
 fi
 
-if printf '%s' "$CONTENT" | grep -q 'Patch 3 — Resend Authorization'; then
+if printf '%s' "$HELPER_CONTENT" | grep -q 'Patch 3 — Resend Authorization'; then
   assert "Patch 3: Resend Authorization" 1
 else
   assert "Patch 3: Resend Authorization" 0
 fi
 
-if printf '%s' "$CONTENT" | grep -q 'Patch 4 — serve.public'; then
+if printf '%s' "$HELPER_CONTENT" | grep -q 'Patch 4 — serve.public'; then
   assert "Patch 4: serve.public" 1
 else
   assert "Patch 4: serve.public" 0
 fi
 
-if printf '%s' "$CONTENT" | grep -q 'Patch 5 — cookies'; then
+if printf '%s' "$HELPER_CONTENT" | grep -q 'Patch 5 — cookies'; then
   assert "Patch 5: cookies" 1
 else
   assert "Patch 5: cookies" 0
 fi
 
-if printf '%s' "$CONTENT" | grep -q 'Patch 6 — selfservice flows'; then
+if printf '%s' "$HELPER_CONTENT" | grep -q 'Patch 6 — selfservice flows'; then
   assert "Patch 6: selfservice flows" 1
 else
   assert "Patch 6: selfservice flows" 0
@@ -106,10 +123,10 @@ fi
 printf '\n== --dry-run semantics ==\n'
 
 # In Python heredoc, check that kubectl apply is gated by DRY check
-if printf '%s' "$CONTENT" | grep -q 'if DRY:'; then
-  assert "Python heredoc gates apply via if DRY check" 1
+if printf '%s' "$HELPER_CONTENT" | grep -q 'if dry:'; then
+  assert "helper gates apply via if dry check" 1
 else
-  assert "Python heredoc gates apply via if DRY check" 0
+  assert "helper gates apply via if dry check" 0
 fi
 
 # Verify retry-with-backoff

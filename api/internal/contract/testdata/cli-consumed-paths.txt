@@ -1,0 +1,43 @@
+# Canonical /api/v1 paths the TS CLI (loopzero/cli/src) consumes, normalized to
+# template form ({} = any path param). The engine spec (api/openapi/engine.yaml)
+# MUST cover every path here. Generated from `grep -rhoE '/api/v1/...' cli/src`
+# then normalized; kept in sync by the drift guard in cli_consumer_test.go.
+# NOTE: /api/v1/domains/{}/dns-records is a KNOWN GAP (CLI references a route the
+# engine does not register) — tracked as knownConsumerGaps in the test, NOT here.
+/api/v1/audit
+/api/v1/auth/team/switch
+/api/v1/auth/whoami
+/api/v1/billing
+/api/v1/billing/portal
+/api/v1/builds
+/api/v1/builds/{}
+/api/v1/builds/{}/cancel
+/api/v1/builds/{}/logs
+/api/v1/domains
+/api/v1/domains/{}
+/api/v1/domains/{}/verify
+/api/v1/environments
+/api/v1/environments/{}
+/api/v1/projects
+/api/v1/projects/{}
+/api/v1/projects/{}/builds
+/api/v1/projects/{}/connect
+/api/v1/projects/{}/environments/{}
+/api/v1/projects/{}/previews
+/api/v1/projects/{}/previews/{}
+/api/v1/projects/{}/promote
+/api/v1/projects/{}/rollback
+/api/v1/projects/{}/scale
+/api/v1/projects/{}/status
+/api/v1/secrets
+/api/v1/secrets/{}
+/api/v1/teams/members
+/api/v1/teams/members/{}
+/api/v1/health
+/api/v1/source/upload
+/api/v1/admin/tenants/evict
+/api/v1/admin/tenants/pin
+/api/v1/admin/releases/{}/inspect
+/api/v1/builds/{}/logs/stream
+/api/v1/builds/{}/stream
+/api/v1/projects/{}/logs/stream

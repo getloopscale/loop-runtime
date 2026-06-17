@@ -24,7 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
-	sm "github.com/loopzero/loopzero/pkg/statemachine"
+	sm "github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // machines is the canonical state-machine registry. Add new entries here

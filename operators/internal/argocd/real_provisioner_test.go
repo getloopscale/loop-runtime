@@ -15,7 +15,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 )
 
 func TestDeleteApplications_NotFoundIsIdempotent(t *testing.T) {

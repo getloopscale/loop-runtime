@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/config"
 )
 
 func newTestLogger() *slog.Logger {

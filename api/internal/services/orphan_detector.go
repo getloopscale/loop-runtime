@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // OrphanedTenantQuerier returns the set of cell_ids that have tenants assigned

@@ -146,16 +146,11 @@ ELAPSED=$(($(date +%s) - START))
 
 # === Report ===
 if [[ "$JSON_MODE" -eq 1 ]]; then
-  python3 - <<PYEOF
-import json
-results = """${RESULTS[@]}""".split()
-print(json.dumps({
-  "passed": $PASS, "failed": $FAIL, "skipped": $SKIP,
-  "elapsed_seconds": $ELAPSED,
-  "journeys": [r.split(":", 2) for r in results if r],
-  "verdict": "PASS" if $FAIL == 0 else "FAIL"
-}, indent=2))
-PYEOF
+  CR_TMP="$(mktemp)"
+  for r in "${RESULTS[@]}"; do printf '%s\n' "$r"; done > "$CR_TMP"
+  CR_RESULTS_FILE="$CR_TMP" CR_PASS="$PASS" CR_FAIL="$FAIL" CR_SKIP="$SKIP" CR_ELAPSED="$ELAPSED" \
+    python3 "$(dirname "$0")/dev_public_cleanroom_canonical_9_journeys.py"
+  rm -f "$CR_TMP"
 else
   log ""
   log "════════════════════════════════════════════════════════════════"

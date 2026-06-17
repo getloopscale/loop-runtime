@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 )
 
 // ApplyTenantNetworkPolicies creates or updates the canonical defense-in-depth
