@@ -102,7 +102,7 @@ run_live_suites() {
     "bash $REPO_ROOT/infra/tests/e2e/dev-public-billing-portal_test.sh"
 
   run_suite "LIVE: live-proof-dev-public.sh" \
-    "bash $REPO_ROOT/infra/scripts/local/live-proof-dev-public.sh"
+    "bash $REPO_ROOT/archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh"
 
   run_suite "LIVE: trio-dev-public.sh" \
     "bash $REPO_ROOT/infra/scripts/local/trio-dev-public.sh"

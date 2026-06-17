@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Audit `2026-06-17-canonical-tests-deep-review/` — deep review da suite canonical (cleanroom + dogfood + chaos-test + live-proof + contra-prova) com 9 findings classificados BLOCKER/HIGH/MED/LOW + Change Request T3 + ADR T3 APPROVED para rewrite canonical via strangler-fig com quarentena consultável. Sponsor verbatim "Acheito TUDO" 2026-06-17.
 - Discovery + blueprint + plan v1.0 para `canonical-tests-rewrite-v2` em `.claude/knowledge-base/{discoveries/plans,discoveries/blueprints,plans}/` — 6 patterns (Ginkgo+helpers, Pact-go bilateral, OTel evidence, strangler-fig, contra-prova, steady-state baseline) + 8 ADR sketches + 5 Open Questions + Coverage Matrix completa + 8 risks.
 - `pkg/quality/quarantineprotect/` Go quality gate (T0.2 do plan) — bloqueia PRs editando `archive/canonical-tests-v1/**` durante a janela do strangler-fig per ADR-2026-06-17-T3 D5. DELETE só permitido com marker `[ARCHIVE-DELETE]` no PR title. 7 hermetic tests PASS + wired em `task quality:gates:diff` + `loopzero-ops quality quarantine-protect` subcommand.
+- `archive/canonical-tests-v1/` quarantine directory (T0.1 do plan) — 8 SKILL.md dirs (cleanroom + cleanroom-drill + dogfood + dogfood-drill + chaos-test + chaos-test-drill + live-proof + contra-prova) + 16 local bash scripts (dogfood-* + cleanroom-canonical-chain-runner + live-proof-dev-public) + 3 drill orchestrators + drill-dogfood-journeys lib movidos via `git mv` (history preserved). README.md documenta status QUARANTINED READ-ONLY + invocation path post-move + DELETE policy. Per ADR D5 quarentena consultável — files remain executable via direct `bash archive/canonical-tests-v1/scripts/local/...` OR via task targets (path-updated).
+
+### Changed
+
+- `taskfiles/test.yml` 14 `test:dogfood:*` targets + `taskfiles/infra.yml` live-proof reference path-updated v1 → archive paths (T0.1). Chain antiga continua executável via `task` targets per ADR D5.
+- `.claude/rules/shell-scripts-allowlist.md` 20+ entries path-updated v1 → archive paths (T0.1). Allowlist intent preserved at new locations.
+- `.claude/rules/cleanroom-up-live-test-mandate.md` SKILL.md + script references path-updated (T0.1). Mandate scope confirmed per ADR D9 — does not apply to refactor of own gate.
+- `docs/operations/cleanroom-canonical-runbook.md` path references updated v1 → archive (T0.1).
+- `infra/scripts/local/{trio-dev-public,test-all-dev-public}.sh` callers of `live-proof-dev-public.sh` path-updated to archive (T0.1).
 
 ### Changed
 

@@ -1131,7 +1131,7 @@ tasks:
 
       Output: per-check PASS/FAIL with reason; non-zero exit on any FAIL.
     cmds:
-      - bash infra/scripts/local/live-proof-dev-public.sh
+      - bash archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh
 
   dev-public:trio:
     desc: |

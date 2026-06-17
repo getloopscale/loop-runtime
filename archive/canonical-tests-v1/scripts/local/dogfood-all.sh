@@ -82,19 +82,19 @@ cd "$REPO_ROOT"
 # ordering). NEW journeys: add the wrapper here when its 3-script triplet
 # ships per roadmap Phase 3 + matching `task test:dogfood:{slug}` target.
 WRAPPERS=(
-  "infra/scripts/local/dogfood-recovery.sh"          # J-04
-  "infra/scripts/local/dogfood-device.sh"            # J-05
-  "infra/scripts/local/dogfood-project-connect.sh"   # J-09
-  "infra/scripts/local/dogfood-environments.sh"      # J-10
-  "infra/scripts/local/dogfood-domains.sh"           # J-11
-  "infra/scripts/local/dogfood-deployments.sh"       # J-17 + J-19
-  "infra/scripts/local/dogfood-scale.sh"             # J-20
-  "infra/scripts/local/dogfood-readiness.sh"         # J-21
-  "infra/scripts/local/dogfood-secrets.sh"           # J-22
-  "infra/scripts/local/dogfood-secrets-openbao.sh"   # J-22 OpenBao Transit
-  "infra/scripts/local/dogfood-preview.sh"           # J-23
-  "infra/scripts/local/dogfood-live-url.sh"          # J-25
-  "infra/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
+  "archive/canonical-tests-v1/scripts/local/dogfood-recovery.sh"          # J-04
+  "archive/canonical-tests-v1/scripts/local/dogfood-device.sh"            # J-05
+  "archive/canonical-tests-v1/scripts/local/dogfood-project-connect.sh"   # J-09
+  "archive/canonical-tests-v1/scripts/local/dogfood-environments.sh"      # J-10
+  "archive/canonical-tests-v1/scripts/local/dogfood-domains.sh"           # J-11
+  "archive/canonical-tests-v1/scripts/local/dogfood-deployments.sh"       # J-17 + J-19
+  "archive/canonical-tests-v1/scripts/local/dogfood-scale.sh"             # J-20
+  "archive/canonical-tests-v1/scripts/local/dogfood-readiness.sh"         # J-21
+  "archive/canonical-tests-v1/scripts/local/dogfood-secrets.sh"           # J-22
+  "archive/canonical-tests-v1/scripts/local/dogfood-secrets-openbao.sh"   # J-22 OpenBao Transit
+  "archive/canonical-tests-v1/scripts/local/dogfood-preview.sh"           # J-23
+  "archive/canonical-tests-v1/scripts/local/dogfood-live-url.sh"          # J-25
+  "archive/canonical-tests-v1/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh
