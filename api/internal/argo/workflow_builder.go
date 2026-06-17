@@ -10,8 +10,8 @@ import (
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
 
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // InfraParams holds infrastructure-level parameters that are injected into every workflow.

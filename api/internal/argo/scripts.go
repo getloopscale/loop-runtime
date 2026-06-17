@@ -13,8 +13,8 @@ package argo
 import (
 	"fmt"
 
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/shellgen"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/shellgen"
 )
 
 // ---------------------------------------------------------------------------

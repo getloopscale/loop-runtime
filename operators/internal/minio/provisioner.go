@@ -25,7 +25,7 @@ import (
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // Compile-time interface compliance check.

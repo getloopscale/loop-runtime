@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // SqlcBridge is the bridge interface from the internal db.DBTX abstraction to

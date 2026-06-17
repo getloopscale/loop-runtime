@@ -3,9 +3,9 @@ name: loopzero-common
 description: Shared Helm helpers for the LoopZeroCloud platform
 type: library
 version: 0.3.0
-home: https://github.com/loopzero/loopzero
+home: https://github.com/getloopscale/loopzero
 sources:
-  - https://github.com/loopzero/loopzero
+  - https://github.com/getloopscale/loopzero
 maintainers:
   - name: LoopZero Team
     url: https://loopzero.example

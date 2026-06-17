@@ -25,7 +25,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // GetActiveTenant returns the user's explicit active_tenant_id, or

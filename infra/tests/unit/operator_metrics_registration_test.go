@@ -39,7 +39,7 @@ func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testi
 		"tenant-operator",
 	}
 
-	expected := `_ "github.com/loopzero/loopzero/operators/internal/metrics"`
+	expected := `_ "github.com/getloopscale/loopzero/operators/internal/metrics"`
 
 	for _, b := range binaries {
 		path := filepath.Join(cmdDir, b, "main.go")

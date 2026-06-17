@@ -14,10 +14,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	pkgdomain "github.com/loopzero/loopzero/pkg/domain"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // reservedEnvironmentNames contains names that cannot be used for environments.

@@ -16,8 +16,8 @@ package enforcement_test
 import (
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/enforcement"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {

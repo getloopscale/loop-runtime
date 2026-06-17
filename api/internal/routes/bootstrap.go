@@ -19,10 +19,10 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/pkg/naming"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.

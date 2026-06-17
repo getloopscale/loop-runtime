@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/config"
 )
 
 // TestMain seeds LOOPZERO_CLUSTER_ISSUER for ALL tests in this package.

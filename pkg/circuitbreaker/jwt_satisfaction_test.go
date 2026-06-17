@@ -15,7 +15,7 @@ package circuitbreaker_test
 // breaker fits the extracted contract.
 
 import (
-	"github.com/loopzero/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
 	"github.com/getloopscale/loopzero-contracts/jwt"
 )
 

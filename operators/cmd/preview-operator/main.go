@@ -20,13 +20,13 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/preview"
-	"github.com/loopzero/loopzero/operators/internal/shared"
-	"github.com/loopzero/loopzero/operators/internal/tracing"
-	"github.com/loopzero/loopzero/pkg/healthcheck"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/preview"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/tracing"
+	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
-	_ "github.com/loopzero/loopzero/operators/internal/metrics"
+	_ "github.com/getloopscale/loopzero/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()

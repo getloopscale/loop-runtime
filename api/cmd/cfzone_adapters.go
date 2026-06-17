@@ -6,8 +6,8 @@ package main
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/cfzone"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/cfzone"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // cfZoneAdapter bridges cfzone.Client → routes.CFZoneManager.

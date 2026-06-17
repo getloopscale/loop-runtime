@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
 // buildEnvironmentT31 constructs an Environment CR in `default/` namespace

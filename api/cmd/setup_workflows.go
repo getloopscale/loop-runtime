@@ -14,12 +14,12 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/loopzero/loopzero/api/internal/argo"
-	"github.com/loopzero/loopzero/api/internal/argocd"
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/gitops"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/cfkv"
+	"github.com/getloopscale/loopzero/api/internal/argo"
+	"github.com/getloopscale/loopzero/api/internal/argocd"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/gitops"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/cfkv"
 )
 
 // WorkflowDeps holds workflow submitter, sync client, gitops pusher, and KV client.

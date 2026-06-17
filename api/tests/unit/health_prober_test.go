@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/health"
+	"github.com/getloopscale/loopzero/api/internal/health"
 )
 
 func TestHTTPProber_DirectProbe(t *testing.T) {

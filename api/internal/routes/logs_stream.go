@@ -14,10 +14,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // StreamLogQuerier — alias to domain.StreamLogQuerier (T1.3 of

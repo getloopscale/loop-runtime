@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 

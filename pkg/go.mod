@@ -1,8 +1,13 @@
-module github.com/loopzero/loopzero/pkg
+module github.com/getloopscale/loopzero/pkg
 
 go 1.26.1
 
-require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+require (
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+)
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -10,8 +15,8 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/openbao/openbao/api/v2 v2.5.1
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sync v0.20.0
-	golang.org/x/time v0.14.0
+	golang.org/x/sync v0.21.0
+	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

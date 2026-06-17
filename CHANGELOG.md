@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Completed the M6 acyclic-graph gate node for `operators/api` (`loopzero-ops quality acyclic-graph`): the CRD contract module is now a checked base that must import nothing engine-internal (`operators/internal`, `api`, `pkg`, `cloud`) — only k8s. Hermetic tests prove the node PASSES on the real layout and FAILS on a synthetic upward import. The gate now checks 4 nodes (loopzero-contracts, engine, loopzero-cloud, operators-api). (M6 — plan extract-crd-types-contract-module Phase 3)
+
+
 - `operators/api` is now a standalone, versioned Go module (`github.com/loopzero/loopzero/operators/api`) holding the CRD types (Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, PreviewEnvironment) as a first-class contract artifact (à la `crossplane/apis`). The import path `loopzero/loopzero/operators/api/v1` is UNCHANGED, so the 53 consumers need no edits; the operators main module consumes it via `require v0.0.0` + `replace => ./api` + `go.work` (the M3 idiom). The module is a clean base: deps are `k8s.io/apimachinery` only (zero engine-internal, zero controller-runtime). Typed adoption by the engine `api/` (unstructured→typed) and loopzero-cloud is a DEFERRED follow-up — today operators is the sole Go consumer; the extraction is justified as a versioned-contract artifact, not a second consumer. (M6 — plan extract-crd-types-contract-module Phase 2)
 
 
@@ -19,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `pkg/plan` — new package holding the cost/plan value vocabulary (`Plan`, `CostMetric`, `CostCounter`, `CapFor`, `Unlimited`, `ExceededError`, `ProjectStatus`, `CurrentPeriod`) extracted from `pkg/enforcement`. It is the contracts-bound surface (M3 `loopzero-contracts/plan` target) with zero engine-internal dependencies. Cap-enforcement logic (`CapChecker`, `CostStore`) and the `statemachine`→`ProjectStatus` mapper stay in `pkg/enforcement` (ISP). All external consumers import `pkg/plan` directly; `enforcement` keeps the vocabulary as type aliases for its own internal shorthand. (M1.2/M1.3 — plan m1-decouple-in-place; ADR D3)
 
 ### Changed
+
+- Renamed every engine Go module path from `github.com/loopzero/loopzero` → `github.com/getloopscale/loopzero` so the module path matches the GitHub org (the repo is `getloopscale/loopzero`; the legacy module path dropped the "dev"). Swept all 9 engine modules (api, operators, operators/api, cmd/loopzero-ops, pkg, tools/*, infra/scripts, infra/tests) + 563 `.go` import sites + 15 `Chart.yaml` URLs via a safe single-token substitution (`loopzero/loopzero` is not a substring of the `getloopscale/loopzero-*` satellites). Checksums regenerated via `go work sync`; CRD YAML byte-identical; acyclic gate updated to the new prefixes + still PASSES. Satellites (loopzero-contracts/loopzero-cloud) untouched; historical `.claude/knowledge-base/` audit trail preserved. (M7 — plan rename-engine-module-getloopscale)
+
 
 - Relocated the CRD status-condition vocabulary (the `Type*` condition-name constants) + the generic metav1 `SetCondition`/`GetCondition` helpers from `operators/internal/conditions` into the CRD types package `operators/api/v1` (they are part of the CR status contract). `operators/internal/conditions` re-exports them via const aliases + delegating funcs, so its 40 importers are unchanged. This makes `operators/api/v1` a clean base (imports only `k8s.io/apimachinery`, in production AND tests) — the decouple-first step before extracting it as a versioned contract module. (M6 — plan extract-crd-types-contract-module Phase 1)
 

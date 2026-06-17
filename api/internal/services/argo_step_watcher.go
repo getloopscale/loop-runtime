@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	cloudmetrics "github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	"github.com/loopzero/loopzero/pkg/events"
+	cloudmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/pkg/events"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

@@ -18,8 +18,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 var tenantGVR = schema.GroupVersionResource{

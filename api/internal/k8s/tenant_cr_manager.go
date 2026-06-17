@@ -19,8 +19,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	pkgdomain "github.com/loopzero/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // tenantNamespace is the canonical namespace for all Tenant + Environment CRs.

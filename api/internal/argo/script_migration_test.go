@@ -9,7 +9,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // Script-migration regression tests.

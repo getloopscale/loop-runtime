@@ -13,9 +13,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/shared"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
 )
 
 // reconcileNamespace ensures the namespace exists via CreateOrUpdate.

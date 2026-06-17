@@ -46,7 +46,7 @@ func TestConditionTypeConstants_values(t *testing.T) {
 }
 
 // TestApiModuleIsCleanBase is the keystone decouple guard: NO .go file in this
-// package (production OR test) may import anything under loopzero/loopzero/operators/
+// package (production OR test) may import anything under getloopscale/loopzero/operators/
 // except this same api module. The acyclic-graph gate enforces production; this
 // test additionally covers the package's own test files, which the gate's
 // node-scan also sees but which would otherwise be easy to regress.
@@ -56,10 +56,10 @@ func TestApiModuleIsCleanBase(t *testing.T) {
 		t.Fatalf("read dir: %v", err)
 	}
 	forbidden := []string{
-		"github.com/loopzero/loopzero/operators/internal",
-		"github.com/loopzero/loopzero/api",
-		"github.com/loopzero/loopzero/pkg",
-		"github.com/loopzero/loopzero/cloud",
+		"github.com/getloopscale/loopzero/operators/internal",
+		"github.com/getloopscale/loopzero/api",
+		"github.com/getloopscale/loopzero/pkg",
+		"github.com/getloopscale/loopzero/cloud",
 	}
 	fset := token.NewFileSet()
 	for _, e := range entries {

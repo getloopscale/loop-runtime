@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/k8s"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.

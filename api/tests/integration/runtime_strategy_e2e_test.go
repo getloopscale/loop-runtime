@@ -12,8 +12,8 @@ package integration
 import (
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/argo"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/argo"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 func TestRuntimeStrategyEndToEnd(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/loopzero/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
 )
 
 const (

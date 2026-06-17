@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
 

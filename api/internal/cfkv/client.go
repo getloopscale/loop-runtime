@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // RoutingEntry is the value stored in KV for each static frontend hostname.

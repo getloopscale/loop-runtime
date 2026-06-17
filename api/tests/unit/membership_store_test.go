@@ -6,8 +6,8 @@ package unit
 import (
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 func TestPostgresMembershipStoreImplementsInterface(t *testing.T) {

@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/source"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // maxBundleSize is the maximum allowed bundle size (500MB).

@@ -6,7 +6,7 @@ package argo
 import (
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // build-mode-dispatch-and-dockerfile-security-plan T1.3 + T1.4 + T4.1.

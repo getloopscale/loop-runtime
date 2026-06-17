@@ -22,7 +22,7 @@ import (
 	stderrors "errors"
 	"net/http"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // statusByCode maps machine-readable error codes to HTTP status codes.

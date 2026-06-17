@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // ScalingResolver merges yaml-supplied AppSpecs with persisted scaling

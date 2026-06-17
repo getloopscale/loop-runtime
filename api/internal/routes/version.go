@@ -19,9 +19,9 @@ import (
 // Version metadata — populados via ldflags em build (ver api/Dockerfile).
 //
 //	go build -ldflags "\
-//	  -X github.com/loopzero/loopzero/api/internal/routes.versionTag=$(git describe --tags) \
-//	  -X github.com/loopzero/loopzero/api/internal/routes.versionCommit=$(git rev-parse HEAD) \
-//	  -X github.com/loopzero/loopzero/api/internal/routes.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+//	  -X github.com/getloopscale/loopzero/api/internal/routes.versionTag=$(git describe --tags) \
+//	  -X github.com/getloopscale/loopzero/api/internal/routes.versionCommit=$(git rev-parse HEAD) \
+//	  -X github.com/getloopscale/loopzero/api/internal/routes.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var (
 	versionTag       = "dev"
 	versionCommit    = "unknown"

@@ -18,7 +18,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // M1.4 T1.2 — producer conformance.

@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // StatusReleaseStoreAdapter implements routes.StatusReleaseStore using db.ReleaseStore.

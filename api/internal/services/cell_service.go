@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 // CellStatus represents the status of a single Cell for operator visibility.

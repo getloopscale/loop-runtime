@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 
-	"github.com/loopzero/loopzero/api/internal/github"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // ProjectRepository represents a project↔repo link (DIP — avoids db import).

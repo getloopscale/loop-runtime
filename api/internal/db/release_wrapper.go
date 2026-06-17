@@ -44,10 +44,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/id"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/id"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // activeUniqueIndexName is the constraint name from migration 000022.

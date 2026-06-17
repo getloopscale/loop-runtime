@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // T1.2 (plan simplify-deploy-loopzerokit-only v2.0) — wire the canonical generator

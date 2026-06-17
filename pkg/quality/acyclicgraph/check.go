@@ -62,14 +62,12 @@ func Check(cfg Config) (*Outcome, error) {
 		{
 			name: "loopzero-contracts",
 			dir:  filepath.Join(parent, "loopzero-contracts"),
-			// The most-stable base imports nothing from any consumer. The canonical
-			// module paths are loopzero/loopzero (engine) + getloopscale/loopzero-{cloud,cli};
-			// the bare loopzero/loopzero-cloud variant is a defensive belt-and-suspenders
-			// guard against an org rename and never matches today.
+			// The most-stable base imports nothing from any consumer. The engine
+			// is github.com/getloopscale/loopzero/* (trailing slash → engine only, never
+			// matches loopzero-contracts); the leaf consumers are loopzero-cloud + loopzero-cli.
 			forbidden: []string{
-				"github.com/loopzero/loopzero/",
+				"github.com/getloopscale/loopzero/",
 				"github.com/getloopscale/loopzero-cloud",
-				"github.com/loopzero/loopzero-cloud",
 				"github.com/getloopscale/loopzero-cli",
 			},
 		},
@@ -79,7 +77,6 @@ func Check(cfg Config) (*Outcome, error) {
 			// The engine never imports the cloud (cloud is a leaf consumer).
 			forbidden: []string{
 				"github.com/getloopscale/loopzero-cloud",
-				"github.com/loopzero/loopzero-cloud",
 				"github.com/getloopscale/loopzero-cli",
 			},
 		},
@@ -88,9 +85,24 @@ func Check(cfg Config) (*Outcome, error) {
 			dir:  filepath.Join(parent, "loopzero-cloud"),
 			// The cloud never imports engine-internal packages (only loopzero-contracts).
 			forbidden: []string{
-				"github.com/loopzero/loopzero/pkg",
-				"github.com/loopzero/loopzero/api",
-				"github.com/loopzero/loopzero/operators",
+				"github.com/getloopscale/loopzero/pkg",
+				"github.com/getloopscale/loopzero/api",
+				"github.com/getloopscale/loopzero/operators",
+				"github.com/getloopscale/loopzero-cli",
+			},
+		},
+		{
+			// M6: the CRD types contract module. An in-engine submodule (not a
+			// sibling repo) — resolved under RepoRoot, not the parent. It is a
+			// clean base: it imports only k8s.io/* and must never reach back into
+			// the engine (operators/internal, api, pkg, cloud).
+			name: "operators-api",
+			dir:  filepath.Join(cfg.RepoRoot, "operators", "api"),
+			forbidden: []string{
+				"github.com/getloopscale/loopzero/operators/internal",
+				"github.com/getloopscale/loopzero/api",
+				"github.com/getloopscale/loopzero/pkg",
+				"github.com/getloopscale/loopzero-cloud",
 				"github.com/getloopscale/loopzero-cli",
 			},
 		},

@@ -7,11 +7,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // BuildOrchestratorAdapter implements routes.BuildOrchestratorService by

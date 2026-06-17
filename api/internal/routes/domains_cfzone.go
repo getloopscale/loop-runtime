@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // createWithCFZone implements the v2 domain creation flow:

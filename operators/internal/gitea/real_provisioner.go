@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/httpclient"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/httpclient"
 )
 
 // Compile-time interface compliance check.

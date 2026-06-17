@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 )
 
 // skipTLSVerify reads the OPERATOR_INSECURE_SKIP_TLS environment variable.

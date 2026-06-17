@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/correlation"
+	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
 // Audit gap M04 #23 (active-execution-plan §6.F.1): the deprecated

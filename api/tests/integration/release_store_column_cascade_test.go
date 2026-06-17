@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // T2.3 Test 1 (column-cascade) of plan

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // RetryReleaseActivation retries Phase 2 (release activation) for a build stuck

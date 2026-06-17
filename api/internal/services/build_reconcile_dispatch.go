@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // reconcile checks all non-terminal builds and reconciles their state

@@ -12,16 +12,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/loopzero/loopzero/api/internal/cfkv"
-	"github.com/loopzero/loopzero/api/internal/cfzone"
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/placement"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/cfkv"
+	"github.com/getloopscale/loopzero/api/internal/cfzone"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // LeaderElectionResult holds leader election state.

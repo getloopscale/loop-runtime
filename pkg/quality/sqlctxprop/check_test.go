@@ -80,7 +80,7 @@ func TestCheckDetectsPoolBoundInsideLock(t *testing.T) {
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 type Locker struct{}
@@ -138,7 +138,7 @@ func TestCheckAllowsWithTxThreading(t *testing.T) {
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 type Locker struct{}
@@ -187,7 +187,7 @@ func TestCheckIgnoresPoolBoundOutsideLock(t *testing.T) {
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 type Service struct {
@@ -226,7 +226,7 @@ func TestCheckIgnoresTestFiles(t *testing.T) {
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 type Locker struct{}

@@ -10,8 +10,8 @@ import (
 	"io"
 	"net/http"
 
-	k "github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/httpclient"
+	k "github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/httpclient"
 )
 
 // BuildCredentials encapsulates all credential fields needed by TenantReconciler

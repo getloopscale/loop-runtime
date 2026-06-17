@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/pkg/logging"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/pkg/logging"
 )
 
 // validAppDigest is a 64-hex sha256 used by tests that exercise

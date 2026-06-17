@@ -9,7 +9,7 @@
 // HTTPStatus field has been REMOVED from LoopZeroError. Callers that
 // need the HTTP status code MUST use:
 //
-//	import errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
+//	import errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 //	status := errorshttp.Status(err)
 //
 // See CLAUDE.md Rule 8.

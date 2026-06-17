@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
-	"github.com/loopzero/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // BuildInfo holds the minimal build information needed by the stream handler.

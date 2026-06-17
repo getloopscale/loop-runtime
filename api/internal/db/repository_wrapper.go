@@ -29,7 +29,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
 // generateRepoID produces a "repo-XXXX" identifier for new

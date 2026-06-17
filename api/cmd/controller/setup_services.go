@@ -11,15 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/adapters"
-	"github.com/loopzero/loopzero/api/internal/argo"
-	"github.com/loopzero/loopzero/api/internal/argocd"
-	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/gitops"
-	"github.com/loopzero/loopzero/api/internal/k8s"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/argo"
+	"github.com/getloopscale/loopzero/api/internal/argocd"
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/gitops"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // controllerDeps holds all services and stores wired during setup. Passed to

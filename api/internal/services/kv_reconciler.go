@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/cfkv"
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/cfkv"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // KVRoutingSource provides the expected set of KV routing keys from the database.

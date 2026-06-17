@@ -37,11 +37,11 @@ import (
 //   - cmd/ — main entry points
 func TestImportGraph_RoutesIsLeaf(t *testing.T) {
 	guarded := []string{
-		"github.com/loopzero/loopzero/api/internal/services/...",
-		"github.com/loopzero/loopzero/api/internal/db/...",
-		"github.com/loopzero/loopzero/api/internal/k8s/...",
-		"github.com/loopzero/loopzero/api/internal/loki/...",
-		"github.com/loopzero/loopzero/api/internal/github/...",
+		"github.com/getloopscale/loopzero/api/internal/services/...",
+		"github.com/getloopscale/loopzero/api/internal/db/...",
+		"github.com/getloopscale/loopzero/api/internal/k8s/...",
+		"github.com/getloopscale/loopzero/api/internal/loki/...",
+		"github.com/getloopscale/loopzero/api/internal/github/...",
 	}
 
 	for _, pkg := range guarded {
@@ -56,7 +56,7 @@ func TestImportGraph_RoutesIsLeaf(t *testing.T) {
 			if line == "" {
 				continue
 			}
-			if strings.Contains(line, "github.com/loopzero/loopzero/api/internal/routes") {
+			if strings.Contains(line, "github.com/getloopscale/loopzero/api/internal/routes") {
 				t.Errorf("DIP violation: package imports routes/ upward\n  %s\n"+
 					"types belonging to the routes/ surface should be moved to "+
 					"api/internal/domain/ first, then imported by the lower-layer "+

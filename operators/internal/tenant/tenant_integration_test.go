@@ -14,8 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/conditions"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
 )
 
 // conditionStatus returns the condition status for a given type, or "" if not found.

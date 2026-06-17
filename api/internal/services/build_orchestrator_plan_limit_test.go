@@ -13,8 +13,8 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 )
 
 // fakePlanCapChecker lets tests drive plan-cap decisions without a real DB.

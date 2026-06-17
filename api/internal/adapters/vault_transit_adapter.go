@@ -16,7 +16,7 @@ package adapters
 import (
 	"context"
 
-	"github.com/loopzero/loopzero/pkg/vault"
+	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
 // VaultTransitAdapter wraps a pkg/vault.Transit so it satisfies the

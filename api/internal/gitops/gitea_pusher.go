@@ -21,9 +21,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/loopzero/loopzero/api/internal/gitclient"
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // GiteaGitOpsPusherConfig holds configuration for connecting to Gitea GitOps repos.

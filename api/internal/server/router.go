@@ -15,11 +15,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 

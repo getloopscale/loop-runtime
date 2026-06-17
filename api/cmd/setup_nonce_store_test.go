@@ -10,7 +10,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 

@@ -51,9 +51,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/placement"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // --- fakes ---

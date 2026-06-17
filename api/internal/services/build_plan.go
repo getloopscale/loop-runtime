@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/loopzero/loopzero/pkg/naming"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // envKeyRegex validates environment variable key names.

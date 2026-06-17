@@ -22,7 +22,7 @@ package loopzerocloudpublished_test
 import (
 	"testing"
 
-	"github.com/loopzero/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
 )
 
 func TestEnvParity_dev(t *testing.T) {

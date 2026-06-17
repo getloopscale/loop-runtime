@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
 // fakeRaceySourceStore simulates the concurrent-upload race observed in

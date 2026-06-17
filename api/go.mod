@@ -1,4 +1,4 @@
-module github.com/loopzero/loopzero/api
+module github.com/getloopscale/loopzero/api
 
 go 1.26.1
 
@@ -15,8 +15,8 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/stripe/stripe-go/v82 v82.5.1
-	github.com/loopzero/loopzero/pkg v0.0.0
 	github.com/getloopscale/loopzero-forge v0.6.0
+	github.com/getloopscale/loopzero/pkg v0.0.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0
@@ -28,7 +28,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.35.2
 	k8s.io/apimachinery v0.35.2
 	k8s.io/client-go v0.35.2
-	k8s.io/klog/v2 v2.130.1
+	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -113,6 +113,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
 
-replace github.com/loopzero/loopzero/pkg => ../pkg
+replace github.com/getloopscale/loopzero/pkg => ../pkg
 
 replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts

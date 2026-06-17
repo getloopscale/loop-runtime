@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"strings"
 
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // DefaultMigrationsDir — bash default.

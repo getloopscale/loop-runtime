@@ -16,7 +16,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // osReadFileC11 — local alias avoiding clash with any other test helper named

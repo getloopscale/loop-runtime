@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 

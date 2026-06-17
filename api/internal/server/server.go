@@ -13,13 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/api/internal/routes"
-	"github.com/loopzero/loopzero/api/internal/services"
-	"github.com/loopzero/loopzero/api/internal/source"
-	"github.com/loopzero/loopzero/api/internal/sse"
-	"github.com/loopzero/loopzero/pkg/enforcement"
-	pkglogging "github.com/loopzero/loopzero/pkg/logging"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
+	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
 )
 
 // Config holds the server configuration.

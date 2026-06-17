@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // DomainHealthStore abstracts persistence needed by the health checker.

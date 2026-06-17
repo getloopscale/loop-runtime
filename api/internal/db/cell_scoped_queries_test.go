@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // osReadFile is an indirection point so tests can stub file reads if

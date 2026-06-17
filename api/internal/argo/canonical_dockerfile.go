@@ -22,7 +22,7 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // Canonical base images — C3: digest-pinned (resolved 2026-06-15 via

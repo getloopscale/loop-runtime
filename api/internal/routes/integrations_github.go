@@ -14,8 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
-	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // InstallationRepository is the sanitised slice of a GitHub installation

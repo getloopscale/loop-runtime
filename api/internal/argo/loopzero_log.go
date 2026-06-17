@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/loopzero/loopzero/pkg/events"
+	"github.com/getloopscale/loopzero/pkg/events"
 )
 
 // Plan J-17 Layer 2 (2026-06-06) — pipeline emits structured logs

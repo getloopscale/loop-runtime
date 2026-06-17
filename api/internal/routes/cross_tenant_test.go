@@ -44,8 +44,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // Adversarial constants — kept in sync with infra/tests/seed/cross_tenant_fixture.go

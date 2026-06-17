@@ -26,8 +26,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // Canonical action strings — exported so tests don't drift.

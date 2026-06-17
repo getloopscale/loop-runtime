@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // TestGitOpsPush_StaleLeaderOverwritten — roadmap 02 DoD.

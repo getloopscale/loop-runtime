@@ -16,8 +16,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // SecretK8sManager creates K8s Secrets on mgmt cluster and ExternalSecret CRs

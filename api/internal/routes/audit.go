@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.

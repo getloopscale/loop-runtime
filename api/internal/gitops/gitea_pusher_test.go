@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // These tests run against real Gitea.

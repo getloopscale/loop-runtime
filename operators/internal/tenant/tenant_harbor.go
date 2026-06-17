@@ -17,13 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
-	"github.com/loopzero/loopzero/operators/internal/conditions"
-	k "github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/harbor"
-	"github.com/loopzero/loopzero/operators/internal/metrics"
-	"github.com/loopzero/loopzero/operators/internal/shared"
-	"github.com/loopzero/loopzero/pkg/naming"
+	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	k "github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/harbor"
+	"github.com/getloopscale/loopzero/operators/internal/metrics"
+	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // ensureHarborProject creates a Harbor project for the tenant if it doesn't exist.

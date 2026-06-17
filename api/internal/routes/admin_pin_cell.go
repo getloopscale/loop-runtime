@@ -30,7 +30,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
