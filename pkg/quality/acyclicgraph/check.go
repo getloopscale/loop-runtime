@@ -62,7 +62,10 @@ func Check(cfg Config) (*Outcome, error) {
 		{
 			name: "loopzero-contracts",
 			dir:  filepath.Join(parent, "loopzero-contracts"),
-			// The most-stable base imports nothing from any consumer.
+			// The most-stable base imports nothing from any consumer. The canonical
+			// module paths are loopzero/loopzero (engine) + getloopscale/loopzero-{cloud,cli};
+			// the bare loopzero/loopzero-cloud variant is a defensive belt-and-suspenders
+			// guard against an org rename and never matches today.
 			forbidden: []string{
 				"github.com/loopzero/loopzero/",
 				"github.com/getloopscale/loopzero-cloud",
