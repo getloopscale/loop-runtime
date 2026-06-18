@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/scrub"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -230,7 +231,9 @@ func (a *Aggregator) emitPhaseEvent(ctx context.Context, e scrub.PhaseEvent, sou
 	if _, err := a.sink.AppendDeployTimelineEvent(ctx, a.deployID, eventType, data); err != nil {
 		a.logger.Error("AppendDeployTimelineEvent failed",
 			"event_type", eventType, "err", err)
+		return
 	}
+	metrics.DeployTimelineEventsTotal.WithLabelValues(e.Phase, e.Status, string(source)).Inc()
 }
 
 // emitAggregatorDegraded persists a synthetic event signaling internal
@@ -249,4 +252,5 @@ func (a *Aggregator) emitAggregatorDegraded(ctx context.Context, reason string) 
 	if _, err := a.sink.AppendDeployTimelineEvent(ctx, a.deployID, "deploy_timeline.aggregator.degraded", data); err != nil {
 		a.logger.Error("emit DEGRADED failed", "err", err)
 	}
+	metrics.DeployTimelineAggregatorPanicTotal.WithLabelValues("aggregator").Inc()
 }
