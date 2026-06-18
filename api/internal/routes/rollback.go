@@ -47,10 +47,34 @@ type RollbackProjectStore interface {
 	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
 }
 
+// RollbackReleaseLookup resolves the canonical release for a build.
+// Used to translate the dashboard sugar {build_id} into the canonical
+// state-machine identifier {to_release_id}. Nil-safe: when nil, the
+// handler rejects requests that only carry build_id with a typed
+// error (caller must send to_release_id directly).
+//
+// Plan: deploy-timeline-canonical-5-phases LIVE follow-up — closes
+// the dashboard rollback 400 caught against the LIVE Vercel UX flow.
+type RollbackReleaseLookup interface {
+	GetLatestReleaseForBuild(ctx context.Context, tenantID, buildID string) (releaseID string, err error)
+}
+
 // rollbackRequest is the JSON body for POST /api/v1/projects/{name}/rollback.
+//
+// Canonical contract: {environment, to_release_id?} per the Release
+// state machine — rollback flips an ACTIVE release back. When
+// to_release_id is omitted, the service rolls back to the prior
+// ACTIVE release for the environment ("undo last deploy" sugar).
+//
+// Dashboard sugar (LIVE-caught 2026-06-18): build_id may be supplied
+// instead of to_release_id. The handler resolves the release that
+// was created from the named build and treats it as to_release_id.
+// Lets the UI pass the user-facing build identifier without an
+// extra lookup round-trip.
 type rollbackRequest struct {
 	Environment string `json:"environment"`
-	ToReleaseID string `json:"to_release_id"`
+	ToReleaseID string `json:"to_release_id,omitempty"`
+	BuildID     string `json:"build_id,omitempty"`
 }
 
 // rollbackResponse is the JSON response for a successful rollback.
@@ -66,6 +90,7 @@ type rollbackResponse struct {
 type RollbackHandler struct {
 	projects   RollbackProjectStore
 	service    RollbackService
+	releases   RollbackReleaseLookup // nil-safe: when nil, build_id sugar is rejected
 	baseDomain string
 }
 
@@ -76,6 +101,13 @@ func NewRollbackHandler(projects RollbackProjectStore, service RollbackService, 
 		service:    service,
 		baseDomain: baseDomain,
 	}
+}
+
+// WithReleaseLookup wires the build_id → release_id resolver. Returns
+// the handler for fluent chaining at the wire-up site.
+func (h *RollbackHandler) WithReleaseLookup(rl RollbackReleaseLookup) *RollbackHandler {
+	h.releases = rl
+	return h
 }
 
 // Create handles POST /api/v1/projects/{name}/rollback.
@@ -106,6 +138,25 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if env == "" {
 		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
 		return
+	}
+
+	// Resolve dashboard sugar: build_id → to_release_id.
+	if req.BuildID != "" && req.ToReleaseID == "" {
+		if h.releases == nil {
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback by build_id not configured"))
+			return
+		}
+		relID, lookupErr := h.releases.GetLatestReleaseForBuild(ctx, uc.TenantID, req.BuildID)
+		if lookupErr != nil {
+			slog.Error("rollback: build_id lookup failed", "build_id", req.BuildID, "err", lookupErr)
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
+		if relID == "" {
+			writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("no release found for build_id"))
+			return
+		}
+		req.ToReleaseID = relID
 	}
 
 	// Look up project

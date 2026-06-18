@@ -142,7 +142,8 @@ func setupOrchestrator(
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &db.PostgresProjectStore{DB: dbAdapter}
-	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain)
+	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
+		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
 	promotionOrch := services.NewPromotionOrchestrator(services.PromotionOrchestratorDeps{
