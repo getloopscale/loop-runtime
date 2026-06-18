@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.20.0] - 2026-06-18
+
+### Added
 - loopzero-api install-config-contract (two-plane, AM6.5 Slice 3): chart now injects 137 engine runtime env vars (post-review F1 exclusion) — 110 non-secret via ConfigMap (documented in `charts/loopzero-api/CONFIG.md`) + 27 secret via referenced K8s Secret (documented in `charts/loopzero-api/SECRETS.md`, never inline). Adds per-backend ESO examples (OpenBao/AWS-SM/GCP-SM), opt-in Stakater Reloader (`reloader.enabled`), `values.example.yaml`, consumer `README.md`, and `values.schema.json` properties for every key (fail-fast `additionalProperties:false`). Hermetic Go guards (`infra/tests/charts/loopzero_api_install_contract_test.go`) enforce CONFIG.md/SECRETS.md set-equality vs the rendered chart + config/secret plane separation.
 - `loopzero-cloud` chart day-2 config hygiene (install-config-contract Slice 2): opt-in Reloader integration (`reloader.enabled` → `reloader.stakater.com/auto` on the Deployment so a rotated secret triggers a rolling restart; operator-installed controller, OFF by default — render byte-stable when disabled, ADR D1); a consumer `README.md` documenting the layered install (`-f values-<env>.yaml`) + existingSecret + ESO examples + rotation; and a hermetic secrets-by-reference guard (`loopzero-cloud-no-inline-secret_test.sh`) that fails if any committed values file inlines a secret value. 2 hermetic tests (12/0 + 4/0).
 - `loopzero-cloud` chart install-config docs (install-config-contract Slice 1, T3.1+T3.2): `SECRETS.md` (logical secret-key manifest + openssl generation for generated secrets + per-backend quick-start), `values.example.yaml` (commented config surface with `!!changeme!!` sentinels, schema-validated), and `examples/eso-{openbao,aws-sm,gcp-sm}.yaml` (ClusterSecretStore + ExternalSecret examples per backend — OpenBao/AWS Secrets Manager/GCP Secret Manager, ADR D2). 2 hermetic tests (9/0 + 30/0).
@@ -29,6 +43,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `pkg/quality/quarantineprotect/` Go quality gate (T0.2 do plan) — bloqueia PRs editando `archive/canonical-tests-v1/**` durante a janela do strangler-fig per ADR-2026-06-17-T3 D5. DELETE só permitido com marker `[ARCHIVE-DELETE]` no PR title. 7 hermetic tests PASS + wired em `task quality:gates:diff` + `loopzero-ops quality quarantine-protect` subcommand.
 - `archive/canonical-tests-v1/` quarantine directory (T0.1 do plan) — 8 SKILL.md dirs (cleanroom + cleanroom-drill + dogfood + dogfood-drill + chaos-test + chaos-test-drill + live-proof + contra-prova) + 16 local bash scripts (dogfood-* + cleanroom-canonical-chain-runner + live-proof-dev-public) + 3 drill orchestrators + drill-dogfood-journeys lib movidos via `git mv` (history preserved). README.md documenta status QUARANTINED READ-ONLY + invocation path post-move + DELETE policy. Per ADR D5 quarentena consultável — files remain executable via direct `bash archive/canonical-tests-v1/scripts/local/...` OR via task targets (path-updated).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
+
+
+### Changed
+- Governed re-anchor of the `script-count` quality baseline 409→411 (`infra/quality/script-count-baseline.json`) — reflects already-merged reviewed work that landed after the 2026-06-17 reconciliation without ratcheting; the install-config-contract slices are net-zero on .sh (their hermetic tests are Go). Owner-authorized; the script-minimization program remains the path to ratchet DOWN. `task quality:gates` GREEN.
+- install-config-contract Slice 1+2 hermetic tests homed as Go (`infra/tests/charts/loopzero_cloud_install_contract_test.go`) replacing 4 bash `*_test.sh` — keeps the contract coverage (secret manifest, ESO examples, Reloader opt-in, no-inline-secret guard) while respecting the un-homed-logic gate (test logic belongs in Go, not new shell). un-homed-logic back to baseline 153.
+- Hardened the `loopzero-cloud` chart config contract (install-config-contract Slice 1, T1.1): `values.schema.json` now `additionalProperties: false` so `helm install` fail-fasts on an unknown/typo'd top-level key; added the `existingSecret` value (anti-lock-in floor — secrets by reference, ADR D1), reconciled the schema with all real top-level keys (loopzero-common, imagePullSecrets, probes, metrics, networkPolicy, topologySpreadConstraints), and widened the `image.repository` pattern to accept a `:port` registry host. Default values + dev-public + prod overlays render GREEN; unknown keys rejected (install-config-contract-slice1-plan T1.1). T1.2 applies the same harden to the `loopzero-api` chart (additionalProperties:false + key reconciliation + registry :port pattern) — default + overlays GREEN.
+- **BREAKING (build): pinned `github.com/getloopscale/loopzero-contracts` to v0.1.0 (M5 version-pin cutover).**
+  Dropped the local `replace => ../../loopzero-contracts` in `pkg/go.mod` + `api/go.mod` and the
+  `../loopzero-contracts` entry from `go.work`; the engine now consumes the published module. `api/Dockerfile`
+  no longer needs the `loopzero-contracts` BuildKit build-context — it fetches the pinned **private** module
+  via `GOPRIVATE` + a short-lived token mounted as a buildx `--secret` (never baked in a layer). Engine
+  builds are now self-contained (no sibling working-tree dependency). Verified: `go build ./...` +
+  `go test ./pkg/...` GREEN; workspace resolves loopzero-contracts v0.1.0; operators build GREEN.
+- AM6 artifact pipeline is now **dual-channel + low-cost**: `develop` push builds only the
+  CHANGED services (paths-filter) and tags `:develop`/`:develop-<sha>` **unsigned** (fast/cheap);
+  a `v*` tag builds ALL 5 images + 13 charts with SBOM + provenance + keyless cosign and tags
+  `:X.Y.Z`/`:latest` (community-standard via `docker/metadata-action`). Low-cost levers: GHA layer
+  cache, amd64-only, `cancel-in-progress` on dev runs. `sign` is a reusable-workflow input,
+  true only on a real release tag.
+
+- `taskfiles/test.yml` 14 `test:dogfood:*` targets + `taskfiles/infra.yml` live-proof reference path-updated v1 → archive paths (T0.1). Chain antiga continua executável via `task` targets per ADR D5.
+- `.claude/rules/shell-scripts-allowlist.md` 20+ entries path-updated v1 → archive paths (T0.1). Allowlist intent preserved at new locations.
+- `.claude/rules/cleanroom-up-live-test-mandate.md` SKILL.md + script references path-updated (T0.1). Mandate scope confirmed per ADR D9 — does not apply to refactor of own gate.
+- `docs/operations/cleanroom-canonical-runbook.md` path references updated v1 → archive (T0.1).
+- `infra/scripts/local/{trio-dev-public,test-all-dev-public}.sh` callers of `live-proof-dev-public.sh` path-updated to archive (T0.1).
+
+
+- ROADMAP.md: M0-M8 dashboard journeys PAUSED até canonical-tests-rewrite-v2 entregar (ADR T3 Amendment 1). Refactor da suite é prerequisite — validar M0-M8 sobre base com débito conhecido produziria evidência frágil.
+
 
 ### Fixed
 - **P0 cross-project namespace corruption on promote (stale rewriter post-2026-06-07 multi-project refactor).**
@@ -92,42 +135,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   downstream phases staying pending. Hermetic regression locks: `TestEventTypeToCanonical
   Transitions_FailureSurfaces` (api/cmd) + `TestReleaseStateProjection_BuildPhaseFailures`
   (api/internal/aggregator).
-
-### Changed
-- Governed re-anchor of the `script-count` quality baseline 409→411 (`infra/quality/script-count-baseline.json`) — reflects already-merged reviewed work that landed after the 2026-06-17 reconciliation without ratcheting; the install-config-contract slices are net-zero on .sh (their hermetic tests are Go). Owner-authorized; the script-minimization program remains the path to ratchet DOWN. `task quality:gates` GREEN.
-- install-config-contract Slice 1+2 hermetic tests homed as Go (`infra/tests/charts/loopzero_cloud_install_contract_test.go`) replacing 4 bash `*_test.sh` — keeps the contract coverage (secret manifest, ESO examples, Reloader opt-in, no-inline-secret guard) while respecting the un-homed-logic gate (test logic belongs in Go, not new shell). un-homed-logic back to baseline 153.
-- Hardened the `loopzero-cloud` chart config contract (install-config-contract Slice 1, T1.1): `values.schema.json` now `additionalProperties: false` so `helm install` fail-fasts on an unknown/typo'd top-level key; added the `existingSecret` value (anti-lock-in floor — secrets by reference, ADR D1), reconciled the schema with all real top-level keys (loopzero-common, imagePullSecrets, probes, metrics, networkPolicy, topologySpreadConstraints), and widened the `image.repository` pattern to accept a `:port` registry host. Default values + dev-public + prod overlays render GREEN; unknown keys rejected (install-config-contract-slice1-plan T1.1). T1.2 applies the same harden to the `loopzero-api` chart (additionalProperties:false + key reconciliation + registry :port pattern) — default + overlays GREEN.
-- **BREAKING (build): pinned `github.com/getloopscale/loopzero-contracts` to v0.1.0 (M5 version-pin cutover).**
-  Dropped the local `replace => ../../loopzero-contracts` in `pkg/go.mod` + `api/go.mod` and the
-  `../loopzero-contracts` entry from `go.work`; the engine now consumes the published module. `api/Dockerfile`
-  no longer needs the `loopzero-contracts` BuildKit build-context — it fetches the pinned **private** module
-  via `GOPRIVATE` + a short-lived token mounted as a buildx `--secret` (never baked in a layer). Engine
-  builds are now self-contained (no sibling working-tree dependency). Verified: `go build ./...` +
-  `go test ./pkg/...` GREEN; workspace resolves loopzero-contracts v0.1.0; operators build GREEN.
-- AM6 artifact pipeline is now **dual-channel + low-cost**: `develop` push builds only the
-  CHANGED services (paths-filter) and tags `:develop`/`:develop-<sha>` **unsigned** (fast/cheap);
-  a `v*` tag builds ALL 5 images + 13 charts with SBOM + provenance + keyless cosign and tags
-  `:X.Y.Z`/`:latest` (community-standard via `docker/metadata-action`). Low-cost levers: GHA layer
-  cache, amd64-only, `cancel-in-progress` on dev runs. `sign` is a reusable-workflow input,
-  true only on a real release tag.
-
-- `taskfiles/test.yml` 14 `test:dogfood:*` targets + `taskfiles/infra.yml` live-proof reference path-updated v1 → archive paths (T0.1). Chain antiga continua executável via `task` targets per ADR D5.
-- `.claude/rules/shell-scripts-allowlist.md` 20+ entries path-updated v1 → archive paths (T0.1). Allowlist intent preserved at new locations.
-- `.claude/rules/cleanroom-up-live-test-mandate.md` SKILL.md + script references path-updated (T0.1). Mandate scope confirmed per ADR D9 — does not apply to refactor of own gate.
-- `docs/operations/cleanroom-canonical-runbook.md` path references updated v1 → archive (T0.1).
-- `infra/scripts/local/{trio-dev-public,test-all-dev-public}.sh` callers of `live-proof-dev-public.sh` path-updated to archive (T0.1).
-
-### Changed
-
-- ROADMAP.md: M0-M8 dashboard journeys PAUSED até canonical-tests-rewrite-v2 entregar (ADR T3 Amendment 1). Refactor da suite é prerequisite — validar M0-M8 sobre base com débito conhecido produziria evidência frágil.
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [0.19.0] - 2026-06-17
 
