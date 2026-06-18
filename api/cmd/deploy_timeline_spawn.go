@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
@@ -13,6 +14,12 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
+
+// _ keeps the db import (releaseStore was removed in v2 of the spawner
+// after the wall-clock ladder was replaced by an sse_events subscription;
+// preserve the dependency surface for the v1.1 follow-up that may need
+// FindReleaseForBuild for richer fan-in).
+var _ db.ReleaseStore = nil
 
 // makeDeployTimelineSpawn returns the canonical spawner callback wired
 // into BuildOrchestratorDeps. Per plan deploy-timeline-canonical-5-phases
@@ -24,12 +31,17 @@ import (
 // signal (release transitions: PENDING → ACTIVE → ROLLED_BACK), enough
 // for the v1 dashboard hero card while the remaining adapters mature.
 func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db.ReleaseStore) services.DeployTimelineSpawner {
-	if eventStore == nil || releaseStore == nil {
+	if eventStore == nil {
 		return nil
 	}
 	return func(ctx context.Context, deployID string) {
 		sink := aggregator.NewSSEEventSink(eventStore)
-		reader := aggregator.NewReleaseDBReader(&releaseStoreQuerier{store: releaseStore})
+		// v2 querier: subscribe to sse_events (the canonical orchestrator
+		// already emits build.started/build.succeeded/deploy.delivering/
+		// deploy.verifying/deploy.live/deploy.completed) and translate
+		// each into FSM-strict 5-phase transitions. Replaces the v1
+		// wall-clock ladder that emitted live.completed prematurely.
+		reader := aggregator.NewReleaseDBReader(&releaseStoreQuerier{eventStore: eventStore})
 		aggregator.SpawnFor(ctx, deployID, sink, []aggregator.SourceReader{reader})
 		slog.Default().Info("deploy_timeline aggregator spawned",
 			"deploy_id", deployID, "sources", 1)
@@ -55,64 +67,100 @@ func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db
 // FindReleaseForBuild + tenant-scoped query when the orchestrator
 // can pass tenant_id through the spawner signature.
 type releaseStoreQuerier struct {
-	store     db.ReleaseStore
-	startedAt time.Time
-	// nextRung is the index of the next ladder rung to emit. Each rung
-	// emits EXACTLY ONCE, in order — the FSM rejects same-state and
-	// out-of-order transitions, so a wall-clock pick that jumps over
-	// intermediate rungs would degrade the stream. Index-based walking
-	// guarantees Build/in_progress → Build/completed → Sign/in_progress
-	// → … → Live/completed without gaps OR repeats.
-	nextRung int
+	eventStore *sse.PostgresEventStore
+	mu         sync.Mutex
+	pending    []string
+	seen       map[string]bool
+	afterID    int64
 }
 
-// ladderSeconds is the time budget the v1 synthetic ladder gives each
-// rung before the next is allowed to emit. Values track the canonical
-// median timing for a single-app loopzerokit build (build 5-7min total).
-// atSecs is the MINIMUM wall-clock elapsed before the rung emits — the
-// index-based walker ensures each emits exactly once, in order, so
-// duplicate atSecs values are safe (they just mean two rungs can land
-// in the same poll tick).
-var ladderSeconds = []struct {
-	phase  string
-	state  string // mapped via releaseStateProjection in the reader
-	atSecs int
-}{
-	// Build phase: walk in_progress for ~4 min then completed.
-	{"build", "BUILD_IN_PROGRESS", 0},
-	{"build", "BUILD_COMPLETED", 240},
-	// Sign phase: ~40s window.
-	{"sign", "SIGN_IN_PROGRESS", 245},
-	{"sign", "SIGN_COMPLETED", 285},
-	// Release: ~5s window.
-	{"release", "PENDING", 290},
-	{"release", "ACTIVE", 295},
-	// Deploy: ~70s window (ArgoCD sync + pod up).
-	{"deploy", "DEPLOY_IN_PROGRESS", 300},
-	{"deploy", "DEPLOY_COMPLETED", 370},
-	// Live: 5s probe-up then terminal completed.
-	{"live", "LIVE_IN_PROGRESS", 375},
-	{"live", "LIVE_COMPLETED", 380},
+// eventTypeToCanonicalTransitions maps a real orchestrator event into
+// the canonical 5-phase FSM transitions it implies. Each event can
+// trigger 1-3 transitions because some real events compress multiple
+// FSM phases (e.g., build.succeeded means Build was done AND Sign ran
+// AND Sign is done — the canonical orchestrator doesn't emit a
+// separate "sign started" event because sign happens inline at
+// build completion).
+//
+// Returned state names are mapped by releaseStateProjection
+// (api/internal/aggregator/adapter_release_db.go) to the canonical
+// (phase, status) FSM tuple.
+func eventTypeToCanonicalTransitions(eventType string) []string {
+	switch eventType {
+	case "build.started":
+		return []string{"BUILD_IN_PROGRESS"}
+	case "build.succeeded":
+		// Build done. Sign happens inline as part of the canonical
+		// build pipeline (cosign-sign + sbom-app steps fire during
+		// the build workflow — surfaced by the J-17 stream). For the
+		// canonical 5-phase timeline we collapse: BUILD_COMPLETED
+		// implies Sign immediately starts and immediately completes.
+		return []string{"BUILD_COMPLETED", "SIGN_IN_PROGRESS", "SIGN_COMPLETED"}
+	case "build.failed", "build.cancelled":
+		return []string{} // terminal failure surfaces via existing build SSE
+	case "deploy.delivering":
+		// Manifests are being generated + pushed to gitops. This is
+		// the canonical Release phase.
+		return []string{"PENDING"} // → release/in_progress
+	case "deploy.verifying":
+		// Release done; the deploy is now in flight (ArgoCD sync +
+		// pod up). This is the canonical Deploy phase.
+		return []string{"ACTIVE", "DEPLOY_IN_PROGRESS"}
+	case "deploy.live":
+		// Pods are up + healthy. Live phase begins probing the URL.
+		return []string{"DEPLOY_COMPLETED", "LIVE_IN_PROGRESS"}
+	case "deploy.completed":
+		// Live URL responds 200. Canonical terminal.
+		return []string{"LIVE_COMPLETED"}
+	}
+	return nil
 }
 
 func (r *releaseStoreQuerier) QueryReleaseStatus(ctx context.Context, deployID string) (*aggregator.ReleaseStatusRow, error) {
-	if r.startedAt.IsZero() {
-		r.startedAt = time.Now().UTC()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.seen == nil {
+		r.seen = make(map[string]bool)
 	}
-	if r.nextRung >= len(ladderSeconds) {
-		// Ladder exhausted — nothing more to emit. Reader keeps polling
-		// but the nil row tells it there is no new signal.
-		return nil, nil
+
+	// Drain any pending transition first so the FSM walks one rung per
+	// poll tick (matches the strict in-order FSM contract).
+	if len(r.pending) > 0 {
+		next := r.pending[0]
+		r.pending = r.pending[1:]
+		return &aggregator.ReleaseStatusRow{
+			State:     next,
+			UpdatedAt: time.Now().UTC(),
+		}, nil
 	}
-	rung := ladderSeconds[r.nextRung]
-	elapsed := int(time.Since(r.startedAt).Seconds())
-	if elapsed < rung.atSecs {
-		// Not yet time for the next rung — heartbeat-only poll.
-		return nil, nil
+
+	// No pending → poll sse_events for new events since the last seen
+	// id. The canonical orchestrator already emits build.started /
+	// build.succeeded / deploy.delivering / deploy.verifying /
+	// deploy.live / deploy.completed — translate each into the
+	// canonical 5-phase FSM transitions it implies.
+	events, err := r.eventStore.GetAfter(ctx, deployID, r.afterID)
+	if err != nil {
+		return nil, err
 	}
-	r.nextRung++
-	return &aggregator.ReleaseStatusRow{
-		State:     rung.state,
-		UpdatedAt: time.Now().UTC(),
-	}, nil
+	for _, ev := range events {
+		if ev.ID > r.afterID {
+			r.afterID = ev.ID
+		}
+		for _, st := range eventTypeToCanonicalTransitions(ev.EventType) {
+			if !r.seen[st] {
+				r.seen[st] = true
+				r.pending = append(r.pending, st)
+			}
+		}
+	}
+	if len(r.pending) > 0 {
+		next := r.pending[0]
+		r.pending = r.pending[1:]
+		return &aggregator.ReleaseStatusRow{
+			State:     next,
+			UpdatedAt: time.Now().UTC(),
+		}, nil
+	}
+	return nil, nil
 }
