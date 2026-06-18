@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package scrub maps internal infrastructure identifiers to user-facing
+// product language before they leave the API boundary. Per Cross-Project
+// Rule 9 (loopzero/CLAUDE.md), internal terms NEVER reach user-facing output:
+// the scrub runs server-side at WRITE time (per plan ADR D4), so the SSE
+// event store never holds an unscrubbed term.
+//
+// Per plan ADR EC-1 absorption v1.1: the denylist is regex-based and
+// case-insensitive. Exact-match (v1.0 design) missed canonical variants
+// across casing and separators — the regex patterns in
+// canonicalScrubRules cover them.
+package scrub
+
+import "regexp"
+
+// PhaseEvent is the canonical 5-phase timeline event shape. Fields that
+// carry potentially-internal text MUST be scrubbed before emission.
+type PhaseEvent struct {
+	Phase           string
+	Status          string
+	DegradedReason  string
+	SubstateMessage string
+}
+
+// scrubRule pairs a compiled regex with its product-language replacement.
+type scrubRule struct {
+	pattern     *regexp.Regexp
+	replacement string
+}
+
+// canonicalScrubRules is the authoritative denylist→product-language map.
+// Each entry maps one or more case-insensitive variants of an internal
+// term to the canonical product-language equivalent the user sees.
+//
+// Source: blueprint § Q5 (12 mappings, 4 platforms — Vercel + Render +
+// the deployment system + LoopZero in-repo). See plan ADR D3.
+var canonicalScrubRules = []scrubRule{
+	// Cell topology — operator-defined cell-N + cell-runtime-N + cell-mgmt.
+	{regexp.MustCompile(`(?i)\bcell-[\w-]+\b`), "your team's runtime"},
+	// ArgoCD canonical variants — Pascal + lower + kebab + spaced.
+	{regexp.MustCompile(`(?i)\bargo[\s-]?cd\b`), "the deployment system"},
+	// Argo Rollouts canonical variants.
+	{regexp.MustCompile(`(?i)\bargo[\s-]?rollouts?\b`), "the rollout controller"},
+	// Argo Workflows.
+	{regexp.MustCompile(`(?i)\bargo[\s-]?workflows?\b`), "the build pipeline"},
+	// Sigstore cosign — image signing.
+	{regexp.MustCompile(`(?i)\bcosign\b`), "image signing"},
+	// SBOM / syft — supply-chain manifest.
+	{regexp.MustCompile(`(?i)\b(?:syft|sbom)\b`), "supply-chain manifest"},
+	// Build engines.
+	{regexp.MustCompile(`(?i)\bbuild[\s-]?kit\b`), "the build engine"},
+	{regexp.MustCompile(`(?i)\bkaniko\b`), "the build engine"},
+	// Gitea — never mention (per CR-9 + memory feedback_secret_canonical_no_hardcode).
+	{regexp.MustCompile(`(?i)\bgitea\b`), ""},
+	// Frontend bundlers — Vercel/Render hide these.
+	{regexp.MustCompile(`(?i)\bwebpack\b`), "the bundler"},
+	{regexp.MustCompile(`(?i)\bturbopack\b`), "the bundler"},
+	{regexp.MustCompile(`(?i)\besbuild\b`), "the bundler"},
+	// AWS Lambda — Vercel calls it "Function".
+	{regexp.MustCompile(`(?i)\blambda\b`), "Function"},
+}
+
+// ScrubEvent returns a copy of in with every internal-term field replaced
+// by its product-language equivalent. Pure function — safe to call from
+// any goroutine. Empty input returns empty output.
+func ScrubEvent(in PhaseEvent) PhaseEvent {
+	out := in
+	out.Phase = applyAll(in.Phase)
+	out.Status = applyAll(in.Status)
+	out.DegradedReason = applyAll(in.DegradedReason)
+	out.SubstateMessage = applyAll(in.SubstateMessage)
+	return out
+}
+
+// applyAll runs every canonical rule against s in declaration order.
+// Most-specific rules SHOULD come first in canonicalScrubRules to avoid
+// partial-match underreach (a broader rule consuming text that a
+// narrower rule would have rewritten more precisely).
+func applyAll(s string) string {
+	for _, r := range canonicalScrubRules {
+		s = r.pattern.ReplaceAllString(s, r.replacement)
+	}
+	return s
+}
