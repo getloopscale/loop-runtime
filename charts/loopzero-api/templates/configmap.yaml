@@ -111,8 +111,6 @@ data:
   LOOPZERO_ENV_BLOCKLIST_MODE: {{ .Values.config.loopzeroEnvBlocklistMode | quote }}
   LOOPZERO_ENV_READINESS_CHECKER: {{ .Values.config.loopzeroEnvReadinessChecker | quote }}
   LOOPZERO_TRUSTED_PROXY_CIDRS: {{ .Values.config.loopzeroTrustedProxyCidrs | quote }}
-  TENANT_NAMESPACE: {{ .Values.config.tenantNamespace | quote }}
-  LOOPZERO_CELL_ID: {{ .Values.config.loopzeroCellId | quote }}
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}
   LOOPZERO_TRACING_ENABLED: {{ .Values.config.loopzeroTracingEnabled | quote }}
   LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}

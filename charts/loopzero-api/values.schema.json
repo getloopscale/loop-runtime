@@ -623,12 +623,6 @@
         "loopzeroTrustedProxyCidrs": {
           "type": "string"
         },
-        "tenantNamespace": {
-          "type": "string"
-        },
-        "loopzeroCellId": {
-          "type": "string"
-        },
         "otelExporterOtlpEndpoint": {
           "type": "string"
         },

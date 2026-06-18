@@ -182,6 +182,9 @@ func TestLoopZeroApiConfigSecretSeparation(t *testing.T) {
 	for _, k := range mdTableKeys(t, filepath.Join(c, "SECRETS.md")) {
 		secretSet[k] = true
 	}
+	if len(secretSet) == 0 {
+		t.Fatal("SECRETS.md parsed zero keys — separation guard would pass vacuously (review F2)")
+	}
 	out := helmRequired(t, c)
 	for _, k := range renderedKeys(t, out, "ConfigMap") {
 		if secretSet[k] {
@@ -237,6 +240,24 @@ func TestLoopZeroApiESOExamples(t *testing.T) {
 				t.Errorf("%s missing secretKey %s", fn, k)
 			}
 		}
+	}
+}
+
+// F3 (review) — fail-closed: secrets.create=false without existingSecret must NOT render
+// a dangling secretRef; the template must fail loudly instead of producing an un-startable pod.
+func TestLoopZeroApiSecretSourceFailClosed(t *testing.T) {
+	if _, err := exec.LookPath("helm"); err != nil {
+		t.Fatal("helm not installed — fail-closed guard cannot run (EC-4)")
+	}
+	c := apiChartDir(t)
+	// Invalid combo → helm template MUST fail.
+	out, err := exec.Command("helm", "template", c, "--set", "secrets.create=false").CombinedOutput()
+	if err == nil {
+		t.Errorf("helm template with secrets.create=false + no existingSecret should FAIL (dangling secretRef), but succeeded:\n%s", out)
+	}
+	// Valid combo (existingSecret) → must succeed even with create=false.
+	if _, err := exec.Command("helm", "template", c, "--set", "secrets.create=false", "--set", "secrets.existingSecret=loopzero-api-secrets").CombinedOutput(); err != nil {
+		t.Errorf("helm template with create=false + existingSecret should succeed: %v", err)
 	}
 }
 

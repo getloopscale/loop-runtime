@@ -113,11 +113,16 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `LOOPZERO_ENV_BLOCKLIST_MODE` | (empty) | N | - | env blocklist mode |
 | `LOOPZERO_ENV_READINESS_CHECKER` | (empty) | N | - | env readiness checker mode |
 | `LOOPZERO_TRUSTED_PROXY_CIDRS` | (empty) | N | - | trusted proxy CIDRs |
-| `TENANT_NAMESPACE` | (empty) | N | - | tenant namespace (operator-set per pod) |
-| `LOOPZERO_CELL_ID` | (empty) | N | - | cell id (operator-set per pod) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | N | internal-url | OTel collector endpoint |
 | `LOOPZERO_TRACING_ENABLED` | `false` | N | - | OTel tracing opt-in |
 | `LOOPZERO_PPROF_ADDR` | (empty) | N | - | pprof listen addr |
 | `LOOPZERO_PPROF_ENABLED` | `false` | N | - | pprof gate |
 
 > **public-url** = browser-facing `https://`; **internal-url** = cluster DNS `http://`. Never mix (redirect-loop bug class).
+
+## Deliberately NOT chart knobs (operator/topology-set)
+
+These env vars the engine reads are **intentionally excluded** from this ConfigMap (review F1 / AR-S3-01) — listed as prose, not table rows, so they are not counted as config keys:
+
+- **TENANT_NAMESPACE** — inert/deprecated per ADR-0018; a source-guard test forbids any code from reading it (const `loopzero-system`). Injecting it would re-publish a closed foot-gun.
+- **LOOPZERO_CELL_ID** — per-controller-instance value (operator/topology-set at pod creation); a single chart-wide ConfigMap cannot express per-cell identity in multi-cell.
