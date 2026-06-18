@@ -120,6 +120,17 @@ func releaseStateProjection(state string) (phase, status string, terminal bool) 
 		return "live", "in_progress", false
 	case "LIVE_COMPLETED":
 		return "live", "completed", true
+	// Canonical build-phase terminal failures emitted by the v1
+	// spawn-site querier when build.failed / build.cancelled SSE
+	// events arrive. Phase=build (NOT release — the failure is upstream
+	// of release) so the deploy timeline hero renders the failed step
+	// at the correct position in the 5-phase ladder. Sponsor LIVE-caught
+	// 2026-06-18: without these, build.failed mapped to [] and the hero
+	// froze in BUILD_IN_PROGRESS forever.
+	case "BUILD_FAILED":
+		return "build", "failed", true
+	case "BUILD_CANCELLED":
+		return "build", "canceled", true
 	// Canonical release-row states (used by real FindReleaseForBuild
 	// in v1.1 — kept for backward-compat + the existing
 	// TestReleaseDBReader hermetic tests).

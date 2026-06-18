@@ -26,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `archive/canonical-tests-v1/` quarantine directory (T0.1 do plan) — 8 SKILL.md dirs (cleanroom + cleanroom-drill + dogfood + dogfood-drill + chaos-test + chaos-test-drill + live-proof + contra-prova) + 16 local bash scripts (dogfood-* + cleanroom-canonical-chain-runner + live-proof-dev-public) + 3 drill orchestrators + drill-dogfood-journeys lib movidos via `git mv` (history preserved). README.md documenta status QUARANTINED READ-ONLY + invocation path post-move + DELETE policy. Per ADR D5 quarentena consultável — files remain executable via direct `bash archive/canonical-tests-v1/scripts/local/...` OR via task targets (path-updated).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
+### Fixed
+- **Deploy timeline hero stuck on "Deploying / Awaiting events" when a build fails.**
+  The canonical aggregator mapper (`api/cmd/deploy_timeline_spawn.go`) returned `[]` for
+  `build.failed` / `build.cancelled` on the false premise that "terminal failure surfaces via
+  existing build SSE" — but the deploy timeline hero ONLY consumes the aggregator, so the
+  empty mapping froze the hero in `BUILD_IN_PROGRESS` forever while the DB already had
+  `status=FAILED` for minutes (sponsor LIVE-caught 2026-06-18 against `build-5a1c7e38a809332e`).
+  Mapper now emits the canonical synthetic states `BUILD_FAILED` / `BUILD_CANCELLED`, projected
+  by `api/internal/aggregator/adapter_release_db.go` to `(phase=build, status=failed|canceled,
+  terminal=true)` so the hero renders the failed Build step at the correct ladder position with
+  downstream phases staying pending. Hermetic regression locks: `TestEventTypeToCanonical
+  Transitions_FailureSurfaces` (api/cmd) + `TestReleaseStateProjection_BuildPhaseFailures`
+  (api/internal/aggregator).
+
 ### Changed
 - **BREAKING (build): pinned `github.com/getloopscale/loopzero-contracts` to v0.1.0 (M5 version-pin cutover).**
   Dropped the local `replace => ../../loopzero-contracts` in `pkg/go.mod` + `api/go.mod` and the
