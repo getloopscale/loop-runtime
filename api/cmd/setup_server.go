@@ -16,6 +16,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
@@ -172,6 +174,16 @@ func buildServerConfig(
 		sc.SourceBucket = cfg.SourceBucket
 		sc.EventStore = stores.EventStore
 		sc.BuildStoreReader = stores.BuildStoreReader
+		// T5.1 — canonical Deploy Timeline read-store. Composes the
+		// build-store reader (BuildLookup → tenant_id) and an SSE event
+		// reader adapter into the routes.DeployTimelineEventStore contract.
+		// nil-safe: when either dependency is nil, the route is omitted.
+		if blu, ok := stores.BuildStoreReader.(aggregator.BuildLookup); ok && stores.EventStore != nil {
+			sc.DeployTimelineStore = aggregator.NewPostgresDeployTimelineStore(
+				blu,
+				adapters.NewDeployTimelineSSEReader(stores.EventStore),
+			)
+		}
 		sc.SecretStore = stores.SecretStore
 		sc.BootstrapStore = stores.BootstrapStore
 		sc.BootstrapSecret = cfg.BootstrapSecret

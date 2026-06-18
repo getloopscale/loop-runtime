@@ -429,6 +429,20 @@ func registerProtectedRoutes(
 	if cfg.StatusSSEHandler != nil {
 		r.Get("/api/v1/projects/{name}/signals/stream", cfg.StatusSSEHandler.Get)
 	}
+	// T5.1 — canonical Deploy Timeline SSE stream per plan
+	// deploy-timeline-canonical-5-phases. The TenantResolver pulls
+	// tenant from middleware.GetUserContext (same auth contract as
+	// every other authenticated route in this group).
+	if cfg.DeployTimelineStore != nil {
+		routes.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore,
+			func(ctx context.Context) (string, bool) {
+				uc := middleware.GetUserContext(ctx)
+				if uc == nil || uc.TenantID == "" {
+					return "", false
+				}
+				return uc.TenantID, true
+			})
+	}
 	if cfg.ScaleHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
