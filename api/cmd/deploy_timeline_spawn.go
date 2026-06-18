@@ -57,61 +57,62 @@ func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db
 type releaseStoreQuerier struct {
 	store     db.ReleaseStore
 	startedAt time.Time
-	// lastEmitted is the synthetic state returned on the previous poll.
-	// Dedup is required because the ReleaseDBReader emits every poll
-	// tick and the strict FSM rejects same-state transitions (in_progress
-	// → in_progress is invalid → DEGRADED storm).
-	lastEmitted string
+	// nextRung is the index of the next ladder rung to emit. Each rung
+	// emits EXACTLY ONCE, in order — the FSM rejects same-state and
+	// out-of-order transitions, so a wall-clock pick that jumps over
+	// intermediate rungs would degrade the stream. Index-based walking
+	// guarantees Build/in_progress → Build/completed → Sign/in_progress
+	// → … → Live/completed without gaps OR repeats.
+	nextRung int
 }
 
-// laddersSeconds is the time budget the v1 synthetic ladder gives each
-// phase before advancing. Values mirror canonical median observed
-// in the build-86c2cef499bc6f9b reference build (~4 minutes total).
+// ladderSeconds is the time budget the v1 synthetic ladder gives each
+// rung before the next is allowed to emit. Values track the canonical
+// median timing for a single-app loopzerokit build (build 5-7min total).
+// atSecs is the MINIMUM wall-clock elapsed before the rung emits — the
+// index-based walker ensures each emits exactly once, in order, so
+// duplicate atSecs values are safe (they just mean two rungs can land
+// in the same poll tick).
 var ladderSeconds = []struct {
-	phase   string
-	state   string // mapped via releaseStateProjection in the reader
-	atSecs  int
+	phase  string
+	state  string // mapped via releaseStateProjection in the reader
+	atSecs int
 }{
-	// Build phase: walk in_progress for ~2.5 min then completed.
+	// Build phase: walk in_progress for ~4 min then completed.
 	{"build", "BUILD_IN_PROGRESS", 0},
-	{"build", "BUILD_COMPLETED", 150},
-	// Sign phase: ~30s window.
-	{"sign", "SIGN_IN_PROGRESS", 150},
-	{"sign", "SIGN_COMPLETED", 180},
+	{"build", "BUILD_COMPLETED", 240},
+	// Sign phase: ~40s window.
+	{"sign", "SIGN_IN_PROGRESS", 245},
+	{"sign", "SIGN_COMPLETED", 285},
 	// Release: ~5s window.
-	{"release", "PENDING", 180},
-	{"release", "ACTIVE", 185},
+	{"release", "PENDING", 290},
+	{"release", "ACTIVE", 295},
 	// Deploy: ~70s window (ArgoCD sync + pod up).
-	{"deploy", "DEPLOY_IN_PROGRESS", 185},
-	{"deploy", "DEPLOY_COMPLETED", 255},
+	{"deploy", "DEPLOY_IN_PROGRESS", 300},
+	{"deploy", "DEPLOY_COMPLETED", 370},
 	// Live: 5s probe-up then terminal completed.
-	{"live", "LIVE_IN_PROGRESS", 255},
-	{"live", "LIVE_COMPLETED", 260},
+	{"live", "LIVE_IN_PROGRESS", 375},
+	{"live", "LIVE_COMPLETED", 380},
 }
 
 func (r *releaseStoreQuerier) QueryReleaseStatus(ctx context.Context, deployID string) (*aggregator.ReleaseStatusRow, error) {
 	if r.startedAt.IsZero() {
 		r.startedAt = time.Now().UTC()
 	}
-	elapsed := int(time.Since(r.startedAt).Seconds())
-	// Walk the ladder forward — pick the LAST rung whose atSecs <= elapsed.
-	pick := ladderSeconds[0]
-	for _, rung := range ladderSeconds {
-		if rung.atSecs <= elapsed {
-			pick = rung
-		}
-	}
-	// Dedup: same state as previous poll → return nil so the reader
-	// emits no PhaseEvent. The reader's `if row == nil { return false, nil }`
-	// branch handles this gracefully and keeps the poll cycle alive.
-	// Strict FSM rejects same-state transitions; without dedup the
-	// aggregator emits 1 valid event then 100+ DEGRADED events.
-	if pick.state == r.lastEmitted {
+	if r.nextRung >= len(ladderSeconds) {
+		// Ladder exhausted — nothing more to emit. Reader keeps polling
+		// but the nil row tells it there is no new signal.
 		return nil, nil
 	}
-	r.lastEmitted = pick.state
+	rung := ladderSeconds[r.nextRung]
+	elapsed := int(time.Since(r.startedAt).Seconds())
+	if elapsed < rung.atSecs {
+		// Not yet time for the next rung — heartbeat-only poll.
+		return nil, nil
+	}
+	r.nextRung++
 	return &aggregator.ReleaseStatusRow{
-		State:     pick.state,
+		State:     rung.state,
 		UpdatedAt: time.Now().UTC(),
 	}, nil
 }
