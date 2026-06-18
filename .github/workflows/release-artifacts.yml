@@ -69,6 +69,7 @@ jobs:
       dockerfile: ${{ matrix.dockerfile }}
       context: ${{ matrix.context }}
       sign: ${{ needs.plan.outputs.sign == 'true' }}
+    secrets: inherit
   charts:
     needs: plan
     if: ${{ needs.plan.outputs.charts == 'true' }}

@@ -11,6 +11,9 @@ on:
       context:    { required: false, type: string,  default: "." }
       registry:   { required: false, type: string,  default: "ghcr.io/getloopscale" }
       sign:       { required: false, type: boolean, default: false }   # SBOM+provenance+cosign only on release
+    secrets:
+      GOMOD_TOKEN:                                                      # cross-repo read for the pinned private loopzero-contracts module (M5)
+        required: false
 permissions:
   contents: read
   packages: write
@@ -51,6 +54,8 @@ jobs:
           provenance: ${{ inputs.sign }}
           cache-from: type=gha,scope=${{ inputs.image }}
           cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+          secrets: |
+            gomod_token=${{ secrets.GOMOD_TOKEN }}
       - name: Install cosign
         if: ${{ inputs.sign }}
         uses: sigstore/cosign-installer@v3
