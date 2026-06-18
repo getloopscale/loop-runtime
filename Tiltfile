@@ -153,7 +153,14 @@ docker_build(
     "loopzero-api",
     context=".",
     dockerfile="api/Dockerfile",
-    only=["api/", "pkg/", "go.work", "go.work.sum", "operators/go.mod", "operators/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
+    # M6 Phase 2 (commit 4984365b 2026-06-17) extracted operators/api as a
+    # standalone Go module. api/Dockerfile COPYs operators/api/go.mod,
+    # operators/api/go.sum, and operators/api/v1 explicitly. Without
+    # adding operators/api/ to this `only=` list, those files are pruned
+    # from the build context and BuildKit fails with
+    # "/operators/api/go.sum: not found". Cleanroom catch 2026-06-18 —
+    # same stale-helper-post-architecture-refactor class as PR #88.
+    only=["api/", "pkg/", "go.work", "go.work.sum", "operators/api/", "operators/go.mod", "operators/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
 )
 
 # T1.1.c (plan 2026-06-11-code-review-remediation-147-findings v1.2) per ADR D1:
