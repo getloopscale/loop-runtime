@@ -38,11 +38,12 @@ def no(msg):
     global fail; fail += 1; print(f"  FAIL: {msg}")
 
 # clean tree
-for f in ['values.yaml','values.example.yaml']:
-    p = os.path.join(chart, f)
-    if not os.path.exists(p): continue
+import glob as _glob
+vfiles = sorted(_glob.glob(os.path.join(chart, 'values*.yaml')))
+assert vfiles, 'no values*.yaml found to scan'
+for p in vfiles:
     v = scan(p)
-    if v: no(f"inline secret in {f}: {v}")
+    if v: no(f"inline secret in {os.path.basename(p)}: {v}")
     else: ok()
 
 # positive self-check: planted secret MUST be flagged
