@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -109,11 +110,22 @@ func (f *fakeRollbackGitPusher) Push(_ context.Context, _ GitOpsPushOpts) (strin
 }
 
 type fakeRollbackSyncClient struct {
-	synced bool
+	synced       bool
+	waitCalled   bool
+	waitErr      error
 }
 
 func (f *fakeRollbackSyncClient) TriggerSync(_ context.Context, _ string) error {
 	f.synced = true
+	return nil
+}
+
+func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+	f.waitCalled = true
+	return f.waitErr
+}
+
+func (f *fakeRollbackSyncClient) ForceReconcile(_ context.Context, _ string) error {
 	return nil
 }
 
@@ -514,5 +526,97 @@ func TestRollback_NoBaseDomain_EmptyURL(t *testing.T) {
 	}
 	if result.URL != "" {
 		t.Errorf("URL should be empty when no base domain, got %q", result.URL)
+	}
+}
+
+// TestRollback_WaitsForSyncBeforeFlippingDB confirms the canonical
+// safety invariant: DB transitions ROLLING_BACK → ROLLED_BACK + target
+// → ACTIVE happen ONLY AFTER the delivery layer confirms the deployment
+// infrastructure has synced + pods are healthy. If WaitForSync fails,
+// the DB does NOT flip and the rollback is marked failed.
+//
+// LIVE-caught 2026-06-18 sponsor mandate: "o banco deve ser atualizado
+// somente COM GARANTIA MAXIMA QUE O ROLLBACK aconteceu". The previous
+// flow trigger-sync-then-flip risked DB lying about ACTIVE state while
+// pods still served the rolled-back code.
+func TestRollback_WaitsForSyncBeforeFlippingDB(t *testing.T) {
+	rs := newFakeRollbackReleaseStore()
+	activeRelease := &db.Release{
+		ID: "rel-active", BuildID: "build-active", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseActive), GitCommit: "sha-active",
+	}
+	targetRelease := &db.Release{
+		ID: "rel-target", BuildID: "build-target", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "sha-target",
+	}
+	rs.releases["rel-active"] = activeRelease
+	rs.releases["rel-target"] = targetRelease
+	rs.activeByEnv["tn-1-proj-1-production"] = activeRelease
+	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
+
+	syncClient := &fakeRollbackSyncClient{waitErr: nil} // sync succeeds
+	gitReader := &fakeRollbackGitReader{manifests: map[string][]byte{"sha-target": []byte("apps:\n  - name: app")}}
+	gitPusher := &fakeRollbackGitPusher{}
+
+	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
+		Releases:   rs,
+		EnvTargets: newFakeRollbackEnvTargetStore(),
+		Locker:     &fakeRollbackLocker{},
+		GitReader:  gitReader,
+		GitPusher:  gitPusher,
+		Sync:       syncClient,
+		Logger:     slog.Default(),
+	})
+
+	_, err := orch.Rollback(context.Background(), RollbackRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
+	})
+	if err != nil {
+		t.Fatalf("rollback err: %v", err)
+	}
+	if !syncClient.waitCalled {
+		t.Errorf("WaitForSync NOT called — DB safety invariant violated: rollback flipped state without confirming sync")
+	}
+}
+
+// TestRollback_SyncWaitFails_DBStaysInRollingBack confirms that when
+// WaitForSync errors, the DB does NOT flip current to ROLLED_BACK and
+// the rollback is reported failed. Closes the LIVE risk of DB lying
+// ACTIVE while pods still serve the rolled-back code.
+func TestRollback_SyncWaitFails_DBStaysInRollingBack(t *testing.T) {
+	rs := newFakeRollbackReleaseStore()
+	activeRelease := &db.Release{
+		ID: "rel-active", BuildID: "build-active", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseActive), GitCommit: "sha-active",
+	}
+	targetRelease := &db.Release{
+		ID: "rel-target", BuildID: "build-target", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "sha-target",
+	}
+	rs.releases["rel-active"] = activeRelease
+	rs.releases["rel-target"] = targetRelease
+	rs.activeByEnv["tn-1-proj-1-production"] = activeRelease
+	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
+
+	syncClient := &fakeRollbackSyncClient{waitErr: fmt.Errorf("argo sync timeout")}
+	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
+		Releases:   rs,
+		EnvTargets: newFakeRollbackEnvTargetStore(),
+		Locker:     &fakeRollbackLocker{},
+		GitReader:  &fakeRollbackGitReader{manifests: map[string][]byte{"sha-target": []byte("apps: []")}},
+		GitPusher:  &fakeRollbackGitPusher{},
+		Sync:       syncClient,
+		Logger:     slog.Default(),
+	})
+
+	_, err := orch.Rollback(context.Background(), RollbackRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
+	})
+	if err == nil {
+		t.Fatalf("expected error when WaitForSync fails")
+	}
+	// Sync wait failure → release stays in ROLLBACK_FAILED, NOT ROLLED_BACK.
+	if rs.lastStatus["rel-active"] == string(statemachine.ReleaseRollbackCompleted) {
+		t.Errorf("DB SAFETY VIOLATION: release marked ROLLED_BACK after sync wait failed (expected ROLLBACK_FAILED)")
 	}
 }

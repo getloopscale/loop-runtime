@@ -130,15 +130,20 @@ func setupOrchestrator(
 		Logger: logger,
 	})
 
-	// Rollback orchestrator — coordinates release rollback with lock + state machine
+	// Rollback orchestrator — coordinates release rollback with lock + state machine.
+	// ArgocdSyncTimeout closes the LIVE sponsor mandate (2026-06-18): the
+	// release-state flip happens ONLY after sync confirmation, never on
+	// trigger-and-hope. Default 120s suffices for single-app loopzerokit;
+	// production-grade monorepo deploys inherit cfg.ArgocdSyncTimeout.
 	rollbackOrch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
-		Releases:   stores.ReleaseStore,
-		EnvTargets: stores.EnvTargetStore,
-		GitReader:  workflows.GitOpsPusher,
-		GitPusher:  workflows.GitOpsPusher,
-		Sync:       workflows.SyncClient,
-		Locker:     stores.Locker,
-		Logger:     logger,
+		Releases:          stores.ReleaseStore,
+		EnvTargets:        stores.EnvTargetStore,
+		GitReader:         workflows.GitOpsPusher,
+		GitPusher:         workflows.GitOpsPusher,
+		Sync:              workflows.SyncClient,
+		Locker:            stores.Locker,
+		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+		Logger:            logger,
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &db.PostgresProjectStore{DB: dbAdapter}

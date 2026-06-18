@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -43,6 +44,12 @@ type RollbackGitOpsPusher interface {
 // RollbackSyncClient abstracts ArgoCD sync operations (DIP).
 type RollbackSyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
+	// WaitForSync blocks until the deployment infrastructure confirms
+	// the gitops manifest has been applied AND the target workloads
+	// are healthy (or until timeout fires). Required for the canonical
+	// "DB safety invariant" — release state flip happens ONLY after
+	// this returns nil. LIVE-caught 2026-06-18 sponsor mandate.
+	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
 }
 
 // RollbackOrchestratorDeps contains all dependencies for the rollback orchestrator.
@@ -54,7 +61,11 @@ type RollbackOrchestratorDeps struct {
 	Sync       RollbackSyncClient
 	Locker     EnvironmentLocker
 	Delivery   DeliveryActivator // MEET-009: polymorphic rollback delivery
-	Logger     *slog.Logger
+	// ArgocdSyncTimeout bounds the post-trigger sync confirmation wait.
+	// LIVE-caught 2026-06-18 sponsor mandate: DB state flip requires
+	// sync verification (not just trigger). Zero defaults to 120s.
+	ArgocdSyncTimeout time.Duration
+	Logger            *slog.Logger
 }
 
 // RollbackRequest contains the inputs for a rollback operation.
@@ -201,6 +212,19 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
 			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
 				fmt.Errorf("rollback: sync trigger failed for %s: %w", appName, syncErr))
+		}
+		// LIVE-caught 2026-06-18 sponsor mandate: "o banco deve ser
+		// atualizado somente COM GARANTIA MAXIMA QUE O ROLLBACK
+		// aconteceu". TriggerSync alone returns immediately + the
+		// deployment infrastructure might fail mid-sync. Wait for
+		// real confirmation before letting Phase 5 flip DB state.
+		timeout := o.deps.ArgocdSyncTimeout
+		if timeout == 0 {
+			timeout = 120 * time.Second
+		}
+		if waitErr := o.deps.Sync.WaitForSync(ctx, appName, timeout, nil); waitErr != nil {
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
+				fmt.Errorf("rollback: sync wait failed for %s: %w", appName, waitErr))
 		}
 	}
 
