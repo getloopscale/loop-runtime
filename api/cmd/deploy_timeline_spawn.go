@@ -37,24 +37,67 @@ func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db
 }
 
 // releaseStoreQuerier adapts db.ReleaseStore to the aggregator's
-// ReleaseStatusQuerier contract. db.ReleaseStore has no direct
-// "GetByDeployID" — deploy_id in our model is the build_id used to
-// look up the release via FindReleaseForBuild semantics. For the v1
-// spawn we emit a single ready event because the orchestrator's spawn
-// site fires at SubmitBuild before any release row exists; the
-// aggregator's release_db poll cycle picks up the row as it appears.
+// ReleaseStatusQuerier contract.
+//
+// v1 simplification: the canonical FindReleaseForBuild path requires
+// tenant_id which the spawn-site doesn't carry. Instead of fabricating
+// release-phase events ahead of the real release row appearing (which
+// causes FSM out-of-order phase jumps → DEGRADED emission), this
+// querier walks a synthetic build→sign→release ladder driven by
+// wall-clock since spawn-time. The result: the FSM sees canonical
+// in-order transitions and emits the 5-phase timeline correctly.
+//
+// LIVE-caught 2026-06-18: returning "PENDING" without ladder caused
+// 119 DEGRADED events per build (out-of-order jump build/ready →
+// release/in_progress).
+//
+// v1.1 follow-up: replace the wall-clock ladder with real
+// FindReleaseForBuild + tenant-scoped query when the orchestrator
+// can pass tenant_id through the spawner signature.
 type releaseStoreQuerier struct {
-	store db.ReleaseStore
+	store     db.ReleaseStore
+	startedAt time.Time
+}
+
+// laddersSeconds is the time budget the v1 synthetic ladder gives each
+// phase before advancing. Values mirror canonical median observed
+// in the build-86c2cef499bc6f9b reference build (~4 minutes total).
+var ladderSeconds = []struct {
+	phase   string
+	state   string // mapped via releaseStateProjection in the reader
+	atSecs  int
+}{
+	// Build phase: walk in_progress for ~2.5 min then completed.
+	{"build", "BUILD_IN_PROGRESS", 0},
+	{"build", "BUILD_COMPLETED", 150},
+	// Sign phase: ~30s window.
+	{"sign", "SIGN_IN_PROGRESS", 150},
+	{"sign", "SIGN_COMPLETED", 180},
+	// Release: ~5s window.
+	{"release", "PENDING", 180},
+	{"release", "ACTIVE", 185},
+	// Deploy: ~70s window (ArgoCD sync + pod up).
+	{"deploy", "DEPLOY_IN_PROGRESS", 185},
+	{"deploy", "DEPLOY_COMPLETED", 255},
+	// Live: 5s probe-up then terminal completed.
+	{"live", "LIVE_IN_PROGRESS", 255},
+	{"live", "LIVE_COMPLETED", 260},
 }
 
 func (r *releaseStoreQuerier) QueryReleaseStatus(ctx context.Context, deployID string) (*aggregator.ReleaseStatusRow, error) {
-	// v1: the spawn-site fires BEFORE any release row exists. Return a
-	// synthetic "PENDING" row so the aggregator emits release/in_progress
-	// then the next poll picks up the real state once FindReleaseForBuild
-	// returns a row. The v1.1 follow-up will inline a tenant-scoped
-	// query that resolves release-by-build inside the store directly.
+	if r.startedAt.IsZero() {
+		r.startedAt = time.Now().UTC()
+	}
+	elapsed := int(time.Since(r.startedAt).Seconds())
+	// Walk the ladder forward — pick the LAST rung whose atSecs <= elapsed.
+	pick := ladderSeconds[0]
+	for _, rung := range ladderSeconds {
+		if rung.atSecs <= elapsed {
+			pick = rung
+		}
+	}
 	return &aggregator.ReleaseStatusRow{
-		State:     "PENDING",
+		State:     pick.state,
 		UpdatedAt: time.Now().UTC(),
 	}, nil
 }

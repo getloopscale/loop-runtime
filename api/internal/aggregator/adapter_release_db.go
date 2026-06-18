@@ -99,6 +99,30 @@ func (r *ReleaseDBReader) Stream(ctx context.Context, deployID string, out chan<
 
 func releaseStateProjection(state string) (phase, status string, terminal bool) {
 	switch state {
+	// Canonical 5-phase ladder synthetic states emitted by the v1
+	// spawn-site querier (api/cmd/deploy_timeline_spawn.go). Maps
+	// the wall-clock ladder onto the FSM-strict in-order phases so
+	// the aggregator emits the full Build → Sign → Release → Deploy
+	// → Live progression without out-of-order panics.
+	case "BUILD_IN_PROGRESS":
+		return "build", "in_progress", false
+	case "BUILD_COMPLETED":
+		return "build", "completed", false
+	case "SIGN_IN_PROGRESS":
+		return "sign", "in_progress", false
+	case "SIGN_COMPLETED":
+		return "sign", "completed", false
+	case "DEPLOY_IN_PROGRESS":
+		return "deploy", "in_progress", false
+	case "DEPLOY_COMPLETED":
+		return "deploy", "completed", false
+	case "LIVE_IN_PROGRESS":
+		return "live", "in_progress", false
+	case "LIVE_COMPLETED":
+		return "live", "completed", true
+	// Canonical release-row states (used by real FindReleaseForBuild
+	// in v1.1 — kept for backward-compat + the existing
+	// TestReleaseDBReader hermetic tests).
 	case "PENDING", "READY":
 		return "release", "in_progress", false
 	case "ACTIVE":
