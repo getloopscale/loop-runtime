@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
 ### Changed
+- AM6 artifact pipeline is now **dual-channel + low-cost**: `develop` push builds only the
+  CHANGED services (paths-filter) and tags `:develop`/`:develop-<sha>` **unsigned** (fast/cheap);
+  a `v*` tag builds ALL 5 images + 13 charts with SBOM + provenance + keyless cosign and tags
+  `:X.Y.Z`/`:latest` (community-standard via `docker/metadata-action`). Low-cost levers: GHA layer
+  cache, amd64-only, `cancel-in-progress` on dev runs. `sign` is a reusable-workflow input,
+  true only on a real release tag.
 
 - `taskfiles/test.yml` 14 `test:dogfood:*` targets + `taskfiles/infra.yml` live-proof reference path-updated v1 → archive paths (T0.1). Chain antiga continua executável via `task` targets per ADR D5.
 - `.claude/rules/shell-scripts-allowlist.md` 20+ entries path-updated v1 → archive paths (T0.1). Allowlist intent preserved at new locations.

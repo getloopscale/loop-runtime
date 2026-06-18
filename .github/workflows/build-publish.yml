@@ -1,19 +1,20 @@
-# AM6 — reusable build-publish: buildx (SBOM + provenance) → push by digest → cosign KEYLESS sign.
-# Auth via the ephemeral GITHUB_TOKEN (no literal token, EC-2). Keyless cosign via GitHub OIDC
-# (id-token: write) — no long-lived signing key (D2). Build engine = buildx from the existing
-# distroless Dockerfiles (D1, not Buildpacks). SBOM via buildx native (D3, no syft).
+# AM6 — reusable build-publish (dual-channel). buildx → push, with GHA layer cache.
+# Tags via docker/metadata-action (community standard): develop → :develop + :develop-<sha>;
+# tag vX.Y.Z → :X.Y.Z + :X.Y + :latest. SBOM + provenance + keyless cosign ONLY when sign=true
+# (release channel) — dev builds skip signing for speed/cost. Auth via ephemeral GITHUB_TOKEN.
 name: build-publish
 on:
   workflow_call:
     inputs:
       image:      { required: true,  type: string }
       dockerfile: { required: true,  type: string }
-      context:    { required: false, type: string, default: "." }
-      registry:   { required: false, type: string, default: "ghcr.io/getloopscale" }
+      context:    { required: false, type: string,  default: "." }
+      registry:   { required: false, type: string,  default: "ghcr.io/getloopscale" }
+      sign:       { required: false, type: boolean, default: false }   # SBOM+provenance+cosign only on release
 permissions:
   contents: read
-  packages: write   # push to GHCR
-  id-token: write   # keyless cosign (OIDC)
+  packages: write
+  id-token: write   # consumed only when sign=true (keyless cosign); harmless otherwise
 jobs:
   build-publish:
     runs-on: ubuntu-latest
@@ -25,18 +26,34 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   # EC-2: no literal token
-      - name: Build + push by digest (SBOM + provenance)
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute tags (community-standard channels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.registry }}/${{ inputs.image }}
+          tags: |
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=sha,prefix=develop-,format=short,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+      - name: Build + push (cache; SBOM/provenance only on release)
         id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
           push: true
-          tags: ${{ inputs.registry }}/${{ inputs.image }}:${{ github.sha }}
-          sbom: true          # D3 — buildx native SPDX SBOM
-          provenance: true    # SLSA provenance
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: ${{ inputs.sign }}
+          provenance: ${{ inputs.sign }}
+          cache-from: type=gha,scope=${{ inputs.image }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.image }}
       - name: Install cosign
+        if: ${{ inputs.sign }}
         uses: sigstore/cosign-installer@v3
-      - name: Keyless sign by digest
+      - name: Keyless sign by digest (release only)
+        if: ${{ inputs.sign }}
         run: cosign sign --yes "${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}"
