@@ -57,6 +57,11 @@ func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db
 type releaseStoreQuerier struct {
 	store     db.ReleaseStore
 	startedAt time.Time
+	// lastEmitted is the synthetic state returned on the previous poll.
+	// Dedup is required because the ReleaseDBReader emits every poll
+	// tick and the strict FSM rejects same-state transitions (in_progress
+	// → in_progress is invalid → DEGRADED storm).
+	lastEmitted string
 }
 
 // laddersSeconds is the time budget the v1 synthetic ladder gives each
@@ -96,6 +101,15 @@ func (r *releaseStoreQuerier) QueryReleaseStatus(ctx context.Context, deployID s
 			pick = rung
 		}
 	}
+	// Dedup: same state as previous poll → return nil so the reader
+	// emits no PhaseEvent. The reader's `if row == nil { return false, nil }`
+	// branch handles this gracefully and keeps the poll cycle alive.
+	// Strict FSM rejects same-state transitions; without dedup the
+	// aggregator emits 1 valid event then 100+ DEGRADED events.
+	if pick.state == r.lastEmitted {
+		return nil, nil
+	}
+	r.lastEmitted = pick.state
 	return &aggregator.ReleaseStatusRow{
 		State:     pick.state,
 		UpdatedAt: time.Now().UTC(),
