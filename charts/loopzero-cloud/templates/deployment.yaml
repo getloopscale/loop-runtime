@@ -63,6 +63,13 @@ spec:
             - secretRef:
                 name: loopzero-stripe-webhook
                 optional: true
+            {{- if .Values.existingSecret }}
+            # install-config-contract Slice 1 (ADR D1): operator-provided Secret supplies
+            # the app's referenced secrets (Stripe API key, session token, themory key, ...).
+            # Backend-agnostic — populated via ESO / CSI / sops / kubectl (see SECRETS.md).
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

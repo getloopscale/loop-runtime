@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `loopzero-cloud` chart `existingSecret` value (install-config-contract Slice 1, T2.1, ADR D1 anti-lock-in floor): when set, the chart adds an `envFrom` secretRef so an operator-provided K8s Secret supplies the app's referenced secrets (Stripe/session/themory) — backend-agnostic (ESO/CSI/sops/kubectl), no secret backend lock-in. Default empty = legacy behavior (back-compat).
 - Artifact supply-chain pipeline (ROADMAP_AWS AM6): reusable `build-publish` GitHub Actions
   workflow (`docker buildx --sbom --provenance` → push by digest → keyless cosign sign) +
   `release-artifacts` matrix caller over the 5 loopzero service images (api + 4 operators) and

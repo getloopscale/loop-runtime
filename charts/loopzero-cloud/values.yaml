@@ -7,6 +7,15 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
+# install-config-contract Slice 1 (ADR D1 — anti-lock-in secret floor).
+# Name of a pre-existing K8s Secret supplying the cloud-API's referenced secrets
+# (STRIPE_API_KEY, SESSION_TOKEN_SECRET, THEMORY_API_KEY, ...). When set, the chart
+# adds it as an envFrom secretRef. The operator populates it however they choose —
+# ESO (see examples/eso-*.yaml), CSI, sops, kubectl — so the secret backend is never
+# locked in. Empty = legacy behavior (secrets injected by the per-env overlay/seed).
+# See SECRETS.md.
+existingSecret: ""
+
 # HA for the auth control plane (find_infra_011): a single pod means an
 # eviction during node maintenance takes consent/session flows offline.
 # Safe with the shared LOOPZERO_SERVICE_AUTH_SECRET requirement (T1.6) — both
