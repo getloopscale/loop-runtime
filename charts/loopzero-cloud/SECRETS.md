@@ -62,3 +62,7 @@ helm install loopzero-cloud oci://ghcr.io/getloopscale/charts/loopzero-cloud \
 
 For production, prefer an ESO example (`examples/eso-*.yaml`) so secrets stay in your managed
 store and rotate without `kubectl`.
+
+## Rotation (day-2)
+
+When you rotate a secret in your store, ESO re-syncs the K8s Secret — enable `--set reloader.enabled=true` so the pod restarts and reads the new value (the cloud-API reads config only at boot). See [README.md](README.md) § Day-2.
