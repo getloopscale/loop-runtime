@@ -66,21 +66,44 @@ var canonicalScrubRules = []scrubRule{
 // by its product-language equivalent. Pure function — safe to call from
 // any goroutine. Empty input returns empty output.
 func ScrubEvent(in PhaseEvent) PhaseEvent {
-	out := in
-	out.Phase = applyAll(in.Phase)
-	out.Status = applyAll(in.Status)
-	out.DegradedReason = applyAll(in.DegradedReason)
-	out.SubstateMessage = applyAll(in.SubstateMessage)
+	out, _ := ScrubEventWithCount(in)
 	return out
+}
+
+// ScrubEventWithCount is the counted variant used by the aggregator to
+// feed loopzero_deploy_timeline_scrub_replacements_total. The integer is
+// the total number of regex-pattern matches replaced across all four
+// fields. Pure function — safe to call from any goroutine.
+func ScrubEventWithCount(in PhaseEvent) (PhaseEvent, int) {
+	out := in
+	var total int
+	out.Phase, total = applyAll(in.Phase)
+	var n int
+	out.Status, n = applyAll(in.Status)
+	total += n
+	out.DegradedReason, n = applyAll(in.DegradedReason)
+	total += n
+	out.SubstateMessage, n = applyAll(in.SubstateMessage)
+	total += n
+	return out, total
 }
 
 // applyAll runs every canonical rule against s in declaration order.
 // Most-specific rules SHOULD come first in canonicalScrubRules to avoid
 // partial-match underreach (a broader rule consuming text that a
 // narrower rule would have rewritten more precisely).
-func applyAll(s string) string {
+//
+// Returns the rewritten string AND the count of replacements applied —
+// callers feed this count to the loopzero_deploy_timeline_scrub_replacements_total
+// metric (T5.2 wiring + closes HIGH H2 dead-metric finding from review).
+func applyAll(s string) (string, int) {
+	replacements := 0
 	for _, r := range canonicalScrubRules {
-		s = r.pattern.ReplaceAllString(s, r.replacement)
+		matches := r.pattern.FindAllStringIndex(s, -1)
+		if len(matches) > 0 {
+			replacements += len(matches)
+			s = r.pattern.ReplaceAllString(s, r.replacement)
+		}
 	}
-	return s
+	return s, replacements
 }

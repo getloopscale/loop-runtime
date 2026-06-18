@@ -18,6 +18,31 @@ func TestScrubEvent_PreservesCleanInput(t *testing.T) {
 	}
 }
 
+// TestScrubEventWithCount_ReturnsAccurateReplacementCount locks the
+// counter contract per T5.2 wiring + H2 review fix.
+func TestScrubEventWithCount_ReturnsAccurateReplacementCount(t *testing.T) {
+	tests := []struct {
+		name        string
+		in          PhaseEvent
+		wantMin     int
+	}{
+		{"no replacements on clean input", PhaseEvent{Phase: "build", Status: "in_progress"}, 0},
+		{"one replacement on ArgoCD term", PhaseEvent{DegradedReason: "ArgoCD sync failed"}, 1},
+		{"two replacements across fields", PhaseEvent{
+			DegradedReason:  "cosign verify failed in cell-default",
+			SubstateMessage: "Kaniko build failed",
+		}, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, n := ScrubEventWithCount(tt.in)
+			if n < tt.wantMin {
+				t.Errorf("ScrubEventWithCount count = %d; want ≥ %d", n, tt.wantMin)
+			}
+		})
+	}
+}
+
 // TestScrubEvent_RemovesArgoCDTerm — exact-match canonical case.
 func TestScrubEvent_RemovesArgoCDTerm(t *testing.T) {
 	in := PhaseEvent{Phase: "deploy", Status: "in_progress", DegradedReason: "ArgoCD application sync timeout"}

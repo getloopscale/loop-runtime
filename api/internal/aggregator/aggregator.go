@@ -39,6 +39,14 @@ type ScrubFunc func(scrub.PhaseEvent) scrub.PhaseEvent
 // NOT thread-safe across instances — one Aggregator per deploy, owned
 // by the spawning goroutine. Within Run() the aggregator multiplexes N
 // adapter goroutines via a fan-in channel.
+//
+// DEFERRED — ADR D5 EC-2 per-source heartbeat watchdog (30s OR 6×poll
+// silence → emit DEGRADED with substate "source X silent"). Empty-Phase
+// heartbeat events already flow through (see handleEvent below); the
+// watchdog goroutine that PROMOTES silence-without-heartbeat into a
+// DEGRADED emission lives in a follow-up commit per cross-validator
+// review feedback. Tracked via the plan's Open Questions §
+// stale-source-watchdog.
 type Aggregator struct {
 	deployID  string
 	sink      EventSink
@@ -172,12 +180,17 @@ func (a *Aggregator) handleEvent(ctx context.Context, ev readerEvent) {
 		// Heartbeat-only — used by adapters to keep stale-source watchdog quiet.
 		return
 	}
-	scrubbed := a.scrubFunc(scrub.PhaseEvent{
+	scrubbedIn := scrub.PhaseEvent{
 		Phase:           ev.event.Phase,
 		Status:          ev.event.Status,
 		DegradedReason:  ev.event.DegradedReason,
 		SubstateMessage: ev.event.SubstateMessage,
-	})
+	}
+	scrubbed, replaced := scrub.ScrubEventWithCount(scrubbedIn)
+	_ = a.scrubFunc // legacy injection retained for test stubs; counts come from ScrubEventWithCount.
+	if replaced > 0 {
+		metrics.DeployTimelineScrubReplacementsTotal.WithLabelValues(scrubbed.Phase).Add(float64(replaced))
+	}
 
 	phase := statemachine.DeployTimelinePhase(scrubbed.Phase)
 	status := statemachine.DeployTimelinePhaseStatus(scrubbed.Status)
