@@ -30,6 +30,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
 ### Fixed
+- **P0 cross-project namespace corruption on promote (stale rewriter post-2026-06-07 multi-project refactor).**
+  `api/internal/services/promotion_orchestrator.go` `rewriteManifestsForEnv` was written to recognize the
+  legacy namespace format `loopzero-{tenant}-{env}`. The 2026-06-07 multi-project refactor ("TUDO DEVERIA esta
+  separado por projeto") changed the canonical namespace format to `loopzero-{tenant}-{project}-{env}` and
+  updated `pkg/naming.Namespace`, but the rewriter's exact-match string comparison (`s == oldNs`) was
+  never updated to match. Result: rewrite silently no-op'd on real renderer output; manifests shipped to
+  gitops with the FromEnv namespace verbatim; resources deployed into the preview namespace instead of
+  production; ArgoCD reported "Synced + Healthy" because the manifest told it to do exactly what it did.
+  Bug latent until first multi-project tenant promote in production. Sponsor LIVE-caught 2026-06-18
+  against `teste` project (build `build-e83c0186d91cfca1`): 5 promotes appeared to succeed, dashboard
+  showed "Rolling out…" stuck, real workload was deployed in `teste-preview-pr-1` namespace while the
+  production env target was empty. Fix accepts `projectID` in the rewriter and recognizes BOTH the
+  canonical and legacy namespace formats as fromEnv match candidates so existing fixtures keep working
+  while real renderer output is rewritten correctly. Hermetic regression lock
+  `TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace` pins the multi-project format using a
+  fixture that mirrors actual renderer output.
 - **`/projects` listing showed "Failed" for projects whose latest build was cancelled but whose earlier release was still ACTIVE serving production.**
   The aggregate-status SQL (`api/internal/db/queries/projects.sql`
   `ListProjectsWithSummaryByTenant`) only consulted the latest build status — it

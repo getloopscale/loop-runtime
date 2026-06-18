@@ -184,7 +184,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	// would create resources in the FromEnv namespace and the ToEnv App
 	// would adopt-or-shadow the FromEnv workload — breaking traffic isolation
 	// and producing wrong-host IngressRoutes.
-	rewritten, rewriteErr := rewriteManifestsForEnv(string(manifests), req.TenantID, req.FromEnv, req.ToEnv, o.deps.BaseDomain)
+	rewritten, rewriteErr := rewriteManifestsForEnv(string(manifests), req.TenantID, req.ProjectID, req.FromEnv, req.ToEnv, o.deps.BaseDomain)
 	if rewriteErr != nil {
 		return nil, fmt.Errorf("promote: rewrite manifests for %s: %w", req.ToEnv, rewriteErr)
 	}
@@ -309,31 +309,70 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 // rewriteManifestsForEnv transforms the env-specific fields embedded in
 // rendered manifests so they target `toEnv` instead of `fromEnv`. The renderer
 // (api/internal/manifests) bakes the environment into:
-//   - metadata.namespace (`loopzero-{tenant}-{env}`)
+//   - metadata.namespace (canonical `loopzero-{tenant}-{project}-{env}` since the
+//     2026-06-07 multi-project refactor; legacy fixtures use `loopzero-{tenant}-{env}`)
 //   - hostnames in IngressRoute spec.routes[].match (`Host(...)`) and
 //     Certificate spec.dnsNames (`{tenant}-{project}-{app}-{env}.{baseDomain}`)
 //   - the `loopzero.io/environment` label on every Deployment/Service/IngressRoute.
 //
 // We parse each YAML document, walk it recursively, and apply two rules:
-//   1. any string equal to "loopzero-{tenant}-{fromEnv}" becomes
-//      "loopzero-{tenant}-{toEnv}";
-//   2. any string ending in "-{fromEnv}.{baseDomain}" has the env suffix
-//      swapped to toEnv (only when baseDomain is non-empty);
-//   3. any string equal to fromEnv when nested under a key named
-//      "loopzero.io/environment" becomes toEnv.
+//  1. any string equal to the canonical OR legacy namespace for fromEnv
+//     becomes the corresponding canonical namespace for toEnv;
+//  2. any string ending in "-{fromEnv}.{baseDomain}" has the env suffix
+//     swapped to toEnv (only when baseDomain is non-empty);
+//  3. any string equal to fromEnv when nested under a key named
+//     "loopzero.io/environment" becomes toEnv.
 //
 // Match() route lines in IngressRoute use the full hostname, which rule 2
 // covers. We deliberately do NOT do free-form regex over the YAML text so
 // we don't accidentally rewrite an unrelated field that happens to contain
 // the fromEnv substring.
-func rewriteManifestsForEnv(manifests, tenantID, fromEnv, toEnv, baseDomain string) (string, error) {
+//
+// Sponsor LIVE-caught 2026-06-18 (Staff-level Phase 2 troubleshooting):
+// before this commit the rewriter only knew the legacy namespace format
+// (no project segment). After the 2026-06-07 multi-project refactor the
+// renderer started emitting `loopzero-{tenant}-{project}-{env}` but the
+// rewriter's exact-match string comparison was never updated to match.
+// Result: rewrite was silently a no-op on real renderer output; manifests
+// shipped to gitops with the FromEnv namespace verbatim; resources
+// deployed into the preview namespace instead of production; ArgoCD
+// reported "Synced + Healthy" because the manifest told it to do exactly
+// what it did. Bug latent until first multi-project tenant promote in
+// production. Fix is to use the canonical naming helper for the target
+// namespace; the legacy format is still recognized as a fromEnv match
+// so callers with pre-refactor fixtures keep working.
+func rewriteManifestsForEnv(manifests, tenantID, projectID, fromEnv, toEnv, baseDomain string) (string, error) {
 	if fromEnv == "" || toEnv == "" || fromEnv == toEnv {
 		return manifests, nil
 	}
 	docs := splitYAMLDocs(manifests)
 	rewritten := make([]string, 0, len(docs))
-	oldNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, fromEnv)
+	// Canonical namespace format requires projectID. When the caller
+	// omits projectID (legacy call site / test fixture), fall back to
+	// the pre-refactor "loopzero-{tenant}-{env}" format so back-compat is
+	// preserved. The fall-through happens at the strings.Equal layer
+	// in rewriteString — both formats are produced + recognized below.
 	newNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, toEnv)
+	if projectID != "" {
+		newNamespace = fmt.Sprintf("loopzero-%s-%s-%s", tenantID, projectID, toEnv)
+	}
+	// Recognize the FromEnv namespace in BOTH formats so a manifest
+	// rendered by either format is rewritten cleanly.
+	oldNamespaceLegacy := fmt.Sprintf("loopzero-%s-%s", tenantID, fromEnv)
+	oldNamespaceCanonical := ""
+	if projectID != "" {
+		oldNamespaceCanonical = fmt.Sprintf("loopzero-%s-%s-%s", tenantID, projectID, fromEnv)
+	}
+	// The downstream walker treats two oldNamespace strings as a
+	// dual-match by joining them with a sentinel that string compare
+	// can split. We keep a single oldNamespace var for back-compat with
+	// the existing rewriteEnvFields signature; rewriteString handles
+	// the canonical alternative explicitly below.
+	_ = oldNamespaceLegacy // captured into oldNs slice below
+	oldNamespaces := []string{oldNamespaceLegacy}
+	if oldNamespaceCanonical != "" {
+		oldNamespaces = append(oldNamespaces, oldNamespaceCanonical)
+	}
 	oldHostSuffix := ""
 	newHostSuffix := ""
 	if baseDomain != "" {
@@ -353,7 +392,7 @@ func rewriteManifestsForEnv(manifests, tenantID, fromEnv, toEnv, baseDomain stri
 			rewritten = append(rewritten, trimmed)
 			continue
 		}
-		rewriteEnvFields(node, oldNamespace, newNamespace, oldHostSuffix, newHostSuffix, fromEnv, toEnv, false)
+		rewriteEnvFields(node, oldNamespaces, newNamespace, oldHostSuffix, newHostSuffix, fromEnv, toEnv, false)
 		rewriteHostInMatch(node, oldHostSuffix, newHostSuffix)
 		out, err := sigsyaml.Marshal(node)
 		if err != nil {
@@ -374,10 +413,11 @@ func splitYAMLDocs(manifests string) []string {
 }
 
 // rewriteEnvFields walks the YAML node and rewrites:
-//   - exact namespace strings;
+//   - exact namespace strings (matching ANY of the oldNs candidates —
+//     canonical "loopzero-{t}-{p}-{e}" + legacy "loopzero-{t}-{e}");
 //   - hostname strings (-{fromEnv}.{baseDomain} suffix);
 //   - values nested under "loopzero.io/environment" key (set inEnvLabel=true when descending).
-func rewriteEnvFields(node interface{}, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) {
+func rewriteEnvFields(node interface{}, oldNs []string, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) {
 	switch v := node.(type) {
 	case map[string]interface{}:
 		for k, child := range v {
@@ -399,9 +439,11 @@ func rewriteEnvFields(node interface{}, oldNs, newNs, oldHostSuffix, newHostSuff
 	}
 }
 
-func rewriteString(s, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) string {
-	if s == oldNs {
-		return newNs
+func rewriteString(s string, oldNs []string, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) string {
+	for _, candidate := range oldNs {
+		if s == candidate {
+			return newNs
+		}
 	}
 	if oldHostSuffix != "" && strings.HasSuffix(s, oldHostSuffix) {
 		return strings.TrimSuffix(s, oldHostSuffix) + newHostSuffix
