@@ -311,12 +311,6 @@
     "extraVolumeMounts": {
       "type": "array"
     },
-    "domain": {
-      "type": "object"
-    },
-    "kubeContexts": {
-      "type": "object"
-    },
     "kubeconfig": {
       "type": "object"
     },
@@ -353,10 +347,6 @@
     "loopzero-common": {
       "type": "object",
       "description": "Values block consumed by the loopzero-common library subchart."
-    },
-    "existingSecret": {
-      "type": "string",
-      "description": "Pre-existing K8s Secret name for referenced secrets (install-config-contract floor, ADR D1)."
     }
   }
 }
