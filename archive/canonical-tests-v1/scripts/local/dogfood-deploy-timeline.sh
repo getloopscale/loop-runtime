@@ -62,9 +62,9 @@ run_suite() {
     fi
 }
 
-# Suite 1 — hermetic syntax (always runs)
-run_suite "1.hermetic-syntax" "T6.1 LIVE script structural test" \
-    bash "$REPO_ROOT/infra/tests/check-dev-public-deploy-timeline-syntax_test.sh"
+# Suite 1 — hermetic syntax (now homed as Go test per architecture mandate)
+run_suite "1.hermetic-syntax" "T6.1 LIVE script structural Go test" \
+    bash -c "cd '$REPO_ROOT' && go test ./pkg/quality/deploytimelinelive/... -count=1"
 
 if [[ $LIVE_ONLY -ne 1 ]]; then
     # Suite 2 — Go aggregator + adapter tests
