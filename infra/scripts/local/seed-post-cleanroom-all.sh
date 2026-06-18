@@ -66,6 +66,21 @@ PASS=0
 FAIL=0
 SKIP=0
 
+# Finding #5 of issue #91 (Cleanroom mandate canonical chain run
+# 2026-06-18): run_step previously returned 1 on failure which, combined
+# with the top-level `set -euo pipefail`, aborted the entire script at
+# the FIRST failing step. The canonical-chain-summary log block (below
+# the final step invocation) was UNREACHABLE on any failure — operators
+# saw a "wrapper exit 0" with no summary of which steps actually ran,
+# which passed, which failed. Worse, downstream steps that did NOT
+# depend on the failing step were never attempted, so triage required
+# re-running the script manually after each fix.
+#
+# Canonical fix: accumulate FAIL count + ALWAYS return 0. The final
+# `[[ "$FAIL" == "0" ]] || exit 1` (last line of the script) preserves
+# the fail-loud contract by exiting non-zero if any FAIL accumulated.
+# Operators now get the full chain attempt + the summary + a non-zero
+# exit when anything failed.
 run_step() {
   local name="$1"; shift
   local cmd="$*"
@@ -77,12 +92,15 @@ run_step() {
   if eval "$cmd" >"/tmp/seed-${name}.log" 2>&1; then
     RESULTS+=("PASS: $name")
     PASS=$((PASS + 1))
-    return 0
   else
     RESULTS+=("FAIL: $name (see /tmp/seed-${name}.log)")
     FAIL=$((FAIL + 1))
-    return 1
+    log "  FAIL: $name — see /tmp/seed-${name}.log"
   fi
+  # ALWAYS return 0 so `set -e` does not abort the chain at the first
+  # failing step. The final FAIL counter check at the end of the
+  # script drives the actual exit code (Finding #5).
+  return 0
 }
 
 skip_step() {
