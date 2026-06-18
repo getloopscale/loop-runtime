@@ -98,6 +98,12 @@ type Config struct {
 	StatusHandler           *routes.StatusHandler
 	MetricsProxyHandler     *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
 	StatusSSEHandler        *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
+	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
+	// nil, the route is omitted (legacy / test paths). Production wires
+	// aggregator.SSEEventSink-backed PostgresEventStore that satisfies
+	// the DeployTimelineEventStore contract.
+	DeployTimelineStore     routes.DeployTimelineEventStore
 	ScaleHandler            *routes.ScaleHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync

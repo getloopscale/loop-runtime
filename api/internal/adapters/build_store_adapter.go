@@ -31,6 +31,21 @@ func (a *BuildStoreReaderAdapter) GetByID(ctx context.Context, id string) (*sse.
 	}, nil
 }
 
+// GetTenantForBuild satisfies the aggregator.BuildLookup contract used by
+// PostgresDeployTimelineStore (plan T5.1 wiring). Returns the empty
+// string when the build is not found OR an error occurs — the caller
+// translates that into routes.ErrDeployNotFound (existence-leak guard).
+func (a *BuildStoreReaderAdapter) GetTenantForBuild(ctx context.Context, buildID string) (string, error) {
+	build, err := a.Store.GetByID(ctx, buildID)
+	if err != nil {
+		return "", err
+	}
+	if build == nil {
+		return "", nil
+	}
+	return build.TenantID, nil
+}
+
 // LogBuildStoreAdapter implements routes.LogBuildStore using db.BuildStore.
 // The logs handler needs only build ID, tenant, and status for authorization
 // and response metadata.

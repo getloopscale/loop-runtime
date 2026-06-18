@@ -36,8 +36,6 @@ require (
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
-	github.com/onsi/ginkgo/v2 v2.28.1 // indirect
-	github.com/onsi/gomega v1.39.1 // indirect
 )
 
 require (

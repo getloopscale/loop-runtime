@@ -66,6 +66,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/quality/pgpdb"
 	"github.com/getloopscale/loopzero/pkg/quality/pkgusagematrix"
 	"github.com/getloopscale/loopzero/pkg/quality/prodimagetags"
+	"github.com/getloopscale/loopzero/pkg/quality/quarantineprotect"
 	"github.com/getloopscale/loopzero/pkg/quality/regressionmatrix"
 	"github.com/getloopscale/loopzero/pkg/quality/regressiontest"
 	"github.com/getloopscale/loopzero/pkg/quality/runtimeslo"
@@ -102,6 +103,19 @@ GATES:
                     --allowlist PATH  allowlist MD (default: ".claude/rules/shell-scripts-allowlist.md")
                     --base-ref REF    base git ref (default: "origin/main")
                     --head-ref REF    head git ref (default: "HEAD")
+
+  quarantine-protect
+                  Fail if PR touches archive/canonical-tests-v1/** during the
+                  canonical-tests-rewrite-v2 strangler-fig window. Per ADR
+                  2026-06-17-T3 D5: archive is READ-ONLY consultable; DELETE
+                  allowed only with PR title containing [ARCHIVE-DELETE] marker.
+                  Plan: knowledge-base/plans/canonical-tests-rewrite-v2-plan.md
+                  Flags:
+                    --root DIR        repo root (default: ".")
+                    --archive PATH    quarantine path root (default: "archive/canonical-tests-v1")
+                    --base-ref REF    base git ref (default: "origin/main")
+                    --head-ref REF    head git ref (default: "HEAD")
+                    --pr-title STR    PR title for marker check (default: env GITHUB_PR_TITLE)
 
   dangling-script-refs
                   Fail if a .sh deleted in the diff is still referenced (live)
@@ -284,6 +298,8 @@ func runQuality(args []string) int {
 		return runScriptsAudit(args[1:])
 	case "no-new-bash":
 		return runNoNewBash(args[1:])
+	case "quarantine-protect":
+		return runQuarantineProtect(args[1:])
 	case "no-shell-wrap":
 		return runNoShellWrap(args[1:])
 	case "taskfile-interface":
@@ -460,6 +476,48 @@ func runNoNewBash(args []string) int {
 		return 1
 	}
 	fmt.Println("no-new-bash: PASS — no new bash scripts outside allowlist")
+	return 0
+}
+
+// runQuarantineProtect is the T0.2 governance gate of plan canonical-tests-rewrite-v2 v1.0:
+// fail if a PR touches archive/canonical-tests-v1/** during the strangler-fig
+// window. DELETE-only allowed with [ARCHIVE-DELETE] PR title marker per ADR D5.
+func runQuarantineProtect(args []string) int {
+	fs := flag.NewFlagSet("quarantine-protect", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	archive := fs.String("archive", "archive/canonical-tests-v1", "quarantine path root prefix")
+	baseRef := fs.String("base-ref", "origin/main", "base git ref")
+	headRef := fs.String("head-ref", "HEAD", "head git ref")
+	prTitle := fs.String("pr-title", os.Getenv("GITHUB_PR_TITLE"), "PR title (substring-matched for [ARCHIVE-DELETE] marker)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := quarantineprotect.Check(quarantineprotect.Config{
+		RepoRoot:        *root,
+		ArchivePathRoot: *archive,
+		BaseRef:         *baseRef,
+		HeadRef:         *headRef,
+		PRTitle:         *prTitle,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "quarantine-protect: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "quarantine-protect: FAIL — PR touches quarantined files:")
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Per ADR-2026-06-17-T3 D5: build the new suite at infra/tests/livetest/ paths instead.")
+		fmt.Fprintln(os.Stderr, "Plan: knowledge-base/plans/canonical-tests-rewrite-v2-plan.md")
+		return 1
+	}
+	fmt.Println("quarantine-protect: PASS — no quarantine violations")
 	return 0
 }
 

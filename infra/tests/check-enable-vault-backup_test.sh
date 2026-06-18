@@ -65,7 +65,14 @@ metadata:
   name: openbao-snapshot-s3-creds"
     exit 0
     ;;
-  *"apply -f -"*) exit "${MOCK_APPLY_EXIT:-0}" ;;
+  *"apply -f -"*)
+    # Drain stdin: the script pipes `kubectl create secret ... --dry-run -o yaml
+    # | kubectl apply -f -`. If apply exits without consuming stdin, the upstream
+    # create-secret gets SIGPIPE → with the script's set -o pipefail the pipeline
+    # fails flakily ("Secret apply failed"). Real kubectl reads stdin.
+    cat >/dev/null 2>&1 || true
+    exit "${MOCK_APPLY_EXIT:-0}"
+    ;;
   *"get cronjob"*)
     echo "${MOCK_CRONJOB_SCHEDULE:-0 * * * *}"
     exit 0

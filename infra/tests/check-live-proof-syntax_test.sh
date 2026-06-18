@@ -14,7 +14,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SCRIPT="$REPO_ROOT/infra/scripts/local/live-proof-dev-public.sh"
+SCRIPT="$REPO_ROOT/archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh"
 ALLOWLIST="$REPO_ROOT/.claude/rules/shell-scripts-allowlist.md"
 
 PASS=0

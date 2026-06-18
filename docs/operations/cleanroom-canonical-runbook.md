@@ -122,13 +122,13 @@ with verdict tracking:
 
 ```bash
 # Full chain (Cleanroom TOTAL + LIVE + pause for sponsor)
-bash infra/scripts/local/cleanroom-canonical-chain-runner.sh
+bash archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh
 
 # Skip Cleanroom (debug iteration on existing cluster)
-bash infra/scripts/local/cleanroom-canonical-chain-runner.sh --skip-cleanroom
+bash archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh --skip-cleanroom
 
 # Engineering-side only (stop at step 6, skip sponsor pause)
-bash infra/scripts/local/cleanroom-canonical-chain-runner.sh --skip-sponsor
+bash archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh --skip-sponsor
 ```
 
 ## Abort criteria

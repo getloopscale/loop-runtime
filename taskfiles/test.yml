@@ -765,7 +765,7 @@ tasks:
            skipped via --hermetic-only)
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-recovery.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-recovery.sh {{.CLI_ARGS}}
 
   test:dogfood:device:
     desc: |
@@ -780,7 +780,7 @@ tasks:
            skipped via --hermetic-only)
       Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
     cmds:
-      - bash infra/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
 
   test:dogfood:project-connect:
     desc: |
@@ -798,7 +798,7 @@ tasks:
            full bypass via --hermetic-only)
       Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
     cmds:
-      - bash infra/scripts/local/dogfood-project-connect.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-project-connect.sh {{.CLI_ARGS}}
 
   test:dogfood:deployments:
     desc: |
@@ -814,7 +814,7 @@ tasks:
            list + SSE wiring + Loki marker pipeline + preflight)
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-deployments.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-deployments.sh {{.CLI_ARGS}}
 
   test:dogfood:secrets:
     desc: |
@@ -833,7 +833,7 @@ tasks:
            C bulk / D ESO sync) against dev-public
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
 
   test:dogfood:login:
     desc: |
@@ -849,7 +849,7 @@ tasks:
         4. Playwright OAuth denial (SKIP when no chromium)
       Flags: --hermetic-only --live-only --skip-playwright --json.
     cmds:
-      - bash infra/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
 
   test:dogfood:domains:
     desc: |
@@ -862,7 +862,7 @@ tasks:
            (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-domains.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-domains.sh {{.CLI_ARGS}}
 
   test:dogfood:readiness:
     desc: |
@@ -875,7 +875,7 @@ tasks:
            (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-readiness.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-readiness.sh {{.CLI_ARGS}}
 
   test:dogfood:all:
     desc: |
@@ -893,7 +893,7 @@ tasks:
       Roadmap Phase 3 adds 11 more wrappers for backlog journeys
       (J-01/J-02/J-03/J-06/J-12/J-13/J-14/J-15/J-16/J-18/J-24).
     cmds:
-      - bash infra/scripts/local/dogfood-all.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-all.sh {{.CLI_ARGS}}
 
   test:dogfood:scale:
     desc: |
@@ -909,7 +909,7 @@ tasks:
            (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-scale.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-scale.sh {{.CLI_ARGS}}
 
   test:dogfood:secrets-openbao:
     desc: |
@@ -931,7 +931,7 @@ tasks:
            F sentinel only in tenant ns) — operator HARD STOP
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-secrets-openbao.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-secrets-openbao.sh {{.CLI_ARGS}}
 
   test:dogfood:secrets-openbao:rehearsal:
     desc: |
@@ -985,7 +985,7 @@ tasks:
            canonical body shape / D preflight against dev-public)
       Flags forwarded to wrapper: --hermetic-only --live-only --json.
     cmds:
-      - bash infra/scripts/local/dogfood-environments.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-environments.sh {{.CLI_ARGS}}
 
   test:dogfood:preview:
     desc: |
@@ -1008,7 +1008,7 @@ tasks:
       Flags forwarded to wrapper: --hermetic-only --live-only --json
       --skip-envtest.
     cmds:
-      - bash infra/scripts/local/dogfood-preview.sh {{.CLI_ARGS}}
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-preview.sh {{.CLI_ARGS}}
 
   validate:slos:
     desc: |
@@ -1326,7 +1326,7 @@ tasks:
       BuildListItem.Apps + T5.3 ProjectHealthCard regression classes).
       Internal budget 5 min. Plan T3.1.
     cmds:
-      - bash infra/scripts/local/live-proof-dev-public.sh --check=api-sanity
+      - bash archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh --check=api-sanity
 
   test:pre-release-rigor:scenario-3:
     desc: |
@@ -1363,3 +1363,86 @@ tasks:
       - task: test:pre-release-rigor:scenario-1
       - task: test:pre-release-rigor:scenario-4
       - task: test:pre-release-rigor:scenario-3
+
+  # T3.1+T3.5 of plan canonical-tests-rewrite-v2 v1.0 per ADR-2026-06-17-T3 D1.
+  # Canonical chain runner v2 — replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh.
+  cleanroom:v2:
+    desc: |
+      T3.1 v2 cleanroom canonical chain (Ginkgo) — 6 fases Phase 0..5.
+      Wall-clock budget ~30-45min. Requires LIVE k3d clusters.
+      Phases: baseline pre + clean:all + setup + tilt up + doctor + baseline post-diff.
+    cmds:
+      - go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1h -v
+
+  cleanroom:v2:hermetic:
+    desc: |
+      T3.1 v2 cleanroom helper unit tests (hermetic, no LIVE infra needed).
+      Validates Options + Outcome + Run wiring at the Go layer.
+    cmds:
+      - go test ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1m
+
+  # T3.2 + T3.3 + T3.4 of plan canonical-tests-rewrite-v2 v1.0 — v2 dogfood / chaos / contra-prova
+  dogfood:v2:hermetic:
+    desc: |
+      T3.2 v2 dogfood helper unit tests (hermetic). Validates Env + JWT loader +
+      CurlJSON + KubectlGetJSON + Pause helpers. No LIVE infra needed.
+    cmds:
+      - go test ./infra/tests/livetest/dogfood/... -count=1 -timeout 1m
+
+  dogfood:v2:
+    desc: |
+      T3.2 v2 dogfood per-journey LIVE Ginkgo specs. Requires dev-public UP +
+      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated por build tag `live`.
+    cmds:
+      - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v
+
+  chaos:v2:hermetic:
+    desc: |
+      T3.3 v2 chaos helper unit tests (hermetic). Validates Manifest + ChaosResult
+      type contracts + AssertSpanCoverage stub behavior. No LIVE chaos-mesh needed.
+    cmds:
+      - go test ./infra/tests/livetest/chaos/... -count=1 -timeout 1m
+
+  contraprova:v2:hermetic:
+    desc: |
+      T3.4 v2 contra-prova helper unit tests (hermetic). Validates 8 camadas
+      (chaos summary byte-grep / JUnit XML parse / git state / live-proof
+      absorption per ADR D3). No LIVE deploy needed.
+    cmds:
+      - go test ./infra/tests/livetest/contraprova/... -count=1 -timeout 1m
+
+  livetest:v2:hermetic:
+    desc: |
+      T3.1+T3.2+T3.3+T3.4 aggregate v2 livetest helper unit tests (hermetic).
+      All 4 packages exercised without LIVE infra.
+    cmds:
+      - task: cleanroom:v2:hermetic
+      - task: dogfood:v2:hermetic
+      - task: chaos:v2:hermetic
+      - task: contraprova:v2:hermetic
+
+  # T3.5 of plan canonical-tests-rewrite-v2 v1.0 — chain runner v2 (Taskfile composition per ADR D2)
+  chain:v2:full:
+    desc: |
+      T3.5 v2 canonical chain runner — composes 6 fases via Taskfile.
+      Replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh
+      Per ADR D2: bash mantido apenas como wrapper de `task X` calls; chain
+      orchestration moves to Taskfile composition.
+      Wall-clock budget ~60-90min (~30-45min cleanroom + ~5min seeds + ~30-45min dogfood + ~15min contra-prova).
+      Pre-condition: dev-public infra UP + JWT seeded.
+    cmds:
+      - task: cleanroom:v2  # T3.1 6 fases
+      - bash infra/scripts/local/seed-post-cleanroom-all.sh --verify
+      - task: dogfood:v2    # T3.2 per-journey LIVE specs
+      - go test -tags=live ./infra/tests/livetest/contraprova/... -count=1 -timeout 30m -v
+      - echo "T3.5 chain:v2:full ENGINEERING-COMPLETE — sponsor CP3 JUNTOS gate pending"
+
+  chain:v2:engineering:
+    desc: |
+      T3.5 engineering-only subset (cleanroom + dogfood + contra-prova,
+      no sponsor JUNTOS gate). Use for halt-loop iteration during Phase 3+4 dev.
+    cmds:
+      - task: cleanroom:v2:hermetic
+      - task: dogfood:v2:hermetic
+      - task: chaos:v2:hermetic
+      - task: contraprova:v2:hermetic
