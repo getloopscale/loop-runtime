@@ -30,6 +30,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
 ### Fixed
+- **`/projects` listing showed "Failed" for projects whose latest build was cancelled but whose earlier release was still ACTIVE serving production.**
+  The aggregate-status SQL (`api/internal/db/queries/projects.sql`
+  `ListProjectsWithSummaryByTenant`) only consulted the latest build status — it
+  never looked at `releases`. The mapper `MapBuildStatusToProjectStatus` then
+  collapsed `BuildCancelled` + `BuildFailed` into `ProjectStatusFailed`. Result:
+  a project whose user cancelled an in-flight build (intentional) but whose
+  prior successful release was still serving prod traffic showed visually as
+  "Failed" while `/projects/<name>/deployments` correctly rendered `● Active`
+  on the same release. Sponsor LIVE-caught 2026-06-18 against `loopzerokit-example`.
+  Fix is release-aware: the SQL JOINs an `active_release` LATERAL preferring
+  rows whose status is in `(ACTIVE, ROLLING_BACK, FAILED, ROLLBACK_FAILED)`,
+  the new `MapProjectStatus(activeReleaseStatusRaw, latestBuildState)` consults
+  the release SoT first and falls back to the build state only when no release
+  is consultable, and `BuildCancelled` now maps to `ProjectStatusIdle` (not
+  `ProjectStatusFailed`) — cancellation is intentional, failure is unexpected,
+  they cannot share a UI bucket. 8 new hermetic tests in
+  `aggregate_project_status_test.go` pin the canonical decision tree
+  (ACTIVE-release-trumps-cancelled, ACTIVE-trumps-failed, ROLLING_BACK is
+  Building, FAILED/ROLLBACK_FAILED is Failed, terminal SUPERSEDED/ROLLED_BACK/
+  CANCELLED releases fall back to build, empty-everything is Idle).
 - **Preview builds failed with "no declared start command" while same loopzero.yaml succeeded via CLI deploy.**
   The conversion `loopzero.yaml apps map → []services.AppSpec` lived inline in TWO places —
   `api/cmd/autodeploy_adapters.go` (push path) and `api/internal/services/preview_service.go`
