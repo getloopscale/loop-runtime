@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
 ### Changed
+- Hardened the `loopzero-cloud` chart config contract (install-config-contract Slice 1, T1.1): `values.schema.json` now `additionalProperties: false` so `helm install` fail-fasts on an unknown/typo'd top-level key; added the `existingSecret` value (anti-lock-in floor — secrets by reference, ADR D1), reconciled the schema with all real top-level keys (loopzero-common, imagePullSecrets, probes, metrics, networkPolicy, topologySpreadConstraints), and widened the `image.repository` pattern to accept a `:port` registry host. Default values + dev-public + prod overlays render GREEN; unknown keys rejected (install-config-contract-slice1-plan T1.1).
 - **BREAKING (build): pinned `github.com/getloopscale/loopzero-contracts` to v0.1.0 (M5 version-pin cutover).**
   Dropped the local `replace => ../../loopzero-contracts` in `pkg/go.mod` + `api/go.mod` and the
   `../loopzero-contracts` entry from `go.work`; the engine now consumes the published module. `api/Dockerfile`

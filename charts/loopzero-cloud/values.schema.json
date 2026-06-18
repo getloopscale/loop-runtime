@@ -4,8 +4,20 @@
   "description": "Schema for loopzero-api Helm chart. Per INF-G17 + plan ADR D4, schema is mandatory for all published charts in charts/.",
   "type": "object",
   "required": ["image", "replicaCount"],
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
+    "existingSecret": {
+      "type": "string",
+      "description": "Name of a pre-existing K8s Secret supplying the cloud-API secret env (Stripe, session, service-auth, themory). When set, the chart references it via envFrom and skips the inline admin Secret. The operator populates it however they choose (ESO, CSI, sops, kubectl) — see SECRETS.md (install-config-contract Slice 1, ADR D1 existingSecret floor)."
+    },
+    "livenessProbe": { "type": "object" },
+    "readinessProbe": { "type": "object" },
+    "startupProbe": { "type": "object" },
+    "metrics": { "type": "object" },
+    "networkPolicy": { "type": "object" },
+    "topologySpreadConstraints": { "type": ["object", "array"] },
+    "imagePullSecrets": { "type": "array" },
+    "loopzero-common": { "type": "object", "description": "Values block consumed by the loopzero-common library subchart (labels, security contexts)." },
     "global": {
       "type": "object",
       "properties": {
@@ -22,8 +34,8 @@
       "properties": {
         "repository": {
           "type": "string",
-          "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$",
-          "description": "Container image repository (lowercase, no protocol prefix)"
+          "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)*$",
+          "description": "Container image repository (lowercase, no protocol prefix; optional :port on the registry host, e.g. k3d-loopzero-registry:5000/loopzero-cloud)"
         },
         "tag": { "type": "string", "minLength": 1 },
         "digest": {
