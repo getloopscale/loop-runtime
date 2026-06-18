@@ -20,10 +20,19 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 )
+
+// deployTimelineEventTypePrefix is the canonical filter — the underlying
+// sse_events table is shared with the J-17 build.step.* stream, so the
+// handler MUST skip every event whose type does not begin with this
+// prefix. LIVE caught 2026-06-18: a real build's stream returned
+// build.started + build.step.* events that the dashboard would render
+// with the wrong shape.
+const deployTimelineEventTypePrefix = "deploy_timeline."
 
 // DeployTimelineEvent is the canonical SSE-event row consumed by the
 // timeline handler. ID is monotonic per (tenant, deploy). EventType
@@ -181,7 +190,14 @@ func (h *DeployTimelineHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			return false, perr
 		}
 		for _, ev := range events {
+			// Always advance afterID so the sse_events scan does not
+			// re-stream skipped rows on the next poll tick.
 			afterID = ev.ID
+			// Filter shared-table siblings (build.step.*, build.started)
+			// so the dashboard only sees canonical deploy_timeline.*.
+			if !strings.HasPrefix(ev.EventType, deployTimelineEventTypePrefix) {
+				continue
+			}
 			if _, werr := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.EventType, string(ev.Data)); werr != nil {
 				return false, werr
 			}

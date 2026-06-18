@@ -214,6 +214,63 @@ func TestDeployTimelineSSE_TenantMismatch_Returns404(t *testing.T) {
 	}
 }
 
+// TestDeployTimelineSSE_FiltersNonTimelineEvents confirms LIVE-caught
+// 2026-06-18 fix: the sse_events table is shared with the J-17
+// build.step.* stream; the handler MUST emit only events whose type
+// begins with "deploy_timeline.".
+func TestDeployTimelineSSE_FiltersNonTimelineEvents(t *testing.T) {
+	store := &memDeployTimelineStore{
+		tenantID: "tn-test",
+		deployID: "dep-filter",
+	}
+	store.appendEvent("build.started", `{"build_id":"dep-filter"}`)
+	store.appendEvent("build.step.succeeded", `{"step_name":"clone-repo"}`)
+	store.appendEvent("deploy_timeline.build.in_progress", `{"phase":"build"}`)
+	store.appendEvent("deploy_timeline.live.completed", `{"phase":"live"}`)
+
+	handler := NewDeployTimelineHandler(store,
+		WithDTPollInterval(10*time.Millisecond),
+		WithDTMaxDuration(2*time.Second),
+	)
+	r := chi.NewRouter()
+	r.Get("/api/v1/deploys/{deployID}/timeline", func(w http.ResponseWriter, req *http.Request) {
+		ctx := withTestTenant(req.Context(), "tn-test")
+		handler.Stream(w, req.WithContext(ctx))
+	})
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/deploys/dep-filter/timeline")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	scanner := bufio.NewScanner(resp.Body)
+	body := []string{}
+	done := make(chan struct{})
+	go func() {
+		for scanner.Scan() {
+			body = append(body, scanner.Text())
+		}
+		close(done)
+	}()
+	<-done
+
+	full := strings.Join(body, "\n")
+	if strings.Contains(full, "event: build.started") {
+		t.Errorf("non-timeline event leaked: build.started")
+	}
+	if strings.Contains(full, "event: build.step.succeeded") {
+		t.Errorf("non-timeline event leaked: build.step.succeeded")
+	}
+	if !strings.Contains(full, "event: deploy_timeline.build.in_progress") {
+		t.Errorf("expected deploy_timeline.build.in_progress in stream; got:\n%s", full)
+	}
+	if !strings.Contains(full, "event: deploy_timeline.live.completed") {
+		t.Errorf("expected deploy_timeline.live.completed in stream; got:\n%s", full)
+	}
+}
+
 // TestDeployTimelineSSE_UnknownDeploy_Returns404 confirms unknown deploy_id
 // returns 404 even when tenant matches nothing.
 func TestDeployTimelineSSE_UnknownDeploy_Returns404(t *testing.T) {
