@@ -174,9 +174,16 @@ echo "SBOM generated and uploaded successfully"
 				Name: secretRegistryConfig, MountPath: buildkitRegistryMount, ReadOnly: true,
 			}, SecretName: secretRegistryConfig},
 		},
+		// LIVE-caught 2026-06-18 against build-25d1977102ec378b: syft
+		// scanning a single-app loopzerokit Node.js image OOMKilled at 1Gi
+		// limit (exit code 137). syft holds the layer index + dep graph
+		// proportional to image size — typical loopzerokit Node.js image is
+		// ~300-500MB compressed → ~1.5GB resident at peak. 2Gi limit /
+		// 512Mi request gives headroom without bloating cluster scheduling.
+		// Future v1.1: tune per-app via loopzero.yaml resource hints.
 		Resources: &forge.ResourceRequirements{
-			Requests: forge.ResourceList{CPU: "100m", Memory: "256Mi"},
-			Limits:   forge.ResourceList{CPU: "500m", Memory: "1Gi"},
+			Requests: forge.ResourceList{CPU: "100m", Memory: "512Mi"},
+			Limits:   forge.ResourceList{CPU: "500m", Memory: "2Gi"},
 		},
 		SecurityContext: &model.SecurityContext{
 			RunAsUser:    forge.Ptr(rootlessUID),

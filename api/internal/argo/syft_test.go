@@ -251,6 +251,28 @@ func TestWorkflowBuilder_SBOMTaskContinueOnFailed(t *testing.T) {
 }
 
 // Static apps don't go through the SBOM pipeline.
+// TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans confirms the
+// SBOM step carries enough memory to scan a typical loopzerokit Node.js
+// image. LIVE-caught 2026-06-18 against build-25d1977102ec378b:
+// 1Gi memory limit caused OOMKilled (exit code 137) on a single-app
+// loopzerokit Node.js build. syft holds the layer index + dependency
+// graph in memory proportional to image size; ~256Mi-1Gi insufficient
+// for any non-trivial Node.js layer set. New floor: 2Gi limit /
+// 512Mi request balances OOM headroom vs cluster scheduling pressure.
+func TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans(t *testing.T) {
+	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "app",
+		"registry.example.com/org/app:abc", false)
+	if c.Resources == nil {
+		t.Fatalf("syft template missing Resources spec")
+	}
+	if got := c.Resources.Limits.Memory; got != "2Gi" {
+		t.Errorf("syft memory limit = %q; want 2Gi (closes LIVE OOM build-25d1977102ec378b)", got)
+	}
+	if got := c.Resources.Requests.Memory; got != "512Mi" {
+		t.Errorf("syft memory request = %q; want 512Mi", got)
+	}
+}
+
 func TestWorkflowBuilder_StaticAppHasNoSBOMStep(t *testing.T) {
 	spec := services.WorkflowSpec{
 		BuildID:       "build-static",
