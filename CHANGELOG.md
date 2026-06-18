@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Operators install-config-contract (two-plane, AM6.5 Slice 4, per-binary ISP): all 4 operator charts get CONFIG.md + hardened `values.schema.json` (`additionalProperties:false`) + opt-in Reloader. `loopzero-tenant-operator` is two-plane (17 config ConfigMap + 8 secret K8s Secret + SECRETS.md + ESO examples OpenBao/AWS-SM/GCP-SM); `loopzero-{app,preview,platform}-operator` are config-only (kubeconfig is platform-mounted via `loopzero-cluster-kubeconfigs` volume, not a chart secret — EC-1). Each chart documents ONLY the env vars its own binary reads (ISP). Hermetic Go guards (`infra/tests/charts/loopzero_operators_install_contract_test.go`) enforce per-operator CONFIG.md/SECRETS.md set-equality vs rendered chart + config/secret plane separation + an EC-3 completeness guard (chart injects ⊇ binary reads).
 
 ### Changed
 

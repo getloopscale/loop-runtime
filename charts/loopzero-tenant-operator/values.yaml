@@ -24,20 +24,36 @@ service:
 
 # Operator configuration (environment variables via ConfigMap)
 config:
-  giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"
-  baseDomain: ""
   argocdNamespace: "argocd"
-  workloadClusterUrl: ""
+  giteaUrl: ""
+  harborAdminUsername: "admin"
+  harborRegistryHost: ""
+  harborUrl: ""
   ingressNamespace: "traefik"
-  insecureSkipTls: "false"
+  minioEndpoint: ""
+  registryCidrs: ""
+  loopzeroTenantMaxConcurrent: "5"
+  workloadClusterUrl: ""
+  baseDomain: ""
+  operatorInsecureSkipTls: "false"
+  loopzeroPprofAddr: ""
+  loopzeroPprofEnabled: "false"
+  otelExporterOtlpEndpoint: ""
+  loopzeroEnv: "production"
+  loopzeroTracingEnabled: "false"
 
-# Secrets (environment variables via Secret)
 secrets:
   create: true
   existingSecret: ""
+  digitaloceanToken: ""
   giteaToken: ""
+  harborAdminPassword: ""
+  minioAccessKey: ""
+  minioSecretKey: ""
+  registryDockerConfig: ""
+  spacesAccessKeyId: ""
+  spacesSecretAccessKey: ""
 
-# Kubeconfig for multi-cluster access
 kubeconfig:
   build:
     existingConfigMap: ""
@@ -49,6 +65,9 @@ args:
   leaderElect: true
   healthProbeBindAddress: ":8081"
   metricsBindAddress: ":8443"
+
+reloader:
+  enabled: false
 
 resources:
   requests:
