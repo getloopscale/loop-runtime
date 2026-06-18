@@ -1,0 +1,46 @@
+# AM6 — loopzero repo artifact release: 5 service images (matrix) + the 13 Helm charts (OCI), to GHCR.
+# Images call the reusable build-publish workflow; charts are packaged + helm-push'd as OCI.
+name: release-artifacts
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+jobs:
+  images:
+    strategy:
+      matrix:
+        include:
+          - { image: loopzero-api,              dockerfile: api/Dockerfile,                       context: . }
+          - { image: loopzero-app-operator,     dockerfile: operators/Dockerfile.app-operator,    context: . }
+          - { image: loopzero-platform-operator, dockerfile: operators/Dockerfile.platform-operator, context: . }
+          - { image: loopzero-tenant-operator,  dockerfile: operators/Dockerfile.tenant-operator, context: . }
+          - { image: loopzero-preview-operator, dockerfile: operators/Dockerfile.preview-operator, context: . }
+    uses: ./.github/workflows/build-publish.yml
+    with:
+      image: ${{ matrix.image }}
+      dockerfile: ${{ matrix.dockerfile }}
+      context: ${{ matrix.context }}
+  charts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login GHCR (helm)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Package + push the 13 charts (OCI)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/charts
+          for c in charts/*/; do
+            [ -f "$c/Chart.yaml" ] || continue
+            helm package "$c" -d /tmp/charts
+          done
+          for tgz in /tmp/charts/*.tgz; do
+            helm push "$tgz" oci://ghcr.io/getloopscale/charts
+          done
