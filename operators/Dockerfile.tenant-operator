@@ -2,12 +2,21 @@ FROM golang:1.26.1-alpine3.22 AS builder
 WORKDIR /workspace
 
 ENV GOWORK=off
+ENV GOPRIVATE=github.com/getloopscale/*
+
+# loopzero-contracts is a PINNED private module (M5 cutover, via pkg). Fetched with GOPRIVATE +
+# a buildx --secret token (never baked in a layer). git is required for the module VCS fetch.
+RUN apk add --no-cache git
 
 COPY pkg/go.mod ./pkg/go.mod
 COPY operators/go.mod operators/go.sum ./operators/
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
-    cd operators && go mod download
+    --mount=type=secret,id=gomod_token \
+    sh -c 'if [ -s /run/secrets/gomod_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
+    fi' \
+    && cd operators && go mod download
 
 COPY pkg/ ./pkg/
 COPY operators/ ./operators/

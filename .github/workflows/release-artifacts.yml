@@ -85,8 +85,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/charts
+          # loopzero-common is a library chart that image-backed charts depend on; resolve
+          # local (file://) deps into charts/<chart>/charts/ before packaging.
           for c in charts/*/; do
             [ -f "$c/Chart.yaml" ] || continue
+            helm dependency update "$c" 2>/dev/null || true
             helm package "$c" -d /tmp/charts
           done
           for tgz in /tmp/charts/*.tgz; do
