@@ -105,8 +105,16 @@ fi
 # Step 2
 run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VERIFY_FLAG"
 
-# Step 3
-run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
+# CANONICAL ORDER FIX 2026-06-18 (Finding #4 of issue #91 — Cleanroom
+# mandate canonical chain run): Step 4 (patch-kratos-dev-public) MUST
+# precede Step 3 (seed-admin-loopzero-dev) because Step 3 HTTP-POSTs a
+# login submit against the canonical Kratos URL (auth-dev.loopzero.example)
+# and Kratos rejects the request with HTTP 000 when the ConfigMap is
+# still helm-default (localhost:4455 + missing cors / cookies.domain).
+# Same family: Step 4b (hydra URLs canonical) must also precede admin
+# so the OIDC callback chain is consistent. Memory
+# feedback_post_cleanroom_kratos_patch_dev_public already documents
+# the dependency — this re-ordering codifies it in the master script.
 
 # Step 4
 if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
@@ -117,6 +125,10 @@ fi
 
 # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
 run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+
+# Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
+# requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
+run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
 
 # Step 5
 run_step "5-seed-github-app-dev" "bash $SCRIPT_DIR/seed-github-app-dev.sh $VERIFY_FLAG"

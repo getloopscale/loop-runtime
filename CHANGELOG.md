@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **Master seed Step 3 (admin login submit) failed HTTP 000 on fresh Cleanroom because Step 4 (patch-kratos) ran after it.**
+  Finding #4 of issue #91 (Cleanroom mandate canonical chain run 2026-06-18). The script declared
+  order `1 vault → 2 minio → 3 admin → 4 patch-kratos → 4b hydra → 5+` but Step 3 HTTP-POSTs a
+  login submit against `auth-dev.loopzero.example` while Kratos ConfigMap still has helm-default URLs
+  (`localhost:4455`, missing CORS / cookies.domain). Kratos rejects the submit with HTTP 000 (CSRF
+  defense). Memory `feedback_post_cleanroom_kratos_patch_dev_public` already documented the
+  dependency; this commit codifies it in the master script. Canonical order is now
+  `1 vault → 2 minio → 4 patch-kratos → 4b hydra → 3 admin → 5+`. Hermetic regression lock
+  `TestSeedPostCleanroomAll_StepOrderCanonical` enforces 4-before-3 and 4b-before-3, plus a
+  traceability comment so a future "clean up" refactor does not regress the unusual order.
 
 ### Security
 
