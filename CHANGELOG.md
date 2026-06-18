@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
 ### Fixed
+- **Cleanroom-fresh seed chain failed: vault-bootstrap-dev.sh wrote `loopzero-openbao-approle` Secret to wrong namespace.**
+  Finding #2 from issue #91 (Cleanroom mandate canonical chain run 2026-06-18). The script default
+  `TARGET_NS=external-secrets` put the Secret out of reach of `loopzero-api` Deployment (envFrom reads
+  from `loopzero-system` ns), so a fresh Cleanroom seed left `loopzero-api` in `CrashLoopBackOff` with
+  `OPENBAO_VAULT_SECRET_ID (AppRole secret_id) required` and the downstream master seed Step 2
+  (seed-minio-canonical) Layer 4 timed out waiting for `loopzero-api` rollout to converge. Default now
+  points at the canonical consumer ns (`loopzero-system`) so the chain converges on first run.
+  `ESO_TARGET_NS` env var override preserved for pre-canonical workloads. Hermetic regression lock
+  `infra/tests/check-vault-bootstrap-target-ns-default_test.sh` pins default + override semantics +
+  $TARGET_NS interpolation in the Step 10 log/kubectl-apply alignment (6/6 PASS). Same
+  stale-helper-post-architecture-refactor class as PR #88 (rewriter) + PR #89 (Tiltfile).
 - **P0 cross-project namespace corruption on promote (stale rewriter post-2026-06-07 multi-project refactor).**
   `api/internal/services/promotion_orchestrator.go` `rewriteManifestsForEnv` was written to recognize the
   legacy namespace format `loopzero-{tenant}-{env}`. The 2026-06-07 multi-project refactor ("TUDO DEVERIA esta
