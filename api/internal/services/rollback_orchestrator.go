@@ -291,8 +291,20 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 // REVIEW-FIX: Pass correct lock coordinates instead of empty strings to avoid
 // global lock contention. Also log lock/transition errors instead of discarding.
 func (o *RollbackOrchestrator) failRollback(ctx context.Context, tenant, project, env, releaseID string, cause error) error {
-	if err := o.deps.Locker.WithLock(ctx, tenant, project, env, func(tx db.DBTX) error {
-		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.RPEventRollbackFailed)); err != nil {
+	// LIVE-caught 2026-06-18: when sync wait times out the caller's
+	// ctx is already cancelled. Using it for the lock + UpdateStatus
+	// fails immediately ("lock: begin transaction: context canceled")
+	// → release stays in ROLLING_BACK forever → next rollback attempt
+	// rejects with "no longer in ROLLING_BACK state" cascade.
+	//
+	// Fix: detach a fresh ctx with a bounded budget so failRollback
+	// ALWAYS gets a chance to write ROLLBACK_FAILED, even when the
+	// upstream HTTP request died. WithoutCancel propagates trace
+	// context for observability while ignoring the parent's cancel.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := o.deps.Locker.WithLock(cleanupCtx, tenant, project, env, func(tx db.DBTX) error {
+		if _, err := o.deps.Releases.UpdateStatus(cleanupCtx, tx, releaseID, string(statemachine.RPEventRollbackFailed)); err != nil {
 			return fmt.Errorf("failRollback: update status: %w", err)
 		}
 		return nil
