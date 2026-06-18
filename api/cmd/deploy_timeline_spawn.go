@@ -96,8 +96,21 @@ func eventTypeToCanonicalTransitions(eventType string) []string {
 		// canonical 5-phase timeline we collapse: BUILD_COMPLETED
 		// implies Sign immediately starts and immediately completes.
 		return []string{"BUILD_COMPLETED", "SIGN_IN_PROGRESS", "SIGN_COMPLETED"}
-	case "build.failed", "build.cancelled":
-		return []string{} // terminal failure surfaces via existing build SSE
+	case "build.failed":
+		// Canonical build-phase terminal failure. Sponsor LIVE-caught
+		// 2026-06-18: previously returned [] on the false premise that
+		// "terminal failure surfaces via existing build SSE" — the
+		// deploy timeline hero ONLY consumes the aggregator, so the
+		// empty mapping froze the hero in BUILD_IN_PROGRESS while the
+		// DB had status=FAILED for minutes (visually "Deploying /
+		// Awaiting events" forever). BUILD_FAILED projects to phase=
+		// build, status=failed, terminal=true so the hero renders the
+		// failed step + the cascading downstream phases stay pending.
+		return []string{"BUILD_FAILED"}
+	case "build.cancelled":
+		// Same canonical fix as build.failed but for user/operator
+		// cancellation. Phase=build, status=canceled, terminal=true.
+		return []string{"BUILD_CANCELLED"}
 	case "deploy.delivering":
 		// Manifests are being generated + pushed to gitops. This is
 		// the canonical Release phase.
