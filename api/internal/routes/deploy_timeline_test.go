@@ -228,7 +228,10 @@ func TestDeployTimelineSSE_UnknownDeploy_Returns404(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, _ := http.Get(srv.URL + "/api/v1/deploys/dep-fake/timeline")
+	resp, err := http.Get(srv.URL + "/api/v1/deploys/dep-fake/timeline")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d; want 404", resp.StatusCode)
