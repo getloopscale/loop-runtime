@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `loopzero-cloud` chart install-config docs (install-config-contract Slice 1, T3.1+T3.2): `SECRETS.md` (logical secret-key manifest + openssl generation for generated secrets + per-backend quick-start), `values.example.yaml` (commented config surface with `!!changeme!!` sentinels, schema-validated), and `examples/eso-{openbao,aws-sm,gcp-sm}.yaml` (ClusterSecretStore + ExternalSecret examples per backend — OpenBao/AWS Secrets Manager/GCP Secret Manager, ADR D2). 2 hermetic tests (9/0 + 30/0).
 - `loopzero-cloud` chart `existingSecret` value (install-config-contract Slice 1, T2.1, ADR D1 anti-lock-in floor): when set, the chart adds an `envFrom` secretRef so an operator-provided K8s Secret supplies the app's referenced secrets (Stripe/session/themory) — backend-agnostic (ESO/CSI/sops/kubectl), no secret backend lock-in. Default empty = legacy behavior (back-compat).
 - Artifact supply-chain pipeline (ROADMAP_AWS AM6): reusable `build-publish` GitHub Actions
   workflow (`docker buildx --sbom --provenance` → push by digest → keyless cosign sign) +
