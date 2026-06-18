@@ -227,11 +227,16 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	// Plan deploy-timeline-canonical-5-phases T5.1 — spawn the per-deploy
 	// 5-phase aggregator goroutine. Nil-safe: when no spawner is wired
 	// (legacy / test configurations), submit behavior is identical to
-	// before. The spawner OWNS the goroutine lifecycle — SubmitBuild
-	// returns immediately and the goroutine exits on terminal-state OR
-	// ctx cancel.
+	// before.
+	//
+	// LIVE-caught 2026-06-18: pass context.Background(), NOT the HTTP
+	// request ctx. SubmitBuild returns 202 immediately; the request
+	// handler completes and its ctx is canceled — the goroutine would
+	// see ctx.Done() and exit before emitting any deploy_timeline.*
+	// event. The aggregator owns its own lifecycle and exits via FSM
+	// terminal-state OR explicit cancel from outside.
 	if o.deployTimelineSpawn != nil {
-		o.deployTimelineSpawn(ctx, buildID)
+		o.deployTimelineSpawn(context.Background(), buildID)
 	}
 
 	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
