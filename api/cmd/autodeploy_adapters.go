@@ -51,81 +51,16 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		return fmt.Errorf("no loopzero.yaml parsed")
 	}
 
-	// Convert loopzero.yaml apps to AppSpec
-	var apps []services.AppSpec
-	for name, appCfg := range req.LoopZeroYaml.Apps {
-		app := services.AppSpec{
-			Name: name,
-		}
-
-		// Extract fields from the map[string]interface{}
-		if v, ok := appCfg["type"].(string); ok {
-			app.Type = v
-		} else {
-			app.Type = "server" // default
-		}
-		if v, ok := appCfg["runtime"].(string); ok {
-			app.Runtime = v // F-dom-2: runtime is the build-strategy key (framework removed)
-		}
-		if v, ok := appCfg["path"].(string); ok {
-			app.Path = v
-		}
-		if v, ok := appCfg["port"].(int); ok {
-			app.Port = v
-		} else if v, ok := appCfg["port"].(float64); ok {
-			app.Port = int(v)
-		}
-		if v, ok := appCfg["build"].(string); ok {
-			app.Build = v
-		}
-		if v, ok := appCfg["render"].(string); ok {
-			app.Rendering = v
-		}
-		// Canonical 2026-06-16: extract `start` field from loopzero.yaml apps map.
-		// The canonical Dockerfile generator (canonical_dockerfile.go) requires
-		// an explicit start command — without it, generate-dockerfile fails at
-		// build time with "app 'X' has no declared start command". The
-		// loopzerokit-example fixture declares `start: loopzerokit start`.
-		if v, ok := appCfg["start"].(string); ok {
-			app.Start = v
-		}
-
-		// Auto-infer: frontend → static
-		if app.Type == "frontend" && app.Rendering == "" {
-			app.Rendering = "static"
-		}
-
-		// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): extract scaling config
-		// from the webhook-parsed loopzero.yaml so plan-cap enforcement in
-		// BuildOrchestrator.SubmitBuild sees the requested values. Without this
-		// extraction, `replicas: 99` silently becomes 0 and bypasses the cap.
-		if v, ok := appCfg["replicas"].(int); ok {
-			app.Replicas = v
-		} else if v, ok := appCfg["replicas"].(float64); ok {
-			app.Replicas = int(v)
-		}
-		if asRaw, ok := appCfg["autoscaling"].(map[string]interface{}); ok {
-			as := &services.AppAutoscalingSpec{}
-			if v, ok := asRaw["min"].(int); ok {
-				as.MinReplicas = v
-			} else if v, ok := asRaw["min"].(float64); ok {
-				as.MinReplicas = int(v)
-			}
-			if v, ok := asRaw["max"].(int); ok {
-				as.MaxReplicas = v
-			} else if v, ok := asRaw["max"].(float64); ok {
-				as.MaxReplicas = int(v)
-			}
-			if v, ok := asRaw["targetCPU"].(int); ok {
-				as.TargetCPU = v
-			} else if v, ok := asRaw["targetCPU"].(float64); ok {
-				as.TargetCPU = int(v)
-			}
-			app.Autoscaling = as
-		}
-
-		apps = append(apps, app)
-	}
+	// Sponsor LIVE-caught 2026-06-18: this conversion previously lived
+	// inline here AND in services/preview_service.go appsFromLoopZeroYaml,
+	// with a comment "mirror of autodeploy_adapters.go" admitting the
+	// duplication. Canonical 2026-06-16 added `start` field extraction
+	// only to this path — preview path silently kept losing it, so PR
+	// previews failed at generate-dockerfile time while push deploys
+	// succeeded against the same loopzero.yaml. Single source of truth now
+	// lives in services.ConvertLoopZeroYamlApps (with hermetic regression
+	// locks for every extracted field).
+	apps := services.ConvertLoopZeroYamlApps(req.LoopZeroYaml.Apps)
 
 	a.logger.Info("auto-deploy: submitting build",
 		"project", req.ProjectName,

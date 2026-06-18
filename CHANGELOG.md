@@ -30,6 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
 ### Fixed
+- **Preview builds failed with "no declared start command" while same loopzero.yaml succeeded via CLI deploy.**
+  The conversion `loopzero.yaml apps map → []services.AppSpec` lived inline in TWO places —
+  `api/cmd/autodeploy_adapters.go` (push path) and `api/internal/services/preview_service.go`
+  `appsFromLoopZeroYaml` (preview path) — with the latter explicitly commented as "mirror of
+  autodeploy_adapters.go". When canonical 2026-06-16 added `start` field extraction to
+  satisfy `canonical_dockerfile.go`, only the push path was updated; the preview path silently
+  kept dropping the field. Same loopzero.yaml → push deploy GREEN → PR preview RED with
+  `generate-dockerfile` rejecting `app "X" has no declared start command`. Sponsor LIVE-caught
+  2026-06-18 against `loopzerokit-example` PR #1. Extracted the conversion into the single source
+  of truth `services.ConvertLoopZeroYamlApps` consumed by both callsites; 8 hermetic regression
+  locks (`TestConvertLoopZeroYamlApps_*`) pin every extracted field + a field-count drift detector
+  so a future AppSpec addition can no longer reach only one of the two webhook flows. Closes
+  CLAUDE.md anti-pattern *"Correct code in wrong place / mirror of X"*.
 - **Deploy timeline hero stuck on "Deploying / Awaiting events" when a build fails.**
   The canonical aggregator mapper (`api/cmd/deploy_timeline_spawn.go`) returned `[]` for
   `build.failed` / `build.cancelled` on the false premise that "terminal failure surfaces via
