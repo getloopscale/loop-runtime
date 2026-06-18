@@ -1,0 +1,97 @@
+# AM6 — loopzero artifact pipeline, dual-channel + low-cost.
+#   develop push  → DEV channel: build only CHANGED services (paths-filter), tags :develop/:develop-<sha>, NO sign (cheap/fast)
+#   tag v*        → RELEASE channel: build ALL 5 services + ALL 13 charts, SBOM + provenance + keyless cosign
+#   workflow_dispatch → build ALL (unsigned), manual
+# Low-cost levers: change-detection (dev), GHA layer cache (build-publish.yml), amd64-only, cancel-in-progress (dev only).
+name: artifacts
+on:
+  push:
+    branches: [develop]
+    tags: ["v*"]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+concurrency:
+  group: artifacts-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}   # cancel superseded DEV runs only; never release
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.set.outputs.images }}
+      charts: ${{ steps.set.outputs.charts }}
+      sign: ${{ steps.set.outputs.sign }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # full history for accurate paths-filter diff on push
+      - id: filter
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            loopzero-api: ['api/**', 'pkg/**']
+            loopzero-app-operator: ['operators/**', 'pkg/**']
+            loopzero-platform-operator: ['operators/**', 'pkg/**']
+            loopzero-tenant-operator: ['operators/**', 'pkg/**']
+            loopzero-preview-operator: ['operators/**', 'pkg/**']
+            charts: ['charts/**']
+      - id: set
+        env:
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          CHANGES: ${{ steps.filter.outputs.changes }}
+        run: |
+          set -euo pipefail
+          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."}]'
+          if [ "$IS_TAG" = "true" ] || [ "$IS_DISPATCH" = "true" ]; then
+            echo "images=$ALL" >> "$GITHUB_OUTPUT"
+            echo "charts=true" >> "$GITHUB_OUTPUT"
+            echo "sign=$IS_TAG" >> "$GITHUB_OUTPUT"        # sign ONLY on a real release tag
+          else
+            CH="${CHANGES:-[]}"
+            SEL=$(printf '%s' "$ALL" | jq -c --argjson ch "$CH" '[.[] | select(.image as $i | $ch | index($i))]')
+            echo "images=$SEL" >> "$GITHUB_OUTPUT"
+            echo "charts=$(printf '%s' "$CH" | jq 'index("charts") != null')" >> "$GITHUB_OUTPUT"
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+          fi
+  images:
+    needs: plan
+    if: ${{ needs.plan.outputs.images != '[]' && needs.plan.outputs.images != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.images) }}
+    uses: ./.github/workflows/build-publish.yml
+    with:
+      image: ${{ matrix.image }}
+      dockerfile: ${{ matrix.dockerfile }}
+      context: ${{ matrix.context }}
+      sign: ${{ needs.plan.outputs.sign == 'true' }}
+    secrets: inherit
+  charts:
+    needs: plan
+    if: ${{ needs.plan.outputs.charts == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login GHCR (helm)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Package + push the 13 charts (OCI)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/charts
+          # loopzero-common is a library chart that image-backed charts depend on; resolve
+          # local (file://) deps into charts/<chart>/charts/ before packaging.
+          for c in charts/*/; do
+            [ -f "$c/Chart.yaml" ] || continue
+            helm dependency update "$c" 2>/dev/null || true
+            helm package "$c" -d /tmp/charts
+          done
+          for tgz in /tmp/charts/*.tgz; do
+            helm push "$tgz" oci://ghcr.io/getloopscale/charts
+          done

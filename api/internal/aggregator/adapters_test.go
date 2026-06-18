@@ -88,6 +88,68 @@ func TestReleaseDBReader_FailedTerminal(t *testing.T) {
 	}
 }
 
+// TestReleaseStateProjection_BuildPhaseFailures locks the canonical
+// projection for the synthetic states emitted by the v1 spawn-site
+// querier when an upstream build.failed / build.cancelled event arrives
+// (per api/cmd/deploy_timeline_spawn.go). Without these mappings the
+// projection would default to ("release", "in_progress", false) and the
+// deploy timeline hero would render "Release in progress" while the
+// real failure was in the Build phase — sponsor LIVE-caught 2026-06-18.
+func TestReleaseStateProjection_BuildPhaseFailures(t *testing.T) {
+	cases := []struct {
+		state    string
+		phase    string
+		status   string
+		terminal bool
+	}{
+		{"BUILD_FAILED", "build", "failed", true},
+		{"BUILD_CANCELLED", "build", "canceled", true},
+	}
+	for _, tc := range cases {
+		phase, status, terminal := releaseStateProjection(tc.state)
+		if phase != tc.phase {
+			t.Errorf("%s: phase=%s; want %s", tc.state, phase, tc.phase)
+		}
+		if status != tc.status {
+			t.Errorf("%s: status=%s; want %s", tc.state, status, tc.status)
+		}
+		if terminal != tc.terminal {
+			t.Errorf("%s: terminal=%v; want %v", tc.state, terminal, tc.terminal)
+		}
+	}
+}
+
+// TestReleaseStateProjection_HappyPathLadder locks the canonical 5-phase
+// ladder synthetic states emitted by the spawn-site querier. Refactor
+// safety: if the projection drops a state, the deploy timeline hero would
+// fall through to the default ("release", "in_progress") and visually
+// regress to "Release in progress" while a downstream phase was actually
+// running.
+func TestReleaseStateProjection_HappyPathLadder(t *testing.T) {
+	cases := []struct {
+		state    string
+		phase    string
+		status   string
+		terminal bool
+	}{
+		{"BUILD_IN_PROGRESS", "build", "in_progress", false},
+		{"BUILD_COMPLETED", "build", "completed", false},
+		{"SIGN_IN_PROGRESS", "sign", "in_progress", false},
+		{"SIGN_COMPLETED", "sign", "completed", false},
+		{"DEPLOY_IN_PROGRESS", "deploy", "in_progress", false},
+		{"DEPLOY_COMPLETED", "deploy", "completed", false},
+		{"LIVE_IN_PROGRESS", "live", "in_progress", false},
+		{"LIVE_COMPLETED", "live", "completed", true},
+	}
+	for _, tc := range cases {
+		phase, status, terminal := releaseStateProjection(tc.state)
+		if phase != tc.phase || status != tc.status || terminal != tc.terminal {
+			t.Errorf("%s: got (%s,%s,%v); want (%s,%s,%v)",
+				tc.state, phase, status, terminal, tc.phase, tc.status, tc.terminal)
+		}
+	}
+}
+
 // --- loki_markers ------------------------------------------------------
 
 type fakeLokiQ struct {

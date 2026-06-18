@@ -2,13 +2,13 @@ FROM golang:1.26.1-alpine3.22 AS builder
 WORKDIR /workspace
 
 ENV GOWORK=off
+ENV GOPRIVATE=github.com/getloopscale/*
 
-# Sibling loopzero-contracts module: api/go.mod uses `replace => ../../loopzero-contracts`
-# which from /workspace/api/ resolves to /loopzero-contracts. Provided via BuildKit
-# named build context `loopzero-contracts` so the sibling repo is reachable inside
-# the Docker build (per M5 decomposition; see docs/version-pin-cutover-runbook.md).
-# Sponsor-direct-approval 2026-06-17 ("O sistema deve rodar no k3, continue").
-COPY --from=loopzero-contracts . /loopzero-contracts
+# loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
+# requires github.com/getloopscale/loopzero-contracts v0.1.0, NO replace). The private module
+# is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
+# token is NEVER written to an image layer. git is required for the module VCS fetch.
+RUN apk add --no-cache git
 
 COPY pkg/go.mod ./pkg/go.mod
 COPY operators/api/go.mod operators/api/go.sum ./operators/api/
@@ -16,7 +16,11 @@ COPY operators/api/v1 ./operators/api/v1
 COPY api/go.mod api/go.sum ./api/
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
-    cd api && go mod download
+    --mount=type=secret,id=gomod_token \
+    sh -c 'if [ -s /run/secrets/gomod_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
+    fi' \
+    && cd api && go mod download
 
 COPY pkg/ ./pkg/
 COPY api/ ./api/

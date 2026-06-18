@@ -183,7 +183,16 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req RollbackD
 	// See MEET-2026-03-27-012 for the bug report.
 	argoAppName := fmt.Sprintf("%s-%s", req.TenantID, req.Environment)
 	if syncErr := c.sync.TriggerSync(ctx, argoAppName); syncErr != nil {
-		slog.Warn("container rollback: argocd sync trigger failed, continuing", "error", syncErr)
+		return fmt.Errorf("container rollback: sync trigger failed: %w", syncErr)
+	}
+	// LIVE-caught 2026-06-18 sponsor mandate: DB safety invariant —
+	// wait for sync confirmation before letting the orchestrator's
+	// Phase 5 flip release state. Without this wait the rollback
+	// would return success while the deployment infrastructure was
+	// still applying manifests + pods could still serve the old
+	// (rolled-back) code.
+	if waitErr := c.sync.WaitForSync(ctx, argoAppName, c.argocdSyncTimeout, nil); waitErr != nil {
+		return fmt.Errorf("container rollback: sync wait failed: %w", waitErr)
 	}
 
 	return nil

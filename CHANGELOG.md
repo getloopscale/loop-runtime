@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.20.0] - 2026-06-18
+
+### Added
+- loopzero-api install-config-contract (two-plane, AM6.5 Slice 3): chart now injects 137 engine runtime env vars (post-review F1 exclusion) — 110 non-secret via ConfigMap (documented in `charts/loopzero-api/CONFIG.md`) + 27 secret via referenced K8s Secret (documented in `charts/loopzero-api/SECRETS.md`, never inline). Adds per-backend ESO examples (OpenBao/AWS-SM/GCP-SM), opt-in Stakater Reloader (`reloader.enabled`), `values.example.yaml`, consumer `README.md`, and `values.schema.json` properties for every key (fail-fast `additionalProperties:false`). Hermetic Go guards (`infra/tests/charts/loopzero_api_install_contract_test.go`) enforce CONFIG.md/SECRETS.md set-equality vs the rendered chart + config/secret plane separation.
+- `loopzero-cloud` chart day-2 config hygiene (install-config-contract Slice 2): opt-in Reloader integration (`reloader.enabled` → `reloader.stakater.com/auto` on the Deployment so a rotated secret triggers a rolling restart; operator-installed controller, OFF by default — render byte-stable when disabled, ADR D1); a consumer `README.md` documenting the layered install (`-f values-<env>.yaml`) + existingSecret + ESO examples + rotation; and a hermetic secrets-by-reference guard (`loopzero-cloud-no-inline-secret_test.sh`) that fails if any committed values file inlines a secret value. 2 hermetic tests (12/0 + 4/0).
+- `loopzero-cloud` chart install-config docs (install-config-contract Slice 1, T3.1+T3.2): `SECRETS.md` (logical secret-key manifest + openssl generation for generated secrets + per-backend quick-start), `values.example.yaml` (commented config surface with `!!changeme!!` sentinels, schema-validated), and `examples/eso-{openbao,aws-sm,gcp-sm}.yaml` (ClusterSecretStore + ExternalSecret examples per backend — OpenBao/AWS Secrets Manager/GCP Secret Manager, ADR D2). 2 hermetic tests (9/0 + 30/0).
+- `loopzero-cloud` chart `existingSecret` value (install-config-contract Slice 1, T2.1, ADR D1 anti-lock-in floor): when set, the chart adds an `envFrom` secretRef so an operator-provided K8s Secret supplies the app's referenced secrets (Stripe/session/themory) — backend-agnostic (ESO/CSI/sops/kubectl), no secret backend lock-in. Default empty = legacy behavior (back-compat).
+- Artifact supply-chain pipeline (ROADMAP_AWS AM6): reusable `build-publish` GitHub Actions
+  workflow (`docker buildx --sbom --provenance` → push by digest → keyless cosign sign) +
+  `release-artifacts` matrix caller over the 5 loopzero service images (api + 4 operators) and
+  the 13 Helm charts (OCI). Builds from the existing distroless Dockerfiles (not Buildpacks).
+  Proven end-to-end against GHCR private (signed + SBOM + cosign-verify). The pipeline IS the
+  CI workflows (YAML) — no new shell scripts (respects the script-minimization gate).
+
 - Canonical Deploy Timeline (5-phase build → sign → release → deploy → live) — plan `deploy-timeline-canonical-5-phases` v1.1 (blueprint SHIPPABLE 97.0 + plan SHIPPABLE_WITH_CAVEATS 70). **Read path + write path WIRED end-to-end in production via `server.Config.DeployTimelineStore` mount (router.go) + `BuildOrchestratorDeps.DeployTimelineSpawn` hook firing on every SubmitBuild after build.started Append.** Foundation: `api/internal/scrub/` write-time regex denylist for 12 internal terms per Cross-Project Rule 9 (9 tests PASS -race) + `pkg/statemachine/deploy_timeline.go` strict 5-phase FSM with Deploy DEGRADED recovery per ADR D5 (6 tests PASS -race). Aggregator: `api/internal/aggregator/` per-deploy goroutine with SourceReader DIP (5 canonical adapters loki_markers + release_db + argocd_app + loopzeroapp_informer + status_url_probe) + write-time scrub + recovered panic → DEGRADED emission per ADR D1 § Drawbacks (20 tests PASS -race incl. SpawnFor + PostgresDeployTimelineStore). Read path: `api/internal/routes/deploy_timeline.go` SSE handler with Last-Event-ID dedup + Flusher per chunk + 2s poll + 30min cap + tenant defense returning 404 on mismatch per ADR D8 + `RegisterDeployTimelineRoute` chi mount helper (6 tests PASS -race) + `PostgresDeployTimelineStore` composing `BuildStoreReaderAdapter.GetTenantForBuild` (BuildLookup) + `DeployTimelineSSEReader` (SSE forwarder) into the canonical store contract (4 tests PASS -race). Write path: `BuildOrchestrator.SubmitBuild` now invokes the nil-safe `DeployTimelineSpawn` callback after `build.started` is appended; production-wired spawner calls `aggregator.SpawnFor` with v1 `release_db` source (delivers ~60% of canonical signal — release transitions PENDING → ACTIVE → ROLLED_BACK). The remaining 4 source adapters (loki_markers + argocd_app + loopzeroapp_informer + status_url_probe) are documented v1.1 follow-up per plan Open Questions — each requires Querier dependencies wired in setup_*.go. Storage: `SSEEventSink` reuses existing `sse_events` table avoiding T2 migration governance loop (build_id column holds deploy_id). Metrics: 4 canonical Prometheus counters/histograms `loopzero_deploy_timeline_{events_total,phase_duration_seconds,scrub_replacements_total,aggregator_panic_total}` per spec §15.2 (2 tests PASS). Tests: `infra/tests/e2e/dev-public-deploy-timeline_test.sh` LIVE 5-scenario bash (Content-Type + tenant defense + Last-Event-ID + scrub leak + preflight) + `infra/tests/check-dev-public-deploy-timeline-syntax_test.sh` hermetic structural (24/24 PASS) + `archive/canonical-tests-v1/scripts/local/dogfood-deploy-timeline.sh` aggregate wrapper.
 - Audit `2026-06-17-canonical-tests-deep-review/` — deep review da suite canonical (cleanroom + dogfood + chaos-test + live-proof + contra-prova) com 9 findings classificados BLOCKER/HIGH/MED/LOW + Change Request T3 + ADR T3 APPROVED para rewrite canonical via strangler-fig com quarentena consultável. Sponsor verbatim "Acheito TUDO" 2026-06-17.
 - `infra/tests/livetest/{dogfood,chaos,contraprova}/` Go packages (T3.2 + T3.3 + T3.4 do plan) — v2 helpers replacing remaining v1 bash wrappers per ADR-2026-06-17-T3 D1: dogfood (Env + LoadJWT + CurlJSON + KubectlGetJSON + Pause + example J-17 LIVE spec) / chaos (Manifest + ChaosResult + ApplyChaos + WaitForFinished + AssertSLOHeld preserving `loopzero-ops chaos slo-compare` per ADR D8 + AssertSpanCoverage Tempo stub per ADR D7 OTel evidence) / contraprova (8 Camadas including new Camada 8 live-proof byte-grep absorption per ADR D3 + RunContraProva orchestrator with APROVADA/REPROVADA verdict). 15 hermetic Go tests PASS (6 dogfood + 3 chaos + 6 contraprova). Wired em `task {dogfood,chaos,contraprova}:v2:hermetic` + `task livetest:v2:hermetic` aggregate.
@@ -20,7 +44,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `archive/canonical-tests-v1/` quarantine directory (T0.1 do plan) — 8 SKILL.md dirs (cleanroom + cleanroom-drill + dogfood + dogfood-drill + chaos-test + chaos-test-drill + live-proof + contra-prova) + 16 local bash scripts (dogfood-* + cleanroom-canonical-chain-runner + live-proof-dev-public) + 3 drill orchestrators + drill-dogfood-journeys lib movidos via `git mv` (history preserved). README.md documenta status QUARANTINED READ-ONLY + invocation path post-move + DELETE policy. Per ADR D5 quarentena consultável — files remain executable via direct `bash archive/canonical-tests-v1/scripts/local/...` OR via task targets (path-updated).
 - `infra/tests/livetest/cleanroom/` Go package (T3.1 do plan) — Ginkgo-driven v2 cleanroom orchestrator replacing v1 bash chain runner. Helpers: `Options`/`Outcome`/`PhaseResult` types + `Run` aggregator + per-phase wrappers (`TaskRun`, `TiltUpBackground`, `TaskDoctorAssertReady`, `BaselineCapture`, `BaselineDiff`). 5 hermetic Go tests PASS. Ginkgo LIVE spec gated por build tag `live` em `cleanroom_live_test.go`. Wired em `task cleanroom:v2` + `task cleanroom:v2:hermetic`.
 
+
 ### Changed
+- Governed re-anchor of the `script-count` quality baseline 409→411 (`infra/quality/script-count-baseline.json`) — reflects already-merged reviewed work that landed after the 2026-06-17 reconciliation without ratcheting; the install-config-contract slices are net-zero on .sh (their hermetic tests are Go). Owner-authorized; the script-minimization program remains the path to ratchet DOWN. `task quality:gates` GREEN.
+- install-config-contract Slice 1+2 hermetic tests homed as Go (`infra/tests/charts/loopzero_cloud_install_contract_test.go`) replacing 4 bash `*_test.sh` — keeps the contract coverage (secret manifest, ESO examples, Reloader opt-in, no-inline-secret guard) while respecting the un-homed-logic gate (test logic belongs in Go, not new shell). un-homed-logic back to baseline 153.
+- Hardened the `loopzero-cloud` chart config contract (install-config-contract Slice 1, T1.1): `values.schema.json` now `additionalProperties: false` so `helm install` fail-fasts on an unknown/typo'd top-level key; added the `existingSecret` value (anti-lock-in floor — secrets by reference, ADR D1), reconciled the schema with all real top-level keys (loopzero-common, imagePullSecrets, probes, metrics, networkPolicy, topologySpreadConstraints), and widened the `image.repository` pattern to accept a `:port` registry host. Default values + dev-public + prod overlays render GREEN; unknown keys rejected (install-config-contract-slice1-plan T1.1). T1.2 applies the same harden to the `loopzero-api` chart (additionalProperties:false + key reconciliation + registry :port pattern) — default + overlays GREEN.
+- **BREAKING (build): pinned `github.com/getloopscale/loopzero-contracts` to v0.1.0 (M5 version-pin cutover).**
+  Dropped the local `replace => ../../loopzero-contracts` in `pkg/go.mod` + `api/go.mod` and the
+  `../loopzero-contracts` entry from `go.work`; the engine now consumes the published module. `api/Dockerfile`
+  no longer needs the `loopzero-contracts` BuildKit build-context — it fetches the pinned **private** module
+  via `GOPRIVATE` + a short-lived token mounted as a buildx `--secret` (never baked in a layer). Engine
+  builds are now self-contained (no sibling working-tree dependency). Verified: `go build ./...` +
+  `go test ./pkg/...` GREEN; workspace resolves loopzero-contracts v0.1.0; operators build GREEN.
+- AM6 artifact pipeline is now **dual-channel + low-cost**: `develop` push builds only the
+  CHANGED services (paths-filter) and tags `:develop`/`:develop-<sha>` **unsigned** (fast/cheap);
+  a `v*` tag builds ALL 5 images + 13 charts with SBOM + provenance + keyless cosign and tags
+  `:X.Y.Z`/`:latest` (community-standard via `docker/metadata-action`). Low-cost levers: GHA layer
+  cache, amd64-only, `cancel-in-progress` on dev runs. `sign` is a reusable-workflow input,
+  true only on a real release tag.
 
 - `taskfiles/test.yml` 14 `test:dogfood:*` targets + `taskfiles/infra.yml` live-proof reference path-updated v1 → archive paths (T0.1). Chain antiga continua executável via `task` targets per ADR D5.
 - `.claude/rules/shell-scripts-allowlist.md` 20+ entries path-updated v1 → archive paths (T0.1). Allowlist intent preserved at new locations.
@@ -28,17 +69,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `docs/operations/cleanroom-canonical-runbook.md` path references updated v1 → archive (T0.1).
 - `infra/scripts/local/{trio-dev-public,test-all-dev-public}.sh` callers of `live-proof-dev-public.sh` path-updated to archive (T0.1).
 
-### Changed
 
 - ROADMAP.md: M0-M8 dashboard journeys PAUSED até canonical-tests-rewrite-v2 entregar (ADR T3 Amendment 1). Refactor da suite é prerequisite — validar M0-M8 sobre base com débito conhecido produziria evidência frágil.
 
-### Deprecated
-
-### Removed
 
 ### Fixed
-
-### Security
+- **P0 cross-project namespace corruption on promote (stale rewriter post-2026-06-07 multi-project refactor).**
+  `api/internal/services/promotion_orchestrator.go` `rewriteManifestsForEnv` was written to recognize the
+  legacy namespace format `loopzero-{tenant}-{env}`. The 2026-06-07 multi-project refactor ("TUDO DEVERIA esta
+  separado por projeto") changed the canonical namespace format to `loopzero-{tenant}-{project}-{env}` and
+  updated `pkg/naming.Namespace`, but the rewriter's exact-match string comparison (`s == oldNs`) was
+  never updated to match. Result: rewrite silently no-op'd on real renderer output; manifests shipped to
+  gitops with the FromEnv namespace verbatim; resources deployed into the preview namespace instead of
+  production; ArgoCD reported "Synced + Healthy" because the manifest told it to do exactly what it did.
+  Bug latent until first multi-project tenant promote in production. Sponsor LIVE-caught 2026-06-18
+  against `teste` project (build `build-e83c0186d91cfca1`): 5 promotes appeared to succeed, dashboard
+  showed "Rolling out…" stuck, real workload was deployed in `teste-preview-pr-1` namespace while the
+  production env target was empty. Fix accepts `projectID` in the rewriter and recognizes BOTH the
+  canonical and legacy namespace formats as fromEnv match candidates so existing fixtures keep working
+  while real renderer output is rewritten correctly. Hermetic regression lock
+  `TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace` pins the multi-project format using a
+  fixture that mirrors actual renderer output.
+- **`/projects` listing showed "Failed" for projects whose latest build was cancelled but whose earlier release was still ACTIVE serving production.**
+  The aggregate-status SQL (`api/internal/db/queries/projects.sql`
+  `ListProjectsWithSummaryByTenant`) only consulted the latest build status — it
+  never looked at `releases`. The mapper `MapBuildStatusToProjectStatus` then
+  collapsed `BuildCancelled` + `BuildFailed` into `ProjectStatusFailed`. Result:
+  a project whose user cancelled an in-flight build (intentional) but whose
+  prior successful release was still serving prod traffic showed visually as
+  "Failed" while `/projects/<name>/deployments` correctly rendered `● Active`
+  on the same release. Sponsor LIVE-caught 2026-06-18 against `loopzerokit-example`.
+  Fix is release-aware: the SQL JOINs an `active_release` LATERAL preferring
+  rows whose status is in `(ACTIVE, ROLLING_BACK, FAILED, ROLLBACK_FAILED)`,
+  the new `MapProjectStatus(activeReleaseStatusRaw, latestBuildState)` consults
+  the release SoT first and falls back to the build state only when no release
+  is consultable, and `BuildCancelled` now maps to `ProjectStatusIdle` (not
+  `ProjectStatusFailed`) — cancellation is intentional, failure is unexpected,
+  they cannot share a UI bucket. 8 new hermetic tests in
+  `aggregate_project_status_test.go` pin the canonical decision tree
+  (ACTIVE-release-trumps-cancelled, ACTIVE-trumps-failed, ROLLING_BACK is
+  Building, FAILED/ROLLBACK_FAILED is Failed, terminal SUPERSEDED/ROLLED_BACK/
+  CANCELLED releases fall back to build, empty-everything is Idle).
+- **Preview builds failed with "no declared start command" while same loopzero.yaml succeeded via CLI deploy.**
+  The conversion `loopzero.yaml apps map → []services.AppSpec` lived inline in TWO places —
+  `api/cmd/autodeploy_adapters.go` (push path) and `api/internal/services/preview_service.go`
+  `appsFromLoopZeroYaml` (preview path) — with the latter explicitly commented as "mirror of
+  autodeploy_adapters.go". When canonical 2026-06-16 added `start` field extraction to
+  satisfy `canonical_dockerfile.go`, only the push path was updated; the preview path silently
+  kept dropping the field. Same loopzero.yaml → push deploy GREEN → PR preview RED with
+  `generate-dockerfile` rejecting `app "X" has no declared start command`. Sponsor LIVE-caught
+  2026-06-18 against `loopzerokit-example` PR #1. Extracted the conversion into the single source
+  of truth `services.ConvertLoopZeroYamlApps` consumed by both callsites; 8 hermetic regression
+  locks (`TestConvertLoopZeroYamlApps_*`) pin every extracted field + a field-count drift detector
+  so a future AppSpec addition can no longer reach only one of the two webhook flows. Closes
+  CLAUDE.md anti-pattern *"Correct code in wrong place / mirror of X"*.
+- **Deploy timeline hero stuck on "Deploying / Awaiting events" when a build fails.**
+  The canonical aggregator mapper (`api/cmd/deploy_timeline_spawn.go`) returned `[]` for
+  `build.failed` / `build.cancelled` on the false premise that "terminal failure surfaces via
+  existing build SSE" — but the deploy timeline hero ONLY consumes the aggregator, so the
+  empty mapping froze the hero in `BUILD_IN_PROGRESS` forever while the DB already had
+  `status=FAILED` for minutes (sponsor LIVE-caught 2026-06-18 against `build-5a1c7e38a809332e`).
+  Mapper now emits the canonical synthetic states `BUILD_FAILED` / `BUILD_CANCELLED`, projected
+  by `api/internal/aggregator/adapter_release_db.go` to `(phase=build, status=failed|canceled,
+  terminal=true)` so the hero renders the failed Build step at the correct ladder position with
+  downstream phases staying pending. Hermetic regression locks: `TestEventTypeToCanonical
+  Transitions_FailureSurfaces` (api/cmd) + `TestReleaseStateProjection_BuildPhaseFailures`
+  (api/internal/aggregator).
 
 ## [0.19.0] - 2026-06-17
 

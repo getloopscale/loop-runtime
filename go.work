@@ -3,7 +3,6 @@ go 1.26.1
 toolchain go1.26.1
 
 use (
-	../loopzero-contracts
 	./api
 	./cmd/loopzero-ops
 	./infra/scripts

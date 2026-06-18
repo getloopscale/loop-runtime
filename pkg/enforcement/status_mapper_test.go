@@ -31,7 +31,14 @@ func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {
 		{statemachine.BuildSucceeded, enforcement.ProjectStatusLive},
 		{statemachine.BuildFailed, enforcement.ProjectStatusFailed},
 		{statemachine.BuildCancelling, enforcement.ProjectStatusBuilding},
-		{statemachine.BuildCancelled, enforcement.ProjectStatusFailed},
+		// Sponsor LIVE-caught 2026-06-18: CANCELLED is intentional (user
+		// pressed Cancel), FAILED is unexpected. Lumping them under
+		// ProjectStatusFailed produced visually-broken /projects rows for
+		// projects whose latest build was cancelled while an earlier
+		// release was still ACTIVE serving production. Cancelled now
+		// lands in Idle; the release-aware MapProjectStatus is the
+		// canonical aggregator that consults the release state first.
+		{statemachine.BuildCancelled, enforcement.ProjectStatusIdle},
 	}
 	if len(cases) != 7 {
 		t.Fatalf("EC-1 contract: expected exhaustive 7-state coverage, got %d. "+

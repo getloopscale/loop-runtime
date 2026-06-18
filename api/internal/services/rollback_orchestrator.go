@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -43,6 +44,12 @@ type RollbackGitOpsPusher interface {
 // RollbackSyncClient abstracts ArgoCD sync operations (DIP).
 type RollbackSyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
+	// WaitForSync blocks until the deployment infrastructure confirms
+	// the gitops manifest has been applied AND the target workloads
+	// are healthy (or until timeout fires). Required for the canonical
+	// "DB safety invariant" — release state flip happens ONLY after
+	// this returns nil. LIVE-caught 2026-06-18 sponsor mandate.
+	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
 }
 
 // RollbackOrchestratorDeps contains all dependencies for the rollback orchestrator.
@@ -54,7 +61,11 @@ type RollbackOrchestratorDeps struct {
 	Sync       RollbackSyncClient
 	Locker     EnvironmentLocker
 	Delivery   DeliveryActivator // MEET-009: polymorphic rollback delivery
-	Logger     *slog.Logger
+	// ArgocdSyncTimeout bounds the post-trigger sync confirmation wait.
+	// LIVE-caught 2026-06-18 sponsor mandate: DB state flip requires
+	// sync verification (not just trigger). Zero defaults to 120s.
+	ArgocdSyncTimeout time.Duration
+	Logger            *slog.Logger
 }
 
 // RollbackRequest contains the inputs for a rollback operation.
@@ -202,6 +213,19 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
 				fmt.Errorf("rollback: sync trigger failed for %s: %w", appName, syncErr))
 		}
+		// LIVE-caught 2026-06-18 sponsor mandate: "o banco deve ser
+		// atualizado somente COM GARANTIA MAXIMA QUE O ROLLBACK
+		// aconteceu". TriggerSync alone returns immediately + the
+		// deployment infrastructure might fail mid-sync. Wait for
+		// real confirmation before letting Phase 5 flip DB state.
+		timeout := o.deps.ArgocdSyncTimeout
+		if timeout == 0 {
+			timeout = 120 * time.Second
+		}
+		if waitErr := o.deps.Sync.WaitForSync(ctx, appName, timeout, nil); waitErr != nil {
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
+				fmt.Errorf("rollback: sync wait failed for %s: %w", appName, waitErr))
+		}
 	}
 
 	// Phase 5 (INSIDE lock): finalize — mark current as ROLLED_BACK, reactivate target.
@@ -267,8 +291,20 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 // REVIEW-FIX: Pass correct lock coordinates instead of empty strings to avoid
 // global lock contention. Also log lock/transition errors instead of discarding.
 func (o *RollbackOrchestrator) failRollback(ctx context.Context, tenant, project, env, releaseID string, cause error) error {
-	if err := o.deps.Locker.WithLock(ctx, tenant, project, env, func(tx db.DBTX) error {
-		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.RPEventRollbackFailed)); err != nil {
+	// LIVE-caught 2026-06-18: when sync wait times out the caller's
+	// ctx is already cancelled. Using it for the lock + UpdateStatus
+	// fails immediately ("lock: begin transaction: context canceled")
+	// → release stays in ROLLING_BACK forever → next rollback attempt
+	// rejects with "no longer in ROLLING_BACK state" cascade.
+	//
+	// Fix: detach a fresh ctx with a bounded budget so failRollback
+	// ALWAYS gets a chance to write ROLLBACK_FAILED, even when the
+	// upstream HTTP request died. WithoutCancel propagates trace
+	// context for observability while ignoring the parent's cancel.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := o.deps.Locker.WithLock(cleanupCtx, tenant, project, env, func(tx db.DBTX) error {
+		if _, err := o.deps.Releases.UpdateStatus(cleanupCtx, tx, releaseID, string(statemachine.RPEventRollbackFailed)); err != nil {
 			return fmt.Errorf("failRollback: update status: %w", err)
 		}
 		return nil

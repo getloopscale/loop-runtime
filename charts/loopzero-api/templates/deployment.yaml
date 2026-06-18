@@ -4,6 +4,10 @@ metadata:
   name: {{ include "loopzero-common.fullname" . }}
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
@@ -62,8 +66,10 @@ spec:
             - secretRef:
                 {{- if .Values.secrets.existingSecret }}
                 name: {{ .Values.secrets.existingSecret }}
-                {{- else }}
+                {{- else if .Values.secrets.create }}
                 name: {{ include "loopzero-common.fullname" . }}
+                {{- else }}
+                {{- fail "loopzero-api: no secret source — set secrets.existingSecret OR secrets.create=true (review F3: secrets.create=false without existingSecret would leave a dangling secretRef)" }}
                 {{- end }}
             # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
             # Shared with loopzero-cloud — single source of truth for X-Service-Auth.

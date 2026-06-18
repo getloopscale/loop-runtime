@@ -4,6 +4,11 @@ metadata:
   name: {{ include "loopzero-common.fullname" . }}
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    # install-config-contract Slice 2 (ADR D1): rotation-aware restart on Secret change.
+    reloader.stakater.com/auto: "true"
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
@@ -63,6 +68,13 @@ spec:
             - secretRef:
                 name: loopzero-stripe-webhook
                 optional: true
+            {{- if .Values.existingSecret }}
+            # install-config-contract Slice 1 (ADR D1): operator-provided Secret supplies
+            # the app's referenced secrets (Stripe API key, session token, themory key, ...).
+            # Backend-agnostic — populated via ESO / CSI / sops / kubectl (see SECRETS.md).
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
