@@ -10,6 +10,7 @@ RUN apk add --no-cache git
 
 COPY pkg/go.mod ./pkg/go.mod
 COPY operators/go.mod operators/go.sum ./operators/
+COPY operators/api/go.mod operators/api/go.sum ./operators/api/
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=secret,id=gomod_token \
