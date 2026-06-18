@@ -486,66 +486,13 @@ func isPreviewNotFound(err error) bool {
 // PreviewService interface.
 var _ domain.PreviewService = (*PreviewService)(nil)
 
-// appsFromLoopZeroYaml converts the raw loopzero.yaml apps map (as parsed from
-// the PR commit tarball) into []AppSpec carrying ALL fields the build
-// orchestrator needs to resolve LanguageStrategy: type, framework, path,
-// port, build, rendering, replicas, autoscaling.
-//
-// LIVE catch 2026-06-07 J-23 Option B: mirror of autodeploy_adapters.go
-// conversion logic so push-flow and PR-flow produce identical
-// SubmitBuildRequest.Apps for the same source code.
+// appsFromLoopZeroYaml — deprecated thin wrapper around the canonical
+// ConvertLoopZeroYamlApps. Kept for in-package call sites that still use
+// the short name; the implementation now delegates to the single source
+// of truth so push-flow and PR-flow can never drift again (sponsor
+// LIVE-caught 2026-06-18: this function had silently fallen out of sync
+// with autodeploy_adapters.go — losing the `start` field — breaking
+// preview builds with "no declared start command").
 func appsFromLoopZeroYaml(rawApps map[string]map[string]interface{}) []AppSpec {
-	out := make([]AppSpec, 0, len(rawApps))
-	for name, cfg := range rawApps {
-		app := AppSpec{Name: name}
-		if v, ok := cfg["type"].(string); ok {
-			app.Type = v
-		} else {
-			app.Type = "server"
-		}
-		if v, ok := cfg["runtime"].(string); ok {
-			app.Runtime = v // F-dom-2: runtime is the build-strategy key (framework removed)
-		}
-		if v, ok := cfg["path"].(string); ok {
-			app.Path = v
-		}
-		if v, ok := cfg["port"].(int); ok {
-			app.Port = v
-		} else if v, ok := cfg["port"].(float64); ok {
-			app.Port = int(v)
-		}
-		if v, ok := cfg["build"].(string); ok {
-			app.Build = v
-		}
-		if v, ok := cfg["render"].(string); ok {
-			app.Rendering = v
-		}
-		// T3.3: frontend/static delivery removed — no frontend default.
-		if v, ok := cfg["replicas"].(int); ok {
-			app.Replicas = v
-		} else if v, ok := cfg["replicas"].(float64); ok {
-			app.Replicas = int(v)
-		}
-		if asRaw, ok := cfg["autoscaling"].(map[string]interface{}); ok {
-			as := &AppAutoscalingSpec{}
-			if v, ok := asRaw["min"].(int); ok {
-				as.MinReplicas = v
-			} else if v, ok := asRaw["min"].(float64); ok {
-				as.MinReplicas = int(v)
-			}
-			if v, ok := asRaw["max"].(int); ok {
-				as.MaxReplicas = v
-			} else if v, ok := asRaw["max"].(float64); ok {
-				as.MaxReplicas = int(v)
-			}
-			if v, ok := asRaw["targetCPU"].(int); ok {
-				as.TargetCPU = v
-			} else if v, ok := asRaw["targetCPU"].(float64); ok {
-				as.TargetCPU = int(v)
-			}
-			app.Autoscaling = as
-		}
-		out = append(out, app)
-	}
-	return out
+	return ConvertLoopZeroYamlApps(rawApps)
 }
