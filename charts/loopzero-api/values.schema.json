@@ -303,7 +303,346 @@
       "type": "array"
     },
     "config": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "string"
+        },
+        "metricsPort": {
+          "type": "string"
+        },
+        "loopzeroEnv": {
+          "type": "string"
+        },
+        "logLevel": {
+          "type": "string"
+        },
+        "baseDomain": {
+          "type": "string"
+        },
+        "serverReadHeaderTimeout": {
+          "type": "string"
+        },
+        "serverReadTimeout": {
+          "type": "string"
+        },
+        "serverIdleTimeout": {
+          "type": "string"
+        },
+        "serverGracefulShutdown": {
+          "type": "string"
+        },
+        "dbMaxConns": {
+          "type": "string"
+        },
+        "dbMinConns": {
+          "type": "string"
+        },
+        "dbMaxConnIdleTime": {
+          "type": "string"
+        },
+        "dbMaxConnLifetime": {
+          "type": "string"
+        },
+        "dbHealthCheckPeriod": {
+          "type": "string"
+        },
+        "dbConnectTimeout": {
+          "type": "string"
+        },
+        "dbStatementTimeout": {
+          "type": "string"
+        },
+        "httpClientTimeout": {
+          "type": "string"
+        },
+        "argocdUrl": {
+          "type": "string"
+        },
+        "argocdClientTimeout": {
+          "type": "string"
+        },
+        "argocdInsecure": {
+          "type": "string"
+        },
+        "argocdPollInterval": {
+          "type": "string"
+        },
+        "argocdSyncTimeout": {
+          "type": "string"
+        },
+        "argoNamespace": {
+          "type": "string"
+        },
+        "argocdNamespace": {
+          "type": "string"
+        },
+        "apiCrossClusterUrl": {
+          "type": "string"
+        },
+        "giteaUrl": {
+          "type": "string"
+        },
+        "giteaCrossClusterUrl": {
+          "type": "string"
+        },
+        "giteaOrg": {
+          "type": "string"
+        },
+        "mgmtKubeContext": {
+          "type": "string"
+        },
+        "buildKubeContext": {
+          "type": "string"
+        },
+        "runtimeKubeContext": {
+          "type": "string"
+        },
+        "minioEndpoint": {
+          "type": "string"
+        },
+        "minioCrossClusterEndpoint": {
+          "type": "string"
+        },
+        "sourceBucket": {
+          "type": "string"
+        },
+        "registryUrl": {
+          "type": "string"
+        },
+        "registryInsecure": {
+          "type": "string"
+        },
+        "harborRegistryUrl": {
+          "type": "string"
+        },
+        "workloadIngressUrl": {
+          "type": "string"
+        },
+        "loopzeroPreviewPublicDomain": {
+          "type": "string"
+        },
+        "loopzeroPublicDomain": {
+          "type": "string"
+        },
+        "loopzeroClusterIssuer": {
+          "type": "string"
+        },
+        "loopzeroPrometheusAddress": {
+          "type": "string"
+        },
+        "lokiUrl": {
+          "type": "string"
+        },
+        "loopzeroGrafanaBaseUrl": {
+          "type": "string"
+        },
+        "githubAppId": {
+          "type": "string"
+        },
+        "githubApiBaseUrl": {
+          "type": "string"
+        },
+        "billingReturnUrl": {
+          "type": "string"
+        },
+        "billingUpgradeUrl": {
+          "type": "string"
+        },
+        "cfAccountId": {
+          "type": "string"
+        },
+        "cfKvNamespaceId": {
+          "type": "string"
+        },
+        "cfZoneManagement": {
+          "type": "string"
+        },
+        "loopzeroCosignKeyless": {
+          "type": "string"
+        },
+        "loopzeroCosignAttestEnabled": {
+          "type": "string"
+        },
+        "loopzeroCosignInsecureSkipSctVerify": {
+          "type": "string"
+        },
+        "loopzeroCosignTufRootPinned": {
+          "type": "string"
+        },
+        "loopzeroFulcioUrl": {
+          "type": "string"
+        },
+        "loopzeroRekorUrl": {
+          "type": "string"
+        },
+        "loopzeroCosignImage": {
+          "type": "string"
+        },
+        "loopzeroSyftImage": {
+          "type": "string"
+        },
+        "openbaoTransitEnabled": {
+          "type": "string"
+        },
+        "openbaoVaultAddr": {
+          "type": "string"
+        },
+        "openbaoSpkiPinSha256": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthEd25519PublicCurrent": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthEd25519PublicPrevious": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthNonceRedisAddr": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthRequireSignature": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthSecretCreatedAt": {
+          "type": "string"
+        },
+        "cbKey": {
+          "type": "string"
+        },
+        "cbOpenThreshold": {
+          "type": "string"
+        },
+        "cbCloseThreshold": {
+          "type": "string"
+        },
+        "cbRetryInterval": {
+          "type": "string"
+        },
+        "buildQueueTimeout": {
+          "type": "string"
+        },
+        "buildRunningTimeout": {
+          "type": "string"
+        },
+        "buildReleasingTimeout": {
+          "type": "string"
+        },
+        "buildCancelTimeout": {
+          "type": "string"
+        },
+        "buildReaperInterval": {
+          "type": "string"
+        },
+        "releaseReadyTimeout": {
+          "type": "string"
+        },
+        "releasePendingTimeout": {
+          "type": "string"
+        },
+        "releaseReaperInterval": {
+          "type": "string"
+        },
+        "buildReconcileInterval": {
+          "type": "string"
+        },
+        "maxBuildsPerTenant": {
+          "type": "string"
+        },
+        "sseHeartbeatInterval": {
+          "type": "string"
+        },
+        "ssePollInterval": {
+          "type": "string"
+        },
+        "sseSafetyTimeout": {
+          "type": "string"
+        },
+        "sseMaxConcurrentStreams": {
+          "type": "string"
+        },
+        "authCacheTtl": {
+          "type": "string"
+        },
+        "sourceMaxBundleSize": {
+          "type": "string"
+        },
+        "sourceMultipartMaxMemory": {
+          "type": "string"
+        },
+        "loopzeroDisableLegacyLoops": {
+          "type": "string"
+        },
+        "loopzeroAdmissionControl": {
+          "type": "string"
+        },
+        "maxConcurrentBuildsPerCell": {
+          "type": "string"
+        },
+        "maxTenantsPerCell": {
+          "type": "string"
+        },
+        "maxConcurrentBuildsPerTenant": {
+          "type": "string"
+        },
+        "pgCircuitBreakerThresholdPct": {
+          "type": "string"
+        },
+        "loopzeroUsePgClaims": {
+          "type": "string"
+        },
+        "loopzeroKedaEnabled": {
+          "type": "string"
+        },
+        "corsAllowedOrigin": {
+          "type": "string"
+        },
+        "jwksUrl": {
+          "type": "string"
+        },
+        "jwtIssuer": {
+          "type": "string"
+        },
+        "loopzeroAdminApi": {
+          "type": "string"
+        },
+        "loopzeroMaintenanceMode": {
+          "type": "string"
+        },
+        "loopzeroProgressiveDelivery": {
+          "type": "string"
+        },
+        "loopzeroLeanResources": {
+          "type": "string"
+        },
+        "loopzeroEnvBlocklistMode": {
+          "type": "string"
+        },
+        "loopzeroEnvReadinessChecker": {
+          "type": "string"
+        },
+        "loopzeroTrustedProxyCidrs": {
+          "type": "string"
+        },
+        "tenantNamespace": {
+          "type": "string"
+        },
+        "loopzeroCellId": {
+          "type": "string"
+        },
+        "otelExporterOtlpEndpoint": {
+          "type": "string"
+        },
+        "loopzeroTracingEnabled": {
+          "type": "string"
+        },
+        "loopzeroPprofAddr": {
+          "type": "string"
+        },
+        "loopzeroPprofEnabled": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "extraVolumes": {
       "type": "array"
@@ -330,7 +669,97 @@
       "type": "object"
     },
     "secrets": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "databaseUrl": {
+          "type": "string"
+        },
+        "loopzeroWorkerDatabaseUrl": {
+          "type": "string"
+        },
+        "loopzeroApiDatabaseUrl": {
+          "type": "string"
+        },
+        "giteaToken": {
+          "type": "string"
+        },
+        "argocdToken": {
+          "type": "string"
+        },
+        "minioAccessKey": {
+          "type": "string"
+        },
+        "minioSecretKey": {
+          "type": "string"
+        },
+        "loopzeroArgoCallbackSecret": {
+          "type": "string"
+        },
+        "loopzeroBootstrapSecret": {
+          "type": "string"
+        },
+        "loopzeroSecretEncryptionKey": {
+          "type": "string"
+        },
+        "openbaoVaultRoleId": {
+          "type": "string"
+        },
+        "openbaoVaultSecretId": {
+          "type": "string"
+        },
+        "cfApiToken": {
+          "type": "string"
+        },
+        "mgmtKubeconfig": {
+          "type": "string"
+        },
+        "buildKubeconfig": {
+          "type": "string"
+        },
+        "runtimeKubeconfig": {
+          "type": "string"
+        },
+        "stripeSecretKey": {
+          "type": "string"
+        },
+        "githubAppPrivateKey": {
+          "type": "string"
+        },
+        "githubWebhookSecret": {
+          "type": "string"
+        },
+        "loopzeroAdminApiKey": {
+          "type": "string"
+        },
+        "loopzeroAdminApiKeyPrevious": {
+          "type": "string"
+        },
+        "loopzeroAdminServiceAuthSecret": {
+          "type": "string"
+        },
+        "loopzeroAdminServiceAuthSecretPrevious": {
+          "type": "string"
+        },
+        "loopzeroBrokerToken": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthSecret": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthSecretPrevious": {
+          "type": "string"
+        },
+        "loopzeroServiceAuthNonceRedisPassword": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "vault": {
       "type": "object"
@@ -347,6 +776,15 @@
     "loopzero-common": {
       "type": "object",
       "description": "Values block consumed by the loopzero-common library subchart."
+    },
+    "reloader": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }
