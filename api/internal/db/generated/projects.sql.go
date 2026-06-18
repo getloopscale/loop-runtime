@@ -186,7 +186,8 @@ SELECT
   COALESCE(latest_build.status, '')::text AS last_deploy_status_raw,
   latest_build.created_at AS last_deploy_at,
   COALESCE(jsonb_array_length(latest_build.apps_spec), 0)::bigint AS apps_count,
-  COALESCE(latest_build.apps_spec->0->>'type', '')::text AS latest_framework_raw
+  COALESCE(latest_build.apps_spec->0->>'type', '')::text AS latest_framework_raw,
+  COALESCE(active_release.status, '')::text AS active_release_status_raw
 FROM projects p
 LEFT JOIN LATERAL (
   SELECT COUNT(*) AS cnt
@@ -200,21 +201,37 @@ LEFT JOIN LATERAL (
   ORDER BY b.created_at DESC, b.id DESC
   LIMIT 1
 ) latest_build ON true
+LEFT JOIN LATERAL (
+  -- Pick the most recent non-terminal release. The release-state SoT
+  -- prefers ACTIVE (currently serving) > ROLLING_BACK (in-flight) >
+  -- FAILED / ROLLBACK_FAILED (release-level failure). Terminal
+  -- historical states (SUPERSEDED, ROLLED_BACK, CANCELLED) are
+  -- excluded so the mapper falls back to the latest build instead of
+  -- attributing a stale release to the current truth. Sponsor
+  -- LIVE-caught 2026-06-18 (loopzerokit-example).
+  SELECT r.status
+  FROM releases r
+  WHERE r.tenant_id = p.tenant_id AND r.project_id = p.name
+    AND r.status IN ('ACTIVE', 'ROLLING_BACK', 'FAILED', 'ROLLBACK_FAILED')
+  ORDER BY r.created_at DESC, r.id DESC
+  LIMIT 1
+) active_release ON true
 WHERE p.tenant_id = $1
 ORDER BY p.name
 `
 
 type ListProjectsWithSummaryByTenantRow struct {
-	ID                  string             `json:"id"`
-	Name                string             `json:"name"`
-	TenantID            string             `json:"tenant_id"`
-	CreatedBy           string             `json:"created_by"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	EnvironmentCount    int64              `json:"environment_count"`
-	LastDeployStatusRaw string             `json:"last_deploy_status_raw"`
-	LastDeployAt        pgtype.Timestamptz `json:"last_deploy_at"`
-	AppsCount           int64              `json:"apps_count"`
-	LatestFrameworkRaw  string             `json:"latest_framework_raw"`
+	ID                     string             `json:"id"`
+	Name                   string             `json:"name"`
+	TenantID               string             `json:"tenant_id"`
+	CreatedBy              string             `json:"created_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	EnvironmentCount       int64              `json:"environment_count"`
+	LastDeployStatusRaw    string             `json:"last_deploy_status_raw"`
+	LastDeployAt           pgtype.Timestamptz `json:"last_deploy_at"`
+	AppsCount              int64              `json:"apps_count"`
+	LatestFrameworkRaw     string             `json:"latest_framework_raw"`
+	ActiveReleaseStatusRaw string             `json:"active_release_status_raw"`
 }
 
 // Returns all projects for a tenant with per-project summary fields:
@@ -235,13 +252,22 @@ type ListProjectsWithSummaryByTenantRow struct {
 //     `framework` indicator. loopzero.yaml apps schema has `type` (server/
 //     static/worker/etc.), not `framework`; the dashboard renders as a
 //     Badge so the type string is the canonical "what is this app" label
+//   - active_release_status_raw: status string of the most recent
+//     ACTIVE-or-mid-flight release (ROLLING_BACK / ROLLBACK_FAILED /
+//     FAILED also surface here so the aggregate mapper can decide).
+//     Sponsor LIVE-caught 2026-06-18: the dashboard's /projects status
+//     column was misreporting "Failed" for projects whose latest build
+//     was cancelled but whose earlier release was still ACTIVE serving
+//     production. The aggregate status MUST consider release state, not
+//     just latest build. Caller now calls
+//     pkg/enforcement.MapProjectStatus(active_release_status_raw,
+//     last_deploy_status_raw) which prefers the release-state SoT and
+//     falls back to the build state only when no release is consultable.
 //
 // Per plan 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2 +
 // EC-1/EC-8 absorptions, extended 2026-06-08 for T5.3 sponsor walkthrough
-// LIVE-bug. Caller wraps last_deploy_status_raw through
-// pkg/enforcement.MapBuildStatusToProjectStatus to derive the 5-value
-// dashboard ProjectStatus.
-// Join keys match the "project_id stores slug, not UUID" convention
+// LIVE-bug, extended 2026-06-18 for the release-aware aggregate. Join
+// keys match the "project_id stores slug, not UUID" convention
 // (CLAUDE.md "Common Mistakes → Project name vs project ID"): both
 // builds.project_id and environment_targets.project_id are the project
 // name slug, joined against projects.name. Only projects.id is UUID.
@@ -265,6 +291,7 @@ func (q *Queries) ListProjectsWithSummaryByTenant(ctx context.Context, db DBTX, 
 			&i.LastDeployAt,
 			&i.AppsCount,
 			&i.LatestFrameworkRaw,
+			&i.ActiveReleaseStatusRaw,
 		); err != nil {
 			return nil, err
 		}

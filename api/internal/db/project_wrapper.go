@@ -156,7 +156,14 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			TeamID:           r.TenantID,
 			CreatedBy:        r.CreatedBy,
 			EnvironmentCount: r.EnvironmentCount,
-			LastDeployStatus: string(enforcement.MapBuildStatusToProjectStatus(
+			// Sponsor LIVE-caught 2026-06-18: the aggregate status MUST
+			// consider release state, not just latest build. A cancelled
+			// build with a still-ACTIVE release is Live, not Failed.
+			// MapProjectStatus reads release first, falls back to build
+			// when no release is consultable. See aggregate_project_
+			// status_test.go for the canonical decision tree.
+			LastDeployStatus: string(enforcement.MapProjectStatus(
+				r.ActiveReleaseStatusRaw,
 				statemachine.State(r.LastDeployStatusRaw),
 			)),
 			// T5.3 LIVE-bug fix (2026-06-08): additive completion of T2.1's
