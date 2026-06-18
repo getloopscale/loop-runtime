@@ -101,6 +101,13 @@ func setupOrchestrator(
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
 		AuditLogger: &db.AuditLogger{DB: dbAdapter},
+		// Plan deploy-timeline-canonical-5-phases T5.1 — per-deploy
+		// 5-phase aggregator spawn hook. Wired to a release_db-only
+		// minimal source set as the canonical v1 — the other 4 source
+		// adapters (loki_markers + argocd_app + loopzeroapp_informer +
+		// status_url_probe) are documented as the v1.1 production
+		// follow-up per the plan's Open Questions section. Nil-safe.
+		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore, stores.ReleaseStore),
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{

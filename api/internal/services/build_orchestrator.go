@@ -279,7 +279,22 @@ type BuildOrchestratorDeps struct {
 	// `image.signed` audit entry per app with a cosign signature
 	// (T1.2 mitigation #3 of MEET-2026-05-12). Nil-safe.
 	AuditLogger domain.AuditLogger
+	// DeployTimelineSpawn is the canonical hook for spawning the
+	// per-deploy 5-phase aggregator goroutine when a build transitions
+	// to RUNNING. The wired function constructs the sink + source
+	// readers + calls aggregator.SpawnFor.
+	//
+	// Plan deploy-timeline-canonical-5-phases T5.1 — keeps the
+	// orchestrator decoupled from adapter wiring (sponsor T2 boundary).
+	// Nil-safe: when nil, no aggregator spawns and SubmitBuild returns
+	// identically (backwards-compat).
+	DeployTimelineSpawn DeployTimelineSpawner
 }
+
+// DeployTimelineSpawner is the canonical callback the orchestrator
+// invokes after build.started is emitted. Implementations construct
+// the EventSink + N SourceReaders and call aggregator.SpawnFor.
+type DeployTimelineSpawner func(ctx context.Context, deployID string)
 
 // BuildOrchestrator orchestrates the entire deploy flow:
 // build submission, completion callback, release creation, and activation.
@@ -313,6 +328,7 @@ type BuildOrchestrator struct {
 	kedaEnabled       bool            // gates scale-to-zero (min=0)
 	scalingResolver   ScalingResolver // B40: nil = yaml-only (backward-compat)
 	auditLogger       domain.AuditLogger // T1.2 mitigation #3: per-sign cosign audit
+	deployTimelineSpawn DeployTimelineSpawner // plan T5.1 — nil-safe
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -366,6 +382,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		kedaEnabled:       deps.KEDAEnabled,
 		scalingResolver:   deps.ScalingResolver, // B40: nil-safe (resolveScaling handles)
 		auditLogger:       deps.AuditLogger,     // T1.2 mitigation #3: nil = no-op
+		deployTimelineSpawn: deps.DeployTimelineSpawn, // plan T5.1: nil = no-op
 	}
 }
 
