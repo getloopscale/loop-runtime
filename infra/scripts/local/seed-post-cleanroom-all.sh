@@ -134,15 +134,32 @@ run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VER
 # feedback_post_cleanroom_kratos_patch_dev_public already documents
 # the dependency — this re-ordering codifies it in the master script.
 
-# Step 4
-if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
-  run_step "4-patch-kratos-dev-public" "bash $SCRIPT_DIR/patch-kratos-dev-public.sh --verify"
-else
-  skip_step "4-patch-kratos-dev-public" "script not yet present in canonical chain"
-fi
+# ENV-GATE 2026-06-19 (issue #99 of cleanroom-mandate-run-2026-06-19):
+# Steps 4 + 4b configure dev-public URLs (auth-dev.loopzero.example,
+# app-dev.loopzero.example) which are INAPPLICABLE in standalone-multi /
+# drill / prod envs. patch-kratos-dev-public.sh also requires
+# LOOPZERO_GITHUB_CLIENT_ID + LOOPZERO_GOOGLE_CLIENT_ID OAuth credentials
+# which operators typically only provision for dev-public. Running
+# these steps unconditionally produced VERDICT=FAIL when
+# `LOOPZERO_HELMFILE_ENV=standalone-multi task setup` operators ran
+# the master seed afterwards (and CASCADE-failed Steps 3, 9, 11
+# which depend on the dev-public Kratos config). Canonical fix:
+# gate both steps on `LOOPZERO_HELMFILE_ENV == dev-public` with a clear
+# SKIP message in other envs. Defaults to SKIP when env var unset.
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  # Step 4
+  if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
+    run_step "4-patch-kratos-dev-public" "bash $SCRIPT_DIR/patch-kratos-dev-public.sh --verify"
+  else
+    skip_step "4-patch-kratos-dev-public" "script not yet present in canonical chain"
+  fi
 
-# Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
-run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+  # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
+  run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+else
+  skip_step "4-patch-kratos-dev-public" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "4b-seed-hydra-urls-canonical" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
 
 # Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
 # requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)

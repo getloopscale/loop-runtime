@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **`seed-post-cleanroom-all.sh` ran Step 4 (patch-kratos-dev-public) + 4b (hydra-urls-canonical) unconditionally regardless of `LOOPZERO_HELMFILE_ENV`.**
+  Issue #99 of Cleanroom canonical chain run 2026-06-19. Both steps configure dev-public-specific URLs
+  (`auth-dev.loopzero.example`, `app-dev.loopzero.example`) and Step 4 requires `LOOPZERO_GITHUB_CLIENT_ID` +
+  `LOOPZERO_GOOGLE_CLIENT_ID` OAuth credentials that operators typically only provision for dev-public.
+  Running the master seed after `LOOPZERO_HELMFILE_ENV=standalone-multi task setup` (the default) produced
+  `VERDICT=FAIL` with an opaque "LOOPZERO_GITHUB_CLIENT_ID not set" message + CASCADE FAILs in Steps 3,
+  9, 11 which depend on dev-public-shaped Kratos config. Canonical fix: both steps now gated on
+  `[[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]`; SKIPPED in all other envs with a clear log
+  message citing the current env. Hermetic regression lock `TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv`
+  pins the env-gate shape + ensures other steps (vault, minio, github-app, gitea-token, etc.)
+  remain unconditional.
 - **Tiltfile `loopzero-api` build failed Cleanroom-fresh with "could not read Username for 'https://github.com'".**
   Cleanroom catch 2026-06-19. M5 decomposition split `loopzero-contracts` into a private repo;
   `api/Dockerfile` step 8/11 fetches `github.com/getloopscale/loopzero-contracts@v0.1.0` via a BuildKit
