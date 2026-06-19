@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `values.schema.json /properties/config/properties` whenever the schema has
   `additionalProperties:false` at that path (Slice 4 hardening). Closes the helmfile
   env-overlay drift surface that the Slice 4 EC-3 Go-deps transitive guard did not cover.
+- Hermetic regression gate `TestCrossClusterSecretStoreContract` in
+  `infra/tests/charts/cross_cluster_secrets_test.go` locking T1.2 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Verifies the dev-public
+  ESO `loopzero-external-secrets` overlay declares workload identity
+  (`auth.kind: kubernetes` + `serviceAccountRef` + `audiences`) replacing
+  the legacy AppRole shape. Asserts EC-5 contract (audiences present) and
+  EC-2 contract (`server` retains canonical intra-cluster DNS so the cert
+  SAN survives CoreDNS host-alias rewrite). Cross-checks the `loopzero-api`
+  dev-public overlay carries the cross-cluster traceability comment so a
+  future operator understands how OPENBAO_VAULT_ADDR resolves to the
+  loopzero-vault NodePort under Jeito A.
 - Hermetic regression gate `TestVaultBootstrapDev_SplitContexts` in
   `infra/tests/scripts/vault_bootstrap_split_contexts_test.go` locking T1.1 of plan
   `dev-public-cross-cluster-secrets` (issue #111). Verifies the canonical SPLIT-CONTEXT
@@ -48,6 +59,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/helm/loopzero-external-secrets` chart now supports
+  `openbaoTransit.auth.kind={appRole|kubernetes}` per T1.2 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Adds workload-identity
+  authentication mode (Kubernetes-auth — ESO controller SA TokenRequest
+  presented to OpenBao `/v1/auth/<mountPath>/login`) alongside the legacy
+  AppRole path. The new mode replaces the static `secret_id` materialized
+  as a K8s Secret in mgmt with a bounded TokenRequest audience (EC-5: must
+  match OpenBao role `bound_audiences`). Default `auth.kind` stays
+  `appRole` so single-cluster overlays (`standalone-multi`, prod single-
+  cell) keep their legacy shape. Translates 1:1 to IRSA on EKS later
+  (blueprint D1). Template fails-loud when `kind=kubernetes` and either
+  `auth.kubernetes.role` or `auth.kubernetes.serviceAccountRef.name` is
+  missing — operator error surfaces at chart-template time, not at
+  Cleanroom LIVE walkthrough.
+- `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`
+  rewritten per T1.2 from the legacy AppRole shape (`roleId` placeholder +
+  `secretRef` pointing at `loopzero-openbao-approle` in `external-secrets` ns)
+  to the new `auth.kind: kubernetes` shape (workload identity against the
+  ESO controller's SA + bound audience). Header now documents the
+  Jeito A cross-cluster topology + EC-1 token-review contract + EC-2
+  CoreDNS host-alias contract.  `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl`
+  carries a cross-cluster traceability comment block on `OPENBAO_VAULT_ADDR`
+  so operators understand mgmt CoreDNS rewrites the canonical DNS to the
+  vault-cluster NodePort at resolve time.
+- `infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh`
+  rewritten for the post-T1.2 contract (20/20 PASS): asserts
+  `auth.kind: kubernetes`, `serviceAccountRef.name`, `audiences:`, and
+  forbids the legacy `roleId:` + `secretRef:` fields — turns the
+  regression risk that motivated the legacy gate (operator hand-edits
+  re-introducing the AppRole shape) into a CI failure.
 - `infra/scripts/local/vault-bootstrap-dev.sh` split into two kubectl contexts per T1.1
   of plan `dev-public-cross-cluster-secrets` (issue #111). Previously every kubectl
   call ran against a single `$CONTEXT` defaulting to `k3d-loopzero-mgmt` — incompatible
