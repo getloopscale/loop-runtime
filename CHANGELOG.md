@@ -35,6 +35,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `values.schema.json /properties/config/properties` whenever the schema has
   `additionalProperties:false` at that path (Slice 4 hardening). Closes the helmfile
   env-overlay drift surface that the Slice 4 EC-3 Go-deps transitive guard did not cover.
+- Hermetic regression gate `TestVaultBootstrapDev_TransitAutoUnseal` in
+  `infra/tests/scripts/vault_bootstrap_auto_unseal_test.go` locking T2.1
+  (hermetic side) of plan `dev-public-cross-cluster-secrets` (issue
+  #111). Verifies the opt-in Transit auto-unseal contract: vault-bootstrap-dev.sh
+  declares `AUTO_UNSEAL_MODE` (default `shamir` — backwards compat), the
+  Shamir init path is guarded so it does NOT run when `AUTO_UNSEAL_MODE=transit`,
+  and an EC-3 Transit-ready wait (`wait_transit_ready` probing
+  `/v1/sys/health`) precedes main-pod init under transit mode. The
+  helmfile vault.helmfile.yaml.gotmpl declares a conditional
+  `seal "transit"` HCL stanza for the `vault-local` env, gated by
+  `.Values.transitAutoUnsealEnabled` (default off). EC-7 (ephemeral
+  Transit) + EC-8 (no seal-migration) doc lines required. The LIVE
+  acceptance (`bao status` Sealed=false + Seal Type=transit, no shard
+  file written) requires sponsor JUNTOS Cleanroom per
+  `cleanroom-up-live-test-mandate § Sub-step 2.5` — not in scope here.
 - Hermetic regression gate `TestCrossClusterSecretStoreContract` in
   `infra/tests/charts/cross_cluster_secrets_test.go` locking T1.2 of plan
   `dev-public-cross-cluster-secrets` (issue #111). Verifies the dev-public
@@ -59,6 +74,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/scripts/local/vault-bootstrap-dev.sh` gains opt-in Transit
+  auto-unseal mode per T2.1 (hermetic side) of plan
+  `dev-public-cross-cluster-secrets` (issue #111). New env var
+  `AUTO_UNSEAL_MODE` (default `shamir` — backwards compat preserved):
+  when set to `transit`, the Shamir init/unseal/shard-write path
+  (Step 2 + Step 3) is skipped because main OpenBao auto-unseals at
+  pod startup against the Transit backend (blueprint D2: no shards on
+  disk). New `wait_transit_ready` helper probes the Transit backend
+  `/v1/sys/health` BEFORE main init (EC-3 — else main pod CrashLoops
+  on auto-unseal). New `OPENBAO_TRANSIT_ADDR` env var (default
+  `http://openbao-transit.vault-system.svc.cluster.local:8200`)
+  parameterizes the probe target. EC-7 documented: Transit backend
+  ephemeral by design (restart loses wrapping key; acceptable in
+  Cleanroom because the stack is re-created each run). EC-8 documented:
+  no seal-migration code — Cleanroom always fresh-inits OpenBao.
+- `infra/helmfile/vault.helmfile.yaml.gotmpl` gains a conditional
+  `seal "transit"` HCL stanza in the `vault-local` env's
+  `server.standalone.config` block per T2.1 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Gated by
+  `.Values.transitAutoUnsealEnabled` (default off — existing Shamir
+  installs unchanged). Parameterized by `.Values.transitAutoUnseal.address`
+  + `.Values.transitAutoUnseal.keyName` + `.Values.transitAutoUnseal.mountPath`
+  + env var `OPENBAO_TRANSIT_TOKEN`. Mirrors the existing prod
+  `seal "awskms"` shape so the dev path (Transit) translates 1:1 to
+  the prod path (KMS).
+- `infra/tests/check-vault-bootstrap-unseal-loop_test.sh` relaxes its
+  `BAO_STATUS_JSON=` count regex to allow leading whitespace
+  (`^[[:space:]]*BAO_STATUS_JSON=...`). Required because T2.1 wraps
+  Step 2's status read in an `if [[ "$AUTO_UNSEAL_MODE" != "transit" ]]`
+  guard which indents the canonical capture pattern. The regression
+  test's intent (≥2 canonical capture-first patterns) is unchanged.
 - `infra/helm/loopzero-external-secrets` chart now supports
   `openbaoTransit.auth.kind={appRole|kubernetes}` per T1.2 of plan
   `dev-public-cross-cluster-secrets` (issue #111). Adds workload-identity

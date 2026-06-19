@@ -57,6 +57,23 @@ CONTEXT="$OPENBAO_CONTEXT"
 NS="${OPENBAO_NAMESPACE:-vault-system}"
 POD="${OPENBAO_POD:-openbao-0}"
 UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
+# T2.1 of plan dev-public-cross-cluster-secrets (issue #111).
+# AUTO_UNSEAL_MODE selects between the legacy Shamir init/unseal/shard
+# chain (default — preserves backwards compat) and the new Transit
+# auto-unseal path (opt-in — eliminates the shards-on-disk custody risk
+# per blueprint D2). Operator opts in by exporting AUTO_UNSEAL_MODE=transit
+# AND deploying the Transit backend (separate dev-mode OpenBao OR — for
+# AWS — KMS). The Transit backend is ephemeral by design (EC-7) — a
+# restart loses the wrapping key and the sealed data is unrecoverable;
+# acceptable in Cleanroom because the whole stack is re-created each run.
+# No seal-migration code (EC-8) — Cleanroom always fresh-inits OpenBao,
+# so the cofre is born with the active seal type; migrating an existing
+# Shamir cofre to Transit never happens here.
+# When transit auto-unseal is active, main OpenBao auto-unseals at pod
+# startup and the EC-3 contract requires the Transit backend to be
+# reachable (sys/health 200) BEFORE main init.
+AUTO_UNSEAL_MODE="${AUTO_UNSEAL_MODE:-shamir}"
+OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.vault-system.svc.cluster.local:8200}"
 # Cleanroom mandate run 2026-06-18 caught Finding #2 (issue #91): the
 # legacy default external-secrets ns put the loopzero-openbao-approle
 # Secret out of reach of loopzero-api Deployment (envFrom reads from
@@ -97,6 +114,35 @@ mkdir -p "$(dirname "$UNSEAL_FILE")"
 # (acceptable for dev — prod path uses real CA via cert-manager).
 bao() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BAO_SKIP_VERIFY=true bao "$@"; }
 
+# === Step 1.5: EC-3 Transit-ready gate (only when AUTO_UNSEAL_MODE=transit) ===
+# Per blueprint D2 + plan T2.1 EC-3: the main OpenBao auto-unseals
+# against the Transit backend at pod startup; if the Transit backend is
+# not yet ready, main pod CrashLoops. The bootstrap MUST wait for the
+# Transit backend /v1/sys/health 200 BEFORE allowing main init.
+# When AUTO_UNSEAL_MODE=shamir (default), this gate no-ops.
+wait_transit_ready() {
+  local attempts="${TRANSIT_READY_ATTEMPTS:-30}"  # 30 * 2s = 60s budget
+  log "Step 1.5: EC-3 — wait Transit backend sys/health 200 at $OPENBAO_TRANSIT_ADDR"
+  for i in $(seq 1 "$attempts"); do
+    # curl from inside the pod (cluster DNS resolves transit endpoint).
+    # /v1/sys/health returns 200 on a healthy initialized+unsealed transit
+    # OR 472/473 when still booting — anything < 500 means listener is up.
+    if kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- \
+        curl -sk -o /dev/null -w '%{http_code}' --max-time 3 \
+        "$OPENBAO_TRANSIT_ADDR/v1/sys/health" 2>/dev/null | grep -qE '^(200|429|472|473|501)$'; then
+      log "OK: Transit backend ready (attempt $i)"
+      return 0
+    fi
+    sleep 2
+  done
+  log "FAIL: Transit backend $OPENBAO_TRANSIT_ADDR/v1/sys/health did not respond < 500 within $((attempts * 2))s — EC-3 gate FAIL; main OpenBao would CrashLoop on auto-unseal"
+  return 1
+}
+
+if [[ "$AUTO_UNSEAL_MODE" == "transit" ]]; then
+  wait_transit_ready || exit 1
+fi
+
 # === Step 2: init (idempotent — skip if already initialized) ===
 # CANONICAL FIX 2026-06-15 Phase 4 dev-public Cleanroom: `bao status` uses
 # exit-code SEMANTICS (rc=0 unsealed, rc=2 sealed-but-init, rc=1 error).
@@ -107,25 +153,35 @@ bao() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BAO_SKI
 # Fix: capture stdout first (always works because bao -format=json emits
 # JSON on both rc=0 AND rc=2), then parse independent of rc.
 log "Step 2: bao operator init (idempotent)"
-BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
-INIT_STATUS=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('initialized', False))" 2>/dev/null || echo "False")
-if [[ "$INIT_STATUS" != "True" ]]; then
-  # LIVE bug fix (T6.2 Cleanroom TOTAL 2026-06-12): when OpenBao is fresh
-  # (Initialized=false) post-Cleanroom destroy, any existing unseal file is
-  # STALE from the previous cycle — auto-archive rather than abort.
-  if [[ -f "$UNSEAL_FILE" ]]; then
-    ARCHIVE="${UNSEAL_FILE}.pre-cleanroom-$(date +%Y%m%d-%H%M%S)"
-    log "INFO: vault fresh + $UNSEAL_FILE exists from previous Cleanroom → archiving to $ARCHIVE"
-    mv "$UNSEAL_FILE" "$ARCHIVE"
-  fi
-  if [[ "$DRY_RUN" -eq 0 ]]; then
-    INIT_OUT=$(bao operator init -key-shares=5 -key-threshold=3 -format=json)
-    echo "$INIT_OUT" > "$UNSEAL_FILE"
-    chmod 0600 "$UNSEAL_FILE"
-    log "Init complete. Shards + root_token saved to $UNSEAL_FILE (mode 0600)"
+# T2.1 (issue #111): under AUTO_UNSEAL_MODE=transit the main OpenBao
+# auto-unseals at pod startup against the Transit backend — no Shamir
+# init, no shard file written to disk (blueprint D2). The recovery
+# key emitted by `operator init -recovery-shares` is still useful for
+# break-glass but operator-time, not Cleanroom-time. EC-7: Transit
+# ephemeral; EC-8: no seal-migration — Cleanroom always fresh-init.
+if [[ "$AUTO_UNSEAL_MODE" != "transit" ]]; then
+  BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
+  INIT_STATUS=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('initialized', False))" 2>/dev/null || echo "False")
+  if [[ "$INIT_STATUS" != "True" ]]; then
+    # LIVE bug fix (T6.2 Cleanroom TOTAL 2026-06-12): when OpenBao is fresh
+    # (Initialized=false) post-Cleanroom destroy, any existing unseal file is
+    # STALE from the previous cycle — auto-archive rather than abort.
+    if [[ -f "$UNSEAL_FILE" ]]; then
+      ARCHIVE="${UNSEAL_FILE}.pre-cleanroom-$(date +%Y%m%d-%H%M%S)"
+      log "INFO: vault fresh + $UNSEAL_FILE exists from previous Cleanroom → archiving to $ARCHIVE"
+      mv "$UNSEAL_FILE" "$ARCHIVE"
+    fi
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      INIT_OUT=$(bao operator init -key-shares=5 -key-threshold=3 -format=json)
+      echo "$INIT_OUT" > "$UNSEAL_FILE"
+      chmod 0600 "$UNSEAL_FILE"
+      log "Init complete. Shards + root_token saved to $UNSEAL_FILE (mode 0600)"
+    fi
+  else
+    log "Skip: vault already initialized"
   fi
 else
-  log "Skip: vault already initialized"
+  log "Skip Step 2 (Shamir init) — AUTO_UNSEAL_MODE=transit; main OpenBao auto-unseals at pod startup (no shard file written — blueprint D2)"
 fi
 
 # === Step 3: unseal (idempotent — skip if already unsealed) ===
@@ -136,6 +192,11 @@ fi
 # had to manually `bao operator unseal $SHARD x3`. Sponsor "sem WORKAROUNDs"
 # explicit: capture stdout first, parse rc-independent, normalize to "True".
 log "Step 3: bao operator unseal × 3 (idempotent)"
+# T2.1: under AUTO_UNSEAL_MODE=transit, the Transit backend auto-unseals
+# main OpenBao at startup — no manual unseal required (blueprint D2).
+if [[ "$AUTO_UNSEAL_MODE" == "transit" ]]; then
+  log "Skip Step 3 (Shamir unseal) — AUTO_UNSEAL_MODE=transit; auto-unsealed at pod startup"
+else
 BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
 SEALED=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('sealed', True))" 2>/dev/null || echo "True")
 if [[ "$SEALED" == "True" ]]; then
@@ -150,6 +211,7 @@ if [[ "$SEALED" == "True" ]]; then
 else
   log "Skip: vault already unsealed"
 fi
+fi  # close AUTO_UNSEAL_MODE != transit branch
 
 # === Step 4: root token Secret ===
 log "Step 4: kubectl create secret openbao-init-token (idempotent)"

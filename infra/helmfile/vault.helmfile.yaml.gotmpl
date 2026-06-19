@@ -151,6 +151,16 @@ releases:
       # vault-local: standalone + Raft persistent + HTTPS (PRODLIKE.2)
       # Replaces previous devMode (in-memory, http, auto-unseal). Shamir
       # init is manual operator-time after helm install (see runbook).
+      #
+      # T2.1 of plan dev-public-cross-cluster-secrets (issue #111) — adds
+      # an OPT-IN Transit auto-unseal stanza gated by
+      # `.Values.transitAutoUnsealEnabled` (default false; opt-in only).
+      # When enabled, the main OpenBao auto-unseals at pod startup against
+      # the Transit backend at `.Values.transitAutoUnseal.address` — no
+      # Shamir shards on disk (blueprint D2). The Transit backend is
+      # ephemeral by design (EC-7) — a restart loses the wrapping key;
+      # acceptable in Cleanroom because the stack is re-created each run.
+      # No seal-migration code (EC-8) — Cleanroom always fresh-init.
       {{- if eq .Environment.Name "vault-local" }}
       - server:
           dev:
@@ -174,6 +184,23 @@ releases:
                 path = "/openbao/data"
                 node_id = "openbao-0"
               }
+
+              {{- if .Values | get "transitAutoUnsealEnabled" false }}
+              # T2.1 (issue #111): Transit auto-unseal stanza. Eliminates
+              # the Shamir-shards-on-disk custody risk (blueprint D2).
+              # EC-3: the Transit backend MUST be reachable BEFORE main
+              # OpenBao starts — vault-bootstrap-dev.sh wait_transit_ready
+              # enforces. EC-7: backend ephemeral (acceptable in Cleanroom).
+              # EC-8: no seal-migration — Cleanroom always fresh-init.
+              seal "transit" {
+                address         = "{{ .Values | get "transitAutoUnseal.address" "http://openbao-transit.vault-system.svc.cluster.local:8200" }}"
+                token           = "{{ env "OPENBAO_TRANSIT_TOKEN" }}"
+                disable_renewal = "false"
+                key_name        = "{{ .Values | get "transitAutoUnseal.keyName" "autounseal" }}"
+                mount_path      = "{{ .Values | get "transitAutoUnseal.mountPath" "transit/" }}"
+                tls_skip_verify = "true"
+              }
+              {{- end }}
 
               service_registration "kubernetes" {}
 
