@@ -94,7 +94,25 @@ log() { echo "[run-migrations] $*"; }
 # Resolve pod label that includes both mgmt-cluster loopzero-api and any future
 # replicas (Recreate strategy means single pod at a time).
 LOOPZERO_API_POD="$(kctl -n "$NAMESPACE" get pod -l app=loopzero-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-if [[ -z "${LOOPZERO_API_POD}" ]]; then
+
+# Issue #106 Design E (Cleanroom catch 2026-06-19; ADR
+# `2026-06-19-loopzero-api-vault-bootstrap-ordering`). The pod-NAME presence
+# check alone misses the CrashLoopBackOff case. In dev-public env,
+# loopzero-api ships with OPENBAO_TRANSIT_ENABLED=true which makes the binary
+# fail-fast on missing OPENBAO_VAULT_SECRET_ID (that env var only ships
+# from seed-post-cleanroom-all.sh Step 7b post-vault-bootstrap). The pod
+# NAME exists (Deployment scheduled) but the container "loopzero-api" is not
+# Running, so `kubectl exec` errors with `container not found`. Honor the
+# existing fallback intent by ALSO triggering the psql-loop path when
+# the named container is not Ready. Defensive jsonpath picks the
+# container by name (safe against future sidecars).
+LOOPZERO_API_READY="false"
+if [[ -n "${LOOPZERO_API_POD}" ]]; then
+  LOOPZERO_API_READY="$(kctl -n "$NAMESPACE" get pod "$LOOPZERO_API_POD" -o jsonpath='{.status.containerStatuses[?(@.name=="loopzero-api")].ready}' 2>/dev/null || echo "false")"
+  [[ -z "$LOOPZERO_API_READY" ]] && LOOPZERO_API_READY="false"
+fi
+
+if [[ -z "${LOOPZERO_API_POD}" || "$LOOPZERO_API_READY" != "true" ]]; then
   # `task setup` calls `task db:migrate` BEFORE `tilt up` so loopzero-api pod
   # may not exist yet (only Helm bootstrap charts are installed by setup).
   # Tilt's local_resource db-migrate handles schema bootstrap via psql loop
@@ -102,7 +120,7 @@ if [[ -z "${LOOPZERO_API_POD}" ]]; then
   # canonical golang-migrate path) takes over post-tilt via `task k3d:heal`
   # H17 + subsequent `task db:migrate` calls.
   if [[ "${LOOPZERO_MIGRATIONS_REQUIRE_API:-true}" == "false" ]]; then
-    log "INFO: loopzero-api pod not found; skipping golang-migrate (pre-tilt setup)."
+    log "INFO: loopzero-api pod absent OR not Ready (CrashLoopBackOff); skipping golang-migrate (pre-tilt setup)."
     log "      Tilt's db-migrate local_resource will bootstrap schema via psql"
     log "      and seed schema_migrations. Run 'task k3d:heal' after 'tilt up'"
     log "      to canonicalize via golang-migrate."
@@ -117,7 +135,11 @@ if [[ -z "${LOOPZERO_API_POD}" ]]; then
   # `task db:migrate` did before the T1.2 refactor.
   PG_POD_BOOT="$(kctl -n "$NAMESPACE" get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [[ -n "$PG_POD_BOOT" ]]; then
-    log "INFO: loopzero-api pod absent — running psql-loop fallback (pre-tilt setup)."
+    if [[ -z "${LOOPZERO_API_POD}" ]]; then
+      log "INFO: loopzero-api pod absent — running psql-loop fallback (pre-tilt setup)."
+    else
+      log "INFO: loopzero-api pod ${LOOPZERO_API_POD} not Ready (CrashLoopBackOff suspected) — running psql-loop fallback (issue #106 Design E)."
+    fi
     log "      schema_migrations table will be seeded with the highest version"
     log "      so a later golang-migrate up call (via task k3d:heal H17 or"
     log "      task db:migrate post-tilt) is a no-op."
