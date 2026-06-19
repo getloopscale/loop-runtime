@@ -93,6 +93,13 @@ data:
     # per-cluster auth isolation: auth/k8s-mgmt, auth/k8s-build, auth/k8s-cell-X
     # each have their own role namespace + tokenReviewer JWT so a compromised
     # cell-1 cluster cannot forge tokens valid against cell-2's auth/login. ----
+    #
+    # R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
+    # 2026-06-19): extended to accept a 7th positional arg `bound_audiences`.
+    # When non-empty, OpenBao validates that the JWT's `aud` claim contains
+    # the configured CSV — defense-in-depth (EC-5) that closes the
+    # "any-audience login" gap for the role. Empty preserves the legacy
+    # behavior for roles that omit `boundAudiences` in values.
     write_auth_role() {
       mount="$1"
       role="$2"
@@ -100,24 +107,37 @@ data:
       bound_ns="$4"
       policies="$5"
       ttl="$6"
+      bound_audiences="${7:-}"
       echo "[INIT] Writing auth/${mount}/role/${role}"
-      bao write "auth/${mount}/role/${role}" \
-        bound_service_account_names="${bound_sas}" \
-        bound_service_account_namespaces="${bound_ns}" \
-        policies="${policies}" \
-        ttl="${ttl}"
+      if [ -n "${bound_audiences}" ]; then
+        bao write "auth/${mount}/role/${role}" \
+          bound_service_account_names="${bound_sas}" \
+          bound_service_account_namespaces="${bound_ns}" \
+          bound_audiences="${bound_audiences}" \
+          policies="${policies}" \
+          ttl="${ttl}"
+      else
+        bao write "auth/${mount}/role/${role}" \
+          bound_service_account_names="${bound_sas}" \
+          bound_service_account_namespaces="${bound_ns}" \
+          policies="${policies}" \
+          ttl="${ttl}"
+      fi
     }
 
     # ---- Provision per-mount kubernetes auth roles ----
     # When .mount is unset, defaults to "kubernetes" for backward compat with
     # pre-T5 single-cluster bootstraps. New roles SHOULD specify .mount
     # explicitly so multi-cluster auth isolation is auditable.
+    # When .boundAudiences is set (R2 of issue #111), the helper renders the
+    # CSV — back-compat preserved when the field is absent or empty.
     {{- range .Values.authRoles }}
     write_auth_role "{{ .mount | default "kubernetes" }}" "{{ .name }}" \
       "{{ join "," .boundServiceAccountNames }}" \
       "{{ join "," .boundServiceAccountNamespaces }}" \
       "{{ join "," .policies }}" \
-      "{{ .ttl }}"
+      "{{ .ttl }}" \
+      "{{ if .boundAudiences }}{{ join "," .boundAudiences }}{{ end }}"
     {{- end }}
 
     # ---- Helper: idempotent transit key create (T3.2 of openbao-adoption v1.3) ----

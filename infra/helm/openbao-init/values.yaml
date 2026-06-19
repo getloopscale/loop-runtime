@@ -250,16 +250,29 @@ policies:
 
 # Kubernetes auth roles (Phase 3.1 — D11).
 # Maps Vault role name → SA(s) allowed to login.
+# R1+R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
+# 2026-06-19): the `eso` role moves from the legacy `kubernetes` mount (intended
+# for in-cluster loopzero-vault workloads) to the canonical multi-cluster
+# `k8s-mgmt` mount (mgmt-cluster workloads). The `boundAudiences` field
+# enforces EC-5 (TokenRequest aud claim == role bound_audiences) as
+# defence-in-depth — closes the "any-audience login" gap. The
+# `serviceAccountRef.audiences` in the ClusterSecretStore that consumes
+# this role (canonical: infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml)
+# MUST match this list exactly, else ESO's TokenRequest emits an `aud`
+# claim the role won't accept → 403 at login.
 authRoles:
   - name: eso
+    mount: k8s-mgmt
     boundServiceAccountNames:
       - eso-vault-reader
     boundServiceAccountNamespaces:
       - loopzero-system
+    boundAudiences:
+      - openbao.vault.loopzero.io
     policies:
       - eso-read
     ttl: "24h"
-    description: "External Secrets Operator role (cross-cluster mgmt→vault)"
+    description: "External Secrets Operator role (cross-cluster mgmt→vault) — R1+R2 of issue #111"
   # Phase 8 D12 — snapshot-agent intra-cluster role.
   - name: bao-snapshot
     boundServiceAccountNames:

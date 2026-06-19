@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `values.schema.json /properties/config/properties` whenever the schema has
   `additionalProperties:false` at that path (Slice 4 hardening). Closes the helmfile
   env-overlay drift surface that the Slice 4 EC-3 Go-deps transitive guard did not cover.
+- Hermetic regression gate `TestOpenbaoInitAuthRoleSupportsBoundAudiences`
+  in `infra/tests/charts/openbao_init_bound_audiences_test.go` locking
+  R2 of plan `dev-public-cross-cluster-secrets` (issue #111, sponsor
+  approved 2026-06-19). Verifies the `openbao-init` chart's
+  `write_auth_role` helper accepts a 7th positional arg `bound_audiences`
+  and emits the `bao write ... bound_audiences=<csv>` line ONLY when
+  the role declares `boundAudiences` in values (back-compat preserved
+  for roles that omit the field). EC-5 defence-in-depth: TokenRequest
+  aud claim must match OpenBao role `bound_audiences` — closes the
+  "any-audience login" gap.
 - Hermetic regression gate `TestVaultBootstrapDev_TransitAutoUnseal` in
   `infra/tests/scripts/vault_bootstrap_auto_unseal_test.go` locking T2.1
   (hermetic side) of plan `dev-public-cross-cluster-secrets` (issue
@@ -74,6 +84,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/helm/openbao-init/templates/configmap.yaml` extends the
+  `write_auth_role` helper to support optional `bound_audiences` (R2 of
+  plan `dev-public-cross-cluster-secrets`, issue #111, sponsor approved
+  2026-06-19). The helper now accepts a 7th positional arg, guards
+  emission with `if [ -n "${bound_audiences}" ]`, and renders the value
+  via `{{ if .boundAudiences }}{{ join "," .boundAudiences }}{{ end }}`
+  at the call site. Back-compat: roles that omit `boundAudiences` get
+  identical bao writes to the pre-R2 chart.
+- `infra/helm/openbao-init/values.yaml` reconciles the `eso` authRole
+  (R1+R2 of plan `dev-public-cross-cluster-secrets`, issue #111). Moves
+  the role from the legacy `kubernetes` mount (intended for in-cluster
+  loopzero-vault workloads) to the canonical multi-cluster `k8s-mgmt`
+  mount (mgmt-cluster workloads). Adds
+  `boundAudiences: [openbao.vault.loopzero.io]` so OpenBao validates the
+  TokenRequest `aud` claim presented by ESO at login (EC-5
+  defence-in-depth).
+- `infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml`
+  reconciles the canonical KV ClusterSecretStore (R1+R2+R4 of plan
+  `dev-public-cross-cluster-secrets`, issue #111). `mountPath` moves
+  from `kubernetes` (legacy) to `k8s-mgmt` (canonical multi-cluster
+  mount); `serviceAccountRef.audiences: [openbao.vault.loopzero.io]` added
+  so ESO's TokenRequest emits the matching `aud` claim;
+  `server` corrected from the legacy `https://host.k3d.internal:8210`
+  (stale operator-time port-forward note) to
+  `https://host.k3d.internal:8200` — aligned with the actual k3d
+  loopzero-vault cluster config (`infra/k3d/vault-cluster.yaml` maps
+  host:8200 → loadbalancer 8200 → NodePort 30200 → openbao pod) and
+  with the cert SAN that includes `host.k3d.internal` (verified
+  2026-06-19). The stale `:8210` was the seed chain FAIL=11 root cause
+  for ESO reachability.
 - `infra/scripts/local/vault-bootstrap-dev.sh` gains opt-in Transit
   auto-unseal mode per T2.1 (hermetic side) of plan
   `dev-public-cross-cluster-secrets` (issue #111). New env var
