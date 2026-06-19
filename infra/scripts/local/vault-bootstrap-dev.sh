@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # T2.1 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+# T1.1 of plan dev-public-cross-cluster-secrets v1.1 (issue #111).
 #
 # Aggregates 10 canonical OpenBao Transit bootstrap manual steps into one
 # idempotent task. Closes catch #5 from T6.2 session (memory
@@ -7,6 +8,19 @@
 # 6 synchronized artifacts (helm + init + unseal + approle + role_id +
 # secret_id + K8s Secret + SPKI pin) — Cleanroom seeds ZERO of them.
 # Without this task, operator hand-edits during live debug for 30+ min.
+#
+# SPLIT-CONTEXT contract (T1.1 / Jeito A canonical sponsor mandate
+# INQUEBRÁVEL 2026-06-19, issue #111): OpenBao runs in a SEPARATE
+# k3d-loopzero-vault cluster (NOT mgmt). This script splits the kubectl
+# fan-out into:
+#   - OPENBAO_CONTEXT (default k3d-loopzero-vault) → bao operator init /
+#     auth/approle / SPKI read — the vault-cluster side
+#   - TARGET_CONTEXT  (default k3d-loopzero-mgmt)  → loopzero-openbao-approle +
+#     openbao-spki-pin Secret apply (where loopzero-api Deployment envFrom
+#     reads from) — the mgmt-cluster side
+# Legacy single-context invocations (everything against mgmt) were
+# canonical only under the superseded `task k3d:vault:bootstrap-in-mgmt`
+# shortcut. Jeito A INQUEBRÁVEL forbids that shortcut.
 #
 # Per ADR D2: idempotent aggregator (re-run no-ops on already-initialized
 # state). Stores Shamir shards + root token at ~/.loopzero/cleanroom-unseal.json
@@ -30,7 +44,16 @@
 
 set -uo pipefail
 
-CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-mgmt}"
+# SPLIT-CONTEXT (T1.1 — Jeito A INQUEBRÁVEL — issue #111).
+# OPENBAO_CONTEXT is the vault-cluster side (bao init/unseal/approle/SPKI).
+# TARGET_CONTEXT is the mgmt-cluster side (Secret apply that loopzero-api
+# Deployment envFrom reads from loopzero-system ns).
+OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-vault}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
+# Backwards-compat alias preserved for inline log lines + helmfile sync
+# selectors that pre-date the T1.1 split. New code MUST use one of the
+# two split variables above.
+CONTEXT="$OPENBAO_CONTEXT"
 NS="${OPENBAO_NAMESPACE:-vault-system}"
 POD="${OPENBAO_POD:-openbao-0}"
 UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
@@ -55,9 +78,14 @@ run() {
 }
 
 # === Pre-flight ===
-log "Step 1: pre-flight — OpenBao pod state"
-if ! kubectl --context "$CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&1; then
-  log "FAIL: OpenBao pod $POD not found in $NS. Run \`task k3d:vault:bootstrap-in-mgmt\` first."
+log "Step 1: pre-flight — OpenBao pod state in $OPENBAO_CONTEXT"
+if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&1; then
+  log "FAIL: OpenBao pod $POD not found in $OPENBAO_CONTEXT/$NS."
+  log "Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19, issue #111):"
+  log "  1. Provision separate vault cluster: task k3d:vault:create"
+  log "  2. Install OpenBao chart:            task k3d:vault:bootstrap"
+  log "  3. Sponsor JUNTOS Shamir init + unseal × 3 (see docs/operations/openbao-init-runbook.md)"
+  log "Override OPENBAO_CONTEXT env if your vault cluster has a different name."
   exit 1
 fi
 
@@ -67,7 +95,7 @@ mkdir -p "$(dirname "$UNSEAL_FILE")"
 # inside the pod because the bao CLI doesn't have the openbao-tls CA bundle.
 # Pass BAO_SKIP_VERIFY=true so all `bao` invocations skip cert verification
 # (acceptable for dev — prod path uses real CA via cert-manager).
-bao() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_SKIP_VERIFY=true bao "$@"; }
+bao() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BAO_SKIP_VERIFY=true bao "$@"; }
 
 # === Step 2: init (idempotent — skip if already initialized) ===
 # CANONICAL FIX 2026-06-15 Phase 4 dev-public Cleanroom: `bao status` uses
@@ -127,9 +155,11 @@ fi
 log "Step 4: kubectl create secret openbao-init-token (idempotent)"
 ROOT_TOKEN=$(python3 -c "import json; print(json.load(open('$UNSEAL_FILE'))['root_token'])" 2>/dev/null || true)
 if [[ -n "$ROOT_TOKEN" ]]; then
-  run kubectl --context "$CONTEXT" -n "$NS" create secret generic openbao-init-token \
+  # openbao-init-token lives in the vault cluster (consumed by the
+  # openbao-init helmfile sync at Step 5 — policy bootstrap).
+  run kubectl --context "$OPENBAO_CONTEXT" -n "$NS" create secret generic openbao-init-token \
     --from-literal=BAO_TOKEN="$ROOT_TOKEN" \
-    --dry-run=client -o yaml | kubectl --context "$CONTEXT" -n "$NS" apply -f -
+    --dry-run=client -o yaml | kubectl --context "$OPENBAO_CONTEXT" -n "$NS" apply -f -
 fi
 
 # === Step 5: openbao-init helmfile sync ===
@@ -137,14 +167,14 @@ log "Step 5: helmfile sync openbao-init (T5.1-T5.9 provisioning)"
 if [[ -f "infra/helmfile/vault.helmfile.yaml.gotmpl" ]]; then
   ENV_NAME="${HELMFILE_ENV:-vault-local}"
   run helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e "$ENV_NAME" \
-    --kube-context "$CONTEXT" --selector name=openbao-init sync || \
+    --kube-context "$OPENBAO_CONTEXT" --selector name=openbao-init sync || \
     log "WARN: openbao-init helmfile sync had issues — manual inspect recommended"
 fi
 
 # === Step 6+7: approle + policy ===
 log "Step 6+7: approle + loopzero-api policy"
 export BAO_TOKEN="$ROOT_TOKEN"
-bao_auth() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao "$@"; }
+bao_auth() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao "$@"; }
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
@@ -160,7 +190,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   # via stdin pipe was missing BAO_SKIP_VERIFY=true; cert chain x509
   # verification failed inside the pod (no CA bundle for openbao-tls).
   # Mirrors the bao() / bao_auth() helper fixes.
-  echo "$POLICY" | kubectl --context "$CONTEXT" -n "$NS" exec -i "$POD" -- \
+  echo "$POLICY" | kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec -i "$POD" -- \
     env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao policy write loopzero-api - || true
   bao_auth write auth/approle/role/loopzero-api \
     token_policies=loopzero-api \
@@ -176,18 +206,28 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
 fi
 
 # === Step 10: loopzero-openbao-approle + openbao-spki-pin Secrets ===
-log "Step 10: loopzero-openbao-approle Secret in $TARGET_NS + openbao-spki-pin"
+# T1.1 split-context: writes target the MGMT cluster (TARGET_CONTEXT)
+# where loopzero-api Deployment envFrom reads from. EC-4 absorption:
+# ensure target ns exists BEFORE the Secret apply — fail-fast if
+# the mgmt-side ESO target namespace was never provisioned.
+log "Step 10: loopzero-openbao-approle Secret in $TARGET_CONTEXT/$TARGET_NS + openbao-spki-pin"
 if [[ "$DRY_RUN" -eq 0 && -n "${SECRET_ID:-}" ]]; then
-  kubectl --context "$CONTEXT" -n "$TARGET_NS" create secret generic loopzero-openbao-approle \
+  # EC-4: idempotent namespace ensure on TARGET_CONTEXT side BEFORE Secret apply.
+  kubectl --context "$TARGET_CONTEXT" create namespace "$TARGET_NS" --dry-run=client -o yaml | \
+    kubectl --context "$TARGET_CONTEXT" apply -f - >/dev/null
+  kubectl --context "$TARGET_CONTEXT" -n "$TARGET_NS" create secret generic loopzero-openbao-approle \
     --from-literal=OPENBAO_VAULT_SECRET_ID="$SECRET_ID" \
-    --dry-run=client -o yaml | kubectl --context "$CONTEXT" -n "$TARGET_NS" apply -f - || \
-    log "WARN: loopzero-openbao-approle creation failed — namespace $TARGET_NS may not exist yet"
+    --dry-run=client -o yaml | kubectl --context "$TARGET_CONTEXT" -n "$TARGET_NS" apply -f - || \
+    log "WARN: loopzero-openbao-approle creation failed in $TARGET_CONTEXT/$TARGET_NS"
 fi
 
 # Extract SPKI pin from openbao-tls cert (catch #7 — dynamic extraction)
 log "Step 10b: extract SPKI pin from openbao-tls cert"
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  TLS_CRT=$(kubectl --context "$CONTEXT" -n "$NS" get secret openbao-tls -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  # Read openbao-tls from the VAULT cluster (where cert-manager issued
+  # the Secret), then write the SPKI pin to the MGMT cluster (where
+  # loopzero-api chart envFrom reads from).
+  TLS_CRT=$(kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get secret openbao-tls -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || true)
   if [[ -n "$TLS_CRT" ]]; then
     # CANONICAL FIX 2026-06-15: pkg/vault/transit_client.go:199 expects
     # HEX-encoded SHA-256 (via hex.DecodeString). Previous base64url
@@ -198,9 +238,9 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     # post-process to strip the prefix; equivalently use `-binary | xxd`.
     SPKI=$(echo "$TLS_CRT" | openssl x509 -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | xxd -p -c 999 | tr -d '\n' || true)
     if [[ -n "$SPKI" ]]; then
-      kubectl --context "$CONTEXT" -n loopzero-system create secret generic openbao-spki-pin \
+      kubectl --context "$TARGET_CONTEXT" -n loopzero-system create secret generic openbao-spki-pin \
         --from-literal=OPENBAO_SPKI_PIN_SHA256="$SPKI" \
-        --dry-run=client -o yaml | kubectl --context "$CONTEXT" -n loopzero-system apply -f -
+        --dry-run=client -o yaml | kubectl --context "$TARGET_CONTEXT" -n loopzero-system apply -f -
       log "OK: openbao-spki-pin Secret created with extracted SPKI"
     fi
   fi

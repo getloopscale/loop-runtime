@@ -35,8 +35,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `values.schema.json /properties/config/properties` whenever the schema has
   `additionalProperties:false` at that path (Slice 4 hardening). Closes the helmfile
   env-overlay drift surface that the Slice 4 EC-3 Go-deps transitive guard did not cover.
+- Hermetic regression gate `TestVaultBootstrapDev_SplitContexts` in
+  `infra/tests/scripts/vault_bootstrap_split_contexts_test.go` locking T1.1 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Verifies the canonical SPLIT-CONTEXT
+  contract: `OPENBAO_CONTEXT` defaults to `k3d-loopzero-vault` (vault-cluster side — bao
+  init/unseal/approle/SPKI read), `TARGET_CONTEXT` defaults to `k3d-loopzero-mgmt`
+  (mgmt-cluster side — `loopzero-openbao-approle` + `openbao-spki-pin` Secret apply where
+  loopzero-api Deployment envFrom reads from); EC-4 ns-ensure precedes the Secret apply;
+  EC-6 `initialized` state guard preserved against accidental destructive re-init.
+  9 sub-assertions cover defaults, ns-ensure, Secret-apply context, bao-exec context,
+  literal-namespace regression guard, traceability, and EC-6 idempotency.
 
 ### Changed
+
+- `infra/scripts/local/vault-bootstrap-dev.sh` split into two kubectl contexts per T1.1
+  of plan `dev-public-cross-cluster-secrets` (issue #111). Previously every kubectl
+  call ran against a single `$CONTEXT` defaulting to `k3d-loopzero-mgmt` — incompatible
+  with Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19: OpenBao runs in a
+  separate `k3d-loopzero-vault` cluster). Post-T1.1: bao init/unseal/approle/SPKI read
+  use `$OPENBAO_CONTEXT` (default `k3d-loopzero-vault`); `loopzero-openbao-approle` +
+  `openbao-spki-pin` Secret apply use `$TARGET_CONTEXT` (default `k3d-loopzero-mgmt`);
+  EC-4 idempotent ns-ensure on TARGET_CONTEXT side guarantees the target namespace
+  exists before the Secret apply; pre-flight FAIL message points operators at the
+  Jeito A canonical chain (`task k3d:vault:create` + `task k3d:vault:bootstrap` +
+  sponsor JUNTOS Shamir init per `docs/operations/openbao-init-runbook.md`) instead
+  of the superseded `task k3d:vault:bootstrap-in-mgmt` shortcut. Backwards-compat
+  alias `CONTEXT="$OPENBAO_CONTEXT"` preserved for log-line reuse; new code MUST
+  use one of the two split variables.
 
 ### Deprecated
 
