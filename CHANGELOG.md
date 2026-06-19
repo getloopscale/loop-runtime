@@ -38,6 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   preserved: env var > ENV_FILE > DEV_CREDS_FILE. Hermetic regression lock
   `TestPatchKratosDevPublic_FallsBackToDevCredentials` pins default path + all 5 key mappings +
   fallback order + traceability comment.
+- **Master seed `run_step` aborted entire chain on first failure + summary unreachable.**
+  Finding #5 of issue #91 (Cleanroom mandate canonical chain run 2026-06-18). With
+  `set -euo pipefail`, the legacy `return 1` on failure propagated up to the top-level command and
+  aborted the script. The "=== canonical chain summary ===" log block (below the final step) was
+  UNREACHABLE on any failure — operators saw "wrapper exit 0" with no summary of which steps ran,
+  passed, or failed. Worse, downstream steps that did NOT depend on the failing step were never
+  attempted, requiring manual re-runs after each fix. Canonical fix: `run_step` accumulates FAIL
+  count + always returns 0. The final `[[ "$FAIL" == "0" ]] || exit 1` preserves the fail-loud
+  contract via the FAIL counter. Hermetic regression lock
+  `TestSeedPostCleanroomAll_RunStepAlwaysReturnsZero` pins: no `return 1`; explicit `return 0`;
+  summary log block at top level; FAIL-driven final exit; traceability comment.
 
 ### Security
 
