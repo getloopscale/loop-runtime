@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `1 vault → 2 minio → 4 patch-kratos → 4b hydra → 3 admin → 5+`. Hermetic regression lock
   `TestSeedPostCleanroomAll_StepOrderCanonical` enforces 4-before-3 and 4b-before-3, plus a
   traceability comment so a future "clean up" refactor does not regress the unusual order.
+- **`patch-kratos-dev-public.sh` failed Cleanroom-fresh with "LOOPZERO_GITHUB_CLIENT_ID not set in env or .env" — canonical fallback to `~/.loopzero/dev-credentials.json` missing.**
+  Finding #3 of issue #91 (Cleanroom mandate canonical chain run). Operators with credentials
+  persisted only in the canonical `~/.loopzero/dev-credentials.json` (per memories
+  `feedback_post_cleanroom_seed_github_app_canonical` + `reference_admin_cli_hydra_client_canonical`)
+  got opaque exit-1 failures on first Cleanroom because `load_env` consulted only env vars +
+  operator-specific `.env`. `load_env` now adds a third fallback layer (`DEV_CREDS_FILE`, default
+  `$HOME/.loopzero/dev-credentials.json`) with explicit `LOOPZERO_* → JSON-path` mapping for all 5 keys
+  consumed by the script (GitHub + Google client_id/secret + Resend API key). Priority order
+  preserved: env var > ENV_FILE > DEV_CREDS_FILE. Hermetic regression lock
+  `TestPatchKratosDevPublic_FallsBackToDevCredentials` pins default path + all 5 key mappings +
+  fallback order + traceability comment.
 
 ### Security
 
