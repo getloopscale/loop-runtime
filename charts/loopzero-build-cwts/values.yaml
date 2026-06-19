@@ -67,6 +67,10 @@ workflow:
 # Gitea is only used for GitOps manifests (ArgoCD watches it).
 minio:
   insecure: true   # DEV ONLY — allows HTTP MinIO (no TLS)
+  # existingSecret floor (anti-lock-in): the operator-provided K8s Secret the build
+  # CWTs consume by reference (envFrom secretRef). Must provide the keys in SECRETS.md.
+  # Default preserves legacy behavior. See SECRETS.md + examples/eso-minio.yaml.
+  existingSecret: "loopzero-minio-credentials"
 
 # Pod retention for log collection — Promtail needs time to ship logs to Loki
 # before pods are garbage collected. 4h is sufficient for all build durations.

@@ -31,7 +31,7 @@ spec:
             value: /tmp
         envFrom:
           - secretRef:
-              name: loopzero-minio-credentials
+              name: {{ .Values.minio.existingSecret | default "loopzero-minio-credentials" }}
         command:
           - sh
           - -c

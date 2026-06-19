@@ -3,7 +3,7 @@
   "title": "loopzero-platform umbrella values",
   "description": "Schema for loopzero-platform umbrella chart. Validates global.registry + sub-chart enable toggles. charts-sota T4.1 + ADR-0037. loopzero-controller ghost removed per ADR-0042.",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "global": {
       "type": "object",
@@ -16,57 +16,111 @@
         },
         "imagePullSecrets": {
           "type": "array",
-          "items": { "type": "object" }
+          "items": {
+            "type": "object"
+          }
         },
         "environment": {
           "type": "string",
-          "enum": ["dev", "staging", "prod"]
+          "enum": [
+            "dev",
+            "staging",
+            "prod"
+          ]
         }
       }
     },
     "loopzero-crds": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-api": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-tenant-operator": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-app-operator": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-preview-operator": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-platform-operator": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-cloud": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-dashboard": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-build-cwts": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-monitoring": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
     "loopzero-admission-policies": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "loopzero-common": {
+      "type": "object",
+      "description": "Values block consumed by the loopzero-common library subchart."
     }
   }
 }
