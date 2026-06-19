@@ -311,11 +311,21 @@
     "extraVolumeMounts": {
       "type": "array"
     },
-    "livenessProbe": {},
-    "metrics": {},
-    "networkPolicy": {},
-    "readinessProbe": {},
-    "startupProbe": {},
+    "livenessProbe": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "networkPolicy": {
+      "type": "object"
+    },
+    "readinessProbe": {
+      "type": "object"
+    },
+    "startupProbe": {
+      "type": "object"
+    },
     "loopzero-common": {
       "type": "object",
       "description": "Values block consumed by the loopzero-common library subchart."

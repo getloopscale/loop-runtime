@@ -197,6 +197,8 @@
         }
       }
     },
-    "tufRootCeremonyDate": {}
+    "tufRootCeremonyDate": {
+      "type": "string"
+    }
   }
 }

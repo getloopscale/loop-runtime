@@ -87,10 +87,26 @@
         }
       }
     },
-    "minio": {},
-    "server": {},
-    "workflow": {},
-    "workflowDefaults": {}
+    "minio": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string"
+        },
+        "insecure": {
+          "type": "boolean"
+        }
+      }
+    },
+    "server": {
+      "type": "object"
+    },
+    "workflow": {
+      "type": "object"
+    },
+    "workflowDefaults": {
+      "type": "object"
+    }
   },
   "required": [
     "images",

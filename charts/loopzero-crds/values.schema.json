@@ -101,7 +101,9 @@
       "type": "boolean",
       "description": "Whether to retain CRDs on chart uninstall (helm.sh/resource-policy: keep)"
     },
-    "controllerGenVersion": {},
+    "controllerGenVersion": {
+      "type": "string"
+    },
     "loopzero-common": {
       "type": "object",
       "description": "Values block consumed by the loopzero-common library subchart."
