@@ -34,7 +34,17 @@ CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-mgmt}"
 NS="${OPENBAO_NAMESPACE:-vault-system}"
 POD="${OPENBAO_POD:-openbao-0}"
 UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
-TARGET_NS="${ESO_TARGET_NS:-external-secrets}"
+# Cleanroom mandate run 2026-06-18 caught Finding #2 (issue #91): the
+# legacy default external-secrets ns put the loopzero-openbao-approle
+# Secret out of reach of loopzero-api Deployment (envFrom reads from
+# loopzero-system ns), so a fresh Cleanroom seed left loopzero-api in
+# CrashLoopBackOff with "OPENBAO_VAULT_SECRET_ID required" and the
+# downstream master seed Step 2 (seed-minio-canonical) Layer 4 timed
+# out waiting for loopzero-api rollout. Default now points at the
+# canonical consumer ns (loopzero-system) so the chain converges on first
+# run. Operators with workloads still bound to external-secrets ns
+# (pre-canonical setup) override via ESO_TARGET_NS env var.
+TARGET_NS="${ESO_TARGET_NS:-loopzero-system}"
 DRY_RUN="${DRY_RUN:-0}"
 
 log() { printf '[vault-bootstrap-dev] %s\n' "$*" >&2; }

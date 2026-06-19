@@ -25,8 +25,13 @@ service:
 # Operator configuration (environment variables via ConfigMap)
 config:
   baseDomain: ""
+  ingressNamespace: "traefik"
+  loopzeroPprofAddr: ""
+  loopzeroPprofEnabled: "false"
+  otelExporterOtlpEndpoint: ""
+  loopzeroEnv: "production"
+  loopzeroTracingEnabled: "false"
 
-# Kubeconfig for multi-cluster access
 kubeconfig:
   runtime:
     existingConfigMap: ""
@@ -36,6 +41,9 @@ args:
   leaderElect: true
   healthProbeBindAddress: ":8081"
   metricsBindAddress: ":8443"
+
+reloader:
+  enabled: false
 
 resources:
   requests:

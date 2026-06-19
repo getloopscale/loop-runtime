@@ -54,6 +54,16 @@ set -euo pipefail
 : "${KUBECTL_CONTEXT:=k3d-loopzero-mgmt}"
 : "${KRATOS_NAMESPACE:=loopzero-auth}"
 : "${ENV_FILE:=/home/paulo/loopzero/.env}"
+# Finding #3 of issue #91 (Cleanroom mandate canonical chain run
+# 2026-06-18): operators with credentials persisted only in the
+# canonical ~/.loopzero/dev-credentials.json (per memories
+# feedback_post_cleanroom_seed_github_app_canonical +
+# reference_admin_cli_hydra_client_canonical) were getting opaque
+# "LOOPZERO_GITHUB_CLIENT_ID not set in env or .env" failures on first
+# Cleanroom because patch-kratos didn't know about the canonical
+# source. DEV_CREDS_FILE is consulted as a third fallback inside
+# load_env (env > ENV_FILE > DEV_CREDS_FILE).
+: "${DEV_CREDS_FILE:=$HOME/.loopzero/dev-credentials.json}"
 
 DRY_RUN=0
 SKIP_RESTART=0
@@ -71,15 +81,29 @@ done
 
 log() { printf '[patch-kratos-dev-public] %s\n' "$*" >&2; }
 
-# Read LOOPZERO_* env from .env if not already exported
+# Read LOOPZERO_* env from .env if not already exported. Fallback chain
+# is env var > ENV_FILE > DEV_CREDS_FILE (~/.loopzero/dev-credentials.json
+# canonical post-Cleanroom seed file). Operators can populate any of
+# the three; the priority order preserves explicit override semantics.
+# Fallback layer added 2026-06-18 (Finding #3 of issue #91).
 load_env() {
   local key="$1"
   local val="${!key:-}"
   if [[ -z "$val" && -f "$ENV_FILE" ]]; then
     val=$(grep -E "^$key=" "$ENV_FILE" | head -1 | cut -d= -f2-)
   fi
+  # Finding #3 fallback: read from canonical dev-credentials.json via
+  # the sibling patch_kratos_load_devcreds.py helper. The helper holds
+  # the LOOPZERO_* -> JSON-path mapping; keeping it in a sibling .py file
+  # (matching the patch_kratos_dev_public.py pattern) keeps reimplem-
+  # entable logic OUT of this KEEP-tagged bash script (un-homed-logic
+  # gate). Adding a new LOOPZERO_* env key without updating both the
+  # helper AND the hermetic test will fail CI.
+  if [[ -z "$val" && -f "$DEV_CREDS_FILE" ]]; then
+    val=$(python3 "$(dirname "$0")/patch_kratos_load_devcreds.py" "$key" "$DEV_CREDS_FILE" 2>/dev/null)
+  fi
   if [[ -z "$val" ]]; then
-    log "ERROR: $key not set in env or $ENV_FILE"
+    log "ERROR: $key not set in env, $ENV_FILE, or $DEV_CREDS_FILE (dev-credentials.json)"
     exit 1
   fi
   printf '%s' "$val"

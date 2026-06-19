@@ -5,9 +5,19 @@ metadata:
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
 data:
-  GITEA_URL: {{ .Values.config.giteaUrl | quote }}
   ARGOCD_NAMESPACE: {{ .Values.config.argocdNamespace | quote }}
-  BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
-  WORKLOAD_CLUSTER_URL: {{ .Values.config.workloadClusterUrl | quote }}
+  GITEA_URL: {{ .Values.config.giteaUrl | quote }}
+  HARBOR_ADMIN_USERNAME: {{ .Values.config.harborAdminUsername | quote }}
+  HARBOR_REGISTRY_HOST: {{ .Values.config.harborRegistryHost | quote }}
+  HARBOR_URL: {{ .Values.config.harborUrl | quote }}
   INGRESS_NAMESPACE: {{ .Values.config.ingressNamespace | quote }}
-  OPERATOR_INSECURE_SKIP_TLS: {{ .Values.config.insecureSkipTls | quote }}
+  MINIO_ENDPOINT: {{ .Values.config.minioEndpoint | quote }}
+  REGISTRY_CIDRS: {{ .Values.config.registryCidrs | quote }}
+  LOOPZERO_TENANT_MAX_CONCURRENT: {{ .Values.config.loopzeroTenantMaxConcurrent | quote }}
+  WORKLOAD_CLUSTER_URL: {{ .Values.config.workloadClusterUrl | quote }}
+  OPERATOR_INSECURE_SKIP_TLS: {{ .Values.config.operatorInsecureSkipTls | quote }}
+  LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}
+  LOOPZERO_PPROF_ENABLED: {{ .Values.config.loopzeroPprofEnabled | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}
+  LOOPZERO_ENV: {{ .Values.config.loopzeroEnv | quote }}
+  LOOPZERO_TRACING_ENABLED: {{ .Values.config.loopzeroTracingEnabled | quote }}

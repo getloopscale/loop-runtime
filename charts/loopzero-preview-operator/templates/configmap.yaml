@@ -6,3 +6,9 @@ metadata:
     {{- include "loopzero-common.labels" . | nindent 4 }}
 data:
   BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
+  INGRESS_NAMESPACE: {{ .Values.config.ingressNamespace | quote }}
+  LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}
+  LOOPZERO_PPROF_ENABLED: {{ .Values.config.loopzeroPprofEnabled | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}
+  LOOPZERO_ENV: {{ .Values.config.loopzeroEnv | quote }}
+  LOOPZERO_TRACING_ENABLED: {{ .Values.config.loopzeroTracingEnabled | quote }}

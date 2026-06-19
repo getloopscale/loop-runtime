@@ -25,12 +25,22 @@ service:
 # Operator configuration (environment variables via ConfigMap)
 config:
   baseDomain: ""
+  operatorInsecureSkipTls: "false"
+  loopzeroRequireRuntimeKubeconfig: "false"
+  loopzeroReaperGracePeriodSeconds: "300"
+  loopzeroPprofAddr: ""
+  loopzeroPprofEnabled: "false"
+  otelExporterOtlpEndpoint: ""
+  loopzeroEnv: "production"
+  loopzeroTracingEnabled: "false"
 
-# Operator binary arguments
 args:
   leaderElect: true
   healthProbeBindAddress: ":8081"
   metricsBindAddress: ":8443"
+
+reloader:
+  enabled: false
 
 resources:
   requests:

@@ -19,6 +19,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.21.0] - 2026-06-19
+
+### Added
+- Operators install-config-contract (two-plane, AM6.5 Slice 4, per-binary ISP): all 4 operator charts get CONFIG.md + hardened `values.schema.json` (root + leaf `additionalProperties:false`) + opt-in Reloader. `loopzero-tenant-operator` is two-plane (16 config ConfigMap + 8 secret K8s Secret + SECRETS.md + ESO examples OpenBao/AWS-SM/GCP-SM); `loopzero-{app,preview,platform}-operator` are config-only (kubeconfig is platform-mounted via `loopzero-cluster-kubeconfigs` volume, not a chart secret — EC-1). Each chart documents ONLY the env vars its own binary reads (ISP), where "reads" is the FULL transitive set (`cmd/<op>` + every imported `internal/*` package, resolved via `go list -deps`). Hermetic Go guards (`infra/tests/charts/loopzero_operators_install_contract_test.go`) enforce per-operator CONFIG.md/SECRETS.md set-equality vs rendered chart + config/secret plane separation + a bidirectional EC-3 guard (chart injects ⊇ binary reads AND ⊆ binary reads — no under- nor over-injection) + a schema fail-fast guard (root `additionalProperties:false`).
+
+
+### Fixed
+- **Master seed Step 3 (admin login submit) failed HTTP 000 on fresh Cleanroom because Step 4 (patch-kratos) ran after it.**
+  Finding #4 of issue #91 (Cleanroom mandate canonical chain run 2026-06-18). The script declared
+  order `1 vault → 2 minio → 3 admin → 4 patch-kratos → 4b hydra → 5+` but Step 3 HTTP-POSTs a
+  login submit against `auth-dev.loopzero.example` while Kratos ConfigMap still has helm-default URLs
+  (`localhost:4455`, missing CORS / cookies.domain). Kratos rejects the submit with HTTP 000 (CSRF
+  defense). Memory `feedback_post_cleanroom_kratos_patch_dev_public` already documented the
+  dependency; this commit codifies it in the master script. Canonical order is now
+  `1 vault → 2 minio → 4 patch-kratos → 4b hydra → 3 admin → 5+`. Hermetic regression lock
+  `TestSeedPostCleanroomAll_StepOrderCanonical` enforces 4-before-3 and 4b-before-3, plus a
+  traceability comment so a future "clean up" refactor does not regress the unusual order.
+- **`patch-kratos-dev-public.sh` failed Cleanroom-fresh with "LOOPZERO_GITHUB_CLIENT_ID not set in env or .env" — canonical fallback to `~/.loopzero/dev-credentials.json` missing.**
+  Finding #3 of issue #91 (Cleanroom mandate canonical chain run). Operators with credentials
+  persisted only in the canonical `~/.loopzero/dev-credentials.json` (per memories
+  `feedback_post_cleanroom_seed_github_app_canonical` + `reference_admin_cli_hydra_client_canonical`)
+  got opaque exit-1 failures on first Cleanroom because `load_env` consulted only env vars +
+  operator-specific `.env`. `load_env` now adds a third fallback layer (`DEV_CREDS_FILE`, default
+  `$HOME/.loopzero/dev-credentials.json`) with explicit `LOOPZERO_* → JSON-path` mapping for all 5 keys
+  consumed by the script (GitHub + Google client_id/secret + Resend API key). Priority order
+  preserved: env var > ENV_FILE > DEV_CREDS_FILE. Hermetic regression lock
+  `TestPatchKratosDevPublic_FallsBackToDevCredentials` pins default path + all 5 key mappings +
+  fallback order + traceability comment.
+- **Master seed `run_step` aborted entire chain on first failure + summary unreachable.**
+  Finding #5 of issue #91 (Cleanroom mandate canonical chain run 2026-06-18). With
+  `set -euo pipefail`, the legacy `return 1` on failure propagated up to the top-level command and
+  aborted the script. The "=== canonical chain summary ===" log block (below the final step) was
+  UNREACHABLE on any failure — operators saw "wrapper exit 0" with no summary of which steps ran,
+  passed, or failed. Worse, downstream steps that did NOT depend on the failing step were never
+  attempted, requiring manual re-runs after each fix. Canonical fix: `run_step` accumulates FAIL
+  count + always returns 0. The final `[[ "$FAIL" == "0" ]] || exit 1` preserves the fail-loud
+  contract via the FAIL counter. Hermetic regression lock
+  `TestSeedPostCleanroomAll_RunStepAlwaysReturnsZero` pins: no `return 1`; explicit `return 0`;
+  summary log block at top level; FAIL-driven final exit; traceability comment.
+- Operators install-config-contract Slice 4 — `/review` remediation (ISP correctness): removed `BASE_DOMAIN` over-injected into `loopzero-tenant-operator` (the tenant binary never reads it — only app/preview do); added `OPERATOR_INSECURE_SKIP_TLS` to `loopzero-app-operator` (its binary reads it transitively via `internal/app`→`internal/httpclient`, chart was omitting it); set root `additionalProperties:false` on all 4 operator schemas to match the released loopzero-api reference (a typo'd top-level key now fails `helm install` instead of passing silently); corrected the per-binary EC-3 guard to walk the full transitive `internal/*` read-set and to also reject over-injection (chart ⊆ binary reads). Caught by the multi-agent `/review`; invisible to the prior cmd-only, subset-only guard.
+
 ## [0.20.0] - 2026-06-18
 
 ### Added
@@ -74,6 +115,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 
 ### Fixed
+- **Cleanroom-fresh seed chain failed: vault-bootstrap-dev.sh wrote `loopzero-openbao-approle` Secret to wrong namespace.**
+  Finding #2 from issue #91 (Cleanroom mandate canonical chain run 2026-06-18). The script default
+  `TARGET_NS=external-secrets` put the Secret out of reach of `loopzero-api` Deployment (envFrom reads
+  from `loopzero-system` ns), so a fresh Cleanroom seed left `loopzero-api` in `CrashLoopBackOff` with
+  `OPENBAO_VAULT_SECRET_ID (AppRole secret_id) required` and the downstream master seed Step 2
+  (seed-minio-canonical) Layer 4 timed out waiting for `loopzero-api` rollout to converge. Default now
+  points at the canonical consumer ns (`loopzero-system`) so the chain converges on first run.
+  `ESO_TARGET_NS` env var override preserved for pre-canonical workloads. Hermetic regression lock
+  `infra/tests/check-vault-bootstrap-target-ns-default_test.sh` pins default + override semantics +
+  $TARGET_NS interpolation in the Step 10 log/kubectl-apply alignment (6/6 PASS). Same
+  stale-helper-post-architecture-refactor class as PR #88 (rewriter) + PR #89 (Tiltfile).
 - **P0 cross-project namespace corruption on promote (stale rewriter post-2026-06-07 multi-project refactor).**
   `api/internal/services/promotion_orchestrator.go` `rewriteManifestsForEnv` was written to recognize the
   legacy namespace format `loopzero-{tenant}-{env}`. The 2026-06-07 multi-project refactor ("TUDO DEVERIA esta

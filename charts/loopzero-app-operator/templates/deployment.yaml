@@ -4,6 +4,10 @@ metadata:
   name: {{ include "loopzero-common.fullname" . }}
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
