@@ -84,6 +84,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/scripts/local/vault-bootstrap-dev.sh` gains Step 5.5 — canonical
+  TokenReview config for `auth/k8s-mgmt` (R3 of plan
+  `dev-public-cross-cluster-secrets`, issue #111, sponsor approved
+  2026-06-19). Codifies the docs/operations/openbao-multi-cluster-auth-runbook.md
+  operator-time procedure: applies `vault-tokenreviewer` SA +
+  `system:auth-delegator` ClusterRoleBinding + a Secret-based
+  `kubernetes.io/service-account-token` (long-lived non-expiring per
+  sponsor reinforcement — K8s ≥1.24 `kubectl create token`
+  TokenRequest is bounded) in MGMT; extracts MGMT API server URL +
+  CA bundle; writes `auth/k8s-mgmt/config` inside the loopzero-vault
+  OpenBao pod. Mount-precedence guard: probes `bao auth list` for
+  `k8s-mgmt/` (60s budget) BEFORE writing config — else the write
+  fails 404 `no handler for route`. Only runs when OPENBAO_CONTEXT !=
+  TARGET_CONTEXT (cross-cluster Jeito A). Each failure mode warns +
+  continues so the seed chain surfaces the issue rather than aborts.
+- `infra/scripts/local/seed-post-cleanroom-all.sh` gains Step 1b that
+  invokes the existing canonical `infra/scripts/openbao/vault-bootstrap-eso.sh`
+  (R3 of plan `dev-public-cross-cluster-secrets`, issue #111). Closes
+  the gap where the canonical CSS `loopzero-vault-secrets` + SA
+  `eso-vault-reader` + CA ConfigMap `loopzero-vault-ca` were defined as
+  manifests but NEVER applied by any automated chain (operator-time
+  per VK.5 runbook). Reuses the existing script (Rule 9: don't
+  reinvent; un-homed-logic gate: NO new bash) — only adds the
+  invocation. The script's own preflight no-ops when single-cluster.
 - `infra/helm/openbao-init/templates/configmap.yaml` extends the
   `write_auth_role` helper to support optional `bound_audiences` (R2 of
   plan `dev-public-cross-cluster-secrets`, issue #111, sponsor approved

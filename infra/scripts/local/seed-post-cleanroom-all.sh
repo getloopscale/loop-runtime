@@ -120,6 +120,26 @@ else
   run_step "1-vault-bootstrap-dev" "bash $SCRIPT_DIR/vault-bootstrap-dev.sh" || log "  (continuing — vault may already be bootstrapped)"
 fi
 
+# Step 1b (R3 of plan dev-public-cross-cluster-secrets, issue #111, sponsor
+# approved 2026-06-19): apply ESO ClusterSecretStore + SA + CRB + CA
+# ConfigMap on mgmt, then wait for CSS Ready=True. This was operator-time
+# per the canonical runbook (VK.5) — codified here closes the seed chain
+# FAIL=11 for the cross-cluster ESO read path. Reuses the existing
+# canonical vault-bootstrap-eso.sh (NOT a new .sh — Rule 9 + un-homed-logic).
+# Only meaningful under Jeito A (separate loopzero-vault cluster); single-
+# cluster runs no-op via the script's own preflight.
+if [[ "$SKIP_VAULT" == "1" ]]; then
+  skip_step "1b-vault-bootstrap-eso" "skipped together with step 1 (operator already ran vault chain)"
+else
+  ESO_BOOTSTRAP="$SCRIPT_DIR/../openbao/vault-bootstrap-eso.sh"
+  if [[ -f "$ESO_BOOTSTRAP" ]]; then
+    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopzero-mgmt --vault-context k3d-loopzero-vault" || \
+      log "  (continuing — CSS loopzero-vault-secrets may need operator triage)"
+  else
+    skip_step "1b-vault-bootstrap-eso" "vault-bootstrap-eso.sh not found at $ESO_BOOTSTRAP (skipped)"
+  fi
+fi
+
 # Step 2
 run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VERIFY_FLAG"
 

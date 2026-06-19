@@ -233,6 +233,120 @@ if [[ -f "infra/helmfile/vault.helmfile.yaml.gotmpl" ]]; then
     log "WARN: openbao-init helmfile sync had issues — manual inspect recommended"
 fi
 
+# === Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt ===
+# R3 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
+# 2026-06-19). The openbao-init Job (Step 5) provisions the `k8s-mgmt`
+# auth mount + the `eso` role bound to eso-vault-reader@loopzero-system.
+# But the mount needs `auth/k8s-mgmt/config` (kubernetes_host + CA +
+# token_reviewer_jwt) for OpenBao to validate mgmt-issued SA tokens
+# via the TokenReview API. The canonical operator runbook documented
+# this as "operator-time" — codifying it here closes seed chain FAIL=11
+# for the cross-cluster ESO read path (per
+# docs/operations/openbao-multi-cluster-auth-runbook.md).
+#
+# Mount-precedence guard: bao MUST report `k8s-mgmt/` enabled before
+# `bao write auth/k8s-mgmt/config` — else Vault returns 404
+# `no handler for route auth/k8s-mgmt/config`. Sponsor reinforced.
+#
+# Long-lived token contract: K8s ≥1.24 `kubectl create token` produces
+# bounded TokenRequest JWTs that expire — useless for OpenBao's
+# continuous TokenReview path. Use a Secret-based
+# `kubernetes.io/service-account-token` instead — K8s populates
+# `.data.token` with a JWT that never expires (legacy mechanism still
+# supported). Sponsor reinforced.
+#
+# This step only runs when the TARGET_CONTEXT (mgmt) is different from
+# OPENBAO_CONTEXT (vault) — single-cluster setups don't need
+# cross-cluster TokenReview wiring.
+log "Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt"
+if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
+  # Wait for openbao-init Job to provision the k8s-mgmt mount.
+  log "  Waiting for auth/k8s-mgmt/ mount (openbao-init Job creates it)"
+  MOUNT_READY=0
+  for i in $(seq 1 30); do  # 30 * 2s = 60s budget
+    if bao_auth auth list -format=json 2>/dev/null | python3 -c \
+        "import sys,json; d=json.loads(sys.stdin.read() or '{}'); sys.exit(0 if 'k8s-mgmt/' in d else 1)" 2>/dev/null; then
+      MOUNT_READY=1
+      log "  OK: auth/k8s-mgmt/ mount present (attempt $i)"
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$MOUNT_READY" -eq 0 ]]; then
+    log "  WARN: auth/k8s-mgmt/ mount not present after 60s — skipping R3 config write (seed chain FAIL=11 will surface)"
+  else
+    # MGMT side: ensure vault-tokenreviewer SA + CRB exist.
+    log "  Applying vault-tokenreviewer SA + CRB on $TARGET_CONTEXT"
+    kubectl --context "$TARGET_CONTEXT" apply -f - <<'TR_EOF' >/dev/null
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-tokenreviewer
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-tokenreviewer-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: vault-tokenreviewer
+    namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-tokenreviewer-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: vault-tokenreviewer
+type: kubernetes.io/service-account-token
+TR_EOF
+
+    # Wait for K8s to populate the Secret-based token (legacy
+    # non-expiring SA token mechanism; sponsor explicit — TokenRequest
+    # is bounded). Up to 30s wait.
+    TR_JWT=""
+    for i in $(seq 1 15); do
+      TR_JWT=$(kubectl --context "$TARGET_CONTEXT" -n kube-system get secret vault-tokenreviewer-token -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+      if [[ -n "$TR_JWT" ]]; then
+        log "  OK: vault-tokenreviewer token populated (attempt $i)"
+        break
+      fi
+      sleep 2
+    done
+    if [[ -z "$TR_JWT" ]]; then
+      log "  WARN: vault-tokenreviewer token not populated after 30s — skipping R3"
+    else
+      # Extract MGMT API server URL + CA bundle.
+      MGMT_HOST=$(kubectl --context "$TARGET_CONTEXT" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
+      MGMT_CA=$(kubectl --context "$TARGET_CONTEXT" -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)
+      if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
+        log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"
+      else
+        # Write auth/k8s-mgmt/config inside the OpenBao pod (avoids
+        # CA distribution overhead — pod has bao CLI + connectivity).
+        log "  Writing auth/k8s-mgmt/config with MGMT_HOST=$MGMT_HOST"
+        kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec -i "$POD" -- \
+          env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true \
+          bao write auth/k8s-mgmt/config \
+            kubernetes_host="$MGMT_HOST" \
+            kubernetes_ca_cert="$MGMT_CA" \
+            token_reviewer_jwt="$TR_JWT" \
+            disable_iss_validation=true 2>&1 | tail -5 || \
+          log "  WARN: bao write auth/k8s-mgmt/config returned non-zero"
+        log "  R3 codification complete"
+      fi
+    fi
+  fi
+else
+  log "  Skip R3: OPENBAO_CONTEXT == TARGET_CONTEXT (single-cluster topology) OR DRY_RUN"
+fi
+
 # === Step 6+7: approle + policy ===
 log "Step 6+7: approle + loopzero-api policy"
 export BAO_TOKEN="$ROOT_TOKEN"
