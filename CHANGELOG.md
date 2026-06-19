@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Hermetic regression gate `TestRuntimeEnvCompleteness` in `infra/tests/charts/env_completeness_test.go`
+  (T1.1 of plan `dev-public-env-config-completeness`). Locks the dev-public runtime env/secret surface:
+  reads `infra/tests/fixtures/runtime-env-manifest.txt` (200 distinct runtime rows derived from the
+  umbrella env master table), `secret-producers.txt` (D4 producer map for all 39 distinct SECRET
+  runtime vars), and `env-completeness-known-gaps.txt` (explicit allowlist refusing silent debt);
+  cross-references against the install-config-contract surface (CONFIG.md + SECRETS.md across 7
+  charts). 5 sub-tests: anti-vacuity floor (EC-2, ≥150), producer floor (EC-5 companion, ≥30),
+  completeness (0 NEW req=Y orphan + 0 NEW phantom), SECRET materialization (EC-1/D4 — every SECRET
+  runtime VAR has a producer), and camelCase ↔ UPPER_SNAKE normalization (EC-4 — viteApiUrl
+  ↔ VITE_API_URL). The allowlist file refuses empty justifications at parse time. Companion
+  generator `_generate_runtime_manifest.py` (one-shot, NOT runtime — D2 keeps the Go guard hermetic).
 - New § Sub-step 2.5 in `.claude/rules/cleanroom-up-live-test-mandate.md` documenting the
   Sponsor JUNTOS OpenBao Shamir init gate for dev-public env (issue #101). The mandate now
   explicitly slots the ceremony BETWEEN step 2 (UP) and step 3 (seeds), with the canonical
