@@ -1,25 +1,25 @@
-# Plan 2026-06-04-dev-public-docr-fix-forward T2.1 (extended for loopzero-cloud).
-# Bootstrap chart infra/helm/loopzero-cloud/values.yaml defaults to tag: latest
-# + imagePullSecrets: loopzero-registry-pull (legacy CI-published artifacts).
-# Override for dev-public: tag :dev (pushed by images:push:platform task)
-# + do-registry imagePullSecret (provisioned by :pullsecret task).
-
-# CANONICAL FIX 2026-06-15 (multi-audience JWT): local rebuild with
-# FAANG-canonical RFC 7519 § 4.1.3 multi-audience validator. Image
-# pushed to k3d-loopzero-registry (via localhost:5000 → 172.18.0.2:5000
-# inside cluster) so dev-public mgmt cluster pulls fresh binary
-# without DOCR push (sponsor "sem gerar debito tecnico" — local
-# rebuild closes the 11/12 dogfood --live-only audience-mismatch
-# gap without polluting prod DOCR with dev-only fixes).
+# CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
+# `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images
+# are published EXCLUSIVELY to GHCR by the AM6 reusable workflow
+# (loopzero/.github/workflows/build-publish.yml). The 2026-06-15 `multi-
+# aud-fix` workaround tag against k3d-loopzero-registry:5000 was a one-off
+# rebuild that the canonical AM6 CI made obsolete. Every Cleanroom
+# destroyed the local k3d registry, so dev-public loopzero-cloud pods
+# ImagePullBackOff'd for a tag that no longer existed. Aligning the
+# overlay to GHCR `:develop` (rolling) matches where the image actually
+# lives. `ghcr-pull` imagePullSecret is provisioned from
+# ~/.loopzero/ghcr-pull-token.txt by `task images:ghcr:pullsecret` (NEW —
+# sibling SoT of ~/.loopzero/gomod-token.txt per memory
+# reference_gomod_token_canonical_path).
 image:
-  repository: k3d-loopzero-registry:5000/loopzero-cloud
-  tag: multi-aud-fix
+  repository: ghcr.io/getloopscale/loopzero-cloud
+  tag: develop
   pullPolicy: Always
 
-# do-registry pull secret kept (chart schema requires minItems=1 — even
-# though k3d-loopzero-registry is open-auth, the schema enforces a value).
+# GHCR pull secret — provisioned by `task images:ghcr:pullsecret` from
+# ~/.loopzero/ghcr-pull-token.txt. The chart schema requires minItems=1.
 imagePullSecrets:
-  - name: do-registry
+  - name: ghcr-pull
 
 # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake env vars.
 # Merged into the chart's env: map (range $k, $v := .Values.env in
