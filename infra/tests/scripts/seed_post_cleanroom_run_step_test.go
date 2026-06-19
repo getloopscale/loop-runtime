@@ -4,36 +4,13 @@
 package scripts
 
 import (
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
 
-// scriptPath resolves a path under infra/scripts/local/ relative to this
-// test file (infra/tests/scripts/).
-func scriptPath(t *testing.T, name string) string {
-	t.Helper()
-	p, err := filepath.Abs(filepath.Join("..", "..", "scripts", "local", name))
-	if err != nil {
-		t.Fatalf("resolve %s: %v", name, err)
-	}
-	if _, err := os.Stat(p); err != nil {
-		t.Fatalf("%s not found at %s: %v", name, p, err)
-	}
-	return p
-}
-
-// readScript reads a script source verbatim.
-func readScript(t *testing.T, name string) string {
-	t.Helper()
-	b, err := os.ReadFile(scriptPath(t, name))
-	if err != nil {
-		t.Fatalf("read %s: %v", name, err)
-	}
-	return string(b)
-}
+// scriptPath + readScript helpers live in vault_bootstrap_test.go
+// (shared package-level helpers, landed first via PR #92).
 
 // TestSeedPostCleanroomAll_RunStepAlwaysReturnsZero locks Finding #5 of
 // issue #91 (Cleanroom mandate canonical chain run 2026-06-18).
