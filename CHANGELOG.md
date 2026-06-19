@@ -8,13 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Operators install-config-contract (two-plane, AM6.5 Slice 4, per-binary ISP): all 4 operator charts get CONFIG.md + hardened `values.schema.json` (root + leaf `additionalProperties:false`) + opt-in Reloader. `loopzero-tenant-operator` is two-plane (16 config ConfigMap + 8 secret K8s Secret + SECRETS.md + ESO examples OpenBao/AWS-SM/GCP-SM); `loopzero-{app,preview,platform}-operator` are config-only (kubeconfig is platform-mounted via `loopzero-cluster-kubeconfigs` volume, not a chart secret — EC-1). Each chart documents ONLY the env vars its own binary reads (ISP), where "reads" is the FULL transitive set (`cmd/<op>` + every imported `internal/*` package, resolved via `go list -deps`). Hermetic Go guards (`infra/tests/charts/loopzero_operators_install_contract_test.go`) enforce per-operator CONFIG.md/SECRETS.md set-equality vs rendered chart + config/secret plane separation + a bidirectional EC-3 guard (chart injects ⊇ binary reads AND ⊆ binary reads — no under- nor over-injection) + a schema fail-fast guard (root `additionalProperties:false`).
 
 ### Changed
 
 ### Deprecated
 
 ### Removed
+
+### Fixed
+
+### Security
+
+## [0.21.0] - 2026-06-19
+
+### Added
+- Operators install-config-contract (two-plane, AM6.5 Slice 4, per-binary ISP): all 4 operator charts get CONFIG.md + hardened `values.schema.json` (root + leaf `additionalProperties:false`) + opt-in Reloader. `loopzero-tenant-operator` is two-plane (16 config ConfigMap + 8 secret K8s Secret + SECRETS.md + ESO examples OpenBao/AWS-SM/GCP-SM); `loopzero-{app,preview,platform}-operator` are config-only (kubeconfig is platform-mounted via `loopzero-cluster-kubeconfigs` volume, not a chart secret — EC-1). Each chart documents ONLY the env vars its own binary reads (ISP), where "reads" is the FULL transitive set (`cmd/<op>` + every imported `internal/*` package, resolved via `go list -deps`). Hermetic Go guards (`infra/tests/charts/loopzero_operators_install_contract_test.go`) enforce per-operator CONFIG.md/SECRETS.md set-equality vs rendered chart + config/secret plane separation + a bidirectional EC-3 guard (chart injects ⊇ binary reads AND ⊆ binary reads — no under- nor over-injection) + a schema fail-fast guard (root `additionalProperties:false`).
+
 
 ### Fixed
 - **Master seed Step 3 (admin login submit) failed HTTP 000 on fresh Cleanroom because Step 4 (patch-kratos) ran after it.**
@@ -50,8 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `TestSeedPostCleanroomAll_RunStepAlwaysReturnsZero` pins: no `return 1`; explicit `return 0`;
   summary log block at top level; FAIL-driven final exit; traceability comment.
 - Operators install-config-contract Slice 4 — `/review` remediation (ISP correctness): removed `BASE_DOMAIN` over-injected into `loopzero-tenant-operator` (the tenant binary never reads it — only app/preview do); added `OPERATOR_INSECURE_SKIP_TLS` to `loopzero-app-operator` (its binary reads it transitively via `internal/app`→`internal/httpclient`, chart was omitting it); set root `additionalProperties:false` on all 4 operator schemas to match the released loopzero-api reference (a typo'd top-level key now fails `helm install` instead of passing silently); corrected the per-binary EC-3 guard to walk the full transitive `internal/*` read-set and to also reject over-injection (chart ⊆ binary reads). Caught by the multi-agent `/review`; invisible to the prior cmd-only, subset-only guard.
-
-### Security
 
 ## [0.20.0] - 2026-06-18
 
