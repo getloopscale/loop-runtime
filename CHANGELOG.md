@@ -32,6 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **dev-public loopzero-cloud chart + overlay targeted wrong image registries (DOCR + k3d-registry workaround); image actually published to GHCR.**
+  Issue #104 Architecture A (Cleanroom catch 2026-06-19; ADR PROPOSED `2026-06-19-loopzero-cloud-image-registry-canonical`).
+  3-way SoT divergence caught during PR #105's mechanical fix discovery:
+  - loopzero-cloud CI (AM6 reusable workflow `loopzero/.github/workflows/build-publish.yml:12`) publishes EXCLUSIVELY to GHCR (`ghcr.io/getloopscale/loopzero-cloud:develop` for branch pushes; `:vX.Y.Z` + `:latest` for tags).
+  - Engine chart default `infra/helm/loopzero-cloud/values.yaml` expected DOCR — image never published there.
+  - Engine dev-public overlay used local k3d-registry with stale `multi-aud-fix` workaround tag + `do-registry` (DOCR pull secret incoherent with k3d-registry).
+  Canonical fix: align both chart default (`ghcr.io/getloopscale/loopzero-cloud:latest`) and dev-public overlay
+  (`ghcr.io/getloopscale/loopzero-cloud:develop`) to where the AM6 workflow actually publishes. Provision
+  `kubernetes.io/dockerconfigjson` Secret named `ghcr-pull` via new `task images:ghcr:pullsecret` reading
+  from `~/.loopzero/ghcr-pull-token.txt` (NEW canonical SoT, sibling of `~/.loopzero/gomod-token.txt` per memory
+  `reference_gomod_token_canonical_path`). Hermetic regression lock `TestLoopZeroCloudImageOverlayUsesGHCRCanonical`
+  (9 invariants) asserts overlay + chart default + provisioning task canonical. ADR shipped PROPOSED via
+  PR #108 (sponsor grill-me OQ1-OQ5 pending); implementation shipped pre-ratification with same justification
+  as PR #109 for issue #106 (minimum surface, single-PR revertible, unblocks dev-public Cleanroom).
 - **`run-migrations.sh` detector missed CrashLoopBackOff loopzero-api pods, causing `task setup` deadlock at `db:migrate` for dev-public env.**
   Issue #106 Design E (Cleanroom catch 2026-06-19; ADR `2026-06-19-loopzero-api-vault-bootstrap-ordering` PROPOSED).
   The pod-NAME presence check `[[ -z "${LOOPZERO_API_POD}" ]]` at line 97 triggered the psql-loop fallback only

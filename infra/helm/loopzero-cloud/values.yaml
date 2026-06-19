@@ -1,12 +1,20 @@
 replicaCount: 1
 
+# CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
+# `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images
+# are published EXCLUSIVELY to GHCR by the AM6 reusable workflow at
+# loopzero/.github/workflows/build-publish.yml (registry default is
+# `ghcr.io/getloopscale`). The legacy DOCR default never received
+# the image — pulls hit ImagePullBackOff. Aligning the chart default to
+# where the image actually lives. Tags: `:latest` on release tags;
+# `:develop` + `:develop-<sha>` on develop branch pushes (per AM6).
 image:
-  repository: registry.digitalocean.com/loopzero-system/loopzero-cloud
+  repository: ghcr.io/getloopscale/loopzero-cloud
   tag: latest
   pullPolicy: Always
 
 imagePullSecrets:
-  - name: loopzero-registry-pull
+  - name: ghcr-pull
 
 wiringConfigMap: loopzero-platform-topology
 
