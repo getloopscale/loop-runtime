@@ -165,6 +165,17 @@ releases:
       - server:
           dev:
             enabled: false  # NO MORE devMode — proper prod-posture
+          # R5 of plan dev-public-cross-cluster-secrets (issue #111+#112,
+          # sponsor 2026-06-19). Service.type=LoadBalancer triggers k3s
+          # servicelb (Klipper) DaemonSet which binds hostPort=Service.port
+          # (8200) on each node container. Combined with k3d port mapping
+          # `port: 8200:8200@server:0` (issue #112 fix in
+          # infra/k3d/vault-cluster.yaml), the chain is
+          # host:8200 → docker DNAT → server-0:8200 (Klipper) → openbao pod.
+          # The ClusterIP default would leave server-0:8200 unbound and
+          # break cross-cluster ESO reach.
+          service:
+            type: LoadBalancer
           standalone:
             enabled: true
             # HCL config: HTTPS listener (cert from openbao-tls Secret) +

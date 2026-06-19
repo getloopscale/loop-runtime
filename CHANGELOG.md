@@ -84,6 +84,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/helmfile/vault.helmfile.yaml.gotmpl` adds
+  `server.service.type=LoadBalancer` for vault-local env (R5 of plan
+  `dev-public-cross-cluster-secrets`, issue #111+#112, sponsor
+  2026-06-19). Companion to the issue #112 k3d port-mapping fix:
+  LoadBalancer triggers k3s servicelb (Klipper) DaemonSet which adds
+  `hostPort=Service.port=8200` to each node container. NOTE: LIVE
+  diagnosed 2026-06-19 — Klipper's svclb pod sets hostPort=8200 but
+  does NOT use `hostNetwork: true`, so the port binding doesn't
+  actually take effect at the node-eth0 level. The reach chain
+  (host:8200 → docker DNAT → server-0:8200) breaks at the last hop
+  because server-0 has no listener on 8200. This is a deeper k3d/k3s
+  network-config issue that's outside the scope of issue #111;
+  follow-up needed to either (a) override Klipper svclb to use
+  hostNetwork, OR (b) switch to a different LB mechanism. Issue #111
+  LIVE gate remains BLOCKED until the deeper fix lands.
 - `infra/k3d/vault-cluster.yaml` port mapping fix for cross-cluster
   reach (issue #112, blocked issue #111 LIVE gate). The legacy
   `port: 8200:30200` with `nodeFilters: [loadbalancer]` expected the
