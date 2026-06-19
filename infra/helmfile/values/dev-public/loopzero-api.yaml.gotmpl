@@ -7,14 +7,21 @@
 # and hardcodes `.Values.image.tag: latest` as default — so we must
 # override both explicitly here.
 
-# CANONICAL FIX 2026-06-15 (multi-audience JWT): local rebuild with
-# pkg/jwt NewValidatorWithAudiences accepting BOTH loopzero-engine AND
-# loopzero-cloud audiences (per api/cmd/setup_auth.go). Image pushed to
-# k3d-loopzero-registry so dev-public mgmt pulls the multi-aud-capable
-# binary. Mirrors the loopzero-cloud override (same family of fix).
+# CANONICAL 2026-06-19 (issue #100 Gap B of cleanroom-mandate-run-2026-06-19):
+# loopzero-api image now uses canonical DOCR `:dev` tag built+pushed by
+# `task images:push:platform:dev-public` (taskfiles/infra.yml). The
+# 2026-06-15 `multi-aud-fix` workaround tag against
+# k3d-loopzero-registry:5000 was a one-off rebuild after the multi-
+# audience JWT validator shipped in api/cmd/setup_auth.go:69
+# (loopzerojwt.NewValidatorWithAudiences). The change has been in develop
+# + DOCR `:dev` builds ever since, so the workaround is obsolete +
+# every Cleanroom destroyed k3d-loopzero-registry, causing dev-public
+# loopzero-api pods to ImagePullBackOff for a tag that no longer existed.
+# `${LOOPZERO_DEV_IMAGE_TAG:-dev}` matches the canonical TAG variable in
+# the build task so a future renaming stays consistent.
 image:
-  repository: k3d-loopzero-registry:5000/loopzero-api
-  tag: multi-aud-fix
+  repository: registry.digitalocean.com/loopzero-system/loopzero-api
+  tag: "{{ env "LOOPZERO_DEV_IMAGE_TAG" | default "dev" }}"
   # Always so each rollout pulls the latest :dev push from DOCR.
   pullPolicy: Always
 
