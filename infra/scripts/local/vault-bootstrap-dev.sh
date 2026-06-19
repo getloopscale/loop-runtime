@@ -262,8 +262,12 @@ log "Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt"
 if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
   # Wait for openbao-init Job to provision the k8s-mgmt mount.
   log "  Waiting for auth/k8s-mgmt/ mount (openbao-init Job creates it)"
+  # LIVE-measured 2026-06-19 Cleanroom: the openbao-init Job takes
+  # ~78s to complete (helmfile sync + Job init + bao auth enable across
+  # 6 mounts + transit keys). The 60s budget skipped R3 mid-LIVE; bumped
+  # to 180s + added 5s grace to absorb Cleanroom load variability.
   MOUNT_READY=0
-  for i in $(seq 1 30); do  # 30 * 2s = 60s budget
+  for i in $(seq 1 90); do  # 90 * 2s = 180s budget
     if bao_auth auth list -format=json 2>/dev/null | python3 -c \
         "import sys,json; d=json.loads(sys.stdin.read() or '{}'); sys.exit(0 if 'k8s-mgmt/' in d else 1)" 2>/dev/null; then
       MOUNT_READY=1

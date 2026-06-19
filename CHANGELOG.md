@@ -84,6 +84,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/scripts/local/vault-bootstrap-dev.sh` Step 5.5 mount-wait budget
+  bumped from 60s to 180s (post-LIVE finding 2026-06-19): the canonical
+  Cleanroom run measured the openbao-init Job taking ~78s to complete
+  (helmfile sync + Job init + `bao auth enable` across 6 mounts + transit
+  keys). The 60s budget skipped R3 mid-LIVE; 180s absorbs Cleanroom load
+  variability. Issue #111 LIVE session.
 - `infra/scripts/local/vault-bootstrap-dev.sh` gains Step 5.5 — canonical
   TokenReview config for `auth/k8s-mgmt` (R3 of plan
   `dev-public-cross-cluster-secrets`, issue #111, sponsor approved
