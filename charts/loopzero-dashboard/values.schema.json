@@ -3,29 +3,43 @@
   "title": "loopzero-dashboard values",
   "description": "Schema for loopzero-api Helm chart. Per INF-G17 + plan ADR D4, schema is mandatory for all published charts in charts/.",
   "type": "object",
-  "required": ["image", "replicaCount"],
-  "additionalProperties": true,
+  "required": [
+    "image",
+    "replicaCount"
+  ],
+  "additionalProperties": false,
   "properties": {
     "global": {
       "type": "object",
       "properties": {
-        "registry": { "type": "string", "minLength": 1 },
+        "registry": {
+          "type": "string",
+          "minLength": 1
+        },
         "imagePullSecrets": {
           "type": "array",
-          "items": { "type": "object" }
+          "items": {
+            "type": "object"
+          }
         }
       }
     },
     "image": {
       "type": "object",
-      "required": ["repository", "tag"],
+      "required": [
+        "repository",
+        "tag"
+      ],
       "properties": {
         "repository": {
           "type": "string",
           "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$",
           "description": "Container image repository (lowercase, no protocol prefix)"
         },
-        "tag": { "type": "string", "minLength": 1 },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
         "digest": {
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$",
@@ -33,34 +47,71 @@
         },
         "pullPolicy": {
           "type": "string",
-          "enum": ["Always", "IfNotPresent", "Never"]
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
         }
       }
     },
-    "replicaCount": { "type": "integer", "minimum": 0 },
-    "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
-    "priorityClassName": { "type": "string" },
-    "nameOverride": { "type": "string" },
-    "fullnameOverride": { "type": "string" },
-    "podLabels": { "type": "object" },
-    "podAnnotations": { "type": "object" },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "podLabels": {
+      "type": "object"
+    },
+    "podAnnotations": {
+      "type": "object"
+    },
     "service": {
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer",
+            "ExternalName"
+          ]
         },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
       }
     },
     "ingress": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "className": { "type": "string" },
-        "annotations": { "type": "object" },
-        "hosts": { "type": "array" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "hosts": {
+          "type": "array"
+        }
       }
     },
     "resources": {
@@ -69,15 +120,35 @@
         "limits": {
           "type": "object",
           "properties": {
-            "cpu": { "type": ["string", "number"] },
-            "memory": { "type": ["string", "number"] }
+            "cpu": {
+              "type": [
+                "string",
+                "number"
+              ]
+            },
+            "memory": {
+              "type": [
+                "string",
+                "number"
+              ]
+            }
           }
         },
         "requests": {
           "type": "object",
           "properties": {
-            "cpu": { "type": ["string", "number"] },
-            "memory": { "type": ["string", "number"] }
+            "cpu": {
+              "type": [
+                "string",
+                "number"
+              ]
+            },
+            "memory": {
+              "type": [
+                "string",
+                "number"
+              ]
+            }
           }
         }
       }
@@ -85,53 +156,111 @@
     "podSecurityContext": {
       "type": "object",
       "properties": {
-        "runAsNonRoot": { "type": "boolean" },
-        "runAsUser": { "type": "integer", "minimum": 0 },
-        "runAsGroup": { "type": "integer", "minimum": 0 },
-        "fsGroup": { "type": "integer", "minimum": 0 },
-        "seccompProfile": { "type": "object" }
+        "runAsNonRoot": {
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fsGroup": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seccompProfile": {
+          "type": "object"
+        }
       }
     },
     "containerSecurityContext": {
       "type": "object",
       "properties": {
-        "runAsNonRoot": { "type": "boolean" },
-        "runAsUser": { "type": "integer", "minimum": 0 },
-        "readOnlyRootFilesystem": { "type": "boolean" },
-        "allowPrivilegeEscalation": { "type": "boolean" },
+        "runAsNonRoot": {
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean"
+        },
+        "allowPrivilegeEscalation": {
+          "type": "boolean"
+        },
         "capabilities": {
           "type": "object",
           "properties": {
-            "add": { "type": "array", "items": { "type": "string" } },
-            "drop": { "type": "array", "items": { "type": "string" } }
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "drop": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       }
     },
-    "nodeSelector": { "type": "object" },
-    "tolerations": { "type": "array" },
-    "affinity": { "type": "object" },
+    "nodeSelector": {
+      "type": "object"
+    },
+    "tolerations": {
+      "type": "array"
+    },
+    "affinity": {
+      "type": "object"
+    },
     "autoscaling": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "minReplicas": { "type": "integer", "minimum": 1 },
-        "maxReplicas": { "type": "integer", "minimum": 1 },
-        "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+        "enabled": {
+          "type": "boolean"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
       }
     },
     "serviceAccount": {
       "type": "object",
       "properties": {
-        "create": { "type": "boolean" },
-        "name": { "type": "string" },
-        "annotations": { "type": "object" }
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        }
       }
     },
     "rbac": {
       "type": "object",
       "properties": {
-        "create": { "type": "boolean" }
+        "create": {
+          "type": "boolean"
+        }
       }
     },
     "monitoring": {
@@ -140,30 +269,72 @@
         "serviceMonitor": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": {
+              "type": "boolean"
+            }
           }
         }
       }
     },
     "env": {
-      "description": "Environment variables. Some charts use array (k8s native), others use object (key=value) — schema permits both.",
+      "description": "Environment variables. Some charts use array (k8s native), others use object (key=value) \u2014 schema permits both.",
       "oneOf": [
         {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string", "minLength": 1 }
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
             },
-            "required": ["name"]
+            "required": [
+              "name"
+            ]
           }
         },
-        { "type": "object" }
+        {
+          "type": "object"
+        }
       ]
     },
-    "envFrom": { "type": "array" },
-    "config": { "type": "object" },
-    "extraVolumes": { "type": "array" },
-    "extraVolumeMounts": { "type": "array" }
+    "envFrom": {
+      "type": "array"
+    },
+    "config": {
+      "type": "object"
+    },
+    "extraVolumes": {
+      "type": "array"
+    },
+    "extraVolumeMounts": {
+      "type": "array"
+    },
+    "livenessProbe": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "networkPolicy": {
+      "type": "object"
+    },
+    "readinessProbe": {
+      "type": "object"
+    },
+    "startupProbe": {
+      "type": "object"
+    },
+    "loopzero-common": {
+      "type": "object",
+      "description": "Values block consumed by the loopzero-common library subchart."
+    },
+    "topologySpreadConstraints": {
+      "type": [
+        "object",
+        "array"
+      ]
+    }
   }
 }

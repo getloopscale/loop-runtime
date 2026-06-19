@@ -3,7 +3,7 @@
   "title": "loopzero-build-cwts values",
   "description": "Schema for loopzero-build-cwts (ClusterWorkflowTemplates for Argo build pipeline). Per INF-G17.",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "images": {
       "type": "object",
@@ -14,7 +14,9 @@
           "description": "Image used for git-clone init step"
         }
       },
-      "required": ["cloneRunner"]
+      "required": [
+        "cloneRunner"
+      ]
     },
     "sourceBucket": {
       "type": "string",
@@ -27,7 +29,9 @@
         "securityContext": {
           "type": "object",
           "properties": {
-            "runAsNonRoot": { "type": "boolean" }
+            "runAsNonRoot": {
+              "type": "boolean"
+            }
           }
         },
         "workflowWorkers": {
@@ -42,31 +46,70 @@
           "maximum": 256,
           "description": "Max concurrent pod reconciliations"
         },
-        "livenessProbe": { "type": "object" },
-        "readinessProbe": { "type": "object" },
-        "resources": { "type": "object" }
+        "livenessProbe": {
+          "type": "object"
+        },
+        "readinessProbe": {
+          "type": "object"
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "buildkit": {
       "type": "object",
       "properties": {
-        "image": { "type": "string" },
-        "resources": { "type": "object" }
+        "image": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "cosign": {
       "type": "object",
       "properties": {
-        "image": { "type": "string" },
-        "keyless": { "type": "boolean" }
+        "image": {
+          "type": "string"
+        },
+        "keyless": {
+          "type": "boolean"
+        }
       }
     },
     "syft": {
       "type": "object",
       "properties": {
-        "image": { "type": "string" }
+        "image": {
+          "type": "string"
+        }
       }
+    },
+    "minio": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string"
+        },
+        "insecure": {
+          "type": "boolean"
+        }
+      }
+    },
+    "server": {
+      "type": "object"
+    },
+    "workflow": {
+      "type": "object"
+    },
+    "workflowDefaults": {
+      "type": "object"
     }
   },
-  "required": ["images", "sourceBucket"]
+  "required": [
+    "images",
+    "sourceBucket"
+  ]
 }

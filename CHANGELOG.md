@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.22.0] - 2026-06-19
+
+### Added
+- install-config-contract Slice 5 (LAST — INCLUIR TUDO 7/7): universal schema fail-fast invariant + loopzero-build-cwts/loopzero-dashboard surfaces. (a) All 6 remaining published charts (loopzero-build-cwts, loopzero-dashboard, loopzero-platform, loopzero-crds, loopzero-monitoring, loopzero-admission-policies) hardened to root `additionalProperties:false` — a typo'd top-level Helm value now fails `helm install` instead of being silently ignored; legitimate top-level keys enumerated so `helm lint` stays green. (b) `loopzero-build-cwts` gains a `minio.existingSecret` floor (default `loopzero-minio-credentials`) — the 3 build CWTs reference the secret by name (templatable, backend-agnostic) — plus SECRETS.md (referenced secret + keys `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`MINIO_ENDPOINT`) + README + ESO example. (c) `loopzero-dashboard` gains CONFIG.md documenting the `__config.js` runtime values (`VITE_API_URL`/`VITE_CLOUD_URL`/`BASE_DOMAIN`) + README note. Enumerated top-level keys are typed (reference-grade — `{"type":"object"}` / scalar types; `minio.existingSecret` typed string) so a wrong-TYPE top-level value (e.g. `--set minio=42`) is also rejected, not just unknown keys. A new permanent Go guard (`infra/tests/charts/loopzero_remaining_charts_install_contract_test.go`) asserts EVERY non-library chart under `charts/` has root `additionalProperties:false` (self-extending — any future chart must harden) + the build-cwts referenced-secret contract (keys via `mdTableKeys`, name via dedicated parser, existingSecret seam) + the dashboard config contract (`camelAPI`-mapped). All 13 charts now ship fail-fast schemas; INCLUIR TUDO complete (7/7 env/secret-consuming charts configured + documented + guarded).
+
 ## [0.21.0] - 2026-06-19
 
 ### Added
