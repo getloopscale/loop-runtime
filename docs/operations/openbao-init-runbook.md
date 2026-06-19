@@ -8,6 +8,15 @@
 >
 > **Authorization:** sponsor + 1 backup person witness (per Q13).
 > Estimated time: ~30 min.
+>
+> **When this runbook is triggered:** este runbook é o conteúdo executável
+> do **Sub-step 2.5** do mandate canonical
+> [`/.claude/rules/cleanroom-up-live-test-mandate.md § Sub-step 2.5`](../../.claude/rules/cleanroom-up-live-test-mandate.md).
+> Disparado SEMPRE que `LOOPZERO_HELMFILE_ENV=dev-public` durante a chain
+> Cleanroom canonical. Standalone-multi usa o shortcut
+> `task k3d:vault:bootstrap-in-mgmt` (sem Shamir, sem sponsor JUNTOS) —
+> consulte memory `check-vault-bootstrap-in-mgmt-task_test.sh` para
+> trade-offs entre os dois paths.
 
 ## Pre-flight (block ceremony if any fail)
 

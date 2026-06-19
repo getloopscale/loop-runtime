@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- New § Sub-step 2.5 in `.claude/rules/cleanroom-up-live-test-mandate.md` documenting the
+  Sponsor JUNTOS OpenBao Shamir init gate for dev-public env (issue #101). The mandate now
+  explicitly slots the ceremony BETWEEN step 2 (UP) and step 3 (seeds), with the canonical
+  command sequence (`task k3d:vault:create` + `task k3d:vault:bootstrap` + sponsor
+  `bao operator init -key-shares=5 -key-threshold=3` + 3-of-5 unseal + provisioning
+  helmfile sync), the runbook cross-link, the standalone-multi escape hatch via
+  `task k3d:vault:bootstrap-in-mgmt`, and the anti-patterns table. `docs/operations/openbao-init-runbook.md`
+  back-links the mandate. Hermetic regression lock
+  `TestCleanroomMandateOpenBaoSponsorJUNTOSGateDocumented` asserts both files contain the
+  required cross-references.
 - Hermetic regression gate `TestHelmfileOverlayConfigKeysHonorSchema` in `infra/tests/charts/`
   (Cleanroom catch 2026-06-19). Scans every `infra/helmfile/values/<env>/<chart>.yaml.gotmpl`,
   parses `/config:` keys, and asserts each one is declared in the matching chart's
