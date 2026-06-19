@@ -84,6 +84,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `infra/k3d/vault-cluster.yaml` port mapping fix for cross-cluster
+  reach (issue #112, blocked issue #111 LIVE gate). The legacy
+  `port: 8200:30200` with `nodeFilters: [loadbalancer]` expected the
+  k3d serverlb HAProxy to forward to a NodePort 30200 backend on the
+  server-0 node. But k3s servicelb (Klipper) DaemonSet binds
+  `hostPort=Service.port=8200` (NOT Service.nodePort) — so the
+  HAProxy backend at server-0:30200 was unbound and TLS handshakes
+  cut mid-stream (`decode_error 562, unexpected eof while reading`).
+  LIVE-diagnosed 2026-06-19 across LoadBalancer + NodePort
+  permutations; root cause is the k3d port-mapping ↔ Klipper
+  hostPort-binding misalignment, NOT an OpenBao or chart bug.
+  New canonical: `port: 8200:8200` with `nodeFilters: [server:0]`
+  skips serverlb HAProxy entirely, hitting Klipper's hostPort 8200
+  directly on the server-0 container. Cert SAN `host.k3d.internal`
+  preserved (verified `openssl x509 -text`).
 - `infra/scripts/local/vault-bootstrap-dev.sh` Step 5.5 mount-wait budget
   bumped from 60s to 180s (post-LIVE finding 2026-06-19): the canonical
   Cleanroom run measured the openbao-init Job taking ~78s to complete

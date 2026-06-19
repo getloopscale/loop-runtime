@@ -19,7 +19,14 @@
 # Registry: k3d-loopzero-registry pull-through (mesma cache compartilhada).
 #
 # Exposed ports:
-#   - 8200 (HTTPS Vault API) → host:8200 para validação local via bao CLI
+#   - 8200 (HTTPS Vault API) → host:8200 → k3d-loopzero-vault-server-0 hostPort:8200
+#     The Klipper svclb DaemonSet (auto-deployed by k3s for LoadBalancer
+#     Services) binds hostPort = Service.port (NOT Service.nodePort) on
+#     each node. Originally `8200:30200@loadbalancer` expected HAProxy →
+#     server-0:30200 but Klipper binds 8200 → connection chain broken
+#     mid-TLS (decode_error 562). Issue #112 fix 2026-06-19: direct
+#     `8200:8200@server:0` skips serverlb HAProxy, hits Klipper hostPort
+#     directly, preserving cert SAN host.k3d.internal.
 #   - 30095 NodePort para cross-cluster scraping (Prometheus federation futura)
 apiVersion: k3d.io/v1alpha5
 kind: Simple
@@ -33,10 +40,15 @@ kubeAPI:
   hostPort: "6447"
 
 ports:
-  # Vault HTTPS API → host:8200 (cli local: bao status -address=https://localhost:8200)
-  - port: 8200:30200
+  # Vault HTTPS API → host:8200 → server-0 hostPort:8200 (issue #112 fix
+  # 2026-06-19). Klipper svclb binds hostPort=Service.port=8200 directly
+  # on server-0 — the prior `8200:30200@loadbalancer` mapping went via
+  # serverlb HAProxy expecting NodePort 30200 backend, but Klipper does
+  # NOT bind nodePort, only Service.port, causing TLS handshake decode_error
+  # 562 mid-stream. Direct server:0 hostPort skips HAProxy entirely.
+  - port: 8200:8200
     nodeFilters:
-      - loadbalancer
+      - server:0
   # OpenBao metrics NodePort (Prometheus federation cross-cluster)
   - port: 30095:30095
     nodeFilters:
