@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Hermetic regression gate `TestHelmfileOverlayConfigKeysHonorSchema` in `infra/tests/charts/`
+  (Cleanroom catch 2026-06-19). Scans every `infra/helmfile/values/<env>/<chart>.yaml.gotmpl`,
+  parses `/config:` keys, and asserts each one is declared in the matching chart's
+  `values.schema.json /properties/config/properties` whenever the schema has
+  `additionalProperties:false` at that path (Slice 4 hardening). Closes the helmfile
+  env-overlay drift surface that the Slice 4 EC-3 Go-deps transitive guard did not cover.
 
 ### Changed
 
@@ -16,6 +22,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **Tiltfile `loopzero-api` build failed Cleanroom-fresh with "could not read Username for 'https://github.com'".**
+  Cleanroom catch 2026-06-19. M5 decomposition split `loopzero-contracts` into a private repo;
+  `api/Dockerfile` step 8/11 fetches `github.com/getloopscale/loopzero-contracts@v0.1.0` via a BuildKit
+  secret mount (`--mount=type=secret,id=gomod_token`). The Tilt `docker_build("loopzero-api", ...)`
+  call did NOT pass `secret=...`, so the mount was empty and `go mod download` hit terminal-prompts-
+  disabled. Fix: `secret=["id=gomod_token,src=$HOME/.loopzero/gomod-token.txt"]` on the call + a
+  Tiltfile fail-fast pre-flight that errors with a clear remediation hint when the canonical SoT
+  file is missing. Same stale-helper-post-architecture-refactor class as issue #91.
+- **`helmfile sync` failed on `loopzero-platform-operator` and `loopzero-tenant-operator` in dev-public + drill envs.**
+  Cleanroom catch 2026-06-19. Slice 4 ISP remediation (commit 52ccf8a6 2026-06-18) dropped
+  `baseDomain` from `loopzero-platform-operator` + `loopzero-tenant-operator` schemas (the binaries never
+  read BASE_DOMAIN; only app + preview do) and renamed `config.insecureSkipTls` →
+  `config.operatorInsecureSkipTls` under hardened `additionalProperties:false` roots. The Slice 4
+  commit included EC-3 transitive Go-deps guard catching binary↔chart drift but did NOT cover the
+  helmfile env overlays at `infra/helmfile/values/<env>/`. Four overlays still passed the
+  removed/renamed keys: `dev-public/loopzero-{platform,tenant}-operator.yaml.gotmpl` +
+  `drill/loopzero-{platform,tenant}-operator.yaml.gotmpl`. Fix: drop `baseDomain` from the 4 overlays
+  + rename `insecureSkipTls` → `operatorInsecureSkipTls` in `dev-public/loopzero-tenant-operator`.
+  Same stale-helper-post-architecture-refactor class as issue #91.
 
 ### Security
 

@@ -9,8 +9,16 @@ global:
 image:
   pullPolicy: Always
 
-config:
-  baseDomain: "{{ .Values.domain }}"
+# Slice 4 ISP remediation (commit 52ccf8a6 2026-06-18) dropped baseDomain
+# from loopzero-platform-operator + loopzero-tenant-operator schemas: the binaries
+# never read BASE_DOMAIN (only app + preview do). Schema enforces
+# additionalProperties:false at /config so passing baseDomain here makes
+# `helmfile sync` FAIL with "additional properties 'baseDomain' not
+# allowed". Cleanroom catch 2026-06-19 — same stale-helper-post-
+# architecture-refactor class as issue #91. EC-3 transitive Go-deps guard
+# in the Slice 4 commit catches the Go binary <-> chart drift but not the
+# helmfile env overlay (this file); follow-up PR adds a hermetic helmfile-
+# render gate.
 
 # dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
 # chart-default `gitea` ns). Same fix as loopzero-tenant-operator. Without

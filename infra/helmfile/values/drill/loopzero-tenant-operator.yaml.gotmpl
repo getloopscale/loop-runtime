@@ -33,5 +33,9 @@ kubeconfig:
 
 # Bug #28 LIVE fix (2026-05-17 iter 20): operators require BASE_DOMAIN env var
 # (from .Values.config.baseDomain). Drill domain matches Pulumi config loopzero-drill:domain.
-config:
-  baseDomain: "loopzero-drill.example"
+#
+# Slice 4 ISP remediation (commit 52ccf8a6 2026-06-18) dropped baseDomain
+# from loopzero-tenant-operator schema — the binary never reads BASE_DOMAIN.
+# Schema enforces additionalProperties:false at /config so passing it makes
+# `helmfile sync` FAIL. Cleanroom catch 2026-06-19 (drill overlay drift) —
+# same stale-helper-post-architecture-refactor class as issue #91.
