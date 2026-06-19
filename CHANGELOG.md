@@ -32,6 +32,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **dev-public loopzero-api overlay used stale `multi-aud-fix` workaround tag against local k3d registry, causing `ImagePullBackOff` on every fresh Cleanroom + `images:push:platform:dev-public` build failed `go mod download` for private `loopzero-contracts` module.**
+  Issue #100 Gap B of Cleanroom canonical chain run 2026-06-19. The 2026-06-15 `multi-aud-fix`
+  tag was a one-off rebuild after the multi-audience JWT validator shipped in
+  `api/cmd/setup_auth.go:69` (`loopzerojwt.NewValidatorWithAudiences`). The change has been on
+  develop + the canonical DOCR `:dev` build pipeline ever since, so the workaround is obsolete
+  — but every Cleanroom destroyed the local k3d registry, so dev-public loopzero-api pods
+  ImagePullBackOff'd for a tag that no longer existed. Additionally, the canonical DOCR push
+  task (`task images:push:platform:dev-public`) did not pass `--secret id=gomod_token` to
+  docker buildx, which would re-trigger the same private-module-fetch failure that PR #98
+  fixed in the Tiltfile path. Canonical fix: drop the `multi-aud-fix` workaround in the
+  overlay (use DOCR `registry.digitalocean.com/loopzero-system/loopzero-api:${LOOPZERO_DEV_IMAGE_TAG:-dev}`
+  canonical) + pass `--secret id=gomod_token,src=$HOME/.loopzero/gomod-token.txt` to the docker
+  buildx invocation + add fail-fast pre-flight that errors with clear remediation hint when
+  the canonical SoT file is missing (mirrors Tiltfile pattern). Hermetic regression lock
+  `TestDevPublicLoopZeroApiImageOverlayUsesCanonicalDOCR` asserts both files canonical (overlay
+  + task), with 8 invariants total. Issue #104 tracks the same workaround in the loopzero-cloud
+  overlay (separate repo, deferred).
 - **`seed-post-cleanroom-all.sh` ran Step 4 (patch-kratos-dev-public) + 4b (hydra-urls-canonical) unconditionally regardless of `LOOPZERO_HELMFILE_ENV`.**
   Issue #99 of Cleanroom canonical chain run 2026-06-19. Both steps configure dev-public-specific URLs
   (`auth-dev.loopzero.example`, `app-dev.loopzero.example`) and Step 4 requires `LOOPZERO_GITHUB_CLIENT_ID` +
