@@ -17,4 +17,4 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 
 ## Deliberately NOT chart-ConfigMap keys (deployment-set / platform-mounted)
 
-- **RUNTIME_KUBECONFIG / BUILD_KUBECONFIG** — file-PATH values set directly on the Deployment `env:`; the kubeconfig **content** is mounted as a volume from the platform Secret `loopzero-cluster-kubeconfigs` (not a chart ConfigMap/Secret key). EC-1.
+- **RUNTIME_KUBECONFIG** — file-PATH value set directly on the Deployment `env:`; the kubeconfig **content** is mounted as a volume from the platform Secret `loopzero-cluster-kubeconfigs` (not a chart ConfigMap/Secret key). EC-1. (`BUILD_KUBECONFIG` is read only by the tenant binary.)

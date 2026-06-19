@@ -7,7 +7,7 @@
     "image",
     "replicaCount"
   ],
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "global": {
       "type": "object",
@@ -309,6 +309,9 @@
         "baseDomain": {
           "type": "string"
         },
+        "operatorInsecureSkipTls": {
+          "type": "string"
+        },
         "loopzeroRequireRuntimeKubeconfig": {
           "type": "string"
         },
@@ -346,6 +349,37 @@
           "type": "boolean"
         }
       }
+    },
+    "args": {
+      "type": "object"
+    },
+    "livenessProbe": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "networkPolicy": {
+      "type": "object"
+    },
+    "readinessProbe": {
+      "type": "object"
+    },
+    "runtimeKubeconfigMount": {
+      "type": "object"
+    },
+    "startupProbe": {
+      "type": "object"
+    },
+    "loopzero-common": {
+      "type": "object",
+      "description": "Values block consumed by the loopzero-common library subchart."
+    },
+    "topologySpreadConstraints": {
+      "type": [
+        "object",
+        "array"
+      ]
     }
   }
 }

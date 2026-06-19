@@ -21,11 +21,10 @@ image:
 # are runtime-conditional and tracked in fb-cutover-backlog.md.
 config:
   giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
-  baseDomain: loopzero.local
   argocdNamespace: argocd
   workloadClusterUrl: ""   # patched at runtime by task k3d:heal H10
   ingressNamespace: traefik
-  insecureSkipTls: "true"  # local k3d certs are self-signed
+  operatorInsecureSkipTls: "true"  # local k3d certs are self-signed
 
 # FB-#2 (MEET-070): the current chart Secret template ships empty
 # stringData. For LOCAL cutover, the deploy operator should patch

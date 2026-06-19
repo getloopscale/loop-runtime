@@ -17,7 +17,6 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 | `REGISTRY_CIDRS` | (empty) | operator runtime config |
 | `LOOPZERO_TENANT_MAX_CONCURRENT` | `5` | operator runtime config |
 | `WORKLOAD_CLUSTER_URL` | (empty) | operator runtime config |
-| `BASE_DOMAIN` | (empty) | operator runtime config |
 | `OPERATOR_INSECURE_SKIP_TLS` | `false` | operator runtime config |
 | `LOOPZERO_PPROF_ADDR` | (empty) | operator runtime config |
 | `LOOPZERO_PPROF_ENABLED` | `false` | operator runtime config |

@@ -34,7 +34,6 @@ config:
   registryCidrs: ""
   loopzeroTenantMaxConcurrent: "5"
   workloadClusterUrl: ""
-  baseDomain: ""
   operatorInsecureSkipTls: "false"
   loopzeroPprofAddr: ""
   loopzeroPprofEnabled: "false"

@@ -15,7 +15,6 @@ data:
   REGISTRY_CIDRS: {{ .Values.config.registryCidrs | quote }}
   LOOPZERO_TENANT_MAX_CONCURRENT: {{ .Values.config.loopzeroTenantMaxConcurrent | quote }}
   WORKLOAD_CLUSTER_URL: {{ .Values.config.workloadClusterUrl | quote }}
-  BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
   OPERATOR_INSECURE_SKIP_TLS: {{ .Values.config.operatorInsecureSkipTls | quote }}
   LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}
   LOOPZERO_PPROF_ENABLED: {{ .Values.config.loopzeroPprofEnabled | quote }}
