@@ -32,6 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **`run-migrations.sh` detector missed CrashLoopBackOff loopzero-api pods, causing `task setup` deadlock at `db:migrate` for dev-public env.**
+  Issue #106 Design E (Cleanroom catch 2026-06-19; ADR `2026-06-19-loopzero-api-vault-bootstrap-ordering` PROPOSED).
+  The pod-NAME presence check `[[ -z "${LOOPZERO_API_POD}" ]]` at line 97 triggered the psql-loop fallback only
+  when loopzero-api had no scheduled pods. In dev-public the pods ARE scheduled but crashloop because
+  `OPENBAO_TRANSIT_ENABLED=true` requires `OPENBAO_VAULT_SECRET_ID` which only ships post-seed-chain.
+  Result: pod NAME exists → fallback skipped → `kubectl exec` errors with `container not found ("loopzero-api")`
+  → `task setup` exit 1. The existing fallback (lines 111-148) was DESIGNED for this scenario per its
+  own comment block. Extend the detector: capture `LOOPZERO_API_READY` via
+  `kubectl get pod -o jsonpath='{.status.containerStatuses[?(@.name=="loopzero-api")].ready}'` and OR the
+  gate condition (`[[ -z "${LOOPZERO_API_POD}" || "$LOOPZERO_API_READY" != "true" ]]`). Named-container jsonpath
+  is defensive against future sidecars. Updated log messages cite the CrashLoopBackOff trigger so
+  operators understand which path fired. Hermetic regression lock
+  `TestRunMigrationsDetectsContainerNotReady` (6 invariants) asserts the detector shape + traceability.
+  loopzero-api's runtime `validateOpenBaoTransit` hard-fail behavior unchanged (T2.5+EC-05 design preserved).
 - **dev-public loopzero-api overlay used stale `multi-aud-fix` workaround tag against local k3d registry, causing `ImagePullBackOff` on every fresh Cleanroom + `images:push:platform:dev-public` build failed `go mod download` for private `loopzero-contracts` module.**
   Issue #100 Gap B of Cleanroom canonical chain run 2026-06-19. The 2026-06-15 `multi-aud-fix`
   tag was a one-off rebuild after the multi-audience JWT validator shipped in
