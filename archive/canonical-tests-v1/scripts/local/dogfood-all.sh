@@ -75,7 +75,14 @@ if [[ $HERMETIC_ONLY -eq 1 && $LIVE_ONLY -eq 1 ]]; then
   exit 2
 fi
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Canonical 2026-06-20: 4 `..` climbs (NOT 3). The script lives 4 levels deep
+# at loopzero/archive/canonical-tests-v1/scripts/local/. WRAPPERS paths
+# `archive/canonical-tests-v1/scripts/local/dogfood-*.sh` are relative to
+# `loopzero/` (the repo root). Pre-fix 3-climb landed at `loopzero/archive/`,
+# resolving wrappers to `loopzero/archive/archive/...` → 13/13 SKIP "script
+# missing on disk" during the canonical seed-layer close session. Issue
+# #106. Regression-locked by infra/tests/charts/dogfood_all_repo_root_test.go.
+REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 cd "$REPO_ROOT"
 
 # Canonical per-journey wrapper list (sorted by journey ID for deterministic

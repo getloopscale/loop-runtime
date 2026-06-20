@@ -82,7 +82,15 @@ case "$ENV_NAME" in
     ;;
 esac
 
-: "${ENV_FILE:=/home/paulo/loopzero/.env}"
+# Canonical 2026-06-20 (issue #107): post-M2 decomposition the dev-public env
+# SoT is `~/.loopzero/dev-credentials.json` (JSON), NOT a flat KEY=VALUE `.env`
+# file. The pre-decomp `/home/paulo/loopzero/.env` was deleted; grepping it under
+# `set -euo pipefail` aborted the script at exit 2 before any check ran.
+# Sibling canonical scripts already use this JSON SoT:
+#   - infra/scripts/local/secrets-seed-dev.sh:26
+#   - infra/scripts/local/setup-dev-public-dns.sh:36
+# Regression-locked by infra/tests/charts/live_proof_env_file_test.go.
+: "${CREDS_FILE:=$HOME/.loopzero/dev-credentials.json}"
 
 PASS=0
 FAIL=0
@@ -94,9 +102,24 @@ warn() { printf '  WARN: %s\n' "$1" >&2; }
 
 log() { printf '[live-proof env=%s] %s\n' "$ENV_NAME" "$*" >&2; }
 
+# env_get returns the canonical value for a logical LOOPZERO_* env key by reading
+# the JSON SoT. The mapping below tracks ~/.loopzero/dev-credentials.json's
+# schema. Keys absent from the JSON return empty — the caller's Layer-1
+# check then bad()s honestly (surfacing the schema gap, not papering over).
 env_get() {
   local key="$1"
-  grep -E "^$key=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-
+  [[ -r "$CREDS_FILE" ]] || { printf ''; return 0; }
+  case "$key" in
+    LOOPZERO_GITHUB_CLIENT_ID)          jq -r '.github.client_id // ""'      "$CREDS_FILE" ;;
+    LOOPZERO_GITHUB_CLIENT_SECRET)      jq -r '.github.client_secret // ""'  "$CREDS_FILE" ;;
+    LOOPZERO_GOOGLE_CLIENT_ID)          jq -r '.google.client_id // ""'      "$CREDS_FILE" ;;
+    LOOPZERO_GOOGLE_CLIENT_SECRET)      jq -r '.google.client_secret // ""'  "$CREDS_FILE" ;;
+    LOOPZERO_STRIPE_SECRET_KEY)         jq -r '.stripe.api_key // ""'        "$CREDS_FILE" ;;
+    LOOPZERO_STRIPE_PUBLISHABLE_KEY)    jq -r '.stripe.publishable_key // ""' "$CREDS_FILE" ;;
+    LOOPZERO_STRIPE_WEBHOOK_SECRET_DEV) jq -r '.stripe.webhook_secret // ""' "$CREDS_FILE" ;;
+    LOOPZERO_RESEND_API_KEY)            jq -r '.resend.api_key // ""'        "$CREDS_FILE" ;;
+    *)                              printf '' ;;
+  esac
 }
 
 # Cached fresh JWT (lazy: only built when a Layer3 needs it)

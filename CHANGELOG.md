@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `infra/tests/charts/dogfood_all_repo_root_test.go` — hermetic Go regression-lock for the
+  `archive/canonical-tests-v1/scripts/local/dogfood-all.sh` REPO_ROOT off-by-one fix landed
+  2026-06-20 (issue #106). Asserts the canonical 4-`..` derivation
+  `$(cd "$(dirname "$0")/../../../.." && pwd)` is present and the pre-fix 3-`..` form is absent.
+  Empirical companion check stats the first wrapper on disk from both derivations to prove the
+  4-climb resolves and the 3-climb does not. Negative-control mutates the script body via
+  `strings.Replace` (NOT regex Expand semantics, which would interpret literal `$0` as the whole
+  match) and asserts the guard fires. Pure hermetic — NO kubectl, NO network.
+- `infra/tests/charts/live_proof_env_file_test.go` — hermetic Go regression-lock for the
+  `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh` ENV_FILE orphan fix landed
+  2026-06-20 (issue #107). Asserts the dead `/home/paulo/loopzero/.env` literal is GONE from CODE
+  lines (the audit-trail comment is allowed to reference it as historical context, gated via
+  `containsLiteralInCodeLine` skip of `#`-comment lines), AND the canonical post-decomposition
+  SoT `~/.loopzero/dev-credentials.json` is referenced. Negative-control appends the dead literal as
+  a code line and asserts the guard fires. Pure hermetic — NO kubectl, NO network.
+- `infra/tests/charts/loopzero_bin_workspace_discovery_test.go` — hermetic Go regression-lock for
+  the `connect-canonical-fixture.sh` LOOPZERO_BIN workspace-discovery fix landed 2026-06-20
+  (issue #108). Asserts the workspace-canonical `loopzero-cli/bin/loopzero` path is referenced + the
+  pre-fix bare `LOOPZERO_BIN="${LOOPZERO_BIN:-loopzero}"` literal is absent from CODE lines. Negative-control
+  appends the dead literal as a code line and asserts the guard fires. Pure hermetic — NO
+  kubectl, NO network.
 - `infra/tests/charts/connect_canonical_fixture_container_name_test.go` — hermetic Go regression-lock
   for the Step 11 (`connect-canonical-fixture.sh`) canonical container-name fix landed 2026-06-20
   during the dev-public Cleanroom-fresh close. Asserts `mint_app_jwt()` reads `GITHUB_APP_ID` via
@@ -36,6 +57,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
 
 ### Fixed
+- `archive/canonical-tests-v1/scripts/local/dogfood-all.sh` — REPO_ROOT canonical 4-`..` climbs
+  (NOT 3) for the post-archive script relocation (issue #106). The script lives 4 levels deep
+  at `loopzero/archive/canonical-tests-v1/scripts/local/`; the pre-fix 3-climb landed at
+  `loopzero/archive/` instead of `loopzero/`, so WRAPPERS paths
+  `archive/canonical-tests-v1/scripts/local/dogfood-*.sh` resolved to `loopzero/archive/archive/...`
+  and every wrapper hit `[[ ! -f "$wrapper" ]]` → 13/13 SKIP "script missing on disk" with a
+  paradoxical `verdict=PASS` despite zero wrappers run. Post-fix `dogfood-all.sh --live-only`
+  resolves wrappers and invokes them (per-wrapper PASS/FAIL surfaces real journey state, no
+  longer harness SKIP-missing). Regression-locked by
+  `infra/tests/charts/dogfood_all_repo_root_test.go`.
+- `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh` — migrate from dead
+  `ENV_FILE=/home/paulo/loopzero/.env` (pre-M2 absolute path; file deleted in decomposition) to
+  canonical `CREDS_FILE=$HOME/.loopzero/dev-credentials.json` JSON SoT (issue #107). Pre-fix the
+  script exited 2 silently after one line because `env_get`'s `grep` against the missing file
+  under `set -euo pipefail` aborted execution. The new `env_get()` maps each `LOOPZERO_*` logical
+  key to its canonical `~/.loopzero/dev-credentials.json` path via `jq`. Keys absent from the JSON
+  schema (e.g., `LOOPZERO_STRIPE_PUBLISHABLE_KEY`) return empty so the caller's Layer-1 check
+  bad()s honestly — surfacing the schema gap, not papering over it. Sibling canonical scripts
+  use the same SoT: `infra/scripts/local/secrets-seed-dev.sh:26`,
+  `infra/scripts/local/setup-dev-public-dns.sh:36`. Regression-locked by
+  `infra/tests/charts/live_proof_env_file_test.go`.
+- `infra/scripts/local/connect-canonical-fixture.sh` — workspace-relative discovery of the
+  canonical LoopZero CLI binary `loopzero-cli/bin/loopzero` when neither `$LOOPZERO_BIN` is exported nor `loopzero`
+  is on `PATH` (issue #108). Post-M2 decomposition the LoopZero CLI lives in a sibling repo; the
+  master orchestrator `seed-post-cleanroom-all.sh` invokes Step 11 without pre-exporting
+  `LOOPZERO_BIN`, and pre-fix this emitted `WARN+return-2` because the script defaulted to bare
+  `loopzero` on `PATH`. The new 1-line derivation chains: (a) operator-exported `LOOPZERO_BIN`, (b)
+  `command -v loopzero`, (c) workspace-relative `loopzero-cli/bin/loopzero` via `readlink -f`, (d) literal
+  `loopzero` fallback so the existing WARN path remains the last-resort signal. LIVE-verified:
+  Step 11 runs to `DONE — fixture connected` with no operator-exported LOOPZERO_BIN. Regression-
+  locked by `infra/tests/charts/loopzero_bin_workspace_discovery_test.go`.
 - `infra/scripts/local/connect-canonical-fixture.sh` — canonical container name `loopzero-api` (NOT
   `api`) for `kubectl exec deployment/loopzero-api -c <container> --` inside `mint_app_jwt()`. The
   chart name + Service name + container name are all `loopzero-api` per
