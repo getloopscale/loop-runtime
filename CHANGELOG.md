@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `infra/tests/charts/generate_secrets_context_pin_test.go` — hermetic Go regression-lock for
+  the `infra/helmfile/scripts/generate-secrets.sh` `--context` pin (closes #115). Pre-fix the
+  script did not pin `kubectl --context`, so any active context residue (e.g. `k3d-loopzero-vault`
+  from a prior T0.1 / vault-bootstrap session) silently misprovisioned Secrets to the wrong
+  cluster, and `task setup` failed at `infra:install:mgmt` with the secrets landed in
+  loopzero-vault. Asserts (a) the canonical `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"`
+  default is declared + (b) the `kubectl()` function override injects
+  `--context="$KUBECTL_CONTEXT"` on every call + (c) audit-trail cites issue #115. Negative-
+  control mutates each piece independently and asserts the matching check fires. Pure
+  hermetic — NO kubectl, NO network.
+- `infra/tests/charts/openbao_cert_san_canonical_test.go` — hermetic render-level regression-
+  lock for the OpenBao Certificate SAN canonical contract (closes post-/review MEDIUM
+  "cert-SAN dependency only LIVE-spike proven, no hermetic guard"). Renders
+  `infra/helm/openbao-cert` via `helm template`, extracts the `kind: Certificate name: openbao`
+  block, asserts `host.k3d.internal` IS present in `dnsNames`. The slice's D1 (x509-clean
+  base) depends on this SAN coverage — without it, the mgmt-pod → host.k3d.internal:8200
+  reach fails TLS verification (F1-class blanket failure mode). Negative-control mutates the
+  rendered output to drop the SAN entry and asserts the guard fires.
+- ADR D7 (F1 SAN-aligned `kubernetes_host`) and ADR D8 (Step 11 canonical container name
+  `-c loopzero-api`) formalized in `knowledge-base/plans/k3d-host-published-vault-reach-plan.md`
+  v1.3 — closes post-/review MEDIUM "plan↔impl formalization gap". Doc-only; the canonical
+  fixes already landed in code (loopzero `7c255524` + `927f93f8` + `a8c66fe8`) and have
+  hermetic guards.
 - `infra/tests/charts/charts_go_tests_wired_test.go` — meta-guard locking the
   `infra/tests/charts/` Go-guards wiring into `task quality:gates` (closes /review HIGH
   2026-06-20). Pre-fix, the 16 hermetic Go guards in `infra/tests/charts/` (NodePort/serverlb
@@ -73,6 +96,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
 
 ### Fixed
+- `infra/helmfile/scripts/generate-secrets.sh` — pin `kubectl --context` to
+  `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"` via a `kubectl()` shell-function
+  override that injects `--context="$KUBECTL_CONTEXT"` on every call (closes #115). All bare
+  `kubectl` invocations downstream automatically inherit the canonical mgmt context by
+  construction. Without the pin, an active `k3d-loopzero-vault` context (residue from a prior
+  T0.1 / vault-bootstrap session) silently misprovisioned Secrets to the wrong cluster, and
+  `task setup` failed at `infra:install:mgmt` with the secrets landed in loopzero-vault. Override
+  via `KUBECTL_CONTEXT` env var for non-k3d targets (DOKS prod, drill cluster). Regression-
+  locked by `infra/tests/charts/generate_secrets_context_pin_test.go`.
 - `taskfiles/quality.yml` — wire `infra/tests/charts/` Go guards into `task quality:gates`
   (closes /review HIGH 2026-06-20). Pre-fix the slice's regression protection (16 hermetic Go
   guards) existed but never ran in pre-push; only `cd infra/tests && go test ./unit/...` was

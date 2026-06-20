@@ -26,6 +26,19 @@ set -euo pipefail
 ENV="${1:?usage: $0 <env> <cluster>}"
 CLUSTER="${2:?usage: $0 <env> <cluster>}"
 
+# Canonical 2026-06-20 (issue #115): pin kubectl context to the mgmt cluster.
+# This script applies Secrets to mgmt — without the pin, an active shell
+# context residue (e.g. `k3d-loopzero-vault` from a prior T0.1 / vault-bootstrap
+# session) silently misprovisions Secrets to the wrong cluster, and
+# `task setup` fails at `infra:install:mgmt` with the secrets landed in
+# loopzero-vault. Override via `KUBECTL_CONTEXT` for non-k3d targets (DOKS prod,
+# drill cluster). The `kubectl()` function override below injects
+# `--context="$KUBECTL_CONTEXT"` on every call — all bare `kubectl` calls
+# downstream inherit the canonical context by construction. Regression-locked
+# by infra/tests/charts/generate_secrets_context_pin_test.go.
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+
 log() { printf '[generate-secrets] %s\n' "$*" >&2; }
 random_password() { openssl rand -base64 32 | tr -d '/+=' | head -c 32; }
 emit_token() { printf '%s' "$1"; }   # B4 — no trailing newline
