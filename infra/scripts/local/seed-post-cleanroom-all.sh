@@ -113,6 +113,36 @@ skip_step() {
 VERIFY_FLAG=""
 [[ "$VERIFY" == "1" ]] && VERIFY_FLAG="--verify"
 
+# Step 0 (NEW 2026-06-20) — auto-provision the separate loopzero-vault k3d
+# cluster + OpenBao chart BEFORE Step 1 (vault-bootstrap-dev.sh) attempts
+# init/unseal. Gated on LOOPZERO_HELMFILE_ENV=dev-public per ADR
+# 2026-06-20-dev-public-vault-automated-init (sponsor-accepted risk: the
+# dev-public TEST tier uses an AUTOMATED Shamir init; the witness +
+# distributed-shard ceremony is scoped to prod/persistent vaults only).
+#
+# Jeito A INQUEBRÁVEL: this uses `task k3d:vault:create` +
+# `task k3d:vault:bootstrap` against the SEPARATE k3d-loopzero-vault cluster.
+# `task k3d:vault:bootstrap-in-mgmt` remains PROHIBITED (independent of
+# witness scope — separate-cluster topology violation).
+#
+# Both tasks are idempotent: k3d:vault:create skips if cluster exists;
+# k3d:vault:bootstrap re-syncs helm releases (cert-manager + cluster-issuer
+# + openbao-cert + openbao chart) without destroying existing state. So
+# this Step 0 is a no-op on a warm-vault re-run, and the only cost on a
+# Cleanroom-fresh run is the cluster create + ~3min helm sync.
+#
+# In other envs (standalone-multi / unset / prod) this Step 0 is SKIPPED —
+# standalone doesn't run loopzero-vault, and prod requires the witnessed
+# ceremony per the mandate § Sub-step 2.5 prod/persistent path.
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+  run_step "0a-vault-cluster-create" "cd $REPO_ROOT && task k3d:vault:create"
+  run_step "0b-vault-cluster-bootstrap" "cd $REPO_ROOT && task k3d:vault:bootstrap"
+else
+  skip_step "0a-vault-cluster-create" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "0b-vault-cluster-bootstrap" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
+
 # Step 1
 if [[ "$SKIP_VAULT" == "1" ]]; then
   skip_step "1-vault-bootstrap-dev" "operator already ran vault chain"

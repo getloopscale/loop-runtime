@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5 — re-scoped per ADR
+  [`2026-06-20-dev-public-vault-automated-init`](.claude/knowledge-base/decisions/2026-06-20-dev-public-vault-automated-init.md)
+  (sponsor-accepted risk). The witness + distributed-shard ceremony (1Password / YubiKey / LUKS USB /
+  safe-deposit-box) is now scoped to **persistent / production** vaults (sole-custodian topology). The
+  dev-public Cleanroom TEST tier uses an **automated** Shamir init via `vault-bootstrap-dev.sh`
+  (ephemeral local shards at `~/.loopzero/cleanroom-unseal.json` 0600, no sponsor JUNTOS, ~5min wall-clock).
+  Rationale: in dev-public the `~/.loopzero/dev-credentials.json` plaintext already co-locates on the
+  droplet with the shards → distributed custody adds only marginal protection when the vault is NOT
+  sole-custodian. **Jeito A INQUEBRÁVEL preserved**: `task k3d:vault:bootstrap-in-mgmt` remains
+  PROHIBITED in any tier (separate cluster topology violation, independent of witness scope).
+  Anti-patterns table re-tiered (prod/persistent vs dev-public vs both); cross-references updated.
+
 ### Added
+- Hermetic regression gate `TestDevPublicVaultBootstrapDefault` in
+  `infra/tests/charts/dev_public_vault_bootstrap_default_test.go`
+  (T-A3 of follow-up to ADR `2026-06-20-dev-public-vault-automated-init`). Locks 4 assertions:
+  (a) `seed-post-cleanroom-all.sh` invokes `vault-bootstrap-dev.sh`; (b) for
+  `LOOPZERO_HELMFILE_ENV=dev-public`, the script auto-provisions loopzero-vault via `task k3d:vault:create`
+  + `task k3d:vault:bootstrap` BEFORE `vault-bootstrap-dev.sh` runs (so the dev-public chain is
+  solo/CI provisionable per the ADR); (c) the script NEVER invokes `task k3d:vault:bootstrap-in-mgmt`
+  (Jeito A INQUEBRÁVEL — comment-line mentions of the forbidden shortcut are allowed; actual
+  invocations are forbidden); (d) `cleanroom-up-live-test-mandate.md` cites the ADR so the
+  witness re-scoping is auditable from the rule. Pure-text grep on canonical files; no kubectl, no
+  docker, no helmfile.
+
+### Changed
+- `infra/scripts/local/seed-post-cleanroom-all.sh` — NEW Step 0 (T-A2 of follow-up to ADR
+  `2026-06-20-dev-public-vault-automated-init`). When `LOOPZERO_HELMFILE_ENV=dev-public`, Step 0
+  auto-provisions the SEPARATE `loopzero-vault` k3d cluster + OpenBao chart via `task k3d:vault:create`
+  + `task k3d:vault:bootstrap` BEFORE Step 1 (`vault-bootstrap-dev.sh`) attempts init/unseal. Both
+  tasks are idempotent: no-op on warm re-run; full provision on Cleanroom-fresh. In other envs
+  (standalone-multi / unset / prod) Step 0 is skipped. **Jeito A INQUEBRÁVEL preserved**:
+  `task k3d:vault:bootstrap-in-mgmt` remains PROHIBITED in every tier. Closes the dev-public chain
+  to be solo/CI provisionable end-to-end per the ADR.
+
 - Hermetic regression gate `TestHostK3dInternalCanonical` in `infra/tests/charts/host_k3d_internal_canonical_test.go`
   (T1.2 of plan `k3d-host-published-vault-reach`, ADR D6, sponsor 2026-06-20). Locks the canonical
   contract on `infra/scripts/local/setup-cross-cluster-networking.sh`: mgmt CoreDNS
