@@ -25,6 +25,7 @@
 set -euo pipefail
 
 MGMT_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
+VAULT_CONTEXT="${VAULT_CONTEXT:-k3d-loopzero-vault}"
 LOOPZERO_NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
 VAULT_NAMESPACE="${VAULT_NAMESPACE:-vault-system}"
 UNSEAL_FILE="${LOOPZERO_VAULT_UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
@@ -49,8 +50,8 @@ fail() { log "FAIL: $*"; exit 1; }
 # Pre-flight
 [[ -r "$UNSEAL_FILE" ]] \
   || fail "unseal file missing at $UNSEAL_FILE — run vault-bootstrap-dev.sh first"
-kubectl --context "$MGMT_CONTEXT" -n "$VAULT_NAMESPACE" get pod openbao-0 >/dev/null 2>&1 \
-  || fail "openbao-0 pod missing in $VAULT_NAMESPACE — run task k3d:vault:bootstrap-in-mgmt"
+kubectl --context "$VAULT_CONTEXT" -n "$VAULT_NAMESPACE" get pod openbao-0 >/dev/null 2>&1 \
+  || fail "openbao-0 pod missing in $VAULT_CONTEXT/$VAULT_NAMESPACE — run task k3d:vault:create && task k3d:vault:bootstrap (Jeito A INQUEBRÁVEL — bootstrap-in-mgmt PROHIBITED)"
 
 ROOT_TOKEN=$(python3 -c "
 import json,sys
@@ -59,8 +60,8 @@ sys.stdout.write(d.get('root_token',''))
 " 2>/dev/null)
 [[ -n "$ROOT_TOKEN" ]] || fail "root_token not found in $UNSEAL_FILE"
 
-# Layer 1+2 — read fresh role_id from vault
-ROLE_ID=$(kubectl --context "$MGMT_CONTEXT" -n "$VAULT_NAMESPACE" \
+# Layer 1+2 — read fresh role_id from vault (in k3d-loopzero-vault cluster per Jeito A)
+ROLE_ID=$(kubectl --context "$VAULT_CONTEXT" -n "$VAULT_NAMESPACE" \
   exec openbao-0 -- env BAO_SKIP_VERIFY=true BAO_TOKEN="$ROOT_TOKEN" \
   bao read -field=role_id auth/approle/role/loopzero-api/role-id 2>/dev/null | tail -1)
 

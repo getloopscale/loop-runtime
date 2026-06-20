@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `infra/scripts/local/vault-bootstrap-dev.sh` — rewrite host-scoped kubeconfig server URL into
+  pod-scoped reach BEFORE writing `auth/k8s-mgmt/config`. The kubeconfig on the operator droplet
+  resolves the mgmt API as `https://0.0.0.0:6443` (k3d's host-published bind address). From inside
+  the OpenBao pod (loopzero-vault cluster, Jeito A), `0.0.0.0:6443` is the pod's own loopback —
+  unreachable. The pod canonically reaches the host via `host.k3d.internal` (resolved to the
+  k3d-loopzero bridge gateway per T1.2 of `k3d-host-published-vault-reach`, commit `cb7cc254`).
+  The patch rewrites `//(0.0.0.0|127.0.0.1|localhost)(:port)?` → `//host.k3d.internal\2` defensively
+  before the `bao write auth/k8s-mgmt/config` call. Surfaced during the T3.1 LIVE iteration on the
+  dev-public droplet 2026-06-20 — R3 codification previously wrote unreachable URL. NOTE: the
+  rewrite is a necessary precondition for the ESO `auth/k8s-mgmt/login` chain but NOT sufficient
+  — a separate `permission denied` symptom remains under investigation (see baseline file
+  `docs/operations/baselines/2026-06-20-blocked-t3-1.md` umbrella).
+- `infra/scripts/local/seed-vault-role-id-sync.sh` — separate `VAULT_CONTEXT` (default
+  `k3d-loopzero-vault`) from `MGMT_CONTEXT` (default `k3d-loopzero-mgmt`) per Jeito A INQUEBRÁVEL.
+  Previous code defaulted to `k3d-loopzero-mgmt` for the openbao-0 pod lookup and emitted a fail message
+  recommending `task k3d:vault:bootstrap-in-mgmt` (which is PROHIBITED — separate cluster topology
+  violation). The script now correctly reads the canonical role_id from the loopzero-vault cluster +
+  patches loopzero-api Deployment env in mgmt cluster.
+
 ### Changed
 - `.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5 — re-scoped per ADR
   [`2026-06-20-dev-public-vault-automated-init`](.claude/knowledge-base/decisions/2026-06-20-dev-public-vault-automated-init.md)

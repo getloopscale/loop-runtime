@@ -366,6 +366,18 @@ TR_EOF
       # Extract MGMT API server URL + CA bundle.
       MGMT_HOST=$(kubectl --context "$TARGET_CONTEXT" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
       MGMT_CA=$(kubectl --context "$TARGET_CONTEXT" -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)
+      # CANONICAL FIX 2026-06-20 — rewrite host-scoped kubeconfig URL into pod-scoped
+      # reach. k3d publishes mgmt API on host port 6443 (e.g. `https://0.0.0.0:6443`
+      # from the operator's kubeconfig). From the OpenBao pod's network namespace
+      # (loopzero-vault cluster), 0.0.0.0 means "this pod's loopback" — unreachable.
+      # The pod canonically reaches the host via `host.k3d.internal` (resolved to
+      # the k3d-loopzero bridge gateway by T1.2 of k3d-host-published-vault-reach).
+      # Same rewrite applied for 127.0.0.1 / localhost defensively.
+      MGMT_HOST_ORIG="$MGMT_HOST"
+      MGMT_HOST=$(echo "$MGMT_HOST" | sed -E 's|//(0\.0\.0\.0\|127\.0\.0\.1\|localhost)(:[0-9]+)?|//host.k3d.internal\2|')
+      if [[ "$MGMT_HOST" != "$MGMT_HOST_ORIG" ]]; then
+        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (pod-scoped reach via host.k3d.internal)"
+      fi
       if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
         log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"
       else
