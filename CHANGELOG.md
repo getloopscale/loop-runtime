@@ -34,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   docker, no helmfile.
 
 ### Changed
+- `infra/scripts/local/vault-bootstrap-dev.sh` — Step 5.5 R3 TokenReview path FIXED. Two coupled bugs:
+  (1) the WARN text on timeout said "60s" but the actual loop budget was 180s (stale text from a
+  prior bump per memory `j22-aprendizado-openbao-multi-secret-chain`); (2) the `bao_auth` shell
+  function used by the wait-loop was defined LATER in the script (alongside Step 6/7), so during
+  Step 5.5 the call returned no stdout, the Python check evaluated `'k8s-mgmt/' in {}` → False
+  every iteration, the 180s wait loop ALWAYS timed out, and `auth/k8s-mgmt/config` was NEVER
+  written even when the mount was actually present. Downstream consequence: CSS loopzero-vault-secrets
+  stayed `Ready=False reason=InvalidProviderConfig` (seed-post-cleanroom Step 1b FAIL), ESO
+  cross-cluster workload-identity path silently broke. Fix: define `bao_auth` immediately after
+  ROOT_TOKEN is set (Step 4), remove the legacy duplicate definition at Step 6/7 (replaced with
+  audit-trail comment), correct the WARN text to "180s". LIVE-validated: `bao auth list` from a
+  root-token shell shows `k8s-mgmt/`, `k8s-build/`, `k8s-cell-*/`, `approle/` all enabled. The
+  16-assertion regression guard `check-vault-bootstrap-unseal-loop_test.sh` still passes after the
+  edits.
+
 - `infra/scripts/local/vault-bootstrap-dev.sh` — NEW Step 1.1 `kubectl wait pod openbao-0 --for=condition=Ready --timeout=300s` BEFORE Step 2 (`bao operator init`).
   LIVE finding 2026-06-20 T-A4 follow-up to ADR `2026-06-20-dev-public-vault-automated-init`: when the chain
   is invoked back-to-back with `task k3d:vault:bootstrap` (now standard via T-A2 Step 0b), the openbao

@@ -248,6 +248,19 @@ if [[ -n "$ROOT_TOKEN" ]]; then
     --dry-run=client -o yaml | kubectl --context "$OPENBAO_CONTEXT" -n "$NS" apply -f -
 fi
 
+# LIVE finding 2026-06-20 dev-public Cleanroom (T-A4 follow-up): the
+# `bao_auth` function was historically defined later (after Step 5.5)
+# alongside other auth-required steps. Step 5.5 therefore called an
+# undefined function — `bao_auth auth list` produced no stdout, the
+# Python check evaluated `'k8s-mgmt/' in {}` → False every iteration,
+# the 180s wait loop ALWAYS timed out, and `auth/k8s-mgmt/config` was
+# NEVER written. Downstream consequence: CSS loopzero-vault-secrets stayed
+# `Ready=False reason=InvalidProviderConfig` (1b-vault-bootstrap-eso
+# FAIL), and ESO cross-cluster workload-identity path silently
+# broke. Define bao_auth NOW (after ROOT_TOKEN is set, before Step 5.5
+# needs it) so the R3 TokenReview canonical writes succeed on first run.
+bao_auth() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao "$@"; }
+
 # === Step 5: openbao-init helmfile sync ===
 log "Step 5: helmfile sync openbao-init (T5.1-T5.9 provisioning)"
 if [[ -f "infra/helmfile/vault.helmfile.yaml.gotmpl" ]]; then
@@ -301,7 +314,7 @@ if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
     sleep 2
   done
   if [[ "$MOUNT_READY" -eq 0 ]]; then
-    log "  WARN: auth/k8s-mgmt/ mount not present after 60s — skipping R3 config write (seed chain FAIL=11 will surface)"
+    log "  WARN: auth/k8s-mgmt/ mount not present after 180s — skipping R3 config write (seed chain FAIL=11 will surface)"
   else
     # MGMT side: ensure vault-tokenreviewer SA + CRB exist.
     log "  Applying vault-tokenreviewer SA + CRB on $TARGET_CONTEXT"
@@ -378,7 +391,10 @@ fi
 # === Step 6+7: approle + policy ===
 log "Step 6+7: approle + loopzero-api policy"
 export BAO_TOKEN="$ROOT_TOKEN"
-bao_auth() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao "$@"; }
+# `bao_auth` is now defined right after ROOT_TOKEN is set (Step 4) so
+# Step 5.5's auth/k8s-mgmt wait-loop can actually call it. The legacy
+# duplicate definition here was the source of the silent R3 skip
+# (issue #111 cross-cluster ESO path).
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
