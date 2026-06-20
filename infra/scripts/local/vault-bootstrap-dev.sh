@@ -366,8 +366,10 @@ TR_EOF
       # Extract MGMT API server URL + CA bundle.
       MGMT_HOST=$(kubectl --context "$TARGET_CONTEXT" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
       MGMT_CA=$(kubectl --context "$TARGET_CONTEXT" -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)
-      # CANONICAL FIX 2026-06-20 (revised) — rewrite the host-scoped kubeconfig URL
-      # to a SAN-aligned name reachable from the OpenBao pod's network namespace.
+      # CANONICAL FIX 2026-06-20 (revised, loopzero commit 7c255524) — rewrite the
+      # host-scoped kubeconfig URL to a SAN-aligned name reachable from the OpenBao
+      # pod's network namespace. Regression-locked by
+      # infra/tests/charts/vault_bootstrap_san_aligned_host_test.go (F1 guard).
       # Two requirements MUST hold simultaneously:
       #   (a) reachability — from the vault pod (in loopzero-vault cluster), the URL
       #       must resolve to + connect to the mgmt API server on the host.

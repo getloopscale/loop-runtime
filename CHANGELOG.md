@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `infra/tests/charts/vault_bootstrap_san_aligned_host_test.go` — hermetic Go regression-lock for
+  the F1 SAN-aligned `kubernetes_host` fix (loopzero commit `7c255524`). Asserts
+  `vault-bootstrap-dev.sh` derives `k3d-${MGMT_CLUSTER}-serverlb` from `TARGET_CONTEXT`, rewrites
+  `MGMT_HOST` via a sed expression whose replacement target is `${SERVERLB_HOST}` (NOT
+  `host.k3d.internal`), and routes the rewritten value into the `bao write auth/k8s-mgmt/config`
+  block via `kubernetes_host="$MGMT_HOST"`. Scoped strictly to the `auth/k8s-mgmt/config`
+  `kubernetes_host` value — does NOT forbid `host.k3d.internal` elsewhere (the vault REACH
+  surface `https://host.k3d.internal:8200` stays canonical because OpenBao's own cert SAN
+  includes that name). Companion negative-control test mutates the body in-memory to revert the
+  rewrite target back to `host.k3d.internal` and asserts the guard fires, proving the gate is not
+  theatre. Pure hermetic — NO kubectl, NO network, NO cluster. Follows the sister-pattern of
+  `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
+
 ### Fixed
 - `infra/scripts/local/vault-bootstrap-dev.sh` — rewrite host-scoped kubeconfig server URL to a
   SAN-aligned name reachable from the OpenBao pod's network namespace BEFORE writing
