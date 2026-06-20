@@ -225,9 +225,11 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 
 ### IaC + Local Dev
 
+> **⚠️ L1 RE-PLATFORM IN PROGRESS (CTO mandate 2026-06-17, ADR `decisions/2026-06-17-infra-state-decomposition-aws.md` ACCEPTED).** The Pulumi/DigitalOcean L1 below is **AS-IS / legacy** — it is being **superseded by AWS + Terraform** in two Gruntwork-style repos: **`loopzero-infra-modules`** (versioned blueprints — EKS/RDS/VPC) + **`loopzero-infra-live`** (per-env Terragrunt units, per-component state isolation; RDS is its own protected unit). **Tooling = Terraform** (decision D6: "Terraform mais maduro" — NOT OpenTofu/Pulumi). Roadmap `ROADMAP_AWS.md` AM0-AM9 (strangler-fig; **DO + Pulumi stay LIVE until the AM8 cutover**). Do NOT add new Pulumi for the *target* infra-construction layer; new cloud-primitive work goes to the Terraform repos. The in-cluster platform layer (Helmfile L2 + ArgoCD L3 + charts + k3d dev) is **unchanged** by the re-platform. See umbrella `CLAUDE.md § Infraestrutura` + the per-repo `loopzero-infra-modules/CLAUDE.md` / `loopzero-infra-live/CLAUDE.md`.
+
 | Layer | Tooling |
 |-------|---------|
-| L1 (cloud primitives) | Pulumi (TS) — 5 projects: `pulumi/` (DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (32 Helm releases), `pulumi-drill/` (DR prod-identical 4-cluster stack), `pulumi-shared/` (contracts). `pulumi-control-plane/` deleted 2026-05-15 per close-all-gaps T2.1. Bipartite SoT per MEET-2026-05-12 D3. |
+| L1 (cloud primitives) | **AS-IS (legacy, live until AM8):** Pulumi (TS) — 5 projects: `pulumi/` (DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (32 Helm releases), `pulumi-drill/` (DR prod-identical 4-cluster stack), `pulumi-shared/` (contracts). `pulumi-control-plane/` deleted 2026-05-15 per close-all-gaps T2.1. Bipartite SoT per MEET-2026-05-12 D3. **TARGET:** AWS + Terraform (`loopzero-infra-modules` + `loopzero-infra-live`) per ADR 2026-06-17. |
 | L2 (platform workloads) | Helmfile v1.0+ — orchestrator de 32 Helm releases. **SoT real desses workloads**, não Pulumi. |
 | L3 (tenant Day-2 GitOps) | ArgoCD 2.13.3 (manual sync, from Gitea) |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
