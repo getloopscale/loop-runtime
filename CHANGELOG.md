@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `infra/tests/charts/connect_canonical_fixture_container_name_test.go` — hermetic Go regression-lock
+  for the Step 11 (`connect-canonical-fixture.sh`) canonical container-name fix landed 2026-06-20
+  during the dev-public Cleanroom-fresh close. Asserts `mint_app_jwt()` reads `GITHUB_APP_ID` via
+  `kubectl exec deployment/loopzero-api -c loopzero-api --` (canonical container name per
+  `infra/helm/loopzero-api/templates/deployment.yaml`), NOT `-c api`. The previous `-c api` selected no
+  matching container; kubectl errored to stderr, the script suppressed stderr via `2>/dev/null` and
+  swallowed the non-zero exit via `|| true`, so `$app_id` ended up empty. Result: ERROR `cannot
+  resolve GITHUB_APP_ID` even though the env var IS present in the pod, which then made
+  `check_installation` emit a sponsor-side WARN ("no GitHub App installation found on
+  getloopscale/loopzerokit-example") that traced back to the wrong selector. Companion negative-control
+  mutates the script body in-memory from `-c loopzero-api` back to `-c api` and asserts the guard
+  fires, proving the gate is not theatre. Pure hermetic — NO kubectl, NO network, NO cluster.
+  Scoped strictly to the `mint_app_jwt` selector (does NOT forbid containers literally named `api`
+  elsewhere in the project).
 - `infra/tests/charts/vault_bootstrap_san_aligned_host_test.go` — hermetic Go regression-lock for
   the F1 SAN-aligned `kubernetes_host` fix (loopzero commit `7c255524`). Asserts
   `vault-bootstrap-dev.sh` derives `k3d-${MGMT_CLUSTER}-serverlb` from `TARGET_CONTEXT`, rewrites
@@ -22,6 +36,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
 
 ### Fixed
+- `infra/scripts/local/connect-canonical-fixture.sh` — canonical container name `loopzero-api` (NOT
+  `api`) for `kubectl exec deployment/loopzero-api -c <container> --` inside `mint_app_jwt()`. The
+  chart name + Service name + container name are all `loopzero-api` per
+  `infra/helm/loopzero-api/templates/deployment.yaml`. The previous `-c api` selected zero matching
+  containers; kubectl errored to stderr, the script's `2>/dev/null` suppressed the message + the
+  `|| true` swallowed the non-zero exit, so `$app_id` ended up empty and the script reported
+  `cannot resolve GITHUB_APP_ID` while the env var IS present in the pod. Caught during the
+  2026-06-20 Cleanroom-fresh `seed-post-cleanroom-all.sh --verify --json` run that returned
+  `pass=16 fail=1` with Step 11 as the only FAIL (massive improvement from prior `pass=11 fail=6`
+  proving the 4 root-cause fixes — reach + hijack + bao_auth + SAN — held Cleanroom-survivable).
+  Post-fix re-run returned `pass=17 fail=0 verdict=PASS`. Regression-locked by hermetic Go guard
+  `infra/tests/charts/connect_canonical_fixture_container_name_test.go` with positive + negative
+  control.
 - `infra/scripts/local/vault-bootstrap-dev.sh` — rewrite host-scoped kubeconfig server URL to a
   SAN-aligned name reachable from the OpenBao pod's network namespace BEFORE writing
   `auth/k8s-mgmt/config`. The kubeconfig on the operator droplet resolves the mgmt API as
