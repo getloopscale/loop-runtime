@@ -106,6 +106,30 @@ if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&
   exit 1
 fi
 
+# T-A4 LIVE finding 2026-06-20 (follow-up to ADR 2026-06-20-dev-public-vault-automated-init):
+# When `task k3d:vault:bootstrap` returns (helm install completes), the openbao-0
+# pod may still be Pending without a host assigned — the openbao chart declares
+# `wait: false` (per memory feedback_helmfile_wait_false_for_bootstrap_deps). The
+# very first `kubectl exec` then fails with "pod openbao-0 does not have a host
+# assigned", `bao operator init` silently no-ops, and the unseal file lands
+# empty (size 1, just a newline). Downstream Steps 2-10 cascade-fail with
+# "Vault is sealed" (Step 6/7) and the AppRole secret never materializes.
+#
+# Canonical fix: wait for openbao-0 to be Scheduled + Initialized + Running
+# BEFORE Step 2 attempts the first `kubectl exec`. `--for=condition=Ready` is
+# the right gate because the openbao container's readiness probe goes Ready
+# the moment the listener is up — even when sealed (the chart sets
+# `livenessProbe.path: /v1/sys/health?standbyok=true&sealedcode=204` which
+# tolerates sealed state). 300s budget is generous for cold k3d cluster boot
+# (image pull + cert-manager certificate issuance + pod schedule).
+log "Step 1.1: wait openbao-0 Ready (300s) — guards against the kubectl-exec-before-schedule race"
+if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" wait --for=condition=Ready "pod/$POD" --timeout=300s 2>&1; then
+  log "FAIL: openbao-0 pod did NOT reach Ready in 300s — Step 2 (bao operator init) cannot proceed safely."
+  log "  Probe state: kubectl --context $OPENBAO_CONTEXT -n $NS describe pod $POD"
+  exit 1
+fi
+log "  OK: openbao-0 Ready — proceeding to Step 2"
+
 mkdir -p "$(dirname "$UNSEAL_FILE")"
 
 # LIVE bug fix (T6.2 Cleanroom TOTAL 2026-06-12): TLS x509 unknown authority

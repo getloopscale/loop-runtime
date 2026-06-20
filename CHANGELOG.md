@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   docker, no helmfile.
 
 ### Changed
+- `infra/scripts/local/vault-bootstrap-dev.sh` — NEW Step 1.1 `kubectl wait pod openbao-0 --for=condition=Ready --timeout=300s` BEFORE Step 2 (`bao operator init`).
+  LIVE finding 2026-06-20 T-A4 follow-up to ADR `2026-06-20-dev-public-vault-automated-init`: when the chain
+  is invoked back-to-back with `task k3d:vault:bootstrap` (now standard via T-A2 Step 0b), the openbao
+  chart returns from `helm install` before the openbao-0 pod is scheduled (`wait: false` per
+  `feedback_helmfile_wait_false_for_bootstrap_deps`). The very first `kubectl exec` then fails with
+  `pod openbao-0 does not have a host assigned`; `bao operator init` silently no-ops; the unseal file
+  lands size-1 (just a newline); Steps 2-10 cascade-fail with "Vault is sealed". The wait gates Step 2
+  on the pod actually being Ready (sealed-state-tolerant readiness probe), eliminating the race. LIVE
+  validated: Step 1 PASS canonical, `loopzero-openbao-approle` Secret materialized end-to-end.
+
 - `infra/scripts/local/seed-post-cleanroom-all.sh` — NEW Step 0 (T-A2 of follow-up to ADR
   `2026-06-20-dev-public-vault-automated-init`). When `LOOPZERO_HELMFILE_ENV=dev-public`, Step 0
   auto-provisions the SEPARATE `loopzero-vault` k3d cluster + OpenBao chart via `task k3d:vault:create`
