@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `infra/tests/charts/charts_go_tests_wired_test.go` — meta-guard locking the
+  `infra/tests/charts/` Go-guards wiring into `task quality:gates` (closes /review HIGH
+  2026-06-20). Pre-fix, the 16 hermetic Go guards in `infra/tests/charts/` (NodePort/serverlb
+  T1.1, F-1 NetworkPolicy, gateway-derived host.k3d.internal T1.2, F1 SAN-aligned
+  kubernetes_host, Step 11 container-name, 3 post-decomposition tooling fixes #106/#107/#108,
+  plus 9 pre-existing chart contract tests) EXISTED but never ran in pre-push because
+  `taskfiles/test.yml:111` ran only `./unit/...`. This guard asserts the canonical invocation
+  `cd infra/tests && go test ./charts/ -count=1` is present, uncommented, `-count=1`-flagged,
+  helmfile-pre-flight-protected (closes the related MEDIUM: silent SKIP of central
+  `TestVaultHostPublishedReach` is the "looks GREEN, ran nothing" anti-pattern), and free of
+  `|| true` / `2>/dev/null` silencing. Sibling-pattern of
+  `check-openbao-transit-quality-gates-wired_test.sh` (J-22 iter 27), but homed as Go (not
+  bash) to avoid the un-homed-logic gate bump that blocks new `.sh` tests. Negative-control
+  mutates the in-memory taskfile body across 3 sub-cases (canonical invocation removal,
+  helmfile pre-flight removal, `|| true` suffix injection) and asserts the diffs are
+  detectable.
 - `infra/tests/charts/dogfood_all_repo_root_test.go` — hermetic Go regression-lock for the
   `archive/canonical-tests-v1/scripts/local/dogfood-all.sh` REPO_ROOT off-by-one fix landed
   2026-06-20 (issue #106). Asserts the canonical 4-`..` derivation
@@ -57,6 +73,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
 
 ### Fixed
+- `taskfiles/quality.yml` — wire `infra/tests/charts/` Go guards into `task quality:gates`
+  (closes /review HIGH 2026-06-20). Pre-fix the slice's regression protection (16 hermetic Go
+  guards) existed but never ran in pre-push; only `cd infra/tests && go test ./unit/...` was
+  invoked. Adds the canonical invocation `cd infra/tests && go test ./charts/ -count=1` with a
+  fail-loud helmfile pre-flight: the gate aborts with operator-actionable diagnostics if
+  `helmfile` is absent from PATH OR `LOOPZERO_TEST_SKIP_HELMFILE=1` is set, preventing the silent
+  SKIP of `TestVaultHostPublishedReach` (the central helmfile-render guard) — closes the
+  related MEDIUM. Verified GREEN on the droplet 2026-06-20 (helmfile present): all 16 chart
+  guards run + the new `TestChartsGoTestsWired` meta-guard auto-runs inside `./charts/`. No
+  fallout from enabling `./charts/` — baseline was already 39 PASS / 0 FAIL / 0 SKIP.
 - `archive/canonical-tests-v1/scripts/local/dogfood-all.sh` — REPO_ROOT canonical 4-`..` climbs
   (NOT 3) for the post-archive script relocation (issue #106). The script lives 4 levels deep
   at `loopzero/archive/canonical-tests-v1/scripts/local/`; the pre-fix 3-climb landed at
