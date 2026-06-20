@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Hermetic regression gate `TestHostK3dInternalCanonical` in `infra/tests/charts/host_k3d_internal_canonical_test.go`
+  (T1.2 of plan `k3d-host-published-vault-reach`, ADR D6, sponsor 2026-06-20). Locks the canonical
+  contract on `infra/scripts/local/setup-cross-cluster-networking.sh`: mgmt CoreDNS
+  `host.k3d.internal` MUST resolve to the `k3d-loopzero` bridge **gateway**, NEVER to the
+  `k3d-loopzero-workload-serverlb` container IP. 4 assertions: (a) no `docker inspect k3d-loopzero-workload-serverlb`
+  for the resolution target + no `$WORKLOAD_LB_IP host.k3d.internal` NodeHosts line; (b) derivation goes
+  through `docker network inspect <k3d-loopzero> -f '{{(index .IPAM.Config 0).Gateway}}'` honoring the
+  `.Gateway` + `.IPAM.Config` keys; (c) the NodeHosts line written is `$GATEWAY_IP host.k3d.internal`
+  (gateway-derived variable); (d) script comments cite the #111-#115 history / ADR D6 / plan slug so
+  operators reading in 6 months see why the gateway choice matters. Closes the host-side name
+  resolution hijack that broke the chain T1.1 proved (probe-measured 2026-06-20: bridge gateway
+  reaches vault:8200 + every mgmt/workload/k8s-API host-publish port; workload-serverlb returns TCP
+  RST in ~0.4ms on every platform port).
+
+### Changed
+- `infra/scripts/local/setup-cross-cluster-networking.sh` — Step 2 now derives the k3d-loopzero bridge
+  gateway via `docker network inspect ${SHARED_NETWORK} -f '{{(index .IPAM.Config 0).Gateway}}'`
+  instead of `docker inspect k3d-loopzero-workload-serverlb`. Step 3 writes the gateway IP as the
+  `host.k3d.internal` NodeHosts target. Comments rewritten to cite plan
+  `k3d-host-published-vault-reach` ADR D6 + the #111-#115 history + the 2026-06-20 probe evidence.
+  Idempotent + Cleanroom-survivable: every `task setup` re-asserts the canonical resolution. LIVE
+  validation on droplet 2026-06-20: mgmt-pod `curl https://host.k3d.internal:8200/v1/sys/health?uninitcode=200`
+  returns HTTP 200 + the OpenBao sealed JSON via canonical CoreDNS resolution (no `--resolve` override).
+
 - Hermetic regression gate `TestVaultHostPublishedReach` in `infra/tests/charts/vault_host_published_reach_test.go`
   (T1.1 of plan `k3d-host-published-vault-reach`, sponsor 2026-06-20). Locks the canonical
   host-publish topology for loopzero-vault → openbao cross-cluster reach onto the mechanism the T0.1
