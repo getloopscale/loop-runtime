@@ -366,17 +366,32 @@ TR_EOF
       # Extract MGMT API server URL + CA bundle.
       MGMT_HOST=$(kubectl --context "$TARGET_CONTEXT" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
       MGMT_CA=$(kubectl --context "$TARGET_CONTEXT" -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)
-      # CANONICAL FIX 2026-06-20 — rewrite host-scoped kubeconfig URL into pod-scoped
-      # reach. k3d publishes mgmt API on host port 6443 (e.g. `https://0.0.0.0:6443`
-      # from the operator's kubeconfig). From the OpenBao pod's network namespace
-      # (loopzero-vault cluster), 0.0.0.0 means "this pod's loopback" — unreachable.
-      # The pod canonically reaches the host via `host.k3d.internal` (resolved to
-      # the k3d-loopzero bridge gateway by T1.2 of k3d-host-published-vault-reach).
-      # Same rewrite applied for 127.0.0.1 / localhost defensively.
+      # CANONICAL FIX 2026-06-20 (revised) — rewrite the host-scoped kubeconfig URL
+      # to a SAN-aligned name reachable from the OpenBao pod's network namespace.
+      # Two requirements MUST hold simultaneously:
+      #   (a) reachability — from the vault pod (in loopzero-vault cluster), the URL
+      #       must resolve to + connect to the mgmt API server on the host.
+      #   (b) TLS hostname/SAN — OpenBao's Go HTTP client verifies the server cert
+      #       strictly. The k3d-mgmt API cert SAN list is:
+      #         DNS: k3d-loopzero-mgmt-server-0, k3d-loopzero-mgmt-serverlb,
+      #              kubernetes(.default(.svc(.cluster.local))), localhost
+      #         IP : 0.0.0.0, 10.43.0.1, 127.0.0.1, <mgmt-server-0-IP>
+      #       `host.k3d.internal` is NOT in the SAN list — using it triggers
+      #       SAN-mismatch ("x509: certificate is valid for ... not host.k3d.internal")
+      #       which OpenBao surfaces to callers as a generic "permission denied"
+      #       from auth/k8s-mgmt/login for every role (blanket 403).
+      #
+      # The canonical SAN-aligned + cross-cluster-reachable name is the k3d
+      # serverlb docker container name `k3d-${cluster_name}-serverlb`, derived
+      # from TARGET_CONTEXT (e.g., `k3d-loopzero-mgmt` → `k3d-loopzero-mgmt-serverlb`).
+      # k3d injects this name into every cluster's CoreDNS NodeHosts via the
+      # shared docker network, so it resolves canonically from loopzero-vault.
       MGMT_HOST_ORIG="$MGMT_HOST"
-      MGMT_HOST=$(echo "$MGMT_HOST" | sed -E 's|//(0\.0\.0\.0\|127\.0\.0\.1\|localhost)(:[0-9]+)?|//host.k3d.internal\2|')
+      MGMT_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-mgmt → loopzero-mgmt
+      SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"
+      MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
       if [[ "$MGMT_HOST" != "$MGMT_HOST_ORIG" ]]; then
-        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (pod-scoped reach via host.k3d.internal)"
+        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-vault)"
       fi
       if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
         log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"

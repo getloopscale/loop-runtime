@@ -8,18 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- `infra/scripts/local/vault-bootstrap-dev.sh` — rewrite host-scoped kubeconfig server URL into
-  pod-scoped reach BEFORE writing `auth/k8s-mgmt/config`. The kubeconfig on the operator droplet
-  resolves the mgmt API as `https://0.0.0.0:6443` (k3d's host-published bind address). From inside
-  the OpenBao pod (loopzero-vault cluster, Jeito A), `0.0.0.0:6443` is the pod's own loopback —
-  unreachable. The pod canonically reaches the host via `host.k3d.internal` (resolved to the
-  k3d-loopzero bridge gateway per T1.2 of `k3d-host-published-vault-reach`, commit `cb7cc254`).
-  The patch rewrites `//(0.0.0.0|127.0.0.1|localhost)(:port)?` → `//host.k3d.internal\2` defensively
-  before the `bao write auth/k8s-mgmt/config` call. Surfaced during the T3.1 LIVE iteration on the
-  dev-public droplet 2026-06-20 — R3 codification previously wrote unreachable URL. NOTE: the
-  rewrite is a necessary precondition for the ESO `auth/k8s-mgmt/login` chain but NOT sufficient
-  — a separate `permission denied` symptom remains under investigation (see baseline file
-  `docs/operations/baselines/2026-06-20-blocked-t3-1.md` umbrella).
+- `infra/scripts/local/vault-bootstrap-dev.sh` — rewrite host-scoped kubeconfig server URL to a
+  SAN-aligned name reachable from the OpenBao pod's network namespace BEFORE writing
+  `auth/k8s-mgmt/config`. The kubeconfig on the operator droplet resolves the mgmt API as
+  `https://0.0.0.0:6443` (k3d's host-published bind address). Two requirements must hold
+  simultaneously: (a) reachability — from the vault pod (loopzero-vault cluster, Jeito A), the URL
+  must resolve and connect to the mgmt API server on the host; (b) TLS hostname/SAN — OpenBao's
+  Go HTTP client verifies the server cert strictly. The k3d-mgmt API cert SAN list is
+  `DNS: k3d-loopzero-mgmt-server-0, k3d-loopzero-mgmt-serverlb, kubernetes(.default(.svc(.cluster.local))),
+  localhost` + the in-cluster IPs. `host.k3d.internal` is NOT in the SAN list — using it triggers
+  SAN-mismatch which OpenBao surfaces as a generic blanket "permission denied" from
+  `auth/k8s-mgmt/login` for every role. The canonical SAN-aligned + cross-cluster-reachable name
+  is the k3d serverlb container `k3d-${cluster_name}-serverlb` (derived from `TARGET_CONTEXT`,
+  e.g., `k3d-loopzero-mgmt` → `k3d-loopzero-mgmt-serverlb`). k3d injects this name into every cluster's
+  CoreDNS NodeHosts via the shared docker network, so it resolves canonically from loopzero-vault.
+  Surfaced + isolated during the T3.1 LIVE iteration 2026-06-20 via a 4-probe sequence
+  (Probe 1 refuted H2 CA-mismatch; Probe 2 with TLS bypass returned `authenticated=true`;
+  Probe 3 detected the SAN-mismatch; Probe 4 verified strict TLS via the serverlb name → HTTP
+  201 + TokenReview authenticated). Warm validation: `ClusterSecretStore loopzero-vault-secrets`
+  transitioned from 51min `InvalidProviderConfig` to `Ready=True reason=Valid`. Canonical close
+  remains gated on the next Cleanroom-fresh `seed-post-cleanroom-all.sh --verify` 0 FAIL run
+  per the cleanroom-up-live-test-mandate.
 - `infra/scripts/local/seed-vault-role-id-sync.sh` — separate `VAULT_CONTEXT` (default
   `k3d-loopzero-vault`) from `MGMT_CONTEXT` (default `k3d-loopzero-mgmt`) per Jeito A INQUEBRÁVEL.
   Previous code defaulted to `k3d-loopzero-mgmt` for the openbao-0 pod lookup and emitted a fail message
