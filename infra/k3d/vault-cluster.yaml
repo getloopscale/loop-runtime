@@ -19,14 +19,16 @@
 # Registry: k3d-loopzero-registry pull-through (mesma cache compartilhada).
 #
 # Exposed ports:
-#   - 8200 (HTTPS Vault API) → host:8200 → k3d-loopzero-vault-server-0 hostPort:8200
-#     The Klipper svclb DaemonSet (auto-deployed by k3s for LoadBalancer
-#     Services) binds hostPort = Service.port (NOT Service.nodePort) on
-#     each node. Originally `8200:30200@loadbalancer` expected HAProxy →
-#     server-0:30200 but Klipper binds 8200 → connection chain broken
-#     mid-TLS (decode_error 562). Issue #112 fix 2026-06-19: direct
-#     `8200:8200@server:0` skips serverlb HAProxy, hits Klipper hostPort
-#     directly, preserving cert SAN host.k3d.internal.
+#   - 8200 (HTTPS Vault API) → host:8200 → k3d serverlb (k3d-proxy nginx
+#     `stream{}` L4 passthrough) → server-0:30200 → openbao pod (host-published
+#     reach plan k3d-host-published-vault-reach, sponsor 2026-06-20). The
+#     openbao Service is type: NodePort with explicit nodePort: 30200; the
+#     serverlb publishes host:8200 → node:30200 transparently. Reuses the
+#     same in-repo proven pattern as mgmt-cluster.yaml (8 services mapped
+#     `port:NN@loadbalancer` + Service type: NodePort). Klipper svclb is
+#     DISABLED via `--disable=servicelb` so the serverlb is the sole publish
+#     mechanism (no two LB stacks competing). x509-clean: CSS reads via
+#     host.k3d.internal:8200 — already covered by the openbao-cert SAN.
 #   - 30095 NodePort para cross-cluster scraping (Prometheus federation futura)
 apiVersion: k3d.io/v1alpha5
 kind: Simple
@@ -40,15 +42,16 @@ kubeAPI:
   hostPort: "6447"
 
 ports:
-  # Vault HTTPS API → host:8200 → server-0 hostPort:8200 (issue #112 fix
-  # 2026-06-19). Klipper svclb binds hostPort=Service.port=8200 directly
-  # on server-0 — the prior `8200:30200@loadbalancer` mapping went via
-  # serverlb HAProxy expecting NodePort 30200 backend, but Klipper does
-  # NOT bind nodePort, only Service.port, causing TLS handshake decode_error
-  # 562 mid-stream. Direct server:0 hostPort skips HAProxy entirely.
-  - port: 8200:8200
+  # Vault HTTPS API → host:8200 → k3d serverlb (k3d-proxy nginx stream{}
+  # L4 TCP passthrough) → server-0:30200 → openbao pod
+  # (plan k3d-host-published-vault-reach, sponsor 2026-06-20). The openbao
+  # Service is type: NodePort with explicit nodePort: 30200 (see
+  # vault.helmfile.yaml.gotmpl); the serverlb forwards transparently,
+  # preserving the TLS bytes intact (no L7 decode). Same pattern as
+  # mgmt-cluster.yaml mappings.
+  - port: 8200:30200
     nodeFilters:
-      - server:0
+      - loadbalancer
   # OpenBao metrics NodePort (Prometheus federation cross-cluster)
   - port: 30095:30095
     nodeFilters:
@@ -82,9 +85,12 @@ options:
       - arg: "--disable=traefik"
         nodeFilters:
           - server:*
-      # VK5.1 LIVE 2026-06-02: re-enabled servicelb (Klipper).
-      # Originally disabled because Vault uses only ClusterIP intra-cluster,
-      # but VK.5 cross-cluster auth requires NodePort routing host:30200 →
-      # pod. Without servicelb, k3d port mapping 8200:30200 has no fabric
-      # to forward traffic from the k3d serverlb container to the pod.
-      # Klipper adds ~5MB and runs as one DaemonSet pod — accepted cost.
+      # Disable Klipper svclb so the k3d serverlb (k3d-proxy nginx stream{})
+      # is the sole publish path (plan k3d-host-published-vault-reach D3,
+      # sponsor 2026-06-20). Two LB stacks competing on the same hostPort
+      # caused the #112 decode_error 562 + #113 servicelb hostPort gap;
+      # one LB mechanism removes the ambiguity. The serverlb maps
+      # 8200:30200@loadbalancer → openbao Service nodePort: 30200.
+      - arg: "--disable=servicelb"
+        nodeFilters:
+          - server:*

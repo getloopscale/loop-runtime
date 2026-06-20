@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Hermetic regression gate `TestVaultHostPublishedReach` in `infra/tests/charts/vault_host_published_reach_test.go`
+  (T1.1 of plan `k3d-host-published-vault-reach`, sponsor 2026-06-20). Locks the canonical
+  host-publish topology for loopzero-vault → openbao cross-cluster reach onto the mechanism the T0.1
+  LIVE SPIKE proved end-to-end (mgmt-pod → docker bridge gateway 172.18.0.1:8200 → k3d serverlb
+  nginx `stream{}` L4 passthrough → server-0:30200 NodePort → openbao-0 pod :8200 → HTTP 200,
+  TLS bytes intact, no decode_error 562). 7 assertions cover (a) Service `type: NodePort` not
+  LoadBalancer, (b) `nodePort: 30200` FIXED (NOT auto-assigned — the #112 trap), (c) port/targetPort
+  aligned at 8200/8200, (d) `vault-cluster.yaml` maps `8200:30200@loadbalancer` (NOT `@server:0`),
+  (e) `--disable=servicelb` present (Klipper off, serverlb is sole publish path per D3),
+  (f) CSS server unchanged at `host.k3d.internal:8200` (SAN-clean per D4), and (g) F-1 absorption:
+  openbao chart `server.networkPolicy.enabled: false` in vault-local block + render-side guard
+  asserting NO `kind: NetworkPolicy` for the openbao release. F-1 surfaced LIVE during T0.1 SPIKE
+  (the chart-default policy only allows ingress from `namespaceSelector: {}` — intra-cluster pod
+  sources — and DROPS NodePort traffic arriving with source IP from the host network namespace
+  outside any K8s namespace). Closes issues #111, #112, #113, #114.
+
+### Changed
+- `infra/k3d/vault-cluster.yaml` — port mapping flipped from `8200:8200@server:0` (the #112 fix
+  superseded by #113→#114 diagnostic chain) to `8200:30200@loadbalancer` (plan
+  `k3d-host-published-vault-reach` D1, sponsor 2026-06-20). `--disable=servicelb` added (D3 —
+  Klipper off, the k3d serverlb `stream{}` is the sole publish path). Header comments rewritten
+  to document the proven mechanism + reference the SAN-clean property.
+- `infra/helmfile/vault.helmfile.yaml.gotmpl` `vault-local` block — OpenBao Service
+  `type: LoadBalancer` (the R5 of `dev-public-cross-cluster-secrets`, now superseded) flipped to
+  `type: NodePort` + `nodePort: 30200` FIXED (D4/D5 — deterministic across Cleanrooms).
+  `server.networkPolicy.enabled: true` flipped to `false` (F-1 absorption per T0.1 SPIKE LIVE
+  confirmation). PROD block at line 289 retains `networkPolicy.enabled: true` — prod ESO reaches
+  OpenBao via in-cluster Service, never via host-publish, so the chart policy is fine there.
+
 - Hermetic regression gate `TestRuntimeEnvCompleteness` in `infra/tests/charts/env_completeness_test.go`
   (T1.1 of plan `dev-public-env-config-completeness`). Locks the dev-public runtime env/secret surface:
   reads `infra/tests/fixtures/runtime-env-manifest.txt` (200 distinct runtime rows derived from the

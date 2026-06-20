@@ -165,17 +165,18 @@ releases:
       - server:
           dev:
             enabled: false  # NO MORE devMode — proper prod-posture
-          # R5 of plan dev-public-cross-cluster-secrets (issue #111+#112,
-          # sponsor 2026-06-19). Service.type=LoadBalancer triggers k3s
-          # servicelb (Klipper) DaemonSet which binds hostPort=Service.port
-          # (8200) on each node container. Combined with k3d port mapping
-          # `port: 8200:8200@server:0` (issue #112 fix in
-          # infra/k3d/vault-cluster.yaml), the chain is
-          # host:8200 → docker DNAT → server-0:8200 (Klipper) → openbao pod.
-          # The ClusterIP default would leave server-0:8200 unbound and
-          # break cross-cluster ESO reach.
+          # Plan k3d-host-published-vault-reach D1+D4 (sponsor 2026-06-20).
+          # Service is published to the host via the k3d serverlb (k3d-proxy
+          # nginx stream{} L4 TCP passthrough) at host:8200 → node:30200 →
+          # openbao pod, preserving TLS bytes intact (no L7 decode error 562).
+          # See `infra/k3d/vault-cluster.yaml` port mapping
+          # `8200:30200@loadbalancer` + `--disable=servicelb`. The nodePort
+          # is FIXED at 30200 (D4) so the k3d mapping's backend is
+          # deterministic across Cleanrooms; an auto-assigned 31xxx would
+          # silently break the serverlb chain (the #112 trap).
           service:
-            type: LoadBalancer
+            type: NodePort
+            nodePort: 30200
           standalone:
             enabled: true
             # HCL config: HTTPS listener (cert from openbao-tls Secret) +
@@ -225,9 +226,21 @@ releases:
             size: 10Gi
             mountPath: /openbao/data
             storageClass: null  # cluster default (local-path)
-          # NetworkPolicy ON even in standalone (validates policy templates)
+          # F-1 absorption (plan k3d-host-published-vault-reach T1.1,
+          # T0.1 SPIKE LIVE-confirmed 2026-06-20): chart-default NetworkPolicy
+          # `openbao` only allows ingress from `namespaceSelector: {}` —
+          # intra-cluster pod sources. The host-publish topology (serverlb
+          # publishes host:8200 → node:30200 NodePort → openbao pod) brings
+          # traffic from the host network namespace, OUTSIDE any K8s
+          # namespace; the chart policy drops it (connection RST mid TLS
+          # Client Hello). Disabling the chart policy is the canonical fix
+          # for vault-local (single-env scope; PRODUCTION block below at
+          # `eq .Environment.Name "prod"` KEEPS the policy enabled because
+          # prod ESO reaches OpenBao via in-cluster Service, never via
+          # host-publish). Rule 9 forbids forking the chart to add an
+          # explicit 0.0.0.0/0:8200 ingress rule.
           networkPolicy:
-            enabled: true
+            enabled: false
       {{- end }}
 
       # prod: file/raft storage + AWS KMS unseal — definido completamente abaixo
