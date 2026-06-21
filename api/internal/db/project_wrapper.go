@@ -175,12 +175,16 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 		if r.CreatedAt.Valid {
 			out.CreatedAt = r.CreatedAt.Time
 		}
-		// LastDeployAt is NULL when the project has zero builds — keep
-		// out.LastDeployAt as the zero time so `omitempty` JSON tag omits
-		// the field, and the dashboard's `p.last_deploy ? ... : '—'` guard
-		// renders the em-dash naturally.
+		// LastDeployAt is NULL when the project has zero builds. Pointer
+		// + omitempty means the field is OMITTED from the wire when
+		// absent — the dashboard's `p.last_deploy ?? '—'` guard then
+		// fires canonically. Previously a value-type `time.Time` zero
+		// serialized as `"0001-01-01T00:00:00Z"` (truthy in JS), which
+		// rendered "2,027 years ago" on Overview / project-detail hero
+		// (#118, qa-dogfood-cleanup-2026-06-21 T3.1).
 		if r.LastDeployAt.Valid {
-			out.LastDeployAt = r.LastDeployAt.Time
+			t := r.LastDeployAt.Time
+			out.LastDeployAt = &t
 		}
 		results = append(results, out)
 	}
