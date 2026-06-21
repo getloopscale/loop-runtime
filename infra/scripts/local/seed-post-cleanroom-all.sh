@@ -234,7 +234,13 @@ run_step "7b-seed-vault-role-id-sync" "bash $SCRIPT_DIR/seed-vault-role-id-sync.
 run_step "8-seed-loki-cross-cluster" "bash $SCRIPT_DIR/seed-loki-cross-cluster.sh $VERIFY_FLAG"
 
 # Step 9
-run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh"
+# #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
+# explicitly so any inherited `LOOPZERO_PLAN_TIER` env (operator shell
+# default, stale dev-credentials.json residue) cannot override the
+# canonical dev-public tier. QA dogfooding 2026-06-21 caught the
+# Scale page showing `starter` plan ceiling 2 even after the canonical
+# chain ran — root cause was the env-shadowing path.
+run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh --team"
 
 # Step 10 (NEW 2026-06-16) — admin-cli Hydra OAuth2 client.
 # Required for dogfood-login Suite 0 T5.4 (≥ 3 Hydra clients).

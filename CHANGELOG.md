@@ -96,6 +96,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
 
 ### Fixed
+- `qa-dogfood-cleanup-2026-06-21` — backend slice closing 5 of 11 QA-surfaced
+  defects from the 2026-06-21 dogfooding run (engine-side portion; dashboard
+  + CLI pieces ship in their own repos):
+    - (#118) `domain.ProjectSummary.LastDeployAt` switched from value-type
+      `time.Time` to pointer `*time.Time` so `json:",omitempty"` actually
+      omits the field for projects without builds — JS `??` guards now
+      fall through canonically (was rendering "2,027 years ago" on Overview).
+    - (#123) `infra/scripts/local/seed-post-cleanroom-all.sh` Step 9 passes
+      explicit `--team` flag to `seed-tenant-fixture-canonical.sh` so an
+      operator-shell `LOOPZERO_PLAN_TIER=starter` residue can no longer shadow
+      the canonical dev-public tier (ADR-Q7). Hermetic guard at
+      `infra/tests/charts/dev_public_team_tier_seed_test.go`.
+    - (#124) `pkg/domain.PermanentEnvs = []string{"production", "preview"}`
+      canonicalized as the SoT enum for permanent envs per project
+      (ADR-Q5). `api/internal/routes/projects.go` POST handler now seeds
+      BOTH at project.created in the canonical order (production fatal
+      on failure / preview tolerant per Vercel-style derivability).
+      3 new hermetic tests at `pkg/domain/constants_permanent_envs_test.go`.
+    - (#126 Phase A) `api/internal/audit/domain_events.go` ships the
+      closed-enum + 2-phase rollout scaffold (feature flag
+      `AUDIT_ENFORCE_DOMAIN_ENUM`, default OFF). Phase A WARN-only path
+      via `ValidateAction()` + `UnknownActionWarning()`; Phase B (reject
+      mode) flips after at least one release of WARN observation. 5
+      hermetic tests; canonical set covers project/repository/tenant/
+      secret/build/release/environment/domain/api_key domains.
+    - (#127 backend echo) `pkg/domain.DefaultPreviewEnv = "preview"` so
+      the canonical PaaS lexicon (preview + production) is enforced
+      cross-language alongside the dashboard env-terminology audit.
 - `infra/helmfile/scripts/generate-secrets.sh` — pin `kubectl --context` to
   `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"` via a `kubectl()` shell-function
   override that injects `--context="$KUBECTL_CONTEXT"` on every call (closes #115). All bare
