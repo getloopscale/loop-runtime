@@ -290,6 +290,14 @@ func registerProtectedRoutes(
 		if cfg.ProjectDeleter != nil {
 			projects.SetDeleter(cfg.ProjectDeleter)
 		}
+		// QA Run-3 #123: wire canonical tier resolver so Create can
+		// enforce plan caps and downstream Scale/Project surfaces see
+		// the right tier. Without this, scale.go:252-254 falls back
+		// to PlanTierStarter silently even when subscriptions.plan
+		// = 'team' active in DB.
+		if cfg.PlanTierStore != nil {
+			projects.SetPlanTierStore(cfg.PlanTierStore)
+		}
 		// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: auto-create
 		// `production` env on POST /api/v1/projects (ADR D4 — Vercel-style).
 		// nil-safe: when ProjectEnvEnsurer not wired, Create behaves

@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
 )
@@ -43,6 +44,14 @@ type Config struct {
 	ProjectStore       routes.ProjectStore
 	TenantCRMgr        routes.TenantCRManager
 	ProjectDeleter     routes.ProjectDeleter
+	// PlanTierStore wires the canonical tier resolver (subscriptions.plan
+	// active row → PlanTier enum per ADR D4 of plan
+	// 2026-06-15-code-review-49-findings-remediation). nil-safe — when
+	// nil, ProjectHandler/ScaleHandler fall back to PlanTierStarter
+	// silently (the historical behavior). QA Run-3 #123 closure
+	// requires this to be wired so admin@loopzero.example (team tier) is
+	// served correctly.
+	PlanTierStore pkgdomain.PlanTierStore
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4 (ADR D4):
 	// optional EnvironmentEnsurer wired into the project Create handler
 	// so every new project gets a `production` env auto-created. Reuses
