@@ -154,10 +154,13 @@ cloud-dev.loopzero.example {
     }
   }
 
-  reverse_proxy localhost:13002
-  encode gzip
-  request_body {
-    max_size 1MB
+  # Canonical surface is app-dev.loopzero.example as of 2026-06-22 per
+  # qa-dogfood-cleanup-2026-06-21 #128/#122 (QA walkthrough audit).
+  # Everything OTHER than the GitHub webhook redirects to the canonical
+  # host so external CLI consumers + doc bookmarks don't 404 silently.
+  # 301 permanent so browsers + the LoopZero CLI follow + update bookmarks.
+  handle {
+    redir https://app-dev.loopzero.example{uri} 301
   }
 }
 
