@@ -179,6 +179,15 @@ func buildServerConfig(
 		if orchDeps != nil && orchDeps.ScaleHandler != nil {
 			orchDeps.ScaleHandler.SetPlanTierStore(limitsStore)
 		}
+		// StatusHandler wiring — #142 / #123 canonical of
+		// qa-dogfood-cleanup-2026-06-21. GET /api/v1/projects/{name}/status
+		// now surfaces the resolved tenant tier so the dashboard Scale
+		// page can seed the slider ceiling pre-Apply (closes the gap
+		// where the prior /v1/billing seed depended on Known Gap #116
+		// cloud BFF billing read-side, which is 404).
+		if orchDeps != nil && orchDeps.StatusHandler != nil {
+			orchDeps.StatusHandler.SetPlanTierStore(limitsStore)
+		}
 		// ProjectHandler is constructed inline in router.go — surface
 		// the LimitsStore via server.Config.PlanTierStore so the router
 		// can wire it before registering /projects routes.

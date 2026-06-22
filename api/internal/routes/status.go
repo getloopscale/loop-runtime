@@ -5,12 +5,14 @@ package routes
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -79,6 +81,7 @@ type StatusHandler struct {
 	baseDomain      string
 	publicDomain    string // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
 	grafanaBaseURL  string // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
+	planTierStore   pkgdomain.PlanTierStore // #142 / #123 canonical — resolves tenant tier for dashboard pre-Apply slider ceiling (qa-dogfood-cleanup-2026-06-21). When nil, plan_tier echoes "starter" (matches pre-#142 fallback in ProjectHandler.Create + ScaleHandler.resolveTier).
 }
 
 // NewStatusHandler creates a new StatusHandler.
@@ -104,6 +107,16 @@ func NewStatusHandler(projects StatusProjectStore, builds StatusBuildStore, rele
 		publicDomain:   publicDomain,
 		grafanaBaseURL: grafanaBaseURL,
 	}
+}
+
+// SetPlanTierStore wires the PlanTierStore used by Get to resolve the
+// tenant's canonical plan tier (mirrors ProjectHandler.SetPlanTierStore +
+// ScaleHandler.SetPlanTierStore). Optional — handlers that don't set it
+// emit plan_tier="starter" (matching the pre-#142 fallback). #142 / #123
+// canonical of qa-dogfood-cleanup-2026-06-21. Wiring happens at server
+// composition in setup_server.go alongside ScaleHandler.SetPlanTierStore.
+func (h *StatusHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
+	h.planTierStore = s
 }
 
 // lastBuildResponse is the JSON representation of the last build.
@@ -179,6 +192,18 @@ type statusResponse struct {
 	// Order is deterministic (matches T0.2 eight-signals catalog). T1.1 of
 	// plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
 	PromQueryKeys []string `json:"prom_query_keys"`
+
+	// PlanTier is the resolved canonical plan tier for the tenant owning
+	// this project (free / pro / team / enterprise — values mirror the
+	// pkg/domain.PlanTier enum). Populated when StatusHandler.planTierStore
+	// is wired; falls back to "starter" when the store is nil OR when
+	// ResolvePlanTier returns ErrUnknown (matches the fallback contract
+	// in ProjectHandler.Create + ScaleHandler.resolveTier). Read by the
+	// dashboard `useProjectStatus` hook to seed the Scale page slider
+	// ceiling pre-Apply (closes #123 of qa-dogfood-cleanup-2026-06-21
+	// canonically — the prior /v1/billing seed depended on Known Gap
+	// #116 cloud BFF billing read-side, which is 404).
+	PlanTier string `json:"plan_tier,omitempty"`
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.
@@ -218,6 +243,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Project:     name,
 		Environment: env,
 		SyncStatus:  "unknown",
+		PlanTier:    h.resolveTier(r.Context(), uc.TenantID),
 	}
 
 	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, name, 50, 0)
@@ -331,6 +357,25 @@ func buildActiveReleaseResponse(release *StatusRelease) *activeReleaseResponse {
 		GitCommit: release.GitCommit,
 		CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+// resolveTier returns the canonical plan tier as a string for embedding in
+// statusResponse.PlanTier. Mirrors ScaleHandler.resolveTier — calls
+// pkgdomain.ResolvePlanTier when planTierStore is wired; falls back to
+// "starter" when the store is nil OR when ResolvePlanTier returns
+// ErrUnknown (matching the fallback contract elsewhere in this package).
+// #142 / #123 canonical of qa-dogfood-cleanup-2026-06-21.
+func (h *StatusHandler) resolveTier(ctx context.Context, tenantID string) string {
+	if h.planTierStore == nil {
+		return string(pkgdomain.PlanTierStarter)
+	}
+	resolved, perr := pkgdomain.ResolvePlanTier(ctx, h.planTierStore, tenantID)
+	if perr != nil {
+		slog.Warn("status: plan tier resolution failed — falling back to starter (UX hint only; engine enforcement still server-authoritative via /scale)",
+			"tenant_id", tenantID, "error", perr)
+		return string(pkgdomain.PlanTierStarter)
+	}
+	return string(resolved)
 }
 
 // findScalingForEnv extracts scaling info from the last build's app spec

@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- (#142 / #123) `GET /api/v1/projects/{name}/status` response now carries
+  `plan_tier` — the resolved canonical tenant tier (free / pro / team /
+  enterprise, mirrors `pkg/domain.PlanTier`). Sourced via the same
+  `PlanTierStore.GetTenantPlan` that `ScaleHandler.resolveTier` uses for
+  enforcement, so the dashboard slider ceiling and the engine's `POST
+  /scale` cap are now read from a single canonical SoT. Wired in
+  `api/cmd/setup_server.go` via `StatusHandler.SetPlanTierStore(limitsStore)`
+  alongside the existing `ScaleHandler.SetPlanTierStore` call. Optional
+  field (omitempty) — clients fall back to `'starter'` when older engines
+  omit it. Closes `#123` of `qa-dogfood-cleanup-2026-06-21` canonically
+  (replaces the stopgap that depended on Known Gap #116 cloud BFF billing
+  read-side, which is 404).
 - `infra/tests/charts/generate_secrets_context_pin_test.go` — hermetic Go regression-lock for
   the `infra/helmfile/scripts/generate-secrets.sh` `--context` pin (closes #115). Pre-fix the
   script did not pin `kubectl --context`, so any active context residue (e.g. `k3d-loopzero-vault`
