@@ -3,8 +3,9 @@
 # Chart defaults canonical (DOCR + dev tag + IfNotPresent + HA).
 
 global:
+  registry: ghcr.io/getloopscale
   imagePullSecrets:
-    - name: do-registry
+    - name: ghcr-pull
 
 image:
   pullPolicy: Always

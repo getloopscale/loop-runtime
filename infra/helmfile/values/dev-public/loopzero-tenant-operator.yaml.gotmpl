@@ -8,8 +8,9 @@
 #       the env uses selfsigned-issuer (declared in environments/dev-public.yaml).
 
 global:
+  registry: ghcr.io/getloopscale
   imagePullSecrets:
-    - name: do-registry
+    - name: ghcr-pull
 
 image:
   # Always so each rollout pulls the latest :dev push from DOCR.
