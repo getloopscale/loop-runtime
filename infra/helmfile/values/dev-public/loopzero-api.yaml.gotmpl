@@ -7,26 +7,28 @@
 # and hardcodes `.Values.image.tag: latest` as default — so we must
 # override both explicitly here.
 
-# CANONICAL 2026-06-19 (issue #100 Gap B of cleanroom-mandate-run-2026-06-19):
-# loopzero-api image now uses canonical DOCR `:dev` tag built+pushed by
-# `task images:push:platform:dev-public` (taskfiles/infra.yml). The
-# 2026-06-15 `multi-aud-fix` workaround tag against
-# k3d-loopzero-registry:5000 was a one-off rebuild after the multi-
-# audience JWT validator shipped in api/cmd/setup_auth.go:69
-# (loopzerojwt.NewValidatorWithAudiences). The change has been in develop
-# + DOCR `:dev` builds ever since, so the workaround is obsolete +
-# every Cleanroom destroyed k3d-loopzero-registry, causing dev-public
-# loopzero-api pods to ImagePullBackOff for a tag that no longer existed.
-# `${LOOPZERO_DEV_IMAGE_TAG:-dev}` matches the canonical TAG variable in
-# the build task so a future renaming stays consistent.
+# CANONICAL 2026-06-22 (closes #142 LIVE deployment gap discovered while
+# shipping #123 canonical fix qa-dogfood-cleanup-2026-06-21): loopzero-api
+# image is now published to GHCR by the AM6 reusable workflow
+# (`loopzero/.github/workflows/build-publish.yml`) on every push to develop
+# — same channel as loopzero-cloud (`infra/helmfile/values/dev-public/
+# loopzero-cloud.yaml.gotmpl:14-17` per issue #104 Architecture A). The
+# prior `registry.digitalocean.com/loopzero-system/loopzero-api:dev` tag
+# required a local `task images:push:platform:dev-public` step that
+# was easy to forget — every code push had to be paired with a manual
+# DOCR push, which violated [[feedback_close_issue_update_live_dev_public_2026_06_22]]
+# (push must auto-refresh dev-public). GHCR `:develop` (rolling) is
+# now the canonical channel: CI builds + pushes on every push, helmfile
+# `pullPolicy: Always` picks up the new digest on `kubectl rollout
+# restart`. `ghcr-pull` imagePullSecret is provisioned from
+# ~/.loopzero/ghcr-pull-token.txt by `task images:ghcr:pullsecret`.
 image:
-  repository: registry.digitalocean.com/loopzero-system/loopzero-api
-  tag: "{{ env "LOOPZERO_DEV_IMAGE_TAG" | default "dev" }}"
-  # Always so each rollout pulls the latest :dev push from DOCR.
+  repository: ghcr.io/getloopscale/loopzero-api
+  tag: develop
   pullPolicy: Always
 
 imagePullSecrets:
-  - name: do-registry
+  - name: ghcr-pull
 
 # k3d-loopzero-mgmt LB has host port mapping 30001 → 13001. Exposing loopzero-api
 # as NodePort 30001 lets `curl localhost:13001/api/...` hit the cluster
