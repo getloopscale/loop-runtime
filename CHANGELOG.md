@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+### Notes
+
+## [0.25.0] - 2026-06-23
+
+
+### Added
+- M3 `/verify` rate-limit middleware (plan `m3-verify-rate-limit-middleware` v1.1 SHIPPABLE 90.4; roadmap M3 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`). Implements the J11D7 LOCKED ADR (1 reverify per 30 seconds per (tenant, domain)) as a chi-compatible middleware on `POST /api/v1/domains/{domain}/verify`. Returns HTTP 429 `RATE_LIMITED` with `Retry-After: 30` header on excess. Per ADR D1 composition: `VerifyRateLimiter` wraps existing `middleware.RateLimiter` (no new limiter type). Per ADR D3 fail-open: missing UserContext / empty TenantID / missing chi `{domain}` param passes through to downstream auth+validation. New Prometheus counter `loopzero_domain_verify_rate_limited_total{tenant}` per Wiring triad. Wired in `api/cmd/main.go` + `api/internal/server/server.go` + `api/internal/server/router.go`. 7 tests PASS race-clean (5 unit middleware + 2 integration chi+real DomainHandler):
+  - `api/internal/middleware/verify_rate_limit.go` (NEW) + `verify_rate_limit_test.go` (NEW).
+  - `api/internal/routes/domains_verify_rate_limit_test.go` (NEW): integration test mirroring router wiring with real `DomainHandler`.
+  - EC-4 absorption: empty TenantID guard prevents cross-tenant bucket collision via `":domain"` key.
+  - EC-5 absorption: every test uses `defer vrl.Stop()` to prevent cleanup-goroutine leak under `-race` / `goleak`.
+
 - M2 promote 11 canonical seeds (plan `m2-promote-11-canonical-seeds` v1.1 SHIPPABLE 95.2; roadmap M2 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`):
   - 4 NEW canonical post-Cleanroom seeds wired in `seed-post-cleanroom-all.sh` (Steps 12-15, append-only per ADR D2):
     - `infra/scripts/local/seed-chaos-mesh-canonical.sh` (Step 12, mgmt-only): chaos-mesh helm install with values-k3d.yaml socketPath override per `CLAUDE.md § Known issues`.

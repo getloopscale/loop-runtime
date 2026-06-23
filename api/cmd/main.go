@@ -348,6 +348,16 @@ func main() {
 		healthServices, authDeps.TokenValidator, rateLimiter,
 		shutdownCtx, shutdownCancel, logger)
 	srvCfg.IPRateLimit = ipRateLimiter
+
+	// M3 of qa-readiness-roadmap-2026-06-23 — J11D7 LOCKED ADR:
+	// per-(tenant, domain) rate-limit for POST /api/v1/domains/{domain}/verify
+	// (1 reverify per 30 seconds). Composition over duplication: VerifyRateLimiter
+	// wraps RateLimiter internally — see plan m3-verify-rate-limit-middleware
+	// ADR D1.
+	verifyRateLimiter := middleware.NewVerifyRateLimiter(1, 30*time.Second)
+	defer verifyRateLimiter.Stop()
+	srvCfg.VerifyRateLimiter = verifyRateLimiter
+
 	// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): thread
 	// the OpenBao transit client into router so SecretHandler.Bulk encrypts
 	// every entry.Value via Encrypt BEFORE store.Set. The store ALSO

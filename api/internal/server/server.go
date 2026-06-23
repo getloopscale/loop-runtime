@@ -90,6 +90,10 @@ type Config struct {
 	// When non-nil, mounted as the FIRST middleware so brute-force attempts
 	// on /api/v1/auth/* are dropped at the edge.
 	IPRateLimit        *middleware.IPRateLimiter
+	// VerifyRateLimiter is the per-(tenant, domain) limiter for
+	// POST /api/v1/domains/{domain}/verify per J11D7 LOCKED ADR
+	// (1 reverify per 30 seconds per (tenant, domain)).
+	VerifyRateLimiter  *middleware.VerifyRateLimiter
 	// HTTP server timeouts (configurable via env vars)
 	ReadHeaderTimeout  time.Duration
 	ReadTimeout        time.Duration

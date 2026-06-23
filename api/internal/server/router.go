@@ -506,7 +506,14 @@ func registerProtectedRoutes(
 		r.Get("/api/v1/domains", cfg.DomainHandler.List)
 		r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
 		r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
-		r.With(rateLimitMiddlewares...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
+		// J11D7 LOCKED ADR: /verify uses per-(tenant, domain) limiter (1 req/30s)
+		// instead of the tenant-wide 60/min limiter. Falls back to the tenant
+		// limiter when VerifyRateLimiter is not wired (fail-open per ADR D3).
+		verifyMiddlewares := rateLimitMiddlewares
+		if cfg.VerifyRateLimiter != nil {
+			verifyMiddlewares = append([]func(http.Handler) http.Handler{cfg.VerifyRateLimiter.Middleware()}, rateLimitMiddlewares...)
+		}
+		r.With(verifyMiddlewares...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 	}
 
