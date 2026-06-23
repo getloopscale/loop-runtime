@@ -17,6 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Notes
 
+## [0.27.1] - 2026-06-23
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+### Notes
+- **M6 ✅ COMPLETED** — Backlog closure formalization (plan `m6-backlog-closure-formalization` v1.0 SHIPPABLE; ADR `2026-06-23-backlog-closure-milestone`; roadmap M6 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md` transitions from `PENDING` to `✅ COMPLETED`). All 3 backlog sub-tasks substantively closed in prior cycles per Unbreakable Rule 3 (extreme honesty) + Unbreakable Rule 1 (95% confidence): (a) **#87** standalone-multi shortcut paragraph already removed from `.claude/rules/cleanroom-up-live-test-mandate.md` (PR #103 / ADR 2026-06-20-dev-public-vault-automated-init era); (b) **#88** cross-cluster Jeito A wiring canonical-closed via `dev-public-cross-cluster-secrets` plan v1.1 (4-cycle vault-reach epic; GH #111 closed 2026-06-21 with sponsor JUNTOS verbatim *"Login funcionou!"*) with hermetic guard `infra/tests/charts/cross_cluster_secrets_test.go` (lines 103-104 + 124-125) locking the EC-1/EC-2 contract; (c) **#138** Stripe webhook secret resolved via M5 ENGINEERING_COMPLETED (v0.27.0 release) — `whsec_*` test mode preserved per sponsor implicit acceptance; SoT shape hermetic-locked by `infra/tests/charts/stripe_sot_shape_test.go`. **Backlog-Closure Milestone Pattern** formalized via ADR — 5-step canonical: (1) honest audit per sub-task with concrete file:line/SHA/GH-issue evidence; (2) plan + ADR + run-file triple; (3) roadmap status flip with attribution; (4) CHANGELOG `[Unreleased] § Notes` entry; (5) single atomic commit + standard release. Tier T0 documentation-only (zero production code mutation; verified by `git diff --stat`). Future backlog milestones inherit this pattern (sibling of M5's Tier N/A data-only milestone closure pattern, distinct semantics). No Cleanroom + LIVE chain (per ADR D2 of plan — Tier T0 doc-only has nothing LIVE to validate). NOT BLOCKING for M7.
+
 ## [0.27.0] - 2026-06-23
 
 ### Added
