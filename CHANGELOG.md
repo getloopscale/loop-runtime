@@ -17,6 +17,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Notes
 
+## [0.28.0] - 2026-06-23
+
+### Added
+- **M7 🟢 PREPARATION_COMPLETED** — Cleanroom validation + Sponsor JUNTOS walkthrough engineering preparation slice (plan `m7-cleanroom-validation-readiness` v1.0 SHIPPABLE; ADR `2026-06-23-validation-milestone-sponsor-hard-stop`; roadmap M7 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md` transitions from `PENDING` to `🟢 PREPARATION_COMPLETED (sponsor JUNTOS pending)`). Engineering-side artifacts shipped:
+  - **Hermetic pre-flight gate** `infra/tests/charts/m7_preflight_test.go` (7 subtests) — asserts M1-M6 plans + ADRs + chain scripts + sibling hermetic guards (`stripe_sot_shape_test.go` + `cross_cluster_secrets_test.go`) + mandate `cleanroom-up-live-test-mandate.md` INQUEBRÁVEL + qa-readiness-roadmap M1-M6 canonical states (✅ COMPLETED / 🟢 ENGINEERING_COMPLETED) + M7 preparation artifacts all resolve on disk BEFORE operator starts the ~3-4h LIVE chain. Defense-in-depth: `TestM7Preflight_MandateExists` asserts INQUEBRÁVEL marker present (catches mandate-weakening regressions). Wired into existing `cd infra/tests && go test ./charts/` umbrella via `task quality:gates`.
+  - **Operator runbook** `docs/operations/m7-cleanroom-validation-runbook.md` — 7-step playbook with 4 HARD STOP markers (Step 0 pre-flight gate / Step 2 `task doctor` PASS=38+/FAIL=0 / Step 3 seeds `--verify` exit 0 / Step 7 sponsor verbatim "Funcionou!"). Mirrors `cleanroom-up-live-test-mandate.md § The Rule` 6-step chain expanded with Step 0 pre-flight + Step 6.5 baseline capture + Step 8 post-execution closure.
+  - **Baseline template** `docs/operations/baselines/M7-template-qa-readiness-complete.md` — pre-filled 4-layer steady-state structure (Layer 1 code state / Layer 2 runtime state Helm+K8s / Layer 3 config state / Layer 4 LIVE functional probes) with `<TODO operator>` markers + cross-references to prior baselines per `.claude/rules/steady-state-baseline.md § What to capture`.
+  - **GH issue template** `.github/ISSUE_TEMPLATE/qa-readiness.md` — uniform post-execution closure issue with `labels: qa-readiness` frontmatter + 7 chain step result rows + sponsor verbatim quote section + per-journey walkthrough notes + release artifacts cross-references.
+  - **ADR (NEW)** `.claude/knowledge-base/decisions/2026-06-23-validation-milestone-sponsor-hard-stop.md` — third sibling in the 2026-06-23 milestone-closure pattern family (after M5 Tier N/A + M6 backlog-closure). Formalizes the **Validation milestone with sponsor HARD STOP** canonical pattern (5 steps: engineering preparation → roadmap marker 🟢 PREPARATION_COMPLETED → sponsor scheduling → LIVE execution → final ✅ COMPLETED flip in subsequent release + run-file update). Bounded definition: only applies when DoD has sponsor JUNTOS OR LIVE chain. Rejected 7 alternatives including "fabricate LIVE results" (violates Unbreakable Rule 3 + mandate INQUEBRÁVEL) and "merge preparation + LIVE execution into one cycle" (wall-clock too long, compaction risk, preparation needs merge before sponsor schedules).
+  - **Run-file** `.claude/knowledge-base/roadmap-runs/M7-2026-06-23.md` — `status: preparation_completed` (NOT `completed`) per Unbreakable Rule 3 + ADR § Decision Step 2; documents engineering artifacts + LIVE chain step table + post-LIVE closure placeholder fields (`sponsor_juntos_completed_at`, `sponsor_verbatim`, `live_chain_executed_at`, `checkbox_flipped_at`, `flip_commit_sha`, `final_closure_release`).
+  - Roadmap M7 section header annotated `🟢 PREPARATION_COMPLETED (sponsor JUNTOS pending)`; per-DoD `[ ]` checkboxes intentionally UNCHANGED (flip to `[x]` post sponsor verbatim "Funcionou!" in a future release). M5 (🟢 ENGINEERING_COMPLETED) + M6 (✅ COMPLETED) unchanged.
+  - Tier T1 (test-only hermetic gate + doc-only runbook/template/ADR/run-file) — zero production code mutation; sibling hermetic suite unchanged. Per ADR D2: NO Cleanroom + UP + seeds + DOGFOOD + LIVE chain runs during this preparation slice; the LIVE chain IS the future M7 execution delivery (sponsor-scheduled). Single-flip invariant honored: 0 standard `[ ]` → `[x]` transitions this release; M7's status annotation is NOT a checkbox flip. NOT BLOCKING for other milestones (M7 doesn't block downstream work).
+
+### Changed
+
+### Fixed
+
+### Security
+
+### Notes
+
 ## [0.27.1] - 2026-06-23
 
 ### Added
