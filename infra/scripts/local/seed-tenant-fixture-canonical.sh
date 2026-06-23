@@ -104,4 +104,99 @@ else
   log "Layer 2 SKIP: --skip-github"
 fi
 
+# Layer 3 (M2 T2.2 2026-06-23) — Tenant CR + AppProject canonical state
+# Per qa-readiness-roadmap M2 seeds #6 + #7 + ADR D3 (unified in this script).
+#
+# EC-4 absorption (v1.1): Tenant CR schema per operators/api/v1/tenant_types.go.
+# PlanTier enum (CRD admission validation): starter / growth / enterprise.
+# Mapping: starter→starter, pro→growth, team→enterprise (canonical per CLAUDE.md
+# § Pricing tier→PlanTier).
+#
+# Required fields:
+#   spec.displayName  (string, MinLength=1, MaxLength=128, Pattern ^[a-zA-Z0-9])
+#   spec.plan         (PlanTier enum)
+#   spec.environments ([], MinItems=0 — auto-populated by EnvironmentEnsurer)
+#
+# Flags: --skip-cr / --skip-appproject for partial reruns.
+SKIP_CR=0
+SKIP_APPPROJECT=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-cr) SKIP_CR=1 ;;
+    --skip-appproject) SKIP_APPPROJECT=1 ;;
+  esac
+done
+
+# Map PLAN_TIER (script flag) to canonical PlanTier enum (CRD admission)
+case "$PLAN_TIER" in
+  starter) CR_PLAN="starter" ;;
+  pro) CR_PLAN="growth" ;;
+  team) CR_PLAN="enterprise" ;;
+  *) CR_PLAN="starter" ;;
+esac
+
+# Derive canonical tenant_id + display_name
+TENANT_ID_RESOLVED="${TENANT_ID:-3c198c99-0000-0000-0000-000000000000}"
+DISPLAY_NAME="${LOOPZERO_TENANT_DISPLAY_NAME:-LoopZero Dev Tenant}"
+
+ensure_tenant_cr() {
+  if [[ "$SKIP_CR" == "1" ]]; then
+    log "Layer 3a SKIP: --skip-cr"
+    return 0
+  fi
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "DRY: kubectl apply Tenant CR tenant-${TENANT_ID_RESOLVED} plan=${CR_PLAN}"
+    return 0
+  fi
+  cat <<TENANT_YAML | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null
+apiVersion: loopzero.loopzero.example/v1
+kind: Tenant
+metadata:
+  name: tenant-${TENANT_ID_RESOLVED}
+  namespace: ${LOOPZERO_NAMESPACE}
+spec:
+  displayName: "${DISPLAY_NAME}"
+  plan: ${CR_PLAN}
+  environments: []
+TENANT_YAML
+  log "Layer 3a: Tenant CR tenant-${TENANT_ID_RESOLVED} applied (plan=${CR_PLAN})"
+}
+
+ensure_appproject() {
+  if [[ "$SKIP_APPPROJECT" == "1" ]]; then
+    log "Layer 3b SKIP: --skip-appproject"
+    return 0
+  fi
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "DRY: kubectl apply AppProject loopzero-${TENANT_ID_RESOLVED}"
+    return 0
+  fi
+  cat <<APPPROJ_YAML | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: loopzero-${TENANT_ID_RESOLVED}
+  namespace: argocd
+spec:
+  description: "Canonical AppProject for tenant ${TENANT_ID_RESOLVED}"
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: "loopzero-${TENANT_ID_RESOLVED}-*"
+      server: "*"
+    - namespace: "loopzero-system"
+      server: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+APPPROJ_YAML
+  log "Layer 3b: ArgoCD AppProject loopzero-${TENANT_ID_RESOLVED} applied"
+}
+
+ensure_tenant_cr
+ensure_appproject
+
 log "DONE — tenant fixture canonical state seeded"

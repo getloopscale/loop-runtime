@@ -262,6 +262,27 @@ else
   skip_step "11-connect-canonical-fixture" "script not yet present"
 fi
 
+# Step 12 (NEW M2 2026-06-23) — chaos-mesh canonical (mgmt-only, universal)
+run_step "12-seed-chaos-mesh-canonical" "bash $SCRIPT_DIR/seed-chaos-mesh-canonical.sh $VERIFY_FLAG"
+
+# Step 13 (NEW M2 2026-06-23) — ArgoCD admin token
+# EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD não existe em outros envs
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" || "${LOOPZERO_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
+  run_step "13-seed-argocd-token-canonical" "bash $SCRIPT_DIR/seed-argocd-token-canonical.sh $VERIFY_FLAG"
+else
+  skip_step "13-seed-argocd-token-canonical" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
+
+# Step 14 (NEW M2 2026-06-23) — OPENBAO_VAULT_ADDR cross-cluster (dev-public only — Jeito A)
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  run_step "14-seed-vault-cross-cluster-addr" "bash $SCRIPT_DIR/seed-vault-cross-cluster-addr.sh $VERIFY_FLAG"
+else
+  skip_step "14-seed-vault-cross-cluster-addr" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
+
+# Step 15 (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
+run_step "15-seed-stripe-secret-canonical" "bash $SCRIPT_DIR/seed-stripe-secret-canonical.sh $VERIFY_FLAG"
+
 # Summary
 log ""
 log "=== canonical chain summary ==="

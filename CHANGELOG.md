@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- M2 promote 11 canonical seeds (plan `m2-promote-11-canonical-seeds` v1.1 SHIPPABLE 95.2; roadmap M2 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`):
+  - 4 NEW canonical post-Cleanroom seeds wired in `seed-post-cleanroom-all.sh` (Steps 12-15, append-only per ADR D2):
+    - `infra/scripts/local/seed-chaos-mesh-canonical.sh` (Step 12, mgmt-only): chaos-mesh helm install with values-k3d.yaml socketPath override per `CLAUDE.md § Known issues`.
+    - `infra/scripts/local/seed-argocd-token-canonical.sh` (Step 13, env-gated dev-public/standalone-multi): ArgoCD admin token mint via REST + sync into `loopzero-system/loopzero-api-tokens.argocd-token` consumed by release_convergence_loop.
+    - `infra/scripts/local/seed-vault-cross-cluster-addr.sh` (Step 14, dev-public only): OPENBAO_VAULT_ADDR cross-cluster wiring (k3d-loopzero-vault NodePort → mgmt loopzero-api env). EC-1 absorbed `.State.Running` pre-check; EC-2 absorbed rollout-pending guard before set-env.
+    - `infra/scripts/local/seed-stripe-secret-canonical.sh` (Step 15): loopzero-stripe-webhook K8s Secret materialization from `~/.loopzero/dev-credentials.json`. Graceful SKIP semantic on placeholder/sponsor-blocked M5.
+  - 4 NEW hermetic guard tests CI-wired in `task quality:gates`:
+    - `infra/tests/check-seed-chaos-mesh-canonical-syntax_test.sh` (14 assertions)
+    - `infra/tests/check-seed-argocd-token-canonical-syntax_test.sh` (14 assertions; EC-6 PF_PID absorption)
+    - `infra/tests/check-seed-vault-cross-cluster-addr-syntax_test.sh` (14 assertions; EC-1/EC-2 absorption)
+    - `infra/tests/check-seed-stripe-secret-canonical-syntax_test.sh` (13 assertions; EC-8 SKIP graceful)
+
+### Changed
+- `infra/scripts/local/seed-gitea-token-canonical.sh`: ensures Gitea organization `loopzero` exists before token mint (Layer 1b). Idempotent (GET /api/v1/orgs/loopzero → 200 no-op OR 404 → POST /api/v1/orgs). Closes M2 seed #3 (gitops push 404 trap when org absent).
+- `infra/scripts/local/seed-tenant-fixture-canonical.sh`: adds Layer 3a (Tenant CR `loopzero.loopzero.example/v1`) + Layer 3b (ArgoCD AppProject) canonical seed per ADR D3 unified design. EC-4 absorption: schema fields documented inline (displayName MinLength=1 MaxLength=128 Pattern + plan PlanTier enum starter/growth/enterprise). PlanTier mapping: starter→starter, pro→growth, team→enterprise. New flags `--skip-cr` / `--skip-appproject` for partial reruns.
+- `infra/scripts/local/secrets-seed-dev.sh`: adds Path 2b dedicated `kv/loopzero/dev/cloud/secrets/stripe-webhook` whsec write (canonical ESO ExternalSecret pattern: 1 kv path → 1 K8s Secret consumer).
+
+### Notes
+- Per ADR D1 carve-out: seed #11 of M2 roadmap (engine fix `release_convergence_loop.go`) is EXCLUDED from M2 scope — Go service code is T2-engine separate governance (per `pre-release-governance.md § Automatic T2/T3 Triggers`). Tracked as M3+ follow-up. Until then, releases stuck in `SYNC_FAILED` require operator manual `UPDATE releases SET status='ACTIVE'` workaround (also documented in M1 ADR D3 carve-out from v0.23.0).
+
+### Added
 - M1 commit canonical 30 fixes (plan `m1-commit-canonical-30-fixes` v1.2 SHIPPABLE 96.4; roadmap `qa-readiness-roadmap-2026-06-23.md`): 4 hermetic guard tests CI-wired in `task quality:gates`:
   - `infra/tests/check-no-cloud-dev-default_test.sh` — regression guard rejecting `${VAR:-https://cloud-dev.loopzero.example}` defaults in test/seed scripts (Caddy 301 trap post commit `ee77b8da`); webhook handler exception `/api/v1/webhooks/github` honored per EC-1 absorption.
   - `infra/tests/check-archive-script-repo-root_test.sh` — regression guard requiring 4-dirs-up REPO_ROOT in `archive/canonical-tests-v1/scripts/local/` (post-quarantine commit `289cf9d6` added one extra directory level).

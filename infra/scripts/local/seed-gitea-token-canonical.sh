@@ -81,6 +81,34 @@ PROBE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u "$USER:$PW" "http://local
 [[ "$PROBE_CODE" == "200" ]] || fail "Layer 1: gitea-admin credentials reject HTTP $PROBE_CODE (Gitea may not be Ready)"
 log "Layer 1: canonical credentials verified (user=$USER, HTTP $PROBE_CODE)"
 
+# Layer 1b (M2 T2.1 2026-06-23) — ensure Gitea org `loopzero` exists
+# Idempotent: GET /api/v1/orgs/loopzero → 200 (exists, no-op) OR 404 → POST /api/v1/orgs (create)
+# Per qa-readiness-roadmap M2 seed #3 + transcript: gitops push 404 when org `loopzero`
+# absent → loopzero-api fails to create repo `loopzero/<tenant>-<env>` for tenant provisioning.
+ensure_gitea_org() {
+  local org_code
+  org_code=$(curl -s -o /dev/null -w "%{http_code}" -u "$USER:$PW" "http://localhost:${GITEA_PF_PORT}/api/v1/orgs/loopzero" 2>/dev/null || echo "000")
+  if [[ "$org_code" == "200" ]]; then
+    log "Layer 1b: Gitea org 'loopzero' already exists"
+    return 0
+  fi
+  if [[ "$org_code" == "404" ]]; then
+    local create_code
+    create_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -u "$USER:$PW" \
+      -H "Content-Type: application/json" \
+      -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' \
+      "http://localhost:${GITEA_PF_PORT}/api/v1/orgs" || echo "000")
+    if [[ "$create_code" == "201" ]]; then
+      log "Layer 1b: created Gitea org 'loopzero'"
+    else
+      fail "Layer 1b: org create returned HTTP $create_code (expected 201)"
+    fi
+    return 0
+  fi
+  fail "Layer 1b: GET orgs/loopzero returned HTTP $org_code (expected 200|404)"
+}
+ensure_gitea_org
+
 # Layer 2 — delete + mint
 EXISTING_ID=$(curl -fsS -u "$USER:$PW" "http://localhost:${GITEA_PF_PORT}/api/v1/users/$USER/tokens" 2>/dev/null \
   | python3 -c "import json,sys
