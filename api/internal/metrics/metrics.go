@@ -765,4 +765,14 @@ var (
 		Name: "loopzero_audit_log_pruner_fail_total",
 		Help: "audit_log pruner run failures (per batch).",
 	})
+
+	// DomainVerifyRateLimitedTotal counts POST /api/v1/domains/{domain}/verify
+	// requests rejected by the per-(tenant, domain) rate limiter wired in
+	// m3-verify-rate-limit-middleware (J11D7 LOCKED ADR: 1 request / 30s).
+	// Label cardinality bounded by tenant count (acceptable per existing
+	// metrics.go conventions; revisit at >10k tenants).
+	DomainVerifyRateLimitedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_domain_verify_rate_limited_total",
+		Help: "Total POST /verify requests rejected by the per-(tenant, domain) rate limiter.",
+	}, []string{"tenant"})
 )
