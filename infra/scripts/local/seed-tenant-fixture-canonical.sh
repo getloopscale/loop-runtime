@@ -158,7 +158,10 @@ spec:
   cellID: cell-default
   displayName: "${DISPLAY_NAME}"
   plan: ${CR_PLAN}
-  environments: []
+  environments:
+    - cluster: workload
+      name: production
+      project: teste
   gitops:
     branch: main
     repoName: ${TENANT_ID_RESOLVED}-gitops

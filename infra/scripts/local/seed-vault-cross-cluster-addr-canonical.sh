@@ -57,7 +57,7 @@ if [[ -z "$SERVERLB_IP" ]]; then
   exit 1
 fi
 
-VAULT_ADDR="http://${SERVERLB_IP}:${NODE_PORT}"
+VAULT_ADDR="https://${SERVERLB_IP}:${NODE_PORT}"
 log "discovered cross-cluster VAULT_ADDR: $VAULT_ADDR"
 
 if [[ "$DRY_RUN" == "1" ]]; then
