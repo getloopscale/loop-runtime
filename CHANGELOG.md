@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+### Notes
+
+## [0.28.0] - 2026-06-23
+
+### Added
 - **M7 🟢 PREPARATION_COMPLETED** — Cleanroom validation + Sponsor JUNTOS walkthrough engineering preparation slice (plan `m7-cleanroom-validation-readiness` v1.0 SHIPPABLE; ADR `2026-06-23-validation-milestone-sponsor-hard-stop`; roadmap M7 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md` transitions from `PENDING` to `🟢 PREPARATION_COMPLETED (sponsor JUNTOS pending)`). Engineering-side artifacts shipped:
   - **Hermetic pre-flight gate** `infra/tests/charts/m7_preflight_test.go` (7 subtests) — asserts M1-M6 plans + ADRs + chain scripts + sibling hermetic guards (`stripe_sot_shape_test.go` + `cross_cluster_secrets_test.go`) + mandate `cleanroom-up-live-test-mandate.md` INQUEBRÁVEL + qa-readiness-roadmap M1-M6 canonical states (✅ COMPLETED / 🟢 ENGINEERING_COMPLETED) + M7 preparation artifacts all resolve on disk BEFORE operator starts the ~3-4h LIVE chain. Defense-in-depth: `TestM7Preflight_MandateExists` asserts INQUEBRÁVEL marker present (catches mandate-weakening regressions). Wired into existing `cd infra/tests && go test ./charts/` umbrella via `task quality:gates`.
   - **Operator runbook** `docs/operations/m7-cleanroom-validation-runbook.md` — 7-step playbook with 4 HARD STOP markers (Step 0 pre-flight gate / Step 2 `task doctor` PASS=38+/FAIL=0 / Step 3 seeds `--verify` exit 0 / Step 7 sponsor verbatim "Funcionou!"). Mirrors `cleanroom-up-live-test-mandate.md § The Rule` 6-step chain expanded with Step 0 pre-flight + Step 6.5 baseline capture + Step 8 post-execution closure.
