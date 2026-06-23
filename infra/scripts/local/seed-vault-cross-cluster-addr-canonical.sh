@@ -48,7 +48,7 @@ if [[ -z "$NODE_PORT" ]]; then
 fi
 
 # EC-1 absorption (v1.1): distinguish "container not running" from "container exists but IP not assigned"
-docker inspect k3d-loopzero-vault-serverlb --format '{{.State.Running}}' 2>/dev/null | grep -q true || { log "FAIL — k3d-loopzero-vault-serverlb container not running (run task k3d:vault:create first)"; exit 1; }
+docker inspect k3d-loopzero-vault-serverlb --format '{{.State.Running}}' 2>/dev/null | grep -qx true || { log "FAIL — k3d-loopzero-vault-serverlb container not running (run task k3d:vault:create first)"; exit 1; }
 
 # Now safe to extract IP — container is Running
 SERVERLB_IP=$(docker inspect k3d-loopzero-vault-serverlb --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null || echo "")

@@ -56,10 +56,12 @@ fi
 kubectl --context "$MGMT_CONTEXT" -n argocd port-forward svc/argocd-server 14444:443 >/dev/null 2>&1 &
 PF_PID=$!
 trap "kill $PF_PID 2>/dev/null || true" EXIT INT TERM
-sleep 3
 
 # Step 1: login → session token
-SESSION=$(curl -ks "https://localhost:14444/api/v1/session" \
+# Per /review TEST-002: replace sleep 3 with curl --retry loop for port-forward readiness.
+# curl --fail returns non-zero on HTTP 4xx/5xx (per /review TEST-003 EC-8 curl status check).
+SESSION=$(curl -ks --fail --retry 10 --retry-connrefused --retry-delay 1 \
+  "https://localhost:14444/api/v1/session" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"admin\",\"password\":\"$PW\"}" \
   | python3 -c 'import sys, json; print(json.load(sys.stdin).get("token", ""))')
@@ -69,7 +71,8 @@ if [[ -z "$SESSION" ]]; then
 fi
 
 # Step 2: generate account token (account=loopzero-api per canonical contract)
-TOKEN=$(curl -ks -X POST "https://localhost:14444/api/v1/account/loopzero-api/token" \
+# curl --fail returns non-zero on HTTP 4xx/5xx (EC-8 absorption).
+TOKEN=$(curl -ks --fail -X POST "https://localhost:14444/api/v1/account/loopzero-api/token" \
   -H "Authorization: Bearer $SESSION" \
   -H "Content-Type: application/json" \
   -d '{"name":"canonical-seed"}' \

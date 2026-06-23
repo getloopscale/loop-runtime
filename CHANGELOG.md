@@ -12,12 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - 4 NEW canonical post-Cleanroom seeds wired in `seed-post-cleanroom-all.sh` (Steps 12-15, append-only per ADR D2):
     - `infra/scripts/local/seed-chaos-mesh-canonical.sh` (Step 12, mgmt-only): chaos-mesh helm install with values-k3d.yaml socketPath override per `CLAUDE.md § Known issues`.
     - `infra/scripts/local/seed-argocd-token-canonical.sh` (Step 13, env-gated dev-public/standalone-multi): ArgoCD admin token mint via REST + sync into `loopzero-system/loopzero-api-tokens.argocd-token` consumed by release_convergence_loop.
-    - `infra/scripts/local/seed-vault-cross-cluster-addr.sh` (Step 14, dev-public only): OPENBAO_VAULT_ADDR cross-cluster wiring (k3d-loopzero-vault NodePort → mgmt loopzero-api env). EC-1 absorbed `.State.Running` pre-check; EC-2 absorbed rollout-pending guard before set-env.
+    - `infra/scripts/local/seed-vault-cross-cluster-addr-canonical.sh` (Step 14, dev-public only): OPENBAO_VAULT_ADDR cross-cluster wiring (k3d-loopzero-vault NodePort → mgmt loopzero-api env). EC-1 absorbed `.State.Running` pre-check; EC-2 absorbed rollout-pending guard before set-env.
     - `infra/scripts/local/seed-stripe-secret-canonical.sh` (Step 15): loopzero-stripe-webhook K8s Secret materialization from `~/.loopzero/dev-credentials.json`. Graceful SKIP semantic on placeholder/sponsor-blocked M5.
   - 4 NEW hermetic guard tests CI-wired in `task quality:gates`:
     - `infra/tests/check-seed-chaos-mesh-canonical-syntax_test.sh` (14 assertions)
     - `infra/tests/check-seed-argocd-token-canonical-syntax_test.sh` (14 assertions; EC-6 PF_PID absorption)
-    - `infra/tests/check-seed-vault-cross-cluster-addr-syntax_test.sh` (14 assertions; EC-1/EC-2 absorption)
+    - `infra/tests/check-seed-vault-cross-cluster-addr-canonical-syntax_test.sh` (14 assertions; EC-1/EC-2 absorption)
     - `infra/tests/check-seed-stripe-secret-canonical-syntax_test.sh` (13 assertions; EC-8 SKIP graceful)
 
 ### Changed
