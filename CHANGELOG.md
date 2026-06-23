@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 ### Changed
+- **M4 — scale-flow test EC-3 dual-gate alignment** (plan `m4-scale-flow-tier-mismatch-resolution` v1.1 SHIPPABLE 94; roadmap M4 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`). `infra/tests/e2e/dev-public-scale-flow_test.sh` Scenario B now accepts **HTTP 400 (cluster KEDA gate) OR HTTP 402 (tier gate)** per ADR D3 fail-closed dual-gate semantic at `api/internal/routes/scale.go:283-298`. Resolves tier-mismatch where canonical `seed-tenant-fixture-canonical.sh` defaults to `team` tier (M2 v0.24.0) — Scenario B previously rigid `==402` assertion FAILed LIVE on team-tier fixture because tier gate passes and cluster gate (400 INVALID_REQUEST) fires instead. Per ADR D1 (Opção A — minimal change) + ADR D2 (body-code discrimination retained: 402 path requires PLAN_UPGRADE_REQUIRED/REPLICAS_EXCEED_PLAN code, 400 path requires INVALID_REQUEST or "scale-to-zero is not available" message). Test contract aligns with EC-3 contract: assert fail-closed via any gate, not the gate-which-fires.
+  - `infra/tests/e2e/dev-public-scale-flow_test.sh`: scenario_b_keda_tier_gate refactored to `case "$http_code"` dispatch with 400/402/default branches. EC-3 empty-body guard added before jq parse (network-blip diagnostic). EC-4 stale "409 also acceptable" comment dropped.
+  - `infra/tests/check-dev-public-scale-syntax_test.sh`: hermetic guard updated with 11 NEW assertions (EC-1 preserve positive 402 substring + new negative-bracket regression-lock; EC-2 shebang assertion; EC-3 empty-body literal asserted; EC-4 stale 409 comment must not be present; EC-5 emit_pass symmetry between 400 and 402 branches excluding SKIP early-return). 35/0 PASS post-T1.1.
+  - Edge-case absorption per `knowledge-base/reviews/m4-scale-flow-tier-mismatch-resolution-edge-cases-2026-06-23.md` (3 MUST FIX + 2 SHOULD TEST + 3 DOCUMENT).
 
 ### Fixed
 
