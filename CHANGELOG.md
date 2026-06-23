@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Security
 
 ### Notes
+- **M5 — Sponsor input: Stripe API key real → DATA_INGESTED 2026-06-23** (roadmap M5 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`). Sponsor injected real test-mode Stripe credentials (`sk_test_*` + `pk_test_*` + existing `whsec_*`) into `~/.loopzero/dev-credentials.json` (mode 0600, atomic write). Stack agora coherent test mode — runtime contra Stripe test API funciona. Run-file: `knowledge-base/roadmap-runs/M5-2026-06-23.md`. **LIVE side (4 pós-sponsor steps: seed-stripe-secret-canonical.sh + live-proof-dev-public.sh + Stripe portal probe + 9/9 PASS) deferred to M7 Cleanroom validation** per `cleanroom-up-live-test-mandate.md` INQUEBRÁVEL — `seed-stripe-secret-canonical.sh` já é Step 15 do `seed-post-cleanroom-all.sh` (M2 v0.24.0), então M7 chain natural fecha o M5 LIVE side sem ceremony separada. M5 status: `DATA_INGESTED` (não COMPLETED) — honra Unbreakable Rule 3 (engineering side done, LIVE pendente). Sem PR/tag/release neste turno (M5 Tier=N/A secret materialization não-código; vai bundle no próximo release que carregar M4 OR M7). Process-drift detected + resolved: sponsor inicialmente colou `rk_live_*` LIVE restricted key; surfacing acionou correção para `sk_test_*` test mode coherent. **AÇÃO PENDENTE OPERATOR**: revogar `rk_live_*HNHp` no Stripe Dashboard live mode (vazada em chat history desta sessão).
 
 ## [0.25.0] - 2026-06-23
 
