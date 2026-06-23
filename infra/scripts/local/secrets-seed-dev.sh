@@ -80,6 +80,14 @@ if [[ -n "$STRIPE_KEY" ]]; then
     "api_key=$STRIPE_KEY" "webhook_secret=$STRIPE_WEBHOOK"
 fi
 
+# Path 2b (M2 T2.3 2026-06-23): dedicated stripe-webhook kv-v2 path canonical.
+# Per qa-readiness-roadmap M2 seed #10 + live-proof Stripe L1 layer probe.
+# Distinct from bundled stripe path above — dedicated path per consumer
+# (ESO ExternalSecret canonical pattern: 1 kv path → 1 K8s Secret consumer).
+if [[ -n "$STRIPE_WEBHOOK" ]]; then
+  bao_write kv/loopzero/dev/cloud/secrets/stripe-webhook "whsec=$STRIPE_WEBHOOK"
+fi
+
 # Path 3: Resend (Kratos courier per memory feedback_resend_kratos_courier)
 RESEND_KEY=$(extract "['resend']['api_key']")
 if [[ -n "$RESEND_KEY" ]]; then
