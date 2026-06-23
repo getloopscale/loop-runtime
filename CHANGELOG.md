@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **M5 ENGINEERING_COMPLETED** — Stripe SoT canonical closure (plan `m5-stripe-sot-canonical-closure` v1.0 SHIPPABLE 94; ADR `2026-06-23-tier-na-data-only-milestone-closure`; roadmap M5 transitions from `DATA_INGESTED` to `ENGINEERING_COMPLETED`). New hermetic guard `infra/tests/charts/stripe_sot_shape_test.go` locks the Stripe SoT shape canonical contract (3 keys coherent test mode triple: `sk_test_` + `pk_test_` + `whsec_`) via committed schema fixture `infra/tests/fixtures/dev-credentials-stripe-schema-test-mode.json` (ZERO real secrets — clearly FAKE values). Operator-side `--check-live-sot` operator path remains an explicit future-tool concern (NOT in this hermetic guard; operator validates real `~/.loopzero/dev-credentials.json` manually when needed). Wired into `task quality:gates` via the existing `cd infra/tests && go test ./charts/` umbrella — NO new bash gate, NO unhomed-baseline bump. **Tier N/A Data-Only Milestone Closure Pattern** formalized via ADR — 4-step canonical: (1) SoT atomic write sponsor-side; (2) hermetic shape guard committed + CI-wired; (3) LIVE chain deferred to Cleanroom milestone (M7); (4) status `ENGINEERING_COMPLETED` honors Unbreakable Rule 3 (NOT just `COMPLETED` until LIVE side closes via Cleanroom). Future Tier N/A milestones (Resend key, Cloudflare token, etc.) inherit this pattern.
 
 ### Changed
 
