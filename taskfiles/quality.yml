@@ -112,7 +112,7 @@ tasks:
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - bash infra/tests/check-seed-chaos-mesh-canonical-syntax_test.sh             # T1.1 hermetic: chaos-mesh helm install canonical (14 assertions)
       - bash infra/tests/check-seed-argocd-token-canonical-syntax_test.sh           # T1.2 hermetic: ArgoCD admin token mint + loopzero-api-tokens sync (14 assertions)
-      - bash infra/tests/check-seed-vault-cross-cluster-addr-syntax_test.sh         # T1.3 hermetic: OPENBAO_VAULT_ADDR cross-cluster wiring + EC-1/EC-2 absorption (14 assertions)
+      - bash infra/tests/check-seed-vault-cross-cluster-addr-canonical-syntax_test.sh         # T1.3 hermetic: OPENBAO_VAULT_ADDR cross-cluster wiring + EC-1/EC-2 absorption (14 assertions)
       - bash infra/tests/check-seed-stripe-secret-canonical-syntax_test.sh          # T1.4 hermetic: loopzero-stripe-webhook Secret materialization + EC-8 SKIP graceful (13 assertions)
       - bash infra/tests/check-allowlist-sunsets_test.sh                         # T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt)
       - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
