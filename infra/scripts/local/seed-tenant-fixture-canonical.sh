@@ -23,7 +23,7 @@ set -euo pipefail
 
 MGMT_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
 LOOPZERO_NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
-CLOUD_BASE="${LOOPZERO_CLOUD_BASE:-https://cloud-dev.loopzero.example}"
+CLOUD_BASE="${LOOPZERO_CLOUD_BASE:-https://app-dev.loopzero.example}"
 TENANT_ID="${LOOPZERO_TENANT_ID:-}"
 PLAN_TIER="${LOOPZERO_PLAN_TIER:-team}"
 GH_INSTALLATION_ID="${LOOPZERO_GH_INSTALLATION_ID:-138325349}"
@@ -93,7 +93,7 @@ if [[ "$SKIP_GH" == "0" ]]; then
       -H "X-GitHub-Delivery: install-canonical-replay-$(date +%s)" \
       -H "X-Hub-Signature-256: $SIG" \
       -d "$PAYLOAD" \
-      "$CLOUD_BASE/engine/api/v1/webhooks/github" 2>/dev/null || echo "000")
+      "$CLOUD_BASE/api/v1/webhooks/github" 2>/dev/null || echo "000")
     if [[ "$HTTP_CODE" == "200" ]]; then
       log "Layer 2: GitHub installation $GH_INSTALLATION_ID canonical webhook replayed (HTTP 200)"
     else

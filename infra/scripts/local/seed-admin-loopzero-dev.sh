@@ -48,7 +48,7 @@ USERNAME="${USERNAME:-admin}"
 TENANT_SLUG="${TENANT_SLUG:-admin}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_KRATOS_URL="${PUBLIC_KRATOS_URL:-https://auth-dev.loopzero.example}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 # Canonical dev password — high-entropy, dev-only. Override via env in CI.
 # Kratos v26 admin API does NOT mint sessions directly (405 on POST
 # /admin/identities/{id}/sessions). The canonical path is the password

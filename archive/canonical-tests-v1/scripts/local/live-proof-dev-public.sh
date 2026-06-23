@@ -71,7 +71,7 @@ case "$ENV_NAME" in
   dev-public)
     AUTH_HOST="https://auth-dev.loopzero.example"
     APP_HOST="https://app-dev.loopzero.example"
-    CLOUD_HOST="https://cloud-dev.loopzero.example"
+    CLOUD_HOST="https://app-dev.loopzero.example"
     KUBE_CTX="k3d-loopzero-mgmt"
     KRATOS_NS="loopzero-auth"
     CLOUD_NS="loopzero-system"
@@ -123,9 +123,16 @@ env_get() {
 }
 
 # Cached fresh JWT (lazy: only built when a Layer3 needs it)
+# 2026-06-23: prefer pre-seeded JWT from seed-admin-loopzero-dev.sh (canonical OIDC-only path).
+# Fallback to password-login flow only if seed file is missing.
 JWT=""
 get_jwt() {
   [[ -n "$JWT" ]] && { printf '%s' "$JWT"; return 0; }
+  local seed_file="${HOME}/.loopzero/local-dogfood-session-jwt.txt"
+  if [[ -s "$seed_file" ]]; then
+    JWT="$(<"$seed_file")"
+    [[ -n "$JWT" ]] && { printf '%s' "$JWT"; return 0; }
+  fi
   local cookie_jar; cookie_jar=$(mktemp); trap "rm -f $cookie_jar" RETURN
   local flow; flow=$(curl -fsS -c "$cookie_jar" \
     "$AUTH_HOST/self-service/login/browser" -H "Accept: application/json" || echo '{}')
@@ -140,10 +147,10 @@ for n in d.get('ui',{}).get('nodes',[]):
   curl -fsS -b "$cookie_jar" -c "$cookie_jar" -X POST \
     "$AUTH_HOST/self-service/login?flow=$fid" \
     -H "Content-Type: application/json" \
-    -d "{\"method\":\"password\",\"identifier\":\"paulo@loopzero.test\",\"password\":\"LoopZeroDev2026!\",\"csrf_token\":\"$csrf\"}" \
+    -d "{\"method\":\"password\",\"identifier\":\"admin@loopzero.example\",\"password\":\"loopzero-dev-password\",\"csrf_token\":\"$csrf\"}" \
     >/dev/null || true
   JWT=$(curl -fsS -b "$cookie_jar" -X POST "$CLOUD_HOST/v1/auth/session/token" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" || echo "")
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
   printf '%s' "$JWT"
 }
 
@@ -208,9 +215,13 @@ print('|'.join(issues) if issues else 'OK')")
   fi
 
   # Run the existing e2e test (it covers exactly L3 — programmatic OIDC redirect)
+  # NOTE: REPO_ROOT is 4 dirs up from archive/canonical-tests-v1/scripts/local/
+  # (same off-by-one fix pattern as the 13 dogfood wrappers — 2026-06-22).
+  local repo_root_local
+  repo_root_local="$(cd "$(dirname "$0")/../../../.." && pwd)"
   if KRATOS_PUBLIC="$AUTH_HOST" DASHBOARD="$APP_HOST" \
       EXPECTED_CALLBACK_BASE="$AUTH_HOST" \
-      bash "$(dirname "$0")/../../tests/e2e/dev-public-oidc-redirect_test.sh" \
+      bash "$repo_root_local/infra/tests/e2e/dev-public-oidc-redirect_test.sh" \
       >/tmp/live-proof-oidc.log 2>&1; then
     ok "L3 OIDC redirect e2e test 8/8 PASS (both providers redirect to $AUTH_HOST/...callback)" "oidc.l3"
   else

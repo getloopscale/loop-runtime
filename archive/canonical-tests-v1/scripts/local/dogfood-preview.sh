@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-WORKDIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+WORKDIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
 cd "$WORKDIR"
 
 HERMETIC_ONLY=0

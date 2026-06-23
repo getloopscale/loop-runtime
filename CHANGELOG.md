@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- M1 commit canonical 30 fixes (plan `m1-commit-canonical-30-fixes` v1.2 SHIPPABLE 96.4; roadmap `qa-readiness-roadmap-2026-06-23.md`): 4 hermetic guard tests CI-wired in `task quality:gates`:
+  - `infra/tests/check-no-cloud-dev-default_test.sh` — regression guard rejecting `${VAR:-https://cloud-dev.loopzero.example}` defaults in test/seed scripts (Caddy 301 trap post commit `ee77b8da`); webhook handler exception `/api/v1/webhooks/github` honored per EC-1 absorption.
+  - `infra/tests/check-archive-script-repo-root_test.sh` — regression guard requiring 4-dirs-up REPO_ROOT in `archive/canonical-tests-v1/scripts/local/` (post-quarantine commit `289cf9d6` added one extra directory level).
+  - `infra/tests/check-webhook-canonical-path_test.sh` — regression guard rejecting `/engine/api/v1/webhooks/github` (Caddy 301 trap) in favor of canonical `/api/v1/webhooks/github` (handler-direct).
+  - `infra/tests/check-oidc-cred-admin-loopzero_test.sh` — regression guard rejecting fabricated `paulo@loopzero.test` credential in favor of canonical `admin@loopzero.example` / `loopzero-dev-password` (LIVE-validated 2026-06-16, sponsor verbatim "SEMPRE vamos usar nos testes", memory `project_canonical_dev_user_credentials`).
 - (#142 / #123) `GET /api/v1/projects/{name}/status` response now carries
   `plan_tier` — the resolved canonical tenant tier (free / pro / team /
   enterprise, mirrors `pkg/domain.PlanTier`). Sourced via the same
@@ -108,6 +113,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
 
 ### Fixed
+- M1 commit canonical (plan `m1-commit-canonical-30-fixes` v1.2 SHIPPABLE 96.4; roadmap M1 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`): persists the 35+ canonical migrations from session Cleanroom 2026-06-22→23 after Caddyfile commit `ee77b8da` activated `cloud-dev → app-dev` 301 redirect (with single exception at `/api/v1/webhooks/github`):
+    - 35 test/seed scripts migrated from default `${VAR:-https://cloud-dev.loopzero.example}` to `${VAR:-https://app-dev.loopzero.example}` across `archive/canonical-tests-v1/scripts/local/`, `infra/tests/e2e/`, and `infra/scripts/local/` (28 originally caught LIVE + 7 latent bugs surfaced by the new T1.1 guard).
+    - `archive/canonical-tests-v1/scripts/local/dogfood-preview.sh`: REPO_ROOT off-by-one corrected (3 dirs → 4 dirs) post-quarantine `289cf9d6`.
+    - `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh`: OIDC L3 REPO_ROOT off-by-one + JWT seed-file fallback (prefers `~/.loopzero/local-dogfood-session-jwt.txt` for OIDC-only canonical Kratos path) + `paulo@loopzero.test` → `admin@loopzero.example` / `loopzero-dev-password` (canonical per `project_canonical_dev_user_credentials`).
+    - `infra/tests/e2e/dev-public-github-webhook_test.sh`: `WEBHOOK_URL` canonical path `/engine/api/v1/webhooks/github` → `/api/v1/webhooks/github` (handler-direct per Caddyfile lines 142-156).
+    - `infra/scripts/local/seed-tenant-fixture-canonical.sh`: webhook probe path canonical fix (`/engine/api/v1/webhooks/github` → `/api/v1/webhooks/github`).
+    - 5 additional scripts (`stripe-webhook-checkout-completed_test.sh`, `dashboard-engine-proxy_test.sh`, `dev-public-billing-portal_test.sh`, `seed-demo-data.sh`, `smoke-dashboard-memory-bff-e2e.sh`): `paulo@loopzero.test` / `LoopZeroDev2026!` → `admin@loopzero.example` / `loopzero-dev-password` per canonical credentials lock.
+    - LIVE-validated session 2026-06-22→23: DOGFOOD 2/13 → 11/13 PASS; live-proof 5/7 → 8/9 PASS.
+
+### Notes
+- The manual SQL `UPDATE releases SET status='ACTIVE'` plus ~10 LIVE cluster mutations (chaos-mesh helm install, cosign-signing-key Secret mirror mgmt→build, Gitea `loopzero` org create, ArgoCD admin token mint + sync, cluster-issuer chart install, Tenant CR seed, ArgoCD AppProject create, OPENBAO_VAULT_ADDR cross-cluster wiring, loopzero-stripe-webhook Secret materialization, Stripe whsec dev placeholder in `~/.loopzero/dev-credentials.json`) applied during session Cleanroom 2026-06-22→23 are explicitly NOT part of this commit per ADR D3 carve-out — canonical solutions are tracked in M2 step 1-11 of the roadmap upstream.
+
 - `qa-dogfood-cleanup-2026-06-21` — backend slice closing 5 of 11 QA-surfaced
   defects from the 2026-06-21 dogfooding run (engine-side portion; dashboard
   + CLI pieces ship in their own repos):

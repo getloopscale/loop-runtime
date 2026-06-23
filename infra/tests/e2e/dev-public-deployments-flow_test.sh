@@ -38,7 +38,7 @@
 
 set -euo pipefail
 
-CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
+CLOUD_URL="${CLOUD_URL:-https://app-dev.loopzero.example}"
 AUTH_URL="${AUTH_URL:-https://auth-dev.loopzero.example}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 # Engine endpoints (loopzero-api) — reached via /engine/* proxy on loopzero-cloud

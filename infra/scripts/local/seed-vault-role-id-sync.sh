@@ -99,7 +99,7 @@ if [[ "$VERIFY" == "1" ]]; then
   [[ -r "$JWT_FILE" ]] || { log "WARN verify: JWT seed missing; skipping encrypt probe"; exit 0; }
   JWT=$(cat "$JWT_FILE")
 
-  CLOUD_BASE="${LOOPZERO_CLOUD_BASE:-https://cloud-dev.loopzero.example}"
+  CLOUD_BASE="${LOOPZERO_CLOUD_BASE:-https://app-dev.loopzero.example}"
   PROBE_NAME="VAULT_ROLE_PROBE_$(date +%s)"
   RESP=$(curl -sk -X POST -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
     -d "{\"project\":\"teste\",\"name\":\"$PROBE_NAME\",\"value\":\"probe\",\"environment\":\"production\",\"app\":\"api\"}" \

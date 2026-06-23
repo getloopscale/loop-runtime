@@ -44,7 +44,7 @@ REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 # Canonical 2026-06-20 (issue #108): post-M2 decomposition, the LoopZero CLI
 # lives in sibling repo loopzero-cli/bin/loopzero at the workspace root. The master
 # orchestrator seed-post-cleanroom-all.sh invokes Step 11 without exporting
