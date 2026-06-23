@@ -64,6 +64,7 @@ tasks:
       - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
       - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
       - bash infra/tests/check-fulcio-oidc-diagnose_test.sh     # M07 keyless: Fulcio OIDC trust diagnose script (T0.2 plan 2026-05-28)
+      - bash infra/tests/check-k6-load-rigor_test.sh            # k6 load rigor: dropped_iterations threshold + L5 distributed + per-level doc (plan k6-load-test-rigor-fixes)
       - bash infra/tests/check-seed-loopzero-secrets_test.sh        # vault-INT T8.1 EC-21: idempotent Vault seed script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-rotate-secret_test.sh            # vault-INT T8.1 EC-22: cross-binary atomic rotation script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-vault-sync_test.sh               # vault-INT Phase 9 T9.1: ESO sync status check (replaces loopzero_config_secret_source metric, plan 2026-06-02 v1.8 D11)

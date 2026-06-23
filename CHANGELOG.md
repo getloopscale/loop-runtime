@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- k6 load-test rigor: `dropped_iterations` SLO threshold (fails a run that silently under-loaded the platform when the k6 generator hit its VU ceiling), an L5 distributed runner (`testrun-l5-distributed.yaml` + `task k6:distributed:l5`, 16 pods for the 5,000-tenant multi-cell test), a canonical per-level "which runner" guide in the k6 README, and a hermetic gate (`infra/tests/check-k6-load-rigor_test.sh`, wired into `task quality:gates`) (plan k6-load-test-rigor-fixes).
 
 ### Changed
 

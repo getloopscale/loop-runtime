@@ -111,6 +111,21 @@ L1 uses `per-vu-iterations` (acceptable for 10 VUs smoke test).
 Reference: Gil Tene, "How NOT to Measure Latency" — open workload is
 the only correct way to measure latency under sustained load.
 
+## Which runner per level (canonical)
+
+Two execution paths exist. Pick by level — the rule is **"is the platform or
+the k6 generator the bottleneck?"**:
+
+| Level | Canonical runner | Task | Why |
+|---|---|---|---|
+| L1, L2, L3, stress, soak | **Single-pod Job** (`run-k6.sh`) | `task test:load:l1..l3`, `:stress`, `:soak` | Low arrival rate (1–3/min). A single k6 pod is never the bottleneck — the **platform** is what's measured. |
+| L4 (500 tenants) | **Distributed (k6 Operator)** | `task k6:distributed:l4` (8 pods) | At 500 tenants a single pod can become the **generator** bottleneck; the operator fans out so the platform stays the bottleneck. |
+| L5 (5,000 tenants, multi-cell) | **Distributed (k6 Operator)** | `task k6:distributed:l5` (16 pods) | Largest test (`maxVUs:1000`). MUST run distributed — a single pod would generator-throttle and silently under-load (the `dropped_iterations` threshold guards this). |
+
+> L3 is the cross-over: the single-pod path is fine for routine L3, the
+> distributed path (`k6:distributed:l3`) exists for higher-throughput L3 runs.
+> Anything ≥ L4 should use the operator path.
+
 ## Running In-Cluster
 
 ### Job Template (L1-L3, stress)
@@ -133,6 +148,9 @@ task k6:distributed:l3
 
 # Run distributed L4 (8 pods)
 task k6:distributed:l4
+
+# Run distributed L5 multi-cell (16 pods, 5,000 tenants, ~4h)
+task k6:distributed:l5
 
 # Monitor
 kubectl -n loopzero-system get testrun -w

@@ -30,6 +30,16 @@ export const base = {
     'p(99)<30000',                          // p99 < 30s (API only, not deploy)
   ],
 
+  // Generator health — under `ramping-arrival-rate`, dropped iterations
+  // mean the k6 pod (not the platform) was the bottleneck: VUs hit the
+  // `maxVUs` ceiling and k6 dropped queued load → the run SILENTLY
+  // under-loaded the platform, making any SLO claim from it false.
+  // Fail when more than a handful drop. N=100 is a starting absolute
+  // (warm-up tolerance); calibrate against the first LIVE operator run
+  // per docs/capacity/cell-budget.md. `dropped_iterations` is a Counter
+  // → use count< (a rate< form would be a silent no-op).
+  'dropped_iterations': ['count<100'],
+
   // Custom LoopZero metrics.
   'loopzero_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
   'loopzero_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
