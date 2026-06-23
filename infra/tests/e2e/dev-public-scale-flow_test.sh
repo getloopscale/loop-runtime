@@ -150,10 +150,19 @@ scenario_b_keda_tier_gate() {
   local jwt
   jwt="$(<"$TOKEN_FILE")"
 
-  # Free-tier KEDA scale-to-zero opt-in (min=0) must be rejected with
-  # 402 PLAN_UPGRADE_REQUIRED per pkg/enforcement.AssertKEDAAllowed (EC-3).
-  # Canonical KEDA trigger body shape per scale_test.go:390 — `min:0` is
-  # the wire signal that activates the tier gate.
+  # KEDA scale-to-zero opt-in (min=0) must be rejected via EC-3 dual-gate
+  # per api/internal/routes/scale.go:283-298 (ADR D3 fail-closed):
+  #   1. tier gate (line 290-292): AssertKEDAAllowed(planTier) fails when
+  #      tier ∈ {starter, unknown, empty} → 402 PLAN_UPGRADE_REQUIRED.
+  #   2. cluster gate (line 293-295): tier passes but kedaEnabled=false
+  #      (cluster has no KEDA controller) → 400 INVALID_REQUEST with
+  #      "scale-to-zero is not available" message.
+  # Canonical team-tier fixture (seed-tenant-fixture-canonical.sh) lands
+  # on the cluster gate path (400) on dev-public; --starter override
+  # lands on the tier gate path (402). Both satisfy the EC-3 contract
+  # (fail-closed via any gate). Test contract NOT implementation.
+  # Per M4 plan m4-scale-flow-tier-mismatch-resolution v1.1 SHIPPABLE 94
+  # + ADR D1 (Opção A) + ADR D2 (body-code discrimination retained).
   local body http_code response
   response="$(curl -sS -o /tmp/scale-b.json -w '%{http_code}' \
     -X POST \
@@ -164,15 +173,36 @@ scenario_b_keda_tier_gate() {
   body="$(cat /tmp/scale-b.json 2>/dev/null || echo '')"
   http_code="$response"
 
-  # 402 expected. 409 also acceptable if another mutation is in-flight (lock).
-  if [[ "$http_code" == "402" ]]; then
-    emit_pass "scenario B: HTTP 402 PLAN_UPGRADE_REQUIRED on tier cap exceeded"
-    echo "$body" | jq -e '.code == "PLAN_UPGRADE_REQUIRED" or .code == "REPLICAS_EXCEED_PLAN"' >/dev/null \
-      && emit_pass "scenario B: typed error code matches enforcement contract" \
-      || emit_fail "scenario B: error code mismatch body=$body"
-  else
-    emit_fail "scenario B: expected HTTP 402 got $http_code body=$body"
+  # EC-3 absorption (M4 v1.1): guard against empty body (curl network blip)
+  # BEFORE jq parse — gives operator a clean diagnostic instead of noisy
+  # `jq: error (at <stdin>:1): null (null) has no keys` stderr.
+  if [[ -z "$body" ]]; then
+    emit_fail "scenario B: empty body — curl network error (http_code=$http_code)"
+    return 1
   fi
+
+  case "$http_code" in
+    400)
+      emit_pass "scenario B: HTTP 400 cluster KEDA gate (EC-3 cluster-side dual-gate per scale.go:293-295)"
+      if echo "$body" | jq -e '.code == "INVALID_REQUEST"' >/dev/null \
+         || echo "$body" | grep -q "scale-to-zero is not available"; then
+        emit_pass "scenario B: 400 body shape matches cluster-disabled contract"
+      else
+        emit_fail "scenario B: 400 body shape mismatch — expected INVALID_REQUEST or 'scale-to-zero is not available' message, got body=$body"
+      fi
+      ;;
+    402)
+      emit_pass "scenario B: HTTP 402 PLAN_UPGRADE_REQUIRED on tier cap exceeded (EC-3 tier-side dual-gate per scale.go:290-292)"
+      if echo "$body" | jq -e '.code == "PLAN_UPGRADE_REQUIRED" or .code == "REPLICAS_EXCEED_PLAN"' >/dev/null; then
+        emit_pass "scenario B: 402 body shape matches enforcement contract"
+      else
+        emit_fail "scenario B: 402 body shape mismatch — expected PLAN_UPGRADE_REQUIRED/REPLICAS_EXCEED_PLAN, got body=$body"
+      fi
+      ;;
+    *)
+      emit_fail "scenario B: expected HTTP 400 or 402 per EC-3 dual-gate, got $http_code body=$body"
+      ;;
+  esac
 
   rm -f /tmp/scale-b.json
 }
