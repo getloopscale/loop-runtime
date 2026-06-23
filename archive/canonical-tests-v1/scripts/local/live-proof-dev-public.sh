@@ -71,7 +71,7 @@ case "$ENV_NAME" in
   dev-public)
     AUTH_HOST="https://auth-dev.loopzero.example"
     APP_HOST="https://app-dev.loopzero.example"
-    CLOUD_HOST="https://cloud-dev.loopzero.example"
+    CLOUD_HOST="https://app-dev.loopzero.example"
     KUBE_CTX="k3d-loopzero-mgmt"
     KRATOS_NS="loopzero-auth"
     CLOUD_NS="loopzero-system"
@@ -82,7 +82,15 @@ case "$ENV_NAME" in
     ;;
 esac
 
-: "${ENV_FILE:=/home/paulo/loopzero/.env}"
+# Canonical 2026-06-20 (issue #107): post-M2 decomposition the dev-public env
+# SoT is `~/.loopzero/dev-credentials.json` (JSON), NOT a flat KEY=VALUE `.env`
+# file. The pre-decomp `/home/paulo/loopzero/.env` was deleted; grepping it under
+# `set -euo pipefail` aborted the script at exit 2 before any check ran.
+# Sibling canonical scripts already use this JSON SoT:
+#   - infra/scripts/local/secrets-seed-dev.sh:26
+#   - infra/scripts/local/setup-dev-public-dns.sh:36
+# Regression-locked by infra/tests/charts/live_proof_env_file_test.go.
+: "${CREDS_FILE:=$HOME/.loopzero/dev-credentials.json}"
 
 PASS=0
 FAIL=0
@@ -94,15 +102,37 @@ warn() { printf '  WARN: %s\n' "$1" >&2; }
 
 log() { printf '[live-proof env=%s] %s\n' "$ENV_NAME" "$*" >&2; }
 
+# env_get returns the canonical value for a logical LOOPZERO_* env key by reading
+# the JSON SoT. The mapping below tracks ~/.loopzero/dev-credentials.json's
+# schema. Keys absent from the JSON return empty — the caller's Layer-1
+# check then bad()s honestly (surfacing the schema gap, not papering over).
 env_get() {
   local key="$1"
-  grep -E "^$key=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-
+  [[ -r "$CREDS_FILE" ]] || { printf ''; return 0; }
+  case "$key" in
+    LOOPZERO_GITHUB_CLIENT_ID)          jq -r '.github.client_id // ""'      "$CREDS_FILE" ;;
+    LOOPZERO_GITHUB_CLIENT_SECRET)      jq -r '.github.client_secret // ""'  "$CREDS_FILE" ;;
+    LOOPZERO_GOOGLE_CLIENT_ID)          jq -r '.google.client_id // ""'      "$CREDS_FILE" ;;
+    LOOPZERO_GOOGLE_CLIENT_SECRET)      jq -r '.google.client_secret // ""'  "$CREDS_FILE" ;;
+    LOOPZERO_STRIPE_SECRET_KEY)         jq -r '.stripe.api_key // ""'        "$CREDS_FILE" ;;
+    LOOPZERO_STRIPE_PUBLISHABLE_KEY)    jq -r '.stripe.publishable_key // ""' "$CREDS_FILE" ;;
+    LOOPZERO_STRIPE_WEBHOOK_SECRET_DEV) jq -r '.stripe.webhook_secret // ""' "$CREDS_FILE" ;;
+    LOOPZERO_RESEND_API_KEY)            jq -r '.resend.api_key // ""'        "$CREDS_FILE" ;;
+    *)                              printf '' ;;
+  esac
 }
 
 # Cached fresh JWT (lazy: only built when a Layer3 needs it)
+# 2026-06-23: prefer pre-seeded JWT from seed-admin-loopzero-dev.sh (canonical OIDC-only path).
+# Fallback to password-login flow only if seed file is missing.
 JWT=""
 get_jwt() {
   [[ -n "$JWT" ]] && { printf '%s' "$JWT"; return 0; }
+  local seed_file="${HOME}/.loopzero/local-dogfood-session-jwt.txt"
+  if [[ -s "$seed_file" ]]; then
+    JWT="$(<"$seed_file")"
+    [[ -n "$JWT" ]] && { printf '%s' "$JWT"; return 0; }
+  fi
   local cookie_jar; cookie_jar=$(mktemp); trap "rm -f $cookie_jar" RETURN
   local flow; flow=$(curl -fsS -c "$cookie_jar" \
     "$AUTH_HOST/self-service/login/browser" -H "Accept: application/json" || echo '{}')
@@ -117,10 +147,10 @@ for n in d.get('ui',{}).get('nodes',[]):
   curl -fsS -b "$cookie_jar" -c "$cookie_jar" -X POST \
     "$AUTH_HOST/self-service/login?flow=$fid" \
     -H "Content-Type: application/json" \
-    -d "{\"method\":\"password\",\"identifier\":\"paulo@loopzero.test\",\"password\":\"LoopZeroDev2026!\",\"csrf_token\":\"$csrf\"}" \
+    -d "{\"method\":\"password\",\"identifier\":\"admin@loopzero.example\",\"password\":\"loopzero-dev-password\",\"csrf_token\":\"$csrf\"}" \
     >/dev/null || true
   JWT=$(curl -fsS -b "$cookie_jar" -X POST "$CLOUD_HOST/v1/auth/session/token" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" || echo "")
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
   printf '%s' "$JWT"
 }
 
@@ -185,9 +215,13 @@ print('|'.join(issues) if issues else 'OK')")
   fi
 
   # Run the existing e2e test (it covers exactly L3 — programmatic OIDC redirect)
+  # NOTE: REPO_ROOT is 4 dirs up from archive/canonical-tests-v1/scripts/local/
+  # (same off-by-one fix pattern as the 13 dogfood wrappers — 2026-06-22).
+  local repo_root_local
+  repo_root_local="$(cd "$(dirname "$0")/../../../.." && pwd)"
   if KRATOS_PUBLIC="$AUTH_HOST" DASHBOARD="$APP_HOST" \
       EXPECTED_CALLBACK_BASE="$AUTH_HOST" \
-      bash "$(dirname "$0")/../../tests/e2e/dev-public-oidc-redirect_test.sh" \
+      bash "$repo_root_local/infra/tests/e2e/dev-public-oidc-redirect_test.sh" \
       >/tmp/live-proof-oidc.log 2>&1; then
     ok "L3 OIDC redirect e2e test 8/8 PASS (both providers redirect to $AUTH_HOST/...callback)" "oidc.l3"
   else

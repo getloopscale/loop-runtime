@@ -42,7 +42,7 @@ set -euo pipefail
 
 AUTH_PUBLIC="${AUTH_PUBLIC:-https://auth-dev.loopzero.example}"
 DASHBOARD="${DASHBOARD:-https://app-dev.loopzero.example}"
-CLOUD_PUBLIC="${CLOUD_PUBLIC:-https://cloud-dev.loopzero.example}"
+CLOUD_PUBLIC="${CLOUD_PUBLIC:-https://app-dev.loopzero.example}"
 CLUSTER_CTX="${CLUSTER_CTX:-k3d-loopzero-mgmt}"
 HYDRA_ADMIN_LOCAL="${HYDRA_ADMIN_LOCAL:-http://localhost:14445}"
 

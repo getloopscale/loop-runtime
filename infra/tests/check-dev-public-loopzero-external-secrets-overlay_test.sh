@@ -2,22 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# check-dev-public-loopzero-external-secrets-overlay_test.sh — iter 25
-# hermetic structural test for the dev-public env overlay
-# `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`
-# (productive-idle iter 25 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2).
+# check-dev-public-loopzero-external-secrets-overlay_test.sh
+# Hermetic structural test for the dev-public env overlay
+# `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`.
 #
-# Locks the contract that the overlay:
-#   - Defaults openbaoTransit.enabled=false (safe — prevents boot
-#     failures before runbook step 1+2 complete)
-#   - Sets canonical mgmt-cluster service DNS for Option (c)
-#   - Wires secretRef to loopzero-openbao-approle in external-secrets ns
-#     with key OPENBAO_VAULT_SECRET_ID (matches runbook step 2.1 +
-#     iter 20 chart envFrom contract)
-#   - role_id is EMPTY placeholder (not a fabricated UUID hardcode)
-#   - Documents the 6-box pre-flight that operator MUST complete before
-#     flipping enabled=true
-#   - References the runbook + iter 24 shortcut + canonical memory pointers
+# Originally shipped 2026-06-10 (iter 25 of plan
+# 2026-06-10-j22-openbao-transit-eso-sync v1.2) as the AppRole-shape
+# lock. Rewritten 2026-06-19 (T1.2 of plan dev-public-cross-cluster-secrets
+# v1.1, issue #111) for the post-Jeito A canonical contract:
+#   - workload identity (Kubernetes-auth) replaces AppRole
+#   - no static credential (secret_id) materialized in mgmt
+#   - canonical intra-cluster DNS preserves cert SAN (EC-2)
+#   - TokenRequest audience matches OpenBao role bound_audiences (EC-5)
+#
+# Locks the post-T1.2 contract:
+#   - openbaoTransit.enabled defaults to false (safe — anti-foot-shooting)
+#   - server retains canonical intra-cluster DNS (preserves cert SAN)
+#   - auth.kind=kubernetes (NOT appRole) — workload identity, no static cred
+#   - auth.kubernetes.role + serviceAccountRef + audiences present
+#   - No `roleId:` or `secretRef:` fields (legacy AppRole shape removed)
+#   - Traceability: issue #111 / Jeito A / dev-public-cross-cluster-secrets
 #
 # Hermetic — no kubectl, no helm install. Pure grep on overlay file.
 
@@ -57,55 +61,59 @@ assert "C1 server is canonical mgmt-cluster in-cluster DNS" \
 assert "C2 server is https (NOT http)" \
   "grep 'server: \"https://' '$OVERLAY'"
 
-# D — secretRef matches runbook step 2.1 + iter 20 chart envFrom
-assert "D1 secretRef.name = loopzero-openbao-approle (matches runbook step 2.1)" \
-  "grep 'name: \"loopzero-openbao-approle\"' '$OVERLAY'"
+# D — auth.kind=kubernetes (workload identity replaces AppRole per T1.2)
+assert "D1 auth.kind set to kubernetes (workload identity)" \
+  "grep -E 'kind: \"kubernetes\"' '$OVERLAY'"
 
-assert "D2 secretRef.namespace = external-secrets (ESO controller ns convention)" \
-  "grep 'namespace: \"external-secrets\"' '$OVERLAY'"
+assert "D2 auth.kubernetes.role declared (OpenBao role binding)" \
+  "grep -E '^      role: ' '$OVERLAY'"
 
-assert "D3 secretRef.key = OPENBAO_VAULT_SECRET_ID (matches iter 20 chart envFrom)" \
-  "grep 'key: \"OPENBAO_VAULT_SECRET_ID\"' '$OVERLAY'"
+assert "D3 auth.kubernetes.serviceAccountRef.name declared" \
+  "grep -E 'name: \"external-secrets\"' '$OVERLAY'"
 
-# E — ANTI-HARDCODE GUARD: role_id is empty placeholder + caBundle empty
-# (no UUID accidentally checked in)
-assert "E1 roleId placeholder is empty string (operator pastes post-step-1.3)" \
-  "grep -E '^  roleId: \"\"' '$OVERLAY'"
+assert "D4 auth.kubernetes.serviceAccountRef.audiences declared (EC-5 contract)" \
+  "grep -E '^        audiences:' '$OVERLAY'"
 
-assert "E2 NO fabricated UUID hardcoded as roleId" \
-  "! grep -E 'roleId: \"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\"' '$OVERLAY'"
+# E — ANTI-HARDCODE GUARD: legacy AppRole shape REMOVED + caBundle empty.
+# The whole point of T1.2 is removing the static secret_id from the
+# overlay; presence of `roleId:` or `secretRef:` is a structural regression.
+assert "E1 NO roleId field (legacy AppRole shape forbidden post-T1.2)" \
+  "! grep -E '^  roleId:' '$OVERLAY'"
 
-assert "E3 caBundle placeholder is empty string" \
+assert "E2 NO secretRef block (legacy AppRole shape forbidden post-T1.2)" \
+  "! grep -E '^  secretRef:' '$OVERLAY'"
+
+assert "E3 NO fabricated UUID hardcoded anywhere" \
+  "! grep -E '\"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\"' '$OVERLAY'"
+
+assert "E4 caBundle placeholder is empty string" \
   "grep -E '^  caBundle: \"\"' '$OVERLAY'"
 
-# F — Documentation: the overlay MUST cite the 6-box pre-flight + runbook
-# + iter 24 shortcut + canonical memory pointers so operators reading it
-# alone (without the runbook) still see the warnings.
-assert "F1 doc cites cutover runbook" \
-  "grep 'openbao-transit-cutover-runbook.md' '$OVERLAY'"
+# F — Documentation: traceability so the next operator understands
+# why the K8s-auth shape exists.
+assert "F1 doc cites issue #111 / Jeito A / dev-public-cross-cluster-secrets" \
+  "grep -E '(issue #111|Jeito A|dev-public-cross-cluster-secrets)' '$OVERLAY'"
 
-assert "F2 doc references iter 24 task k3d:vault:bootstrap-in-mgmt shortcut" \
-  "grep 'k3d:vault:bootstrap-in-mgmt' '$OVERLAY'"
+assert "F2 doc cites OpenBao init runbook (sponsor JUNTOS Shamir ceremony)" \
+  "grep 'openbao-init-runbook.md' '$OVERLAY'"
 
-assert "F3 doc cites feedback_no_hardcode_gate_2026_06_09 memory" \
-  "grep 'feedback_no_hardcode_gate_2026_06_09' '$OVERLAY'"
+assert "F3 doc cites EC-1 (cross-cluster token review requirement)" \
+  "grep -E 'EC-1' '$OVERLAY'"
 
-assert "F4 doc cites feedback_secret_canonical_no_hardcode memory" \
-  "grep 'feedback_secret_canonical_no_hardcode' '$OVERLAY'"
+assert "F4 doc cites EC-2 (CoreDNS host-alias preserves cert SAN)" \
+  "grep -E 'EC-2' '$OVERLAY'"
 
-# G — Anti-patterns: no Co-Authored-By trailers, no --no-verify references
+# G — Anti-patterns: no Co-Authored-By trailers
 assert "G1 no Co-Authored-By trailer in comments" \
   "! grep -i 'Co-Authored-By' '$OVERLAY'"
 
-# H — Cross-link to chart's actual `openbaoTransit:` schema (defensive
-# typo guard — if someone renames the chart key, overlay's still in
-# sync via grep)
+# H — Cross-link to chart's actual `openbaoTransit:` schema
 assert "H1 overlay uses 'openbaoTransit:' top-level key (matches chart values.yaml schema)" \
   "grep -E '^openbaoTransit:' '$OVERLAY'"
 
-# I — Cross-cluster Open Question awareness
-assert "I1 doc mentions Option (a) / (b) cross-cluster variants in trade-off note" \
-  "grep -E 'Option \([ab]\)' '$OVERLAY'"
+# I — Cross-cluster contract awareness
+assert "I1 doc cites the separate loopzero-vault cluster topology" \
+  "grep -E 'loopzero-vault' '$OVERLAY'"
 
 # Summary
 echo ""

@@ -37,7 +37,7 @@
 set -euo pipefail
 
 # Defaults — overridable via env for prod canary probe.
-CLOUD_HOST="${CLOUD_HOST:-https://cloud-dev.loopzero.example}"
+CLOUD_HOST="${CLOUD_HOST:-https://app-dev.loopzero.example}"
 PROJECT="${PROJECT:-teste}"
 ENV="${ENV:-production}"
 # CANONICAL 2026-06-15: prefer HMAC session JWT (carries tenant_id; passes

@@ -69,7 +69,7 @@ emit_fail() {
   [[ $JSON_OUTPUT -eq 0 ]] && echo "✗ $1"
 }
 
-CLOUD_BASE="${CLOUD_BASE:-https://cloud-dev.loopzero.example}"
+CLOUD_BASE="${CLOUD_BASE:-https://app-dev.loopzero.example}"
 # CANONICAL 2026-06-15: prefer HMAC session JWT (carries tenant_id; passes
 # loopzero-cloud /engine proxy guard). Falls back to bootstrap RSA JWT for
 # engine-direct (localhost:13001) when no session JWT exists.

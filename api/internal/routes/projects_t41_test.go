@@ -27,6 +27,7 @@ type fakeEnvEnsurer struct {
 	lastT    string
 	lastP    string
 	lastEnv  string
+	envs     []string // ordered capture of every envName ensured
 	returnErr error
 }
 
@@ -35,6 +36,7 @@ func (f *fakeEnvEnsurer) EnsureEnvironment(_ context.Context, tenantID, project,
 	f.lastT = tenantID
 	f.lastP = project
 	f.lastEnv = envName
+	f.envs = append(f.envs, envName)
 	return f.returnErr
 }
 
@@ -61,11 +63,15 @@ func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
 	}
-	if atomic.LoadInt32(&envEnsurer.calls) != 1 {
-		t.Fatalf("envEnsurer.EnsureEnvironment must be called exactly once, got %d calls", envEnsurer.calls)
+	// #124 (qa-dogfood-cleanup-2026-06-21 T4.2 / ADR-Q5): the handler
+	// MUST ensure BOTH canonical permanent envs (production + preview),
+	// not just production. The legacy single-env contract was extended
+	// to match the PaaS model lock (preview + production are permanent).
+	if atomic.LoadInt32(&envEnsurer.calls) != 2 {
+		t.Fatalf("envEnsurer.EnsureEnvironment must be called exactly twice (production + preview per ADR-Q5), got %d calls", envEnsurer.calls)
 	}
-	if envEnsurer.lastEnv != "production" {
-		t.Errorf("EnsureEnvironment envName = %q, want %q (ADR D4 — Vercel-style every project gets production)", envEnsurer.lastEnv, "production")
+	if len(envEnsurer.envs) != 2 || envEnsurer.envs[0] != "production" || envEnsurer.envs[1] != "preview" {
+		t.Errorf("EnsureEnvironment ordered envs = %v, want [production preview] (canonical PermanentEnvs order)", envEnsurer.envs)
 	}
 	if envEnsurer.lastP != "my-api" {
 		t.Errorf("EnsureEnvironment project = %q, want %q", envEnsurer.lastP, "my-api")

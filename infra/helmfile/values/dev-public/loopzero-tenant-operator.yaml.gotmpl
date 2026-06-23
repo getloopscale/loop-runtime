@@ -4,27 +4,35 @@
 #   global.registry: registry.digitalocean.com/loopzero-system
 #   image.{repository,tag,pullPolicy}: loopzero-tenant-operator / dev / IfNotPresent
 #   replicaCount: 2 (HA)
-#   config.insecureSkipTls: "false"  ← we override to "true" because the env
-#       uses selfsigned-issuer (declared in environments/dev-public.yaml).
+#   config.operatorInsecureSkipTls: "false"  ← we override to "true" because
+#       the env uses selfsigned-issuer (declared in environments/dev-public.yaml).
 
 global:
+  registry: ghcr.io/getloopscale
   imagePullSecrets:
-    - name: do-registry
+    - name: ghcr-pull
 
 image:
+  tag: develop
   # Always so each rollout pulls the latest :dev push from DOCR.
   pullPolicy: Always
 
 config:
   giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
-  baseDomain: "{{ .Values.domain }}"
+  # Slice 4 ISP remediation (commit 52ccf8a6 2026-06-18) dropped baseDomain
+  # from loopzero-tenant-operator schema — the binary never reads BASE_DOMAIN.
+  # Schema enforces additionalProperties:false at /config; passing it makes
+  # helmfile sync FAIL. Cleanroom catch 2026-06-19. Same stale-helper-post-
+  # architecture-refactor class as issue #91.
   argocdNamespace: argocd
   # workloadClusterUrl populated by wire-clusters.sh post-bootstrap; leaving
   # blank lets the operator discover via in-cluster ClusterCredential.
   ingressNamespace: traefik
   # Tenant-internal TLS uses the selfsigned-issuer declared in the env;
   # tenant operator skipping its verification is consistent with that design.
-  insecureSkipTls: "true"
+  # Slice 4 commit 52ccf8a6 renamed insecureSkipTls → operatorInsecureSkipTls
+  # at the schema level (hardened root additionalProperties:false).
+  operatorInsecureSkipTls: "true"
 
 secrets:
   # Chart would emit an empty GITEA_TOKEN if create=true. Instead we use

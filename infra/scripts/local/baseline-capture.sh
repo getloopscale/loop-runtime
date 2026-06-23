@@ -39,7 +39,7 @@ set -euo pipefail
 OUTPUT=""
 CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 FIXTURE_DIR="${BASELINE_FIXTURE_DIR:-}"
 DETERMINISTIC="${DETERMINISTIC:-0}"
 

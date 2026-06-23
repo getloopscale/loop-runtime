@@ -34,7 +34,7 @@ SCRIPT_NAME=$(basename "$0")
 # loopzero-cloud proxy → loopzero-api (per cloud/cmd/main.go:477 route). The
 # webhook receiver lives on loopzero-api which is reachable only via the
 # /engine prefix from cloud-dev.loopzero.example.
-WEBHOOK_URL="${WEBHOOK_URL:-https://cloud-dev.loopzero.example/engine/api/v1/webhooks/github}"
+WEBHOOK_URL="${WEBHOOK_URL:-https://cloud-dev.loopzero.example/api/v1/webhooks/github}"
 # Metrics port (9090) is intentionally NOT public-exposed (SECURITY note
 # in api/internal/server/validation.go:18 — auth-free /metrics endpoint
 # must stay behind ClusterIP + NetworkPolicy). Test port-forwards

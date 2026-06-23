@@ -30,7 +30,7 @@
 #   bash infra/tests/e2e/dev-public-secrets-flow_test.sh --json
 set -euo pipefail
 
-CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
+CLOUD_URL="${CLOUD_URL:-https://app-dev.loopzero.example}"
 API_PREFIX="${API_PREFIX:-/engine}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 TEST_ENV="${TEST_ENV:-production}"

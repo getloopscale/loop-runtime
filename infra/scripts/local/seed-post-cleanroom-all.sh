@@ -113,11 +113,61 @@ skip_step() {
 VERIFY_FLAG=""
 [[ "$VERIFY" == "1" ]] && VERIFY_FLAG="--verify"
 
+# Step 0 (NEW 2026-06-20) — auto-provision the separate loopzero-vault k3d
+# cluster + OpenBao chart BEFORE Step 1 (vault-bootstrap-dev.sh) attempts
+# init/unseal. Gated on LOOPZERO_HELMFILE_ENV=dev-public per ADR
+# 2026-06-20-dev-public-vault-automated-init (sponsor-accepted risk: the
+# dev-public TEST tier uses an AUTOMATED Shamir init; the witness +
+# distributed-shard ceremony is scoped to prod/persistent vaults only).
+#
+# Jeito A INQUEBRÁVEL: this uses `task k3d:vault:create` +
+# `task k3d:vault:bootstrap` against the SEPARATE k3d-loopzero-vault cluster.
+# `task k3d:vault:bootstrap-in-mgmt` remains PROHIBITED (independent of
+# witness scope — separate-cluster topology violation).
+#
+# Both tasks are idempotent: k3d:vault:create skips if cluster exists;
+# k3d:vault:bootstrap re-syncs helm releases (cert-manager + cluster-issuer
+# + openbao-cert + openbao chart) without destroying existing state. So
+# this Step 0 is a no-op on a warm-vault re-run, and the only cost on a
+# Cleanroom-fresh run is the cluster create + ~3min helm sync.
+#
+# In other envs (standalone-multi / unset / prod) this Step 0 is SKIPPED —
+# standalone doesn't run loopzero-vault, and prod requires the witnessed
+# ceremony per the mandate § Sub-step 2.5 prod/persistent path.
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+  run_step "0a-vault-cluster-create" "cd $REPO_ROOT && task k3d:vault:create"
+  run_step "0b-vault-cluster-bootstrap" "cd $REPO_ROOT && task k3d:vault:bootstrap"
+else
+  skip_step "0a-vault-cluster-create" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "0b-vault-cluster-bootstrap" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
+
 # Step 1
 if [[ "$SKIP_VAULT" == "1" ]]; then
   skip_step "1-vault-bootstrap-dev" "operator already ran vault chain"
 else
   run_step "1-vault-bootstrap-dev" "bash $SCRIPT_DIR/vault-bootstrap-dev.sh" || log "  (continuing — vault may already be bootstrapped)"
+fi
+
+# Step 1b (R3 of plan dev-public-cross-cluster-secrets, issue #111, sponsor
+# approved 2026-06-19): apply ESO ClusterSecretStore + SA + CRB + CA
+# ConfigMap on mgmt, then wait for CSS Ready=True. This was operator-time
+# per the canonical runbook (VK.5) — codified here closes the seed chain
+# FAIL=11 for the cross-cluster ESO read path. Reuses the existing
+# canonical vault-bootstrap-eso.sh (NOT a new .sh — Rule 9 + un-homed-logic).
+# Only meaningful under Jeito A (separate loopzero-vault cluster); single-
+# cluster runs no-op via the script's own preflight.
+if [[ "$SKIP_VAULT" == "1" ]]; then
+  skip_step "1b-vault-bootstrap-eso" "skipped together with step 1 (operator already ran vault chain)"
+else
+  ESO_BOOTSTRAP="$SCRIPT_DIR/../openbao/vault-bootstrap-eso.sh"
+  if [[ -f "$ESO_BOOTSTRAP" ]]; then
+    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopzero-mgmt --vault-context k3d-loopzero-vault" || \
+      log "  (continuing — CSS loopzero-vault-secrets may need operator triage)"
+  else
+    skip_step "1b-vault-bootstrap-eso" "vault-bootstrap-eso.sh not found at $ESO_BOOTSTRAP (skipped)"
+  fi
 fi
 
 # Step 2
@@ -134,15 +184,32 @@ run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VER
 # feedback_post_cleanroom_kratos_patch_dev_public already documents
 # the dependency — this re-ordering codifies it in the master script.
 
-# Step 4
-if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
-  run_step "4-patch-kratos-dev-public" "bash $SCRIPT_DIR/patch-kratos-dev-public.sh --verify"
-else
-  skip_step "4-patch-kratos-dev-public" "script not yet present in canonical chain"
-fi
+# ENV-GATE 2026-06-19 (issue #99 of cleanroom-mandate-run-2026-06-19):
+# Steps 4 + 4b configure dev-public URLs (auth-dev.loopzero.example,
+# app-dev.loopzero.example) which are INAPPLICABLE in standalone-multi /
+# drill / prod envs. patch-kratos-dev-public.sh also requires
+# LOOPZERO_GITHUB_CLIENT_ID + LOOPZERO_GOOGLE_CLIENT_ID OAuth credentials
+# which operators typically only provision for dev-public. Running
+# these steps unconditionally produced VERDICT=FAIL when
+# `LOOPZERO_HELMFILE_ENV=standalone-multi task setup` operators ran
+# the master seed afterwards (and CASCADE-failed Steps 3, 9, 11
+# which depend on the dev-public Kratos config). Canonical fix:
+# gate both steps on `LOOPZERO_HELMFILE_ENV == dev-public` with a clear
+# SKIP message in other envs. Defaults to SKIP when env var unset.
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  # Step 4
+  if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
+    run_step "4-patch-kratos-dev-public" "bash $SCRIPT_DIR/patch-kratos-dev-public.sh --verify"
+  else
+    skip_step "4-patch-kratos-dev-public" "script not yet present in canonical chain"
+  fi
 
-# Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
-run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+  # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
+  run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+else
+  skip_step "4-patch-kratos-dev-public" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "4b-seed-hydra-urls-canonical" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
 
 # Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
 # requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
@@ -167,7 +234,13 @@ run_step "7b-seed-vault-role-id-sync" "bash $SCRIPT_DIR/seed-vault-role-id-sync.
 run_step "8-seed-loki-cross-cluster" "bash $SCRIPT_DIR/seed-loki-cross-cluster.sh $VERIFY_FLAG"
 
 # Step 9
-run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh"
+# #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
+# explicitly so any inherited `LOOPZERO_PLAN_TIER` env (operator shell
+# default, stale dev-credentials.json residue) cannot override the
+# canonical dev-public tier. QA dogfooding 2026-06-21 caught the
+# Scale page showing `starter` plan ceiling 2 even after the canonical
+# chain ran — root cause was the env-shadowing path.
+run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh --team"
 
 # Step 10 (NEW 2026-06-16) — admin-cli Hydra OAuth2 client.
 # Required for dogfood-login Suite 0 T5.4 (≥ 3 Hydra clients).

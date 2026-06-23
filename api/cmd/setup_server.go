@@ -164,8 +164,34 @@ func buildServerConfig(
 		// internal store, so we construct one with the same DB handle —
 		// the query is centralized in enforcement.sqlLimitsStore so this
 		// is single-source-of-truth.
-		planReader := db.NewPlanReader(enforcement.NewSQLLimitsStore(dbDeps.StdDB))
+		limitsStore := enforcement.NewSQLLimitsStore(dbDeps.StdDB)
+		planReader := db.NewPlanReader(limitsStore)
 		sc.CostEnforcer = middleware.NewCostEnforcer(costChecker, planReader, logger)
+		// Wire PlanTierStore into ScaleHandler + ProjectHandler so they
+		// resolve the canonical tier (per ADR D4 of plan
+		// 2026-06-15-code-review-49-findings-remediation). Without this,
+		// scale.go:252-254 silently fallbacks to PlanTierStarter even
+		// when subscriptions.plan = 'team' active. QA Run-3 (#123)
+		// caught this — engine served `starter` despite DB `team`.
+		// LimitsStore (enforcement.sqlLimitsStore) already implements
+		// pkgdomain.PlanTierStore.GetTenantPlan(ctx, tenantID) →
+		// (string, error) verbatim per pkg/enforcement/store.go:64.
+		if orchDeps != nil && orchDeps.ScaleHandler != nil {
+			orchDeps.ScaleHandler.SetPlanTierStore(limitsStore)
+		}
+		// StatusHandler wiring — #142 / #123 canonical of
+		// qa-dogfood-cleanup-2026-06-21. GET /api/v1/projects/{name}/status
+		// now surfaces the resolved tenant tier so the dashboard Scale
+		// page can seed the slider ceiling pre-Apply (closes the gap
+		// where the prior /v1/billing seed depended on Known Gap #116
+		// cloud BFF billing read-side, which is 404).
+		if orchDeps != nil && orchDeps.StatusHandler != nil {
+			orchDeps.StatusHandler.SetPlanTierStore(limitsStore)
+		}
+		// ProjectHandler is constructed inline in router.go — surface
+		// the LimitsStore via server.Config.PlanTierStore so the router
+		// can wire it before registering /projects routes.
+		sc.PlanTierStore = limitsStore
 	}
 
 	if stores != nil {

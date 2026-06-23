@@ -36,7 +36,7 @@ fi
 TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
 PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}"
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
-DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://cloud-dev.loopzero.example}"
+DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
 KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-mgmt}"
 WORKLOAD_CONTEXT="${LOOPZERO_WORKLOAD_CONTEXT:-k3d-loopzero-workload}"
 

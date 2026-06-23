@@ -8,14 +8,678 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- M1 commit canonical 30 fixes (plan `m1-commit-canonical-30-fixes` v1.2 SHIPPABLE 96.4; roadmap `qa-readiness-roadmap-2026-06-23.md`): 4 hermetic guard tests CI-wired in `task quality:gates`:
+  - `infra/tests/check-no-cloud-dev-default_test.sh` — regression guard rejecting `${VAR:-https://cloud-dev.loopzero.example}` defaults in test/seed scripts (Caddy 301 trap post commit `ee77b8da`); webhook handler exception `/api/v1/webhooks/github` honored per EC-1 absorption.
+  - `infra/tests/check-archive-script-repo-root_test.sh` — regression guard requiring 4-dirs-up REPO_ROOT in `archive/canonical-tests-v1/scripts/local/` (post-quarantine commit `289cf9d6` added one extra directory level).
+  - `infra/tests/check-webhook-canonical-path_test.sh` — regression guard rejecting `/engine/api/v1/webhooks/github` (Caddy 301 trap) in favor of canonical `/api/v1/webhooks/github` (handler-direct).
+  - `infra/tests/check-oidc-cred-admin-loopzero_test.sh` — regression guard rejecting fabricated `paulo@loopzero.test` credential in favor of canonical `admin@loopzero.example` / `loopzero-dev-password` (LIVE-validated 2026-06-16, sponsor verbatim "SEMPRE vamos usar nos testes", memory `project_canonical_dev_user_credentials`).
+- (#142 / #123) `GET /api/v1/projects/{name}/status` response now carries
+  `plan_tier` — the resolved canonical tenant tier (free / pro / team /
+  enterprise, mirrors `pkg/domain.PlanTier`). Sourced via the same
+  `PlanTierStore.GetTenantPlan` that `ScaleHandler.resolveTier` uses for
+  enforcement, so the dashboard slider ceiling and the engine's `POST
+  /scale` cap are now read from a single canonical SoT. Wired in
+  `api/cmd/setup_server.go` via `StatusHandler.SetPlanTierStore(limitsStore)`
+  alongside the existing `ScaleHandler.SetPlanTierStore` call. Optional
+  field (omitempty) — clients fall back to `'starter'` when older engines
+  omit it. Closes `#123` of `qa-dogfood-cleanup-2026-06-21` canonically
+  (replaces the stopgap that depended on Known Gap #116 cloud BFF billing
+  read-side, which is 404).
+- `infra/tests/charts/generate_secrets_context_pin_test.go` — hermetic Go regression-lock for
+  the `infra/helmfile/scripts/generate-secrets.sh` `--context` pin (closes #115). Pre-fix the
+  script did not pin `kubectl --context`, so any active context residue (e.g. `k3d-loopzero-vault`
+  from a prior T0.1 / vault-bootstrap session) silently misprovisioned Secrets to the wrong
+  cluster, and `task setup` failed at `infra:install:mgmt` with the secrets landed in
+  loopzero-vault. Asserts (a) the canonical `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"`
+  default is declared + (b) the `kubectl()` function override injects
+  `--context="$KUBECTL_CONTEXT"` on every call + (c) audit-trail cites issue #115. Negative-
+  control mutates each piece independently and asserts the matching check fires. Pure
+  hermetic — NO kubectl, NO network.
+- `infra/tests/charts/openbao_cert_san_canonical_test.go` — hermetic render-level regression-
+  lock for the OpenBao Certificate SAN canonical contract (closes post-/review MEDIUM
+  "cert-SAN dependency only LIVE-spike proven, no hermetic guard"). Renders
+  `infra/helm/openbao-cert` via `helm template`, extracts the `kind: Certificate name: openbao`
+  block, asserts `host.k3d.internal` IS present in `dnsNames`. The slice's D1 (x509-clean
+  base) depends on this SAN coverage — without it, the mgmt-pod → host.k3d.internal:8200
+  reach fails TLS verification (F1-class blanket failure mode). Negative-control mutates the
+  rendered output to drop the SAN entry and asserts the guard fires.
+- ADR D7 (F1 SAN-aligned `kubernetes_host`) and ADR D8 (Step 11 canonical container name
+  `-c loopzero-api`) formalized in `knowledge-base/plans/k3d-host-published-vault-reach-plan.md`
+  v1.3 — closes post-/review MEDIUM "plan↔impl formalization gap". Doc-only; the canonical
+  fixes already landed in code (loopzero `7c255524` + `927f93f8` + `a8c66fe8`) and have
+  hermetic guards.
+- `infra/tests/charts/charts_go_tests_wired_test.go` — meta-guard locking the
+  `infra/tests/charts/` Go-guards wiring into `task quality:gates` (closes /review HIGH
+  2026-06-20). Pre-fix, the 16 hermetic Go guards in `infra/tests/charts/` (NodePort/serverlb
+  T1.1, F-1 NetworkPolicy, gateway-derived host.k3d.internal T1.2, F1 SAN-aligned
+  kubernetes_host, Step 11 container-name, 3 post-decomposition tooling fixes #106/#107/#108,
+  plus 9 pre-existing chart contract tests) EXISTED but never ran in pre-push because
+  `taskfiles/test.yml:111` ran only `./unit/...`. This guard asserts the canonical invocation
+  `cd infra/tests && go test ./charts/ -count=1` is present, uncommented, `-count=1`-flagged,
+  helmfile-pre-flight-protected (closes the related MEDIUM: silent SKIP of central
+  `TestVaultHostPublishedReach` is the "looks GREEN, ran nothing" anti-pattern), and free of
+  `|| true` / `2>/dev/null` silencing. Sibling-pattern of
+  `check-openbao-transit-quality-gates-wired_test.sh` (J-22 iter 27), but homed as Go (not
+  bash) to avoid the un-homed-logic gate bump that blocks new `.sh` tests. Negative-control
+  mutates the in-memory taskfile body across 3 sub-cases (canonical invocation removal,
+  helmfile pre-flight removal, `|| true` suffix injection) and asserts the diffs are
+  detectable.
+- `infra/tests/charts/dogfood_all_repo_root_test.go` — hermetic Go regression-lock for the
+  `archive/canonical-tests-v1/scripts/local/dogfood-all.sh` REPO_ROOT off-by-one fix landed
+  2026-06-20 (issue #106). Asserts the canonical 4-`..` derivation
+  `$(cd "$(dirname "$0")/../../../.." && pwd)` is present and the pre-fix 3-`..` form is absent.
+  Empirical companion check stats the first wrapper on disk from both derivations to prove the
+  4-climb resolves and the 3-climb does not. Negative-control mutates the script body via
+  `strings.Replace` (NOT regex Expand semantics, which would interpret literal `$0` as the whole
+  match) and asserts the guard fires. Pure hermetic — NO kubectl, NO network.
+- `infra/tests/charts/live_proof_env_file_test.go` — hermetic Go regression-lock for the
+  `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh` ENV_FILE orphan fix landed
+  2026-06-20 (issue #107). Asserts the dead `/home/paulo/loopzero/.env` literal is GONE from CODE
+  lines (the audit-trail comment is allowed to reference it as historical context, gated via
+  `containsLiteralInCodeLine` skip of `#`-comment lines), AND the canonical post-decomposition
+  SoT `~/.loopzero/dev-credentials.json` is referenced. Negative-control appends the dead literal as
+  a code line and asserts the guard fires. Pure hermetic — NO kubectl, NO network.
+- `infra/tests/charts/loopzero_bin_workspace_discovery_test.go` — hermetic Go regression-lock for
+  the `connect-canonical-fixture.sh` LOOPZERO_BIN workspace-discovery fix landed 2026-06-20
+  (issue #108). Asserts the workspace-canonical `loopzero-cli/bin/loopzero` path is referenced + the
+  pre-fix bare `LOOPZERO_BIN="${LOOPZERO_BIN:-loopzero}"` literal is absent from CODE lines. Negative-control
+  appends the dead literal as a code line and asserts the guard fires. Pure hermetic — NO
+  kubectl, NO network.
+- `infra/tests/charts/connect_canonical_fixture_container_name_test.go` — hermetic Go regression-lock
+  for the Step 11 (`connect-canonical-fixture.sh`) canonical container-name fix landed 2026-06-20
+  during the dev-public Cleanroom-fresh close. Asserts `mint_app_jwt()` reads `GITHUB_APP_ID` via
+  `kubectl exec deployment/loopzero-api -c loopzero-api --` (canonical container name per
+  `infra/helm/loopzero-api/templates/deployment.yaml`), NOT `-c api`. The previous `-c api` selected no
+  matching container; kubectl errored to stderr, the script suppressed stderr via `2>/dev/null` and
+  swallowed the non-zero exit via `|| true`, so `$app_id` ended up empty. Result: ERROR `cannot
+  resolve GITHUB_APP_ID` even though the env var IS present in the pod, which then made
+  `check_installation` emit a sponsor-side WARN ("no GitHub App installation found on
+  getloopscale/loopzerokit-example") that traced back to the wrong selector. Companion negative-control
+  mutates the script body in-memory from `-c loopzero-api` back to `-c api` and asserts the guard
+  fires, proving the gate is not theatre. Pure hermetic — NO kubectl, NO network, NO cluster.
+  Scoped strictly to the `mint_app_jwt` selector (does NOT forbid containers literally named `api`
+  elsewhere in the project).
+- `infra/tests/charts/vault_bootstrap_san_aligned_host_test.go` — hermetic Go regression-lock for
+  the F1 SAN-aligned `kubernetes_host` fix (loopzero commit `7c255524`). Asserts
+  `vault-bootstrap-dev.sh` derives `k3d-${MGMT_CLUSTER}-serverlb` from `TARGET_CONTEXT`, rewrites
+  `MGMT_HOST` via a sed expression whose replacement target is `${SERVERLB_HOST}` (NOT
+  `host.k3d.internal`), and routes the rewritten value into the `bao write auth/k8s-mgmt/config`
+  block via `kubernetes_host="$MGMT_HOST"`. Scoped strictly to the `auth/k8s-mgmt/config`
+  `kubernetes_host` value — does NOT forbid `host.k3d.internal` elsewhere (the vault REACH
+  surface `https://host.k3d.internal:8200` stays canonical because OpenBao's own cert SAN
+  includes that name). Companion negative-control test mutates the body in-memory to revert the
+  rewrite target back to `host.k3d.internal` and asserts the guard fires, proving the gate is not
+  theatre. Pure hermetic — NO kubectl, NO network, NO cluster. Follows the sister-pattern of
+  `host_k3d_internal_canonical_test.go` (T1.2 of `k3d-host-published-vault-reach`).
+
+### Fixed
+- M1 commit canonical (plan `m1-commit-canonical-30-fixes` v1.2 SHIPPABLE 96.4; roadmap M1 of `knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`): persists the 35+ canonical migrations from session Cleanroom 2026-06-22→23 after Caddyfile commit `ee77b8da` activated `cloud-dev → app-dev` 301 redirect (with single exception at `/api/v1/webhooks/github`):
+    - 35 test/seed scripts migrated from default `${VAR:-https://cloud-dev.loopzero.example}` to `${VAR:-https://app-dev.loopzero.example}` across `archive/canonical-tests-v1/scripts/local/`, `infra/tests/e2e/`, and `infra/scripts/local/` (28 originally caught LIVE + 7 latent bugs surfaced by the new T1.1 guard).
+    - `archive/canonical-tests-v1/scripts/local/dogfood-preview.sh`: REPO_ROOT off-by-one corrected (3 dirs → 4 dirs) post-quarantine `289cf9d6`.
+    - `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh`: OIDC L3 REPO_ROOT off-by-one + JWT seed-file fallback (prefers `~/.loopzero/local-dogfood-session-jwt.txt` for OIDC-only canonical Kratos path) + `paulo@loopzero.test` → `admin@loopzero.example` / `loopzero-dev-password` (canonical per `project_canonical_dev_user_credentials`).
+    - `infra/tests/e2e/dev-public-github-webhook_test.sh`: `WEBHOOK_URL` canonical path `/engine/api/v1/webhooks/github` → `/api/v1/webhooks/github` (handler-direct per Caddyfile lines 142-156).
+    - `infra/scripts/local/seed-tenant-fixture-canonical.sh`: webhook probe path canonical fix (`/engine/api/v1/webhooks/github` → `/api/v1/webhooks/github`).
+    - 5 additional scripts (`stripe-webhook-checkout-completed_test.sh`, `dashboard-engine-proxy_test.sh`, `dev-public-billing-portal_test.sh`, `seed-demo-data.sh`, `smoke-dashboard-memory-bff-e2e.sh`): `paulo@loopzero.test` / `LoopZeroDev2026!` → `admin@loopzero.example` / `loopzero-dev-password` per canonical credentials lock.
+    - LIVE-validated session 2026-06-22→23: DOGFOOD 2/13 → 11/13 PASS; live-proof 5/7 → 8/9 PASS.
+
+### Notes
+- The manual SQL `UPDATE releases SET status='ACTIVE'` plus ~10 LIVE cluster mutations (chaos-mesh helm install, cosign-signing-key Secret mirror mgmt→build, Gitea `loopzero` org create, ArgoCD admin token mint + sync, cluster-issuer chart install, Tenant CR seed, ArgoCD AppProject create, OPENBAO_VAULT_ADDR cross-cluster wiring, loopzero-stripe-webhook Secret materialization, Stripe whsec dev placeholder in `~/.loopzero/dev-credentials.json`) applied during session Cleanroom 2026-06-22→23 are explicitly NOT part of this commit per ADR D3 carve-out — canonical solutions are tracked in M2 step 1-11 of the roadmap upstream.
+
+- `qa-dogfood-cleanup-2026-06-21` — backend slice closing 5 of 11 QA-surfaced
+  defects from the 2026-06-21 dogfooding run (engine-side portion; dashboard
+  + CLI pieces ship in their own repos):
+    - (#118) `domain.ProjectSummary.LastDeployAt` switched from value-type
+      `time.Time` to pointer `*time.Time` so `json:",omitempty"` actually
+      omits the field for projects without builds — JS `??` guards now
+      fall through canonically (was rendering "2,027 years ago" on Overview).
+    - (#123) `infra/scripts/local/seed-post-cleanroom-all.sh` Step 9 passes
+      explicit `--team` flag to `seed-tenant-fixture-canonical.sh` so an
+      operator-shell `LOOPZERO_PLAN_TIER=starter` residue can no longer shadow
+      the canonical dev-public tier (ADR-Q7). Hermetic guard at
+      `infra/tests/charts/dev_public_team_tier_seed_test.go`.
+    - (#124) `pkg/domain.PermanentEnvs = []string{"production", "preview"}`
+      canonicalized as the SoT enum for permanent envs per project
+      (ADR-Q5). `api/internal/routes/projects.go` POST handler now seeds
+      BOTH at project.created in the canonical order (production fatal
+      on failure / preview tolerant per Vercel-style derivability).
+      3 new hermetic tests at `pkg/domain/constants_permanent_envs_test.go`.
+    - (#126 Phase A) `api/internal/audit/domain_events.go` ships the
+      closed-enum + 2-phase rollout scaffold (feature flag
+      `AUDIT_ENFORCE_DOMAIN_ENUM`, default OFF). Phase A WARN-only path
+      via `ValidateAction()` + `UnknownActionWarning()`; Phase B (reject
+      mode) flips after at least one release of WARN observation. 5
+      hermetic tests; canonical set covers project/repository/tenant/
+      secret/build/release/environment/domain/api_key domains.
+    - (#127 backend echo) `pkg/domain.DefaultPreviewEnv = "preview"` so
+      the canonical PaaS lexicon (preview + production) is enforced
+      cross-language alongside the dashboard env-terminology audit.
+- `infra/helmfile/scripts/generate-secrets.sh` — pin `kubectl --context` to
+  `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"` via a `kubectl()` shell-function
+  override that injects `--context="$KUBECTL_CONTEXT"` on every call (closes #115). All bare
+  `kubectl` invocations downstream automatically inherit the canonical mgmt context by
+  construction. Without the pin, an active `k3d-loopzero-vault` context (residue from a prior
+  T0.1 / vault-bootstrap session) silently misprovisioned Secrets to the wrong cluster, and
+  `task setup` failed at `infra:install:mgmt` with the secrets landed in loopzero-vault. Override
+  via `KUBECTL_CONTEXT` env var for non-k3d targets (DOKS prod, drill cluster). Regression-
+  locked by `infra/tests/charts/generate_secrets_context_pin_test.go`.
+- `taskfiles/quality.yml` — wire `infra/tests/charts/` Go guards into `task quality:gates`
+  (closes /review HIGH 2026-06-20). Pre-fix the slice's regression protection (16 hermetic Go
+  guards) existed but never ran in pre-push; only `cd infra/tests && go test ./unit/...` was
+  invoked. Adds the canonical invocation `cd infra/tests && go test ./charts/ -count=1` with a
+  fail-loud helmfile pre-flight: the gate aborts with operator-actionable diagnostics if
+  `helmfile` is absent from PATH OR `LOOPZERO_TEST_SKIP_HELMFILE=1` is set, preventing the silent
+  SKIP of `TestVaultHostPublishedReach` (the central helmfile-render guard) — closes the
+  related MEDIUM. Verified GREEN on the droplet 2026-06-20 (helmfile present): all 16 chart
+  guards run + the new `TestChartsGoTestsWired` meta-guard auto-runs inside `./charts/`. No
+  fallout from enabling `./charts/` — baseline was already 39 PASS / 0 FAIL / 0 SKIP.
+- `archive/canonical-tests-v1/scripts/local/dogfood-all.sh` — REPO_ROOT canonical 4-`..` climbs
+  (NOT 3) for the post-archive script relocation (issue #106). The script lives 4 levels deep
+  at `loopzero/archive/canonical-tests-v1/scripts/local/`; the pre-fix 3-climb landed at
+  `loopzero/archive/` instead of `loopzero/`, so WRAPPERS paths
+  `archive/canonical-tests-v1/scripts/local/dogfood-*.sh` resolved to `loopzero/archive/archive/...`
+  and every wrapper hit `[[ ! -f "$wrapper" ]]` → 13/13 SKIP "script missing on disk" with a
+  paradoxical `verdict=PASS` despite zero wrappers run. Post-fix `dogfood-all.sh --live-only`
+  resolves wrappers and invokes them (per-wrapper PASS/FAIL surfaces real journey state, no
+  longer harness SKIP-missing). Regression-locked by
+  `infra/tests/charts/dogfood_all_repo_root_test.go`.
+- `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh` — migrate from dead
+  `ENV_FILE=/home/paulo/loopzero/.env` (pre-M2 absolute path; file deleted in decomposition) to
+  canonical `CREDS_FILE=$HOME/.loopzero/dev-credentials.json` JSON SoT (issue #107). Pre-fix the
+  script exited 2 silently after one line because `env_get`'s `grep` against the missing file
+  under `set -euo pipefail` aborted execution. The new `env_get()` maps each `LOOPZERO_*` logical
+  key to its canonical `~/.loopzero/dev-credentials.json` path via `jq`. Keys absent from the JSON
+  schema (e.g., `LOOPZERO_STRIPE_PUBLISHABLE_KEY`) return empty so the caller's Layer-1 check
+  bad()s honestly — surfacing the schema gap, not papering over it. Sibling canonical scripts
+  use the same SoT: `infra/scripts/local/secrets-seed-dev.sh:26`,
+  `infra/scripts/local/setup-dev-public-dns.sh:36`. Regression-locked by
+  `infra/tests/charts/live_proof_env_file_test.go`.
+- `infra/scripts/local/connect-canonical-fixture.sh` — workspace-relative discovery of the
+  canonical LoopZero CLI binary `loopzero-cli/bin/loopzero` when neither `$LOOPZERO_BIN` is exported nor `loopzero`
+  is on `PATH` (issue #108). Post-M2 decomposition the LoopZero CLI lives in a sibling repo; the
+  master orchestrator `seed-post-cleanroom-all.sh` invokes Step 11 without pre-exporting
+  `LOOPZERO_BIN`, and pre-fix this emitted `WARN+return-2` because the script defaulted to bare
+  `loopzero` on `PATH`. The new 1-line derivation chains: (a) operator-exported `LOOPZERO_BIN`, (b)
+  `command -v loopzero`, (c) workspace-relative `loopzero-cli/bin/loopzero` via `readlink -f`, (d) literal
+  `loopzero` fallback so the existing WARN path remains the last-resort signal. LIVE-verified:
+  Step 11 runs to `DONE — fixture connected` with no operator-exported LOOPZERO_BIN. Regression-
+  locked by `infra/tests/charts/loopzero_bin_workspace_discovery_test.go`.
+- `infra/scripts/local/connect-canonical-fixture.sh` — canonical container name `loopzero-api` (NOT
+  `api`) for `kubectl exec deployment/loopzero-api -c <container> --` inside `mint_app_jwt()`. The
+  chart name + Service name + container name are all `loopzero-api` per
+  `infra/helm/loopzero-api/templates/deployment.yaml`. The previous `-c api` selected zero matching
+  containers; kubectl errored to stderr, the script's `2>/dev/null` suppressed the message + the
+  `|| true` swallowed the non-zero exit, so `$app_id` ended up empty and the script reported
+  `cannot resolve GITHUB_APP_ID` while the env var IS present in the pod. Caught during the
+  2026-06-20 Cleanroom-fresh `seed-post-cleanroom-all.sh --verify --json` run that returned
+  `pass=16 fail=1` with Step 11 as the only FAIL (massive improvement from prior `pass=11 fail=6`
+  proving the 4 root-cause fixes — reach + hijack + bao_auth + SAN — held Cleanroom-survivable).
+  Post-fix re-run returned `pass=17 fail=0 verdict=PASS`. Regression-locked by hermetic Go guard
+  `infra/tests/charts/connect_canonical_fixture_container_name_test.go` with positive + negative
+  control.
+- `infra/scripts/local/vault-bootstrap-dev.sh` — rewrite host-scoped kubeconfig server URL to a
+  SAN-aligned name reachable from the OpenBao pod's network namespace BEFORE writing
+  `auth/k8s-mgmt/config`. The kubeconfig on the operator droplet resolves the mgmt API as
+  `https://0.0.0.0:6443` (k3d's host-published bind address). Two requirements must hold
+  simultaneously: (a) reachability — from the vault pod (loopzero-vault cluster, Jeito A), the URL
+  must resolve and connect to the mgmt API server on the host; (b) TLS hostname/SAN — OpenBao's
+  Go HTTP client verifies the server cert strictly. The k3d-mgmt API cert SAN list is
+  `DNS: k3d-loopzero-mgmt-server-0, k3d-loopzero-mgmt-serverlb, kubernetes(.default(.svc(.cluster.local))),
+  localhost` + the in-cluster IPs. `host.k3d.internal` is NOT in the SAN list — using it triggers
+  SAN-mismatch which OpenBao surfaces as a generic blanket "permission denied" from
+  `auth/k8s-mgmt/login` for every role. The canonical SAN-aligned + cross-cluster-reachable name
+  is the k3d serverlb container `k3d-${cluster_name}-serverlb` (derived from `TARGET_CONTEXT`,
+  e.g., `k3d-loopzero-mgmt` → `k3d-loopzero-mgmt-serverlb`). k3d injects this name into every cluster's
+  CoreDNS NodeHosts via the shared docker network, so it resolves canonically from loopzero-vault.
+  Surfaced + isolated during the T3.1 LIVE iteration 2026-06-20 via a 4-probe sequence
+  (Probe 1 refuted H2 CA-mismatch; Probe 2 with TLS bypass returned `authenticated=true`;
+  Probe 3 detected the SAN-mismatch; Probe 4 verified strict TLS via the serverlb name → HTTP
+  201 + TokenReview authenticated). Warm validation: `ClusterSecretStore loopzero-vault-secrets`
+  transitioned from 51min `InvalidProviderConfig` to `Ready=True reason=Valid`. Canonical close
+  remains gated on the next Cleanroom-fresh `seed-post-cleanroom-all.sh --verify` 0 FAIL run
+  per the cleanroom-up-live-test-mandate.
+- `infra/scripts/local/seed-vault-role-id-sync.sh` — separate `VAULT_CONTEXT` (default
+  `k3d-loopzero-vault`) from `MGMT_CONTEXT` (default `k3d-loopzero-mgmt`) per Jeito A INQUEBRÁVEL.
+  Previous code defaulted to `k3d-loopzero-mgmt` for the openbao-0 pod lookup and emitted a fail message
+  recommending `task k3d:vault:bootstrap-in-mgmt` (which is PROHIBITED — separate cluster topology
+  violation). The script now correctly reads the canonical role_id from the loopzero-vault cluster +
+  patches loopzero-api Deployment env in mgmt cluster.
 
 ### Changed
+- `.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5 — re-scoped per ADR
+  [`2026-06-20-dev-public-vault-automated-init`](.claude/knowledge-base/decisions/2026-06-20-dev-public-vault-automated-init.md)
+  (sponsor-accepted risk). The witness + distributed-shard ceremony (1Password / YubiKey / LUKS USB /
+  safe-deposit-box) is now scoped to **persistent / production** vaults (sole-custodian topology). The
+  dev-public Cleanroom TEST tier uses an **automated** Shamir init via `vault-bootstrap-dev.sh`
+  (ephemeral local shards at `~/.loopzero/cleanroom-unseal.json` 0600, no sponsor JUNTOS, ~5min wall-clock).
+  Rationale: in dev-public the `~/.loopzero/dev-credentials.json` plaintext already co-locates on the
+  droplet with the shards → distributed custody adds only marginal protection when the vault is NOT
+  sole-custodian. **Jeito A INQUEBRÁVEL preserved**: `task k3d:vault:bootstrap-in-mgmt` remains
+  PROHIBITED in any tier (separate cluster topology violation, independent of witness scope).
+  Anti-patterns table re-tiered (prod/persistent vs dev-public vs both); cross-references updated.
+
+### Added
+- Hermetic regression gate `TestDevPublicVaultBootstrapDefault` in
+  `infra/tests/charts/dev_public_vault_bootstrap_default_test.go`
+  (T-A3 of follow-up to ADR `2026-06-20-dev-public-vault-automated-init`). Locks 4 assertions:
+  (a) `seed-post-cleanroom-all.sh` invokes `vault-bootstrap-dev.sh`; (b) for
+  `LOOPZERO_HELMFILE_ENV=dev-public`, the script auto-provisions loopzero-vault via `task k3d:vault:create`
+  + `task k3d:vault:bootstrap` BEFORE `vault-bootstrap-dev.sh` runs (so the dev-public chain is
+  solo/CI provisionable per the ADR); (c) the script NEVER invokes `task k3d:vault:bootstrap-in-mgmt`
+  (Jeito A INQUEBRÁVEL — comment-line mentions of the forbidden shortcut are allowed; actual
+  invocations are forbidden); (d) `cleanroom-up-live-test-mandate.md` cites the ADR so the
+  witness re-scoping is auditable from the rule. Pure-text grep on canonical files; no kubectl, no
+  docker, no helmfile.
+
+### Changed
+- `infra/scripts/local/vault-bootstrap-dev.sh` — Step 5.5 R3 TokenReview path FIXED. Two coupled bugs:
+  (1) the WARN text on timeout said "60s" but the actual loop budget was 180s (stale text from a
+  prior bump per memory `j22-aprendizado-openbao-multi-secret-chain`); (2) the `bao_auth` shell
+  function used by the wait-loop was defined LATER in the script (alongside Step 6/7), so during
+  Step 5.5 the call returned no stdout, the Python check evaluated `'k8s-mgmt/' in {}` → False
+  every iteration, the 180s wait loop ALWAYS timed out, and `auth/k8s-mgmt/config` was NEVER
+  written even when the mount was actually present. Downstream consequence: CSS loopzero-vault-secrets
+  stayed `Ready=False reason=InvalidProviderConfig` (seed-post-cleanroom Step 1b FAIL), ESO
+  cross-cluster workload-identity path silently broke. Fix: define `bao_auth` immediately after
+  ROOT_TOKEN is set (Step 4), remove the legacy duplicate definition at Step 6/7 (replaced with
+  audit-trail comment), correct the WARN text to "180s". LIVE-validated: `bao auth list` from a
+  root-token shell shows `k8s-mgmt/`, `k8s-build/`, `k8s-cell-*/`, `approle/` all enabled. The
+  16-assertion regression guard `check-vault-bootstrap-unseal-loop_test.sh` still passes after the
+  edits.
+
+- `infra/scripts/local/vault-bootstrap-dev.sh` — NEW Step 1.1 `kubectl wait pod openbao-0 --for=condition=Ready --timeout=300s` BEFORE Step 2 (`bao operator init`).
+  LIVE finding 2026-06-20 T-A4 follow-up to ADR `2026-06-20-dev-public-vault-automated-init`: when the chain
+  is invoked back-to-back with `task k3d:vault:bootstrap` (now standard via T-A2 Step 0b), the openbao
+  chart returns from `helm install` before the openbao-0 pod is scheduled (`wait: false` per
+  `feedback_helmfile_wait_false_for_bootstrap_deps`). The very first `kubectl exec` then fails with
+  `pod openbao-0 does not have a host assigned`; `bao operator init` silently no-ops; the unseal file
+  lands size-1 (just a newline); Steps 2-10 cascade-fail with "Vault is sealed". The wait gates Step 2
+  on the pod actually being Ready (sealed-state-tolerant readiness probe), eliminating the race. LIVE
+  validated: Step 1 PASS canonical, `loopzero-openbao-approle` Secret materialized end-to-end.
+
+- `infra/scripts/local/seed-post-cleanroom-all.sh` — NEW Step 0 (T-A2 of follow-up to ADR
+  `2026-06-20-dev-public-vault-automated-init`). When `LOOPZERO_HELMFILE_ENV=dev-public`, Step 0
+  auto-provisions the SEPARATE `loopzero-vault` k3d cluster + OpenBao chart via `task k3d:vault:create`
+  + `task k3d:vault:bootstrap` BEFORE Step 1 (`vault-bootstrap-dev.sh`) attempts init/unseal. Both
+  tasks are idempotent: no-op on warm re-run; full provision on Cleanroom-fresh. In other envs
+  (standalone-multi / unset / prod) Step 0 is skipped. **Jeito A INQUEBRÁVEL preserved**:
+  `task k3d:vault:bootstrap-in-mgmt` remains PROHIBITED in every tier. Closes the dev-public chain
+  to be solo/CI provisionable end-to-end per the ADR.
+
+- Hermetic regression gate `TestHostK3dInternalCanonical` in `infra/tests/charts/host_k3d_internal_canonical_test.go`
+  (T1.2 of plan `k3d-host-published-vault-reach`, ADR D6, sponsor 2026-06-20). Locks the canonical
+  contract on `infra/scripts/local/setup-cross-cluster-networking.sh`: mgmt CoreDNS
+  `host.k3d.internal` MUST resolve to the `k3d-loopzero` bridge **gateway**, NEVER to the
+  `k3d-loopzero-workload-serverlb` container IP. 4 assertions: (a) no `docker inspect k3d-loopzero-workload-serverlb`
+  for the resolution target + no `$WORKLOAD_LB_IP host.k3d.internal` NodeHosts line; (b) derivation goes
+  through `docker network inspect <k3d-loopzero> -f '{{(index .IPAM.Config 0).Gateway}}'` honoring the
+  `.Gateway` + `.IPAM.Config` keys; (c) the NodeHosts line written is `$GATEWAY_IP host.k3d.internal`
+  (gateway-derived variable); (d) script comments cite the #111-#115 history / ADR D6 / plan slug so
+  operators reading in 6 months see why the gateway choice matters. Closes the host-side name
+  resolution hijack that broke the chain T1.1 proved (probe-measured 2026-06-20: bridge gateway
+  reaches vault:8200 + every mgmt/workload/k8s-API host-publish port; workload-serverlb returns TCP
+  RST in ~0.4ms on every platform port).
+
+### Changed
+- `infra/scripts/local/setup-cross-cluster-networking.sh` — Step 2 now derives the k3d-loopzero bridge
+  gateway via `docker network inspect ${SHARED_NETWORK} -f '{{(index .IPAM.Config 0).Gateway}}'`
+  instead of `docker inspect k3d-loopzero-workload-serverlb`. Step 3 writes the gateway IP as the
+  `host.k3d.internal` NodeHosts target. Comments rewritten to cite plan
+  `k3d-host-published-vault-reach` ADR D6 + the #111-#115 history + the 2026-06-20 probe evidence.
+  Idempotent + Cleanroom-survivable: every `task setup` re-asserts the canonical resolution. LIVE
+  validation on droplet 2026-06-20: mgmt-pod `curl https://host.k3d.internal:8200/v1/sys/health?uninitcode=200`
+  returns HTTP 200 + the OpenBao sealed JSON via canonical CoreDNS resolution (no `--resolve` override).
+
+- Hermetic regression gate `TestVaultHostPublishedReach` in `infra/tests/charts/vault_host_published_reach_test.go`
+  (T1.1 of plan `k3d-host-published-vault-reach`, sponsor 2026-06-20). Locks the canonical
+  host-publish topology for loopzero-vault → openbao cross-cluster reach onto the mechanism the T0.1
+  LIVE SPIKE proved end-to-end (mgmt-pod → docker bridge gateway 172.18.0.1:8200 → k3d serverlb
+  nginx `stream{}` L4 passthrough → server-0:30200 NodePort → openbao-0 pod :8200 → HTTP 200,
+  TLS bytes intact, no decode_error 562). 7 assertions cover (a) Service `type: NodePort` not
+  LoadBalancer, (b) `nodePort: 30200` FIXED (NOT auto-assigned — the #112 trap), (c) port/targetPort
+  aligned at 8200/8200, (d) `vault-cluster.yaml` maps `8200:30200@loadbalancer` (NOT `@server:0`),
+  (e) `--disable=servicelb` present (Klipper off, serverlb is sole publish path per D3),
+  (f) CSS server unchanged at `host.k3d.internal:8200` (SAN-clean per D4), and (g) F-1 absorption:
+  openbao chart `server.networkPolicy.enabled: false` in vault-local block + render-side guard
+  asserting NO `kind: NetworkPolicy` for the openbao release. F-1 surfaced LIVE during T0.1 SPIKE
+  (the chart-default policy only allows ingress from `namespaceSelector: {}` — intra-cluster pod
+  sources — and DROPS NodePort traffic arriving with source IP from the host network namespace
+  outside any K8s namespace). Closes issues #111, #112, #113, #114.
+
+### Changed
+- `infra/k3d/vault-cluster.yaml` — port mapping flipped from `8200:8200@server:0` (the #112 fix
+  superseded by #113→#114 diagnostic chain) to `8200:30200@loadbalancer` (plan
+  `k3d-host-published-vault-reach` D1, sponsor 2026-06-20). `--disable=servicelb` added (D3 —
+  Klipper off, the k3d serverlb `stream{}` is the sole publish path). Header comments rewritten
+  to document the proven mechanism + reference the SAN-clean property.
+- `infra/helmfile/vault.helmfile.yaml.gotmpl` `vault-local` block — OpenBao Service
+  `type: LoadBalancer` (the R5 of `dev-public-cross-cluster-secrets`, now superseded) flipped to
+  `type: NodePort` + `nodePort: 30200` FIXED (D4/D5 — deterministic across Cleanrooms).
+  `server.networkPolicy.enabled: true` flipped to `false` (F-1 absorption per T0.1 SPIKE LIVE
+  confirmation). PROD block at line 289 retains `networkPolicy.enabled: true` — prod ESO reaches
+  OpenBao via in-cluster Service, never via host-publish, so the chart policy is fine there.
+
+- Hermetic regression gate `TestRuntimeEnvCompleteness` in `infra/tests/charts/env_completeness_test.go`
+  (T1.1 of plan `dev-public-env-config-completeness`). Locks the dev-public runtime env/secret surface:
+  reads `infra/tests/fixtures/runtime-env-manifest.txt` (200 distinct runtime rows derived from the
+  umbrella env master table), `secret-producers.txt` (D4 producer map for all 39 distinct SECRET
+  runtime vars), and `env-completeness-known-gaps.txt` (explicit allowlist refusing silent debt);
+  cross-references against the install-config-contract surface (CONFIG.md + SECRETS.md across 7
+  charts). 5 sub-tests: anti-vacuity floor (EC-2, ≥150), producer floor (EC-5 companion, ≥30),
+  completeness (0 NEW req=Y orphan + 0 NEW phantom), SECRET materialization (EC-1/D4 — every SECRET
+  runtime VAR has a producer), and camelCase ↔ UPPER_SNAKE normalization (EC-4 — viteApiUrl
+  ↔ VITE_API_URL). The allowlist file refuses empty justifications at parse time. Companion
+  generator `_generate_runtime_manifest.py` (one-shot, NOT runtime — D2 keeps the Go guard hermetic).
+- New § Sub-step 2.5 in `.claude/rules/cleanroom-up-live-test-mandate.md` documenting the
+  Sponsor JUNTOS OpenBao Shamir init gate for dev-public env (issue #101). The mandate now
+  explicitly slots the ceremony BETWEEN step 2 (UP) and step 3 (seeds), with the canonical
+  command sequence (`task k3d:vault:create` + `task k3d:vault:bootstrap` + sponsor
+  `bao operator init -key-shares=5 -key-threshold=3` + 3-of-5 unseal + provisioning
+  helmfile sync), the runbook cross-link, the standalone-multi escape hatch via
+  `task k3d:vault:bootstrap-in-mgmt`, and the anti-patterns table. `docs/operations/openbao-init-runbook.md`
+  back-links the mandate. Hermetic regression lock
+  `TestCleanroomMandateOpenBaoSponsorJUNTOSGateDocumented` asserts both files contain the
+  required cross-references.
+- Hermetic regression gate `TestHelmfileOverlayConfigKeysHonorSchema` in `infra/tests/charts/`
+  (Cleanroom catch 2026-06-19). Scans every `infra/helmfile/values/<env>/<chart>.yaml.gotmpl`,
+  parses `/config:` keys, and asserts each one is declared in the matching chart's
+  `values.schema.json /properties/config/properties` whenever the schema has
+  `additionalProperties:false` at that path (Slice 4 hardening). Closes the helmfile
+  env-overlay drift surface that the Slice 4 EC-3 Go-deps transitive guard did not cover.
+- Hermetic regression gate `TestOpenbaoInitAuthRoleSupportsBoundAudiences`
+  in `infra/tests/charts/openbao_init_bound_audiences_test.go` locking
+  R2 of plan `dev-public-cross-cluster-secrets` (issue #111, sponsor
+  approved 2026-06-19). Verifies the `openbao-init` chart's
+  `write_auth_role` helper accepts a 7th positional arg `bound_audiences`
+  and emits the `bao write ... bound_audiences=<csv>` line ONLY when
+  the role declares `boundAudiences` in values (back-compat preserved
+  for roles that omit the field). EC-5 defence-in-depth: TokenRequest
+  aud claim must match OpenBao role `bound_audiences` — closes the
+  "any-audience login" gap.
+- Hermetic regression gate `TestVaultBootstrapDev_TransitAutoUnseal` in
+  `infra/tests/scripts/vault_bootstrap_auto_unseal_test.go` locking T2.1
+  (hermetic side) of plan `dev-public-cross-cluster-secrets` (issue
+  #111). Verifies the opt-in Transit auto-unseal contract: vault-bootstrap-dev.sh
+  declares `AUTO_UNSEAL_MODE` (default `shamir` — backwards compat), the
+  Shamir init path is guarded so it does NOT run when `AUTO_UNSEAL_MODE=transit`,
+  and an EC-3 Transit-ready wait (`wait_transit_ready` probing
+  `/v1/sys/health`) precedes main-pod init under transit mode. The
+  helmfile vault.helmfile.yaml.gotmpl declares a conditional
+  `seal "transit"` HCL stanza for the `vault-local` env, gated by
+  `.Values.transitAutoUnsealEnabled` (default off). EC-7 (ephemeral
+  Transit) + EC-8 (no seal-migration) doc lines required. The LIVE
+  acceptance (`bao status` Sealed=false + Seal Type=transit, no shard
+  file written) requires sponsor JUNTOS Cleanroom per
+  `cleanroom-up-live-test-mandate § Sub-step 2.5` — not in scope here.
+- Hermetic regression gate `TestCrossClusterSecretStoreContract` in
+  `infra/tests/charts/cross_cluster_secrets_test.go` locking T1.2 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Verifies the dev-public
+  ESO `loopzero-external-secrets` overlay declares workload identity
+  (`auth.kind: kubernetes` + `serviceAccountRef` + `audiences`) replacing
+  the legacy AppRole shape. Asserts EC-5 contract (audiences present) and
+  EC-2 contract (`server` retains canonical intra-cluster DNS so the cert
+  SAN survives CoreDNS host-alias rewrite). Cross-checks the `loopzero-api`
+  dev-public overlay carries the cross-cluster traceability comment so a
+  future operator understands how OPENBAO_VAULT_ADDR resolves to the
+  loopzero-vault NodePort under Jeito A.
+- Hermetic regression gate `TestVaultBootstrapDev_SplitContexts` in
+  `infra/tests/scripts/vault_bootstrap_split_contexts_test.go` locking T1.1 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Verifies the canonical SPLIT-CONTEXT
+  contract: `OPENBAO_CONTEXT` defaults to `k3d-loopzero-vault` (vault-cluster side — bao
+  init/unseal/approle/SPKI read), `TARGET_CONTEXT` defaults to `k3d-loopzero-mgmt`
+  (mgmt-cluster side — `loopzero-openbao-approle` + `openbao-spki-pin` Secret apply where
+  loopzero-api Deployment envFrom reads from); EC-4 ns-ensure precedes the Secret apply;
+  EC-6 `initialized` state guard preserved against accidental destructive re-init.
+  9 sub-assertions cover defaults, ns-ensure, Secret-apply context, bao-exec context,
+  literal-namespace regression guard, traceability, and EC-6 idempotency.
+
+### Changed
+
+- `infra/helmfile/vault.helmfile.yaml.gotmpl` adds
+  `server.service.type=LoadBalancer` for vault-local env (R5 of plan
+  `dev-public-cross-cluster-secrets`, issue #111+#112, sponsor
+  2026-06-19). Companion to the issue #112 k3d port-mapping fix:
+  LoadBalancer triggers k3s servicelb (Klipper) DaemonSet which adds
+  `hostPort=Service.port=8200` to each node container. NOTE: LIVE
+  diagnosed 2026-06-19 — Klipper's svclb pod sets hostPort=8200 but
+  does NOT use `hostNetwork: true`, so the port binding doesn't
+  actually take effect at the node-eth0 level. The reach chain
+  (host:8200 → docker DNAT → server-0:8200) breaks at the last hop
+  because server-0 has no listener on 8200. This is a deeper k3d/k3s
+  network-config issue that's outside the scope of issue #111;
+  follow-up needed to either (a) override Klipper svclb to use
+  hostNetwork, OR (b) switch to a different LB mechanism. Issue #111
+  LIVE gate remains BLOCKED until the deeper fix lands.
+- `infra/k3d/vault-cluster.yaml` port mapping fix for cross-cluster
+  reach (issue #112, blocked issue #111 LIVE gate). The legacy
+  `port: 8200:30200` with `nodeFilters: [loadbalancer]` expected the
+  k3d serverlb HAProxy to forward to a NodePort 30200 backend on the
+  server-0 node. But k3s servicelb (Klipper) DaemonSet binds
+  `hostPort=Service.port=8200` (NOT Service.nodePort) — so the
+  HAProxy backend at server-0:30200 was unbound and TLS handshakes
+  cut mid-stream (`decode_error 562, unexpected eof while reading`).
+  LIVE-diagnosed 2026-06-19 across LoadBalancer + NodePort
+  permutations; root cause is the k3d port-mapping ↔ Klipper
+  hostPort-binding misalignment, NOT an OpenBao or chart bug.
+  New canonical: `port: 8200:8200` with `nodeFilters: [server:0]`
+  skips serverlb HAProxy entirely, hitting Klipper's hostPort 8200
+  directly on the server-0 container. Cert SAN `host.k3d.internal`
+  preserved (verified `openssl x509 -text`).
+- `infra/scripts/local/vault-bootstrap-dev.sh` Step 5.5 mount-wait budget
+  bumped from 60s to 180s (post-LIVE finding 2026-06-19): the canonical
+  Cleanroom run measured the openbao-init Job taking ~78s to complete
+  (helmfile sync + Job init + `bao auth enable` across 6 mounts + transit
+  keys). The 60s budget skipped R3 mid-LIVE; 180s absorbs Cleanroom load
+  variability. Issue #111 LIVE session.
+- `infra/scripts/local/vault-bootstrap-dev.sh` gains Step 5.5 — canonical
+  TokenReview config for `auth/k8s-mgmt` (R3 of plan
+  `dev-public-cross-cluster-secrets`, issue #111, sponsor approved
+  2026-06-19). Codifies the docs/operations/openbao-multi-cluster-auth-runbook.md
+  operator-time procedure: applies `vault-tokenreviewer` SA +
+  `system:auth-delegator` ClusterRoleBinding + a Secret-based
+  `kubernetes.io/service-account-token` (long-lived non-expiring per
+  sponsor reinforcement — K8s ≥1.24 `kubectl create token`
+  TokenRequest is bounded) in MGMT; extracts MGMT API server URL +
+  CA bundle; writes `auth/k8s-mgmt/config` inside the loopzero-vault
+  OpenBao pod. Mount-precedence guard: probes `bao auth list` for
+  `k8s-mgmt/` (60s budget) BEFORE writing config — else the write
+  fails 404 `no handler for route`. Only runs when OPENBAO_CONTEXT !=
+  TARGET_CONTEXT (cross-cluster Jeito A). Each failure mode warns +
+  continues so the seed chain surfaces the issue rather than aborts.
+- `infra/scripts/local/seed-post-cleanroom-all.sh` gains Step 1b that
+  invokes the existing canonical `infra/scripts/openbao/vault-bootstrap-eso.sh`
+  (R3 of plan `dev-public-cross-cluster-secrets`, issue #111). Closes
+  the gap where the canonical CSS `loopzero-vault-secrets` + SA
+  `eso-vault-reader` + CA ConfigMap `loopzero-vault-ca` were defined as
+  manifests but NEVER applied by any automated chain (operator-time
+  per VK.5 runbook). Reuses the existing script (Rule 9: don't
+  reinvent; un-homed-logic gate: NO new bash) — only adds the
+  invocation. The script's own preflight no-ops when single-cluster.
+- `infra/helm/openbao-init/templates/configmap.yaml` extends the
+  `write_auth_role` helper to support optional `bound_audiences` (R2 of
+  plan `dev-public-cross-cluster-secrets`, issue #111, sponsor approved
+  2026-06-19). The helper now accepts a 7th positional arg, guards
+  emission with `if [ -n "${bound_audiences}" ]`, and renders the value
+  via `{{ if .boundAudiences }}{{ join "," .boundAudiences }}{{ end }}`
+  at the call site. Back-compat: roles that omit `boundAudiences` get
+  identical bao writes to the pre-R2 chart.
+- `infra/helm/openbao-init/values.yaml` reconciles the `eso` authRole
+  (R1+R2 of plan `dev-public-cross-cluster-secrets`, issue #111). Moves
+  the role from the legacy `kubernetes` mount (intended for in-cluster
+  loopzero-vault workloads) to the canonical multi-cluster `k8s-mgmt`
+  mount (mgmt-cluster workloads). Adds
+  `boundAudiences: [openbao.vault.loopzero.io]` so OpenBao validates the
+  TokenRequest `aud` claim presented by ESO at login (EC-5
+  defence-in-depth).
+- `infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml`
+  reconciles the canonical KV ClusterSecretStore (R1+R2+R4 of plan
+  `dev-public-cross-cluster-secrets`, issue #111). `mountPath` moves
+  from `kubernetes` (legacy) to `k8s-mgmt` (canonical multi-cluster
+  mount); `serviceAccountRef.audiences: [openbao.vault.loopzero.io]` added
+  so ESO's TokenRequest emits the matching `aud` claim;
+  `server` corrected from the legacy `https://host.k3d.internal:8210`
+  (stale operator-time port-forward note) to
+  `https://host.k3d.internal:8200` — aligned with the actual k3d
+  loopzero-vault cluster config (`infra/k3d/vault-cluster.yaml` maps
+  host:8200 → loadbalancer 8200 → NodePort 30200 → openbao pod) and
+  with the cert SAN that includes `host.k3d.internal` (verified
+  2026-06-19). The stale `:8210` was the seed chain FAIL=11 root cause
+  for ESO reachability.
+- `infra/scripts/local/vault-bootstrap-dev.sh` gains opt-in Transit
+  auto-unseal mode per T2.1 (hermetic side) of plan
+  `dev-public-cross-cluster-secrets` (issue #111). New env var
+  `AUTO_UNSEAL_MODE` (default `shamir` — backwards compat preserved):
+  when set to `transit`, the Shamir init/unseal/shard-write path
+  (Step 2 + Step 3) is skipped because main OpenBao auto-unseals at
+  pod startup against the Transit backend (blueprint D2: no shards on
+  disk). New `wait_transit_ready` helper probes the Transit backend
+  `/v1/sys/health` BEFORE main init (EC-3 — else main pod CrashLoops
+  on auto-unseal). New `OPENBAO_TRANSIT_ADDR` env var (default
+  `http://openbao-transit.vault-system.svc.cluster.local:8200`)
+  parameterizes the probe target. EC-7 documented: Transit backend
+  ephemeral by design (restart loses wrapping key; acceptable in
+  Cleanroom because the stack is re-created each run). EC-8 documented:
+  no seal-migration code — Cleanroom always fresh-inits OpenBao.
+- `infra/helmfile/vault.helmfile.yaml.gotmpl` gains a conditional
+  `seal "transit"` HCL stanza in the `vault-local` env's
+  `server.standalone.config` block per T2.1 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Gated by
+  `.Values.transitAutoUnsealEnabled` (default off — existing Shamir
+  installs unchanged). Parameterized by `.Values.transitAutoUnseal.address`
+  + `.Values.transitAutoUnseal.keyName` + `.Values.transitAutoUnseal.mountPath`
+  + env var `OPENBAO_TRANSIT_TOKEN`. Mirrors the existing prod
+  `seal "awskms"` shape so the dev path (Transit) translates 1:1 to
+  the prod path (KMS).
+- `infra/tests/check-vault-bootstrap-unseal-loop_test.sh` relaxes its
+  `BAO_STATUS_JSON=` count regex to allow leading whitespace
+  (`^[[:space:]]*BAO_STATUS_JSON=...`). Required because T2.1 wraps
+  Step 2's status read in an `if [[ "$AUTO_UNSEAL_MODE" != "transit" ]]`
+  guard which indents the canonical capture pattern. The regression
+  test's intent (≥2 canonical capture-first patterns) is unchanged.
+- `infra/helm/loopzero-external-secrets` chart now supports
+  `openbaoTransit.auth.kind={appRole|kubernetes}` per T1.2 of plan
+  `dev-public-cross-cluster-secrets` (issue #111). Adds workload-identity
+  authentication mode (Kubernetes-auth — ESO controller SA TokenRequest
+  presented to OpenBao `/v1/auth/<mountPath>/login`) alongside the legacy
+  AppRole path. The new mode replaces the static `secret_id` materialized
+  as a K8s Secret in mgmt with a bounded TokenRequest audience (EC-5: must
+  match OpenBao role `bound_audiences`). Default `auth.kind` stays
+  `appRole` so single-cluster overlays (`standalone-multi`, prod single-
+  cell) keep their legacy shape. Translates 1:1 to IRSA on EKS later
+  (blueprint D1). Template fails-loud when `kind=kubernetes` and either
+  `auth.kubernetes.role` or `auth.kubernetes.serviceAccountRef.name` is
+  missing — operator error surfaces at chart-template time, not at
+  Cleanroom LIVE walkthrough.
+- `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`
+  rewritten per T1.2 from the legacy AppRole shape (`roleId` placeholder +
+  `secretRef` pointing at `loopzero-openbao-approle` in `external-secrets` ns)
+  to the new `auth.kind: kubernetes` shape (workload identity against the
+  ESO controller's SA + bound audience). Header now documents the
+  Jeito A cross-cluster topology + EC-1 token-review contract + EC-2
+  CoreDNS host-alias contract.  `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl`
+  carries a cross-cluster traceability comment block on `OPENBAO_VAULT_ADDR`
+  so operators understand mgmt CoreDNS rewrites the canonical DNS to the
+  vault-cluster NodePort at resolve time.
+- `infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh`
+  rewritten for the post-T1.2 contract (20/20 PASS): asserts
+  `auth.kind: kubernetes`, `serviceAccountRef.name`, `audiences:`, and
+  forbids the legacy `roleId:` + `secretRef:` fields — turns the
+  regression risk that motivated the legacy gate (operator hand-edits
+  re-introducing the AppRole shape) into a CI failure.
+- `infra/scripts/local/vault-bootstrap-dev.sh` split into two kubectl contexts per T1.1
+  of plan `dev-public-cross-cluster-secrets` (issue #111). Previously every kubectl
+  call ran against a single `$CONTEXT` defaulting to `k3d-loopzero-mgmt` — incompatible
+  with Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19: OpenBao runs in a
+  separate `k3d-loopzero-vault` cluster). Post-T1.1: bao init/unseal/approle/SPKI read
+  use `$OPENBAO_CONTEXT` (default `k3d-loopzero-vault`); `loopzero-openbao-approle` +
+  `openbao-spki-pin` Secret apply use `$TARGET_CONTEXT` (default `k3d-loopzero-mgmt`);
+  EC-4 idempotent ns-ensure on TARGET_CONTEXT side guarantees the target namespace
+  exists before the Secret apply; pre-flight FAIL message points operators at the
+  Jeito A canonical chain (`task k3d:vault:create` + `task k3d:vault:bootstrap` +
+  sponsor JUNTOS Shamir init per `docs/operations/openbao-init-runbook.md`) instead
+  of the superseded `task k3d:vault:bootstrap-in-mgmt` shortcut. Backwards-compat
+  alias `CONTEXT="$OPENBAO_CONTEXT"` preserved for log-line reuse; new code MUST
+  use one of the two split variables.
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+- **dev-public loopzero-cloud chart + overlay targeted wrong image registries (DOCR + k3d-registry workaround); image actually published to GHCR.**
+  Issue #104 Architecture A (Cleanroom catch 2026-06-19; ADR PROPOSED `2026-06-19-loopzero-cloud-image-registry-canonical`).
+  3-way SoT divergence caught during PR #105's mechanical fix discovery:
+  - loopzero-cloud CI (AM6 reusable workflow `loopzero/.github/workflows/build-publish.yml:12`) publishes EXCLUSIVELY to GHCR (`ghcr.io/getloopscale/loopzero-cloud:develop` for branch pushes; `:vX.Y.Z` + `:latest` for tags).
+  - Engine chart default `infra/helm/loopzero-cloud/values.yaml` expected DOCR — image never published there.
+  - Engine dev-public overlay used local k3d-registry with stale `multi-aud-fix` workaround tag + `do-registry` (DOCR pull secret incoherent with k3d-registry).
+  Canonical fix: align both chart default (`ghcr.io/getloopscale/loopzero-cloud:latest`) and dev-public overlay
+  (`ghcr.io/getloopscale/loopzero-cloud:develop`) to where the AM6 workflow actually publishes. Provision
+  `kubernetes.io/dockerconfigjson` Secret named `ghcr-pull` via new `task images:ghcr:pullsecret` reading
+  from `~/.loopzero/ghcr-pull-token.txt` (NEW canonical SoT, sibling of `~/.loopzero/gomod-token.txt` per memory
+  `reference_gomod_token_canonical_path`). Hermetic regression lock `TestLoopZeroCloudImageOverlayUsesGHCRCanonical`
+  (9 invariants) asserts overlay + chart default + provisioning task canonical. ADR shipped PROPOSED via
+  PR #108 (sponsor grill-me OQ1-OQ5 pending); implementation shipped pre-ratification with same justification
+  as PR #109 for issue #106 (minimum surface, single-PR revertible, unblocks dev-public Cleanroom).
+- **`run-migrations.sh` detector missed CrashLoopBackOff loopzero-api pods, causing `task setup` deadlock at `db:migrate` for dev-public env.**
+  Issue #106 Design E (Cleanroom catch 2026-06-19; ADR `2026-06-19-loopzero-api-vault-bootstrap-ordering` PROPOSED).
+  The pod-NAME presence check `[[ -z "${LOOPZERO_API_POD}" ]]` at line 97 triggered the psql-loop fallback only
+  when loopzero-api had no scheduled pods. In dev-public the pods ARE scheduled but crashloop because
+  `OPENBAO_TRANSIT_ENABLED=true` requires `OPENBAO_VAULT_SECRET_ID` which only ships post-seed-chain.
+  Result: pod NAME exists → fallback skipped → `kubectl exec` errors with `container not found ("loopzero-api")`
+  → `task setup` exit 1. The existing fallback (lines 111-148) was DESIGNED for this scenario per its
+  own comment block. Extend the detector: capture `LOOPZERO_API_READY` via
+  `kubectl get pod -o jsonpath='{.status.containerStatuses[?(@.name=="loopzero-api")].ready}'` and OR the
+  gate condition (`[[ -z "${LOOPZERO_API_POD}" || "$LOOPZERO_API_READY" != "true" ]]`). Named-container jsonpath
+  is defensive against future sidecars. Updated log messages cite the CrashLoopBackOff trigger so
+  operators understand which path fired. Hermetic regression lock
+  `TestRunMigrationsDetectsContainerNotReady` (6 invariants) asserts the detector shape + traceability.
+  loopzero-api's runtime `validateOpenBaoTransit` hard-fail behavior unchanged (T2.5+EC-05 design preserved).
+- **dev-public loopzero-api overlay used stale `multi-aud-fix` workaround tag against local k3d registry, causing `ImagePullBackOff` on every fresh Cleanroom + `images:push:platform:dev-public` build failed `go mod download` for private `loopzero-contracts` module.**
+  Issue #100 Gap B of Cleanroom canonical chain run 2026-06-19. The 2026-06-15 `multi-aud-fix`
+  tag was a one-off rebuild after the multi-audience JWT validator shipped in
+  `api/cmd/setup_auth.go:69` (`loopzerojwt.NewValidatorWithAudiences`). The change has been on
+  develop + the canonical DOCR `:dev` build pipeline ever since, so the workaround is obsolete
+  — but every Cleanroom destroyed the local k3d registry, so dev-public loopzero-api pods
+  ImagePullBackOff'd for a tag that no longer existed. Additionally, the canonical DOCR push
+  task (`task images:push:platform:dev-public`) did not pass `--secret id=gomod_token` to
+  docker buildx, which would re-trigger the same private-module-fetch failure that PR #98
+  fixed in the Tiltfile path. Canonical fix: drop the `multi-aud-fix` workaround in the
+  overlay (use DOCR `registry.digitalocean.com/loopzero-system/loopzero-api:${LOOPZERO_DEV_IMAGE_TAG:-dev}`
+  canonical) + pass `--secret id=gomod_token,src=$HOME/.loopzero/gomod-token.txt` to the docker
+  buildx invocation + add fail-fast pre-flight that errors with clear remediation hint when
+  the canonical SoT file is missing (mirrors Tiltfile pattern). Hermetic regression lock
+  `TestDevPublicLoopZeroApiImageOverlayUsesCanonicalDOCR` asserts both files canonical (overlay
+  + task), with 8 invariants total. Issue #104 tracks the same workaround in the loopzero-cloud
+  overlay (separate repo, deferred).
+- **`seed-post-cleanroom-all.sh` ran Step 4 (patch-kratos-dev-public) + 4b (hydra-urls-canonical) unconditionally regardless of `LOOPZERO_HELMFILE_ENV`.**
+  Issue #99 of Cleanroom canonical chain run 2026-06-19. Both steps configure dev-public-specific URLs
+  (`auth-dev.loopzero.example`, `app-dev.loopzero.example`) and Step 4 requires `LOOPZERO_GITHUB_CLIENT_ID` +
+  `LOOPZERO_GOOGLE_CLIENT_ID` OAuth credentials that operators typically only provision for dev-public.
+  Running the master seed after `LOOPZERO_HELMFILE_ENV=standalone-multi task setup` (the default) produced
+  `VERDICT=FAIL` with an opaque "LOOPZERO_GITHUB_CLIENT_ID not set" message + CASCADE FAILs in Steps 3,
+  9, 11 which depend on dev-public-shaped Kratos config. Canonical fix: both steps now gated on
+  `[[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]`; SKIPPED in all other envs with a clear log
+  message citing the current env. Hermetic regression lock `TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv`
+  pins the env-gate shape + ensures other steps (vault, minio, github-app, gitea-token, etc.)
+  remain unconditional.
+- **Tiltfile `loopzero-api` build failed Cleanroom-fresh with "could not read Username for 'https://github.com'".**
+  Cleanroom catch 2026-06-19. M5 decomposition split `loopzero-contracts` into a private repo;
+  `api/Dockerfile` step 8/11 fetches `github.com/getloopscale/loopzero-contracts@v0.1.0` via a BuildKit
+  secret mount (`--mount=type=secret,id=gomod_token`). The Tilt `docker_build("loopzero-api", ...)`
+  call did NOT pass `secret=...`, so the mount was empty and `go mod download` hit terminal-prompts-
+  disabled. Fix: `secret=["id=gomod_token,src=$HOME/.loopzero/gomod-token.txt"]` on the call + a
+  Tiltfile fail-fast pre-flight that errors with a clear remediation hint when the canonical SoT
+  file is missing. Same stale-helper-post-architecture-refactor class as issue #91.
+- **`helmfile sync` failed on `loopzero-platform-operator` and `loopzero-tenant-operator` in dev-public + drill envs.**
+  Cleanroom catch 2026-06-19. Slice 4 ISP remediation (commit 52ccf8a6 2026-06-18) dropped
+  `baseDomain` from `loopzero-platform-operator` + `loopzero-tenant-operator` schemas (the binaries never
+  read BASE_DOMAIN; only app + preview do) and renamed `config.insecureSkipTls` →
+  `config.operatorInsecureSkipTls` under hardened `additionalProperties:false` roots. The Slice 4
+  commit included EC-3 transitive Go-deps guard catching binary↔chart drift but did NOT cover the
+  helmfile env overlays at `infra/helmfile/values/<env>/`. Four overlays still passed the
+  removed/renamed keys: `dev-public/loopzero-{platform,tenant}-operator.yaml.gotmpl` +
+  `drill/loopzero-{platform,tenant}-operator.yaml.gotmpl`. Fix: drop `baseDomain` from the 4 overlays
+  + rename `insecureSkipTls` → `operatorInsecureSkipTls` in `dev-public/loopzero-tenant-operator`.
+  Same stale-helper-post-architecture-refactor class as issue #91.
 
 ### Security
 

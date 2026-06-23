@@ -34,7 +34,7 @@ SKIP_LIVE=0
 SCENARIO="all"
 JSON=0
 HELP=0
-CLOUD_BASE="${CLOUD_BASE:-https://cloud-dev.loopzero.example}"
+CLOUD_BASE="${CLOUD_BASE:-https://app-dev.loopzero.example}"
 JWT_FILE="${JWT_FILE:-$HOME/.loopzero/local-dogfood-token.txt}"
 
 for arg in "$@"; do

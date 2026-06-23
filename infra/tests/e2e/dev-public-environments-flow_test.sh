@@ -47,7 +47,7 @@
 
 set -euo pipefail
 
-CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
+CLOUD_URL="${CLOUD_URL:-https://app-dev.loopzero.example}"
 API_PREFIX="${API_PREFIX:-/engine}"
 # Path prefix differs between standalone (no /engine) and dev-public (/engine)
 PROJECT_NAME="${PROJECT_NAME:-teste}"

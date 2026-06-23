@@ -83,8 +83,11 @@ assert_grep "Step 2: compare against capitalized 'True'" \
 
 # --- Section C: Step 3 canonical fix is present ---
 # C1: Step 3 also captures stdout first (same pattern as Step 2)
-# Count: BAO_STATUS_JSON= must appear at LEAST 2x (once per Step 2, once per Step 3)
-count=$(grep -cE '^BAO_STATUS_JSON=\$\(bao status -format=json' "$TARGET_SCRIPT")
+# Count: BAO_STATUS_JSON= must appear at LEAST 2x (once per Step 2, once per Step 3).
+# Allow leading whitespace — T2.1 of issue #111 wrapped Step 2 in an
+# `if [[ "$AUTO_UNSEAL_MODE" != "transit" ]]` block which indents the
+# capture. Intent (canonical capture-first pattern) is unchanged.
+count=$(grep -cE '^[[:space:]]*BAO_STATUS_JSON=\$\(bao status -format=json' "$TARGET_SCRIPT")
 if [[ "$count" -ge 2 ]]; then
   echo "PASS [Step 3: BAO_STATUS_JSON capture pattern present (count=$count)]"
   PASS=$((PASS + 1))

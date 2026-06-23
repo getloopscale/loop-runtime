@@ -35,7 +35,7 @@ JSON_MODE=0
 TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
 PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}"
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
-DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://cloud-dev.loopzero.example}"
+DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
 KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-mgmt}"
 PG_CONN="${LOOPZERO_PG_CONN:-postgres://loopzero:loopzero-dev-password@127.0.0.1:15432/loopzero?sslmode=disable}"
 

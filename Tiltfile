@@ -20,6 +20,24 @@ namespace_create("loopzero-system")
 allow_k8s_contexts("k3d-loopzero-mgmt")
 
 # ---------------------------------------------------------------------------
+# gomod_token — required by api/Dockerfile to fetch private loopzero-contracts
+# module (M5 decomposition, 2026-06-19). Without this, loopzero-api build fails
+# with `could not read Username for 'https://github.com'`. Canonical SoT:
+# `~/.loopzero/gomod-token.txt` mode 0600 (sibling of admin-cli-client-secret.txt
+# + cleanroom-unseal.json). Fail-fast pre-flight so operator gets a clear
+# error BEFORE Tilt spends ~2min on a build that will fail at step 8/11.
+# ---------------------------------------------------------------------------
+GOMOD_TOKEN_PATH = os.getenv("HOME") + "/.loopzero/gomod-token.txt"
+if not os.path.exists(GOMOD_TOKEN_PATH):
+    fail(
+        "missing " + GOMOD_TOKEN_PATH + " — required for loopzero-api build " +
+        "(private loopzero-contracts module). Generate a GitHub PAT with " +
+        "`Contents: read` on getloopscale/loopzero-contracts and save it: " +
+        "`echo \"ghp_xxx\" > " + GOMOD_TOKEN_PATH + " && chmod 600 " +
+        GOMOD_TOKEN_PATH + "`"
+    )
+
+# ---------------------------------------------------------------------------
 # Helm dependencies (PostgreSQL, Gitea, MinIO)
 # ---------------------------------------------------------------------------
 # These are installed via `task infra:install:mgmt` during `task setup`.
@@ -161,6 +179,12 @@ docker_build(
     # "/operators/api/go.sum: not found". Cleanroom catch 2026-06-18 —
     # same stale-helper-post-architecture-refactor class as PR #88.
     only=["api/", "pkg/", "go.work", "go.work.sum", "operators/api/", "operators/go.mod", "operators/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
+    # gomod_token: BuildKit secret mount required by api/Dockerfile step 8/11
+    # to fetch the PRIVATE github.com/getloopscale/loopzero-contracts@v0.1.0 module
+    # (M5 decomposition). Without secret=..., Docker build fails with
+    # `could not read Username for 'https://github.com'`. Cleanroom catch
+    # 2026-06-19 — same stale-helper-post-architecture-refactor class as #91.
+    secret=["id=gomod_token,src=" + GOMOD_TOKEN_PATH],
 )
 
 # T1.1.c (plan 2026-06-11-code-review-remediation-147-findings v1.2) per ADR D1:

@@ -262,9 +262,18 @@ type ProjectSummary struct {
 	// rendering "—" / "0" in those columns despite the data being available
 	// via the latest_build LATERAL join. Sponsor walkthrough caught the
 	// regression; these fields are the additive completion of T2.1.
-	// LastDeployAt is the latest build's created_at timestamp (omitempty
-	// when the project has no builds yet — frontend renders "—").
-	LastDeployAt time.Time `json:"last_deploy,omitempty"`
+	//
+	// LastDeployAt is the latest build's created_at timestamp.
+	//
+	// 2026-06-21 follow-up (#118, qa-dogfood-cleanup-2026-06-21 T3.1):
+	// switched from value-type `time.Time` to pointer `*time.Time` because
+	// `json:"…,omitempty"` does NOT consider the zero-value of `time.Time`
+	// as empty — the wire emitted `"0001-01-01T00:00:00Z"` which JS sees
+	// as truthy, so `??` and `?:` guards on the dashboard never fired
+	// (rendered "2,027 years ago" on Overview / project-detail hero).
+	// Pointer + omitempty makes the field absent on the wire when the
+	// project has no builds yet, so JS `??` works canonically.
+	LastDeployAt *time.Time `json:"last_deploy,omitempty"`
 	// AppsCount = jsonb_array_length(latest_build.apps_spec); 0 when no
 	// builds OR empty apps_spec.
 	AppsCount int64 `json:"apps_count"`

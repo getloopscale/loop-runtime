@@ -7,19 +7,28 @@
 # and hardcodes `.Values.image.tag: latest` as default — so we must
 # override both explicitly here.
 
-# CANONICAL FIX 2026-06-15 (multi-audience JWT): local rebuild with
-# pkg/jwt NewValidatorWithAudiences accepting BOTH loopzero-engine AND
-# loopzero-cloud audiences (per api/cmd/setup_auth.go). Image pushed to
-# k3d-loopzero-registry so dev-public mgmt pulls the multi-aud-capable
-# binary. Mirrors the loopzero-cloud override (same family of fix).
+# CANONICAL 2026-06-22 (closes #142 LIVE deployment gap discovered while
+# shipping #123 canonical fix qa-dogfood-cleanup-2026-06-21): loopzero-api
+# image is now published to GHCR by the AM6 reusable workflow
+# (`loopzero/.github/workflows/build-publish.yml`) on every push to develop
+# — same channel as loopzero-cloud (`infra/helmfile/values/dev-public/
+# loopzero-cloud.yaml.gotmpl:14-17` per issue #104 Architecture A). The
+# prior `registry.digitalocean.com/loopzero-system/loopzero-api:dev` tag
+# required a local `task images:push:platform:dev-public` step that
+# was easy to forget — every code push had to be paired with a manual
+# DOCR push, which violated [[feedback_close_issue_update_live_dev_public_2026_06_22]]
+# (push must auto-refresh dev-public). GHCR `:develop` (rolling) is
+# now the canonical channel: CI builds + pushes on every push, helmfile
+# `pullPolicy: Always` picks up the new digest on `kubectl rollout
+# restart`. `ghcr-pull` imagePullSecret is provisioned from
+# ~/.loopzero/ghcr-pull-token.txt by `task images:ghcr:pullsecret`.
 image:
-  repository: k3d-loopzero-registry:5000/loopzero-api
-  tag: multi-aud-fix
-  # Always so each rollout pulls the latest :dev push from DOCR.
+  repository: ghcr.io/getloopscale/loopzero-api
+  tag: develop
   pullPolicy: Always
 
 imagePullSecrets:
-  - name: do-registry
+  - name: ghcr-pull
 
 # k3d-loopzero-mgmt LB has host port mapping 30001 → 13001. Exposing loopzero-api
 # as NodePort 30001 lets `curl localhost:13001/api/...` hit the cluster
@@ -40,6 +49,13 @@ env:
   # against unencrypted PG bytes → bypass-PASS. With these, secrets
   # are encrypted via Transit (vault:v1:<ciphertext>) before PG store.
   OPENBAO_TRANSIT_ENABLED: "true"
+  # T1.2 of dev-public-cross-cluster-secrets (issue #111): under Jeito A
+  # (sponsor mandate INQUEBRÁVEL 2026-06-19) OpenBao runs in a SEPARATE
+  # k3d-loopzero-vault cluster. EC-2: the URL stays at the canonical
+  # intra-cluster DNS name so the cert SAN survives; mgmt CoreDNS
+  # host-alias (T2.2) rewrites this DNS to the loopzero-vault NodePort IP
+  # at resolve time. Operators in a single-cluster topology
+  # (standalone-multi) keep using this same literal — no per-env split.
   OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"
   OPENBAO_VAULT_ROLE_ID: "bf1a3367-4059-dd74-98bb-b1ae8ff0c9c7"
   # SPKI pin extracted dynamically from openbao-tls cert by

@@ -151,10 +151,32 @@ releases:
       # vault-local: standalone + Raft persistent + HTTPS (PRODLIKE.2)
       # Replaces previous devMode (in-memory, http, auto-unseal). Shamir
       # init is manual operator-time after helm install (see runbook).
+      #
+      # T2.1 of plan dev-public-cross-cluster-secrets (issue #111) — adds
+      # an OPT-IN Transit auto-unseal stanza gated by
+      # `.Values.transitAutoUnsealEnabled` (default false; opt-in only).
+      # When enabled, the main OpenBao auto-unseals at pod startup against
+      # the Transit backend at `.Values.transitAutoUnseal.address` — no
+      # Shamir shards on disk (blueprint D2). The Transit backend is
+      # ephemeral by design (EC-7) — a restart loses the wrapping key;
+      # acceptable in Cleanroom because the stack is re-created each run.
+      # No seal-migration code (EC-8) — Cleanroom always fresh-init.
       {{- if eq .Environment.Name "vault-local" }}
       - server:
           dev:
             enabled: false  # NO MORE devMode — proper prod-posture
+          # Plan k3d-host-published-vault-reach D1+D4 (sponsor 2026-06-20).
+          # Service is published to the host via the k3d serverlb (k3d-proxy
+          # nginx stream{} L4 TCP passthrough) at host:8200 → node:30200 →
+          # openbao pod, preserving TLS bytes intact (no L7 decode error 562).
+          # See `infra/k3d/vault-cluster.yaml` port mapping
+          # `8200:30200@loadbalancer` + `--disable=servicelb`. The nodePort
+          # is FIXED at 30200 (D4) so the k3d mapping's backend is
+          # deterministic across Cleanrooms; an auto-assigned 31xxx would
+          # silently break the serverlb chain (the #112 trap).
+          service:
+            type: NodePort
+            nodePort: 30200
           standalone:
             enabled: true
             # HCL config: HTTPS listener (cert from openbao-tls Secret) +
@@ -175,6 +197,23 @@ releases:
                 node_id = "openbao-0"
               }
 
+              {{- if .Values | get "transitAutoUnsealEnabled" false }}
+              # T2.1 (issue #111): Transit auto-unseal stanza. Eliminates
+              # the Shamir-shards-on-disk custody risk (blueprint D2).
+              # EC-3: the Transit backend MUST be reachable BEFORE main
+              # OpenBao starts — vault-bootstrap-dev.sh wait_transit_ready
+              # enforces. EC-7: backend ephemeral (acceptable in Cleanroom).
+              # EC-8: no seal-migration — Cleanroom always fresh-init.
+              seal "transit" {
+                address         = "{{ .Values | get "transitAutoUnseal.address" "http://openbao-transit.vault-system.svc.cluster.local:8200" }}"
+                token           = "{{ env "OPENBAO_TRANSIT_TOKEN" }}"
+                disable_renewal = "false"
+                key_name        = "{{ .Values | get "transitAutoUnseal.keyName" "autounseal" }}"
+                mount_path      = "{{ .Values | get "transitAutoUnseal.mountPath" "transit/" }}"
+                tls_skip_verify = "true"
+              }
+              {{- end }}
+
               service_registration "kubernetes" {}
 
               # Single-node — telemetry minimal
@@ -187,9 +226,21 @@ releases:
             size: 10Gi
             mountPath: /openbao/data
             storageClass: null  # cluster default (local-path)
-          # NetworkPolicy ON even in standalone (validates policy templates)
+          # F-1 absorption (plan k3d-host-published-vault-reach T1.1,
+          # T0.1 SPIKE LIVE-confirmed 2026-06-20): chart-default NetworkPolicy
+          # `openbao` only allows ingress from `namespaceSelector: {}` —
+          # intra-cluster pod sources. The host-publish topology (serverlb
+          # publishes host:8200 → node:30200 NodePort → openbao pod) brings
+          # traffic from the host network namespace, OUTSIDE any K8s
+          # namespace; the chart policy drops it (connection RST mid TLS
+          # Client Hello). Disabling the chart policy is the canonical fix
+          # for vault-local (single-env scope; PRODUCTION block below at
+          # `eq .Environment.Name "prod"` KEEPS the policy enabled because
+          # prod ESO reaches OpenBao via in-cluster Service, never via
+          # host-publish). Rule 9 forbids forking the chart to add an
+          # explicit 0.0.0.0/0:8200 ingress rule.
           networkPolicy:
-            enabled: true
+            enabled: false
       {{- end }}
 
       # prod: file/raft storage + AWS KMS unseal — definido completamente abaixo

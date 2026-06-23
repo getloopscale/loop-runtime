@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # T5.1 of plan 2026-05-29-dashboard-public-integration-canonicalization
 #
-# LIVE E2E: login paulo@loopzero.test → exchange Kratos session for cloud JWT →
+# LIVE E2E: login admin@loopzero.example → exchange Kratos session for cloud JWT →
 # hit /engine/api/v1/projects → assert HTTP 200 + 2 seeded projects.
 #
 # Prereqs (operator-managed):
@@ -18,8 +18,8 @@ cd "$REPO_ROOT"
 
 CLOUD_URL="${CLOUD_URL:-https://cloud.loopzero.example}"
 AUTH_URL="${AUTH_URL:-https://auth.loopzero.example}"
-EMAIL="${EMAIL:-paulo@loopzero.test}"
-PASSWORD="${PASSWORD:-LoopZeroDev2026!}"
+EMAIL="${EMAIL:-admin@loopzero.example}"
+PASSWORD="${PASSWORD:-loopzero-dev-password}"
 TENANT_ID="${TENANT_ID:-tn-8a5caa142b958008}"
 
 # Pre-flight: reachability

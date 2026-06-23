@@ -19,7 +19,7 @@ set -euo pipefail
 
 # -------------------- Configuration --------------------
 
-API_URL="${LOOPZERO_API_URL:-https://cloud-dev.loopzero.example}"
+API_URL="${LOOPZERO_API_URL:-https://app-dev.loopzero.example}"
 # Engine endpoints (loopzero-api) are reached via the /engine proxy mount on
 # loopzero-cloud (see cloud/cmd/main.go:455 r.Route("/engine", ...)). Direct
 # engine access via port-forward sets LOOPZERO_API_URL=http://localhost:13001

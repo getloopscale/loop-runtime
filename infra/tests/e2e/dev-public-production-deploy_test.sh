@@ -46,7 +46,7 @@ PROJECT_NAME="${PROJECT_NAME:-teste}"
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loopzero-mgmt}"
 CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopzero-workload}"
 

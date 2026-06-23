@@ -873,6 +873,23 @@ tasks:
       - |
         set -euo pipefail
         echo "=== Phase 1 T1.3 — push platform images to DOCR ==="
+
+        # Issue #100 Gap B (Cleanroom catch 2026-06-19) — fail-fast pre-flight
+        # for the gomod_token BuildKit secret. loopzero-api's api/Dockerfile step
+        # 8/11 fetches the private github.com/getloopscale/loopzero-contracts module
+        # via `--mount=type=secret,id=gomod_token` (M5 decomposition). Without
+        # the secret mount, `go mod download` hits terminal-prompts-disabled.
+        # SoT path per memory reference_gomod_token_canonical_path:
+        # ~/.loopzero/gomod-token.txt mode 0600. Same pattern as Tiltfile pre-flight
+        # shipped in PR #98.
+        GOMOD_TOKEN_PATH="${HOME}/.loopzero/gomod-token.txt"
+        if [ ! -f "$GOMOD_TOKEN_PATH" ]; then
+          echo "ERROR: missing $GOMOD_TOKEN_PATH — required for loopzero-api build" >&2
+          echo "  Generate a GitHub PAT with \`Contents: read\` on getloopscale/loopzero-contracts and save:" >&2
+          echo "  echo \"ghp_xxx\" > $GOMOD_TOKEN_PATH && chmod 600 $GOMOD_TOKEN_PATH" >&2
+          exit 1
+        fi
+
         # Refresh DOCR auth (~/.docker/config.json updated). Expiry 1200s
         # covers a full sequential build (~8-10min on cold cache).
         doctl registry login --expiry-seconds 1200
@@ -896,7 +913,12 @@ tasks:
           fi
           echo
           echo "  --- Building $name from $dockerfile ---"
+          # Issue #100 Gap B: pass gomod_token to ALL images (loopzero-api needs it
+          # for private loopzero-contracts; other 4 operators ignore the empty
+          # mount since their Dockerfiles don't declare `--mount=type=secret`).
+          # Uniform flag keeps the loop simple + avoids per-image branching.
           docker buildx build \
+            --secret id=gomod_token,src="$GOMOD_TOKEN_PATH" \
             --push \
             --tag "${REGISTRY}/${name}:${TAG}" \
             --file "$dockerfile" \
@@ -943,6 +965,58 @@ tasks:
         done
         echo
         echo "=== do-registry Secret provisioned ==="
+
+  images:ghcr:pullsecret:
+    desc: Provision ghcr-pull imagePullSecret (loopzero-cloud GHCR canonical) — issue #104 Architecture A
+    cmds:
+      - |
+        set -euo pipefail
+        echo "=== images:ghcr:pullsecret — provision ghcr-pull Secret (issue #104) ==="
+
+        # Issue #104 Architecture A (ADR PROPOSED
+        # `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud
+        # images are published to GHCR by the AM6 reusable workflow
+        # (`loopzero/.github/workflows/build-publish.yml`). Engine helmfile
+        # needs a `kubernetes.io/dockerconfigjson` Secret authenticating
+        # to ghcr.io to pull. Canonical SoT: ~/.loopzero/ghcr-pull-token.txt
+        # mode 0600 (sibling of ~/.loopzero/gomod-token.txt per memory
+        # `reference_gomod_token_canonical_path`).
+        #
+        # Token requirements (fine-grained PAT recommended for dev-public):
+        #   - Repository access: getloopscale/loopzero-cloud
+        #   - Permission: Packages: read
+        # OR Classic PAT with `read:packages` scope.
+        GHCR_PULL_TOKEN_PATH="${HOME}/.loopzero/ghcr-pull-token.txt"
+        if [ ! -f "$GHCR_PULL_TOKEN_PATH" ]; then
+          echo "ERROR: missing $GHCR_PULL_TOKEN_PATH — required to pull loopzero-cloud from GHCR" >&2
+          echo "  Generate a GitHub PAT with \`read:packages\` (or fine-grained \`Packages: read\` on getloopscale/loopzero-cloud) and save:" >&2
+          echo "  echo \"ghp_xxx\" > $GHCR_PULL_TOKEN_PATH && chmod 600 $GHCR_PULL_TOKEN_PATH" >&2
+          exit 1
+        fi
+
+        # Compose dockerconfigjson. Username field is informational for
+        # GHCR PAT auth (GHCR auth header is `Basic <base64(username:PAT)>`);
+        # use the canonical GitHub bot identity placeholder. The actual
+        # auth comes from the token.
+        GHCR_USER="${GHCR_USER:-getloopscale}"
+        GHCR_TOKEN="$(cat "$GHCR_PULL_TOKEN_PATH")"
+        DOCKER_CONFIG_JSON="$(printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 -w0)")"
+        DOCKER_CONFIG_B64="$(printf '%s' "$DOCKER_CONFIG_JSON" | base64 -w0)"
+
+        # Provision in loopzero-system namespace of mgmt cluster (where the
+        # loopzero-cloud Deployment lives). Idempotent kubectl apply.
+        kubectl --context {{.MGMT_CONTEXT}} create namespace loopzero-system --dry-run=client -o yaml | kubectl --context {{.MGMT_CONTEXT}} apply -f -
+        cat <<EOF | kubectl --context {{.MGMT_CONTEXT}} apply -f -
+        apiVersion: v1
+        kind: Secret
+        type: kubernetes.io/dockerconfigjson
+        metadata:
+          name: ghcr-pull
+          namespace: loopzero-system
+        data:
+          .dockerconfigjson: ${DOCKER_CONFIG_B64}
+        EOF
+        echo "=== ghcr-pull Secret provisioned in {{.MGMT_CONTEXT}}/loopzero-system ==="
 
   # ---------------------------------------------------------------------------
   # Dashboard public flow (local-Caddy demo droplet)

@@ -263,14 +263,48 @@ openbaoTransit:
   enabled: false
   # OpenBao service URL — production points at the in-cluster service
   # (https://openbao.vault-system.svc:8200). NOT a public hostname.
+  # T1.2 of dev-public-cross-cluster-secrets (issue #111): for Jeito A
+  # topology (OpenBao in separate loopzero-vault cluster), the URL stays at
+  # the canonical intra-cluster DNS name (preserves cert SAN); mgmt
+  # CoreDNS host-alias rewrites the DNS to the vault-cluster NodePort
+  # at resolve time (T2.2).
   server: ""
+  # T1.2 of dev-public-cross-cluster-secrets (issue #111): auth.kind
+  # selects between AppRole (legacy — static secret_id mounted as K8s
+  # Secret) and Kubernetes-auth (workload identity — TokenRequest API).
+  # Workload identity is preferred per blueprint D1 (no static credential)
+  # and translates 1:1 to IRSA on EKS later. Default kind=appRole
+  # preserves backwards compat with single-cluster overlays.
+  auth:
+    kind: "appRole"  # appRole | kubernetes
+    kubernetes:
+      # OpenBao role bound to the ESO controller ServiceAccount. Operator
+      # creates with: bao write auth/kubernetes/role/<role>
+      #   bound_service_account_names=external-secrets
+      #   bound_service_account_namespaces=external-secrets
+      #   bound_audiences=<aud> policies=loopzero-eso ttl=1h
+      role: ""
+      # OpenBao auth mount path. Default upstream is "kubernetes" → login
+      # endpoint POST /v1/auth/kubernetes/login.
+      mountPath: "kubernetes"
+      serviceAccountRef:
+        # ESO controller's SA name. Default `external-secrets` matches the
+        # upstream External Secrets Operator chart.
+        name: "external-secrets"
+        namespace: "external-secrets"
+        # EC-5 contract: TokenRequest aud MUST match the OpenBao role's
+        # `bound_audiences`. Empty → 403 on every secret fetch.
+        audiences: []
   # AppRole mount path on OpenBao. Default upstream is "approle".
+  # Consumed when auth.kind=appRole (legacy path).
   authPath: "approle"
   # AppRole role_id (DURABLE identity for loopzero-api → OpenBao). Per D4 ADR
   # the role's policy MUST permit transit/{encrypt,decrypt,keys}/loopzero-tenants/*
   # so EC-06 auto-create can self-heal first-secret-for-tenant races.
+  # Consumed when auth.kind=appRole.
   roleId: ""
   # K8s Secret holding the AppRole secret_id (SHORT-LIVED).
+  # Consumed when auth.kind=appRole.
   secretRef:
     name: "openbao-eso-secret-id"
     namespace: "external-secrets"

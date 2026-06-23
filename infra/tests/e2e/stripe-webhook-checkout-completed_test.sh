@@ -14,7 +14,7 @@
 #     with a real whsec_* into the cloud's webhook endpoint)
 #   - loopzero-stripe-webhook Secret populated with stripe listen's whsec
 #   - loopzero-cloud rolled with the new secret
-#   - paulo@loopzero.test tenant exists (run T6.1 demo:seed first)
+#   - admin@loopzero.example tenant exists (run T6.1 demo:seed first)
 #
 # This test is HARD STOP for Ralph (requires stripe login + live Stripe API).
 set -euo pipefail

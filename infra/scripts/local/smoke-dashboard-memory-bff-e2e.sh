@@ -8,7 +8,7 @@
 #
 # Sequence (6 steps + cleanup trap):
 #   1. Pre-flight — port-forwards alive (13002 + 14433)
-#   2. Kratos API login (test@loopzero.dev / LoopZeroDev2026!) → session_token + cookie
+#   2. Kratos API login (test@loopzero.dev / loopzero-dev-password) → session_token + cookie
 #   3. POST /v1/auth/session/token with cookie → cloud JWT
 #   4. POST /v1/remember to TheMemory direct → memoryId (sanity baseline)
 #   5. GET /v1/dashboard/memory/list via Go BFF + Bearer JWT → assert 200 + payload
@@ -26,7 +26,7 @@ readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
 readonly CLOUD_URL="${CLOUD_URL:-http://localhost:13002}"
 readonly KRATOS_URL="${KRATOS_URL:-http://localhost:14433}"
 readonly DEV_EMAIL="${DEV_EMAIL:-test@loopzero.dev}"
-readonly DEV_PASSWORD="${DEV_PASSWORD:-LoopZeroDev2026!}"
+readonly DEV_PASSWORD="${DEV_PASSWORD:-loopzero-dev-password}"
 readonly CURL_TIMEOUT="${CURL_TIMEOUT:-10}"
 
 readonly C_RED='\033[0;31m'

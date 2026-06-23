@@ -44,8 +44,17 @@ REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
-LOOPZERO_BIN="${LOOPZERO_BIN:-loopzero}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
+# Canonical 2026-06-20 (issue #108): post-M2 decomposition, the LoopZero CLI
+# lives in sibling repo loopzero-cli/bin/loopzero at the workspace root. The master
+# orchestrator seed-post-cleanroom-all.sh invokes Step 11 without exporting
+# LOOPZERO_BIN; pre-fix this defaulted to `loopzero` on PATH and Step 11 emitted
+# WARN+return-2 when the operator's PATH lacked the binary. The discovery
+# chain below prefers: (a) operator-exported LOOPZERO_BIN, then (b) `loopzero` on
+# PATH, then (c) workspace-relative loopzero-cli/bin/loopzero, then (d) literal
+# `loopzero` so the existing WARN path remains the last-resort signal.
+# Regression-locked by infra/tests/charts/loopzero_bin_workspace_discovery_test.go.
+LOOPZERO_BIN="${LOOPZERO_BIN:-$(command -v loopzero 2>/dev/null || readlink -f "$(dirname "$0")/../../../../loopzero-cli/bin/loopzero" 2>/dev/null || echo loopzero)}"
 GITHUB_APP_SLUG="${GITHUB_APP_SLUG:-loopzero-platform}"
 CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
 PG_NAMESPACE="${PG_NAMESPACE:-loopzero-system}"
@@ -114,7 +123,18 @@ mint_app_jwt() {
   # query only sees STATIC env declarations — it misses envFrom sources
   # (configMapRef/secretRef), which is how GITHUB_APP_ID is wired canonical
   # (via loopzero-api-runtime-config ConfigMap). The running env is authoritative.
-  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c api -- \
+  #
+  # Canonical 2026-06-20: container selector is `-c loopzero-api`, NOT `-c api`.
+  # The canonical container name (and chart name + Service name) is `loopzero-api`
+  # per infra/helm/loopzero-api/templates/deployment.yaml. The previous `-c api`
+  # silently selected no matching container; kubectl errors to stderr, the
+  # `2>/dev/null` suppresses the error message, and `|| true` swallows the
+  # non-zero exit, so `$app_id` ended up empty and the script reported
+  # "cannot resolve GITHUB_APP_ID" even though the env var IS present in
+  # the pod (caught LIVE during dev-public Cleanroom-fresh seed --verify,
+  # Step 11 was the only FAIL out of 17). Regression-locked by
+  # infra/tests/charts/connect_canonical_fixture_container_name_test.go.
+  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c loopzero-api -- \
     sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
   if [ -z "$app_id" ]; then
     log "ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID from loopzero-api pod running env"

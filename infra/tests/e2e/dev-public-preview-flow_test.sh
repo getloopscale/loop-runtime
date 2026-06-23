@@ -44,7 +44,7 @@
 
 set -euo pipefail
 
-CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
+CLOUD_URL="${CLOUD_URL:-https://app-dev.loopzero.example}"
 API_PREFIX="${API_PREFIX:-/engine}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 PREVIEW_PUBLIC_DOMAIN="${PREVIEW_PUBLIC_DOMAIN:-preview-dev.loopzero.example}"

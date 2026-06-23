@@ -309,17 +309,42 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// follow-up: tracked in the implementation contract known_followups
 	// list. The functional contract (production env exists after a
 	// successful POST) is preserved; the rollback path is deferred.
+	// #124 (qa-dogfood-cleanup-2026-06-21 T4.2 / ADR-Q5): seed BOTH
+	// canonical permanent environments — production AND preview — at
+	// project.created. The legacy single-env seed (production only)
+	// surfaced as a UI inconsistency (Environments view listed only
+	// production while the model + QA doc J-10 + add-secret dialog
+	// (#127) all expect both to be PaaS-permanent). Iteration order
+	// is fixed by pkgdomain.PermanentEnvs so the dashboard renders
+	// deterministically. Partial-failure note: if production seeds
+	// OK but preview fails, the project remains usable (production
+	// is the legacy-compat target); the preview row can be backfilled
+	// via the migration shipped in T4.2 of the plan. Preview seeding
+	// is non-fatal because the Vercel/Netlify model treats preview as
+	// derived from PR existence, so an absent preview is recoverable.
 	if h.envEnsurer != nil {
-		if err := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.Name, pkgdomain.DefaultPermanentEnv); err != nil {
-			slog.Error("failed to auto-create production environment",
-				"tenant_id", uc.TenantID,
-				"project", req.Name,
-				"error", err.Error(),
-			)
-			writeLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
-				fmt.Sprintf("production environment auto-create failed for project %q — retry or contact support", req.Name),
-			))
-			return
+		for _, envName := range pkgdomain.PermanentEnvs {
+			if err := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.Name, envName); err != nil {
+				// Production failure is fatal; preview failure is logged
+				// + tolerated (deferred backfill via migration).
+				if envName == pkgdomain.DefaultPermanentEnv {
+					slog.Error("failed to auto-create production environment",
+						"tenant_id", uc.TenantID,
+						"project", req.Name,
+						"error", err.Error(),
+					)
+					writeLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+						fmt.Sprintf("production environment auto-create failed for project %q — retry or contact support", req.Name),
+					))
+					return
+				}
+				slog.Warn("preview permanent env seed failed — project remains usable; backfill on next project.update or via migration",
+					"tenant_id", uc.TenantID,
+					"project", req.Name,
+					"env", envName,
+					"error", err.Error(),
+				)
+			}
 		}
 	}
 
