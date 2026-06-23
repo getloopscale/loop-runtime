@@ -71,21 +71,18 @@ tasks:
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         echo "[infra:install:mgmt] helmfile env: $HELMFILE_ENV"
         bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" mgmt
-      # Plan 2026-06-04-dev-public-docr-fix-forward T4.1 — for env dev-public
-      # (clusterRole=cloud-local), push platform images to DOCR and provision
-      # the do-registry imagePullSecret BEFORE helmfile sync. Otherwise the
-      # k3d clusters would attempt to pull canonical DOCR tags they can't see.
-      # Other envs skip this block (Tilt/standalone-multi own platform images).
+      # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA
+      # É GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
+      # operators) AND loopzero-cloud + loopzero-dashboard are published canonically
+      # by AM6 reusable workflow (.github/workflows/release-artifacts.yml +
+      # build-publish.yml) to ghcr.io/getloopscale/*. Local engine task setup
+      # pulls; does NOT push. dev-public overlays already reference
+      # ghcr.io/getloopscale/* canonical.
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         if [ "$HELMFILE_ENV" = "dev-public" ]; then
-          echo "[infra:install:mgmt T4.1] dev-public env detected — DOCR pre-flight"
-          if [ "${LOOPZERO_SKIP_DOCR_PUSH:-}" = "1" ]; then
-            echo "  LOOPZERO_SKIP_DOCR_PUSH=1 → assuming images already in DOCR"
-          else
-            task images:push:platform:dev-public
-          fi
-          task images:push:platform:dev-public:pullsecret
+          echo "[infra:install:mgmt] dev-public env detected — GHCR canonical pre-flight"
+          task images:ghcr:pullsecret
         fi
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
