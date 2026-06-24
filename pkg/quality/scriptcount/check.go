@@ -14,27 +14,36 @@
 // unhomed-logic would not flag it.
 //
 // Design constraints:
-//   - Pure Go (no shellout): filepath.WalkDir + a baseline JSON ceiling.
-//   - Excludes .claude/worktrees/ (separate git checkouts — counting them
-//     double-counts every script) AND trash/ (EC-1: a script git-mv'd to
-//     trash/ during a migration is still tracked, so a naive find would count
-//     it in the trash→delete window and give a false verdict).
+//   - Source of truth is the git index (`git ls-files`), NOT the on-disk tree.
+//     A filepath.WalkDir count ignored .gitignore, so any untracked/generated
+//     .sh on disk (discover reference clones, dist/build output, tool caches)
+//     inflated the count non-deterministically — the same commit produced 427
+//     on a machine with reference clones present vs 354 on a clean checkout
+//     (issue #151, CHG-2026-06-24-002). Counting only tracked files makes the
+//     verdict identical for a given commit on every machine and in CI. This
+//     deliberately trades the former "pure Go, no shellout" property for
+//     determinism; git is guaranteed present in the gate's runtime context
+//     (it runs inside a git repo, in the pre-push hook and CI).
+//   - excludedPathSegments remains a secondary filter. trash/ is load-bearing
+//     (EC-1: a script git-mv'd to trash/ is still in the index, so git ls-files
+//     would list it during the trash→delete window); the rest are defense in
+//     depth (already gitignored, so absent from the index anyway).
 package scriptcount
 
 import (
 	"encoding/json"
-	"io/fs"
+	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-// excludedPathSegments — any path containing one of these directory segments
-// is NOT counted. ".claude/worktrees" and "trash" are the program-critical
-// exclusions (EC-1); the rest mirror the scriptsaudit scanner.
-// ".claude/knowledge-base/references" holds gitignored third-party clones from
-// discover cycles (cert-manager, cloudnative-pg, crossplane, etc.) — counting
-// their upstream .sh makes the gate non-deterministic across machines, the same
-// double-count pathology that justifies the worktrees exclusion (CHG-2026-06-24-001).
+// excludedPathSegments — any tracked path containing one of these directory
+// segments is NOT counted. trash/ is load-bearing (EC-1: a script git-mv'd to
+// trash/ is still in the index, so git ls-files lists it during the
+// trash→delete window). The rest are defense in depth — they are gitignored, so
+// already absent from the index — but kept so a future stray `git add -f` of a
+// vendored/reference/worktree script cannot silently inflate the count.
 var excludedPathSegments = []string{
 	"/.claude/worktrees/",
 	"/.claude/knowledge-base/references/",
@@ -58,38 +67,34 @@ func ParseBaseline(data []byte) (Baseline, error) {
 	return b, err
 }
 
-// CountCanonical walks root and returns the number of canonical .sh files —
-// i.e. *.sh excluding the directory segments in excludedPathSegments. The
-// returned paths are repo-relative with a leading "/" normalization so the
-// segment match is unambiguous (a top-level trash/ matches "/trash/").
+// CountCanonical returns the number of canonical .sh files tracked by git under
+// root — i.e. *.sh in the git index, excluding the directory segments in
+// excludedPathSegments. The source is `git ls-files` (the index), NOT the
+// on-disk tree, so untracked/gitignored .sh never count (issue #151). Returned
+// paths are repo-relative with a leading "/" so the segment match is unambiguous
+// (a top-level trash/ matches "/trash/").
 func CountCanonical(root string) (int, []string, error) {
+	cmd := exec.Command("git", "-C", root, "ls-files", "-z")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, nil, fmt.Errorf("git ls-files in %q: %w", root, err)
+	}
 	var matched []string
-	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(p, ".sh") {
-			return nil
-		}
-		// Normalize to a "/"-anchored relative form for segment matching.
-		rel, relErr := filepath.Rel(root, p)
-		if relErr != nil {
-			rel = p
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel == "" || !strings.HasSuffix(rel, ".sh") {
+			continue
 		}
 		anchored := "/" + filepath.ToSlash(rel)
+		excluded := false
 		for _, seg := range excludedPathSegments {
 			if strings.Contains(anchored, seg) {
-				return nil
+				excluded = true
+				break
 			}
 		}
-		matched = append(matched, anchored)
-		return nil
-	})
-	if walkErr != nil {
-		return 0, nil, walkErr
+		if !excluded {
+			matched = append(matched, anchored)
+		}
 	}
 	return len(matched), matched, nil
 }

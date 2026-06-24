@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 411,
+  "canonical_sh": 355,
   "_changelog": [
+    {
+      "date": "2026-06-24",
+      "from": 411,
+      "to": 355,
+      "reason": "Ratchet DOWN after migrating the gate from filepath.WalkDir (on-disk tree, ignored .gitignore) to `git ls-files` (tracked index only) per issue #151 / CHG-2026-06-24-002 (sponsor-direct T2). 355 is the deterministic count of tracked canonical .sh — identical for this commit on any machine and in CI (the old WalkDir reported 427 here with discover reference clones present vs 354 on a clean checkout, depending purely on working-tree junk). NOT a deletion of 56 scripts: the previous 411 ceiling included gitignored/untracked .sh that were never part of the program. The script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md) continues to ratchet DOWN from 355. Hand-edit to preserve this _changelog (script-count --update-baseline would wipe it)."
+    },
     {
       "date": "2026-06-18",
       "from": 409,
