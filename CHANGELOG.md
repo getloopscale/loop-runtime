@@ -8,9 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Stripe L2 canonical wiring + sponsor runbook** (plan `stripe-l2-wiring-canonical-fix`, 11 tasks across 6 phases). LIVE-validated: live-proof `--check=stripe` exits 0 with `PASS=4 SKIP=1 FAIL=0` (mandatory L1+L2+L3 PASS; advisory L2 pricing SKIP per ADR D3 — sponsor-pending Stripe dashboard product creation). Full chain: `[live-proof] summary PASS=9 SKIP=1 FAIL=0` (was `PASS=7 FAIL=1` pre-fix). Engineering-side artifacts:
+  - **NEW** `infra/scripts/local/seed-stripe-api-keys-canonical.sh` — sibling of `seed-stripe-secret-canonical.sh` per ADR D1 (rotation cadence isolation). Materializes Secret `loopzero-stripe-api-keys` with data key `STRIPE_API_KEY` from `~/.loopzero/dev-credentials.json.stripe.api_key`. Mode 0600 enforced + graceful SKIP on placeholder + EC-2 prefix guard (rejects publishable_key `pk_*` pasted into api_key field).
+  - **NEW** `infra/tests/check-seed-stripe-api-keys-canonical-syntax_test.sh` — 17-assertion hermetic guard wired into `task quality:gates`.
+  - **NEW** `docs/operations/stripe-prod-setup.md` — operator runbook documenting sponsor-side Stripe dashboard product creation + `price_pro`/`price_team` additions to `~/.loopzero/dev-credentials.json`; rotation runbook for each Secret family.
+  - `infra/helm/loopzero-cloud/templates/deployment.yaml` — appended `envFrom secretRef loopzero-stripe-api-keys optional=true` (sibling of existing loopzero-stripe-webhook envFrom). Helm lint PASS.
+  - `infra/scripts/local/seed-post-cleanroom-all.sh` — inserted Step 15b invoking new sibling seed.
+  - `archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh` — added `skip()` helper + reshaped `check_stripe` L2 into 2 sub-checks per ADR D3: mandatory (STRIPE_API_KEY + STRIPE_WEBHOOK_SECRET → FAIL on absent) + advisory (STRIPE_PRICE_PRO + STRIPE_PRICE_TEAM → SKIP on absent). Summary line now includes SKIP count.
+  - `.claude/rules/shell-scripts-allowlist.md` — 2 new allowlist entries.
+  - `taskfiles/quality.yml` — new hermetic guard wired into `quality:gates` chain.
+
 - **Canonical fixture repo hermetic guard** `infra/tests/check-canonical-fixture-repo_test.sh` (wired into `task quality:gates` after T1.4 sibling). Fails if any LIVE script under `infra/scripts/local/` OR `infra/tests/e2e/` defaults `REPO_NAME` / `--repo` / `repo_full_name` / `testRepoURL` to the legacy `loopzero-repotest` instead of canonical `getloopscale/loopzerokit-example` (per sponsor mandate 2026-06-16; LIVE-validated 2026-06-23 — `project_repositories` only contains loopzerokit-example so legacy pushes silently no-op in `setup_github.go` OnPush handler). Allowlist pattern honors migration-audit comments containing `legacy` / `deprecated` / `superseded` / `guard` / `forbidden`. Pure regex; zero kubectl, zero network. Allowlist entry in `.claude/rules/shell-scripts-allowlist.md`.
 
 ### Changed
+- **`infra/scripts/local/seed-stripe-secret-canonical.sh` — rename Secret data key `whsec` → `STRIPE_WEBHOOK_SECRET`** (plan `stripe-l2-wiring-canonical-fix` T1.1). Aligns Secret key with the env var name `cloud/internal/config/config.go:158` reads via `envOr("STRIPE_WEBHOOK_SECRET", "")`. envFrom secretRef exposes Secret data keys as env var names verbatim, so writing key `whsec` produced env var `whsec` (which Go ignores) instead of `STRIPE_WEBHOOK_SECRET`. Hermetic guard expanded with 2 new assertions to lock the canonical key name (positive match + defensive negative against legacy `whsec` drift).
+
+- **`infra/quality/unhomed-baseline.json` baseline ratchet** — test domain 102→103 + total 162→163 to accommodate new hermetic guard for `seed-stripe-api-keys-canonical.sh`.
+
 - **Canonical fixture repo migration `loopzero-repotest` → `loopzerokit-example`** (closes 2026-06-23 dev-public Cleanroom audit divergence: `project_repositories` table linked `getloopscale/loopzerokit-example` while LIVE scripts + chaos scenarios + e2e tests defaulted to legacy `getloopscale/loopzero-repotest`, causing pushes to legacy to silently no-op in `setup_github.go` OnPush handler `if linked == nil { return nil }`). Updated all LIVE-side defaults:
   - `infra/scripts/local/chaos-scenarios/c11-webhook-concurrent-podkill.sh` + `c12-simul-prs-during-partition.sh` — `REPO_NAME` default switched.
   - `infra/tests/e2e/dev-public-webhook-chain_test.sh` — `REPO_NAME` default switched.

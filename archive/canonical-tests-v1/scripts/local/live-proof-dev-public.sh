@@ -94,11 +94,18 @@ esac
 
 PASS=0
 FAIL=0
+SKIP=0
 declare -A RESULTS
 
 ok()   { printf '  PASS: %s\n' "$1" >&2; PASS=$((PASS+1)); RESULTS["$2"]="PROOF"; }
 bad()  { printf '  FAIL: %s\n' "$1" >&2; FAIL=$((FAIL+1)); RESULTS["$2"]="FAIL"; }
 warn() { printf '  WARN: %s\n' "$1" >&2; }
+# Plan stripe-l2-wiring-canonical-fix T5.1 (2026-06-24): SKIP emits the
+# sponsor-pending signal (engineering-side correct; sponsor prerequisite
+# still pending — e.g., Stripe dashboard products not yet created). SKIP is
+# distinct from FAIL (no FAIL counter bump) and distinct from PASS (does
+# not certify proven). Per Unbreakable Rule 3: honest BLOCKED > false PASS.
+skip() { printf '  SKIP: %s\n' "$1" >&2; SKIP=$((SKIP+1)); RESULTS["$2"]="SKIP"; }
 
 log() { printf '[live-proof env=%s] %s\n' "$ENV_NAME" "$*" >&2; }
 
@@ -282,17 +289,35 @@ check_stripe() {
     envfrom_keys="$envfrom_keys $keys"
   done
   local all_keys="$cloud_env $envfrom_keys"
-  local missing=()
-  for k in STRIPE_API_KEY STRIPE_PRICE_PRO STRIPE_PRICE_TEAM STRIPE_WEBHOOK_SECRET; do
+  # Plan stripe-l2-wiring-canonical-fix T5.1 (2026-06-24): split the L2 check
+  # into engineering-mandatory (STRIPE_API_KEY + STRIPE_WEBHOOK_SECRET — both
+  # wired via canonical Secrets seed-stripe-secret + seed-stripe-api-keys) and
+  # sponsor-advisory (STRIPE_PRICE_PRO + STRIPE_PRICE_TEAM — require sponsor
+  # creating products in Stripe dashboard per docs/operations/stripe-prod-setup.md).
+  # ADR D3 + Unbreakable Rule 3: honest BLOCKED > false PASS — missing price IDs
+  # surface as SKIP (sponsor-pending), not FAIL (engineering gap).
+  local missing_mandatory=()
+  for k in STRIPE_API_KEY STRIPE_WEBHOOK_SECRET; do
     if ! printf '%s\n' $all_keys | grep -qx "$k"; then
-      missing+=("$k")
+      missing_mandatory+=("$k")
     fi
   done
-  if [[ ${#missing[@]} -eq 0 ]]; then
-    ok "L2 loopzero-cloud Deployment has all Stripe env vars (incl. envFrom)" "stripe.l2"
+  if [[ ${#missing_mandatory[@]} -eq 0 ]]; then
+    ok "L2 mandatory Stripe env vars (STRIPE_API_KEY + STRIPE_WEBHOOK_SECRET)" "stripe.l2.mandatory"
   else
-    bad "L2 loopzero-cloud missing env: ${missing[*]} (checked .env[] + envFrom.{secretRef,configMapRef})" "stripe.l2"
+    bad "L2 loopzero-cloud missing mandatory env: ${missing_mandatory[*]} (checked .env[] + envFrom)" "stripe.l2.mandatory"
     return
+  fi
+  local missing_pricing=()
+  for k in STRIPE_PRICE_PRO STRIPE_PRICE_TEAM; do
+    if ! printf '%s\n' $all_keys | grep -qx "$k"; then
+      missing_pricing+=("$k")
+    fi
+  done
+  if [[ ${#missing_pricing[@]} -eq 0 ]]; then
+    ok "L2 advisory Stripe env vars (STRIPE_PRICE_PRO + STRIPE_PRICE_TEAM)" "stripe.l2.pricing"
+  else
+    skip "L2 ${missing_pricing[*]} (sponsor-pending — see docs/operations/stripe-prod-setup.md)" "stripe.l2.pricing"
   fi
 
   # Layer 3
@@ -566,7 +591,7 @@ case "$CHECK" in
   *) printf 'unknown --check=%s\n' "$CHECK" >&2; exit 1 ;;
 esac
 
-printf '\n[live-proof] summary PASS=%d FAIL=%d\n' "$PASS" "$FAIL"
+printf '\n[live-proof] summary PASS=%d SKIP=%d FAIL=%d\n' "$PASS" "$SKIP" "$FAIL"
 
 if [[ $EMIT_JSON -eq 1 ]]; then
   LP_TMP="$(mktemp)"
