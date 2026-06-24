@@ -23,7 +23,7 @@ GITEA_USER="${GITEA_USER:-gitea_admin}"
 # T1.3 + EC-01 (plan 2026-05-21-deep-review-remediation): no hardcoded
 # fallback. Read from gitea-admin Secret (generate-secrets.sh creates it
 # earlier in bootstrap:standalone chain) OR fail fast.
-GITEA_PASS="${GITEA_PASS:-$(kubectl -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
+GITEA_PASS="${GITEA_PASS:-$(kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
 if [[ -z "$GITEA_PASS" ]]; then
   echo "ERROR: GITEA_PASS unset AND gitea-admin Secret missing in loopzero-system" >&2
   echo "       Run generate-secrets.sh first OR set GITEA_PASS env var" >&2

@@ -283,6 +283,11 @@ fi
 # Step 15 (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
 run_step "15-seed-stripe-secret-canonical" "bash $SCRIPT_DIR/seed-stripe-secret-canonical.sh $VERIFY_FLAG"
 
+# Step 15b (NEW 2026-06-24 — plan stripe-l2-wiring-canonical-fix T3.2) —
+# loopzero-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;
+# separate rotation cadence: webhook secret vs API key per Stripe runbook).
+run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-keys-canonical.sh $VERIFY_FLAG"
+
 # Summary
 log ""
 log "=== canonical chain summary ==="

@@ -22,7 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAOS_DIR="$(cd "$SCRIPT_DIR/../chaos/manifests" && pwd)"
-PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/query}"
+PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus-server.monitoring.svc.cluster.local/api/v1/query}"
 
 # shellcheck source=./safety.sh
 . "$SCRIPT_DIR/safety.sh"

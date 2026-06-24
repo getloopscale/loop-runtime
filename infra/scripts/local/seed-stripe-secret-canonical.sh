@@ -63,21 +63,25 @@ if [[ -z "$WHSEC" || "$WHSEC" == "whsec_PLACEHOLDER" ]]; then
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  log "DRY: kubectl create secret loopzero-stripe-webhook --from-literal=whsec=<redacted>"
+  log "DRY: kubectl create secret loopzero-stripe-webhook --from-literal=STRIPE_WEBHOOK_SECRET=<redacted>"
   exit 0
 fi
 
-# Materialize Secret via dry-run | apply (idempotent — replaces stale Secret)
+# Materialize Secret via dry-run | apply (idempotent — replaces stale Secret).
+# Secret data key MUST be STRIPE_WEBHOOK_SECRET (canonical env-var-name match):
+# envFrom secretRef exposes Secret keys as env var names verbatim, and
+# cloud/internal/config/config.go reads `envOr("STRIPE_WEBHOOK_SECRET", "")`.
+# (stripe-l2-wiring-canonical-fix T1.1 — renamed from legacy `whsec` 2026-06-24.)
 kubectl --context "$MGMT_CONTEXT" -n loopzero-system create secret generic loopzero-stripe-webhook \
-  --from-literal=whsec="$WHSEC" \
+  --from-literal=STRIPE_WEBHOOK_SECRET="$WHSEC" \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CONTEXT" apply -f -
 
 if [[ "$VERIFY" == "1" ]]; then
-  log "verifying whsec key in Secret..."
-  if kubectl --context "$MGMT_CONTEXT" -n loopzero-system get secret loopzero-stripe-webhook -o jsonpath='{.data.whsec}' 2>/dev/null | grep -q .; then
+  log "verifying STRIPE_WEBHOOK_SECRET key in Secret..."
+  if kubectl --context "$MGMT_CONTEXT" -n loopzero-system get secret loopzero-stripe-webhook -o jsonpath='{.data.STRIPE_WEBHOOK_SECRET}' 2>/dev/null | grep -q .; then
     log "PASS — secret materialized"
   else
-    log "FAIL — whsec key missing in loopzero-stripe-webhook Secret"
+    log "FAIL — STRIPE_WEBHOOK_SECRET key missing in loopzero-stripe-webhook Secret"
     exit 1
   fi
 fi
