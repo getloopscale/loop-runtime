@@ -31,8 +31,13 @@ import (
 // excludedPathSegments — any path containing one of these directory segments
 // is NOT counted. ".claude/worktrees" and "trash" are the program-critical
 // exclusions (EC-1); the rest mirror the scriptsaudit scanner.
+// ".claude/knowledge-base/references" holds gitignored third-party clones from
+// discover cycles (cert-manager, cloudnative-pg, crossplane, etc.) — counting
+// their upstream .sh makes the gate non-deterministic across machines, the same
+// double-count pathology that justifies the worktrees exclusion (CHG-2026-06-24-001).
 var excludedPathSegments = []string{
 	"/.claude/worktrees/",
+	"/.claude/knowledge-base/references/",
 	"/trash/",
 	"/node_modules/",
 	"/vendor/",

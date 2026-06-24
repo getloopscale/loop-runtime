@@ -77,6 +77,22 @@ func TestScriptCount_ExcludesTrash(t *testing.T) {
 	}
 }
 
+// Third-party reference clones live under .claude/knowledge-base/references/
+// (gitignored study material from discover cycles — cert-manager, cloudnative-pg,
+// crossplane, etc.). They carry hundreds of upstream .sh files that are NOT part
+// of LoopZero's script-minimization program. Counting them makes the gate
+// non-deterministic (depends on which references happen to be cloned on disk) —
+// the same double-count pathology that justifies the worktrees/ exclusion.
+func TestScriptCount_ExcludesReferenceClones(t *testing.T) {
+	root := t.TempDir()
+	mkscript(t, root, "infra/scripts/a.sh")
+	mkscript(t, root, ".claude/knowledge-base/references/cert-manager/hack/build.sh") // must NOT count
+	v, _ := Check(root, Baseline{CanonicalSH: 1})
+	if !v.OK || v.Count != 1 {
+		t.Fatalf("reference-clone script counted: count=%d (want 1)", v.Count)
+	}
+}
+
 func TestParseBaseline(t *testing.T) {
 	b, err := ParseBaseline([]byte(`{"canonical_sh":140}`))
 	if err != nil || b.CanonicalSH != 140 {
