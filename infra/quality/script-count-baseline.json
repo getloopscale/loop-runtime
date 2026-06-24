@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 355,
+  "canonical_sh": 356,
   "_changelog": [
+    {
+      "date": "2026-06-24",
+      "from": 355,
+      "to": 356,
+      "reason": "T1.2 of plan loopzero-cloud-14-device-flow-csrf-secure-fix v3.0 — adds infra/tests/helm/ory-hydra-cookie-secure-attribute_test.sh (KEEP-CI-WIRED 9/9 PASS hermetic source-level test for the canonical hydra.dev:false cookie Secure attribute fix in dev-public overlay). Allowlisted per D4 criteria (Necessary + Simple + CI-wired + Allowlisted in shell-scripts-allowlist.md). Sibling pattern of ory-hydra-canonical-urls_test.sh; not migrable to Go gate within #14 scope (the future infra/tests/helm/ bash → Go re-home is a queued hardening slice per ADR 2026-06-17-quality-gate-baseline-reanchor.md)."
+    },
     {
       "date": "2026-06-24",
       "from": 411,
