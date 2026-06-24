@@ -19,6 +19,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -122,8 +123,21 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 
 		jobID := uuid.NewString()
 		if _, err := evictor.EnqueueEviction(ctx, matched); err != nil {
+			// T2.1 of plan qa-sprint1-cleanup-2026-06-24 v1.2 — closes #20
+			// (CWE-209 info-disclosure). Split client message + server log:
+			// the prior `fmt.Sprintf("%v", err)` leaked k8s ServiceAccount,
+			// namespace, and ArgoCD APIgroup verbatim to the authenticated
+			// service-auth caller. Per ADR D6 (split over redact-regex), the
+			// detailed err goes to slog (Loki/audit ingest); the client gets
+			// a generic message that is unconditionally safe regardless of
+			// the err shape coming from k8s/ArgoCD upstream.
+			slog.Error("eviction enqueue failed",
+				"err", err,
+				"job_id", jobID,
+				"tenants_matched_count", len(matched),
+			)
 			jsonError(w, http.StatusInternalServerError, "ENQUEUE_FAILED",
-				fmt.Sprintf("Failed to enqueue eviction: %v", err))
+				"Eviction queue temporarily unavailable. Please retry.")
 			return
 		}
 
