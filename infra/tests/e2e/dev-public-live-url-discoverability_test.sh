@@ -128,7 +128,7 @@ fi
 # SC-B: URL is **reachable** (DNS resolves + edge proxies to app pod). Per
 # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): "reachable" means the
 # request hit a real backend pod, NOT that the app's `/` path returns 2xx.
-# Many canonical apps (the dogfood fixture `getloopscale/loopzero-repotest`, any
+# Many canonical apps (the dogfood fixture `getloopscale/loopzerokit-example`, any
 # REST API that doesn't serve a homepage, etc.) return 404 on `/` by
 # design — that 404 IS proof the edge chain works (Caddy + Traefik +
 # IngressRoute + Service + Pod). The pre-fix logic conflated "URL works"

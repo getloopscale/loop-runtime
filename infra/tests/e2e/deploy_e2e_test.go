@@ -21,7 +21,7 @@ const (
 	envFlag       = "LOOPZERO_E2E_DEPLOY"
 	testTenant    = "e2e-test"
 	testProject   = "repotest"
-	testRepoURL   = "https://github.com/getloopscale/loopzero-repotest"
+	testRepoURL   = "https://github.com/getloopscale/loopzerokit-example"
 	testFramework = "node"
 	// deployTimeout and probeTimeout are defined in constants_test.go.
 	// Use httpProbeTimeout for probe operations.
@@ -123,7 +123,7 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	t.Logf("✓ E2E happy path PASS")
 }
 
-// setupWorkspace clones loopzero-repotest into a tmpdir.
+// setupWorkspace clones loopzerokit-example into a tmpdir.
 func setupWorkspace(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "loopzero-e2e-")

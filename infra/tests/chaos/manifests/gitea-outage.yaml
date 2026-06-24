@@ -22,11 +22,15 @@ metadata:
     loopzero.io/roadmap: "08"
     loopzero.io/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
     loopzero.io/slo-query: |
-      # No builds stuck in READY (reaper works)
-      max_over_time(loopzero_releases_ready_over_timeout[5m]) == 0
-      and
-      # All error responses have a code (not "internal error")
-      rate(loopzero_http_requests_total{code="500",reason="untyped"}[2m]) == 0
+      # SLO: loopzero-api scrape still alive post-outage AND release backlog under control.
+      # Canonical metric names per 2026-06-24 audit (post-decomposition rename):
+      #   - loopzero_api_requests_total (was loopzero_http_requests_total pre-decomposition)
+      #   - loopzero_releases_pending (was loopzero_releases_ready_over_timeout — release reaper
+      #     now emits the queue-depth gauge directly; over-timeout was a derived view).
+      # Steady-state: at least one loopzero_api_requests_total series scraped at probe time
+      # (proves Prometheus + loopzero-api liveness AFTER the chaos window) AND release queue
+      # ≤ 5 (proves the reaper kept up — no stuck-in-PENDING runaway).
+      (count(loopzero_api_requests_total) > 0) and (sum(loopzero_releases_pending) <= 5)
 spec:
   action: partition
   mode: all

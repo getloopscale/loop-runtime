@@ -104,4 +104,7 @@ orphanCleanup:
   enabled: true
   schedule: "*/5 * * * *"
   thresholdMin: 5
-  image: bitnami/kubectl:1.32
+  # 2026-06-23: bitnami/kubectl images removed from Docker Hub (Bitnami
+  # deprecation Aug 2025). Switched to alpine/k8s canonical Alpine-based
+  # bundle (kubectl + helm + bash etc.) — pulled + validated this session.
+  image: alpine/k8s:1.32.0

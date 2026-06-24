@@ -52,16 +52,31 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
-# Port-forward + REST mint (more reliable than CLI for headless ops)
-kubectl --context "$MGMT_CONTEXT" -n argocd port-forward svc/argocd-server 14444:443 >/dev/null 2>&1 &
+# Port-forward + REST mint (more reliable than CLI for headless ops).
+# Canonical 2026-06-23: argocd-server runs in --insecure mode in k3d
+# (svc port 80 → targetPort 8080 plaintext). HTTPS svc port 443 also
+# targets 8080 with NO TLS termination → curl HTTPS handshake fails.
+# Use HTTP via svc port 80 to match the actual argocd-server protocol.
+kubectl --context "$MGMT_CONTEXT" -n argocd port-forward svc/argocd-server 14444:80 >/dev/null 2>&1 &
 PF_PID=$!
 trap "kill $PF_PID 2>/dev/null || true" EXIT INT TERM
 
+# Wait for port-forward to fully establish + argocd-server to accept on the
+# forwarded port. Canonical 2026-06-23: --retry-connrefused alone is
+# insufficient because kubectl port-forward "Forwarding from..." message
+# appears BEFORE the underlying pod->localhost path is reliably routable.
+# Explicit poll matches the manual probe pattern that returns 200 OK at
+# ~6s steady-state.
+for i in $(seq 1 30); do
+  if curl -s --max-time 2 -o /dev/null -w '%{http_code}' "http://localhost:14444/api/v1/version" 2>/dev/null | grep -qE '^(200|401)$'; then
+    break
+  fi
+  sleep 1
+done
+
 # Step 1: login → session token
-# Per /review TEST-002: replace sleep 3 with curl --retry loop for port-forward readiness.
-# curl --fail returns non-zero on HTTP 4xx/5xx (per /review TEST-003 EC-8 curl status check).
-SESSION=$(curl -ks --fail --retry 10 --retry-connrefused --retry-delay 1 \
-  "https://localhost:14444/api/v1/session" \
+SESSION=$(curl -s --fail \
+  "http://localhost:14444/api/v1/session" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"admin\",\"password\":\"$PW\"}" \
   | python3 -c 'import sys, json; print(json.load(sys.stdin).get("token", ""))')
@@ -72,7 +87,7 @@ fi
 
 # Step 2: generate account token (account=loopzero-api per canonical contract)
 # curl --fail returns non-zero on HTTP 4xx/5xx (EC-8 absorption).
-TOKEN=$(curl -ks --fail -X POST "https://localhost:14444/api/v1/account/loopzero-api/token" \
+TOKEN=$(curl -s --fail -X POST "http://localhost:14444/api/v1/account/loopzero-api/token" \
   -H "Authorization: Bearer $SESSION" \
   -H "Content-Type: application/json" \
   -d '{"name":"canonical-seed"}' \

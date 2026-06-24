@@ -33,7 +33,7 @@
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
-REPO_NAME="${REPO_NAME:-loopzero-repotest}"
+REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
 CHAOS_NAMESPACE="${CHAOS_NAMESPACE:-chaos-mesh}"
 LOOPZERO_SYSTEM_NS="${LOOPZERO_SYSTEM_NS:-loopzero-system}"

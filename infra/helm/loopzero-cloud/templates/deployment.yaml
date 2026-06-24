@@ -91,6 +91,14 @@ spec:
             - secretRef:
                 name: loopzero-stripe-webhook
                 optional: true
+            # Plan stripe-l2-wiring-canonical-fix T3.1 (2026-06-24): Stripe API
+            # key via separate Secret (ADR D1 — rotation cadence isolation:
+            # webhook secret vs API key rotate on different triggers per Stripe
+            # runbook). Materialized by seed-stripe-api-keys-canonical.sh.
+            # optional=true preserves dev-without-stripe boot path.
+            - secretRef:
+                name: loopzero-stripe-api-keys
+                optional: true
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

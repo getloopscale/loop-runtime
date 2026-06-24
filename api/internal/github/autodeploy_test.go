@@ -131,7 +131,7 @@ func TestExtractLoopZeroYaml_MalformedYaml(t *testing.T) {
 func TestExtractLoopZeroYaml_NestedPath(t *testing.T) {
 	// Arrange — GitHub tarball: "reponame-sha/loopzero.yaml" at depth=2 (prefix/file)
 	tarball := makeTarGz(t, map[string]string{
-		"getloopscale-loopzero-repotest-abc123/loopzero.yaml": `project: nested-project
+		"getloopscale-loopzerokit-example-abc123/loopzero.yaml": `project: nested-project
 apps:
   web:
     language: node

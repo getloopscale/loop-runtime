@@ -117,7 +117,7 @@ func TestWebhook_PushEvent_DispatchesToHandler(t *testing.T) {
 		"before": "000000",
 		"repository": {
 			"id": 12345,
-			"full_name": "getloopscale/loopzero-repotest",
+			"full_name": "getloopscale/loopzerokit-example",
 			"default_branch": "main"
 		},
 		"sender": {"login": "paulohenriquevn"},
@@ -160,8 +160,8 @@ func TestWebhook_PushEvent_DispatchesToHandler(t *testing.T) {
 	if received.After != "abc123def456" {
 		t.Errorf("commit SHA = %q, want abc123def456", received.After)
 	}
-	if received.Repository.FullName != "getloopscale/loopzero-repotest" {
-		t.Errorf("repo = %q, want getloopscale/loopzero-repotest", received.Repository.FullName)
+	if received.Repository.FullName != "getloopscale/loopzerokit-example" {
+		t.Errorf("repo = %q, want getloopscale/loopzerokit-example", received.Repository.FullName)
 	}
 	if received.Installation.ID != 122482567 {
 		t.Errorf("installation ID = %d, want 122482567", received.Installation.ID)
@@ -195,7 +195,7 @@ func TestWebhook_PullRequestEvent_DispatchesToHandler(t *testing.T) {
 			"base": {"ref": "main"},
 			"user": {"login": "dev"}
 		},
-		"repository": {"full_name": "getloopscale/loopzero-repotest"},
+		"repository": {"full_name": "getloopscale/loopzerokit-example"},
 		"installation": {"id": 122482567}
 	}`
 	sig := sign(body, testSecret)

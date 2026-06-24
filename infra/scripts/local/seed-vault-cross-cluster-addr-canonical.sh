@@ -41,7 +41,7 @@ done
 log() { printf "%s [seed-vault-cross-cluster-addr] %s\n" "$(date -u +%H:%M:%SZ)" "$*"; }
 
 # Discover vault Service nodePort
-NODE_PORT=$(kubectl --context "$VAULT_CONTEXT" -n vault-system get svc openbao -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || echo "")
+NODE_PORT=$(kubectl --context "$VAULT_CONTEXT" -n vault-system get svc openbao -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null || echo "")
 if [[ -z "$NODE_PORT" ]]; then
   log "FAIL — openbao Service nodePort not found in vault cluster (run task k3d:vault:bootstrap first)"
   exit 1
@@ -57,7 +57,7 @@ if [[ -z "$SERVERLB_IP" ]]; then
   exit 1
 fi
 
-VAULT_ADDR="http://${SERVERLB_IP}:${NODE_PORT}"
+VAULT_ADDR="https://${SERVERLB_IP}:${NODE_PORT}"
 log "discovered cross-cluster VAULT_ADDR: $VAULT_ADDR"
 
 if [[ "$DRY_RUN" == "1" ]]; then

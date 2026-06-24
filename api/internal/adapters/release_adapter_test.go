@@ -16,7 +16,7 @@ import (
 // serves it instead).
 
 func TestResolveEntryApp_PrefersServerOverStaticFrontend(t *testing.T) {
-	// Real-world fixture from `getloopscale/loopzero-repotest` (production release
+	// Real-world fixture from `getloopscale/loopzerokit-example` (production release
 	// rel-1e40cd32782faeca on 2026-06-12): web frontend FIRST in array,
 	// api server SECOND. The previous resolver picked the first match and
 	// returned "web" — which has no IngressRoute (rendering=static → CF

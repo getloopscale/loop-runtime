@@ -68,7 +68,7 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 			"pr_number": %d,
 			"branch": "feature/ginkgo-test",
 			"commit_sha": "%s",
-			"repo_full_name": "getloopscale/loopzero-repotest",
+			"repo_full_name": "getloopscale/loopzerokit-example",
 			"installation_id": 99999999,
 			"ttl_hours": 1
 		}`, prNumber, commitSHA)

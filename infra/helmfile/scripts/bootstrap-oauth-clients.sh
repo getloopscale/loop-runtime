@@ -116,7 +116,7 @@ main() {
   sleep 1
 
   # Port-forward único, mantido por toda a execução do main.
-  kubectl -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" >/dev/null 2>&1 &
+  kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" >/dev/null 2>&1 &
   local pf_pid=$!
   trap "kill $pf_pid 2>/dev/null || true" EXIT
   sleep 4
@@ -158,10 +158,10 @@ main() {
   secret=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("client_secret",""))' 2>/dev/null || true)
   if [[ -n "$secret" ]]; then
     log "persisting loopzero-bootstrap client_secret to Secret $NS_LOOPZERO/loopzero-bootstrap-credentials"
-    kubectl -n "$NS_LOOPZERO" create secret generic loopzero-bootstrap-credentials \
+    kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" -n "$NS_LOOPZERO" create secret generic loopzero-bootstrap-credentials \
       --from-literal=client_id=loopzero-bootstrap \
       --from-literal=client_secret="$secret" \
-      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+      --dry-run=client -o yaml | kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" apply -f - >/dev/null
   else
     log "loopzero-bootstrap client_secret not in response (PUT path) — Secret not updated; rotate via Hydra admin if needed"
   fi

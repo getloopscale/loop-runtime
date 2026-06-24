@@ -149,15 +149,30 @@ ensure_tenant_cr() {
     return 0
   fi
   cat <<TENANT_YAML | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null
-apiVersion: loopzero.loopzero.example/v1
+apiVersion: loopzero.io/v1
 kind: Tenant
 metadata:
-  name: tenant-${TENANT_ID_RESOLVED}
+  name: ${TENANT_ID_RESOLVED}
   namespace: ${LOOPZERO_NAMESPACE}
 spec:
+  cellID: cell-default
   displayName: "${DISPLAY_NAME}"
   plan: ${CR_PLAN}
-  environments: []
+  environments:
+    - cluster: workload
+      name: production
+      project: teste
+  gitops:
+    branch: main
+    repoName: ${TENANT_ID_RESOLVED}-gitops
+  limits:
+    maxBuildConcurrency: 2
+    maxCPU: "4"
+    maxMemory: 8Gi
+    maxStorage: 20Gi
+  preview:
+    maxEnvironments: 3
+    ttlHours: 72
 TENANT_YAML
   log "Layer 3a: Tenant CR tenant-${TENANT_ID_RESOLVED} applied (plan=${CR_PLAN})"
 }
