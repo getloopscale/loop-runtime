@@ -61,8 +61,8 @@ assert_grep "strict mode: set -euo pipefail" "$SCRIPT" '^set -euo pipefail'
 
 # --- Canonical targets ------------------------------------------------------
 
-assert_grep "canonical fixture repo getloopscale/loopzero-repotest" \
-  "$SCRIPT" 'getloopscale/loopzero-repotest'
+assert_grep "canonical fixture repo getloopscale/loopzerokit-example (per 2026-06-16 sponsor mandate)" \
+  "$SCRIPT" 'loopzerokit-example'
 assert_grep "canonical project name 'teste'" \
   "$SCRIPT" '\bteste\b'
 assert_grep "consumes admin@loopzero.example session from T0.2" \

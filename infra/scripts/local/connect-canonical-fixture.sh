@@ -2,14 +2,15 @@
 # connect-canonical-fixture.sh
 #
 # T2.1 of plan 2026-06-08-pre-release-test-rigor v1.2 — connects the canonical
-# fixture GitHub repo (`getloopscale/loopzero-repotest`) to the canonical LoopZero
-# project `teste` in admin@loopzero.example's tenant. Idempotent + handles orphan
+# fixture GitHub repo (`getloopscale/loopzerokit-example`, per 2026-06-16 sponsor
+# mandate; supersedes legacy `loopzero-repotest`) to the canonical LoopZero project
+# `teste` in admin@loopzero.example's tenant. Idempotent + handles orphan
 # installations.
 #
 # Preconditions:
 #   - T0.2 ran (admin@loopzero.example seeded with session at
 #     ~/.loopzero/admin-loopzero-dev-session.txt)
-#   - `gh auth status` exits 0 with write permission on getloopscale/loopzero-repotest
+#   - `gh auth status` exits 0 with write permission on getloopscale/loopzerokit-example
 #   - LoopZero CLI built (`loopzero` in PATH OR LOOPZERO_BIN env var pointing at binary)
 #
 # EC-12 (DOCUMENT preflight): gh auth status + rate-limit headroom asserted
@@ -28,7 +29,7 @@
 #   bash infra/scripts/local/connect-canonical-fixture.sh --dry-run
 #
 # Exit codes (per plan T2.1):
-#   0  fixture ready (project teste exists, GitHub App active on loopzero-repotest)
+#   0  fixture ready (project teste exists, GitHub App active on loopzerokit-example)
 #   1  preflight failure (gh auth missing OR rate-limit exhausted OR session absent)
 #   2  LIVE infrastructure unreachable (LoopZero API, PG, GitHub API itself)
 set -euo pipefail
@@ -36,10 +37,10 @@ set -euo pipefail
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
 # Canonical 2026-06-16: loopzerokit-example is the FAANG-canonical LoopZeroKit-native
 # fixture (scaffolded via `npm create loopzerokit@latest`; has `loopzero.config.ts`
-# v2 + canonical `apps:` map). The earlier `loopzero-repotest` was a
-# legacy `loopzero.yaml`-only fixture per Plan v1.1 transition window; user
-# mandate 2026-06-16 directed discard+delete in favor of the canonical
-# LoopZeroKit shape.
+# v2 + canonical `apps:` map). The legacy `loopzero-repotest` (superseded by
+# loopzerokit-example per sponsor mandate 2026-06-16) was a `loopzero.yaml`-only
+# fixture per Plan v1.1 transition window; user mandate 2026-06-16
+# directed discard+delete in favor of the canonical LoopZeroKit shape.
 REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"

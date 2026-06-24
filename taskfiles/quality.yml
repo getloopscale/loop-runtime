@@ -109,6 +109,7 @@ tasks:
       - bash infra/tests/check-archive-script-repo-root_test.sh                   # T1.2 regression guard: archive/ scripts use canonical 4-dirs-up REPO_ROOT (broken post-quarantine 289cf9d6)
       - bash infra/tests/check-webhook-canonical-path_test.sh                     # T1.3 regression guard: canonical /api/v1/webhooks/github (handler-direct), not /engine/api/v1/webhooks/github (Caddy 301 trap)
       - bash infra/tests/check-oidc-cred-admin-loopzero_test.sh                    # T1.4 regression guard: canonical admin@loopzero.example (LIVE-validated 2026-06-16) — rejects paulo@loopzero.test fabricated
+      - bash infra/tests/check-canonical-fixture-repo_test.sh                     # Canonical fixture repo guard (2026-06-24): rejects legacy getloopscale/loopzero-repotest in LIVE scripts — canonical is getloopscale/loopzerokit-example per sponsor 2026-06-16 mandate
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - bash infra/tests/check-seed-chaos-mesh-canonical-syntax_test.sh             # T1.1 hermetic: chaos-mesh helm install canonical (14 assertions)
       - bash infra/tests/check-seed-argocd-token-canonical-syntax_test.sh           # T1.2 hermetic: ArgoCD admin token mint + loopzero-api-tokens sync (14 assertions)

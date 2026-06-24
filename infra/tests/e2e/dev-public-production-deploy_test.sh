@@ -13,7 +13,7 @@
 #   2. Reset      — reset-for-e2e.sh applied (DB + Kratos identities)
 #   3. Seed       — admin@loopzero.example session via seed-admin-loopzero-dev.sh
 #   4. Project    — POST /api/v1/projects {name: teste} (T4.1 auto-creates production env)
-#   5. Connect    — connect-canonical-fixture.sh wires the canonical loopzero-repotest repo
+#   5. Connect    — connect-canonical-fixture.sh wires the canonical loopzerokit-example repo
 #   6. Push       — gh api PUT /repos/.../contents/<path> synthesizes a real commit
 #   7. Chain      — webhook -> autodeploy -> build -> release ACTIVE -> ArgoCD Synced+Healthy
 #   8. Assert M2  — kubectl get ns loopzero-<tenant>-teste-production exists (M2 canonical)

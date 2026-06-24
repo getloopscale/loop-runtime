@@ -30,7 +30,7 @@
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
-REPO_NAME="${REPO_NAME:-loopzero-repotest}"
+REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 TENANT_ID="${TENANT_ID:-tn-08fa2ecedc3c7e77}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 ENV_NAME="${ENV_NAME:-production}"

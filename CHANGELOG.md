@@ -8,8 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Canonical fixture repo hermetic guard** `infra/tests/check-canonical-fixture-repo_test.sh` (wired into `task quality:gates` after T1.4 sibling). Fails if any LIVE script under `infra/scripts/local/` OR `infra/tests/e2e/` defaults `REPO_NAME` / `--repo` / `repo_full_name` / `testRepoURL` to the legacy `loopzero-repotest` instead of canonical `getloopscale/loopzerokit-example` (per sponsor mandate 2026-06-16; LIVE-validated 2026-06-23 — `project_repositories` only contains loopzerokit-example so legacy pushes silently no-op in `setup_github.go` OnPush handler). Allowlist pattern honors migration-audit comments containing `legacy` / `deprecated` / `superseded` / `guard` / `forbidden`. Pure regex; zero kubectl, zero network. Allowlist entry in `.claude/rules/shell-scripts-allowlist.md`.
 
 ### Changed
+- **Canonical fixture repo migration `loopzero-repotest` → `loopzerokit-example`** (closes 2026-06-23 dev-public Cleanroom audit divergence: `project_repositories` table linked `getloopscale/loopzerokit-example` while LIVE scripts + chaos scenarios + e2e tests defaulted to legacy `getloopscale/loopzero-repotest`, causing pushes to legacy to silently no-op in `setup_github.go` OnPush handler `if linked == nil { return nil }`). Updated all LIVE-side defaults:
+  - `infra/scripts/local/chaos-scenarios/c11-webhook-concurrent-podkill.sh` + `c12-simul-prs-during-partition.sh` — `REPO_NAME` default switched.
+  - `infra/tests/e2e/dev-public-webhook-chain_test.sh` — `REPO_NAME` default switched.
+  - `infra/tests/e2e/deploy_e2e_test.go` — `testRepoURL` switched + setupWorkspace doc-comment.
+  - `infra/tests/e2e/journey_autodeploy_test.go` — both `--repo` invocations switched.
+  - `infra/tests/e2e/journey_preview_test.go` — `repo_full_name` JSON payload switched.
+  - `infra/scripts/local/connect-canonical-fixture.sh` — header comments updated to use canonical migration-audit shape (`legacy loopzero-repotest superseded by canonical loopzerokit-example`) which passes the new hermetic guard's allowlist.
+  - `infra/tests/check-connect-canonical-fixture_test.sh` — assertion target switched to `loopzerokit-example`.
+  - `infra/tests/e2e/dev-public-production-deploy_test.sh` + `dev-public-live-url-discoverability_test.sh` — doc-comment references updated.
+  - `api/internal/github/webhook/handler_test.go` — 4 mock payload fixtures + assertions switched (unit test parser still validates same shape, with canonical repo name).
+  - `api/internal/github/autodeploy_test.go` — tarball directory prefix fixture switched (`getloopscale-loopzerokit-example-abc123/loopzero.yaml`).
+  - `api/internal/adapters/release_adapter_test.go` — fixture doc-comment updated.
 
 ### Fixed
 - **Post-Cleanroom canonical seeds: 4 LIVE-validated fixes during 2026-06-23 chain execution** — all surfaced during the CLEANROOM FULL + UP + seeds + DOGFOOD FULL + LIVE-PROOF run on dev-public. Each fix preserves the canonical chain so future Cleanrooms reach 13/13 dogfood PASS without manual intervention:

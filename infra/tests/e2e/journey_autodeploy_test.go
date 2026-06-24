@@ -59,7 +59,7 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 
 	It("connects a GitHub repository", func() {
 		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "connect",
-			"--repo", "getloopscale/loopzero-repotest",
+			"--repo", "getloopscale/loopzerokit-example",
 			"--installation-id", "99999999",
 			"--branch", "main",
 			"--json")
@@ -80,7 +80,7 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 
 	It("idempotent reconnect succeeds without duplicate", func() {
 		stdout, _, exitCode := runLoopZeroInDir(workDir, "connect",
-			"--repo", "getloopscale/loopzero-repotest",
+			"--repo", "getloopscale/loopzerokit-example",
 			"--installation-id", "99999999",
 			"--branch", "main",
 			"--json")
