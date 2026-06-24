@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - k6 load-test rigor: `dropped_iterations` SLO threshold (fails a run that silently under-loaded the platform when the k6 generator hit its VU ceiling), an L5 distributed runner (`testrun-l5-distributed.yaml` + `task k6:distributed:l5`, 16 pods for the 5,000-tenant multi-cell test), a canonical per-level "which runner" guide in the k6 README, and a hermetic gate (`infra/tests/check-k6-load-rigor_test.sh`, wired into `task quality:gates`) (plan k6-load-test-rigor-fixes).
 
+- **Discovery blueprint `hydra-v26-upgrade-canonical`** SHIPPABLE_WITH_CAVEATS 89.0 — 7-question canonical investigation across `ory/hydra` (v2.3.0 + v26.2.0) + `ory/k8s` (chart 0.62.1). Synthesizes config-schema diff (Q1), cookie Secure logic byte-identical proof (Q2), device-flow API delta (Q3 — v26.2.0-NEW capability), Go modules delta (Q4 — multi-module workspace), chart compat (Q5), test patterns (Q6), DB migrations (Q7). 4 ADRs (D1 overlay zero-change / D2 cookie fix shippable as separate slice / D3 LIVE image-digest verification blocking / D4 PG snapshot + sponsor JUNTOS for flow_drop_check migration). 6 risks documented; Path A (combined 3-5d) vs Path B (split, 1d + queued upgrade) decision matrix. Files: `.claude/knowledge-base/discoveries/blueprints/hydra-v26-upgrade-canonical-blueprint.md` + `.claude/knowledge-base/discoveries/plans/hydra-v26-upgrade-canonical-plan.md` v1.1.
+
 ### Changed
 - `script-count` quality gate now counts the **git index** (`git ls-files`) instead of walking the on-disk tree, so untracked/gitignored `.sh` (discover reference clones, build artifacts, tool caches) never inflate the count. The gate is now deterministic — the same commit yields the same count on every machine and in CI (the old `filepath.WalkDir` reported 427 with reference clones present vs 354 on a clean checkout). Baseline ratcheted DOWN 411 → 355 to the real tracked count (closes #151, CHG-2026-06-24-002, sponsor-direct T2). The path-segment denylist (including the `.claude/knowledge-base/references/` entry added in CHG-2026-06-24-001) is retained as a secondary filter — `trash/` is load-bearing per EC-1, the rest are defense in depth against a stray `git add -f`.
 - `unhomed-logic` baseline re-anchored 163→164 to reflect the merged allowlist (legitimate tracked `check-k6-load-rigor_test.sh` entry; merge artifact of the scalar ratchet crossing two branches at the same baseline).
+
+- **`rules/deps-audit-allowlist.txt`** — added `GHSA-r9w3-57w2-gch2` (HIGH CVE / CVSS 7.2 SQL injection via forged pagination tokens in Hydra v2.3.0) with sunset 2026-09-22 (90 days). Severity downgrades HIGH → MEDIUM per allowlist mechanism. Per ADR `2026-06-24-hydra-v2-3-0-sql-injection-allowlist.md` (PROVISIONAL, sponsor verbatim ratification PENDING at LIVE sponsor JUNTOS HARD STOP). Closes the `/deps-audit FAIL_INSECURE` blocker that paused `loopzero-cloud-14-device-flow-csrf-secure-fix` plan v1.2. Tracked follow-up slice `hydra-v26-upgrade-canonical-fix-cve` must be filed by 2026-07-24 to close CVE before sunset (per Path B b2 of blueprint).
 
 ### Deprecated
 
@@ -21,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 ### Security
+
+- **HIGH CVE GHSA-r9w3-57w2-gch2 risk-accepted on dev-public via allowlist with 90-day sunset (PROVISIONAL).** Attack vector requires admin OAuth2 token (PR:H per CVSS) which sponsor controls in dev-public. Production environments (NOT dev-public) are NOT affected — they will be on v26.2.0 from the start per the deferred upgrade slice. Red Team WILL flag this CVE in dogfood reports; operator response per ADR: "documented, accepted with sunset, tracker for v26.2.0 upgrade slice filed".
 
 ## [0.1.0] - 2026-06-24
 
