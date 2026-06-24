@@ -24,9 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **loopzero-cloud#14 device-flow CSRF cookie Secure attribute — LIVE-validated on dev-public 2026-06-24.** Helmfile sync applied `hydra.dev: false` overlay; Hydra Deployment rolled out with `--dev` REMOVED from container args. LIVE probe `curl -sk -i https://auth-dev.loopzero.example/oauth2/device/verify?user_code=PROBE` returns `Set-Cookie: ory_hydra_device_csrf=...; HttpOnly; Secure; SameSite=None` — canonical RFC 6265bis-12 §5.4.7 cookie shape. Cookie name canonical (NO `_dev` suffix), confirming dev mode is OFF. `dogfood-device --live-only` 3/3 scenarios GREEN. Evidence file: `.claude/knowledge-base/evidence/loopzero-cloud-14/2026-06-24-live-probe-set-cookie.txt`. **QA Red Team can probe dev-public end-to-end starting now.**
+
 ### Security
 
 - **HIGH CVE GHSA-r9w3-57w2-gch2 risk-accepted on dev-public via allowlist with 90-day sunset (PROVISIONAL).** Attack vector requires admin OAuth2 token (PR:H per CVSS) which sponsor controls in dev-public. Production environments (NOT dev-public) are NOT affected — they will be on v26.2.0 from the start per the deferred upgrade slice. Red Team WILL flag this CVE in dogfood reports; operator response per ADR: "documented, accepted with sunset, tracker for v26.2.0 upgrade slice filed".
+  - **UQ1 ANSWERED LIVE 2026-06-24:** The deployed dev-public Hydra image is **already `docker.io/oryd/hydra:v26.2.0`** (NOT v2.3.0 as the deps-audit inferred from the chart values comment). The HIGH CVE GHSA-r9w3-57w2-gch2 was fixed in `2.3.1-0.20260320110106-0b84568fffcc`; v26.2.0 (2026-03-20 calendar release) contains the fix via the new `secrets.pagination` config field documented in blueprint Q1. The CVE is effectively CLOSED in the deployed runtime. The allowlist remains as documented audit trail per `deps-audit-allowlist.txt` schema; the follow-up `hydra-v26-upgrade-canonical-fix-cve` slice originally planned to close the CVE via upgrade is **NOT REQUIRED** (already-closed). Operator should instead file `hydra-image-pin-doc-update` to fix the stale chart-values comment that misled deps-audit.
 
 ## [0.1.0] - 2026-06-24
 
