@@ -37,6 +37,11 @@ if grep -qE "^[[:space:]]*exit 0$" "$SCRIPT"; then printf "[PASS] EC-8 graceful 
 assert "size ≤ 100 LoC" test "$(wc -l < "$SCRIPT")" -le 100
 assert "no Co-Authored-By" ! grep -q "Co-Authored-By" "$SCRIPT"
 assert "allowlist entry present" grep -q 'seed-stripe-secret-canonical.sh' "$ALLOWLIST"
+# stripe-l2-wiring-canonical-fix T1.2: Secret data key must match consumer env var name
+assert "Secret data key is STRIPE_WEBHOOK_SECRET (canonical env-var-name match)" \
+  grep -qE 'from-literal=STRIPE_WEBHOOK_SECRET=' "$SCRIPT"
+assert "no legacy 'whsec' data key drift" \
+  ! grep -qE 'from-literal=whsec=' "$SCRIPT"
 
 printf '\nsummary: %d pass / %d fail\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]
