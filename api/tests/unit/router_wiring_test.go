@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -334,6 +335,32 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		// Admin: bulk tenant eviction
 		{"POST", "/api/v1/admin/tenants/evict", true, false},
 	}
+
+	// qa-sprint2-cleanup-2026-06-24 T1.2 EC-4 absorption: assert the
+	// /api/v1/admin/tenants/evict route is REGISTERED with the
+	// RequireAdminService middleware attached. Without this assertion a
+	// future refactor that drops the chi r.With wrap (e.g., copy-paste
+	// from pin's inline pattern) could silently leave the route unguarded
+	// while the existing 404/405 wiring smoke above still passes.
+	t.Run("evict route has RequireAdminService middleware (closes loopzero-cloud#16 regression)", func(t *testing.T) {
+		// Build a minimal request with NO X-Service-Auth header. If the
+		// middleware is in the chain, the response MUST be 403 (the
+		// middleware rejects missing-header requests). If the middleware
+		// is NOT in the chain, the request reaches the handler which
+		// returns 404 (LOOPZERO_ADMIN_API gate) OR 400 (input validation).
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/evict", nil)
+		// IMPORTANT: do NOT set X-Service-Auth — that's the discriminator.
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("want 403 (middleware-gated), got %d body=%s — middleware probably dropped from route chain",
+				rec.Code, rec.Body.String())
+		}
+		// Sanity: the explicit response body shape from RequireAdminService.
+		if !strings.Contains(rec.Body.String(), "Admin service authentication required") {
+			t.Fatalf("response body does not match RequireAdminService missing-header shape: %s", rec.Body.String())
+		}
+	})
 
 	for _, r := range routes {
 		t.Run(r.method+" "+r.path, func(t *testing.T) {

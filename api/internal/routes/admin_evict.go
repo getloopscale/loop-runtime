@@ -16,7 +16,6 @@ package routes
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -64,8 +63,12 @@ type TenantEvictor interface {
 //
 // Security:
 //   - LOOPZERO_ADMIN_API env must be "true" (feature flag off by default)
-//   - X-Service-Auth header must match LOOPZERO_SERVICE_AUTH_SECRET
-//   - Any failure returns 403 without leaking whether the flag is on
+//   - X-Service-Auth check is enforced by middleware.RequireAdminService
+//     at the router layer (qa-sprint2-cleanup-2026-06-24 T1.2 migration —
+//     closes loopzero-cloud#16). The middleware accepts ONLY the canonical
+//     LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (+ _PREVIOUS rotation sibling); the
+//     legacy LOOPZERO_SERVICE_AUTH_SECRET that the cloud /engine/* proxy adds
+//     to every user-JWT request is NOT honored for admin authorization.
 //
 // The handler validates input, resolves matches via evictor, and enqueues.
 // Actual FK-ordered DELETE + finalizer cleanup is in services layer.
@@ -73,13 +76,6 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
 			jsonError(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
-			return
-		}
-
-		serviceAuth := r.Header.Get("X-Service-Auth")
-		expected := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
-		if expected == "" || serviceAuth == "" || subtle.ConstantTimeCompare([]byte(serviceAuth), []byte(expected)) != 1 {
-			jsonError(w, http.StatusForbidden, "FORBIDDEN", "Admin endpoint requires X-Service-Auth.")
 			return
 		}
 

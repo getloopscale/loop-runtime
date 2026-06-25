@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 type fakeEvictor struct {
@@ -39,12 +41,23 @@ func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, setEnv map[s
 		req.Header.Set(k, v)
 	}
 	w := httptest.NewRecorder()
-	AdminEvictHandler(ev).ServeHTTP(w, req)
+	// qa-sprint2-cleanup-2026-06-24 T1.2: route handler is wrapped with
+	// middleware.RequireAdminService at the router layer. Tests exercise the
+	// SAME chain (middleware → handler) so the auth-gate behavior is covered
+	// alongside the handler logic.
+	middleware.RequireAdminService(AdminEvictHandler(ev)).ServeHTTP(w, req)
 	return w
 }
 
 func TestAdminEvict_FeatureFlagOff_Returns404(t *testing.T) {
-	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{}, nil, nil)
+	// Post-T1.2 the middleware runs first → caller must pass auth before
+	// reaching the LOOPZERO_ADMIN_API gate. So a valid-secret request with the
+	// flag OFF returns 404 (defense-in-depth: flag-off is opaque even to
+	// authorized callers, NOT just to unauthorized ones).
+	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
+		map[string]string{"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"X-Service-Auth": "s"},
+	)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404 without LOOPZERO_ADMIN_API, got %d", w.Code)
 	}
@@ -52,7 +65,7 @@ func TestAdminEvict_FeatureFlagOff_Returns404(t *testing.T) {
 
 func TestAdminEvict_MissingAuth_Returns403(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s3cr3t"},
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s3cr3t"},
 		nil,
 	)
 	if w.Code != http.StatusForbidden {
@@ -62,7 +75,7 @@ func TestAdminEvict_MissingAuth_Returns403(t *testing.T) {
 
 func TestAdminEvict_WrongSecret_Returns403(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s3cr3t"},
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s3cr3t"},
 		map[string]string{"X-Service-Auth": "wrong"},
 	)
 	if w.Code != http.StatusForbidden {
@@ -70,9 +83,51 @@ func TestAdminEvict_WrongSecret_Returns403(t *testing.T) {
 	}
 }
 
+// TestAdminEvict_LegacyProxySecret_Returns403 closes loopzero-cloud#16:
+// a request carrying the LEGACY LOOPZERO_SERVICE_AUTH_SECRET in the X-Service-Auth
+// header (the exact shape the cloud /engine/* proxy adds to every forwarded
+// user-JWT request) must be rejected. Pre-T1.0+T1.2 the inline check accepted
+// this secret → owner-JWT requests reached the k8s cleanup logic → #16.
+// Post-fix: middleware reads only LOOPZERO_ADMIN_SERVICE_AUTH_SECRET → 403.
+func TestAdminEvict_LegacyProxySecret_Returns403(t *testing.T) {
+	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
+		map[string]string{
+			"LOOPZERO_ADMIN_API":                  "true",
+			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET":  "canonical-admin-secret",
+			"LOOPZERO_SERVICE_AUTH_SECRET":        "legacy-proxy-secret",
+			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS": "",
+			"LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS":       "",
+		},
+		map[string]string{"X-Service-Auth": "legacy-proxy-secret"}, // proxy-added secret
+	)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want 403 (legacy proxy secret must not authorize admin), got %d body=%s",
+			w.Code, w.Body.String())
+	}
+}
+
+// TestAdminEvict_CanonicalAdminSecret_Reachable closes the inverse:
+// a request carrying the CANONICAL admin secret reaches the handler successfully.
+// Without this we cannot tell whether T1.2's middleware rejected everything or
+// just the legacy secret.
+func TestAdminEvict_CanonicalAdminSecret_Reachable(t *testing.T) {
+	ev := &fakeEvictor{matched: []string{"tn-aaaaaaaaaaaaaaaaaaaa"}}
+	w := doEvict(t, AdminEvictInput{IDs: []string{"tn-aaaaaaaaaaaaaaaaaaaa"}, DryRun: true}, ev,
+		map[string]string{
+			"LOOPZERO_ADMIN_API":                 "true",
+			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "canonical-admin-secret",
+		},
+		map[string]string{"X-Service-Auth": "canonical-admin-secret"},
+	)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 with canonical admin secret, got %d body=%s",
+			w.Code, w.Body.String())
+	}
+}
+
 func TestAdminEvict_EmptyFilter_Returns400(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusBadRequest {
@@ -83,7 +138,7 @@ func TestAdminEvict_EmptyFilter_Returns400(t *testing.T) {
 func TestAdminEvict_DangerousPattern_Returns400(t *testing.T) {
 	for _, p := range []string{"%", "tn-%"} {
 		w := doEvict(t, AdminEvictInput{Pattern: p}, &fakeEvictor{},
-			map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s"},
+			map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
 			map[string]string{"X-Service-Auth": "s"},
 		)
 		if w.Code != http.StatusBadRequest {
@@ -95,7 +150,7 @@ func TestAdminEvict_DangerousPattern_Returns400(t *testing.T) {
 func TestAdminEvict_DryRun_ReturnsMatches(t *testing.T) {
 	ev := &fakeEvictor{matched: []string{"tn-lt-1", "tn-lt-2"}}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%", DryRun: true}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusOK {
@@ -116,7 +171,7 @@ func TestAdminEvict_DryRun_ReturnsMatches(t *testing.T) {
 func TestAdminEvict_Live_Returns202(t *testing.T) {
 	ev := &fakeEvictor{matched: []string{"tn-lt-1"}, enqueueID: "job-1"}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusAccepted {
@@ -141,7 +196,7 @@ func TestAdminEvict_EnqueueFailure_SanitizesErrorBody(t *testing.T) {
 	leakyErr := errors.New(`failed to create resource: User "system:serviceaccount:loopzero-system:default" cannot create resource "applications" in API group "argoproj.io"`)
 	ev := &fakeEvictor{matched: []string{"tn-lt-1"}, enqErr: leakyErr}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusInternalServerError {
@@ -175,7 +230,7 @@ func TestAdminEvict_EnqueueFailure_SanitizesErrorBody(t *testing.T) {
 
 func TestAdminEvict_BadJSON_Returns400(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "s")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "s")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/evict",
 		bytes.NewReader([]byte("not-json")))
 	req.Header.Set("X-Service-Auth", "s")
