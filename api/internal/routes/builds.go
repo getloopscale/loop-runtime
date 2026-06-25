@@ -17,6 +17,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -543,6 +544,15 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 }
 
 // mapBuildError maps orchestrator errors to HTTP responses.
+//
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
+// extends the ladder with services.AsSubmitBuildError dispatch BEFORE the
+// fallback so wrap-site discriminated errors from BuildOrchestrator.SubmitBuild
+// (workflow / project ensure / DB write / app normalize / unknown) surface
+// with reason-specific messages composed with the verbatim cause — instead
+// of the generic catchall "Something went wrong" that #34 complained about.
+// EC-3 preserved: DEPLOY_IN_PROGRESS short-circuit + typed *LoopZeroError
+// dispatch order unchanged.
 func mapBuildError(w http.ResponseWriter, err error) {
 	var loopzeroErr *loopzeroerrors.LoopZeroError
 	if errors.As(err, &loopzeroErr) {
@@ -559,6 +569,22 @@ func mapBuildError(w http.ResponseWriter, err error) {
 		return
 	}
 
+	// Sprint 6 ADR D3: dispatch wrap-site discriminated *SubmitBuildError
+	// BEFORE the generic catchall. The reason label is the wire form
+	// (Stringer output); the verbatim cause is composed into the user-
+	// facing message via pkg/errors.NewBuildSubmitFailedFromReason.
+	if se, ok := services.AsSubmitBuildError(err); ok {
+		slog.Error("build trigger failed (typed)",
+			"reason", se.Reason.String(),
+			"stage", string(se.Stage),
+			"detail", se.Detail,
+			"cause", se.Cause.Error(),
+		)
+		writeLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReason(
+			se.Reason.String(), se.Detail))
+		return
+	}
+
 	// F-03: Log unexpected errors for debugging — the audit middleware only logs
 	// status=500 at INFO level, which is useless for diagnosing root causes.
 	slog.Error("unexpected error in build handler",
@@ -566,7 +592,9 @@ func mapBuildError(w http.ResponseWriter, err error) {
 		"type", fmt.Sprintf("%T", err),
 	)
 
-	// Fallback for unexpected errors
+	// Fallback for genuinely-unexpected errors (request decode, etc.).
+	// Sprint 6 narrowed the orchestrator surface so this only fires for
+	// errors that genuinely came from outside BuildOrchestrator.SubmitBuild.
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 }
 

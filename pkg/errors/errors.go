@@ -629,6 +629,50 @@ func NewSourceUploadFailedFromPushReason(reasonLabel, detail string) *LoopZeroEr
 	return &LoopZeroError{Code: "SOURCE_UPLOAD_FAILED", Message: msg}
 }
 
+// ErrBuildSubmitFailed is the canonical LoopZeroError for build-trigger failures
+// that REACH the orchestrator (vs INTERNAL_ERROR which stays for unexpected
+// failures outside the orchestrator's responsibility). Sprint 6 plan qa-
+// sprint6-cleanup-2026-06-25 ADR D3 (closes loopzero-cloud#34) — distinct code
+// so loopzero-cli + dashboards + telemetry can switch on it cleanly.
+var ErrBuildSubmitFailed = &LoopZeroError{
+	Code:    "BUILD_SUBMIT_FAILED",
+	Message: "The build could not be triggered. Try again, or check `loopzero status` for details.",
+}
+
+// NewBuildSubmitFailedFromReason mirrors NewSourceUploadFailedFromPushReason
+// (Sprint 5) for the build-trigger surface. The reasonLabel is the canonical
+// SubmitBuildErrorReason.String() output emitted by api/internal/services;
+// keeping it as a string preserves the DIP boundary (pkg/errors imports
+// nothing from api/internal/services). Per Sprint 6 ADR D3, the message is
+// composed as "<actionable summary>: <verbatim detail>" so the operator
+// sees BOTH the actionable summary AND the underlying cause — same Vercel
+// canonical pattern Sprint 5 introduced.
+//
+// CR-9: zero internal terms in summaries (no Argo / Workflow / Postgres /
+// Gitea names). Detail is already scrubbed by api/internal/services
+// NewSubmitBuildError via source.ScrubInternalTerms.
+func NewBuildSubmitFailedFromReason(reasonLabel, detail string) *LoopZeroError {
+	summary, ok := summaryByBuildSubmitReason[reasonLabel]
+	if !ok {
+		return &LoopZeroError{Code: "BUILD_SUBMIT_FAILED", Message: ErrBuildSubmitFailed.Message}
+	}
+	msg := summary
+	if detail != "" {
+		msg = summary + ": " + detail
+	}
+	return &LoopZeroError{Code: "BUILD_SUBMIT_FAILED", Message: msg}
+}
+
+// summaryByBuildSubmitReason — Sprint 6 ADR D3 canonical mapper. Sibling of
+// summaryByPushReason (Sprint 5).
+var summaryByBuildSubmitReason = map[string]string{
+	"BuildSubmitWorkflowFailed":      "Build trigger failed at workflow submit",
+	"BuildSubmitProjectEnsureFailed": "Build trigger failed while ensuring the project exists",
+	"BuildSubmitDBWriteFailed":       "Build trigger failed at a database write step",
+	"BuildSubmitAppNormalizeFailed":  "Build trigger failed validating one of the apps",
+	"BuildSubmitUnknown":             "Build trigger failed (cause not classified)",
+}
+
 // summaryByPushReason is the canonical operator-actionable summary keyed on
 // the source.PushBundleErrorReason String() output. Sprint 5 plan ADR D3 +
 // D1 — extends the Sprint 4 set with auth/capacity/unknown reasons; messages

@@ -538,6 +538,92 @@ func TestNewHPATargetBoundsViolated_MemoryField(t *testing.T) {
 	}
 }
 
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T2.3 (closes loopzero-cloud#34):
+// NewBuildSubmitFailedFromReason composes "<summary>: <detail>" mirroring
+// Sprint 5's NewSourceUploadFailedFromPushReason. The #34 regression guard
+// asserts the misleading "Something went wrong. Try again, or check `loopzero
+// status`" text NEVER surfaces when a discriminated reason is provided.
+
+func TestNewBuildSubmitFailedFromReason_ComposesDetail(t *testing.T) {
+	cases := []struct {
+		name        string
+		reasonLabel string
+		detail      string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "WorkflowFailed composes verbatim cause",
+			reasonLabel: "BuildSubmitWorkflowFailed",
+			detail:      "argo client: 503 Service Unavailable",
+			wantSubs:    []string{"Build trigger failed at workflow submit", "503"},
+			// Sprint 6 ADR D3: the #34 catchall anti-pattern is replacing
+			// detail with a generic template — assert it NEVER reappears.
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "ProjectEnsureFailed preserves operator diagnostic",
+			reasonLabel: "BuildSubmitProjectEnsureFailed",
+			detail:      "tenant lookup failed: no rows",
+			wantSubs:    []string{"ensuring the project exists", "tenant lookup failed"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "DBWriteFailed preserves DB error verbatim",
+			reasonLabel: "BuildSubmitDBWriteFailed",
+			detail:      "pq: duplicate key value violates unique constraint",
+			wantSubs:    []string{"database write step", "duplicate key"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "AppNormalizeFailed preserves shape error",
+			reasonLabel: "BuildSubmitAppNormalizeFailed",
+			detail:      "invalid runtime declared for app foo",
+			wantSubs:    []string{"validating one of the apps", "invalid runtime"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "UnknownDownstream surfaces verbatim cause",
+			reasonLabel: "BuildSubmitUnknown",
+			detail:      "some genuinely-unknown downstream failure",
+			wantSubs:    []string{"cause not classified", "genuinely-unknown"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "Empty detail uses summary alone (no trailing colon)",
+			reasonLabel: "BuildSubmitWorkflowFailed",
+			detail:      "",
+			wantSubs:    []string{"Build trigger failed at workflow submit"},
+			wantNotSubs: []string{": "},
+		},
+		{
+			name:        "Unknown reason label falls back to neutral generic",
+			reasonLabel: "BogusUnknownLabel",
+			detail:      "ignored when label is unknown",
+			wantSubs:    []string{ErrBuildSubmitFailed.Message},
+			wantNotSubs: []string{"ignored when label"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewBuildSubmitFailedFromReason(tc.reasonLabel, tc.detail)
+			if err.Code != "BUILD_SUBMIT_FAILED" {
+				t.Errorf("Code = %q, want BUILD_SUBMIT_FAILED (Rule 4 — exit-code stability)", err.Code)
+			}
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q (#34 regression guard)", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
 // Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T2.4 (closes loopzero-cloud#33):
 // NewSourceUploadFailedFromPushReason composes "<summary>: <detail>" so the
 // verbatim cause is always preserved in the user-facing message. Vercel CLI

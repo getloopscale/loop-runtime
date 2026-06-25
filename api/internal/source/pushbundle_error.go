@@ -181,6 +181,24 @@ var scrubPatterns = []struct {
 }
 
 func scrubInternalTerms(s string) string {
+	return ScrubInternalTerms(s)
+}
+
+// ScrubInternalTerms is the canonical Rule 3 scrub helper used by ANY package
+// that composes downstream error details into a user-facing message. Sprint 6
+// plan qa-sprint6-cleanup-2026-06-25 T1.2 exported this from package-private
+// (Sprint 5 T2.3 canonical) so api/internal/services/build_submit_error.go
+// can reuse it without duplication (DRY). The Sprint 5 /review HIGH+MEDIUM
+// scrub fixes (F-code-1 Authorization regex / F-sec-1 RFC1918 / F-sec-2
+// literal product names) are inherited verbatim — Sprint 6 callers benefit
+// from the hardened patterns automatically.
+//
+// Returns the input string with cluster-internal hostnames, DNS suffixes,
+// internal CIDR addresses, Authorization headers (Bearer/Basic/token full
+// value), inline Bearer/Basic credentials, and bare token literals replaced
+// by safe operator-facing equivalents. github.com / gitlab.com and other
+// legitimate external hostnames are NOT touched (negative-direction guard).
+func ScrubInternalTerms(s string) string {
 	for _, p := range scrubPatterns {
 		s = p.re.ReplaceAllString(s, p.repl)
 	}

@@ -55,7 +55,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// Step 2: concurrent build check INSIDE the lock (Rule 6)
 		hasActive, err := o.buildStore.HasActiveBuild(ctx, tx, req.TenantID, req.ProjectID, req.Environment)
 		if err != nil {
-			return fmt.Errorf("submit build: check active builds: %w", err)
+			return wrapSubmitBuildError(StageCheckActiveBuilds, err)
 		}
 		if hasActive {
 			return loopzeroerrors.ErrDeployInProgress
@@ -70,7 +70,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// upsert is acceptable per eventual consistency (T2.1 Deep Dives).
 		resolvedApps, err := o.resolveScaling(ctx, req.TenantID, req.ProjectID, req.Environment, req.Apps)
 		if err != nil {
-			return fmt.Errorf("submit build: resolve scaling: %w", err)
+			return wrapSubmitBuildError(StageResolveScaling, err)
 		}
 		req.Apps = resolvedApps
 
@@ -96,7 +96,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 				ensureSpan.RecordError(err)
 				ensureSpan.SetStatus(codes.Error, err.Error())
 				ensureSpan.End()
-				return fmt.Errorf("submit build: ensure project: %w", err)
+				return wrapSubmitBuildError(StageEnsureProject, err)
 			}
 			ensureSpan.End()
 		}
@@ -111,7 +111,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			CorrelationID: req.CorrelationID,
 		}
 		if err := o.buildStore.Create(ctx, tx, build); err != nil {
-			return fmt.Errorf("submit build: create build: %w", err)
+			return wrapSubmitBuildError(StageCreateBuild, err)
 		}
 		buildID = build.ID
 
@@ -141,7 +141,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			appsSpec = append(appsSpec, spec)
 		}
 		if err := o.buildStore.SetAppsSpec(ctx, tx, build.ID, appsSpec); err != nil {
-			return fmt.Errorf("submit build: set apps spec: %w", err)
+			return wrapSubmitBuildError(StageSetAppsSpec, err)
 		}
 
 		return nil
@@ -167,7 +167,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			// is unblocked. Previously, the build sat QUEUED until the reaper
 			// fired (5min timeout), blocking all deploys to this environment.
 			o.failQueuedBuild(ctx, buildID, fmt.Sprintf("app normalization failed: %v", normErr))
-			return nil, fmt.Errorf("normalize app %q: %w", a.Name, normErr)
+			return nil, wrapSubmitBuildError(StageNormalizeApp, fmt.Errorf("normalize app %q: %w", a.Name, normErr))
 		}
 		units = append(units, unit)
 	}
@@ -191,7 +191,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// is unblocked. The build reaper is a safety net (5min QUEUED timeout)
 		// but immediate failure gives better UX.
 		o.failQueuedBuild(ctx, buildID, fmt.Sprintf("Workflow submission failed: %v", submitErr))
-		return nil, fmt.Errorf("submit build: submit workflow: %w", submitErr)
+		return nil, wrapSubmitBuildError(StageSubmitWorkflow, submitErr)
 	}
 
 	// Persist workflow ID (outside lock, tx=nil -> uses pool directly)
