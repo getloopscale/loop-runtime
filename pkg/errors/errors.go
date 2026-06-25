@@ -315,10 +315,18 @@ var (
 		Message:    "a required field is missing",
 	}
 
-	// ErrSourceUploadFailed is returned when pushing the bundle to the source store fails.
+	// ErrSourceUploadFailed is the neutral fallback returned when pushing the
+	// bundle to the source store fails AND the typed PushBundleError mapping
+	// (see source.NewSourceUploadFailedFromPushReason) cannot identify a
+	// specific reason. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
+	// (closes loopzero-cloud#31): replaced the legacy actively-misleading
+	// "Ensure your git history is clean and try again." text (the user's git
+	// history WAS clean in the QA report; the real failure was elsewhere)
+	// with a neutral fallback. Specific actionable text is now emitted by
+	// reason-specific messages keyed off PushBundleError.Reason.
 	ErrSourceUploadFailed = &LoopZeroError{
 		Code:       "SOURCE_UPLOAD_FAILED",
-		Message:    "Failed to upload source code. Ensure your git history is clean and try again.",
+		Message:    "The source upload failed. Please retry; if the issue persists, contact support.",
 	}
 
 	// ErrInvalidTenantOrProject is returned when tenantID or projectID fails
@@ -582,5 +590,43 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 			"HPA %s must be between %d%% and %d%% (got %d%%). Targets below the minimum trigger autoscaling before the pod warms up; above the maximum leave no headroom for transient spikes.",
 			field, minBound, maxBound, got,
 		),
+	}
+}
+
+// NewSourceUploadFailedFromPushReason returns a LoopZeroError with a reason-
+// specific Message keyed off the PushBundleError.Reason string. Sprint 4
+// plan qa-sprint4-cleanup-2026-06-25 T3.3 (closes loopzero-cloud#31).
+//
+// `reasonLabel` is the canonical string emitted by source.PushBundleErrorReason.String()
+// — kept as a string to avoid pulling api/internal/source into pkg/errors
+// (DIP boundary preserved: pkg/errors stays leaf-package).
+//
+// Per ADR D3 of the plan: Code stays SOURCE_UPLOAD_FAILED for backward-compat
+// with loopzero-cli EXIT_CODES (3 = deploy failure). The Message field is the
+// only thing that varies per reason.
+//
+// CR-9 cloud abstraction (loopzero-cloud/CLAUDE.md Rule 3): Messages say "source
+// backend" NOT "Gitea", "remote" NOT "git push" — internal terms are forbidden
+// in user-facing strings.
+func NewSourceUploadFailedFromPushReason(reasonLabel, detail string) *LoopZeroError {
+	var msg string
+	switch reasonLabel {
+	case "SourceBackendUnreachable":
+		msg = "Source backend is unreachable. Please retry; if the issue persists, contact support."
+	case "RemoteRejectedPush":
+		msg = "The remote rejected the push. Verify your project name is unused and try again."
+	case "BundleMalformed":
+		msg = "The source bundle is malformed. Re-run `loopzero deploy` from your project root."
+	case "BundleTooLarge":
+		msg = "The source bundle exceeds the size limit. Reduce the size of your source tree."
+	case "ArchiveReadError":
+		msg = "Could not read the source archive. Check your project files and try again."
+	default:
+		// Unknown reason — fall back to the neutral generic message.
+		msg = ErrSourceUploadFailed.Message
+	}
+	return &LoopZeroError{
+		Code:    "SOURCE_UPLOAD_FAILED",
+		Message: msg,
 	}
 }

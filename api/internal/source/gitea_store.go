@@ -91,26 +91,101 @@ func sourceRepoName(tenantID, projectID string) (string, error) {
 // PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
 // detects the format, and pushes to the Gitea source repo.
 // Returns PushResult with SourceID and optionally a GitBundlePath for S3.
+//
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loopzero-cloud#31):
+// PushBundle now returns typed *PushBundleError for each failure mode so
+// SourceHandler.Upload can map to a specific actionable Message instead of
+// the misleading legacy "Ensure your git history is clean" string. Downstream
+// helpers (pushGitBundle / pushTarBundle) continue to return untyped
+// fmt.Errorf for backward-compat; PushBundle wraps their non-typed errors as
+// ReasonRemoteRejectedPush at the outer boundary (the handler's gitea-race
+// substring discriminator takes precedence over this for F-03 preservation).
+//
+// The size ceiling (MaxBundleBytes) is enforced via io.LimitReader+1 — when
+// io.ReadAll returns more than MaxBundleBytes we know the underlying reader
+// had >= MaxBundleBytes+1 bytes available, which is the canonical
+// ReasonBundleTooLarge signal.
 func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID string, bundle io.Reader) (PushResult, error) {
-	data, err := io.ReadAll(bundle)
+	// Cap the read at MaxBundleBytes+1 so an oversized payload is detected
+	// without buffering the entire body. Per ReasonBundleTooLarge contract.
+	limited := io.LimitReader(bundle, MaxBundleBytes+1)
+	data, err := io.ReadAll(limited)
 	if err != nil {
-		return PushResult{}, fmt.Errorf("gitea source: reading bundle: %w", err)
+		return PushResult{}, NewPushBundleError(
+			ReasonArchiveReadError, err,
+			"could not read the source archive from the upload stream",
+		)
+	}
+	if len(data) > MaxBundleBytes {
+		return PushResult{}, NewPushBundleError(
+			ReasonBundleTooLarge, nil,
+			fmt.Sprintf("bundle exceeds %d-byte limit", MaxBundleBytes),
+		)
 	}
 	if len(data) == 0 {
-		return PushResult{}, fmt.Errorf("gitea source: bundle is empty")
+		return PushResult{}, NewPushBundleError(
+			ReasonBundleMalformed, nil,
+			"the uploaded bundle is empty",
+		)
 	}
 
 	// Detect bundle format by magic bytes:
 	//   tar.gz: 0x1f 0x8b (gzip magic)
 	//   git bundle: "# v2 git bundle\n" or "# v3 git bundle\n"
 	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
-		return s.pushTarBundle(ctx, tenantID, projectID, data)
+		result, err := s.pushTarBundle(ctx, tenantID, projectID, data)
+		if err != nil {
+			return PushResult{}, wrapDownstreamPushError(err)
+		}
+		return result, nil
 	}
 	sourceID, err := s.pushGitBundle(ctx, tenantID, projectID, data)
 	if err != nil {
-		return PushResult{}, err
+		return PushResult{}, wrapDownstreamPushError(err)
 	}
 	return PushResult{SourceID: sourceID}, nil
+}
+
+// wrapDownstreamPushError lifts an untyped error returned by pushGitBundle /
+// pushTarBundle into a typed *PushBundleError so SourceHandler.Upload sees a
+// uniform contract at the outer boundary.
+//
+// EC-3 absorption: ErrInvalidTenantOrProject (sentinel) is preserved as-is —
+// PushBundle itself never owns the tenant-name validation, so the handler's
+// pre-existing `errors.Is(err, source.ErrInvalidTenantOrProject)` ladder
+// discriminator continues to short-circuit BEFORE the typed-error mapping.
+// gitea-race substring matches are also preserved unchanged for F-03 —
+// IsGiteaRaceCondition is consulted by the handler ladder BEFORE this typed
+// wrap is interpreted.
+func wrapDownstreamPushError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// Preserve the sentinel chain so errors.Is(err, ErrInvalidTenantOrProject)
+	// keeps working at the handler.
+	if errors.Is(err, ErrInvalidTenantOrProject) {
+		return err
+	}
+	// Heuristic: distinguish backend-unreachable (DNS / TCP refused / TLS / timeout)
+	// from remote-rejected (4xx push response). Connection-class errors map to
+	// ReasonSourceBackendUnreachable so the operator sees "retry; if issue persists,
+	// contact support" instead of the generic "remote rejected the push" text.
+	msg := err.Error()
+	if strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "tls handshake") ||
+		strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "dial tcp") {
+		return NewPushBundleError(ReasonSourceBackendUnreachable, err,
+			"source backend is unreachable (network or DNS failure)")
+	}
+	// Default mapping: downstream untyped errors become ReasonRemoteRejectedPush
+	// (the most common failure mode beyond the early-validation cases). The
+	// handler's gitea-race substring check still emits DEPLOY_IN_PROGRESS 409
+	// BEFORE it consults pushErr.Reason.
+	return NewPushBundleError(ReasonRemoteRejectedPush, err, err.Error())
 }
 
 // pushGitBundle handles git bundle format (original flow).
