@@ -181,3 +181,80 @@ func TestValidateServicesJSON_MultipleServices_PreservesNames(t *testing.T) {
 		t.Errorf("expected worker.runtime=node, got %+v", worker)
 	}
 }
+
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.1 — multi-field error aggregation.
+// Closes loopzero-cloud#29: ValidateServicesJSONNative previously walked only Causes[0]
+// (the FIRST jsonschema leaf cause), so a payload with 3 simultaneous violations
+// would surface only the first one — forcing a cascading retry loop (fix violation 1,
+// re-upload, hit violation 2, repeat). EC-2 absorption: the new Errors slice is
+// populated by NewValidationError for every legacy site so len(ve.Errors) >= 1 holds
+// for downstream consumers that switched from ve.Field/ve.Message to ve.Errors[0].
+func TestValidateServicesJSONNative_AggregatesAllFieldErrors_closes29(t *testing.T) {
+	// Intentionally violates 3 distinct schema constraints at once:
+	//   1. project: 'Invalid_UPPER_Project' — fails ^[a-z][a-z0-9-]*$ pattern
+	//   2. services[0].runtime: 'BAD_RUNTIME' — fails enum [python, node]
+	//   3. services[0].port: 99 — fails minimum (assuming schema sets a >=1024 or similar floor)
+	payload := `{
+		"version": 2,
+		"project": "Invalid_UPPER_Project",
+		"services": [{
+			"name": "api",
+			"runtime": "BAD_RUNTIME",
+			"type": "server",
+			"dev": "node start",
+			"start": "node start",
+			"port": 0
+		}]
+	}`
+	_, err := ValidateServicesJSONNative(payload)
+	if err == nil {
+		t.Fatal("expected validation error for multi-violation payload, got nil")
+	}
+	ve, ok := err.(*ValidationError)
+	if !ok {
+		t.Fatalf("expected *ValidationError, got %T", err)
+	}
+	// EC-2: legacy Field/Message must still be populated for backward-compat.
+	if ve.Field == "" || ve.Message == "" {
+		t.Errorf("legacy Field/Message must populate; got Field=%q Message=%q", ve.Field, ve.Message)
+	}
+	// Sprint 4 invariant: Errors slice contains ALL leaf violations, not just the first.
+	if len(ve.Errors) < 2 {
+		t.Errorf("expected >= 2 field errors aggregated from jsonschema Causes tree, got %d: %+v",
+			len(ve.Errors), ve.Errors)
+	}
+	// Sanity: each FieldError carries a non-empty Message (Field may be empty
+	// for root-level violations like additionalProperties on the document root,
+	// where jsonschema/v5 emits InstanceLocation="").
+	for i, fe := range ve.Errors {
+		if fe.Message == "" {
+			t.Errorf("Errors[%d] has empty Message: %+v", i, fe)
+		}
+	}
+}
+
+// EC-2: every legacy ValidationError construction site must populate Errors[0].
+// Empty payload triggers the validator.go:98 site (E-008 missing payload) — this asserts
+// the constructor populated the slice even though only one violation exists.
+func TestValidateServicesJSONNative_EmptyPayload_PopulatesErrorsSlicePerEC2(t *testing.T) {
+	_, err := ValidateServicesJSONNative("")
+	if err == nil {
+		t.Fatal("expected E-008 error for empty payload, got nil")
+	}
+	ve, ok := err.(*ValidationError)
+	if !ok {
+		t.Fatalf("expected *ValidationError, got %T", err)
+	}
+	// Legacy scalars still work.
+	if ve.Field != "services_json" {
+		t.Errorf("expected Field='services_json', got %q", ve.Field)
+	}
+	// EC-2: Errors[0] mirrors the legacy scalars.
+	if len(ve.Errors) != 1 {
+		t.Fatalf("EC-2: expected len(Errors)==1 for single-violation legacy site, got %d", len(ve.Errors))
+	}
+	if ve.Errors[0].Field != ve.Field || ve.Errors[0].Message != ve.Message {
+		t.Errorf("EC-2: Errors[0] must mirror legacy Field+Message; got Errors[0]=%+v vs Field=%q Message=%q",
+			ve.Errors[0], ve.Field, ve.Message)
+	}
+}

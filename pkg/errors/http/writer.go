@@ -36,13 +36,31 @@ const ProblemTypeBase = "https://loopzero.example/errors/"
 // The two values are identical; clients can choose either. RFC 9457
 // itself permits extension members.
 type problemDetails struct {
-	Type     string `json:"type"`
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail"`
-	Message  string `json:"message"` // backward-compat alias for legacy clients
-	Code     string `json:"code"`
-	Instance string `json:"instance,omitempty"`
+	Type     string       `json:"type"`
+	Title    string       `json:"title"`
+	Status   int          `json:"status"`
+	Detail   string       `json:"detail"`
+	Message  string       `json:"message"` // backward-compat alias for legacy clients
+	Code     string       `json:"code"`
+	Instance string       `json:"instance,omitempty"`
+	Errors   []FieldError `json:"errors,omitempty"` // Sprint 4 T2.4: RFC 9457 § 3.2 extension member
+}
+
+// FieldError is one field-level violation surfaced in the response body's
+// `errors[]` array. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.4 closes
+// loopzero-cloud#29 multi-field error aggregation. The field name `errors` (NOT
+// `details`) was chosen to avoid collision with the canonical RFC 9457 scalar
+// `detail` field. RFC 9457 § 3.2 explicitly permits extension members.
+//
+// This shape is declared HERE (pkg/errors/http) so callers in api/internal/
+// don't reverse-import an internal package — they convert their own
+// FieldError (declared in api/internal/source/validator.go) into this
+// transport-layer shape at the handler boundary (DIP boundary preserved).
+type FieldError struct {
+	Field    string `json:"field"`
+	Message  string `json:"message"`
+	Expected string `json:"expected,omitempty"`
+	Got      string `json:"got,omitempty"`
 }
 
 // WriteJSON writes a RFC 9457 problem+json response for the given error.
@@ -56,6 +74,16 @@ type problemDetails struct {
 //
 // Per ADR-0030 + gate PKG-G15.
 func WriteJSON(w http.ResponseWriter, r *http.Request, err error) {
+	WriteJSONWithErrors(w, r, err, nil)
+}
+
+// WriteJSONWithErrors is the multi-field variant of WriteJSON. Sprint 4 T2.4
+// (closes loopzero-cloud#29) — when the caller has aggregated multiple field-level
+// violations from a validator (jsonschema Causes walk), pass them via
+// fieldErrors and they will be serialized into the response body's `errors[]`
+// extension member (RFC 9457 § 3.2). Pass nil/empty for the single-error case
+// (omitempty drops the field from the payload).
+func WriteJSONWithErrors(w http.ResponseWriter, r *http.Request, err error, fieldErrors []FieldError) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	status := Status(err)
 	w.WriteHeader(status)
@@ -77,6 +105,7 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, err error) {
 		Detail:  detail,
 		Message: detail, // backward-compat alias (Stage C migration)
 		Code:    code,
+		Errors:  fieldErrors,
 	}
 	if r != nil {
 		pd.Instance = r.URL.Path

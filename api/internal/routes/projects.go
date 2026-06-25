@@ -484,3 +484,13 @@ func writeLoopZeroError(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError
 	// the call sites to populate instance with r.URL.Path.
 	errorshttp.WriteJSON(w, nil, err)
 }
+
+// writeLoopZeroErrorWithFieldErrors is the multi-field variant of writeLoopZeroError.
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.3 closes loopzero-cloud#29:
+// when a validator surfaces an aggregated list of field violations
+// (jsonschema Causes walk), this helper emits them in the response body's
+// `errors[]` extension member (RFC 9457 § 3.2) without changing the legacy
+// scalar `detail` field. Pass nil/empty for the single-error case.
+func writeLoopZeroErrorWithFieldErrors(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError, fieldErrors []errorshttp.FieldError) {
+	errorshttp.WriteJSONWithErrors(w, nil, err, fieldErrors)
+}

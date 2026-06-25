@@ -134,8 +134,10 @@ func validateReservedEnvKeys(manifest *ServicesManifest, logger *slog.Logger) *V
 	}
 
 	// Enforce mode: reject with field-anchored validation error.
-	return &ValidationError{
-		Field:   fmt.Sprintf("/services/%s/env/%s", first.service, first.key),
-		Message: msg,
-	}
+	// Sprint 4 EC-2 absorption: NewValidationError populates the Errors slice
+	// alongside the legacy Field+Message scalars.
+	return NewValidationError(
+		fmt.Sprintf("/services/%s/env/%s", first.service, first.key),
+		msg,
+	)
 }

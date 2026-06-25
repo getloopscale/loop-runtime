@@ -20,6 +20,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 )
 
 // maxBundleSize is the maximum allowed bundle size (500MB).
@@ -206,11 +207,28 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var ve *source.ValidationError
 		if errors.As(err, &ve) {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.3 (closes
+			// loopzero-cloud#29 multi-field error aggregation): convert the
+			// aggregated source.FieldError slice into the transport-layer
+			// errorshttp.FieldError shape and surface ALL violations in the
+			// response body's `errors[]` extension member (RFC 9457 § 3.2),
+			// not just the first one. The legacy ve.Message scalar continues
+			// to feed the `detail` field for backward-compat with consumers
+			// that haven't migrated to the array.
+			fieldErrors := make([]errorshttp.FieldError, 0, len(ve.Errors))
+			for _, fe := range ve.Errors {
+				fieldErrors = append(fieldErrors, errorshttp.FieldError{
+					Field:    fe.Field,
+					Message:  fe.Message,
+					Expected: fe.Expected,
+					Got:      fe.Got,
+				})
+			}
+			writeLoopZeroErrorWithFieldErrors(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
 				ve.Message,
 				422,
-			))
+			), fieldErrors)
 			return
 		}
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
