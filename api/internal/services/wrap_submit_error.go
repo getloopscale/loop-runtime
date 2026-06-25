@@ -35,6 +35,13 @@ func wrapSubmitBuildError(stage SubmitBuildStage, err error) error {
 	if err == nil {
 		return nil
 	}
+	// Sprint 6 /review CODE-002 LOW — defense-in-depth no-double-wrap guard.
+	// A future call site that accidentally chains wrapSubmitBuildError on an
+	// already-wrapped *SubmitBuildError would otherwise corrupt the Detail
+	// field. The check costs one type assertion and closes the footgun.
+	if _, ok := AsSubmitBuildError(err); ok {
+		return err
+	}
 	// EC-3: preserve typed sentinels so the route handler ladder still
 	// short-circuits DEPLOY_IN_PROGRESS + typed LoopZeroError paths.
 	if errors.Is(err, loopzeroerrors.ErrDeployInProgress) {

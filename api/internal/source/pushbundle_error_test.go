@@ -75,6 +75,20 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 			wantNotSubs: []string{".svc.cluster.local"},
 		},
 		{
+			// Sprint 6 /review CODE-001 — pq driver leak.
+			name:        "pq driver hostname fully scrubbed (CODE-001)",
+			rawDetail:   "pq: could not connect to host postgresql.loopzero-system.svc.cluster.local",
+			wantSubs:    []string{"<internal service>"},
+			wantNotSubs: []string{"postgresql.loopzero-system", ".svc.cluster.local"},
+		},
+		{
+			// Sprint 6 /review CODE-001 — generic catch-all for any in-cluster service.
+			name:        "any cluster-internal hostname fully scrubbed",
+			rawDetail:   "Get http://argo-workflows.argo.svc.cluster.local:2746: dial: connect refused",
+			wantSubs:    []string{"<internal service>"},
+			wantNotSubs: []string{"argo-workflows.argo", ".svc.cluster.local"},
+		},
+		{
 			name:        "internal CIDR scrubbed",
 			rawDetail:   "Post: dial tcp 10.43.0.5:3000: connect: connection refused",
 			wantSubs:    []string{"dial tcp <internal>", "connection refused"},

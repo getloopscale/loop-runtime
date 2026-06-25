@@ -51,22 +51,67 @@ func TestSubmitBuildError_UnwrapsThroughFmtErrorf(t *testing.T) {
 
 // Sprint 6 plan T1.1 — Detail is scrubbed via the canonical
 // source.ScrubInternalTerms helper (Sprint 5 T2.3 hardened version).
+// Sprint 6 /review S6-4 added explicit assertions for the Sprint 5
+// hardened patterns (literal Gitea word, 172.16/12 + 192.168/16 RFC1918,
+// Sprint 6 CODE-001 catch-all pq driver scrub) so Sprint 6 has its own
+// regression coverage rather than relying on Sprint 5's tests alone.
 func TestSubmitBuildError_ScrubsInternalTermsInDetail(t *testing.T) {
-	cause := errors.New("Post \"https://gitea-http.loopzero-system.svc.cluster.local:3000\": Authorization: Bearer ghp_secret1234567890 dial tcp 10.43.0.5:3000")
-	se := NewSubmitBuildError(ReasonBuildSubmitWorkflowFailed, StageSubmitWorkflow, cause, cause.Error())
-
-	// Detail must NOT contain credentials / internal hostnames / internal CIDR.
-	if strings.Contains(se.Detail, "ghp_secret1234567890") {
-		t.Errorf("Detail leaked credential: %q", se.Detail)
+	cases := []struct {
+		name        string
+		raw         string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "gitea + credential + 10/8 CIDR",
+			raw:         "Post \"https://gitea-http.loopzero-system.svc.cluster.local:3000\": Authorization: Bearer ghp_secret1234567890 dial tcp 10.43.0.5:3000",
+			wantNotSubs: []string{"ghp_secret1234567890", "gitea-http", "10.43.0.5"},
+		},
+		{
+			name:        "literal Gitea word scrubbed (CR-9 — Sprint 5 F-sec-2)",
+			raw:         "Gitea: Internal Server Error",
+			wantSubs:    []string{"source backend"},
+			wantNotSubs: []string{"Gitea"},
+		},
+		{
+			name:        "RFC1918 172.16/12 scrubbed (Sprint 5 F-sec-1)",
+			raw:         "dial tcp 172.20.45.3:3000: connect: connection refused",
+			wantSubs:    []string{"dial tcp <internal>"},
+			wantNotSubs: []string{"172.20.45.3"},
+		},
+		{
+			name:        "RFC1918 192.168/16 scrubbed (Sprint 5 F-sec-1)",
+			raw:         "dial tcp 192.168.10.50:5432: connection refused",
+			wantSubs:    []string{"dial tcp <internal>"},
+			wantNotSubs: []string{"192.168.10.50"},
+		},
+		{
+			// Sprint 6 /review CODE-001 — pq driver leak coverage applied to the
+			// SubmitBuildError surface (not just PushBundleError).
+			name:        "pq driver internal hostname scrubbed (Sprint 6 CODE-001)",
+			raw:         "pq: could not connect to host postgresql.loopzero-system.svc.cluster.local",
+			wantSubs:    []string{"<internal service>"},
+			wantNotSubs: []string{"postgresql.loopzero-system", ".svc.cluster.local"},
+		},
 	}
-	if strings.Contains(se.Detail, "gitea-http") {
-		t.Errorf("Detail leaked literal gitea hostname: %q", se.Detail)
-	}
-	if strings.Contains(se.Detail, "10.43.0.5") {
-		t.Errorf("Detail leaked internal CIDR: %q", se.Detail)
-	}
-	// Cause stays unscrubbed for internal observability (slog / audit_log).
-	if !strings.Contains(se.Cause.Error(), "ghp_secret1234567890") {
-		t.Errorf("Cause MUST preserve raw error for internal logs; got %q", se.Cause.Error())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cause := errors.New(tc.raw)
+			se := NewSubmitBuildError(ReasonBuildSubmitWorkflowFailed, StageSubmitWorkflow, cause, cause.Error())
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(se.Detail, want) {
+					t.Errorf("Detail %q must contain %q", se.Detail, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(se.Detail, notWant) {
+					t.Errorf("Detail leaked %q: %q", notWant, se.Detail)
+				}
+			}
+			// Cause stays unscrubbed for internal observability (slog / audit_log).
+			if !strings.Contains(se.Cause.Error(), tc.raw) {
+				t.Errorf("Cause MUST preserve raw error for internal logs; got %q", se.Cause.Error())
+			}
+		})
 	}
 }

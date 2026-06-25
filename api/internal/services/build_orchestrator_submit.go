@@ -79,6 +79,13 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// the GitHub App auto-deploy path — bypass here means a plan-cap
 		// enforcement hole (MEET-2026-04-23-059 Constraint 6). Operates on
 		// resolved AppSpec per B40 fix above.
+		//
+		// Sprint 6 /review CODE-003 LOW: enforceScaling returns a *LoopZeroError
+		// directly (ErrScalingAmbiguous / ErrReplicasExceedPlan / etc.) by
+		// design — bypassing wrapSubmitBuildError so mapBuildError dispatches
+		// it via the *LoopZeroError ladder branch with its own code, not as
+		// SubmitBuildError. The wrap helper EC-3 guard also short-circuits
+		// any *LoopZeroError that reaches it (defense-in-depth).
 		if err := enforceScaling(req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}

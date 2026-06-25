@@ -162,6 +162,14 @@ var scrubPatterns = []struct {
 	// "GITEA-HTTP.loopzero-system.svc.cluster.local" mixed-case variants).
 	{regexp.MustCompile(`(?i)source backend(?:-http)?\.[a-z0-9-]+\.svc\.cluster\.local`), "source backend"},
 	{regexp.MustCompile(`(?i)object store(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.svc\.cluster\.local`), "object store"},
+	// Sprint 6 /review CODE-001 MEDIUM — Postgres / Redis / etc. driver errors
+	// (`pq: could not connect to host postgresql.loopzero-system.svc.cluster.local`)
+	// leaked the namespace-qualified hostname through the Sprint 5 suffix-only
+	// strip. Generic catch-all matches ANY `<host>.<ns>.svc.cluster.local` form
+	// BEFORE the suffix strip so the full hostname collapses to "<internal
+	// service>" cleanly. Specific gitea/minio patterns above still win because
+	// they fire first (Go regex slice is ordered).
+	{regexp.MustCompile(`(?i)\b[a-z0-9-]+\.[a-z0-9-]+\.svc\.cluster\.local`), "<internal service>"},
 	{regexp.MustCompile(`(?i)\.svc\.cluster\.local`), ""},
 	// RFC1918 internal CIDR ranges (10/8 + 172.16/12 + 192.168/16). F-sec-1:
 	// closes the gap where production CNIs (Calico 192.168/16, EKS vpc-cni

@@ -63,6 +63,10 @@ func TestWrapSubmitBuildError_NewDiscriminators(t *testing.T) {
 			wantDetailHas: "invalid runtime",
 		},
 		// Negative direction — unknown stage label routes to UnknownReason.
+		// Sprint 6 /review S6-1 raised the negative-direction ratio per the
+		// Vercel canonical threshold (>50%): adding N3 (lookalike-substring)
+		// + N4 (UUID-shape) probes that the stage lookup is strict-equality,
+		// not substring-matching.
 		{
 			name:          "N1-unknown-stage-label",
 			stage:         SubmitBuildStage("not-a-real-stage"),
@@ -76,6 +80,39 @@ func TestWrapSubmitBuildError_NewDiscriminators(t *testing.T) {
 			in:            errors.New("anonymous failure"),
 			wantReason:    ReasonBuildSubmitUnknown,
 			wantDetailHas: "anonymous failure",
+		},
+		{
+			// S6-1: lookalike-prefix probe — must NOT substring-match a real stage.
+			name:          "N3-stage-name-lookalike-prefix",
+			stage:         SubmitBuildStage("submit_workflo"), // missing final 'w'
+			in:            errors.New("typo'd stage label"),
+			wantReason:    ReasonBuildSubmitUnknown,
+			wantDetailHas: "typo'd stage label",
+		},
+		{
+			// S6-1: UUID-shape probe — random unexpected input must route to Unknown.
+			name:          "N4-uuid-shape-stage-label",
+			stage:         SubmitBuildStage("550e8400-e29b-41d4-a716-446655440000"),
+			in:            errors.New("uuid-shape stage"),
+			wantReason:    ReasonBuildSubmitUnknown,
+			wantDetailHas: "uuid-shape stage",
+		},
+		// S6-3: positive coverage for StageSetAppsSpec + StageResolveScaling
+		// (both route to ReasonBuildSubmitDBWriteFailed; previously only
+		// covered via sentinel/negative tests).
+		{
+			name:          "P6-set-apps-spec-failed",
+			stage:         StageSetAppsSpec,
+			in:            errors.New("pq: deadlock detected"),
+			wantReason:    ReasonBuildSubmitDBWriteFailed,
+			wantDetailHas: "deadlock detected",
+		},
+		{
+			name:          "P7-resolve-scaling-failed",
+			stage:         StageResolveScaling,
+			in:            errors.New("scaling_resolver: app_scaling_config row not found"),
+			wantReason:    ReasonBuildSubmitDBWriteFailed,
+			wantDetailHas: "app_scaling_config",
 		},
 	}
 	for _, tc := range cases {
