@@ -22,7 +22,10 @@
 set -euo pipefail
 
 PLAN_SLUG="qa-sprint5-cleanup-2026-06-25"
-CLOUD_BASE="${LOOPZERO_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+# Per check-no-cloud-dev-default_test.sh gate: defaulting to cloud-dev.loopzero.example
+# is forbidden (Caddy 301 redirect trap eats POST bodies on redirect). Require
+# explicit LOOPZERO_CLOUD_URL — operator HARD STOP per cleanroom-up-live-test-mandate.md.
+CLOUD_BASE="${LOOPZERO_CLOUD_URL:?LOOPZERO_CLOUD_URL must be set to the dev-public cloud URL (e.g., https://app-dev.loopzero.example)}"
 JWT_PATH="${LOOPZERO_SESSION_JWT_PATH:-$HOME/.loopzero/local-dogfood-session-jwt.txt}"
 SKIP_LIVE=0
 SCENARIO=""
