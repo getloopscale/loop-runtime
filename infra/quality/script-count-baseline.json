@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 359,
+  "canonical_sh": 361,
   "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": 359,
+      "to": 361,
+      "reason": "Sprint 7 plan qa-sprint7-cleanup-2026-06-25 v1.0 — adds 2 LIVE E2E scripts for loopzero-cloud#35 (info-disclosure CWE-209) + #36 (Argo RBAC BLOCKER): infra/tests/e2e/dev-public-build-rbac_test.sh (4 scenarios A-D incl. JWT sub-claim assertion + auth can-i + build-submit-202 + verbatim-Unauthorized-absent) and infra/tests/e2e/dev-public-info-disclosure-scrub_test.sh (7 scenarios A trigger + B-F assert NO forbidden terms + G negative-direction guard). Both allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan qa-sprint7-cleanup-2026-06-25). Per the NEW INQUEBRÁVEL feedback (sponsor verbatim 2026-06-25 — `feedback_issue_fix_requires_failing_e2e_test_2026_06_25`): issue fix DEMANDS E2E LIVE that RED pre-fix. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-25",
       "from": 356,

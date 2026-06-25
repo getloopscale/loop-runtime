@@ -1,10 +1,10 @@
 {
-  "total": 166,
+  "total": 168,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 106
+    "test": 108
   },
   "_changelog": [
     {

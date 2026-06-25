@@ -171,6 +171,31 @@ var scrubPatterns = []struct {
 	// they fire first (Go regex slice is ordered).
 	{regexp.MustCompile(`(?i)\b[a-z0-9-]+\.[a-z0-9-]+\.svc\.cluster\.local`), "<internal service>"},
 	{regexp.MustCompile(`(?i)\.svc\.cluster\.local`), ""},
+	// Sprint 7 plan qa-sprint7-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#35
+	// info-disclosure CWE-209): the verbatim cause exposure from Sprint 5/6
+	// leaked internal stack names (Argo Workflows + ArgoCD + k8s ServiceAccount
+	// + namespace + git-bundle paths) to tenant-`owner` accounts via
+	// `loopzero deploy --json` error messages. Patterns use word-boundaries so
+	// legitimate user input (e.g., project name "my-argo-test") survives.
+	// Sprint 7 #35: argo leak patterns. Bare `\bargo\b` is INTENTIONALLY
+	// NOT used here — `\b` treats `-` as word boundary so it would match
+	// "argo" inside legitimate user terms like "my-argo-test" project names.
+	// Instead, target the specific leak patterns from the Red Team evidence:
+	// `argo: <op>` (colon-suffixed), `argocd` (concatenated form), and
+	// `argoproj.io` (FQDN form). Standalone "argo" surrounded by dashes/
+	// alphanumerics survives so user input is preserved.
+	{regexp.MustCompile(`(?i)argoproj\.io`), "<orchestrator>"},
+	{regexp.MustCompile(`(?i)argo:\s*create\s+\w+`), "<orchestrator>: <op>"},
+	{regexp.MustCompile(`(?i)\bargocd\b`), "<orchestrator>"},
+	{regexp.MustCompile(`(?i)argo\s+(?:workflows?|server)\b`), "<orchestrator>"},
+	{regexp.MustCompile(`(?i)system:serviceaccount:[a-z0-9-]+:[a-z0-9-]+`), "<service identity>"},
+	{regexp.MustCompile(`(?i)\bserviceaccount\b/?`), "<service identity>"},
+	{regexp.MustCompile(`(?i)\bnamespace\b\s+"[^"]*"`), "<scope>"},
+	{regexp.MustCompile(`(?i)\bnamespace\b`), "<scope>"},
+	{regexp.MustCompile(`/tmp/loopzero-[a-zA-Z0-9_-]+/[^\s'"` + "`" + `]*`), "<server tmp>"},
+	{regexp.MustCompile(`/tmp/loopzero-[a-zA-Z0-9_-]+`), "<server tmp>"},
+	{regexp.MustCompile(`(?i)\bgit\s+bundle\b`), "<source archive>"},
+	{regexp.MustCompile(`(?i)\bbundle\b`), "<source archive>"},
 	// RFC1918 internal CIDR ranges (10/8 + 172.16/12 + 192.168/16). F-sec-1:
 	// closes the gap where production CNIs (Calico 192.168/16, EKS vpc-cni
 	// 172.16/12) produced internal addresses that the previous 10/8-only

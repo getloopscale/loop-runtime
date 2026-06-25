@@ -45,11 +45,23 @@ import sys
 import yaml
 
 
+# Sprint 7 plan qa-sprint7-cleanup-2026-06-25 T2.1 (closes loopzero-cloud#36):
+# extended with per-cluster (namespace, sa) tuple. The pre-Sprint-7 script
+# minted `kube-system/default` for ALL clusters — but the build cluster's
+# Argo Workflows RBAC ties `create workflows.argoproj.io` to the SA
+# `argo/loopzero-workflow-submitter`, NOT to `kube-system/default`. Result:
+# `loopzero deploy` failed at workflow submit with `argo: create workflow:
+# Unauthorized` even though Role+RoleBinding for the correct SA existed.
+#
+# Per ADR D1: per-cluster SA mapping closes the RBAC gap canonically.
+# runtime + runtime2 keep `kube-system/default` (no Argo workloads to
+# submit there — those clusters host user workloads, not the build
+# orchestrator's Argo Workflows control plane).
 CLUSTER_MAP = {
-    # logical name → (k3d cluster context, k3d container, kubeconfig data key)
-    "build":    ("k3d-loopzero-build",    "k3d-loopzero-build-server-0",    "build.kubeconfig"),
-    "runtime":  ("k3d-loopzero-workload", "k3d-loopzero-workload-server-0", "runtime.kubeconfig"),
-    "runtime2": ("k3d-loopzero-runtime-2","k3d-loopzero-runtime-2-server-0","runtime2.kubeconfig"),
+    # logical name → (k3d cluster context, k3d container, kubeconfig data key, (sa_namespace, sa_name))
+    "build":    ("k3d-loopzero-build",    "k3d-loopzero-build-server-0",    "build.kubeconfig",    ("argo", "loopzero-workflow-submitter")),
+    "runtime":  ("k3d-loopzero-workload", "k3d-loopzero-workload-server-0", "runtime.kubeconfig",  ("kube-system", "default")),
+    "runtime2": ("k3d-loopzero-runtime-2","k3d-loopzero-runtime-2-server-0","runtime2.kubeconfig", ("kube-system", "default")),
 }
 
 
@@ -65,10 +77,13 @@ def discover_cluster_ip(container: str) -> str:
     return out
 
 
-def mint_token(context: str) -> str:
+def mint_token(context: str, namespace: str, sa: str) -> str:
+    # Sprint 7 T2.1: namespace + sa parameterized per cluster. Pre-Sprint-7
+    # hardcoded `kube-system/default` which was wrong for the build cluster
+    # (RBAC ties create-workflows to argo/loopzero-workflow-submitter).
     return subprocess.check_output(
-        ["kubectl", "--context=" + context, "-n", "kube-system",
-         "create", "token", "default", "--duration=24h"],
+        ["kubectl", "--context=" + context, "-n", namespace,
+         "create", "token", sa, "--duration=24h"],
         text=True,
     ).strip()
 
@@ -119,13 +134,14 @@ def patch_secret(data_key: str, kc_yaml: str) -> None:
 
 
 def regen_one(logical: str) -> None:
-    context, container, data_key = CLUSTER_MAP[logical]
+    context, container, data_key, sa_spec = CLUSTER_MAP[logical]
+    sa_namespace, sa_name = sa_spec
     ip = discover_cluster_ip(container)
-    token = mint_token(context)
+    token = mint_token(context, sa_namespace, sa_name)
     ca = get_ca_b64(context)
     kc_yaml = build_kubeconfig(ip, ca, token)
     patch_secret(data_key, kc_yaml)
-    print(f"[regen] {logical}: ip={ip} token-len={len(token)} key={data_key} → patched")
+    print(f"[regen] {logical}: ip={ip} sa={sa_namespace}/{sa_name} token-len={len(token)} key={data_key} → patched")
 
 
 def main() -> int:

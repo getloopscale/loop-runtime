@@ -86,7 +86,55 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 			name:        "any cluster-internal hostname fully scrubbed",
 			rawDetail:   "Get http://argo-workflows.argo.svc.cluster.local:2746: dial: connect refused",
 			wantSubs:    []string{"<internal service>"},
-			wantNotSubs: []string{"argo-workflows.argo", ".svc.cluster.local"},
+			wantNotSubs: []string{".svc.cluster.local"},
+		},
+		// Sprint 7 #35 info-disclosure CWE-209 — Argo / ArgoCD / SA / namespace / tmp paths
+		{
+			name:        "#35 argo: create workflow leak scrubbed",
+			rawDetail:   "Build trigger failed at workflow submit: argo: create workflow: Unauthorized",
+			wantSubs:    []string{"<orchestrator>"},
+			wantNotSubs: []string{"argo: create workflow"},
+		},
+		{
+			name:        "#35 argoproj.io leak scrubbed",
+			rawDetail:   "apiGroup argoproj.io denied for SA",
+			wantSubs:    []string{"<orchestrator>"},
+			wantNotSubs: []string{"argoproj.io"},
+		},
+		{
+			name:        "#35 system:serviceaccount full chain scrubbed",
+			rawDetail:   "system:serviceaccount:loopzero-system:default cannot list applications",
+			wantSubs:    []string{"<service identity>"},
+			wantNotSubs: []string{"system:serviceaccount:loopzero-system:default"},
+		},
+		{
+			name:        "#35 namespace leak scrubbed",
+			rawDetail:   "applications.argoproj.io in namespace \"loopzero-system\" forbidden",
+			wantSubs:    []string{"<orchestrator>", "<scope>"},
+			wantNotSubs: []string{"namespace \"loopzero-system\""},
+		},
+		{
+			name:        "#35 /tmp/loopzero-source path scrubbed",
+			rawDetail:   "git fetch /tmp/loopzero-source-1147567712/source.bundle HEAD: did not send all necessary objects",
+			wantSubs:    []string{"<server tmp>"},
+			wantNotSubs: []string{"/tmp/loopzero-source-1147567712"},
+		},
+		{
+			name:        "#35 git bundle term scrubbed",
+			rawDetail:   "git bundle did not send all necessary objects",
+			wantSubs:    []string{"<source archive>"},
+			wantNotSubs: []string{"git bundle"},
+		},
+		// Negative-direction: legitimate user terms NOT scrubbed.
+		{
+			name:        "#35 negative — user project name 'my-argo-test' survives",
+			rawDetail:   "validation error on project my-argo-test",
+			wantSubs:    []string{"my-argo-test"},
+		},
+		{
+			name:        "#35 negative — github.com still NOT scrubbed (Sprint 5 regression)",
+			rawDetail:   "fetch from https://github.com/user/repo failed",
+			wantSubs:    []string{"github.com"},
 		},
 		{
 			name:        "internal CIDR scrubbed",
