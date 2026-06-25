@@ -6,6 +6,7 @@ package source
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -48,6 +49,19 @@ const (
 	ReasonBundleTooLarge PushBundleErrorReason = 4
 	// ReasonArchiveReadError: the io.Reader returned an error mid-read.
 	ReasonArchiveReadError PushBundleErrorReason = 5
+	// ReasonSourceBackendAuthFailure: the backend rejected authentication
+	// (401 / 403 / "authentication required" / "permission denied" patterns).
+	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T1.1 (closes loopzero-cloud#33).
+	ReasonSourceBackendAuthFailure PushBundleErrorReason = 6
+	// ReasonSourceBackendCapacity: the backend ran out of capacity (507 /
+	// "quota exceeded" / "no space left on device" patterns).
+	ReasonSourceBackendCapacity PushBundleErrorReason = 7
+	// ReasonUnknownDownstream is the catchall for unclassified downstream
+	// failures. Per ADR D2 of the Sprint 5 plan: the canonical anti-pattern
+	// is defaulting to a misleading specific reason (Sprint 4 catchall to
+	// RemoteRejectedPush misled operators on QA #33). Operators see the
+	// verbatim cause composed into the user-facing message.
+	ReasonUnknownDownstream PushBundleErrorReason = 8
 )
 
 // reasonStrings is the canonical wire-form lookup table. EC-6 absorption:
@@ -60,6 +74,9 @@ var reasonStrings = map[PushBundleErrorReason]string{
 	ReasonBundleMalformed:          "BundleMalformed",
 	ReasonBundleTooLarge:           "BundleTooLarge",
 	ReasonArchiveReadError:         "ArchiveReadError",
+	ReasonSourceBackendAuthFailure: "SourceBackendAuthFailure",
+	ReasonSourceBackendCapacity:    "SourceBackendCapacity",
+	ReasonUnknownDownstream:        "UnknownDownstream",
 }
 
 // String implements fmt.Stringer. EC-6 absorption: the wire form is the string
@@ -118,8 +135,36 @@ func IsGiteaRaceCondition(err error) bool {
 }
 
 // NewPushBundleError constructs a typed PushBundleError with optional cause.
+// The detail is scrubbed for internal terms (Rule 3: no Gitea/MinIO/SVC DNS
+// in user-facing strings) per Sprint 5 plan qa-sprint5-cleanup-2026-06-25
+// T2.3. The Cause is preserved unscrubbed so internal observability tools
+// (logs, audit_log) see the raw error.
 func NewPushBundleError(reason PushBundleErrorReason, cause error, detail string) *PushBundleError {
-	return &PushBundleError{Reason: reason, Cause: cause, Detail: detail}
+	return &PushBundleError{Reason: reason, Cause: cause, Detail: scrubInternalTerms(detail)}
+}
+
+// scrubInternalTerms removes cluster-internal hostnames, DNS suffixes, internal
+// CIDR addresses and Authorization tokens from a string so it is safe to expose
+// to operators. Sprint 5 plan ADR D3 consequence: detail is composed into the
+// user-facing LoopZeroError message; without scrubbing, Rule 3 ("no internal terms
+// in CLI output") would be violated. Pre-compiled at package init.
+var scrubPatterns = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	{regexp.MustCompile(`gitea(?:-http)?\.[a-z0-9-]+\.svc\.cluster\.local`), "source backend"},
+	{regexp.MustCompile(`minio(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.svc\.cluster\.local`), "object store"},
+	{regexp.MustCompile(`\.svc\.cluster\.local`), ""},
+	{regexp.MustCompile(`dial tcp 10\.\d+\.\d+\.\d+:\d+`), "dial tcp <internal>"},
+	{regexp.MustCompile(`(?i)Authorization:\s*\S+`), "Authorization: <redacted>"},
+	{regexp.MustCompile(`(?i)token\s+[A-Za-z0-9_\-.]{16,}`), "token <redacted>"},
+}
+
+func scrubInternalTerms(s string) string {
+	for _, p := range scrubPatterns {
+		s = p.re.ReplaceAllString(s, p.repl)
+	}
+	return s
 }
 
 // AsPushBundleError is a convenience helper for callers that want a single

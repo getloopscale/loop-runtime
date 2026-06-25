@@ -609,24 +609,39 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 // backend" NOT "Gitea", "remote" NOT "git push" — internal terms are forbidden
 // in user-facing strings.
 func NewSourceUploadFailedFromPushReason(reasonLabel, detail string) *LoopZeroError {
-	var msg string
-	switch reasonLabel {
-	case "SourceBackendUnreachable":
-		msg = "Source backend is unreachable. Please retry; if the issue persists, contact support."
-	case "RemoteRejectedPush":
-		msg = "The remote rejected the push. Verify your project name is unused and try again."
-	case "BundleMalformed":
-		msg = "The source bundle is malformed. Re-run `loopzero deploy` from your project root."
-	case "BundleTooLarge":
-		msg = "The source bundle exceeds the size limit. Reduce the size of your source tree."
-	case "ArchiveReadError":
-		msg = "Could not read the source archive. Check your project files and try again."
-	default:
-		// Unknown reason — fall back to the neutral generic message.
-		msg = ErrSourceUploadFailed.Message
+	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 ADR D3 (closes loopzero-cloud#33):
+	// compose user-facing message as "<summary>: <verbatim detail>" so the
+	// operator sees both the actionable summary AND the underlying cause.
+	// Sprint 4 replaced the detail wholesale ("Verify your project name is
+	// unused" replaced the actual gitea error) — that is the QA #33 user
+	// complaint about non-actionable diagnostics. Vercel CLI's canonical
+	// pattern (knowledge-base/references/vercel/packages/cli/test/unit/util/
+	// deploy/process-deployment.test.ts:17-19) is to compose original + hint.
+	summary, ok := summaryByPushReason[reasonLabel]
+	if !ok {
+		// Unknown reason label — fall back to the neutral generic message.
+		return &LoopZeroError{Code: "SOURCE_UPLOAD_FAILED", Message: ErrSourceUploadFailed.Message}
 	}
-	return &LoopZeroError{
-		Code:    "SOURCE_UPLOAD_FAILED",
-		Message: msg,
+	msg := summary
+	if detail != "" {
+		msg = summary + ": " + detail
 	}
+	return &LoopZeroError{Code: "SOURCE_UPLOAD_FAILED", Message: msg}
+}
+
+// summaryByPushReason is the canonical operator-actionable summary keyed on
+// the source.PushBundleErrorReason String() output. Sprint 5 plan ADR D3 +
+// D1 — extends the Sprint 4 set with auth/capacity/unknown reasons; messages
+// are composed as "<summary>: <verbatim detail>" by
+// NewSourceUploadFailedFromPushReason. CR-9: zero internal terms (no Gitea /
+// MinIO / Kubernetes references).
+var summaryByPushReason = map[string]string{
+	"SourceBackendUnreachable": "Source backend is unreachable (network or DNS failure)",
+	"RemoteRejectedPush":       "The remote rejected the push",
+	"BundleMalformed":          "The source bundle is malformed. Re-run `loopzero deploy` from your project root",
+	"BundleTooLarge":           "The source bundle exceeds the size limit. Reduce the size of your source tree",
+	"ArchiveReadError":         "Could not read the source archive. Check your project files and try again",
+	"SourceBackendAuthFailure": "Source backend rejected authentication",
+	"SourceBackendCapacity":    "Source backend is out of capacity",
+	"UnknownDownstream":        "Source upload failed (cause not classified)",
 }

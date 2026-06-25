@@ -30,6 +30,10 @@ func TestPushBundleErrorReason_StringerRoundTrip(t *testing.T) {
 		{ReasonBundleMalformed, "BundleMalformed"},
 		{ReasonBundleTooLarge, "BundleTooLarge"},
 		{ReasonArchiveReadError, "ArchiveReadError"},
+		// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T1.1 — new discriminators.
+		{ReasonSourceBackendAuthFailure, "SourceBackendAuthFailure"},
+		{ReasonSourceBackendCapacity, "SourceBackendCapacity"},
+		{ReasonUnknownDownstream, "UnknownDownstream"},
 		{PushBundleErrorReason(99), "Unknown"}, // out-of-range guard per EC-6
 		{PushBundleErrorReason(0), "Unknown"},  // zero value (uninitialized) is Unknown
 	}
@@ -37,6 +41,87 @@ func TestPushBundleErrorReason_StringerRoundTrip(t *testing.T) {
 		if got := tc.reason.String(); got != tc.want {
 			t.Errorf("PushBundleErrorReason(%d).String() = %q, want %q", tc.reason, got, tc.want)
 		}
+	}
+}
+
+// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T2.3 — scrubInternalTerms.
+// Detail is composed into the user-facing LoopZeroError message per ADR D3;
+// without scrubbing, Rule 3 (no internal terms — Gitea / MinIO / SVC DNS)
+// would be violated. Scrub runs at NewPushBundleError construction time.
+
+func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
+	cases := []struct {
+		name        string
+		rawDetail   string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "gitea hostname scrubbed",
+			rawDetail:   "Post \"https://gitea-http.loopzero-system.svc.cluster.local:3000/api/v1/repos\": EOF",
+			wantSubs:    []string{"source backend"},
+			wantNotSubs: []string{"gitea-http", ".loopzero-system", ".svc.cluster.local"},
+		},
+		{
+			name:        "minio hostname scrubbed",
+			rawDetail:   "Get \"http://minio.loopzero-system.svc.cluster.local:9000/bundle\": connection refused",
+			wantSubs:    []string{"object store"},
+			wantNotSubs: []string{"minio.loopzero-system", ".svc.cluster.local"},
+		},
+		{
+			name:        "svc.cluster.local suffix scrubbed (defense layer)",
+			rawDetail:   "lookup somesvc.other-ns.svc.cluster.local: no such host",
+			wantSubs:    []string{"no such host"},
+			wantNotSubs: []string{".svc.cluster.local"},
+		},
+		{
+			name:        "internal CIDR scrubbed",
+			rawDetail:   "Post: dial tcp 10.43.0.5:3000: connect: connection refused",
+			wantSubs:    []string{"dial tcp <internal>", "connection refused"},
+			wantNotSubs: []string{"10.43.0.5"},
+		},
+		{
+			name:        "Authorization header redacted",
+			rawDetail:   "request denied with header Authorization: Bearer abc.def.ghi",
+			wantSubs:    []string{"Authorization: <redacted>"},
+			wantNotSubs: []string{"Bearer abc.def.ghi"},
+		},
+		{
+			name:        "token literal redacted",
+			rawDetail:   "git push: invalid token 0123456789abcdef0123456789abcdef",
+			wantSubs:    []string{"token <redacted>"},
+			wantNotSubs: []string{"0123456789abcdef"},
+		},
+		// Negative direction: legitimate external hostnames MUST NOT be touched.
+		{
+			name:        "external github.com NOT touched",
+			rawDetail:   "fetch https://github.com/foo/bar: connection refused",
+			wantSubs:    []string{"github.com", "connection refused"},
+		},
+		{
+			name:        "external gitlab.com NOT touched",
+			rawDetail:   "https://gitlab.com/foo/bar.git: not found",
+			wantSubs:    []string{"gitlab.com"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pe := NewPushBundleError(ReasonUnknownDownstream, errors.New(tc.rawDetail), tc.rawDetail)
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(pe.Detail, want) {
+					t.Errorf("Detail %q must contain %q", pe.Detail, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(pe.Detail, notWant) {
+					t.Errorf("Detail %q must NOT contain %q (Rule 3 scrub regression)", pe.Detail, notWant)
+				}
+			}
+			// Cause stays unscrubbed for internal observability.
+			if !strings.Contains(pe.Cause.Error(), tc.rawDetail) {
+				t.Errorf("Cause MUST preserve raw error for internal logs; got %q", pe.Cause.Error())
+			}
+		})
 	}
 }
 

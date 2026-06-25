@@ -537,3 +537,86 @@ func TestNewHPATargetBoundsViolated_MemoryField(t *testing.T) {
 		}
 	}
 }
+
+// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T2.4 (closes loopzero-cloud#33):
+// NewSourceUploadFailedFromPushReason composes "<summary>: <detail>" so the
+// verbatim cause is always preserved in the user-facing message. Vercel CLI
+// canonical pattern — see knowledge-base/references/vercel/packages/cli/
+// test/unit/util/deploy/process-deployment.test.ts:17-19 (original + hint).
+
+func TestNewSourceUploadFailedFromPushReason_ComposesDetail(t *testing.T) {
+	cases := []struct {
+		name        string
+		reasonLabel string
+		detail      string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "RemoteRejectedPush composes verbatim cause",
+			reasonLabel: "RemoteRejectedPush",
+			detail:      "pre-receive hook declined",
+			wantSubs:    []string{"The remote rejected the push", "pre-receive hook declined"},
+			// Sprint 5 ADR D3: replacing the detail with "Verify your project
+			// name is unused" is the QA #33 anti-pattern — assert the
+			// misleading text never appears.
+			wantNotSubs: []string{"Verify your project name is unused"},
+		},
+		{
+			name:        "UnknownDownstream surfaces verbatim cause",
+			reasonLabel: "UnknownDownstream",
+			detail:      "repo locked by another process",
+			wantSubs:    []string{"Source upload failed", "repo locked by another process"},
+		},
+		{
+			name:        "SourceBackendAuthFailure preserves operator diagnostic",
+			reasonLabel: "SourceBackendAuthFailure",
+			detail:      "server returned 401 Unauthorized",
+			wantSubs:    []string{"Source backend rejected authentication", "401"},
+		},
+		{
+			name:        "SourceBackendCapacity preserves quota detail",
+			reasonLabel: "SourceBackendCapacity",
+			detail:      "quota exceeded on remote",
+			wantSubs:    []string{"Source backend is out of capacity", "quota exceeded"},
+		},
+		{
+			name:        "SourceBackendUnreachable preserves network diagnostic",
+			reasonLabel: "SourceBackendUnreachable",
+			detail:      "dial tcp: connection refused",
+			wantSubs:    []string{"Source backend is unreachable", "connection refused"},
+		},
+		{
+			name:        "Empty detail uses summary alone (no trailing colon)",
+			reasonLabel: "RemoteRejectedPush",
+			detail:      "",
+			wantSubs:    []string{"The remote rejected the push"},
+			wantNotSubs: []string{": "},
+		},
+		{
+			name:        "Unknown reason label falls back to neutral generic message",
+			reasonLabel: "BogusUnknownLabel",
+			detail:      "ignored when label is unknown",
+			wantSubs:    []string{ErrSourceUploadFailed.Message},
+			wantNotSubs: []string{"ignored when label"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewSourceUploadFailedFromPushReason(tc.reasonLabel, tc.detail)
+			if err.Code != "SOURCE_UPLOAD_FAILED" {
+				t.Errorf("Code = %q, want SOURCE_UPLOAD_FAILED (Rule 4 — exit-code stability)", err.Code)
+			}
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q (regression guard)", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
