@@ -15,10 +15,24 @@ import (
 )
 
 // EnvironmentLister is the read side of the EnvironmentManager contract:
-// returns a non-nil error when the environment does not exist for the tenant.
-// Implemented by routes.EnvironmentManager (GetEnvironmentDetail).
+// returns true when the (project, env) tuple exists in the tenant's
+// spec.environments. Implemented by routes.EnvironmentManager
+// (GetEnvironmentDetail).
+//
+// M2 v1.2 plan m37-tenant-cr-project-sync-canonical-fix (2026-06-25):
+// the shallow check is per-(project, env) tuple, NOT project-agnostic.
+// The pre-m37 project-agnostic semantic silently swallowed new-project
+// deploys against tenants that already had the same env name on a
+// different project — Tenant CR never gained the new tuple,
+// AppProject destinations never updated, ArgoCD sync failed with
+// "namespace not permitted in project". Closes #37 cenário 4.
+//
+// Legacy production tuples (pre-M2) have empty Project field; calling
+// HasEnvironment with `project=""` matches only those legacy entries
+// (ADR D2 of M2 v1.2). See pkg/domain.EnvRef and
+// TenantCRManager.GetEnvironmentDetail for the canonical impl.
 type EnvironmentLister interface {
-	HasEnvironment(ctx context.Context, tenantID, envName string) (bool, error)
+	HasEnvironment(ctx context.Context, tenantID, project, envName string) (bool, error)
 }
 
 // EnvironmentAdder is the write side of the EnvironmentManager contract:
@@ -98,13 +112,18 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 		return nil
 	}
 
-	// 1. Cheap existence check — idempotent no-op for pre-existing envs.
-	// M2 v1.2 NOTE: HasEnvironment signature carries env-only by design.
-	// The Lister (TenantCRManager.GetEnvironmentDetail-derived) returns
-	// existence for the tenant-wide env name; per-(project, env) tuple
-	// uniqueness is enforced at AddEnvironment via the operator (Tenant
-	// CR JSON patch). The shallow check is intentionally project-agnostic.
-	exists, err := e.Lister.HasEnvironment(ctx, tenantID, envName)
+	// 1. Cheap existence check — idempotent no-op for pre-existing tuples.
+	// m37 plan canonical fix (2026-06-25): the shallow check is now
+	// per-(project, env) tuple. The pre-m37 project-agnostic check
+	// silently returned exists=true when the SAME env name existed on
+	// a DIFFERENT project for the same tenant → AddEnvironment was
+	// skipped → Tenant CR spec.environments[] never gained the new
+	// tuple → AppProject destinations never extended → ArgoCD sync
+	// failed with "namespace not permitted in project". Closes #37
+	// cenário 4 (BUILD → RELEASE → URL chain). The downstream
+	// AddEnvironment retains its server-side merge idempotency as
+	// defense in depth.
+	exists, err := e.Lister.HasEnvironment(ctx, tenantID, project, envName)
 	if err == nil && exists {
 		return nil
 	}
@@ -159,7 +178,7 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 				504,
 			)
 		case <-ticker.C:
-			exists, err := e.Lister.HasEnvironment(waitCtx, tenantID, envName)
+			exists, err := e.Lister.HasEnvironment(waitCtx, tenantID, project, envName)
 			if err != nil || !exists {
 				// Continue polling on transient errors or env not yet present.
 				continue

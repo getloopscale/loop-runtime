@@ -1,12 +1,18 @@
 {
-  "total": 169,
+  "total": 170,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 109
+    "test": 110
   },
   "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": {"total": 169, "test": 109},
+      "to":   {"total": 170, "test": 110},
+      "reason": "Plan m37-tenant-cr-project-sync-canonical-fix v1.0 T3.1 — adds infra/tests/e2e/dev-public-deploy-live-url_test.sh (4 LIVE scenarios A-D for loopzero-cloud#37 cenário 4 BUILD → RELEASE → URL chain). OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md. Sibling T3.2 hermetic guard is categorically homed in task quality:gates; T3.3 dogfood wrapper lives under archive/canonical-tests-v1/scripts/local/ (archive path). +1 test-domain delta is solely the LIVE script. Allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan m37-tenant-cr-project-sync-canonical-fix). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors infra/quality/script-count-baseline.json _changelog 2026-06-25 entries."
+    },
     {
       "date": "2026-06-25",
       "from": {"total": 168, "test": 108},

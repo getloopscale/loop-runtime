@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 368,
+  "canonical_sh": 371,
   "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": 368,
+      "to": 371,
+      "reason": "Plan m37-tenant-cr-project-sync-canonical-fix v1.0 — adds the canonical 3-script triplet for loopzero-cloud#37 cenário 4 LIVE end-to-end coverage (BUILD → RELEASE → URL). Sprint 8 fix shipped the engine watcher namespace-scoped LIST (correct, LIVE), but the QA Red Team re-test caught a SECOND root cause: `EnvironmentLister.HasEnvironment` shallow check was project-agnostic, so a NEW project deploy against an existing tenant silently no-op'd (Tenant CR `spec.environments[]` never gained the new tuple → AppProject destinations stale → ArgoCD sync fail → no Live URL). m37 plan extends the Lister interface to per-(project, env) tuple semantic and ships the matching LIVE triplet: infra/tests/e2e/dev-public-deploy-live-url_test.sh (4 scenarios A-D covering Tenant CR tuple extension + AppProject destinations + release ACTIVE with URL + HTTP 200..399 probe), infra/tests/check-dev-public-deploy-live-url-syntax_test.sh (hermetic 27/27 PASS), archive/canonical-tests-v1/scripts/local/dogfood-deploy-live-url.sh (4-suite aggregate). All 3 allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan m37-...). Per the INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25: cenário-4 LIVE proof is the close-#37 contract. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-25",
       "from": 361,
