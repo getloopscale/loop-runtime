@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 356,
+  "canonical_sh": 359,
   "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": 356,
+      "to": 359,
+      "reason": "Sprint 5 plan qa-sprint5-cleanup-2026-06-25 v1.0 — adds 3 canonical scripts for loopzero-cloud#33 LIVE wire-level coverage: infra/tests/check-dev-public-deploy-error-surface-syntax_test.sh (hermetic guard, 20 assertions PASS), infra/tests/e2e/dev-public-deploy-error-surface_test.sh (LIVE 4-scenario OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL), archive/canonical-tests-v1/scripts/local/dogfood-deploy-error-surface.sh (aggregate wrapper). All 3 allowlisted in .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (plan qa-sprint5-cleanup-2026-06-25 — 2026-06-25). Per the canonical 3-script triplet pattern (sibling: J-21/J-10/J-20 triplets). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-24",
       "from": 355,
