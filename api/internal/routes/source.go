@@ -16,6 +16,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -325,8 +326,13 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 				"team_id", uc.TenantID, "project", projectName,
 				"reason", pushErr.Reason.String(), "detail", pushErr.Detail,
 				"cause", err.Error())
-			writeLoopZeroError(w, loopzeroerrors.NewSourceUploadFailedFromPushReason(
-				pushErr.Reason.String(), pushErr.Detail))
+			// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: thread
+			// the correlation ID so when Sprint 7 scrub collapses Detail
+			// to placeholder-only, the operator gets "Reference: <id>.
+			// Contact support if it persists." (closes #35 Red Team
+			// original suggestion).
+			writeLoopZeroError(w, loopzeroerrors.NewSourceUploadFailedFromPushReasonWithTrace(
+				pushErr.Reason.String(), pushErr.Detail, correlation.Read(r)))
 			return
 		}
 		// Fallback: untyped failure (downstream helper that didn't get

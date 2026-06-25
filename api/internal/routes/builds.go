@@ -284,7 +284,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.RedeployOf != "" {
 		src, srcErr := h.orch.GetRedeploySource(ctx, uc.TenantID, req.RedeployOf)
 		if srcErr != nil {
-			mapBuildError(w, srcErr)
+			mapBuildError(w, r, srcErr)
 			return
 		}
 		req.ProjectID = src.ProjectID
@@ -462,7 +462,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: correlation.Read(r), //nolint:contextcheck // header from original request (T6.1 uniform read via helper)
 	})
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 
@@ -488,7 +488,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Returns 404 (not 403) to avoid leaking build existence across tenants.
 	buildTenantID, err := h.orch.GetBuildTenantID(ctx, buildID)
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 	if buildTenantID != uc.TenantID {
@@ -498,7 +498,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.orch.GetBuildStatus(ctx, buildID)
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 
@@ -525,7 +525,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	// Returns 404 (not 403) to avoid leaking build existence across tenants.
 	buildTenantID, err := h.orch.GetBuildTenantID(ctx, buildID)
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 	if buildTenantID != uc.TenantID {
@@ -534,7 +534,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.orch.CancelBuild(ctx, buildID); err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 
@@ -553,7 +553,11 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 // of the generic catchall "Something went wrong" that #34 complained about.
 // EC-3 preserved: DEPLOY_IN_PROGRESS short-circuit + typed *LoopZeroError
 // dispatch order unchanged.
-func mapBuildError(w http.ResponseWriter, err error) {
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: signature takes the
+// *http.Request so the SubmitBuildError branch can thread the request's
+// correlation ID into the user-facing message (trace-id fallback). Other
+// branches (typed *LoopZeroError + generic catchall) ignore r.
+func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	var loopzeroErr *loopzeroerrors.LoopZeroError
 	if errors.As(err, &loopzeroErr) {
 		// DA-18: Override message for DEPLOY_IN_PROGRESS
@@ -580,8 +584,14 @@ func mapBuildError(w http.ResponseWriter, err error) {
 			"detail", se.Detail,
 			"cause", se.Cause.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReason(
-			se.Reason.String(), se.Detail))
+		// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: thread the
+		// correlation/trace ID into the user-facing message so when the
+		// scrub collapses Detail to placeholder-only, the operator still
+		// gets a "Reference: <id>. Contact support if it persists." handle
+		// to the server-side log (closes the #35 Red Team original
+		// suggestion of separating client-facing from server-side cause).
+		writeLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReasonWithTrace(
+			se.Reason.String(), se.Detail, correlation.Read(r)))
 		return
 	}
 

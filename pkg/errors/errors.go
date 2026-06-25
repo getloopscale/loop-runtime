@@ -17,6 +17,7 @@ package errors
 
 import (
 	"fmt"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -25,6 +26,13 @@ import (
 // enough for any realistic LoopZero call chain (handler → service → store →
 // driver), and bounded so cost stays in the ~150ns range.
 const stackDepth = 32
+
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — precompiled regex
+// for trace-id composition helpers (isUsefulDetail / composeMessageWithTraceID).
+var (
+	placeholderRE = regexp.MustCompile(`<[^>]+>`)
+	whitespaceRE  = regexp.MustCompile(`\s+`)
+)
 
 // LoopZeroError is a typed, transport-agnostic error.
 // It carries a machine-readable Code and a human Message; HTTP status
@@ -609,24 +617,36 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 // backend" NOT "Gitea", "remote" NOT "git push" — internal terms are forbidden
 // in user-facing strings.
 func NewSourceUploadFailedFromPushReason(reasonLabel, detail string) *LoopZeroError {
-	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 ADR D3 (closes loopzero-cloud#33):
-	// compose user-facing message as "<summary>: <verbatim detail>" so the
-	// operator sees both the actionable summary AND the underlying cause.
-	// Sprint 4 replaced the detail wholesale ("Verify your project name is
-	// unused" replaced the actual gitea error) — that is the QA #33 user
-	// complaint about non-actionable diagnostics. Vercel CLI's canonical
-	// pattern (knowledge-base/references/vercel/packages/cli/test/unit/util/
-	// deploy/process-deployment.test.ts:17-19) is to compose original + hint.
+	return NewSourceUploadFailedFromPushReasonWithTrace(reasonLabel, detail, "")
+}
+
+// NewSourceUploadFailedFromPushReasonWithTrace is the trace-id-aware variant
+// per Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 (closes the Red Team
+// suggestion in loopzero-cloud#35: "Separar mensagem-de-cliente (genérica +
+// trace-id) de causa-de-log (verbatim, server-side)"). The existing
+// NewSourceUploadFailedFromPushReason delegates here with empty traceID for
+// backward compatibility — call sites that have a correlation ID available
+// (HTTP handlers via correlation.Read(r)) call this one directly.
+//
+// Composition logic (per Sprint 7 #35 ADR D2):
+//   - Scrubbed detail is "useful" (≥ 20 chars AND not exclusively redaction
+//     placeholders) → compose "<summary>: <verbatim detail>" (Sprint 5 DX).
+//   - Scrubbed detail is empty / fully-collapsed / placeholder-only → fall
+//     back to "<summary>. Reference: <trace-id>. Contact support if it
+//     persists." (no information disclosure; trace-id correlates server log).
+//   - Unknown reason label → neutral generic + optional trace-id appended.
+func NewSourceUploadFailedFromPushReasonWithTrace(reasonLabel, detail, traceID string) *LoopZeroError {
 	summary, ok := summaryByPushReason[reasonLabel]
 	if !ok {
-		// Unknown reason label — fall back to the neutral generic message.
-		return &LoopZeroError{Code: "SOURCE_UPLOAD_FAILED", Message: ErrSourceUploadFailed.Message}
+		return &LoopZeroError{
+			Code:    "SOURCE_UPLOAD_FAILED",
+			Message: appendTraceIDFallback(ErrSourceUploadFailed.Message, traceID),
+		}
 	}
-	msg := summary
-	if detail != "" {
-		msg = summary + ": " + detail
+	return &LoopZeroError{
+		Code:    "SOURCE_UPLOAD_FAILED",
+		Message: composeMessageWithTraceID(summary, detail, traceID),
 	}
-	return &LoopZeroError{Code: "SOURCE_UPLOAD_FAILED", Message: msg}
 }
 
 // ErrBuildSubmitFailed is the canonical LoopZeroError for build-trigger failures
@@ -652,15 +672,83 @@ var ErrBuildSubmitFailed = &LoopZeroError{
 // Gitea names). Detail is already scrubbed by api/internal/services
 // NewSubmitBuildError via source.ScrubInternalTerms.
 func NewBuildSubmitFailedFromReason(reasonLabel, detail string) *LoopZeroError {
+	return NewBuildSubmitFailedFromReasonWithTrace(reasonLabel, detail, "")
+}
+
+// NewBuildSubmitFailedFromReasonWithTrace is the trace-id-aware variant per
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1. Mirrors
+// NewSourceUploadFailedFromPushReasonWithTrace for the build-trigger surface.
+func NewBuildSubmitFailedFromReasonWithTrace(reasonLabel, detail, traceID string) *LoopZeroError {
 	summary, ok := summaryByBuildSubmitReason[reasonLabel]
 	if !ok {
-		return &LoopZeroError{Code: "BUILD_SUBMIT_FAILED", Message: ErrBuildSubmitFailed.Message}
+		return &LoopZeroError{
+			Code:    "BUILD_SUBMIT_FAILED",
+			Message: appendTraceIDFallback(ErrBuildSubmitFailed.Message, traceID),
+		}
 	}
-	msg := summary
-	if detail != "" {
-		msg = summary + ": " + detail
+	return &LoopZeroError{
+		Code:    "BUILD_SUBMIT_FAILED",
+		Message: composeMessageWithTraceID(summary, detail, traceID),
 	}
-	return &LoopZeroError{Code: "BUILD_SUBMIT_FAILED", Message: msg}
+}
+
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — composition helpers.
+// Closes the Red Team's #35 suggestion of separating client-facing
+// (generic + trace-id) from server-side log (verbatim cause).
+//
+// The Sprint 5/6 composition won when detail was a benign verbatim cause
+// (e.g., "connection refused", "quota exceeded"). The Sprint 7 #35 scrub
+// extension correctly redacted internal terms — but for SOME inputs the
+// scrub collapsed detail to `<orchestrator>: <op>` placeholders only,
+// which leaks zero info but ALSO surfaces zero diagnostic. The trace-id
+// fallback gives the operator a correlation handle to support without
+// leaking implementation details.
+
+// composeMessageWithTraceID is the canonical "<summary>: <verbatim detail>"
+// composer that DOWNGRADES to "<summary>. Reference: <trace-id>." when the
+// scrubbed detail is empty or fully reduced to placeholders. KISS: a single
+// branch on isUsefulDetail.
+func composeMessageWithTraceID(summary, detail, traceID string) string {
+	if isUsefulDetail(detail) {
+		return summary + ": " + detail
+	}
+	return appendTraceIDFallback(summary, traceID)
+}
+
+// appendTraceIDFallback adds "Reference: <trace-id>. Contact support if it
+// persists." to an existing summary when traceID is non-empty; otherwise
+// returns the summary unchanged (preserves Sprint 5/6 backward-compat for
+// callers without a correlation ID).
+func appendTraceIDFallback(summary, traceID string) string {
+	if traceID == "" {
+		return summary
+	}
+	if !strings.HasSuffix(summary, ".") {
+		summary += "."
+	}
+	return summary + " Reference: " + traceID + ". Contact support if it persists."
+}
+
+// isUsefulDetail reports whether the scrubbed detail still carries
+// actionable information for the operator. "Useful" means: ≥ 20 chars
+// AND not exclusively `<...>` placeholders + whitespace + punctuation.
+// Threshold 20 chosen empirically — shorter than "Source backend is
+// unreachable: " (28 chars) but longer than "<orchestrator>" (14 chars)
+// so the heuristic flips at the right boundary.
+//
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 isolation: the
+// threshold + placeholder stripper live here (NOT in pushbundle_error.go)
+// so pkg/errors stays the single composition seam. DIP preserved.
+func isUsefulDetail(detail string) bool {
+	if len(detail) < 20 {
+		return false
+	}
+	// Strip placeholders + collapse whitespace; if what remains is empty
+	// or punctuation-only, the detail is non-informative.
+	stripped := placeholderRE.ReplaceAllString(detail, "")
+	stripped = whitespaceRE.ReplaceAllString(stripped, " ")
+	stripped = strings.Trim(stripped, " :;.,!?-")
+	return len(stripped) >= 8
 }
 
 // summaryByBuildSubmitReason — Sprint 6 ADR D3 canonical mapper. Sibling of

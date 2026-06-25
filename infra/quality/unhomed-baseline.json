@@ -1,12 +1,18 @@
 {
-  "total": 168,
+  "total": 169,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 108
+    "test": 109
   },
   "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": {"total": 168, "test": 108},
+      "to":   {"total": 169, "test": 109},
+      "reason": "Sprint 8 plan qa-sprint8-cleanup-2026-06-25 v1.0 T2.1 — adds infra/tests/e2e/dev-public-build-trigger-error-surface_test.sh (6 LIVE scenarios A-F retroactively covering loopzero-cloud#34 Sprint 6 closure debt per the new INQUEBRÁVEL feedback `feedback_issue_fix_requires_failing_e2e_test_2026_06_25`). OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — sponsor JUNTOS browser walkthrough Step 6 gate. The hermetic guard (check-dev-public-build-trigger-error-surface-syntax_test.sh) is categorically homed in task quality:gates (sibling of every infra/tests/check-*-syntax_test.sh) so the +1 test-domain delta is solely the LIVE script. The 3 dogfood wrappers ship under archive/canonical-tests-v1/scripts/local/ (archive path, not infra/tests/). Allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan qa-sprint8-cleanup-2026-06-25). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors infra/quality/script-count-baseline.json _changelog 2026-06-25 entries."
+    },
     {
       "date": "2026-06-25",
       "from": {"total": 165, "test": 105},

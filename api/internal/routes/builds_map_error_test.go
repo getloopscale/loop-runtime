@@ -98,7 +98,7 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			se := services.NewSubmitBuildError(tc.reason, tc.stage, tc.cause, tc.cause.Error())
 			w := httptest.NewRecorder()
-			mapBuildError(w, se)
+			mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), se)
 			if w.Code != http.StatusInternalServerError {
 				t.Errorf("HTTP status = %d, want 500", w.Code)
 			}
@@ -126,7 +126,7 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 // existing ladder order at routes/builds.go:549-557).
 func TestMapBuildError_PreservesDeployInProgressShortCircuit(t *testing.T) {
 	w := httptest.NewRecorder()
-	mapBuildError(w, loopzeroerrors.ErrDeployInProgress)
+	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), loopzeroerrors.ErrDeployInProgress)
 	if w.Code != http.StatusConflict {
 		t.Errorf("HTTP status = %d, want 409 (DEPLOY_IN_PROGRESS)", w.Code)
 	}
@@ -141,7 +141,7 @@ func TestMapBuildError_PreservesDeployInProgressShortCircuit(t *testing.T) {
 // ladder order at routes/builds.go:547-559.
 func TestMapBuildError_PreservesTypedLoopZeroErrorDispatch(t *testing.T) {
 	w := httptest.NewRecorder()
-	mapBuildError(w, loopzeroerrors.ErrScalingAmbiguous)
+	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), loopzeroerrors.ErrScalingAmbiguous)
 	body := decodeBody(t, w)
 	if code, _ := body["code"].(string); code != loopzeroerrors.ErrScalingAmbiguous.Code {
 		t.Errorf("code = %q, want %q", code, loopzeroerrors.ErrScalingAmbiguous.Code)
@@ -153,7 +153,7 @@ func TestMapBuildError_PreservesTypedLoopZeroErrorDispatch(t *testing.T) {
 // only request-decode-class errors reach here in practice.
 func TestMapBuildError_GenuineUnknownStillFallsBack(t *testing.T) {
 	w := httptest.NewRecorder()
-	mapBuildError(w, errors.New("some error from outside the orchestrator"))
+	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), errors.New("some error from outside the orchestrator"))
 	body := decodeBody(t, w)
 	if code, _ := body["code"].(string); code != "INTERNAL_ERROR" {
 		t.Errorf("code = %q, want INTERNAL_ERROR (genuine catchall)", code)

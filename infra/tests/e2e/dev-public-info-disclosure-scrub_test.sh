@@ -3,9 +3,14 @@
 # `getloopscale/loopzero-cloud#35` (info-disclosure CWE-209: error messages leak
 # internal stack names to tenant-owner accounts).
 #
-# Per the new INQUEBRÁVEL feedback (sponsor verbatim 2026-06-25): this
-# script MUST be authored + confirmed RED against the current dev-public
-# engine BEFORE the Sprint 7 scrub extension lands.
+# Per the new INQUEBRÁVEL feedback `feedback_issue_fix_requires_failing
+# _e2e_test_2026_06_25` (sponsor verbatim 2026-06-25): this script MUST be
+# authored + confirmed RED against the current dev-public engine BEFORE the
+# Sprint 7 scrub extension lands.
+#
+# OPERATOR HARD STOP per .claude/rules/cleanroom-up-live-test-mandate.md
+# INQUEBRÁVEL for full --live coverage (requires valid JWT + reachable
+# loopzero-cloud). The hermetic --skip-live path is the CI-safe entry.
 set -euo pipefail
 
 PLAN_SLUG="qa-sprint7-cleanup-2026-06-25"

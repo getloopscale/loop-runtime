@@ -706,3 +706,140 @@ func TestNewSourceUploadFailedFromPushReason_ComposesDetail(t *testing.T) {
 		})
 	}
 }
+
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — trace-id fallback per
+// Red Team #35 original suggestion ("Separar mensagem-de-cliente (genérica
+// + trace-id) de causa-de-log (verbatim, server-side)"). The Sprint 7
+// aggressive scrub closes the info-disclosure, but for some inputs the
+// scrub collapses detail to placeholder-only — at which point trace-id
+// is the operator's correlation handle to server-side log.
+
+func TestNewSourceUploadFailedFromPushReasonWithTrace(t *testing.T) {
+	cases := []struct {
+		name        string
+		reason      string
+		detail      string
+		traceID     string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "Sprint 5 backward-compat — useful detail composes verbatim, no trace-id appended",
+			reason:      "RemoteRejectedPush",
+			detail:      "pre-receive hook declined for branch main",
+			traceID:     "abc-123",
+			wantSubs:    []string{"pre-receive hook declined for branch main"},
+			wantNotSubs: []string{"Reference: abc-123", "Contact support"},
+		},
+		{
+			name:        "Sprint 8 #35 fallback — fully-scrubbed placeholder-only detail uses trace-id",
+			reason:      "RemoteRejectedPush",
+			detail:      "<orchestrator>: <op>",
+			traceID:     "trace-xyz",
+			wantSubs:    []string{"The remote rejected the push", "Reference: trace-xyz", "Contact support"},
+			wantNotSubs: []string{"<orchestrator>", "<op>"},
+		},
+		{
+			name:        "Sprint 8 #35 fallback — empty detail + trace-id present",
+			reason:      "BundleMalformed",
+			detail:      "",
+			traceID:     "tid-empty",
+			wantSubs:    []string{"source bundle is malformed", "Reference: tid-empty"},
+		},
+		{
+			name:        "Sprint 5 backward-compat — empty trace-id leaves summary without Reference suffix",
+			reason:      "BundleMalformed",
+			detail:      "",
+			traceID:     "",
+			wantSubs:    []string{"source bundle is malformed"},
+			wantNotSubs: []string{"Reference:", "Contact support"},
+		},
+		{
+			name:        "Unknown reason + trace-id — neutral generic + Reference",
+			reason:      "BogusUnknownLabel",
+			detail:      "ignored",
+			traceID:     "tid-unknown",
+			wantSubs:    []string{"Reference: tid-unknown"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewSourceUploadFailedFromPushReasonWithTrace(tc.reason, tc.detail, tc.traceID)
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
+func TestNewBuildSubmitFailedFromReasonWithTrace(t *testing.T) {
+	cases := []struct {
+		name        string
+		reason      string
+		detail      string
+		traceID     string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "Useful detail composes verbatim — Sprint 6 backward-compat",
+			reason:      "BuildSubmitWorkflowFailed",
+			detail:      "argo: connection refused dialing 10.0.0.5:2746",
+			traceID:     "ignored-when-useful",
+			wantSubs:    []string{"connection refused"},
+			wantNotSubs: []string{"Reference: ignored-when-useful"},
+		},
+		{
+			name:        "Scrubbed-to-placeholders detail falls back to trace-id",
+			reason:      "BuildSubmitWorkflowFailed",
+			detail:      "<orchestrator>: <op>",
+			traceID:     "build-trace-1",
+			wantSubs:    []string{"Build trigger failed at workflow submit", "Reference: build-trace-1"},
+			wantNotSubs: []string{"<orchestrator>"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewBuildSubmitFailedFromReasonWithTrace(tc.reason, tc.detail, tc.traceID)
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
+func TestIsUsefulDetail_Boundaries(t *testing.T) {
+	cases := []struct {
+		name   string
+		detail string
+		want   bool
+	}{
+		{"empty is not useful", "", false},
+		{"short string is not useful", "fail", false},
+		{"placeholder-only is not useful", "<orchestrator>: <op>", false},
+		{"placeholder + short prose is not useful", "<scope> <op>", false},
+		{"genuine cause is useful", "connection refused dialing host:2746", true},
+		{"cause with embedded placeholder is useful when prose remains", "<orchestrator>: connection refused on retry", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isUsefulDetail(tc.detail); got != tc.want {
+				t.Errorf("isUsefulDetail(%q) = %v, want %v", tc.detail, got, tc.want)
+			}
+		})
+	}
+}

@@ -45,6 +45,13 @@ func (f *fakeRollbackSyncClient) TriggerSync(ctx context.Context, appName string
 	return nil
 }
 
+// WaitForSync satisfies the RollbackSyncClient interface (added when the
+// interface was extended). These integration tests never invoke the wait
+// path; kept as a no-op so the test file compiles.
+func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+	return nil
+}
+
 // --- Rollback-specific test data ---
 
 // seedRollbackData creates the baseline data for rollback tests: tenant, user, project,

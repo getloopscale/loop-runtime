@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 361,
+  "canonical_sh": 368,
   "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": 361,
+      "to": 368,
+      "reason": "Sprint 8 plan qa-sprint8-cleanup-2026-06-25 v1.0 — retroactively ships the canonical 3-script triplet debt for Sprint 6 (#34, +3 scripts) + completes the Sprint 7 (#35, +2 scripts) + Sprint 7 (#36, +2 scripts) triplets. Per the new INQUEBRÁVEL feedback `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` (sponsor verbatim 2026-06-25): every issue closure now requires hermetic syntax + LIVE bash + dogfood wrapper triplet — not just Go-side tests. Files: (Sprint 6 #34) infra/tests/e2e/dev-public-build-trigger-error-surface_test.sh + infra/tests/check-dev-public-build-trigger-error-surface-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-build-trigger-error-surface.sh; (Sprint 7 #36) infra/tests/check-dev-public-build-rbac-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-build-rbac.sh; (Sprint 7 #35) infra/tests/check-dev-public-info-disclosure-scrub-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-info-disclosure-scrub.sh. All 7 allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan qa-sprint8-cleanup-2026-06-25 — 2026-06-25). All 3 hermetic syntax tests PASS clean (29/29 + 25/25 + 26/26). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-25",
       "from": 359,
