@@ -27,11 +27,22 @@ SCENARIO=""
 JSON_OUTPUT=0
 RESULTS=()
 
-# Probe project name — UNIQUE per run so we exercise the EXACT m37 gap
-# (new project name in existing tenant). Caller can override.
+# Probe project name — UNIQUE per run for scenarios A+B (m37-specific
+# assertions: Tenant CR tuple + AppProject destinations on a NEW project
+# against an existing tenant). Caller can override.
 PROBE_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_PROJECT:-m37-probe-$(date +%s)}"
 PROBE_ENV="${LOOPZERO_DEPLOY_LIVE_URL_ENV:-preview}"
 PROBE_COMMIT_SHA="${LOOPZERO_DEPLOY_LIVE_URL_COMMIT:-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef}"
+
+# Canonical fixture project for scenarios C+D (BUILD → RELEASE → URL
+# end-to-end). Scenarios C+D probe an EXISTING active release because the
+# build chain requires a real GitHub source commit (not the synthetic
+# commit_sha used for A+B). The canonical fixture is `teste` (per memory
+# project_canonical_dev_user_credentials + reference seed scripts).
+# Operator can override; setting empty string SKIPs C+D with a SKIP verdict
+# (not a FAIL).
+CANONICAL_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-teste}"
+CANONICAL_ENV="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_ENV:-production}"
 
 usage() {
     cat <<EOF
@@ -92,26 +103,10 @@ preflight() {
     record "preflight" "PASS" "health=200 jwt=ok kubectl=ok project=$PROBE_PROJECT env=$PROBE_ENV"
 }
 
-# Helper: extract tenant_id from the seeded JWT sub claim (admin-cli flow).
-extract_tenant_from_jwt() {
-    python3 - <<'PY' < "$JWT_PATH"
-import sys, json, base64
-tok = sys.stdin.read().strip()
-parts = tok.split('.')
-if len(parts) < 2:
-    sys.exit("malformed JWT")
-payload = parts[1] + '=' * (-len(parts[1]) % 4)
-claims = json.loads(base64.urlsafe_b64decode(payload))
-# Admin-cli tenant resolution: tenant_members lookup by sub. We need to
-# inspect /api/v1/projects to derive tenant_id; the JWT alone gives sub.
-# Print sub so callers can probe; production scenarios resolve via the
-# engine API.
-print(claims.get('sub', ''))
-PY
-}
-
 # Helper: derive tenant_id via /engine/api/v1/projects (returns the
-# authenticated tenant context). Returns "tn-..." or empty on failure.
+# authenticated tenant context). The canonical project response shape uses
+# the `team` field (NOT `tenant_id`) — both are accepted. Returns "tn-..."
+# or empty on failure.
 resolve_tenant_id() {
     curl -sk -m 10 \
         -H "Authorization: Bearer $(cat "$JWT_PATH")" \
@@ -122,13 +117,33 @@ try:
     body = json.load(sys.stdin)
     items = body if isinstance(body, list) else body.get('projects', body.get('items', []))
     for p in items:
-        # Each project carries tenant_id in the canonical shape.
-        if isinstance(p, dict) and 'tenant_id' in p:
-            print(p['tenant_id'])
+        if not isinstance(p, dict):
+            continue
+        # Canonical engine response uses 'team'; older shape used 'tenant_id'.
+        team = p.get('team') or p.get('tenant_id')
+        if team:
+            print(team)
             break
 except Exception:
     pass
 " 2>/dev/null
+}
+
+# Helper: refresh the session JWT in place. The canonical dev-public session
+# JWT has a 15min TTL (per Kratos+Hydra ConfigMap defaults), but the deploy
+# chain ceiling is 30min (Sprint 8 #38 contract). Long-poll scenarios MUST
+# refresh JWT periodically OR the C/D probes degrade to 401. We call the
+# canonical seed-admin --refresh-only flow (mints a fresh session via the
+# Kratos admin API + propagates to ~/.loopzero/local-dogfood-session-jwt.txt).
+# Skipped when SKIP_LIVE=1; failure is non-fatal (log + continue with stale).
+refresh_jwt_if_needed() {
+    if [ "$SKIP_LIVE" -eq 1 ]; then
+        return 0
+    fi
+    local refresh_script="${LOOPZERO_REPO_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}/infra/scripts/local/seed-admin-loopzero-dev.sh"
+    if [ -x "$refresh_script" ]; then
+        bash "$refresh_script" --refresh-only >/dev/null 2>&1 || true
+    fi
 }
 
 # POST a build to trigger the deploy chain for the unique probe project.
@@ -225,32 +240,54 @@ sys.exit(1)
     return 1
 }
 
-# Scenario C — release reaches ACTIVE within the 30min CLI ceiling AND
-# release.url is non-empty (status payload from /projects/{p}/releases).
+# Scenario C — canonical project has ACTIVE release with non-empty URL.
+# Probes the EXISTING canonical fixture project (default `teste`) instead
+# of a synthetic probe, because building a release requires real GitHub
+# source — the synthetic probe used by A+B is intentional for the m37
+# tuple assertion but cannot drive a real BUILD → RELEASE → URL chain.
+# Setting CANONICAL_PROJECT="" SKIPs C with a SKIP verdict.
 scenario_c() {
     [ -n "$SCENARIO" ] && [ "$SCENARIO" != "C" ] && return 0
     if [ "$SKIP_LIVE" -eq 1 ]; then
         record "C-release-active-with-url" "SKIP" "hermetic mode"
         return 0
     fi
+    if [ -z "$CANONICAL_PROJECT" ]; then
+        record "C-release-active-with-url" "SKIP" "CANONICAL_PROJECT empty — set LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT to enable"
+        return 0
+    fi
     local deadline=$((SECONDS + WAIT_BUDGET_SECONDS))
     local last_state="?"
     local last_url=""
+    local last_refresh=$SECONDS
     while [ $SECONDS -lt $deadline ]; do
+        # Refresh JWT every ~12min to stay ahead of the 15min TTL.
+        if [ $((SECONDS - last_refresh)) -gt 720 ]; then
+            refresh_jwt_if_needed
+            last_refresh=$SECONDS
+        fi
+        # Canonical engine status endpoint: GET /api/v1/projects/{name}/status
+        # returns the active_release + sync_status + url for the latest deploy
+        # in the requested environment.
         local resp
         resp=$(curl -sk -m 15 \
             -H "Authorization: Bearer $(cat "$JWT_PATH")" \
-            "$CLOUD_BASE/engine/api/v1/projects/$PROBE_PROJECT/releases?environment=$PROBE_ENV&limit=1" 2>/dev/null)
-        # Extract latest release state + url
+            "$CLOUD_BASE/engine/api/v1/projects/$CANONICAL_PROJECT/status?environment=$CANONICAL_ENV" 2>/dev/null)
+        # Extract release state + url from the canonical statusResponse shape.
         local extracted
         extracted=$(echo "$resp" | python3 -c "
 import sys, json
 try:
     body = json.load(sys.stdin)
-    items = body if isinstance(body, list) else body.get('releases', body.get('items', []))
-    if items:
-        r = items[0]
-        print(r.get('state', '?') + '|' + (r.get('url') or ''))
+    if isinstance(body, dict):
+        active = body.get('active_release') or {}
+        # The canonical statusResponse shape carries 'status' on
+        # active_release (not 'state') and 'url' at top-level.
+        state = ''
+        if isinstance(active, dict):
+            state = active.get('status') or active.get('state') or ''
+        url = body.get('url') or (active.get('url') if isinstance(active, dict) else '')
+        print(str(state) + '|' + str(url or ''))
 except Exception:
     pass
 " 2>/dev/null)
@@ -258,12 +295,12 @@ except Exception:
         last_url="${extracted#*|}"
         if [ "$last_state" = "ACTIVE" ] && [ -n "$last_url" ]; then
             echo "$last_url" > /tmp/m37-live-url.txt
-            record "C-release-active-with-url" "PASS" "release ACTIVE url=$last_url"
+            record "C-release-active-with-url" "PASS" "project=$CANONICAL_PROJECT env=$CANONICAL_ENV release ACTIVE url=$last_url"
             return 0
         fi
         sleep 10
     done
-    record "C-release-active-with-url" "FAIL" "release did not reach ACTIVE with URL within ${WAIT_BUDGET_SECONDS}s (last_state=$last_state last_url='$last_url')"
+    record "C-release-active-with-url" "FAIL" "project=$CANONICAL_PROJECT did not reach ACTIVE with URL within ${WAIT_BUDGET_SECONDS}s (last_state=$last_state last_url='$last_url')"
     return 1
 }
 
@@ -299,6 +336,9 @@ scenario_d() {
 
 main() {
     preflight || true
+    # Refresh JWT at the start of the LIVE flow — the 15min TTL doesn't
+    # cover the 30min deploy ceiling even on a single iteration.
+    refresh_jwt_if_needed
     scenario_a || true
     scenario_b || true
     scenario_c || true
