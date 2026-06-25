@@ -170,8 +170,12 @@ func wrapDownstreamPushError(err error) error {
 	lower := strings.ToLower(msg)
 
 	// 1. Network class (Sprint 4 — unchanged): backend unreachable (DNS / TCP
-	//    refused / TLS / timeout). Operator-actionable summary surfaces; the
-	//    verbatim cause is preserved in Detail per Sprint 5 ADR D3 composition.
+	//    refused / TLS / timeout). Detail is intentionally FIXED to avoid
+	//    leaking internal DNS / addresses to the operator UI (scrubInternalTerms
+	//    would partially redact them anyway). The verbatim cause remains
+	//    available via errors.Unwrap for operator logs (see source.go handler).
+	//    Sprint 5 ADR D3 composition (verbatim cause in Detail) applies to the
+	//    other 4 buckets below; the network bucket is the deliberate exception.
 	if isNetworkClass(lower) {
 		return NewPushBundleError(ReasonSourceBackendUnreachable, err,
 			"source backend is unreachable (network or DNS failure)")

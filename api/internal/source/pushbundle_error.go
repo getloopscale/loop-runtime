@@ -152,11 +152,31 @@ var scrubPatterns = []struct {
 	re   *regexp.Regexp
 	repl string
 }{
-	{regexp.MustCompile(`gitea(?:-http)?\.[a-z0-9-]+\.svc\.cluster\.local`), "source backend"},
-	{regexp.MustCompile(`minio(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.svc\.cluster\.local`), "object store"},
-	{regexp.MustCompile(`\.svc\.cluster\.local`), ""},
-	{regexp.MustCompile(`dial tcp 10\.\d+\.\d+\.\d+:\d+`), "dial tcp <internal>"},
-	{regexp.MustCompile(`(?i)Authorization:\s*\S+`), "Authorization: <redacted>"},
+	// CR-9: literal product names normalized BEFORE DNS scrubs so hostname
+	// patterns (e.g., "gitea-http.loopzero-system.svc.cluster.local") still match
+	// the DNS rule below — the literal-word patterns use word-boundary regex
+	// to avoid double-matching inside the DNS forms.
+	{regexp.MustCompile(`(?i)\bgitea\b`), "source backend"},
+	{regexp.MustCompile(`(?i)\bminio\b`), "object store"},
+	// DNS-form internal hostnames (case-insensitive — defense for
+	// "GITEA-HTTP.loopzero-system.svc.cluster.local" mixed-case variants).
+	{regexp.MustCompile(`(?i)source backend(?:-http)?\.[a-z0-9-]+\.svc\.cluster\.local`), "source backend"},
+	{regexp.MustCompile(`(?i)object store(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.svc\.cluster\.local`), "object store"},
+	{regexp.MustCompile(`(?i)\.svc\.cluster\.local`), ""},
+	// RFC1918 internal CIDR ranges (10/8 + 172.16/12 + 192.168/16). F-sec-1:
+	// closes the gap where production CNIs (Calico 192.168/16, EKS vpc-cni
+	// 172.16/12) produced internal addresses that the previous 10/8-only
+	// scrub missed.
+	{regexp.MustCompile(`dial tcp (?:10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):\d+`), "dial tcp <internal>"},
+	// Credential redaction. F-code-1: \S+ only consumed the FIRST whitespace-
+	// separated token, exposing the credential value in two-token schemes
+	// (Authorization: Bearer <token>, Authorization: Basic <b64>). [^\r\n]+
+	// consumes the full header value to end-of-line. Defense-in-depth pattern
+	// catches inline Bearer/Basic values that appear without the header keyword
+	// (F-code-2). A bare "token <hex>" literal (e.g., from git's extraHeader
+	// echo) is also caught.
+	{regexp.MustCompile(`(?i)Authorization:\s*[^\r\n]+`), "Authorization: <redacted>"},
+	{regexp.MustCompile(`(?i)(?:Bearer|Basic)\s+[A-Za-z0-9+/=_\-.]{16,}`), "<redacted>"},
 	{regexp.MustCompile(`(?i)token\s+[A-Za-z0-9_\-.]{16,}`), "token <redacted>"},
 }
 

@@ -81,16 +81,67 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 			wantNotSubs: []string{"10.43.0.5"},
 		},
 		{
-			name:        "Authorization header redacted",
-			rawDetail:   "request denied with header Authorization: Bearer abc.def.ghi",
+			name:        "Authorization header — Bearer scheme fully redacted (F-code-1)",
+			rawDetail:   "request denied with header Authorization: Bearer ghp_secret1234567890",
 			wantSubs:    []string{"Authorization: <redacted>"},
-			wantNotSubs: []string{"Bearer abc.def.ghi"},
+			wantNotSubs: []string{"ghp_secret1234567890", "Bearer ghp_secret"},
 		},
 		{
-			name:        "token literal redacted",
+			name:        "Authorization header — Basic scheme fully redacted (F-code-1)",
+			rawDetail:   "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+			wantSubs:    []string{"Authorization: <redacted>"},
+			wantNotSubs: []string{"dXNlcjpwYXNzd29yZA==", "Basic dXNlcjpwYXNz"},
+		},
+		{
+			name:        "Authorization header — token scheme fully redacted",
+			rawDetail:   "Authorization: token abcdef0123456789abcdef",
+			wantSubs:    []string{"Authorization: <redacted>"},
+			wantNotSubs: []string{"abcdef0123456789abcdef"},
+		},
+		{
+			name:        "bare token literal redacted",
 			rawDetail:   "git push: invalid token 0123456789abcdef0123456789abcdef",
 			wantSubs:    []string{"token <redacted>"},
 			wantNotSubs: []string{"0123456789abcdef"},
+		},
+		// F-code-2 — defense-in-depth for inline Bearer/Basic without header keyword.
+		{
+			name:        "inline Bearer credential redacted (F-code-2)",
+			rawDetail:   "downstream returned Bearer ghp_inline1234567890abcdef",
+			wantNotSubs: []string{"ghp_inline1234567890abcdef"},
+		},
+		// F-sec-1 — RFC1918 172.16/12 internal CIDR scrubbed.
+		{
+			name:        "internal CIDR 172.16/12 scrubbed",
+			rawDetail:   "Post: dial tcp 172.20.45.3:3000: connect: connection refused",
+			wantSubs:    []string{"dial tcp <internal>", "connection refused"},
+			wantNotSubs: []string{"172.20.45.3"},
+		},
+		// F-sec-1 — RFC1918 192.168/16 internal CIDR scrubbed.
+		{
+			name:        "internal CIDR 192.168/16 scrubbed",
+			rawDetail:   "Post: dial tcp 192.168.10.50:3000: connect: connection refused",
+			wantSubs:    []string{"dial tcp <internal>", "connection refused"},
+			wantNotSubs: []string{"192.168.10.50"},
+		},
+		// F-sec-1 negative — public IP NOT scrubbed.
+		{
+			name:        "public IP NOT scrubbed (172.x outside RFC1918)",
+			rawDetail:   "dial tcp 172.4.5.6:443: connect: connection refused",
+			wantSubs:    []string{"172.4.5.6", "connection refused"},
+		},
+		// F-sec-2 — literal "Gitea" product name scrubbed (CR-9).
+		{
+			name:        "literal Gitea word scrubbed (CR-9 product name)",
+			rawDetail:   "Gitea: Internal Server Error — repository not found",
+			wantSubs:    []string{"source backend"},
+			wantNotSubs: []string{"Gitea"},
+		},
+		{
+			name:        "case-insensitive Gitea word scrubbed",
+			rawDetail:   "500 error from GITEA backend",
+			wantSubs:    []string{"source backend"},
+			wantNotSubs: []string{"GITEA", "Gitea"},
 		},
 		// Negative direction: legitimate external hostnames MUST NOT be touched.
 		{
