@@ -27,7 +27,8 @@
         },
         "name": {
           "type": "string",
-          "title": "Name"
+          "title": "Name",
+          "maxLength": 256
         }
       },
       "required": ["email"],

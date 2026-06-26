@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 372,
+  "canonical_sh": 373,
   "_changelog": [
+    {
+      "date": "2026-06-26",
+      "from": 372,
+      "to": 373,
+      "reason": "Red Team loopzero-cloud#65 closure — new LIVE bash infra/tests/e2e/dev-public-register-name-maxlength_test.sh (~155 LOC) per memory feedback_issue_fix_requires_failing_e2e_test_2026_06_25 + feedback_close_issue_update_live_dev_public_2026_06_22. Initializes Kratos self-service registration flow via browser API, submits adversarial 20 000-char Name (verbatim from #65 repro), asserts HTTP 400 + Kratos schema validation error referencing the maxLength constraint. LIVE 2026-06-26 PASS post Kratos ConfigMap patch + rollout: `length must be <= 256, but got 20000` (was 200 OK pre-fix). Companion to: dashboard JS validateMaxLength helper (loopzero-cloud commit aeaaf4f) + HTML maxLength={256} on register Name Input + Kratos identity schema cap (this commit) — 4-layer defense-in-depth canonical. Allowlist entry under § Post-baseline additions (Red Team #65 closure — 2026-06-26). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-26",
       "from": 371,
