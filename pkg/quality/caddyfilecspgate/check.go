@@ -204,6 +204,47 @@ func Check(cfg Config) (*Outcome, error) {
 			"assert_spa_fallback_try_files — `try_files {path} /index.html` MISSING (SPA client-side routes would 404; per ADR D1)")
 	}
 
+	// Invariant 11 (v1.3): the SPA-fallback `try_files` MUST live inside an
+	// unnamed catch-all `handle {}` block, NOT at the top level of the host
+	// block. At the top level, `try_files` is in the "rewrite" directive
+	// group and runs BEFORE the routing phase, so it rewrites EVERY non-
+	// existent path (including /sessions/whoami, /v1/auth/me) to /index.html
+	// — the explicit `handle /sessions/*` + `handle /v1/*` reverse-proxies
+	// never see those requests and the dashboard JSON.parse's SPA HTML as
+	// auth responses. Browser-LIVE-caught 2026-06-26 by Red Team Chrome
+	// devtools: `[auth] getSession: network/parse error SyntaxError:
+	// Unexpected token '<', "<!DOCTYPE "... is not valid JSON`. The
+	// canonical Caddy v2 SPA + API proxy pattern wraps file_server +
+	// try_files in an unnamed `handle {}` block at the end so the SPA
+	// rewrite only applies to paths that fell through every explicit
+	// handle. Detection: find `try_files {path} /index.html` and walk
+	// backward looking for the nearest enclosing `handle` block opener.
+	tryFilesIdx := tryFilesRe.FindStringIndex(block)
+	if tryFilesIdx != nil {
+		// Find the nearest preceding `handle` or `handle <matcher>` line.
+		preceding := block[:tryFilesIdx[0]]
+		handleOpenRe := regexp.MustCompile(`(?m)^\s*handle(\s+[^\s{]*)?\s*\{`)
+		handleOpens := handleOpenRe.FindAllStringIndex(preceding, -1)
+		if len(handleOpens) == 0 {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				"assert_try_files_inside_handle_catchall — `try_files {path} /index.html` is at the TOP LEVEL of the app-dev block (no enclosing `handle {}`). Caddy v2 evaluates `try_files` as a rewrite that runs BEFORE the routing phase, so it rewrites EVERY non-existent path (including /sessions/whoami + /v1/auth/me) to /index.html — explicit reverse-proxy handles never see those requests and the dashboard JSON.parse's SPA HTML as auth responses (Red Team LIVE-caught 2026-06-26). Wrap file_server + try_files in an unnamed `handle {}` at the end of the block.")
+		} else {
+			// Found at least one handle opener before try_files. Check that
+			// the IMMEDIATELY preceding open handle has no matcher (i.e., is
+			// the unnamed catch-all `handle {`) — anything else would mean
+			// try_files is inside e.g. `handle /v1/*`, which is wrong too.
+			lastOpen := handleOpens[len(handleOpens)-1]
+			openerLine := strings.TrimSpace(preceding[lastOpen[0]:lastOpen[1]])
+			if openerLine != "handle {" {
+				out.Pass = false
+				out.Violations = append(out.Violations, fmt.Sprintf(
+					"assert_try_files_inside_unnamed_handle — `try_files {path} /index.html` is inside `%s` (a path-matched handle). The SPA-fallback rewrite would only apply to that path, not as a catch-all. Move it inside `handle { ... }` (unnamed catch-all) at the end of the block.",
+					openerLine))
+			}
+		}
+	}
+
 	return out, nil
 }
 

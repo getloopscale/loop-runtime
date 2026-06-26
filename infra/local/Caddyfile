@@ -130,10 +130,21 @@ app-dev.loopzero.example {
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
-  root * {env.DASHBOARD_DIST:./dashboard-dist}
-  encode gzip
-  file_server
-  try_files {path} /index.html
+  # CANONICAL CADDY V2 SPA + API PROXY PATTERN (v1.3 — 2026-06-26):
+  # Explicit `handle` blocks for API/auth proxies MUST come BEFORE the
+  # catch-all `handle {}` block. Caddy v2 evaluates `handle` blocks in
+  # source order and the FIRST match wins; an unnamed `handle {}` matches
+  # everything not previously matched. Without this nesting, `try_files`
+  # (which is in the "rewrite" directive group and runs BEFORE the routing
+  # phase) was rewriting EVERY non-existent path to /index.html — including
+  # /sessions/whoami and /v1/auth/me — so the reverse-proxies never saw
+  # them and the dashboard JSON.parse'd SPA HTML as auth responses (LIVE
+  # caught 2026-06-26 by Red Team Chrome devtools: `[auth] getSession:
+  # network/parse error SyntaxError: Unexpected token '<', "<!DOCTYPE "
+  # ... is not valid JSON`). The fix wraps file_server + try_files in the
+  # catch-all `handle {}` so the rewrite ONLY applies to paths that fell
+  # through every explicit handle — i.e., dashboard SPA routes, not API
+  # paths. Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.3.
 
   handle /sessions/* {
     reverse_proxy localhost:14433 {
@@ -173,15 +184,15 @@ app-dev.loopzero.example {
     }
   }
 
-  # The legacy catch-all Vite-dev upstream + standalone encode-gzip directive
-  # were removed per plan caddyfile-app-dev-prod-bundle-file-server-canonical
-  # v1.1 (LIVE diagnostic 2026-06-26): they were not caught by the v1 Go gate
-  # because they appeared AFTER the file_server directive at the block tail,
-  # NOT inside the named-matcher block. Without removal, the catch-all would
-  # shadow the file_server upstream and Vite dev source files would still
-  # leak publicly (Red Team #66 root cause re-introduced). The encode-gzip
-  # directive is already declared inside the file_server stanza above; no
-  # separate gzip needed at block tail.
+  # Catch-all: SPA prod-bundle (every path not matched above). file_server +
+  # try_files are wrapped HERE so the SPA-fallback rewrite only applies to
+  # dashboard client-side routes, never to API paths above.
+  handle {
+    root * {env.DASHBOARD_DIST:./dashboard-dist}
+    encode gzip
+    file_server
+    try_files {path} /index.html
+  }
 }
 
 cloud-dev.loopzero.example {

@@ -36,10 +36,16 @@ const canonicalAppDevBlock = `app-dev.loopzero.example {
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
-  root * {env.DASHBOARD_DIST}
-  encode gzip
-  file_server
-  try_files {path} /index.html
+  handle /sessions/* {
+    reverse_proxy localhost:14433
+  }
+
+  handle {
+    root * {env.DASHBOARD_DIST}
+    encode gzip
+    file_server
+    try_files {path} /index.html
+  }
 }
 `
 
@@ -236,6 +242,49 @@ func TestCheck_RegressionDetected_TryFilesMissing(t *testing.T) {
 	}
 	if !containsViolation(out.Violations, "assert_spa_fallback_try_files") {
 		t.Fatalf("want try_files violation, got: %v", out.Violations)
+	}
+}
+
+// TestCheck_RegressionDetected_TryFilesAtTopLevel_v13 locks the v1.3 fix
+// for the dashboard `[auth] getSession: ... Unexpected token '<' is not
+// valid JSON` LIVE regression. The original v1.2 shape had file_server +
+// try_files at the TOP LEVEL of the app-dev host block — Caddy v2's
+// rewrite phase rewrote every non-existent path (including /sessions/whoami
+// and /v1/auth/me) to /index.html BEFORE the explicit `handle /sessions/*`
+// + `handle /v1/*` reverse-proxies could match, so the dashboard JSON.parse'd
+// SPA HTML as auth responses. The canonical fix wraps file_server +
+// try_files in an unnamed catch-all `handle {}` block at the end so the
+// SPA-fallback rewrite only applies after every explicit handle missed.
+func TestCheck_RegressionDetected_TryFilesAtTopLevel_v13(t *testing.T) {
+	regressedTopLevel := `app-dev.loopzero.example {
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  }
+
+  root * {env.DASHBOARD_DIST}
+  encode gzip
+  file_server
+  try_files {path} /index.html
+
+  handle /sessions/* {
+    reverse_proxy localhost:14433
+  }
+}
+`
+	dir := makeCaddyfile(t, regressedTopLevel)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when try_files is at top level (would rewrite /sessions/* before handle could match), got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_try_files_inside_handle_catchall") {
+		t.Fatalf("want top-level try_files violation, got: %v", out.Violations)
 	}
 }
 
