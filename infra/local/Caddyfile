@@ -159,14 +159,15 @@ app-dev.loopzero.example {
     }
   }
 
-  # The legacy catch-all `reverse_proxy localhost:5173` + `encode gzip` were
-  # removed per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.1
-  # (LIVE diagnostic 2026-06-26): they were not caught by my v1 gate because
-  # they appeared AFTER the file_server directive at the block tail, NOT
-  # inside the @ws matcher. Without removal, the catch-all would shadow the
-  # file_server upstream and Vite dev source files would still leak publicly
-  # (Red Team #66 root cause re-introduced). `encode gzip` is already declared
-  # at line ~120 inside the file_server stanza; no separate gzip needed.
+  # The legacy catch-all Vite-dev upstream + standalone encode-gzip directive
+  # were removed per plan caddyfile-app-dev-prod-bundle-file-server-canonical
+  # v1.1 (LIVE diagnostic 2026-06-26): they were not caught by the v1 Go gate
+  # because they appeared AFTER the file_server directive at the block tail,
+  # NOT inside the named-matcher block. Without removal, the catch-all would
+  # shadow the file_server upstream and Vite dev source files would still
+  # leak publicly (Red Team #66 root cause re-introduced). The encode-gzip
+  # directive is already declared inside the file_server stanza above; no
+  # separate gzip needed at block tail.
 }
 
 cloud-dev.loopzero.example {

@@ -139,10 +139,19 @@ func Check(cfg Config) (*Outcome, error) {
 	// local Caddy MUST NOT reverse-proxy to Vite dev. The public surface MUST
 	// serve the prod-bundle via file_server. Negative-direction guard closes
 	// Red Team #66 (Vite source TypeScript publicly served).
-	if strings.Contains(block, "reverse_proxy @ws localhost:5173") {
+	// v1.1 amendment (LIVE diagnostic 2026-06-26): widened from string-match
+	// to regex to detect BOTH the named-matcher form (`reverse_proxy @ws
+	// localhost:5173`) AND the catch-all form (`reverse_proxy localhost:5173`
+	// at the block tail). The v1 string-match only caught the first form; the
+	// catch-all leaked through and SHADOWED file_server in route order (Caddy
+	// parser placed the catch-all LAST = matched first at runtime for any path
+	// not handled by the explicit `handle` blocks). Red Team /src/main.tsx
+	// returned 200 with Vite-dev source content.
+	viteReverseProxyRe := regexp.MustCompile(`reverse_proxy\s+(@\w+\s+)?localhost:5173`)
+	if viteReverseProxyRe.MatchString(block) {
 		out.Pass = false
 		out.Violations = append(out.Violations,
-			"assert_no_vite_dev_reverse_proxy — `reverse_proxy @ws localhost:5173` STILL present (Red Team #66 regression — Vite dev MUST NOT be the public upstream; use file_server prod-bundle instead)")
+			"assert_no_vite_dev_reverse_proxy — `reverse_proxy [@matcher] localhost:5173` STILL present (Red Team #66 regression — Vite dev MUST NOT be the public upstream; use file_server prod-bundle instead. v1.1 widened regex catches BOTH the @ws named-matcher form AND the catch-all block-tail form)")
 	}
 
 	// Invariant 8 (v2): Content-Security-Policy directive PRESENT in header
