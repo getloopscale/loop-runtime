@@ -259,7 +259,17 @@ func ActivateReleaseKernel(
 // releaseAppsToActivationApps converts the JSON-encoded apps from a release
 // into ActivationAppInfo structs for the activation kernel.
 // F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
-func releaseAppsToActivationApps(release *db.Release, baseDomain string) []ActivationAppInfo {
+//
+// Plan release-blockers-2026-06-25-set v1.1 #61 (2026-06-26):
+// Closes loopzero-cloud#61 ("loopzero deploy announces .loopzero.local URL not publicly
+// resolvable"). The deploy.completed SSE event URL composition is now the
+// SAME canonical that status.go uses — operator-configured LOOPZERO_PUBLIC_DOMAIN
+// (e.g. `prod-dev.loopzero.example`) preferred when set; falls back to BASE_DOMAIN
+// (legacy default `loopzero.local`) only when no public override is wired. This
+// mirrors the existing `StatusHandler.publicDomain` fallback ladder so
+// `loopzero deploy` and `loopzero status` emit byte-identical URLs (no more
+// "deploy says .loopzero.local, status says .prod-dev.loopzero.example" mismatch).
+func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {
 		if err := json.Unmarshal(release.Apps, &specs); err != nil {
@@ -267,12 +277,20 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain string) []Activ
 				"release_id", release.ID, "error", err)
 		}
 	}
+	// Canonical: prefer the operator-configured public domain so the URL
+	// announced by `loopzero deploy` is the SAME URL `loopzero status` returns
+	// AND publicly resolvable. Empty publicDomain → fall back to baseDomain
+	// (preserves the pre-#61 behavior for envs without a public wildcard).
+	domain := publicDomain
+	if domain == "" {
+		domain = baseDomain
+	}
 	apps := make([]ActivationAppInfo, 0, len(specs))
 	for _, s := range specs {
 		url := ""
-		if s.Type == "server" && baseDomain != "" {
+		if s.Type == "server" && domain != "" {
 			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
-				release.TenantID, release.ProjectID, s.Name, release.Environment, baseDomain)
+				release.TenantID, release.ProjectID, s.Name, release.Environment, domain)
 		}
 		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed", URL: url})
 	}
