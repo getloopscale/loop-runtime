@@ -95,27 +95,31 @@ app-dev.loopzero.example {
   # every response from this host block. Closes #44 clickjacking + #45 nosniff/
   # Referrer/HSTS gap on the SPA.
   #
-  # Plan caddyfile-csp-vite-dev-vs-prod-bundle (2026-06-26): CSP removed — let
-  # the SPA <meta> CSP from dashboard/index.html rule per ADR D1. The Caddyfile
-  # is the operator-local-edge for the `task cloud:caddy:up` demo workflow
-  # (proxies to Vite dev at localhost:5173); browsers enforce the STRICTER
-  # intersection of header CSP vs <meta> CSP, so any Caddy CSP narrower than
-  # the SPA's own <meta> CSP breaks Vite HMR. The 3 Vite-path 404 handle blocks
-  # from #46 were also removed (they short-circuited Vite module resolution);
-  # prod info-disclosure is handled by `dashboard/nginx.conf:try_files` on the
-  # prod-bundled image.
+  # Plan caddyfile-app-dev-prod-bundle-file-server-canonical (2026-06-26):
+  # closes Red Team loopzero-cloud#66 (Vite source TypeScript publicly served).
+  # Prior plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 ADR D2 was wrong —
+  # it argued the operator-local Caddy was non-public, removed Vite-path 404
+  # guards + kept the Vite dev reverse-proxy. Reality: this Caddy IS public
+  # via Cloudflare DNS, so Vite dev source TypeScript + HMR runtime +
+  # node_modules cache leaked publicly. Per blueprint Option B canonical-
+  # shipped — switched to file_server serving dashboard/dist (prod-bundle);
+  # those Vite source files are NEVER reachable publicly because they don't
+  # exist in the served root. CSP restored matching dashboard/nginx.conf
+  # canonical shape. Operator workflow: cd loopzero-cloud/dashboard && npm run
+  # build && export DASHBOARD_DIST=$(pwd)/dist before task cloud:caddy:up.
+  # See docs/operations/operator-local-caddy-workflow.md.
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; object-src 'none'; base-uri 'self'; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
-  @ws {
-    header Connection *Upgrade*
-    header Upgrade websocket
-  }
-  reverse_proxy @ws localhost:5173
+  root * {env.DASHBOARD_DIST:./dashboard-dist}
+  encode gzip
+  file_server
+  try_files {path} /index.html
 
   handle /sessions/* {
     reverse_proxy localhost:14433 {

@@ -196,12 +196,14 @@ GATES:
 
   caddyfile-csp
                   Assert the app-dev.loopzero.example block of infra/local/Caddyfile
-                  emits NO Content-Security-Policy + NO Vite-path handle 404
-                  blocks (Vite HMR / Google Fonts work) AND preserves the 4
-                  non-CSP security headers (X-Frame-Options DENY, nosniff,
-                  Referrer-Policy, HSTS) + the reverse_proxy localhost:5173
-                  upstream. Migrated from check-caddyfile-app-dev-no-csp_test.sh
-                  per plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1.
+                  serves the prod-bundle via file_server + try_files SPA
+                  fallback (Red Team loopzero-cloud#66 closed), emits the canonical
+                  CSP matching dashboard/nginx.conf, preserves the 4 non-CSP
+                  security headers (X-Frame-Options DENY, nosniff, Referrer-
+                  Policy, HSTS), and does NOT reverse-proxy to Vite dev (which
+                  leaked source TypeScript publicly). Per plan
+                  caddyfile-app-dev-prod-bundle-file-server-canonical v1
+                  (supersedes caddyfile-csp-vite-dev-vs-prod-bundle ADR D2).
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -2897,10 +2899,11 @@ func runCaddyfileCSP(args []string) int {
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Per plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1: the operator-local-edge")
-		fmt.Fprintln(os.Stderr, "Caddyfile app-dev.loopzero.example block MUST NOT emit a CSP header (let the SPA")
-		fmt.Fprintln(os.Stderr, "<meta> CSP in dashboard/index.html rule) and MUST NOT 404-block Vite paths.")
+		fmt.Fprintln(os.Stderr, "Per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1 (closes Red Team")
+		fmt.Fprintln(os.Stderr, "loopzero-cloud#66): the operator-local Caddyfile app-dev block MUST serve the")
+		fmt.Fprintln(os.Stderr, "prod-bundle via file_server + emit canonical CSP from dashboard/nginx.conf.")
 		return 1
 	}
-	fmt.Println("caddyfile-csp: PASS — app-dev block emits no CSP + no Vite-path 404 blocks + 4 preserved headers + reverse_proxy")
+	fmt.Println("caddyfile-csp: PASS — app-dev block serves prod-bundle via file_server + canonical CSP + 4 preserved headers + try_files SPA fallback (Red Team #66 closed)")
 	return 0
 }

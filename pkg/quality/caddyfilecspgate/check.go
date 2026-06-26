@@ -69,22 +69,27 @@ func Check(cfg Config) (*Outcome, error) {
 		return out, nil
 	}
 
-	// Sanity: the extracted block must contain `reverse_proxy` (otherwise the
-	// extraction grabbed the wrong span).
-	if !strings.Contains(block, "reverse_proxy") {
+	// Sanity (v2): the extracted block must contain `header {` (otherwise the
+	// extraction grabbed the wrong span). v1 used `reverse_proxy` as the
+	// sanity marker, but v2 replaces Vite-dev reverse_proxy with file_server
+	// prod-bundle per ADR D1 — so the canonical block-presence marker is the
+	// `header {` directive which is required for the 4 preserved security
+	// headers.
+	if !strings.Contains(block, "header") {
 		out.Pass = false
 		out.Violations = append(out.Violations,
-			"assert_app_dev_block_bounded — block extracted contains no `reverse_proxy` (extraction sanity-check failed)")
+			"assert_app_dev_block_bounded — block extracted contains no `header` directive (extraction sanity-check failed)")
 	}
 
-	// Invariant 1: no Content-Security-Policy directive (ADR D1).
-	if strings.Contains(block, "Content-Security-Policy") {
-		out.Pass = false
-		out.Violations = append(out.Violations,
-			"assert_no_csp_in_app_dev_block — Content-Security-Policy directive STILL present in app-dev block")
-	}
+	// Invariant 1 (v2 — supersedes v1's `assert_no_csp`): with file_server
+	// serving prod-bundle, CSP IS required (asserted as invariant 8 below).
+	// The v1 assertion that CSP must be ABSENT was correct ONLY when the
+	// upstream was Vite dev (which needs inline scripts); with file_server,
+	// the canonical posture is strict CSP per dashboard/nginx.conf:23.
 
-	// Invariant 2: no Vite-path handle blocks (ADR D2).
+	// Invariant 2: no Vite-path handle blocks (legacy v1 — still relevant as
+	// defense-in-depth; with file_server they're redundant but their presence
+	// would indicate someone re-introduced the prior broken topology).
 	for _, vitePath := range []string{
 		"handle /src/*",
 		"handle /@vite/*",
@@ -129,14 +134,42 @@ func Check(cfg Config) (*Outcome, error) {
 			"assert_hsts_preserved_in_app_dev_block — HSTS max-age=31536000 MISSING (regression of #45)")
 	}
 
-	// Invariant 7: reverse_proxy @ws localhost:5173 preserved exactly once
-	// (the Vite dev upstream).
-	proxyCount := strings.Count(block, "reverse_proxy @ws localhost:5173")
-	if proxyCount != 1 {
+	// Invariant 7 (v2 — per plan caddyfile-app-dev-prod-bundle-file-server-canonical
+	// ADR D1, supersedes v1's `assert_reverse_proxy_preserved`): the operator-
+	// local Caddy MUST NOT reverse-proxy to Vite dev. The public surface MUST
+	// serve the prod-bundle via file_server. Negative-direction guard closes
+	// Red Team #66 (Vite source TypeScript publicly served).
+	if strings.Contains(block, "reverse_proxy @ws localhost:5173") {
 		out.Pass = false
-		out.Violations = append(out.Violations, fmt.Sprintf(
-			"assert_reverse_proxy_preserved — expected exactly 1 `reverse_proxy @ws localhost:5173`, got %d",
-			proxyCount))
+		out.Violations = append(out.Violations,
+			"assert_no_vite_dev_reverse_proxy — `reverse_proxy @ws localhost:5173` STILL present (Red Team #66 regression — Vite dev MUST NOT be the public upstream; use file_server prod-bundle instead)")
+	}
+
+	// Invariant 8 (v2): Content-Security-Policy directive PRESENT in header
+	// block, matching the canonical shape from dashboard/nginx.conf:23 (per
+	// ADR D2). With file_server serving the prod-bundle, the page no longer
+	// needs Vite HMR's inline scripts — the strict CSP applies cleanly.
+	if !strings.Contains(block, "Content-Security-Policy") {
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_csp_restored_in_app_dev_block — Content-Security-Policy directive MISSING (per ADR D2 of plan caddyfile-app-dev-prod-bundle-file-server-canonical: restore canonical CSP shape from dashboard/nginx.conf:23)")
+	}
+
+	// Invariant 9 (v2): file_server directive PRESENT (the canonical upstream
+	// for the prod-bundle topology per ADR D1).
+	if !strings.Contains(block, "file_server") {
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_file_server_in_app_dev_block — `file_server` directive MISSING (per ADR D1: app-dev serves prod-bundle via file_server, NOT Vite-dev reverse-proxy)")
+	}
+
+	// Invariant 10 (v2): try_files {path} /index.html SPA-routing fallback
+	// PRESENT (so client-side routes return the SPA's index.html).
+	tryFilesRe := regexp.MustCompile(`try_files\s+\{path\}\s+/index\.html`)
+	if !tryFilesRe.MatchString(block) {
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_spa_fallback_try_files — `try_files {path} /index.html` MISSING (SPA client-side routes would 404; per ADR D1)")
 	}
 
 	return out, nil
