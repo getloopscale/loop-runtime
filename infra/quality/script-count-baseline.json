@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 371,
+  "canonical_sh": 372,
   "_changelog": [
+    {
+      "date": "2026-06-26",
+      "from": 371,
+      "to": 372,
+      "reason": "Red Team loopzero-cloud#64 closure — new LIVE bash infra/tests/e2e/dev-public-engine-large-header-not-431_test.sh (~115 LOC) per memory feedback_issue_fix_requires_failing_e2e_test_2026_06_25 (sponsor verbatim 2026-06-25 'every issue closure must include LIVE bash that reproduces verbatim'). Probes /engine/api/v1/{projects,auth/whoami,domains} + /v1/auth/me with a fake-but-structurally-valid 27 KB Bearer token; asserts each endpoint returns != 431 (typically 401 invalid-JWT proving the transport layer accepts the header size). User-reported status 2026-06-26 said the symptom 'sumiu' but asked for o teste fiel para cravar — this script IS o teste fiel. Regression-protector going forward: any gateway-limit drift OR proxy chain change that re-introduces the 431 symptom fires hermetically (--skip-live mode) before reaching dev-public. Allowlist entry under § Post-baseline additions (Red Team #64 closure — 2026-06-26). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-25",
       "from": 368,
