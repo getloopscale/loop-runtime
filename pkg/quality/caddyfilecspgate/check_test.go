@@ -32,7 +32,7 @@ const canonicalAppDevBlock = `app-dev.loopzero.example {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
-    Content-Security-Policy "default-src 'self'; script-src 'self'"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
@@ -178,7 +178,7 @@ func TestCheck_RegressionDetected_CSPMissing_v2(t *testing.T) {
 	// v2: with file_server serving prod-bundle, CSP MUST be present (ADR D2
 	// of plan caddyfile-app-dev-prod-bundle-file-server-canonical).
 	regressed := strings.Replace(canonicalAppDevBlock,
-		"Content-Security-Policy \"default-src 'self'; script-src 'self'\"", "", 1)
+		`Content-Security-Policy "default-src 'self'`, `Forbidden-Policy "stripped`, 1)
 	dir := makeCaddyfile(t, regressed)
 	out, err := Check(Config{RepoRoot: dir})
 	if err != nil {
@@ -189,6 +189,37 @@ func TestCheck_RegressionDetected_CSPMissing_v2(t *testing.T) {
 	}
 	if !containsViolation(out.Violations, "assert_csp_restored_in_app_dev_block") {
 		t.Fatalf("want CSP-missing violation, got: %v", out.Violations)
+	}
+}
+
+func TestCheck_RegressionDetected_CSPStripperShape_v12(t *testing.T) {
+	// v1.2: header CSP MUST be a SUPERSET of dashboard meta CSP. A canonical-
+	// looking but-narrower CSP (no Google Fonts) MUST fail the superset gate.
+	// Browser-LIVE-caught 2026-06-26 by Red Team Chrome devtools.
+	narrowerCSP := `Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; object-src 'none'; base-uri 'self'; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; frame-ancestors 'none'"`
+	regressed := strings.Replace(canonicalAppDevBlock,
+		`Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"`,
+		narrowerCSP, 1)
+	dir := makeCaddyfile(t, regressed)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when CSP is narrower than meta CSP (would strip Google Fonts via intersection)")
+	}
+	wantTokens := []string{"https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://*.stripe.com"}
+	for _, tok := range wantTokens {
+		found := false
+		for _, v := range out.Violations {
+			if strings.Contains(v, tok) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("want superset violation citing %q, got: %v", tok, out.Violations)
+		}
 	}
 }
 

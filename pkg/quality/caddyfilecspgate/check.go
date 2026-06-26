@@ -155,13 +155,36 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 
 	// Invariant 8 (v2): Content-Security-Policy directive PRESENT in header
-	// block, matching the canonical shape from dashboard/nginx.conf:23 (per
-	// ADR D2). With file_server serving the prod-bundle, the page no longer
-	// needs Vite HMR's inline scripts — the strict CSP applies cleanly.
+	// block.
 	if !strings.Contains(block, "Content-Security-Policy") {
 		out.Pass = false
 		out.Violations = append(out.Violations,
-			"assert_csp_restored_in_app_dev_block — Content-Security-Policy directive MISSING (per ADR D2 of plan caddyfile-app-dev-prod-bundle-file-server-canonical: restore canonical CSP shape from dashboard/nginx.conf:23)")
+			"assert_csp_restored_in_app_dev_block — Content-Security-Policy directive MISSING (per ADR D2 of plan caddyfile-app-dev-prod-bundle-file-server-canonical)")
+	}
+
+	// Invariant 8.1 (v1.2): the header CSP MUST be a SUPERSET of the dashboard
+	// `<meta>` CSP (browsers enforce STRICTER intersection per WHATWG fetch
+	// spec). Key tokens the dashboard requires that a stricter shape would
+	// strip: Google Fonts CSS + font binaries, Stripe checkout connect,
+	// 'unsafe-inline' for the PWA inline script-register. Caught LIVE
+	// 2026-06-26 by Red Team Chrome devtools when prior shape stripped them.
+	cspMustContain := []struct {
+		token  string
+		why    string
+	}{
+		{"https://fonts.googleapis.com", "Google Fonts CSS (style-src)"},
+		{"https://fonts.gstatic.com", "Google Fonts binaries (font-src)"},
+		{"https://*.stripe.com", "Stripe checkout connect-src"},
+		{"'unsafe-inline'", "PWA inline service-worker register + design-system CSS-in-JS"},
+		{"frame-ancestors 'none'", "clickjacking defense (header-only directive)"},
+	}
+	for _, req := range cspMustContain {
+		if !strings.Contains(block, req.token) {
+			out.Pass = false
+			out.Violations = append(out.Violations, fmt.Sprintf(
+				"assert_csp_superset_of_meta — header CSP MISSING `%s` (%s). Stricter header CSP intersects with dashboard meta CSP and strips this source, breaking the page.",
+				req.token, req.why))
+		}
 	}
 
 	// Invariant 9 (v2): file_server directive PRESENT (the canonical upstream
