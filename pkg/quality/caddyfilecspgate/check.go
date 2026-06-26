@@ -195,6 +195,32 @@ func Check(cfg Config) (*Outcome, error) {
 			"assert_file_server_in_app_dev_block — `file_server` directive MISSING (per ADR D1: app-dev serves prod-bundle via file_server, NOT Vite-dev reverse-proxy)")
 	}
 
+	// Invariant 9.5 (v1.4): canonical API proxy handles MUST be present in the
+	// app-dev host block. The dashboard `src/lib/api.ts` + the LoopZero CLI both
+	// hit specific path prefixes that need explicit reverse-proxy handles
+	// BEFORE the catch-all SPA fallback (invariant 11 below) catches them.
+	// Without ANY of these, the SPA-fallback rewrite returns `<!DOCTYPE html>`
+	// to consumers expecting JSON → JSON.parse → SyntaxError → consumer-blind
+	// (Red Team loopzero-cloud#88 LIVE: CLI `loopzero whoami → Cannot reach API`).
+	// Each invariant cites the dashboard / CLI surface that breaks.
+	requiredHandles := []struct {
+		path string
+		why  string
+	}{
+		{`handle /sessions/*`, "Kratos session API (dashboard auth.getSession)"},
+		{`handle /self-service/*`, "Kratos self-service flows (login/recovery/registration)"},
+		{`handle /v1/*`, "loopzero-cloud API (dashboard /v1/auth/me, /v1/billing/*, /v1/dashboard/memory/*)"},
+		{`handle /engine/*`, "loopzero-cloud opaque BFF proxy to engine (CLI loopzero whoami + dashboard engineFetch)"},
+	}
+	for _, req := range requiredHandles {
+		if !strings.Contains(block, req.path) {
+			out.Pass = false
+			out.Violations = append(out.Violations, fmt.Sprintf(
+				"assert_canonical_api_handle_present — `%s {` MISSING. Without it, requests to that prefix fall through to the SPA catch-all `handle {}` and consumers receive `<!DOCTYPE html>` instead of JSON. Surface that breaks: %s.",
+				req.path, req.why))
+		}
+	}
+
 	// Invariant 10 (v2): try_files {path} /index.html SPA-routing fallback
 	// PRESENT (so client-side routes return the SPA's index.html).
 	tryFilesRe := regexp.MustCompile(`try_files\s+\{path\}\s+/index\.html`)

@@ -39,6 +39,15 @@ const canonicalAppDevBlock = `app-dev.loopzero.example {
   handle /sessions/* {
     reverse_proxy localhost:14433
   }
+  handle /self-service/* {
+    reverse_proxy localhost:14433
+  }
+  handle /v1/* {
+    reverse_proxy localhost:13002
+  }
+  handle /engine/* {
+    reverse_proxy localhost:13002
+  }
 
   handle {
     root * {env.DASHBOARD_DIST}
@@ -242,6 +251,37 @@ func TestCheck_RegressionDetected_TryFilesMissing(t *testing.T) {
 	}
 	if !containsViolation(out.Violations, "assert_spa_fallback_try_files") {
 		t.Fatalf("want try_files violation, got: %v", out.Violations)
+	}
+}
+
+// TestCheck_RegressionDetected_MissingEngineHandle_v14 locks the v1.4 fix
+// for Red Team loopzero-cloud#88 LIVE regression: the canonical handle blocks
+// for the dashboard + CLI API prefixes (/sessions/*, /self-service/*,
+// /v1/*, /engine/*) MUST all be present. Without /engine/*, every CLI
+// `loopzero whoami` AND every dashboard `engineFetch()` call falls through
+// to the SPA catch-all and the consumer receives `<!DOCTYPE html>` instead
+// of JSON. Defense-in-depth invariant — the gate enumerates EVERY required
+// API handle so a future canonical-paths refactor cannot silently drop one.
+func TestCheck_RegressionDetected_MissingEngineHandle_v14(t *testing.T) {
+	regressed := strings.Replace(canonicalAppDevBlock,
+		"  handle /engine/* {\n    reverse_proxy localhost:13002\n  }\n", "", 1)
+	dir := makeCaddyfile(t, regressed)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when /engine/* handle is missing (CLI + dashboard engineFetch break)")
+	}
+	found := false
+	for _, v := range out.Violations {
+		if strings.Contains(v, "handle /engine/*") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("want violation citing missing /engine/* handle, got: %v", out.Violations)
 	}
 }
 

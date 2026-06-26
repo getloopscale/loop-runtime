@@ -184,6 +184,25 @@ app-dev.loopzero.example {
     }
   }
 
+  # Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.4 (2026-06-26
+  # — closes loopzero-cloud#88): /engine/* is the canonical BFF proxy prefix the
+  # dashboard (`engineFetch` in `src/lib/api.ts:197` → `cloudFetch(`/engine${path}`)`)
+  # AND the LoopZero CLI (`loopzero whoami` → `GET ${LOOPZERO_URL}/engine/api/v1/auth/whoami`)
+  # both use to reach the engine API via loopzero-cloud's opaque pass-through
+  # (`/engine/*` route in loopzero-cloud authenticated with Ed25519 service-auth
+  # per loopzero-cloud/CLAUDE.md). Without this handle, every engine call
+  # (deploy, whoami, list projects, build status, …) falls through to the
+  # SPA catch-all and the consumer JSON.parse's `<!DOCTYPE html>...` →
+  # Red Team #88 LIVE: `loopzero whoami → "Cannot reach API"` + dashboard
+  # dashboard data screens render blank. Mirror /v1/* shape (Host: cloud-dev
+  # so loopzero-cloud's host-aware middleware treats this as the canonical
+  # cross-origin proxy entry).
+  handle /engine/* {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
+
   # Catch-all: SPA prod-bundle (every path not matched above). file_server +
   # try_files are wrapped HERE so the SPA-fallback rewrite only applies to
   # dashboard client-side routes, never to API paths above.
