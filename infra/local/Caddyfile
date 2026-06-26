@@ -90,6 +90,33 @@ auth.loopzero.example {
 # https://auth-dev.loopzero.example/self-service/methods/oidc/callback/{provider}.
 
 app-dev.loopzero.example {
+  # Plan release-blockers-2026-06-25-set T1.1 + T2.1 (closes #44+#45+#46+#47).
+  # Canonical 5-header response set mirrors dashboard/nginx.conf prod posture
+  # + HSTS (the 5th the Red Team flagged missing). Applied at every response
+  # from this host block (proxied or served). Closes #44 clickjacking + #45
+  # nosniff/Referrer/HSTS gap on the SPA.
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; object-src 'none'; base-uri 'self'; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; frame-ancestors 'none'"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  }
+
+  # T2.1: gate Vite dev paths to 404 — closes #46 (source TS + HMR client leak).
+  # These paths only exist in `vite dev` mode (npm run build doesn't emit them).
+  # Local dev workflow uses localhost:5173 directly (not via Caddy), so this
+  # only blocks the PUBLIC host.
+  handle /src/* {
+    respond 404
+  }
+  handle /@vite/* {
+    respond 404
+  }
+  handle /node_modules/.vite/* {
+    respond 404
+  }
+
   @ws {
     header Connection *Upgrade*
     header Upgrade websocket
@@ -139,6 +166,11 @@ app-dev.loopzero.example {
 }
 
 cloud-dev.loopzero.example {
+  # Plan release-blockers-2026-06-25-set T1.2 (closes #47).
+  # HSTS at the edge — the Go cloud middleware already emits CSP/nosniff/XFO/
+  # Referrer; only HSTS was missing per Red Team #47.
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
   # Plan J-09 T4.1 (2026-06-06) — GitHub webhook bypass cloud auth proxy.
   # GitHub does NOT send JWT/cookie -- it signs the body with HMAC-SHA256
   # using the App's webhook secret. loopzero-api validates that signature
@@ -165,6 +197,10 @@ cloud-dev.loopzero.example {
 }
 
 auth-dev.loopzero.example {
+  # Plan release-blockers-2026-06-25-set T1.3 (closes #45 — HSTS on /auth-dev).
+  # Kratos/Hydra public endpoints assert HSTS at the edge.
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
   # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
   # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,
   # so browser must reach Hydra (port-forward localhost:14444), not Kratos.
