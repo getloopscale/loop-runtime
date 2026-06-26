@@ -1024,9 +1024,12 @@ tasks:
     desc: |
       Start Caddy reverse proxy for the local-public dashboard flow. Caddy
       binds :80 + :443 (requires sudo) and terminates Let's Encrypt TLS for
-      app/cloud/auth.loopzero.example. Routes to localhost:5173 (vite), :13002
-      (loopzero-cloud), :14433 (ory-kratos-public). T7.2 of plan.
-      v1.1 EC-S4 pre-check: ensures :80 + :443 are free before starting.
+      app/cloud/auth.loopzero.example. Serves dashboard prod-bundle via file_server
+      (canonical Option B per plan caddyfile-app-dev-prod-bundle-file-server-
+      canonical v1.1 closing Red Team loopzero-cloud#66). Routes /sessions/* +
+      /self-service/* to :14433 (ory-kratos-public), /v1/* to :13002 (cloud).
+      v1.2: exports DASHBOARD_DIST to ../loopzero-cloud/dashboard/dist via sudo -E
+      so file_server serves the prod-bundle without operator manual env-export.
     cmds:
       - |
         # Pre-check: ports 80/443 must be free
@@ -1043,13 +1046,25 @@ tasks:
           exit 1
         fi
       - |
+        # v1.2 pre-check: dashboard prod-bundle must exist (file_server canonical
+        # path per plan caddyfile-app-dev-prod-bundle-file-server-canonical).
+        DASHBOARD_DIST="${DASHBOARD_DIST:-$(pwd)/../loopzero-cloud/dashboard/dist}"
+        if [ ! -f "$DASHBOARD_DIST/index.html" ]; then
+          echo "ERROR: dashboard prod-bundle missing at $DASHBOARD_DIST/index.html"
+          echo "       Build it first: cd ../loopzero-cloud/dashboard && npm run build"
+          exit 1
+        fi
+        echo "Dashboard prod-bundle ready: $DASHBOARD_DIST ($(du -sh "$DASHBOARD_DIST" | cut -f1))"
+      - |
         CADDY=$(command -v caddy || echo $HOME/bin/caddy)
         if [ ! -x "$CADDY" ]; then
           echo "ERROR: caddy binary not found. Install from https://caddyserver.com/"
           exit 1
         fi
-        echo "Starting Caddy (sudo required for :80/:443)..."
-        sudo "$CADDY" start --config infra/local/Caddyfile
+        DASHBOARD_DIST="${DASHBOARD_DIST:-$(pwd)/../loopzero-cloud/dashboard/dist}"
+        export DASHBOARD_DIST
+        echo "Starting Caddy (sudo required for :80/:443); DASHBOARD_DIST=$DASHBOARD_DIST"
+        sudo -E "$CADDY" start --config infra/local/Caddyfile
 
   cloud:caddy:down:
     desc: Stop the local Caddy reverse proxy.

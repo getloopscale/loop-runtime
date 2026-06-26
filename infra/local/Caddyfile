@@ -106,7 +106,11 @@ app-dev.loopzero.example {
   # those Vite source files are NEVER reachable publicly because they don't
   # exist in the served root. CSP restored matching dashboard/nginx.conf
   # canonical shape. Operator workflow: cd loopzero-cloud/dashboard && npm run
-  # build && export DASHBOARD_DIST=$(pwd)/dist before task cloud:caddy:up.
+  # build before task cloud:caddy:up. The Taskfile target cloud:caddy:up
+  # exports DASHBOARD_DIST automatically to the workspace sibling repo
+  # loopzero-cloud/dashboard/dist (per /home/paulo/loopzero-cloud/{loopzero,loopzero-cloud,
+  # loopzero-cli,loopzero-contracts} workspace layout). Override DASHBOARD_DIST
+  # before task invocation if you have a non-standard layout.
   # See docs/operations/operator-local-caddy-workflow.md.
   header {
     X-Frame-Options "DENY"
