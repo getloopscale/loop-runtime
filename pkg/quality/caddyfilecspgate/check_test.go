@@ -51,9 +51,10 @@ const canonicalGlobalConfigBlock = `{
 }
 `
 
-// canonicalAuthDevBlock is the v1.5 (T1.2 of plan
+// canonicalAuthDevBlock is the v1.6 (T1.2 + T3.2 of plan
 // kratos-self-service-rate-limit-systemic) canonical shape: 4 rate_limit zones
-// keyed on cf-connecting-ip + HSTS header preserved.
+// keyed on cf-connecting-ip + register-route handle proxied to loopzero-cloud BFF
+// + HSTS header preserved.
 const canonicalAuthDevBlock = `auth-dev.loopzero.example {
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
@@ -89,6 +90,12 @@ const canonicalAuthDevBlock = `auth-dev.loopzero.example {
       key {http.request.header.cf-connecting-ip}
       window 5m
       events 5
+    }
+  }
+
+  handle /self-service/registration/methods/password {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
     }
   }
 
@@ -524,6 +531,51 @@ auth-dev.loopzero.example {
 	}
 	if !containsViolation(out.Violations, "assert_authdev_rate_limit_zone_register_throttle") {
 		t.Fatalf("want register_throttle-zone-missing violation, got: %v", out.Violations)
+	}
+}
+
+// T3.3 of plan kratos-self-service-rate-limit-systemic v1.1 — register-route
+// proxy invariant for the auth-dev block (BFF wiring per T3.2).
+func TestCheck_RegressionDetected_RegisterRouteMissing(t *testing.T) {
+	// auth-dev block exists with full rate_limit + handles, but the
+	// /self-service/registration/methods/password handle is absent.
+	missingRegisterHandle := canonicalGlobalConfigBlock + `
+app-dev.loopzero.example {
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'"
+    Strict-Transport-Security "max-age=31536000"
+  }
+  handle /sessions/* { reverse_proxy localhost:14433 }
+  handle /self-service/* { reverse_proxy localhost:14433 }
+  handle /v1/* { reverse_proxy localhost:13002 }
+  handle /engine/* { reverse_proxy localhost:13002 }
+  handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
+}
+
+auth-dev.loopzero.example {
+  header Strict-Transport-Security "max-age=31536000"
+  rate_limit {
+    zone login_throttle { match { path /self-service/login/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 10 }
+    zone register_throttle { match { path /self-service/registration/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 5 }
+    zone recovery_throttle { match { path /self-service/recovery/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 3 }
+    zone recovery_flow_create_throttle { match { path /self-service/recovery/browser /self-service/recovery/api }; key {http.request.header.cf-connecting-ip}; window 5m; events 5 }
+  }
+  reverse_proxy localhost:14433
+}
+`
+	dir := makeCaddyfile(t, missingRegisterHandle)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when register route is missing, got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_register_route_proxied_to_cloud") {
+		t.Fatalf("want register-route-missing violation, got: %v", out.Violations)
 	}
 }
 

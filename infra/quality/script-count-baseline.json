@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 378,
+  "canonical_sh": 379,
   "_changelog": [
+    {
+      "date": "2026-06-27",
+      "from": 378,
+      "to": 379,
+      "reason": "T3.5 of plan kratos-self-service-rate-limit-systemic v1.1 \u2014 dev-public-register-response-shape_test.sh LIVE regression-protector for Red Team loopzero-cloud#43 (response-shape unifier closure proof + scenario C bucket-coexistence)"
+    },
     {
       "date": "2026-06-27",
       "from": 373,

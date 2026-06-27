@@ -335,6 +335,25 @@ auth-dev.loopzero.example {
     }
   }
 
+  # T3.2 of plan kratos-self-service-rate-limit-systemic v1.1 — route the
+  # canonical register submission endpoint through the loopzero-cloud BFF
+  # response-shape unifier (T3.1) instead of straight to the upstream
+  # identity-store. Closes Red Team loopzero-cloud#43 (account enumeration via
+  # response-shape divergence). The BFF accepts both form-encoded (browser
+  # navigation, returns 303 redirect to /auth/check-email) AND JSON (API
+  # client, returns canonical universal body) — both shapes are byte
+  # identical between new and existing email branches.
+  #
+  # PLACED BEFORE the default catch-all reverse_proxy to localhost:14433
+  # (Kratos public) so this prefix wins via Caddy's first-match-wins
+  # semantic. Edge rate_limit register_throttle (T1.2) still applies
+  # because it's evaluated at the host level before any handle.
+  handle /self-service/registration/methods/password {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
+
   # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
   # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,
   # so browser must reach Hydra (port-forward localhost:14444), not Kratos.

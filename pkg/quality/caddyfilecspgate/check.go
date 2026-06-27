@@ -341,6 +341,24 @@ func Check(cfg Config) (*Outcome, error) {
 					"assert_authdev_rate_limit_key_cf_connecting_ip — no `key {http.request.header.cf-connecting-ip}` found inside rate_limit zones. EC-2 absorption: required for per-real-IP buckets through CF Tunnel.")
 			}
 		}
+
+		// Invariant 15 (v1.6 — T3.3): auth-dev block declares
+		// `handle /self-service/registration/methods/password { ... }`
+		// reverse-proxying to localhost:13002 (loopzero-cloud BFF). Closes Red
+		// Team loopzero-cloud#43 at the routing layer.
+		registerRouteRe := regexp.MustCompile(`(?m)^\s*handle\s+/self-service/registration/methods/password\s*\{`)
+		if !registerRouteRe.MatchString(authBlock) {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password { ... }` MISSING in auth-dev host block. Red Team loopzero-cloud#43 closure (BFF response-shape unifier per T3.1) is unreachable without this routing handle (T3.2).")
+		} else {
+			registerRouteBlockRe := regexp.MustCompile(`(?ms)handle\s+/self-service/registration/methods/password\s*\{[^}]*reverse_proxy\s+localhost:13002`)
+			if !registerRouteBlockRe.MatchString(authBlock) {
+				out.Pass = false
+				out.Violations = append(out.Violations,
+					"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password` does NOT reverse_proxy to localhost:13002 (loopzero-cloud BFF). Red Team loopzero-cloud#43 closure requires this exact target.")
+			}
+		}
 	}
 
 	// Invariant 14 (v1.5 — T1.3 + EC-2): global config block declares
