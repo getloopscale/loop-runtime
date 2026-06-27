@@ -23,6 +23,33 @@
 
 {
   email admin@loopzero.example
+
+  # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 (EC-2 absorption).
+  # Caddy lives behind Cloudflare Tunnel for auth-dev.loopzero.example — `{remote_host}`
+  # resolves to CF's internal hop address, NOT the real end-user IP. Without
+  # `trusted_proxies` Caddy refuses to honor the `CF-Connecting-IP` header that
+  # CF forwards, so every rate_limit zone keyed on that header would silently
+  # share ONE bucket across ALL CF-fronted users (FAANG-grade gotcha per
+  # blueprint Q2). CF's published IPv4 ranges (https://www.cloudflare.com/ips/)
+  # are pinned verbatim below. Annual refresh tracked in operator runbook.
+  servers {
+    trusted_proxies static \
+      173.245.48.0/20 \
+      103.21.244.0/22 \
+      103.22.200.0/22 \
+      103.31.4.0/22 \
+      141.101.64.0/18 \
+      108.162.192.0/18 \
+      190.93.240.0/20 \
+      188.114.96.0/20 \
+      197.234.240.0/22 \
+      198.41.128.0/17 \
+      162.158.0.0/15 \
+      104.16.0.0/13 \
+      104.24.0.0/14 \
+      172.64.0.0/13 \
+      131.0.72.0/22
+  }
 }
 
 # Dashboard (vite dev server with HMR) + same-origin Kratos proxy
@@ -249,6 +276,64 @@ auth-dev.loopzero.example {
   # Plan release-blockers-2026-06-25-set T1.3 (closes #45 — HSTS on /auth-dev).
   # Kratos/Hydra public endpoints assert HSTS at the edge.
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+  # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 — Caddy edge
+  # rate-limit closing Red Team loopzero-cloud#68 (login) + #89 (recovery email
+  # bomb / unlimited flow creates) + defense-in-depth #43 (register).
+  # Module: github.com/mholt/caddy-ratelimit@5625512 (bundled by
+  # caddy-build-canonical.sh per T1.1 EC-1).
+  #
+  # All 4 zones key on `{http.request.header.cf-connecting-ip}` so per-IP
+  # buckets are real-user-IP, NOT CF tunnel hop address (EC-2 absorption —
+  # trusted_proxies block in global config above honors the header from CF
+  # ranges only, not from spoofed hops).
+  #
+  # Quotas tuned conservatively to absorb legitimate retry-during-typo
+  # without enabling adversarial abuse:
+  #   login_throttle             10/min  (10 password-submit attempts/min/IP
+  #                                       — credential-stuffing defense)
+  #   register_throttle           5/min  (5 register-submit/min/IP — slows
+  #                                       enumeration scanners)
+  #   recovery_throttle           3/min  (3 recovery code-submit/min/IP —
+  #                                       brute-force code guess defense)
+  #   recovery_flow_create_throttle 5/5min (5 NEW recovery flows/5min/IP —
+  #                                         caps email-bomb attack)
+  #
+  # Caddy sliding-window algorithm + 429 + Retry-After per blueprint Q1.
+  rate_limit {
+    zone login_throttle {
+      match {
+        path /self-service/login/methods/*
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 10
+    }
+    zone register_throttle {
+      match {
+        path /self-service/registration/methods/*
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 5
+    }
+    zone recovery_throttle {
+      match {
+        path /self-service/recovery/methods/*
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 3
+    }
+    zone recovery_flow_create_throttle {
+      match {
+        path /self-service/recovery/browser /self-service/recovery/api
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 5m
+      events 5
+    }
+  }
 
   # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
   # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,

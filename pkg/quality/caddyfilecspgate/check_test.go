@@ -25,9 +25,82 @@ func makeCaddyfile(t *testing.T, content string) string {
 	return dir
 }
 
+// canonicalGlobalConfigBlock is the canonical Caddyfile global config —
+// v1.5 (T1.3 + EC-2): trusted_proxies declares CF's published IPv4 ranges so
+// Caddy honors the cf-connecting-ip header from CF tunnel only.
+const canonicalGlobalConfigBlock = `{
+  email admin@loopzero.example
+  servers {
+    trusted_proxies static \
+      173.245.48.0/20 \
+      103.21.244.0/22 \
+      103.22.200.0/22 \
+      103.31.4.0/22 \
+      141.101.64.0/18 \
+      108.162.192.0/18 \
+      190.93.240.0/20 \
+      188.114.96.0/20 \
+      197.234.240.0/22 \
+      198.41.128.0/17 \
+      162.158.0.0/15 \
+      104.16.0.0/13 \
+      104.24.0.0/14 \
+      172.64.0.0/13 \
+      131.0.72.0/22
+  }
+}
+`
+
+// canonicalAuthDevBlock is the v1.5 (T1.2 of plan
+// kratos-self-service-rate-limit-systemic) canonical shape: 4 rate_limit zones
+// keyed on cf-connecting-ip + HSTS header preserved.
+const canonicalAuthDevBlock = `auth-dev.loopzero.example {
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+  rate_limit {
+    zone login_throttle {
+      match {
+        path /self-service/login/methods/*
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 10
+    }
+    zone register_throttle {
+      match {
+        path /self-service/registration/methods/*
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 5
+    }
+    zone recovery_throttle {
+      match {
+        path /self-service/recovery/methods/*
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 3
+    }
+    zone recovery_flow_create_throttle {
+      match {
+        path /self-service/recovery/browser /self-service/recovery/api
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 5m
+      events 5
+    }
+  }
+
+  reverse_proxy localhost:14433
+}
+`
+
 // canonicalAppDevBlock is the v2 (file_server prod-bundle) canonical shape per
-// plan caddyfile-app-dev-prod-bundle-file-server-canonical ADR D1+D2.
-const canonicalAppDevBlock = `app-dev.loopzero.example {
+// plan caddyfile-app-dev-prod-bundle-file-server-canonical ADR D1+D2, paired
+// with the v1.5 global config + auth-dev block per T1.3.
+const canonicalAppDevBlock = canonicalGlobalConfigBlock + `
+app-dev.loopzero.example {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
@@ -56,7 +129,7 @@ const canonicalAppDevBlock = `app-dev.loopzero.example {
     try_files {path} /index.html
   }
 }
-`
+` + canonicalAuthDevBlock
 
 func TestCheck_SkippedWhenCaddyfileAbsent(t *testing.T) {
 	dir := t.TempDir() // empty dir, no infra/local/Caddyfile
@@ -370,4 +443,120 @@ func containsViolation(violations []string, substr string) bool {
 		}
 	}
 	return false
+}
+
+// ----------------------------------------------------------------------------
+// T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 — auth-dev rate_limit
+// + trusted_proxies invariants (12 / 13 / 14). 3 new regression-detected tests.
+// ----------------------------------------------------------------------------
+
+func TestCheck_RegressionDetected_AuthDevRateLimitBlockMissing(t *testing.T) {
+	// auth-dev block exists but the rate_limit { ... } container is absent.
+	missingRateLimit := canonicalGlobalConfigBlock + `
+app-dev.loopzero.example {
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'"
+    Strict-Transport-Security "max-age=31536000"
+  }
+  handle /sessions/* { reverse_proxy localhost:14433 }
+  handle /self-service/* { reverse_proxy localhost:14433 }
+  handle /v1/* { reverse_proxy localhost:13002 }
+  handle /engine/* { reverse_proxy localhost:13002 }
+  handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
+}
+
+auth-dev.loopzero.example {
+  header Strict-Transport-Security "max-age=31536000"
+  reverse_proxy localhost:14433
+}
+`
+	dir := makeCaddyfile(t, missingRateLimit)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when auth-dev rate_limit block is missing, got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_authdev_rate_limit_block_present") {
+		t.Fatalf("want rate_limit-block-missing violation, got: %v", out.Violations)
+	}
+}
+
+func TestCheck_RegressionDetected_AuthDevRateLimitZoneMissing(t *testing.T) {
+	// rate_limit block exists but the register_throttle zone is absent.
+	missingZone := canonicalGlobalConfigBlock + `
+app-dev.loopzero.example {
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'"
+    Strict-Transport-Security "max-age=31536000"
+  }
+  handle /sessions/* { reverse_proxy localhost:14433 }
+  handle /self-service/* { reverse_proxy localhost:14433 }
+  handle /v1/* { reverse_proxy localhost:13002 }
+  handle /engine/* { reverse_proxy localhost:13002 }
+  handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
+}
+
+auth-dev.loopzero.example {
+  header Strict-Transport-Security "max-age=31536000"
+  rate_limit {
+    zone login_throttle { match { path /self-service/login/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 10 }
+    zone recovery_throttle { match { path /self-service/recovery/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 3 }
+    zone recovery_flow_create_throttle { match { path /self-service/recovery/browser /self-service/recovery/api }; key {http.request.header.cf-connecting-ip}; window 5m; events 5 }
+  }
+  reverse_proxy localhost:14433
+}
+`
+	dir := makeCaddyfile(t, missingZone)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when register_throttle zone is missing, got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_authdev_rate_limit_zone_register_throttle") {
+		t.Fatalf("want register_throttle-zone-missing violation, got: %v", out.Violations)
+	}
+}
+
+func TestCheck_RegressionDetected_TrustedProxiesMissing(t *testing.T) {
+	// Global config block exists but no trusted_proxies static.
+	missingTP := `{
+  email admin@loopzero.example
+}
+` + `
+app-dev.loopzero.example {
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'"
+    Strict-Transport-Security "max-age=31536000"
+  }
+  handle /sessions/* { reverse_proxy localhost:14433 }
+  handle /self-service/* { reverse_proxy localhost:14433 }
+  handle /v1/* { reverse_proxy localhost:13002 }
+  handle /engine/* { reverse_proxy localhost:13002 }
+  handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
+}
+` + canonicalAuthDevBlock
+	dir := makeCaddyfile(t, missingTP)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when trusted_proxies is missing, got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_trusted_proxies_static_cf_ranges") {
+		t.Fatalf("want trusted_proxies-missing violation, got: %v", out.Violations)
+	}
 }

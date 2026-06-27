@@ -45,6 +45,23 @@ type Outcome struct {
 // blockOpenRe finds the opening `app-dev.loopzero.example {` line of the host block.
 var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.dev\s*\{`)
 
+// authDevBlockOpenRe finds the opening `auth-dev.loopzero.example {` line of the
+// host block (T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 —
+// rate_limit + trusted_proxies invariants extend the gate to the auth-dev
+// host beyond the existing app-dev coverage).
+var authDevBlockOpenRe = regexp.MustCompile(`(?m)^auth-dev\.loopzero\.dev\s*\{`)
+
+// canonicalRateLimitZones are the 4 zones that MUST be present in the
+// auth-dev host block per T1.2 of plan kratos-self-service-rate-limit-systemic
+// (closes Red Team loopzero-cloud#68 login + #89 recovery + defense-in-depth #43
+// register). Per blueprint Q1 canonical snippet.
+var canonicalRateLimitZones = []string{
+	"zone login_throttle",
+	"zone register_throttle",
+	"zone recovery_throttle",
+	"zone recovery_flow_create_throttle",
+}
+
 // Check enforces the 11 invariants per plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 T1.1.
 // Returns Skipped=true when the Caddyfile is absent (CI runs without the
 // operator-local-edge config are valid no-ops).
@@ -271,7 +288,110 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 	}
 
+	// T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 — 3 new
+	// invariants on the auth-dev block (separate from app-dev). These do NOT
+	// short-circuit the existing app-dev assertions; both blocks are audited.
+	authBlock, authOK := extractAuthDevBlock(content)
+	if !authOK {
+		// auth-dev block is required by the plan; absence is a violation.
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_auth_dev_block_present — `auth-dev.loopzero.example { ... }` host block MISSING. Plan kratos-self-service-rate-limit-systemic T1.2 declares 4 rate_limit zones MUST live inside this block.")
+	} else {
+		// Invariant 12 (v1.5 — T1.3): auth-dev block declares a `rate_limit { ... }`
+		// container with all 4 canonical zones (login + register + recovery
+		// submit + recovery flow-create). Each zone keyed on
+		// `{http.request.header.cf-connecting-ip}` (EC-2 absorption — without
+		// cf-connecting-ip + trusted_proxies, the bucket shares one slot across
+		// all CF-fronted traffic = FAANG-grade DoS).
+		rateLimitDirRe := regexp.MustCompile(`(?m)^\s*rate_limit\s*\{`)
+		if !rateLimitDirRe.MatchString(authBlock) {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				"assert_authdev_rate_limit_block_present — `rate_limit { ... }` directive MISSING in auth-dev host block. Red Team loopzero-cloud#68 login + #89 recovery email-bomb stay open without it (per blueprint Q1 canonical zones).")
+		} else {
+			// All 4 zones must be present.
+			for _, zone := range canonicalRateLimitZones {
+				if !strings.Contains(authBlock, zone) {
+					out.Pass = false
+					out.Violations = append(out.Violations, fmt.Sprintf(
+						"assert_authdev_rate_limit_zone_%s — `%s` MISSING in auth-dev host block. All 4 canonical zones (login + register + recovery submit + recovery flow-create) are required per plan kratos-self-service-rate-limit-systemic T1.2.",
+						strings.TrimPrefix(zone, "zone "), zone))
+				}
+			}
+		}
+
+		// Invariant 13 (v1.5 — T1.3 + EC-2): every rate_limit zone in
+		// auth-dev keys on cf-connecting-ip, NOT {remote_host}.
+		// {remote_host} resolves to CF tunnel's internal hop address →
+		// shared bucket across all CF-fronted users → trivial DoS.
+		// Defensive grep: if `key {remote_host}` appears in the auth-dev block
+		// AND any rate_limit zone exists, it's a regression.
+		if rateLimitDirRe.MatchString(authBlock) {
+			remoteHostKeyRe := regexp.MustCompile(`(?m)^\s*key\s*\{remote_host\}`)
+			if remoteHostKeyRe.MatchString(authBlock) {
+				out.Pass = false
+				out.Violations = append(out.Violations,
+					"assert_authdev_rate_limit_key_cf_connecting_ip — `key {remote_host}` found inside auth-dev rate_limit block. EC-2 absorption: must use `key {http.request.header.cf-connecting-ip}` so per-IP buckets reflect the real end-user IP through Cloudflare Tunnel (otherwise the bucket shares one slot across all CF-fronted users = FAANG-grade DoS).")
+			}
+			cfKeyRe := regexp.MustCompile(`key\s*\{http\.request\.header\.cf-connecting-ip\}`)
+			if !cfKeyRe.MatchString(authBlock) {
+				out.Pass = false
+				out.Violations = append(out.Violations,
+					"assert_authdev_rate_limit_key_cf_connecting_ip — no `key {http.request.header.cf-connecting-ip}` found inside rate_limit zones. EC-2 absorption: required for per-real-IP buckets through CF Tunnel.")
+			}
+		}
+	}
+
+	// Invariant 14 (v1.5 — T1.3 + EC-2): global config block declares
+	// `servers { trusted_proxies static <CF-IPv4-ranges> }` so Caddy honors
+	// the cf-connecting-ip header ONLY when traffic arrives from CF's IP
+	// ranges (defense vs spoofed header from non-CF hop).
+	trustedProxiesRe := regexp.MustCompile(`(?m)^\s*trusted_proxies\s+static\s`)
+	if !trustedProxiesRe.MatchString(content) {
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_trusted_proxies_static_cf_ranges — global `servers { trusted_proxies static ... }` block MISSING from Caddyfile. EC-2 absorption: without trusted_proxies CF ranges, Caddy refuses to honor cf-connecting-ip header → rate_limit buckets share one slot across all CF traffic. Pin CF's published IPv4 ranges per https://www.cloudflare.com/ips/ + annual refresh.")
+	} else {
+		// Sanity-count: at least 10 CIDR-shaped tokens between trusted_proxies
+		// static and the closing }.
+		cidrRe := regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}\b`)
+		// Heuristic — count CIDRs anywhere in the file. Full CF list is ~22;
+		// require ≥ 10 (gives operator room to drop deprecated ranges).
+		if matches := cidrRe.FindAllString(content, -1); len(matches) < 10 {
+			out.Pass = false
+			out.Violations = append(out.Violations, fmt.Sprintf(
+				"assert_trusted_proxies_cf_ranges_count — only %d CIDR(s) found in Caddyfile; CF's published list has ~22. Plan kratos-self-service-rate-limit-systemic T1.2 requires ≥ 10 CF IPv4 CIDRs pinned.",
+				len(matches)))
+		}
+	}
+
 	return out, nil
+}
+
+// extractAuthDevBlock returns the body of the `auth-dev.loopzero.example { ... }`
+// host block via brace-balance counting starting at the opening `{`. T1.3 of
+// plan kratos-self-service-rate-limit-systemic v1.1. Returns (body, true) on
+// success, ("", false) when the opening directive is missing or unbalanced.
+func extractAuthDevBlock(content string) (string, bool) {
+	openLoc := authDevBlockOpenRe.FindStringIndex(content)
+	if openLoc == nil {
+		return "", false
+	}
+	depth := 1
+	start := openLoc[1]
+	for i := start; i < len(content); i++ {
+		switch content[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return content[start:i], true
+			}
+		}
+	}
+	return "", false
 }
 
 // extractAppDevBlock returns the body of the `app-dev.loopzero.example { ... }`
