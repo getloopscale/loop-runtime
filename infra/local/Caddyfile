@@ -241,14 +241,19 @@ app-dev.loopzero.example {
     }
   }
 
-  # Catch-all: SPA prod-bundle (every path not matched above). file_server +
-  # try_files are wrapped HERE so the SPA-fallback rewrite only applies to
-  # dashboard client-side routes, never to API paths above.
+  # Catch-all: SPA prod-bundle (every path not matched above). Canonical
+  # Caddy v2 SPA shape — `root` declared at the handle-block level (NOT
+  # via vars placeholder, which silently failed env resolution at request
+  # time on this Caddy build). file_server reads {http.vars.root} set by
+  # `root *`, try_files rewrites missing paths to /index.html, then
+  # file_server serves. Fixed 2026-06-27 per Red Team #95 (P0 blocker —
+  # app-dev returned 404 for /, /index.html, /__config.js despite the
+  # bundle being present + DASHBOARD_DIST env var set).
   handle {
-    root * {env.DASHBOARD_DIST:./dashboard-dist}
+    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
     encode gzip
-    file_server
     try_files {path} /index.html
+    file_server
   }
 }
 
