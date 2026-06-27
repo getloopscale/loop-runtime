@@ -165,12 +165,14 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			LastDeployStatus: string(enforcement.MapProjectStatus(
 				r.ActiveReleaseStatusRaw,
 				statemachine.State(r.LastDeployStatusRaw),
+				r.LatestBuildEnvironment,
 			)),
 			// T5.3 LIVE-bug fix (2026-06-08): additive completion of T2.1's
 			// summary contract. AppsCount + LatestFramework feed the
 			// /projects table Apps + Framework columns (was always 0 / —).
-			AppsCount:       r.AppsCount,
-			LatestFramework: r.LatestFrameworkRaw,
+			AppsCount:              r.AppsCount,
+			LatestFramework:        r.LatestFrameworkRaw,
+			LatestBuildEnvironment: r.LatestBuildEnvironment,
 		}
 		if r.CreatedAt.Valid {
 			out.CreatedAt = r.CreatedAt.Time

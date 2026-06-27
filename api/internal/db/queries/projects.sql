@@ -92,6 +92,7 @@ SELECT
   latest_build.created_at AS last_deploy_at,
   COALESCE(jsonb_array_length(latest_build.apps_spec), 0)::bigint AS apps_count,
   COALESCE(latest_build.apps_spec->0->>'type', '')::text AS latest_framework_raw,
+  COALESCE(latest_build.environment, '')::text AS latest_build_environment,
   COALESCE(active_release.status, '')::text AS active_release_status_raw
 FROM projects p
 LEFT JOIN LATERAL (
@@ -100,7 +101,7 @@ LEFT JOIN LATERAL (
   WHERE et.tenant_id = p.tenant_id AND et.project_id = p.name
 ) env_count ON true
 LEFT JOIN LATERAL (
-  SELECT b.status, b.created_at, b.apps_spec
+  SELECT b.status, b.created_at, b.apps_spec, b.environment
   FROM builds b
   WHERE b.tenant_id = p.tenant_id AND b.project_id = p.name
   ORDER BY b.created_at DESC, b.id DESC
