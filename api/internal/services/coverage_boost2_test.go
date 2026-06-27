@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,7 +157,7 @@ func (f *fakeReleaseConvergenceStoreForCallback) CancelAllByEnv(_ context.Contex
 
 func TestNewSyncCallbackActivator(t *testing.T) {
 	store := &fakeReleaseConvergenceStoreForCallback{}
-	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", nil)
+	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", "", nil)
 	if activator == nil {
 		t.Fatal("expected non-nil activator")
 	}
@@ -164,7 +165,7 @@ func TestNewSyncCallbackActivator(t *testing.T) {
 
 func TestSyncCallbackActivator_OnSyncCompleted_InvalidAppName(t *testing.T) {
 	store := &fakeReleaseConvergenceStoreForCallback{}
-	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", nil)
+	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", "", nil)
 
 	err := activator.OnSyncCompleted("nohyphen", "abc123")
 	if err == nil {
@@ -177,7 +178,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_NoMatchingReleases(t *testing.T) 
 		pendingReleases: nil, // no pending releases
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", testLogger())
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger())
 
 	// Should succeed with 0 activations
 	err := activator.OnSyncCompleted("tn-acme-production", "rev123")
@@ -198,7 +199,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsEmptyGitCommit(t *testing.T)
 		},
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", testLogger())
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger())
 
 	err := activator.OnSyncCompleted("tn-acme-production", "rev123")
 	if err != nil {
@@ -222,7 +223,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsMismatchedRevision(t *testin
 		},
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", testLogger())
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger())
 
 	err := activator.OnSyncCompleted("tn-acme-production", "different-revision")
 	if err != nil {
@@ -250,7 +251,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_ActivatesMatchingRelease(t *testi
 	ets := newFakeEnvTargetStoreStatic()
 	locker := &fakeLockerStatic{}
 
-	activator := NewSyncCallbackActivator(store, ets, locker, es, "dev.loopzero.example", testLogger())
+	activator := NewSyncCallbackActivator(store, ets, locker, es, "dev.loopzero.example", "", testLogger())
 
 	err := activator.OnSyncCompleted("tn-acme-production", "commit-abc")
 	if err != nil {
@@ -335,7 +336,7 @@ func TestReleaseAppsToActivationApps_EmptyApps(t *testing.T) {
 		Environment: "production",
 		Apps:        json.RawMessage(`[]`),
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example")
+	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
 	if len(apps) != 0 {
 		t.Errorf("expected 0 apps, got %d", len(apps))
 	}
@@ -352,7 +353,7 @@ func TestReleaseAppsToActivationApps_WithApps(t *testing.T) {
 		Environment: "production",
 		Apps:        appsJSON,
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example")
+	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
 	if len(apps) != 2 {
 		t.Fatalf("expected 2 apps, got %d", len(apps))
 	}
@@ -366,7 +367,7 @@ func TestReleaseAppsToActivationApps_InvalidJSON(t *testing.T) {
 		TenantID: "tn-acme", ProjectID: "my-app", Environment: "production",
 		Apps: json.RawMessage(`invalid-json`),
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example")
+	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
 	if len(apps) != 0 {
 		t.Errorf("expected 0 apps for invalid JSON, got %d", len(apps))
 	}
@@ -377,9 +378,62 @@ func TestReleaseAppsToActivationApps_NilApps(t *testing.T) {
 		TenantID: "tn-acme", ProjectID: "my-app", Environment: "production",
 		Apps: nil,
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example")
+	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
 	if len(apps) != 0 {
 		t.Errorf("expected 0 apps for nil Apps, got %d", len(apps))
+	}
+}
+
+// TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61 is the
+// release-blockers-2026-06-25-set v1.1 #61 RED test. When both baseDomain
+// ("loopzero.local" — internal, non-resolvable) AND publicDomain
+// ("prod-dev.loopzero.example" — canonical public wildcard) are set, the URL
+// emitted on deploy.completed MUST use publicDomain — the SAME URL that
+// `loopzero status` returns. Pre-#61 the function only accepted baseDomain →
+// `loopzero deploy` announced `.loopzero.local` while `loopzero status` returned
+// `.prod-dev.loopzero.example`. The mismatch is the bug.
+func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testing.T) {
+	appsJSON, _ := json.Marshal([]AppRelease{
+		{Name: "app", Type: "server"},
+	})
+	release := &db.Release{
+		TenantID:    "tn-cb13ca5299a9391a",
+		ProjectID:   "loopzerokit-example",
+		Environment: "preview",
+		Apps:        appsJSON,
+	}
+	apps := releaseAppsToActivationApps(release, "loopzero.local", "prod-dev.loopzero.example")
+	if len(apps) != 1 {
+		t.Fatalf("expected 1 app, got %d", len(apps))
+	}
+	wantURL := "https://tn-cb13ca5299a9391a-loopzerokit-example-app-preview.prod-dev.loopzero.example"
+	if apps[0].URL != wantURL {
+		t.Errorf("#61 regression: got URL %q, want %q (publicDomain MUST be preferred over .loopzero.local)",
+			apps[0].URL, wantURL)
+	}
+	// Critical anti-regression: NEVER announce the internal .loopzero.local hostname.
+	if strings.Contains(apps[0].URL, ".loopzero.local") {
+		t.Fatalf("#61 regression: URL %q must NOT contain the internal .loopzero.local hostname", apps[0].URL)
+	}
+}
+
+// TestReleaseAppsToActivationApps_FallsBackToBaseDomainWhenPublicEmpty_M61
+// is the backward-compat guard: existing test fixtures + local-dev envs
+// without a public override must still get the baseDomain-based URL.
+func TestReleaseAppsToActivationApps_FallsBackToBaseDomainWhenPublicEmpty_M61(t *testing.T) {
+	appsJSON, _ := json.Marshal([]AppRelease{
+		{Name: "app", Type: "server"},
+	})
+	release := &db.Release{
+		TenantID:    "tn-acme",
+		ProjectID:   "my-app",
+		Environment: "production",
+		Apps:        appsJSON,
+	}
+	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
+	wantURL := "https://tn-acme-my-app-app-production.dev.loopzero.example"
+	if apps[0].URL != wantURL {
+		t.Errorf("expected fallback URL %q, got %q", wantURL, apps[0].URL)
 	}
 }
 

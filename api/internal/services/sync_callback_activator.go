@@ -21,6 +21,7 @@ import (
 //
 // This is the push-based replacement for Phase D polling.
 // MEET-2026-03-27-012: ArgoCD notifies instead of API polling.
+// publicDomain is added per release-blockers-2026-06-25-set v1.1 #61.
 type SyncCallbackActivator struct {
 	releaseStore   ReleaseConvergenceStore
 	envTargetStore db.EnvironmentTargetStore
@@ -29,7 +30,13 @@ type SyncCallbackActivator struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	baseDomain string
-	logger     *slog.Logger
+	// publicDomain is the operator-configured wildcard root mirrored from
+	// LOOPZERO_PUBLIC_DOMAIN (e.g. `prod-dev.loopzero.example`). When set, the
+	// deploy.completed SSE event URL uses this domain instead of the legacy
+	// baseDomain (`loopzero.local`) — closes loopzero-cloud#61 so the URL `loopzero deploy`
+	// announces is the SAME publicly-resolvable URL `loopzero status` returns.
+	publicDomain string
+	logger       *slog.Logger
 	// Sprint B B3 (closes code-005): optional label-based lookup. When wired,
 	// OnSyncCompleted reads `loopzero.io/tenant` + `loopzero.io/environment` labels off
 	// the ArgoCD App CR instead of LastIndex-parsing the app name. Falls back
@@ -87,6 +94,12 @@ func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName str
 }
 
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
+//
+// release-blockers-2026-06-25-set v1.1 #61: publicDomain is the
+// canonical public wildcard (LOOPZERO_PUBLIC_DOMAIN) used to compose the
+// URL announced in the deploy.completed SSE event. Empty publicDomain
+// falls back to baseDomain (legacy default `loopzero.local`) so test fixtures
+// + envs without a public wildcard preserve pre-#61 behavior.
 func NewSyncCallbackActivator(
 	releaseStore ReleaseConvergenceStore,
 	envTargetStore db.EnvironmentTargetStore,
@@ -94,7 +107,7 @@ func NewSyncCallbackActivator(
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
-	baseDomain string,
+	baseDomain, publicDomain string,
 	logger *slog.Logger,
 ) *SyncCallbackActivator {
 	return &SyncCallbackActivator{
@@ -103,6 +116,7 @@ func NewSyncCallbackActivator(
 		locker:         locker,
 		eventStore:     eventStore,
 		baseDomain:     baseDomain,
+		publicDomain:   publicDomain,
 		logger:         logger,
 	}
 }
@@ -217,7 +231,7 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 
 func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db.Release) error {
 	return a.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		apps := releaseAppsToActivationApps(release, a.baseDomain)
+		apps := releaseAppsToActivationApps(release, a.baseDomain, a.publicDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
 		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, apps, duration, a.logger)
 	})

@@ -14,11 +14,11 @@ import (
 func TestEnvManagerAdapter_HasEnvironment_ExistsWhenDetailNonNil(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
-		func(_ context.Context, _, _ string) (any, error) {
+		func(_ context.Context, _, _, _ string) (any, error) {
 			return struct{ Name string }{"prod"}, nil
 		},
 	)
-	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "prod")
+	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "", "prod")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -32,11 +32,11 @@ func TestEnvManagerAdapter_HasEnvironment_ExistsWhenDetailNonNil(t *testing.T) {
 func TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
-		func(_ context.Context, _, _ string) (any, error) {
+		func(_ context.Context, _, _, _ string) (any, error) {
 			return nil, nil // env not present per TenantCRManager
 		},
 	)
-	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "preview")
+	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "", "preview")
 	if err != nil {
 		t.Fatalf("expected nil err for absent, got %v", err)
 	}
@@ -50,11 +50,11 @@ func TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic(t *testing.T) {
 func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
-		func(_ context.Context, _, _ string) (any, error) {
+		func(_ context.Context, _, _, _ string) (any, error) {
 			return nil, errors.New("environment not found")
 		},
 	)
-	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "preview")
+	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "", "preview")
 	if err != nil {
 		t.Fatalf("expected nil err for not-found message, got %v", err)
 	}
@@ -68,11 +68,11 @@ func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError(t *testing.T) {
 func TestEnvManagerAdapter_HasEnvironment_PropagatesOtherErrors(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
-		func(_ context.Context, _, _ string) (any, error) {
+		func(_ context.Context, _, _, _ string) (any, error) {
 			return nil, errors.New("forbidden")
 		},
 	)
-	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "preview")
+	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "", "preview")
 	if err == nil {
 		t.Errorf("expected error for non-not-found, got nil")
 	}
@@ -93,7 +93,7 @@ func TestEnvManagerAdapter_AddEnvironment_Delegates(t *testing.T) {
 			}
 			return nil
 		},
-		func(_ context.Context, _, _ string) (any, error) { return nil, nil },
+		func(_ context.Context, _, _, _ string) (any, error) { return nil, nil },
 	)
 	if err := adder.AddEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Fatalf("unexpected err: %v", err)

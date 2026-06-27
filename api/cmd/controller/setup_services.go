@@ -196,6 +196,9 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Release convergence loop ----
+	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain (canonical
+	// LOOPZERO_PUBLIC_DOMAIN) preferred over BaseDomain for deploy.completed
+	// URL so it matches `loopzero status`.
 	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
 		releaseStore,
 		envTargetStore,
@@ -203,6 +206,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		locker,
 		pgEventStore,
 		cfg.BaseDomain,
+		cfg.PublicDomain,
 		logger,
 		services.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,

@@ -250,8 +250,13 @@ func setupOrchestrator(
 
 	// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 	// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
+	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain is the
+	// canonical public wildcard (LOOPZERO_PUBLIC_DOMAIN) — same source
+	// status.go uses — so deploy.completed SSE URL matches `loopzero status`.
+	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
+	// behavior for envs without a public override).
 	syncCallbackActivator := services.NewSyncCallbackActivator(
-		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, logger,
+		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	)
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
 	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead

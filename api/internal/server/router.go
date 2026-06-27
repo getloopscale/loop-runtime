@@ -137,11 +137,20 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 
 	// Admin endpoints — operator primitives, X-Service-Auth only (no user
-	// context). Handler enforces LOOPZERO_ADMIN_API=true + service-auth match
-	// itself (admin_evict.go:73-83). Sibling of /webhooks/github so it
-	// bypasses the user-auth middleware that requires identity headers.
+	// context). Sibling of /webhooks/github so it bypasses the user-auth
+	// middleware that requires identity headers.
+	//
+	// qa-sprint2-cleanup-2026-06-24 T1.2 (closes loopzero-cloud#16): /evict now
+	// wraps the handler with middleware.RequireAdminService (chi canonical
+	// r.With form). The middleware reads only LOOPZERO_ADMIN_SERVICE_AUTH_SECRET
+	// (canonical) + _PREVIOUS — NOT the legacy LOOPZERO_SERVICE_AUTH_SECRET that
+	// the cloud /engine/* proxy carries on user-JWT requests. The handler
+	// still enforces LOOPZERO_ADMIN_API=true as a separate defense-in-depth gate.
 	if cfg.AdminEvictor != nil {
-		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
+		r.With(middleware.RequireAdminService).Post(
+			"/api/v1/admin/tenants/evict",
+			routes.AdminEvictHandler(cfg.AdminEvictor),
+		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if cfg.AdminPinner != nil {

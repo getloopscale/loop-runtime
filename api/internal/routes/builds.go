@@ -17,6 +17,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -283,7 +284,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.RedeployOf != "" {
 		src, srcErr := h.orch.GetRedeploySource(ctx, uc.TenantID, req.RedeployOf)
 		if srcErr != nil {
-			mapBuildError(w, srcErr)
+			mapBuildError(w, r, srcErr)
 			return
 		}
 		req.ProjectID = src.ProjectID
@@ -461,7 +462,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: correlation.Read(r), //nolint:contextcheck // header from original request (T6.1 uniform read via helper)
 	})
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 
@@ -487,7 +488,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Returns 404 (not 403) to avoid leaking build existence across tenants.
 	buildTenantID, err := h.orch.GetBuildTenantID(ctx, buildID)
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 	if buildTenantID != uc.TenantID {
@@ -497,7 +498,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.orch.GetBuildStatus(ctx, buildID)
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 
@@ -524,7 +525,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	// Returns 404 (not 403) to avoid leaking build existence across tenants.
 	buildTenantID, err := h.orch.GetBuildTenantID(ctx, buildID)
 	if err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 	if buildTenantID != uc.TenantID {
@@ -533,7 +534,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.orch.CancelBuild(ctx, buildID); err != nil {
-		mapBuildError(w, err)
+		mapBuildError(w, r, err)
 		return
 	}
 
@@ -543,7 +544,20 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 }
 
 // mapBuildError maps orchestrator errors to HTTP responses.
-func mapBuildError(w http.ResponseWriter, err error) {
+//
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
+// extends the ladder with services.AsSubmitBuildError dispatch BEFORE the
+// fallback so wrap-site discriminated errors from BuildOrchestrator.SubmitBuild
+// (workflow / project ensure / DB write / app normalize / unknown) surface
+// with reason-specific messages composed with the verbatim cause — instead
+// of the generic catchall "Something went wrong" that #34 complained about.
+// EC-3 preserved: DEPLOY_IN_PROGRESS short-circuit + typed *LoopZeroError
+// dispatch order unchanged.
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: signature takes the
+// *http.Request so the SubmitBuildError branch can thread the request's
+// correlation ID into the user-facing message (trace-id fallback). Other
+// branches (typed *LoopZeroError + generic catchall) ignore r.
+func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	var loopzeroErr *loopzeroerrors.LoopZeroError
 	if errors.As(err, &loopzeroErr) {
 		// DA-18: Override message for DEPLOY_IN_PROGRESS
@@ -559,6 +573,28 @@ func mapBuildError(w http.ResponseWriter, err error) {
 		return
 	}
 
+	// Sprint 6 ADR D3: dispatch wrap-site discriminated *SubmitBuildError
+	// BEFORE the generic catchall. The reason label is the wire form
+	// (Stringer output); the verbatim cause is composed into the user-
+	// facing message via pkg/errors.NewBuildSubmitFailedFromReason.
+	if se, ok := services.AsSubmitBuildError(err); ok {
+		slog.Error("build trigger failed (typed)",
+			"reason", se.Reason.String(),
+			"stage", string(se.Stage),
+			"detail", se.Detail,
+			"cause", se.Cause.Error(),
+		)
+		// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: thread the
+		// correlation/trace ID into the user-facing message so when the
+		// scrub collapses Detail to placeholder-only, the operator still
+		// gets a "Reference: <id>. Contact support if it persists." handle
+		// to the server-side log (closes the #35 Red Team original
+		// suggestion of separating client-facing from server-side cause).
+		writeLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReasonWithTrace(
+			se.Reason.String(), se.Detail, correlation.Read(r)))
+		return
+	}
+
 	// F-03: Log unexpected errors for debugging — the audit middleware only logs
 	// status=500 at INFO level, which is useless for diagnosing root causes.
 	slog.Error("unexpected error in build handler",
@@ -566,7 +602,9 @@ func mapBuildError(w http.ResponseWriter, err error) {
 		"type", fmt.Sprintf("%T", err),
 	)
 
-	// Fallback for unexpected errors
+	// Fallback for genuinely-unexpected errors (request decode, etc.).
+	// Sprint 6 narrowed the orchestrator surface so this only fires for
+	// errors that genuinely came from outside BuildOrchestrator.SubmitBuild.
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 }
 

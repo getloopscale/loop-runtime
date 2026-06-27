@@ -90,11 +90,61 @@ auth.loopzero.example {
 # https://auth-dev.loopzero.example/self-service/methods/oidc/callback/{provider}.
 
 app-dev.loopzero.example {
-  @ws {
-    header Connection *Upgrade*
-    header Upgrade websocket
+  # Plan release-blockers-2026-06-25-set T1.1 + T2.1 (closes #44+#45+#47).
+  # 4-header response set (X-Frame DENY + nosniff + Referrer + HSTS) applied at
+  # every response from this host block. Closes #44 clickjacking + #45 nosniff/
+  # Referrer/HSTS gap on the SPA.
+  #
+  # Plan caddyfile-app-dev-prod-bundle-file-server-canonical (2026-06-26):
+  # closes Red Team loopzero-cloud#66 (Vite source TypeScript publicly served).
+  # Prior plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 ADR D2 was wrong —
+  # it argued the operator-local Caddy was non-public, removed Vite-path 404
+  # guards + kept the Vite dev reverse-proxy. Reality: this Caddy IS public
+  # via Cloudflare DNS, so Vite dev source TypeScript + HMR runtime +
+  # node_modules cache leaked publicly. Per blueprint Option B canonical-
+  # shipped — switched to file_server serving dashboard/dist (prod-bundle);
+  # those Vite source files are NEVER reachable publicly because they don't
+  # exist in the served root. CSP restored matching dashboard/nginx.conf
+  # canonical shape. Operator workflow: cd loopzero-cloud/dashboard && npm run
+  # build before task cloud:caddy:up. The Taskfile target cloud:caddy:up
+  # exports DASHBOARD_DIST automatically to the workspace sibling repo
+  # loopzero-cloud/dashboard/dist (per /home/paulo/loopzero-cloud/{loopzero,loopzero-cloud,
+  # loopzero-cli,loopzero-contracts} workspace layout). Override DASHBOARD_DIST
+  # before task invocation if you have a non-standard layout.
+  # See docs/operations/operator-local-caddy-workflow.md.
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    # CSP MUST be a superset of dashboard/index.html <meta> CSP — browsers
+    # enforce the STRICTER intersection of header CSP vs meta CSP (WHATWG
+    # fetch spec). The meta CSP is the dashboard team's canonical contract:
+    # script-src 'unsafe-inline' (PWA service-worker register inline),
+    # style-src + font-src allowlist Google Fonts (Geist family), connect-src
+    # allowlist Stripe checkout. frame-ancestors is header-only (not valid
+    # in meta) so it's added here. Caught LIVE 2026-06-26 by Red Team Chrome
+    # devtools when prior version stripped Google Fonts via narrower header
+    # CSP intersection. Plan caddyfile-app-dev-prod-bundle-file-server-
+    # canonical v1.2.
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
-  reverse_proxy @ws localhost:5173
+
+  # CANONICAL CADDY V2 SPA + API PROXY PATTERN (v1.3 — 2026-06-26):
+  # Explicit `handle` blocks for API/auth proxies MUST come BEFORE the
+  # catch-all `handle {}` block. Caddy v2 evaluates `handle` blocks in
+  # source order and the FIRST match wins; an unnamed `handle {}` matches
+  # everything not previously matched. Without this nesting, `try_files`
+  # (which is in the "rewrite" directive group and runs BEFORE the routing
+  # phase) was rewriting EVERY non-existent path to /index.html — including
+  # /sessions/whoami and /v1/auth/me — so the reverse-proxies never saw
+  # them and the dashboard JSON.parse'd SPA HTML as auth responses (LIVE
+  # caught 2026-06-26 by Red Team Chrome devtools: `[auth] getSession:
+  # network/parse error SyntaxError: Unexpected token '<', "<!DOCTYPE "
+  # ... is not valid JSON`). The fix wraps file_server + try_files in the
+  # catch-all `handle {}` so the rewrite ONLY applies to paths that fell
+  # through every explicit handle — i.e., dashboard SPA routes, not API
+  # paths. Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.3.
 
   handle /sessions/* {
     reverse_proxy localhost:14433 {
@@ -134,11 +184,42 @@ app-dev.loopzero.example {
     }
   }
 
-  reverse_proxy localhost:5173
-  encode gzip
+  # Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.4 (2026-06-26
+  # — closes loopzero-cloud#88): /engine/* is the canonical BFF proxy prefix the
+  # dashboard (`engineFetch` in `src/lib/api.ts:197` → `cloudFetch(`/engine${path}`)`)
+  # AND the LoopZero CLI (`loopzero whoami` → `GET ${LOOPZERO_URL}/engine/api/v1/auth/whoami`)
+  # both use to reach the engine API via loopzero-cloud's opaque pass-through
+  # (`/engine/*` route in loopzero-cloud authenticated with Ed25519 service-auth
+  # per loopzero-cloud/CLAUDE.md). Without this handle, every engine call
+  # (deploy, whoami, list projects, build status, …) falls through to the
+  # SPA catch-all and the consumer JSON.parse's `<!DOCTYPE html>...` →
+  # Red Team #88 LIVE: `loopzero whoami → "Cannot reach API"` + dashboard
+  # dashboard data screens render blank. Mirror /v1/* shape (Host: cloud-dev
+  # so loopzero-cloud's host-aware middleware treats this as the canonical
+  # cross-origin proxy entry).
+  handle /engine/* {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
+
+  # Catch-all: SPA prod-bundle (every path not matched above). file_server +
+  # try_files are wrapped HERE so the SPA-fallback rewrite only applies to
+  # dashboard client-side routes, never to API paths above.
+  handle {
+    root * {env.DASHBOARD_DIST:./dashboard-dist}
+    encode gzip
+    file_server
+    try_files {path} /index.html
+  }
 }
 
 cloud-dev.loopzero.example {
+  # Plan release-blockers-2026-06-25-set T1.2 (closes #47).
+  # HSTS at the edge — the Go cloud middleware already emits CSP/nosniff/XFO/
+  # Referrer; only HSTS was missing per Red Team #47.
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
   # Plan J-09 T4.1 (2026-06-06) — GitHub webhook bypass cloud auth proxy.
   # GitHub does NOT send JWT/cookie -- it signs the body with HMAC-SHA256
   # using the App's webhook secret. loopzero-api validates that signature
@@ -165,6 +246,10 @@ cloud-dev.loopzero.example {
 }
 
 auth-dev.loopzero.example {
+  # Plan release-blockers-2026-06-25-set T1.3 (closes #45 — HSTS on /auth-dev).
+  # Kratos/Hydra public endpoints assert HSTS at the edge.
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
   # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
   # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,
   # so browser must reach Hydra (port-forward localhost:14444), not Kratos.

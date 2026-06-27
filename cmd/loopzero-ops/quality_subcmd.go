@@ -39,6 +39,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/quality/baseimagedigest"
 	"github.com/getloopscale/loopzero/pkg/quality/baselinecompare"
 	"github.com/getloopscale/loopzero/pkg/quality/baselineupdate"
+	"github.com/getloopscale/loopzero/pkg/quality/caddyfilecspgate"
 	"github.com/getloopscale/loopzero/pkg/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/pkg/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/pkg/quality/clusterimagepolicymode"
@@ -190,6 +191,19 @@ GATES:
                   Fail if cli/src process.exit() uses a code outside 0-5
                   (Rule 4; 130/143 allowed only in SIG handlers). Migrated from
                   check-cli-exit-codes_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  caddyfile-csp
+                  Assert the app-dev.loopzero.example block of infra/local/Caddyfile
+                  serves the prod-bundle via file_server + try_files SPA
+                  fallback (Red Team loopzero-cloud#66 closed), emits the canonical
+                  CSP matching dashboard/nginx.conf, preserves the 4 non-CSP
+                  security headers (X-Frame-Options DENY, nosniff, Referrer-
+                  Policy, HSTS), and does NOT reverse-proxy to Vite dev (which
+                  leaked source TypeScript publicly). Per plan
+                  caddyfile-app-dev-prod-bundle-file-server-canonical v1
+                  (supersedes caddyfile-csp-vite-dev-vs-prod-bundle ADR D2).
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -366,6 +380,8 @@ func runQuality(args []string) int {
 		return runDashboardPromtool(args[1:])
 	case "cli-exit-codes":
 		return runCLIExitCodes(args[1:])
+	case "caddyfile-csp":
+		return runCaddyfileCSP(args[1:])
 	case "acyclic-graph":
 		return runAcyclicGraph(args[1:])
 	case "shell-hygiene":
@@ -2844,5 +2860,50 @@ func runCorrelationHeader(args []string) int {
 		return 1
 	}
 	fmt.Println("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/")
+	return 0
+}
+
+// runCaddyfileCSP is the Go home for the caddyfile-csp gate (migrated from
+// infra/tests/check-caddyfile-app-dev-no-csp_test.sh) per plan
+// caddyfile-csp-vite-dev-vs-prod-bundle v1.1 T1.1.
+//
+// Closes the 2026-06-26 LIVE regression on app-dev.loopzero.example/device-verify
+// where the operator-local-edge Caddyfile inherited prod-strict CSP from
+// #44/#45/#46 that broke the Vite-dev upstream. ADR D1+D2+D3 invariants
+// asserted via Go regex/string matching on the app-dev block; sibling blocks
+// (cloud-dev, auth-dev) are not affected (block-bound extraction via brace
+// counting).
+func runCaddyfileCSP(args []string) int {
+	fs := flag.NewFlagSet("caddyfile-csp", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := caddyfilecspgate.Check(caddyfilecspgate.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "caddyfile-csp: %v\n", err)
+		return 5
+	}
+	if outcome.Skipped {
+		fmt.Println("caddyfile-csp: SKIP — infra/local/Caddyfile not present")
+		return 0
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "caddyfile-csp: FAIL — %d invariant(s) violated:\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Per plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1: the operator-local-edge")
+		fmt.Fprintln(os.Stderr, "Per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1 (closes Red Team")
+		fmt.Fprintln(os.Stderr, "loopzero-cloud#66): the operator-local Caddyfile app-dev block MUST serve the")
+		fmt.Fprintln(os.Stderr, "prod-bundle via file_server + emit canonical CSP from dashboard/nginx.conf.")
+		return 1
+	}
+	fmt.Println("caddyfile-csp: PASS — app-dev block serves prod-bundle via file_server + canonical CSP + 4 preserved headers + try_files SPA fallback (Red Team #66 closed)")
 	return 0
 }

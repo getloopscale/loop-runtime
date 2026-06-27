@@ -95,48 +95,62 @@ func compileSchema() (*jsonschema.Schema, error) {
 // that still need the *LoopZeroYAML adapter; it now delegates here.
 func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 	if strings.TrimSpace(content) == "" {
-		return nil, &ValidationError{
-			Field:   "services_json",
-			Message: "E-008: missing payload (services.json content is empty)",
-		}
+		return nil, NewValidationError(
+			"services_json",
+			"E-008: missing payload (services.json content is empty)",
+		)
 	}
 
 	schema, err := compileSchema()
 	if err != nil {
-		return nil, &ValidationError{
-			Field:   "_internal",
-			Message: fmt.Sprintf("schema compile failed: %s", err.Error()),
-		}
+		return nil, NewValidationError(
+			"_internal",
+			fmt.Sprintf("schema compile failed: %s", err.Error()),
+		)
 	}
 
 	var raw interface{}
 	if err := json.Unmarshal([]byte(content), &raw); err != nil {
-		return nil, &ValidationError{
-			Field:   "services_json",
-			Message: fmt.Sprintf("E-008: invalid JSON payload: %s", err.Error()),
-		}
+		return nil, NewValidationError(
+			"services_json",
+			fmt.Sprintf("E-008: invalid JSON payload: %s", err.Error()),
+		)
 	}
 
 	if err := schema.Validate(raw); err != nil {
-		var ve *jsonschema.ValidationError
-		msg := err.Error()
+		// Sprint 4 T2.2 (closes loopzero-cloud#29): walk the FULL Causes tree,
+		// collecting every leaf violation into a flat FieldError slice. Replaces
+		// the legacy `leaf := ve.Causes[0]` single-cause walk (which masked
+		// simultaneous violations and produced a cascading-retry trap for the
+		// uploading user). Legacy Field/Message scalars are set from the first
+		// leaf for backward-compat with consumers that haven't migrated to the
+		// Errors slice.
 		if asValidErr, ok := err.(*jsonschema.ValidationError); ok {
-			ve = asValidErr
-			leaf := ve
-			for len(leaf.Causes) > 0 {
-				leaf = leaf.Causes[0]
+			fieldErrors := flattenJSONSchemaCauses(asValidErr)
+			if len(fieldErrors) == 0 {
+				// Defensive: top-level error with no Causes (rare — e.g.,
+				// type-mismatch at root). Surface the top-level message.
+				return nil, NewValidationError(
+					"services_json",
+					fmt.Sprintf("%s: %s", asValidErr.InstanceLocation, asValidErr.Message),
+				)
 			}
-			msg = fmt.Sprintf("%s: %s", leaf.InstanceLocation, leaf.Message)
+			first := fieldErrors[0]
+			return nil, &ValidationError{
+				Field:   first.Field,
+				Message: first.Message,
+				Errors:  fieldErrors,
+			}
 		}
-		return nil, &ValidationError{Field: "services_json", Message: msg}
+		return nil, NewValidationError("services_json", err.Error())
 	}
 
 	var manifest ServicesManifest
 	if err := json.Unmarshal([]byte(content), &manifest); err != nil {
-		return nil, &ValidationError{
-			Field:   "services_json",
-			Message: fmt.Sprintf("decode manifest: %s", err.Error()),
-		}
+		return nil, NewValidationError(
+			"services_json",
+			fmt.Sprintf("decode manifest: %s", err.Error()),
+		)
 	}
 
 	if envErr := validateReservedEnvKeys(&manifest, nil); envErr != nil {
@@ -144,5 +158,38 @@ func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 	}
 
 	return &manifest, nil
+}
+
+// flattenJSONSchemaCauses recursively walks the jsonschema.ValidationError
+// Causes tree and emits one FieldError per LEAF (a cause with no further
+// sub-causes). The InstanceLocation becomes Field; the schema message becomes
+// Message. Sprint 4 T2.2 closes loopzero-cloud#29 (multi-field error aggregation).
+//
+// Walk order is depth-first, left-to-right — matches the order jsonschema/v5
+// emits the Causes slice, which makes the first leaf deterministic and
+// stable for the legacy Field/Message scalars (back-compat).
+func flattenJSONSchemaCauses(ve *jsonschema.ValidationError) []FieldError {
+	if ve == nil {
+		return nil
+	}
+	var out []FieldError
+	var walk func(*jsonschema.ValidationError)
+	walk = func(n *jsonschema.ValidationError) {
+		if n == nil {
+			return
+		}
+		if len(n.Causes) == 0 {
+			out = append(out, FieldError{
+				Field:   n.InstanceLocation,
+				Message: n.Message,
+			})
+			return
+		}
+		for _, c := range n.Causes {
+			walk(c)
+		}
+	}
+	walk(ve)
+	return out
 }
 

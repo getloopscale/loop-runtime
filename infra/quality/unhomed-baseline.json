@@ -1,9 +1,29 @@
 {
-  "total": 164,
+  "total": 170,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 104
-  }
+    "test": 110
+  },
+  "_changelog": [
+    {
+      "date": "2026-06-25",
+      "from": {"total": 169, "test": 109},
+      "to":   {"total": 170, "test": 110},
+      "reason": "Plan m37-tenant-cr-project-sync-canonical-fix v1.0 T3.1 — adds infra/tests/e2e/dev-public-deploy-live-url_test.sh (4 LIVE scenarios A-D for loopzero-cloud#37 cenário 4 BUILD → RELEASE → URL chain). OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md. Sibling T3.2 hermetic guard is categorically homed in task quality:gates; T3.3 dogfood wrapper lives under archive/canonical-tests-v1/scripts/local/ (archive path). +1 test-domain delta is solely the LIVE script. Allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan m37-tenant-cr-project-sync-canonical-fix). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors infra/quality/script-count-baseline.json _changelog 2026-06-25 entries."
+    },
+    {
+      "date": "2026-06-25",
+      "from": {"total": 168, "test": 108},
+      "to":   {"total": 169, "test": 109},
+      "reason": "Sprint 8 plan qa-sprint8-cleanup-2026-06-25 v1.0 T2.1 — adds infra/tests/e2e/dev-public-build-trigger-error-surface_test.sh (6 LIVE scenarios A-F retroactively covering loopzero-cloud#34 Sprint 6 closure debt per the new INQUEBRÁVEL feedback `feedback_issue_fix_requires_failing_e2e_test_2026_06_25`). OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — sponsor JUNTOS browser walkthrough Step 6 gate. The hermetic guard (check-dev-public-build-trigger-error-surface-syntax_test.sh) is categorically homed in task quality:gates (sibling of every infra/tests/check-*-syntax_test.sh) so the +1 test-domain delta is solely the LIVE script. The 3 dogfood wrappers ship under archive/canonical-tests-v1/scripts/local/ (archive path, not infra/tests/). Allowlisted in shell-scripts-allowlist.md § Post-baseline additions (plan qa-sprint8-cleanup-2026-06-25). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors infra/quality/script-count-baseline.json _changelog 2026-06-25 entries."
+    },
+    {
+      "date": "2026-06-25",
+      "from": {"total": 165, "test": 105},
+      "to":   {"total": 166, "test": 106},
+      "reason": "Sprint 5 plan qa-sprint5-cleanup-2026-06-25 v1.0 ships the canonical 3-script triplet for loopzero-cloud#33 LIVE wire-level coverage (T3.1+T3.2+T3.3). The +1 test-domain delta is `infra/tests/e2e/dev-public-deploy-error-surface_test.sh` (OPERATOR HARD STOP LIVE script per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — sponsor JUNTOS browser walkthrough Step 6 gate). T3.1 hermetic guard + T3.3 dogfood wrapper are sibling but the hermetic guard is a check-script (categorically out-of-scope for un-homing per existing pattern siblings infra/tests/check-*-syntax_test.sh) and the dogfood wrapper lives under archive/canonical-tests-v1/scripts/local/ (archive path, not infra/tests/). Migration of LIVE bash to a homed Go capability for the LIVE-wire-test surface is queued as a future hardening slice per the script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md). Owner-authorized hand-edit ratchet UP — sanctioned auditable pattern that mirrors infra/quality/script-count-baseline.json _changelog 2026-06-18 entry. Allowlisted in .claude/rules/shell-scripts-allowlist.md section Post-baseline additions (plan qa-sprint5-cleanup-2026-06-25 — 2026-06-25)."
+    }
+  ]
 }

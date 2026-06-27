@@ -246,34 +246,33 @@ func main() {
 	// TenantCRManager from k8sDeps; both ensurer + BuildHandler are
 	// composed here in main so we keep the dependency tree explicit.
 	if buildHandler != nil && k8sDeps != nil && k8sDeps.TenantCRMgr != nil {
-		// M2 v1.2 T3.3 (2026-06-07): method value
-		// k8sDeps.TenantCRMgr.AddEnvironment now carries the
-		// (tenantID, project, envName) signature — matches the
-		// NewEnvManagerAdapter closure type after T1.2.
+		// m37 plan canonical fix (2026-06-25): the closure is now per-(project,
+		// env) tuple. The pre-m37 closure matched by env name alone, which
+		// silently returned exists=true when a DIFFERENT project on the same
+		// tenant already used the env name → AddEnvironment was skipped →
+		// Tenant CR spec.environments[] never gained the new tuple →
+		// AppProject destinations never extended → ArgoCD sync failed:
+		// "namespace not permitted in project". Closes #37 cenário 4.
 		//
-		// LIVE regression fix (2026-06-08, deploy hang debugging): the
-		// previous closure called GetEnvironmentDetail(tenantID, "", envName),
-		// but after T2.1 GetEnvironmentDetail filters by the (name, project)
-		// tuple — project="" only matches LEGACY entries (production with
-		// no project). Post-M2 entries with project=web silently failed the
-		// HasEnvironment shallow check, so EnsureEnvironment polled for 60s
-		// then timed out, hanging POST /api/v1/builds for ~30s → 500.
-		//
-		// Correct semantic: the Lister contract is project-AGNOSTIC by design
-		// (the comment on EnvironmentLister in services/environment_ensurer.go
-		// says "shallow existence check is per-tenant by design"). To honor
-		// that without breaking T2.1's tuple semantics, the closure now
-		// iterates ListEnvironments and matches by name only — any (project,
-		// envName) tuple with the matching name returns existence=true.
+		// History (preserved for traceability):
+		//   - M2 v1.2 T3.3 (2026-06-07): AddEnvironment gained the project arg.
+		//   - 2026-06-08: the previous attempt used GetEnvironmentDetail
+		//     (which is project-aware) but the project="" production-legacy
+		//     pathway broke deploy-hang. The 2026-06-08 fix walked
+		//     ListEnvironments and matched on name only — solving the hang
+		//     but reintroducing the m37 silent no-op gap.
+		//   - 2026-06-25 (this plan): tuple-aware match closes both gaps:
+		//     legacy (project="") matches ONLY entries with empty Project;
+		//     post-M2 tuples match by exact (Name, Project) pair.
 		lister, adder := services.NewEnvManagerAdapter(
 			k8sDeps.TenantCRMgr.AddEnvironment,
-			func(ctx context.Context, tenantID, envName string) (any, error) {
+			func(ctx context.Context, tenantID, project, envName string) (any, error) {
 				envs, err := k8sDeps.TenantCRMgr.ListEnvironments(ctx, tenantID)
 				if err != nil {
 					return nil, err
 				}
 				for i := range envs {
-					if envs[i].Name == envName {
+					if envs[i].Name == envName && envs[i].Project == project {
 						return &envs[i], nil
 					}
 				}

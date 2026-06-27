@@ -14,12 +14,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 )
 
 // maxBundleSize is the maximum allowed bundle size (500MB).
@@ -206,11 +207,28 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var ve *source.ValidationError
 		if errors.As(err, &ve) {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.3 (closes
+			// loopzero-cloud#29 multi-field error aggregation): convert the
+			// aggregated source.FieldError slice into the transport-layer
+			// errorshttp.FieldError shape and surface ALL violations in the
+			// response body's `errors[]` extension member (RFC 9457 § 3.2),
+			// not just the first one. The legacy ve.Message scalar continues
+			// to feed the `detail` field for backward-compat with consumers
+			// that haven't migrated to the array.
+			fieldErrors := make([]errorshttp.FieldError, 0, len(ve.Errors))
+			for _, fe := range ve.Errors {
+				fieldErrors = append(fieldErrors, errorshttp.FieldError{
+					Field:    fe.Field,
+					Message:  fe.Message,
+					Expected: fe.Expected,
+					Got:      fe.Got,
+				})
+			}
+			writeLoopZeroErrorWithFieldErrors(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
 				ve.Message,
 				422,
-			))
+			), fieldErrors)
 			return
 		}
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
@@ -283,16 +301,42 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		// error code instead of SOURCE_UPLOAD_FAILED + DEPLOY_IN_PROGRESS for
 		// the same race. Distinct from real upload failures (network, MinIO
 		// 503, malformed bundle) which keep SOURCE_UPLOAD_FAILED.
-		msg := err.Error()
-		if strings.Contains(msg, "cannot lock ref") ||
-			strings.Contains(msg, "remote rejected") ||
-			strings.Contains(msg, "failed to update ref") ||
-			strings.Contains(msg, "stale info") {
+		//
+		// EC-3 absorption: Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
+		// preserves this discriminator UNCHANGED. Order matters: gitea-race
+		// substring matching takes precedence OVER the new typed-error mapping
+		// below, because PushBundle wraps gitea-race errors in a typed
+		// *PushBundleError{Reason: ReasonRemoteRejectedPush} that we want to
+		// surface as DEPLOY_IN_PROGRESS 409 (the F-03 fix) — NOT as
+		// SOURCE_UPLOAD_FAILED 500. Calling source.IsGiteaRaceCondition(err)
+		// works because *PushBundleError.Error() embeds the underlying cause
+		// message; the substring set survives the typed wrap.
+		if source.IsGiteaRaceCondition(err) {
 			slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
-				"team_id", uc.TenantID, "project", projectName, "error", msg)
+				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
 			writeLoopZeroError(w, loopzeroerrors.ErrDeployInProgress)
 			return
 		}
+		// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3 (closes
+		// loopzero-cloud#31): typed PushBundleError mapping — emit a specific
+		// actionable Message per failure mode instead of the misleading
+		// legacy "Ensure your git history is clean" string.
+		if pushErr, ok := source.AsPushBundleError(err); ok {
+			slog.Error("source upload failed (typed)",
+				"team_id", uc.TenantID, "project", projectName,
+				"reason", pushErr.Reason.String(), "detail", pushErr.Detail,
+				"cause", err.Error())
+			// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: thread
+			// the correlation ID so when Sprint 7 scrub collapses Detail
+			// to placeholder-only, the operator gets "Reference: <id>.
+			// Contact support if it persists." (closes #35 Red Team
+			// original suggestion).
+			writeLoopZeroError(w, loopzeroerrors.NewSourceUploadFailedFromPushReasonWithTrace(
+				pushErr.Reason.String(), pushErr.Detail, correlation.Read(r)))
+			return
+		}
+		// Fallback: untyped failure (downstream helper that didn't get
+		// wrapped). Emit the neutral generic fallback per Sprint 4.
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
