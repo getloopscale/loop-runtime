@@ -363,3 +363,73 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 		t.Fatalf("want sync_status unknown, got %s", resp.SyncStatus)
 	}
 }
+
+// Red Team loopzero-cloud#85 regression-protector — provenance.
+// `active_release.git_commit` MUST match the app commit_sha of the
+// build the release references (build.commit_sha), NOT the internal
+// gitops/SoT push commit. The Red Team observed:
+//   last_build.commit_sha   = e52f2f41... (app commit; user pushed)
+//   active_release.git_commit = de6b5c5b... (gitops repo commit; internal)
+//
+// The user-facing field MUST surface the user-pushed commit. The DB
+// column `releases.git_commit` keeps the gitops commit for activator
+// integrity; this is API-surface aliasing only.
+func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing.T) {
+	now := time.Now()
+	const appCommit = "e52f2f41d8334f7fc506ca646ef53b34ad4ddb55"
+	const gitopsCommit = "de6b5c5b728265cc229599143a0d979ceed9bc00"
+
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	builds := &fakeStatusBuildStore{
+		builds: []StatusBuild{
+			{
+				ID:          "bld-1",
+				Environment: "production",
+				Status:      "SUCCEEDED",
+				CommitSHA:   appCommit, // the user-pushed commit
+				CreatedAt:   now,
+			},
+		},
+	}
+	releases := &fakeStatusReleaseStore{
+		release: &StatusRelease{
+			ID:        "rel-1",
+			BuildID:   "bld-1",          // matches the build above
+			Status:    "ACTIVE",
+			GitCommit: gitopsCommit,     // the internal gitops commit — MUST NOT leak as user-facing
+			CreatedAt: now,
+			EntryApp:  "web",
+		},
+	}
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.ActiveRelease == nil {
+		t.Fatal("Red Team #85: active_release must be present")
+	}
+	if resp.ActiveRelease.GitCommit != appCommit {
+		t.Errorf("Red Team #85: active_release.git_commit must equal build.commit_sha (%s), got %s",
+			appCommit, resp.ActiveRelease.GitCommit)
+	}
+	if resp.LastBuild == nil {
+		t.Fatal("Red Team #85: last_build must be present")
+	}
+	if resp.LastBuild.CommitSHA != resp.ActiveRelease.GitCommit {
+		t.Errorf("Red Team #85: last_build.commit_sha (%s) and active_release.git_commit (%s) must be identical for the SAME build",
+			resp.LastBuild.CommitSHA, resp.ActiveRelease.GitCommit)
+	}
+}

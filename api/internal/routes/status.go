@@ -260,7 +260,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if release != nil {
-		resp.ActiveRelease = buildActiveReleaseResponse(release)
+		resp.ActiveRelease = buildActiveReleaseResponse(release, builds)
 		resp.SyncStatus = "synced"
 	}
 
@@ -349,12 +349,31 @@ func findLastBuildForEnv(builds []StatusBuild, env string) *lastBuildResponse {
 
 // buildActiveReleaseResponse converts the domain release record to the
 // canonical response shape.
-func buildActiveReleaseResponse(release *StatusRelease) *activeReleaseResponse {
+//
+// Red Team loopzero-cloud#85 closure: the user-facing `git_commit` field
+// is the APP commit (`build.commit_sha` — what the user pushed and
+// `loopzero deploy` printed in stdout), NOT the internal gitops repo
+// commit (which is what `releases.git_commit` actually stores for
+// SyncCallbackActivator integrity per MEET-2026-03-31-024 BUG-03). When
+// the active release's build_id matches a build in the result set, we
+// prefer that build's commit_sha. Falls back to release.GitCommit for
+// orphan releases (build pruned, legacy data) so the field is never
+// empty.
+func buildActiveReleaseResponse(release *StatusRelease, builds []StatusBuild) *activeReleaseResponse {
+	commit := release.GitCommit
+	if release.BuildID != "" {
+		for i := range builds {
+			if builds[i].ID == release.BuildID && builds[i].CommitSHA != "" {
+				commit = builds[i].CommitSHA
+				break
+			}
+		}
+	}
 	return &activeReleaseResponse{
 		ID:        release.ID,
 		BuildID:   release.BuildID,
 		Status:    release.Status,
-		GitCommit: release.GitCommit,
+		GitCommit: commit,
 		CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
