@@ -175,7 +175,7 @@ app-dev.loopzero.example {
     # devtools when prior version stripped Google Fonts via narrower header
     # CSP intersection. Plan caddyfile-app-dev-prod-bundle-file-server-
     # canonical v1.2.
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
