@@ -183,6 +183,7 @@ SELECT
   p.created_by,
   p.created_at,
   COALESCE(env_count.cnt, 0)::bigint AS environment_count,
+  COALESCE(prod_env_count.cnt, 0)::bigint AS production_env_count,
   COALESCE(latest_build.status, '')::text AS last_deploy_status_raw,
   latest_build.created_at AS last_deploy_at,
   COALESCE(jsonb_array_length(latest_build.apps_spec), 0)::bigint AS apps_count,
@@ -195,6 +196,13 @@ LEFT JOIN LATERAL (
   FROM environment_targets et
   WHERE et.tenant_id = p.tenant_id AND et.project_id = p.name
 ) env_count ON true
+LEFT JOIN LATERAL (
+  SELECT COUNT(*) AS cnt
+  FROM environment_targets et
+  WHERE et.tenant_id = p.tenant_id
+    AND et.project_id = p.name
+    AND et.kind = 'permanent'
+) prod_env_count ON true
 LEFT JOIN LATERAL (
   SELECT b.status, b.created_at, b.apps_spec, b.environment
   FROM builds b
@@ -228,6 +236,7 @@ type ListProjectsWithSummaryByTenantRow struct {
 	CreatedBy              string             `json:"created_by"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	EnvironmentCount       int64              `json:"environment_count"`
+	ProductionEnvCount     int64              `json:"production_env_count"`
 	LastDeployStatusRaw    string             `json:"last_deploy_status_raw"`
 	LastDeployAt           pgtype.Timestamptz `json:"last_deploy_at"`
 	AppsCount              int64              `json:"apps_count"`
@@ -289,6 +298,7 @@ func (q *Queries) ListProjectsWithSummaryByTenant(ctx context.Context, db DBTX, 
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.EnvironmentCount,
+			&i.ProductionEnvCount,
 			&i.LastDeployStatusRaw,
 			&i.LastDeployAt,
 			&i.AppsCount,

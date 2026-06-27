@@ -88,6 +88,14 @@ SELECT
   p.created_by,
   p.created_at,
   COALESCE(env_count.cnt, 0)::bigint AS environment_count,
+  -- Red Team loopzero-cloud#41 absorption (2026-06-27): the legacy
+  -- `environment_count` collapses preview + production envs into one
+  -- count. The dashboard's "Live envs" label was misleading — a project
+  -- with preview-only deploys still rendered `Live envs: 1` AND
+  -- `URL PENDING` side by side. Splitting the count surfaces the
+  -- canonical truth: how many PRODUCTION environments are wired vs
+  -- how many PREVIEW environments exist as separate fields.
+  COALESCE(prod_env_count.cnt, 0)::bigint AS production_env_count,
   COALESCE(latest_build.status, '')::text AS last_deploy_status_raw,
   latest_build.created_at AS last_deploy_at,
   COALESCE(jsonb_array_length(latest_build.apps_spec), 0)::bigint AS apps_count,
@@ -100,6 +108,20 @@ LEFT JOIN LATERAL (
   FROM environment_targets et
   WHERE et.tenant_id = p.tenant_id AND et.project_id = p.name
 ) env_count ON true
+LEFT JOIN LATERAL (
+  -- Red Team loopzero-cloud#41 absorption (2026-06-27): production-only
+  -- env count. A `kind = 'permanent'` env_target is a production-like
+  -- (non-preview) env; a project with zero permanent envs is by
+  -- definition preview-only at the env_targets layer. Combined with
+  -- the latest_build_environment + active_release_status signals in
+  -- enforcement.MapProjectStatus, this is the canonical disambiguator
+  -- the dashboard's "Live envs" / "URL hero" pair was missing.
+  SELECT COUNT(*) AS cnt
+  FROM environment_targets et
+  WHERE et.tenant_id = p.tenant_id
+    AND et.project_id = p.name
+    AND et.kind = 'permanent'
+) prod_env_count ON true
 LEFT JOIN LATERAL (
   SELECT b.status, b.created_at, b.apps_spec, b.environment
   FROM builds b

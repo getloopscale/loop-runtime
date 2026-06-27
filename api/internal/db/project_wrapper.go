@@ -151,11 +151,12 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 	results := make([]domain.ProjectSummary, 0, len(rows))
 	for _, r := range rows {
 		out := domain.ProjectSummary{
-			ID:               r.ID,
-			Name:             r.Name,
-			TeamID:           r.TenantID,
-			CreatedBy:        r.CreatedBy,
-			EnvironmentCount: r.EnvironmentCount,
+			ID:                 r.ID,
+			Name:               r.Name,
+			TeamID:             r.TenantID,
+			CreatedBy:          r.CreatedBy,
+			EnvironmentCount:   r.EnvironmentCount,
+			ProductionEnvCount: r.ProductionEnvCount,
 			// Sponsor LIVE-caught 2026-06-18: the aggregate status MUST
 			// consider release state, not just latest build. A cancelled
 			// build with a still-ACTIVE release is Live, not Failed.
