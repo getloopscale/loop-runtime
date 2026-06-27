@@ -363,9 +363,16 @@ func buildServerConfig(
 		// phase so dashboard reflects operator-observed status. Manager
 		// is canonical (k8sDeps.PreviewCRMgr), not a per-handler
 		// adapter — same dynamic client + namespace const as Tenant CRs.
+		//
+		// Red Team loopzero-cloud#92 absorption (2026-06-27): wire the
+		// ProjectChecker so /previews handlers reject non-existent
+		// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty
+		// list. Existing *db.PostgresProjectStore matches the narrow
+		// interface signature — no adapter needed.
 		sc.PreviewHandler = routes.
 			NewPreviewHandler(previewStore, previewService, logger).
-			WithPhaseLookup(k8sDeps.PreviewCRMgr)
+			WithPhaseLookup(k8sDeps.PreviewCRMgr).
+			WithProjectChecker(&db.PostgresProjectStore{DB: dbAdapter})
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))

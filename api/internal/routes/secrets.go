@@ -584,7 +584,8 @@ func (h *SecretHandler) bulkAggregateStatus(result *secretBulkResult, entry secr
 // List handles GET /api/v1/secrets?env={env}&project={project}.
 // Returns secret names only — NEVER values.
 func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	ctx := r.Context()
+	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -593,7 +594,18 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 	env := r.URL.Query().Get("env")
 	project := r.URL.Query().Get("project")
 
-	secrets, err := h.store.ListNames(r.Context(), uc.TenantID, project, env)
+	// Red Team loopzero-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Without this check, GET /api/v1/secrets?project=<nonexistent> returned
+	// 200 with an empty list. CWE-204 defense + UX: the dashboard's Secrets
+	// page rendered an "Add secret" form on top of a deleted project. Same
+	// `assertSecretProjectBinding` helper used by Set/Bulk/DeleteSecret —
+	// emits byte-identical PROJECT_NOT_FOUND whether the project belongs to
+	// another tenant or does not exist anywhere (no existence leak).
+	if !h.assertSecretProjectBinding(ctx, w, uc.TenantID, uc.UserID, project) {
+		return
+	}
+
+	secrets, err := h.store.ListNames(ctx, uc.TenantID, project, env)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return

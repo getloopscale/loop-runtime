@@ -45,6 +45,23 @@ type Outcome struct {
 // blockOpenRe finds the opening `app-dev.loopzero.example {` line of the host block.
 var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.dev\s*\{`)
 
+// authDevBlockOpenRe finds the opening `auth-dev.loopzero.example {` line of the
+// host block (T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 —
+// rate_limit + trusted_proxies invariants extend the gate to the auth-dev
+// host beyond the existing app-dev coverage).
+var authDevBlockOpenRe = regexp.MustCompile(`(?m)^auth-dev\.loopzero\.dev\s*\{`)
+
+// canonicalRateLimitZones are the 4 zones that MUST be present in the
+// auth-dev host block per T1.2 of plan kratos-self-service-rate-limit-systemic
+// (closes Red Team loopzero-cloud#68 login + #89 recovery + defense-in-depth #43
+// register). Per blueprint Q1 canonical snippet.
+var canonicalRateLimitZones = []string{
+	"zone login_throttle",
+	"zone register_throttle",
+	"zone recovery_throttle",
+	"zone recovery_flow_create_throttle",
+}
+
 // Check enforces the 11 invariants per plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 T1.1.
 // Returns Skipped=true when the Caddyfile is absent (CI runs without the
 // operator-local-edge config are valid no-ops).
@@ -271,7 +288,213 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 	}
 
+	// T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 — 3 new
+	// invariants on the auth-dev block (separate from app-dev). These do NOT
+	// short-circuit the existing app-dev assertions; both blocks are audited.
+	authBlock, authOK := extractAuthDevBlock(content)
+	if !authOK {
+		// auth-dev block is required by the plan; absence is a violation.
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_auth_dev_block_present — `auth-dev.loopzero.example { ... }` host block MISSING. Plan kratos-self-service-rate-limit-systemic T1.2 declares 4 rate_limit zones MUST live inside this block.")
+	} else {
+		// Invariant 12 (v1.5 — T1.3): auth-dev block declares a `rate_limit { ... }`
+		// container with all 4 canonical zones (login + register + recovery
+		// submit + recovery flow-create). Each zone keyed on
+		// `{http.request.header.cf-connecting-ip}` (EC-2 absorption — without
+		// cf-connecting-ip + trusted_proxies, the bucket shares one slot across
+		// all CF-fronted traffic = FAANG-grade DoS).
+		rateLimitDirRe := regexp.MustCompile(`(?m)^\s*rate_limit\s*\{`)
+		if !rateLimitDirRe.MatchString(authBlock) {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				"assert_authdev_rate_limit_block_present — `rate_limit { ... }` directive MISSING in auth-dev host block. Red Team loopzero-cloud#68 login + #89 recovery email-bomb stay open without it (per blueprint Q1 canonical zones).")
+		} else {
+			// All 4 zones must be present.
+			for _, zone := range canonicalRateLimitZones {
+				if !strings.Contains(authBlock, zone) {
+					out.Pass = false
+					out.Violations = append(out.Violations, fmt.Sprintf(
+						"assert_authdev_rate_limit_zone_%s — `%s` MISSING in auth-dev host block. All 4 canonical zones (login + register + recovery submit + recovery flow-create) are required per plan kratos-self-service-rate-limit-systemic T1.2.",
+						strings.TrimPrefix(zone, "zone "), zone))
+				}
+			}
+		}
+
+		// Invariant 13 (v1.5 — T1.3 + EC-2): every rate_limit zone in
+		// auth-dev keys on cf-connecting-ip, NOT {remote_host}.
+		// {remote_host} resolves to CF tunnel's internal hop address →
+		// shared bucket across all CF-fronted users → trivial DoS.
+		// Defensive grep: if `key {remote_host}` appears in the auth-dev block
+		// AND any rate_limit zone exists, it's a regression.
+		if rateLimitDirRe.MatchString(authBlock) {
+			remoteHostKeyRe := regexp.MustCompile(`(?m)^\s*key\s*\{remote_host\}`)
+			if remoteHostKeyRe.MatchString(authBlock) {
+				out.Pass = false
+				out.Violations = append(out.Violations,
+					"assert_authdev_rate_limit_key_cf_connecting_ip — `key {remote_host}` found inside auth-dev rate_limit block. EC-2 absorption: must use `key {http.request.header.cf-connecting-ip}` so per-IP buckets reflect the real end-user IP through Cloudflare Tunnel (otherwise the bucket shares one slot across all CF-fronted users = FAANG-grade DoS).")
+			}
+			cfKeyRe := regexp.MustCompile(`key\s*\{http\.request\.header\.cf-connecting-ip\}`)
+			if !cfKeyRe.MatchString(authBlock) {
+				out.Pass = false
+				out.Violations = append(out.Violations,
+					"assert_authdev_rate_limit_key_cf_connecting_ip — no `key {http.request.header.cf-connecting-ip}` found inside rate_limit zones. EC-2 absorption: required for per-real-IP buckets through CF Tunnel.")
+			}
+		}
+
+		// Invariant 15 (v1.6 — T3.3): auth-dev block declares
+		// `handle /self-service/registration/methods/password { ... }`
+		// reverse-proxying to localhost:13002 (loopzero-cloud BFF). Closes Red
+		// Team loopzero-cloud#43 at the routing layer.
+		registerRouteRe := regexp.MustCompile(`(?m)^\s*handle\s+/self-service/registration/methods/password\s*\{`)
+		if !registerRouteRe.MatchString(authBlock) {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password { ... }` MISSING in auth-dev host block. Red Team loopzero-cloud#43 closure (BFF response-shape unifier per T3.1) is unreachable without this routing handle (T3.2).")
+		} else {
+			registerRouteBlockRe := regexp.MustCompile(`(?ms)handle\s+/self-service/registration/methods/password\s*\{[^}]*reverse_proxy\s+localhost:13002`)
+			if !registerRouteBlockRe.MatchString(authBlock) {
+				out.Pass = false
+				out.Violations = append(out.Violations,
+					"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password` does NOT reverse_proxy to localhost:13002 (loopzero-cloud BFF). Red Team loopzero-cloud#43 closure requires this exact target.")
+			}
+		}
+	}
+
+	// Invariant 14 (v1.5 — T1.3 + EC-2): global config block declares
+	// `servers { trusted_proxies static <CF-IPv4-ranges> }` so Caddy honors
+	// the cf-connecting-ip header ONLY when traffic arrives from CF's IP
+	// ranges (defense vs spoofed header from non-CF hop).
+	trustedProxiesRe := regexp.MustCompile(`(?m)^\s*trusted_proxies\s+static\s`)
+	if !trustedProxiesRe.MatchString(content) {
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"assert_trusted_proxies_static_cf_ranges — global `servers { trusted_proxies static ... }` block MISSING from Caddyfile. EC-2 absorption: without trusted_proxies CF ranges, Caddy refuses to honor cf-connecting-ip header → rate_limit buckets share one slot across all CF traffic. Pin CF's published IPv4 ranges per https://www.cloudflare.com/ips/ + annual refresh.")
+	} else {
+		// F-arch-4 absorption: extract the trusted_proxies block (brace-balance)
+		// and count CIDRs ONLY inside that block — counting CIDRs file-globally
+		// allows a Caddyfile with empty trusted_proxies + CIDR comments to
+		// silently satisfy the gate. F-sec-4 absorption: also count IPv6 CIDRs
+		// (CF publishes BOTH IPv4 and IPv6 ranges; either family without the
+		// other re-introduces the bucket-collision bypass).
+		ipv4Re := regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}\b`)
+		ipv6Re := regexp.MustCompile(`\b[0-9a-fA-F:]+::?(?:[0-9a-fA-F]{1,4})?/\d{1,3}\b`)
+		tpBody, tpOK := extractTrustedProxiesBlock(content)
+		if !tpOK {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				"assert_trusted_proxies_block_extractable — `trusted_proxies static { ... }` body brace-balance failed. Block likely truncated or malformed.")
+		} else {
+			ipv4Count := len(ipv4Re.FindAllString(tpBody, -1))
+			ipv6Count := len(ipv6Re.FindAllString(tpBody, -1))
+			if ipv4Count < 10 {
+				out.Pass = false
+				out.Violations = append(out.Violations, fmt.Sprintf(
+					"assert_trusted_proxies_cf_ipv4_count — only %d IPv4 CIDR(s) inside trusted_proxies block; CF publishes ~15. Plan kratos-self-service-rate-limit-systemic T1.2 requires ≥ 10 CF IPv4 CIDRs pinned.",
+					ipv4Count))
+			}
+			if ipv6Count < 5 {
+				out.Pass = false
+				out.Violations = append(out.Violations, fmt.Sprintf(
+					"assert_trusted_proxies_cf_ipv6_count — only %d IPv6 CIDR(s) inside trusted_proxies block; CF publishes 7. F-sec-4 absorption: pin all CF IPv6 ranges to close the IPv6-hop bypass.",
+					ipv6Count))
+			}
+		}
+	}
+
 	return out, nil
+}
+
+// extractTrustedProxiesBlock returns the body inside `trusted_proxies static {
+// ... }` OR — when the static form is used inline as `trusted_proxies static
+// 1.2.3.4/16 5.6.7.0/24` (no braces, line continuations via `\`) — returns
+// the contiguous line-continuation tail. F-arch-4 absorption: counting CIDRs
+// only inside this block defeats the bypass where a Caddyfile sprinkles CIDR
+// strings in comments while keeping trusted_proxies empty. Returns (body,
+// true) on success; ("", false) when no `trusted_proxies static` is present.
+func extractTrustedProxiesBlock(content string) (string, bool) {
+	// Two canonical shapes:
+	//   (1) `trusted_proxies static <ipv4cidr> <ipv6cidr> ...` over one or more
+	//       lines (line-continuation `\`).
+	//   (2) `trusted_proxies static { ... }` block form (less common).
+	tpRe := regexp.MustCompile(`(?m)trusted_proxies\s+static\b`)
+	loc := tpRe.FindStringIndex(content)
+	if loc == nil {
+		return "", false
+	}
+	tail := content[loc[1]:]
+	// Brace form?
+	if i := indexNonSpace(tail); i >= 0 && tail[i] == '{' {
+		depth := 1
+		start := i + 1
+		for j := start; j < len(tail); j++ {
+			switch tail[j] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					return tail[start:j], true
+				}
+			}
+		}
+		return "", false
+	}
+	// Line-continuation form: read until the first un-continued newline OR
+	// the next directive-terminating closing brace at the same level. Treat
+	// `\` followed by newline as continuation; bare newline ends the block.
+	var b strings.Builder
+	for j := 0; j < len(tail); j++ {
+		c := tail[j]
+		if c == '\n' {
+			break
+		}
+		if c == '\\' && j+1 < len(tail) && tail[j+1] == '\n' {
+			b.WriteByte(' ')
+			j++ // consume newline
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String(), true
+}
+
+// indexNonSpace returns the index of the first non-whitespace byte in s, or -1.
+func indexNonSpace(s string) int {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n':
+			continue
+		default:
+			return i
+		}
+	}
+	return -1
+}
+
+// extractAuthDevBlock returns the body of the `auth-dev.loopzero.example { ... }`
+// host block via brace-balance counting starting at the opening `{`. T1.3 of
+// plan kratos-self-service-rate-limit-systemic v1.1. Returns (body, true) on
+// success, ("", false) when the opening directive is missing or unbalanced.
+func extractAuthDevBlock(content string) (string, bool) {
+	openLoc := authDevBlockOpenRe.FindStringIndex(content)
+	if openLoc == nil {
+		return "", false
+	}
+	depth := 1
+	start := openLoc[1]
+	for i := start; i < len(content); i++ {
+		switch content[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return content[start:i], true
+			}
+		}
+	}
+	return "", false
 }
 
 // extractAppDevBlock returns the body of the `app-dev.loopzero.example { ... }`

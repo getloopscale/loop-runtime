@@ -151,11 +151,12 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 	results := make([]domain.ProjectSummary, 0, len(rows))
 	for _, r := range rows {
 		out := domain.ProjectSummary{
-			ID:               r.ID,
-			Name:             r.Name,
-			TeamID:           r.TenantID,
-			CreatedBy:        r.CreatedBy,
-			EnvironmentCount: r.EnvironmentCount,
+			ID:                 r.ID,
+			Name:               r.Name,
+			TeamID:             r.TenantID,
+			CreatedBy:          r.CreatedBy,
+			EnvironmentCount:   r.EnvironmentCount,
+			ProductionEnvCount: r.ProductionEnvCount,
 			// Sponsor LIVE-caught 2026-06-18: the aggregate status MUST
 			// consider release state, not just latest build. A cancelled
 			// build with a still-ACTIVE release is Live, not Failed.
@@ -165,12 +166,14 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			LastDeployStatus: string(enforcement.MapProjectStatus(
 				r.ActiveReleaseStatusRaw,
 				statemachine.State(r.LastDeployStatusRaw),
+				r.LatestBuildEnvironment,
 			)),
 			// T5.3 LIVE-bug fix (2026-06-08): additive completion of T2.1's
 			// summary contract. AppsCount + LatestFramework feed the
 			// /projects table Apps + Framework columns (was always 0 / —).
-			AppsCount:       r.AppsCount,
-			LatestFramework: r.LatestFrameworkRaw,
+			AppsCount:              r.AppsCount,
+			LatestFramework:        r.LatestFrameworkRaw,
+			LatestBuildEnvironment: r.LatestBuildEnvironment,
 		}
 		if r.CreatedAt.Valid {
 			out.CreatedAt = r.CreatedAt.Time

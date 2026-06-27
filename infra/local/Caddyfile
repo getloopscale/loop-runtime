@@ -23,6 +23,44 @@
 
 {
   email admin@loopzero.example
+
+  # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 (EC-2 absorption +
+  # F-sec-4 absorption — also pin CF IPv6 ranges).
+  # Caddy lives behind Cloudflare Tunnel for auth-dev.loopzero.example — `{remote_host}`
+  # resolves to CF's internal hop address, NOT the real end-user IP. Without
+  # `trusted_proxies` Caddy refuses to honor the `CF-Connecting-IP` header that
+  # CF forwards, so every rate_limit zone keyed on that header would silently
+  # share ONE bucket across ALL CF-fronted users (FAANG-grade gotcha per
+  # blueprint Q2). CF's published IPv4 + IPv6 ranges (https://www.cloudflare.com/ips/)
+  # are pinned verbatim below. Annual refresh tracked in operator runbook.
+  # F-sec-4: IPv6 list closes the bypass where an IPv6 CF hop would otherwise
+  # be untrusted and every rate-limit bucket would collapse to one (or fall
+  # back to `{remote_host}` semantics).
+  servers {
+    trusted_proxies static \
+      173.245.48.0/20 \
+      103.21.244.0/22 \
+      103.22.200.0/22 \
+      103.31.4.0/22 \
+      141.101.64.0/18 \
+      108.162.192.0/18 \
+      190.93.240.0/20 \
+      188.114.96.0/20 \
+      197.234.240.0/22 \
+      198.41.128.0/17 \
+      162.158.0.0/15 \
+      104.16.0.0/13 \
+      104.24.0.0/14 \
+      172.64.0.0/13 \
+      131.0.72.0/22 \
+      2400:cb00::/32 \
+      2606:4700::/32 \
+      2803:f800::/32 \
+      2405:b500::/32 \
+      2405:8100::/32 \
+      2a06:98c0::/29 \
+      2c0f:f248::/32
+  }
 }
 
 # Dashboard (vite dev server with HMR) + same-origin Kratos proxy
@@ -203,14 +241,71 @@ app-dev.loopzero.example {
     }
   }
 
-  # Catch-all: SPA prod-bundle (every path not matched above). file_server +
-  # try_files are wrapped HERE so the SPA-fallback rewrite only applies to
-  # dashboard client-side routes, never to API paths above.
-  handle {
-    root * {env.DASHBOARD_DIST:./dashboard-dist}
+  # Red Team loopzero-cloud#100 absorption (2026-06-27) — silent MIME outage
+  # on stale chunk requests. Browser tabs already-open before a deploy
+  # have an HTML page that references chunk filenames (e.g.,
+  # /assets/index-OLDHASH.js) that no longer exist on disk. With the
+  # generic catch-all handle below, those .js requests fall through
+  # `try_files {path} /index.html` and the server returns
+  # `200 + text/html + nosniff` for a .js URL → strict-MIME rejection
+  # → blank screen for every logged-in user after every deploy. The
+  # silent version of #95.
+  #
+  # Fix: dedicated /assets/* handle that DOES NOT have try_files
+  # fallback to /index.html. Missing chunk → genuine 404 (the canonical
+  # browser cache-bust signal — Service Worker reloads index.html and
+  # re-imports the new chunk hashes). Plus the canonical immutable
+  # cache header for chunks (vite hashed filenames are content-addressed,
+  # so cache forever is safe).
+  handle /assets/* {
+    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
     encode gzip
+    header Cache-Control "public, max-age=31536000, immutable"
     file_server
+  }
+
+  # Same dedicated handle for the PWA service-worker JS (Workbox emits
+  # sw.js + workbox-*.js at the root, not under /assets/). Without the
+  # explicit handle these would also fall through to /index.html → MIME
+  # reject → PWA dies silently. Named matcher because Caddy v2's
+  # `handle` directive accepts only ONE path argument (verified
+  # 2026-06-27 via Caddy v2.11.3 — multi-path failed reload).
+  @pwa_service_worker {
+    path /sw.js /workbox-*.js
+  }
+  handle @pwa_service_worker {
+    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    encode gzip
+    # Service worker MUST NOT be cached — the browser checks for a new
+    # SW on every visit; cache it and the user is stuck on the old
+    # one forever. Workbox convention.
+    header Cache-Control "no-cache, no-store, must-revalidate"
+    file_server
+  }
+
+  # Catch-all: SPA prod-bundle (every path not matched above). Canonical
+  # Caddy v2 SPA shape — `root` declared at the handle-block level (NOT
+  # via vars placeholder, which silently failed env resolution at request
+  # time on this Caddy build). try_files rewrites missing paths to
+  # /index.html (SPA client-side routing fallback for real routes like
+  # /projects/foo). The dedicated /assets/* handle above means JS chunks
+  # are NEVER mis-served as text/html for stale requests.
+  #
+  # Cache-Control: no-cache on every served path → response cached by
+  # the browser, but MUST revalidate (If-None-Match) on EVERY request.
+  # Pairs with the immutable /assets/* shape: index.html is the
+  # bootstrap that points at hashed chunks; if index.html is cached
+  # forever, the user is stuck on a deploy that may have stale chunk
+  # hashes. Fixed 2026-06-27 per Red Team #95 (P0 blocker — app-dev
+  # returned 404 for /, /index.html, /__config.js despite the bundle
+  # being present + DASHBOARD_DIST env var set) + Red Team #100
+  # absorption (silent MIME outage on stale-chunk requests).
+  handle {
+    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    encode gzip
+    header Cache-Control "no-cache"
     try_files {path} /index.html
+    file_server
   }
 }
 
@@ -249,6 +344,105 @@ auth-dev.loopzero.example {
   # Plan release-blockers-2026-06-25-set T1.3 (closes #45 — HSTS on /auth-dev).
   # Kratos/Hydra public endpoints assert HSTS at the edge.
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+  # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 — Caddy edge
+  # rate-limit closing Red Team loopzero-cloud#68 (login) + #89 (recovery email
+  # bomb / unlimited flow creates) + defense-in-depth #43 (register).
+  # Module: github.com/mholt/caddy-ratelimit@5625512 (bundled by
+  # caddy-build-canonical.sh per T1.1 EC-1).
+  #
+  # All 4 zones key on `{http.request.header.cf-connecting-ip}` so per-IP
+  # buckets are real-user-IP, NOT CF tunnel hop address (EC-2 absorption —
+  # trusted_proxies block in global config above honors the header from CF
+  # ranges only, not from spoofed hops).
+  #
+  # Quotas tuned conservatively to absorb legitimate retry-during-typo
+  # without enabling adversarial abuse:
+  #   login_throttle             10/min  (10 password-submit attempts/min/IP
+  #                                       — credential-stuffing defense)
+  #   register_throttle           5/min  (5 register-submit/min/IP — slows
+  #                                       enumeration scanners)
+  #   recovery_throttle           3/min  (3 recovery code-submit/min/IP —
+  #                                       brute-force code guess defense)
+  #   recovery_flow_create_throttle 5/5min (5 NEW recovery flows/5min/IP —
+  #                                         caps email-bomb attack)
+  #
+  # Caddy sliding-window algorithm + 429 + Retry-After per blueprint Q1.
+  # Red Team loopzero-cloud#68/#43 closure: the original zone path patterns
+  # `/self-service/{login,registration}/methods/*` cover only Kratos's old
+  # API flow submit path. The CANONICAL browser-flow submit path used by
+  # the dashboard is `/self-service/{login,registration}` WITHOUT the
+  # `/methods/` suffix (per `ui.action` URL emitted by the flow init).
+  # Without matching both, the dashboard's actual login/register submits
+  # bypass the rate-limit entirely. Each zone now matches BOTH paths.
+  rate_limit {
+    zone login_throttle {
+      match {
+        path /self-service/login/methods/* /self-service/login
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 10
+    }
+    zone register_throttle {
+      match {
+        path /self-service/registration/methods/* /self-service/registration
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 5
+    }
+    zone recovery_throttle {
+      match {
+        path /self-service/recovery/methods/* /self-service/recovery
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 1m
+      events 3
+    }
+    zone recovery_flow_create_throttle {
+      match {
+        path /self-service/recovery/browser /self-service/recovery/api
+      }
+      key {http.request.header.cf-connecting-ip}
+      window 5m
+      events 5
+    }
+  }
+
+  # T3.2 of plan kratos-self-service-rate-limit-systemic v1.1 (Red Team
+  # post-fix-verification absorption 2026-06-27) — route the canonical
+  # register submission paths through the loopzero-cloud BFF response-shape
+  # unifier (T3.1). Closes Red Team loopzero-cloud#43 (account enumeration via
+  # response-shape divergence — existing email + valid password → 400
+  # "exists" while new email + valid password → 200 success).
+  #
+  # TWO submit paths exist on Kratos:
+  #   - `/self-service/registration/methods/password` — Kratos API flow
+  #     (old shape; covered by /v1/auth/register too on BFF directly).
+  #   - `/self-service/registration` — Kratos BROWSER flow canonical (the
+  #     `ui.action` URL from `GET /self-service/registration/browser`).
+  #     This is the path the dashboard browser flow actually POSTs to and
+  #     was the Red Team's enumeration vector.
+  #
+  # BOTH must route through the BFF unifier or the enumeration leak stays
+  # open via the bypass path. The BFF accepts both form-encoded (browser
+  # navigation, returns 303 redirect to /auth/check-email) AND JSON (API
+  # client, returns canonical universal body) — both shapes are byte
+  # identical between new and existing email branches.
+  #
+  # PLACED BEFORE the default catch-all reverse_proxy to localhost:14433
+  # (Kratos public) so this prefix wins via Caddy's first-match-wins
+  # semantic. Edge rate_limit register_throttle (T1.2) still applies
+  # because it's evaluated at the host level before any handle.
+  @bff_register_paths {
+    path /self-service/registration/methods/password /self-service/registration
+  }
+  handle @bff_register_paths {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
 
   # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
   # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,

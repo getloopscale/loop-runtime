@@ -221,6 +221,46 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Red Team loopzero-cloud#48 closure — A01:2021 Broken Access Control / CWE-639.
+	// `?project=` was silently ignored server-side, letting a caller probe
+	// for env names of projects outside their tenant. Canonical fix:
+	//   1) Cross-tenant gate via projectStore (same EC-1 SEPA-CRITICAL
+	//      pattern as Create) — return 404 PROJECT_NOT_FOUND when the
+	//      project doesn't belong to the caller.
+	//   2) Filter result set to entries whose Project matches OR the
+	//      legacy production entry (empty Project) which is shared across
+	//      projects per ADR D2.
+	// Empty ?project= preserves the legacy J-10 dashboard shape (all envs).
+	if projectFilter := strings.TrimSpace(r.URL.Query().Get("project")); projectFilter != "" {
+		if h.projectStore != nil {
+			exists, perr := h.projectStore.ProjectExistsForTenant(ctx, uc.TenantID, projectFilter)
+			if perr != nil {
+				slog.Error("failed to validate project filter",
+					"tenant_id", uc.TenantID,
+					"project", projectFilter,
+					"error", perr.Error(),
+				)
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			if !exists {
+				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+					"PROJECT_NOT_FOUND",
+					fmt.Sprintf("project %q not found in your account", projectFilter),
+					404,
+				))
+				return
+			}
+		}
+		filtered := envs[:0]
+		for _, e := range envs {
+			if e.Project == projectFilter || e.Project == "" {
+				filtered = append(filtered, e)
+			}
+		}
+		envs = filtered
+	}
+
 	// J-10 v1.1 LIVE catch 2026-06-07: enrich each entry with KPI signals
 	// (last_deploy + last_deploy_sha) when a lookup is wired. Tolerant of
 	// errors — KPI enrichment is best-effort, the list itself must always

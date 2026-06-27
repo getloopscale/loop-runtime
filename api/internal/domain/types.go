@@ -251,6 +251,13 @@ type ProjectSummary struct {
 	CreatedBy        string    `json:"created_by,omitempty"`
 	CreatedAt        time.Time `json:"created_at,omitempty"`
 	EnvironmentCount int64     `json:"environment_count"`
+	// Red Team loopzero-cloud#41 absorption (2026-06-27): subset of
+	// EnvironmentCount that includes ONLY env_targets with kind='permanent'
+	// (production-like envs). Distinguishes preview-only projects
+	// (production_env_count == 0) from those wired to production.
+	// Dashboard renders this as the canonical "Live envs" count;
+	// EnvironmentCount stays for backwards compat as the all-kinds total.
+	ProductionEnvCount int64 `json:"production_env_count"`
 	// LastDeployStatus is one of: "live", "building", "failed", "idle",
 	// "queued" — derived from the latest build's status via
 	// pkg/enforcement.MapBuildStatusToProjectStatus.
@@ -281,6 +288,15 @@ type ProjectSummary struct {
 	// to "framework" (the dashboard renders this as a Badge). Empty string
 	// when no builds OR apps_spec missing.
 	LatestFramework string `json:"latest_framework,omitempty"`
+	// LatestBuildEnvironment = latest_build.environment — feeds the
+	// dashboard's Red Team loopzero-cloud#41 disambiguation: when this is
+	// "preview" AND there is no active production release, the project
+	// is preview-only and the badge MUST show "Preview" (not "Live" with
+	// a "URL PENDING" hint). Red Team 2026-06-27 caught the divergence
+	// where a project with 12 successful preview builds AND zero
+	// production releases rendered Live across 4 surfaces. Empty string
+	// when no builds exist.
+	LatestBuildEnvironment string `json:"latest_build_environment,omitempty"`
 }
 
 // ProjectStore abstracts project persistence (DIP).

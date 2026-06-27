@@ -95,6 +95,30 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		return
+	}
+
+	// Red Team loopzero-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Without this check, GET /projects/<nonexistent>/builds returned 200
+	// with an empty list, so the dashboard's sub-views (Deployments page)
+	// rendered functional UI for a deleted/non-existent project. Same EC-2
+	// SEPA-CRITICAL pattern as BuildEnvs below: a tenant probing
+	// /projects/<foo-of-other-tenant>/builds gets the canonical
+	// PROJECT_NOT_FOUND (no existence leak) — `projects.GetByName` already
+	// scopes by uc.TenantID.
+	if h.projects != nil {
+		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
+		if err != nil {
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
+		if project == nil {
+			writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			return
+		}
+	}
 
 	env := r.URL.Query().Get("env")
 	limit := parseIntParam(r.URL.Query().Get("limit"), 20)

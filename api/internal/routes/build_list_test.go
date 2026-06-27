@@ -345,3 +345,71 @@ func TestBuildEnvs_CrossTenantBlockedWith404(t *testing.T) {
 		t.Errorf("EC-2: error code should be PROJECT_NOT_FOUND, got %q (body=%s)", errResp.Code, w.Body.String())
 	}
 }
+
+// Red Team loopzero-cloud#92 regression-protector (2026-06-27): the plain
+// /api/v1/projects/{name}/builds endpoint (not /build-envs) MUST also
+// reject non-existent projects with 404 PROJECT_NOT_FOUND. Without this,
+// the dashboard's Deployments page rendered functional UI for a deleted
+// project (the BuildEnvs gate was the only one wired).
+func TestBuildList_NonExistentProject_Returns404(t *testing.T) {
+	store := &fakeBuildListStore{}
+	projectStore := &fakeProjectStore{project: nil} // project missing
+	h := NewBuildListHandlerWithGate(store, projectStore)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent-zzz/builds", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "nonexistent-zzz")
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("Red Team #92: want 404 PROJECT_NOT_FOUND for missing project, got %d body=%s", w.Code, w.Body.String())
+	}
+	var errResp struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if errResp.Code != "PROJECT_NOT_FOUND" {
+		t.Errorf("Red Team #92: error code should be PROJECT_NOT_FOUND, got %q (body=%s)", errResp.Code, w.Body.String())
+	}
+}
+
+func TestBuildList_ExistingProject_AllowsThrough(t *testing.T) {
+	store := &fakeBuildListStore{}
+	projectStore := &fakeProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	h := NewBuildListHandlerWithGate(store, projectStore)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 OK for existing project, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// Backwards-compat: NewBuildListHandler (without gate) still works for
+// legacy/test code paths.
+func TestBuildList_NilProjectStore_NoGate(t *testing.T) {
+	store := &fakeBuildListStore{}
+	h := NewBuildListHandler(store) // no gate
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/whatever/builds", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "whatever")
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (nil projects = no gate), got %d", w.Code)
+	}
+}

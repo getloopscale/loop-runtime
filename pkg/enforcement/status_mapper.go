@@ -28,6 +28,12 @@ const (
 	ProjectStatusFailed   = plan.ProjectStatusFailed
 	ProjectStatusIdle     = plan.ProjectStatusIdle
 	ProjectStatusQueued   = plan.ProjectStatusQueued
+	// Red Team loopzero-cloud#41 (2026-06-27) — preview-only project status.
+	// Declared as a local typed string to avoid pinning the engine on a
+	// not-yet-published loopzero-contracts v0.2 (the canonical constant lives
+	// at loopzero-contracts/plan.ProjectStatusPreview — see follow-up
+	// version-pin cutover runbook). Wire-format identical: "preview".
+	ProjectStatusPreview plan.ProjectStatus = "preview"
 )
 
 // MapBuildStatusToProjectStatus is the exhaustive 7-state mapping.
@@ -97,7 +103,16 @@ func MapBuildStatusToProjectStatus(state statemachine.State) ProjectStatus {
 // status enum). Empty string means "no eligible release row" — the
 // SQL query returns this when the project has no release at all OR
 // when the only releases are in a terminal state.
-func MapProjectStatus(activeReleaseStatus string, latestBuildState statemachine.State) ProjectStatus {
+//
+// latestBuildEnv is the latest build's `environment` column ("preview",
+// "production", "staging", ...). Red Team loopzero-cloud#41 absorption
+// (2026-06-27): when there is no active release AND the latest build
+// SUCCEEDED in a preview-only environment, return ProjectStatusPreview
+// — the project is preview-only (no production release ever shipped),
+// so the dashboard renders a "Preview" badge instead of "Live" with a
+// confusing "URL PENDING" hint. Empty latestBuildEnv = unknown
+// (defensive — fall back to the legacy build-state mapping).
+func MapProjectStatus(activeReleaseStatus string, latestBuildState statemachine.State, latestBuildEnv string) ProjectStatus {
 	switch activeReleaseStatus {
 	case "ACTIVE":
 		return ProjectStatusLive
@@ -105,6 +120,11 @@ func MapProjectStatus(activeReleaseStatus string, latestBuildState statemachine.
 		return ProjectStatusBuilding
 	case "FAILED", "ROLLBACK_FAILED":
 		return ProjectStatusFailed
+	}
+	// Red Team #41: BuildSucceeded + preview env + no active release =
+	// preview-only project. Surface as "Preview" instead of "Live".
+	if latestBuildState == statemachine.BuildSucceeded && latestBuildEnv == "preview" {
+		return ProjectStatusPreview
 	}
 	return MapBuildStatusToProjectStatus(latestBuildState)
 }
