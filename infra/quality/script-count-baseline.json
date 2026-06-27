@@ -1,12 +1,6 @@
 {
-  "canonical_sh": 374,
+  "canonical_sh": 373,
   "_changelog": [
-    {
-      "date": "2026-06-27",
-      "from": 373,
-      "to": 374,
-      "reason": "Owner-authorized up-ratchet (+1) for infra/tests/check-m0-account-migrations_test.sh (KEEP-CI-WIRED) — the account-level-tenancy M0 backfill + round-trip-reversibility integration test required by /review (finding H1). Irreducible to pure-logic Go: pipes `docker exec` + `pg_dump --schema-only` (clones the real pg-cloud schema into a throwaway DB) + `psql` replay of migrations 000034-000039 up/down, asserting one-account-per-owner backfill, linkage, idempotency, and full down-reversibility. Skips gracefully (exit 0) when no pg-cloud container is reachable — same skip contract as the Go e2e E2E_PG_CLOUD_DSN gate. Re-based onto the merged baseline 373 (Sprint 5-8 + Red Team #64/#65 work). Hand-edit per the sanctioned auditable up-ratchet override. plan account-foundation-m0 (milestone M0), ADR account-level-tenancy."
-    },
     {
       "date": "2026-06-26",
       "from": 372,
