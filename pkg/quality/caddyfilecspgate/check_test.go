@@ -26,8 +26,9 @@ func makeCaddyfile(t *testing.T, content string) string {
 }
 
 // canonicalGlobalConfigBlock is the canonical Caddyfile global config —
-// v1.5 (T1.3 + EC-2): trusted_proxies declares CF's published IPv4 ranges so
-// Caddy honors the cf-connecting-ip header from CF tunnel only.
+// v1.6 (T1.3 + EC-2 + F-sec-4): trusted_proxies declares CF's published IPv4
+// AND IPv6 ranges so Caddy honors the cf-connecting-ip header from CF
+// tunnel only (covers BOTH families — IPv6 bypass closed per F-sec-4).
 const canonicalGlobalConfigBlock = `{
   email admin@loopzero.example
   servers {
@@ -46,7 +47,14 @@ const canonicalGlobalConfigBlock = `{
       104.16.0.0/13 \
       104.24.0.0/14 \
       172.64.0.0/13 \
-      131.0.72.0/22
+      131.0.72.0/22 \
+      2400:cb00::/32 \
+      2606:4700::/32 \
+      2803:f800::/32 \
+      2405:b500::/32 \
+      2405:8100::/32 \
+      2a06:98c0::/29 \
+      2c0f:f248::/32
   }
 }
 `
@@ -610,5 +618,72 @@ app-dev.loopzero.example {
 	}
 	if !containsViolation(out.Violations, "assert_trusted_proxies_static_cf_ranges") {
 		t.Fatalf("want trusted_proxies-missing violation, got: %v", out.Violations)
+	}
+}
+
+// F-arch-4 regression-protector: an empty trusted_proxies block with CIDRs
+// only in comments must FAIL the gate. The old file-global CIDR count was
+// the bypass; the new block-scoped count closes it.
+func TestCheck_RegressionDetected_EmptyTrustedProxiesWithCIDRCommentsBypass(t *testing.T) {
+	bypass := `{
+  email admin@loopzero.example
+  servers {
+    # CF ranges as of 2026-06-26 (comment-only, no real entries):
+    # 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22
+    # 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20
+    # 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13
+    # 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22
+    trusted_proxies static 1.2.3.4/32
+  }
+}
+` + canonicalAppDevBlock + canonicalAuthDevBlock
+	dir := makeCaddyfile(t, bypass)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when trusted_proxies has only 1 IPv4 CIDR (15 in comments don't count), got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_trusted_proxies_cf_ipv4_count") {
+		t.Fatalf("want ipv4-count-low violation (block-scoped), got: %v", out.Violations)
+	}
+}
+
+// F-sec-4 regression-protector: trusted_proxies with full IPv4 set but ZERO
+// IPv6 CIDRs must FAIL. The IPv6-bypass closure is non-optional.
+func TestCheck_RegressionDetected_TrustedProxiesMissingIPv6Bypass(t *testing.T) {
+	missingIPv6 := `{
+  email admin@loopzero.example
+  servers {
+    trusted_proxies static \
+      173.245.48.0/20 \
+      103.21.244.0/22 \
+      103.22.200.0/22 \
+      103.31.4.0/22 \
+      141.101.64.0/18 \
+      108.162.192.0/18 \
+      190.93.240.0/20 \
+      188.114.96.0/20 \
+      197.234.240.0/22 \
+      198.41.128.0/17 \
+      162.158.0.0/15 \
+      104.16.0.0/13 \
+      104.24.0.0/14 \
+      172.64.0.0/13 \
+      131.0.72.0/22
+  }
+}
+` + canonicalAppDevBlock + canonicalAuthDevBlock
+	dir := makeCaddyfile(t, missingIPv6)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("want Pass=false when trusted_proxies has zero IPv6 CIDRs, got Pass=true")
+	}
+	if !containsViolation(out.Violations, "assert_trusted_proxies_cf_ipv6_count") {
+		t.Fatalf("want ipv6-count-low violation, got: %v", out.Violations)
 	}
 }

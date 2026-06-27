@@ -24,14 +24,18 @@
 {
   email admin@loopzero.example
 
-  # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 (EC-2 absorption).
+  # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 (EC-2 absorption +
+  # F-sec-4 absorption — also pin CF IPv6 ranges).
   # Caddy lives behind Cloudflare Tunnel for auth-dev.loopzero.example — `{remote_host}`
   # resolves to CF's internal hop address, NOT the real end-user IP. Without
   # `trusted_proxies` Caddy refuses to honor the `CF-Connecting-IP` header that
   # CF forwards, so every rate_limit zone keyed on that header would silently
   # share ONE bucket across ALL CF-fronted users (FAANG-grade gotcha per
-  # blueprint Q2). CF's published IPv4 ranges (https://www.cloudflare.com/ips/)
+  # blueprint Q2). CF's published IPv4 + IPv6 ranges (https://www.cloudflare.com/ips/)
   # are pinned verbatim below. Annual refresh tracked in operator runbook.
+  # F-sec-4: IPv6 list closes the bypass where an IPv6 CF hop would otherwise
+  # be untrusted and every rate-limit bucket would collapse to one (or fall
+  # back to `{remote_host}` semantics).
   servers {
     trusted_proxies static \
       173.245.48.0/20 \
@@ -48,7 +52,14 @@
       104.16.0.0/13 \
       104.24.0.0/14 \
       172.64.0.0/13 \
-      131.0.72.0/22
+      131.0.72.0/22 \
+      2400:cb00::/32 \
+      2606:4700::/32 \
+      2803:f800::/32 \
+      2405:b500::/32 \
+      2405:8100::/32 \
+      2a06:98c0::/29 \
+      2c0f:f248::/32
   }
 }
 

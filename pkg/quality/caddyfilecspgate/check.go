@@ -371,20 +371,105 @@ func Check(cfg Config) (*Outcome, error) {
 		out.Violations = append(out.Violations,
 			"assert_trusted_proxies_static_cf_ranges — global `servers { trusted_proxies static ... }` block MISSING from Caddyfile. EC-2 absorption: without trusted_proxies CF ranges, Caddy refuses to honor cf-connecting-ip header → rate_limit buckets share one slot across all CF traffic. Pin CF's published IPv4 ranges per https://www.cloudflare.com/ips/ + annual refresh.")
 	} else {
-		// Sanity-count: at least 10 CIDR-shaped tokens between trusted_proxies
-		// static and the closing }.
-		cidrRe := regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}\b`)
-		// Heuristic — count CIDRs anywhere in the file. Full CF list is ~22;
-		// require ≥ 10 (gives operator room to drop deprecated ranges).
-		if matches := cidrRe.FindAllString(content, -1); len(matches) < 10 {
+		// F-arch-4 absorption: extract the trusted_proxies block (brace-balance)
+		// and count CIDRs ONLY inside that block — counting CIDRs file-globally
+		// allows a Caddyfile with empty trusted_proxies + CIDR comments to
+		// silently satisfy the gate. F-sec-4 absorption: also count IPv6 CIDRs
+		// (CF publishes BOTH IPv4 and IPv6 ranges; either family without the
+		// other re-introduces the bucket-collision bypass).
+		ipv4Re := regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}\b`)
+		ipv6Re := regexp.MustCompile(`\b[0-9a-fA-F:]+::?(?:[0-9a-fA-F]{1,4})?/\d{1,3}\b`)
+		tpBody, tpOK := extractTrustedProxiesBlock(content)
+		if !tpOK {
 			out.Pass = false
-			out.Violations = append(out.Violations, fmt.Sprintf(
-				"assert_trusted_proxies_cf_ranges_count — only %d CIDR(s) found in Caddyfile; CF's published list has ~22. Plan kratos-self-service-rate-limit-systemic T1.2 requires ≥ 10 CF IPv4 CIDRs pinned.",
-				len(matches)))
+			out.Violations = append(out.Violations,
+				"assert_trusted_proxies_block_extractable — `trusted_proxies static { ... }` body brace-balance failed. Block likely truncated or malformed.")
+		} else {
+			ipv4Count := len(ipv4Re.FindAllString(tpBody, -1))
+			ipv6Count := len(ipv6Re.FindAllString(tpBody, -1))
+			if ipv4Count < 10 {
+				out.Pass = false
+				out.Violations = append(out.Violations, fmt.Sprintf(
+					"assert_trusted_proxies_cf_ipv4_count — only %d IPv4 CIDR(s) inside trusted_proxies block; CF publishes ~15. Plan kratos-self-service-rate-limit-systemic T1.2 requires ≥ 10 CF IPv4 CIDRs pinned.",
+					ipv4Count))
+			}
+			if ipv6Count < 5 {
+				out.Pass = false
+				out.Violations = append(out.Violations, fmt.Sprintf(
+					"assert_trusted_proxies_cf_ipv6_count — only %d IPv6 CIDR(s) inside trusted_proxies block; CF publishes 7. F-sec-4 absorption: pin all CF IPv6 ranges to close the IPv6-hop bypass.",
+					ipv6Count))
+			}
 		}
 	}
 
 	return out, nil
+}
+
+// extractTrustedProxiesBlock returns the body inside `trusted_proxies static {
+// ... }` OR — when the static form is used inline as `trusted_proxies static
+// 1.2.3.4/16 5.6.7.0/24` (no braces, line continuations via `\`) — returns
+// the contiguous line-continuation tail. F-arch-4 absorption: counting CIDRs
+// only inside this block defeats the bypass where a Caddyfile sprinkles CIDR
+// strings in comments while keeping trusted_proxies empty. Returns (body,
+// true) on success; ("", false) when no `trusted_proxies static` is present.
+func extractTrustedProxiesBlock(content string) (string, bool) {
+	// Two canonical shapes:
+	//   (1) `trusted_proxies static <ipv4cidr> <ipv6cidr> ...` over one or more
+	//       lines (line-continuation `\`).
+	//   (2) `trusted_proxies static { ... }` block form (less common).
+	tpRe := regexp.MustCompile(`(?m)trusted_proxies\s+static\b`)
+	loc := tpRe.FindStringIndex(content)
+	if loc == nil {
+		return "", false
+	}
+	tail := content[loc[1]:]
+	// Brace form?
+	if i := indexNonSpace(tail); i >= 0 && tail[i] == '{' {
+		depth := 1
+		start := i + 1
+		for j := start; j < len(tail); j++ {
+			switch tail[j] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					return tail[start:j], true
+				}
+			}
+		}
+		return "", false
+	}
+	// Line-continuation form: read until the first un-continued newline OR
+	// the next directive-terminating closing brace at the same level. Treat
+	// `\` followed by newline as continuation; bare newline ends the block.
+	var b strings.Builder
+	for j := 0; j < len(tail); j++ {
+		c := tail[j]
+		if c == '\n' {
+			break
+		}
+		if c == '\\' && j+1 < len(tail) && tail[j+1] == '\n' {
+			b.WriteByte(' ')
+			j++ // consume newline
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String(), true
+}
+
+// indexNonSpace returns the index of the first non-whitespace byte in s, or -1.
+func indexNonSpace(s string) int {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n':
+			continue
+		default:
+			return i
+		}
+	}
+	return -1
 }
 
 // extractAuthDevBlock returns the body of the `auth-dev.loopzero.example { ... }`

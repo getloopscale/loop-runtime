@@ -150,19 +150,98 @@ scenario_a() {
 }
 
 scenario_b() {
-  log "Scenario B — window-expiration regression-protector"
-  log "(skipped in fast mode; full 1-min wait would block CI runs — operator manual verify)"
+  # F-tests-1 absorption: NEVER silently return 0 in default mode. The
+  # window-expiration regression-protector is a 65s wait + burst; if the
+  # operator opts in via `INCLUDE_SLOW_SCENARIOS=1`, run it for real. If
+  # not, emit verdict=SKIPPED with explicit reason so the operator + CI
+  # cannot mistake "skipped" for "passed" (per Unbreakable Rule 3 honest
+  # BLOCKED > false PASS). The case-statement honors this by mapping the
+  # SKIPPED exit-code 3 back to verdict=SKIPPED at the top level.
+  if [ "${INCLUDE_SLOW_SCENARIOS:-0}" != "1" ]; then
+    log "Scenario B — SKIPPED (window-expiration would block 65s; rerun with INCLUDE_SLOW_SCENARIOS=1)"
+    emit "SKIPPED" "scenario-b-requires-INCLUDE_SLOW_SCENARIOS=1"
+    return 3
+  fi
+
+  log "Scenario B — window-expiration regression-protector (real 65s wait)"
+  # Burn the bucket first (10 hits in < 60s).
+  local flow_json flow_id
+  flow_json="$(curl -sS --max-time 10 \
+                "$TARGET_HOST/self-service/login/api" \
+                -H "cf-connecting-ip: $SYNTH_IP" \
+                -H 'Accept: application/json' 2>&1 || true)"
+  flow_id="$(printf '%s' "$flow_json" | jq -r '.id // empty' 2>/dev/null || true)"
+  if [ -z "$flow_id" ] || [ "$flow_id" = "null" ]; then
+    log "BLOCKED: flow-init returned no .id"
+    emit "BLOCKED" "scenario-b-flow-init-failed"
+    return 2
+  fi
+  local pre_window_hits_429=0 code
+  for i in $(seq 1 15); do
+    code="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' \
+            -X POST "$TARGET_HOST/self-service/login/methods/password?flow=$flow_id" \
+            -H "cf-connecting-ip: $SYNTH_IP" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            -d '{"identifier":"warmup'"$i"'@example.invalid","password":"x","method":"password"}' \
+            2>&1 || true)"
+    [ "$code" = "429" ] && pre_window_hits_429=$((pre_window_hits_429 + 1))
+  done
+  log "Pre-window: bucket burned, $pre_window_hits_429/15 returned 429"
+  log "Waiting 65s for window expiration..."
+  sleep 65
+  # Post-window single probe MUST return non-429 (bucket reset).
+  local post_code
+  post_code="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' \
+            -X POST "$TARGET_HOST/self-service/login/methods/password?flow=$flow_id" \
+            -H "cf-connecting-ip: $SYNTH_IP" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            -d '{"identifier":"postwin@example.invalid","password":"x","method":"password"}' \
+            2>&1 || true)"
+  log "Post-window probe → HTTP $post_code (must NOT be 429)"
+  if [ "$post_code" = "429" ]; then
+    emit "FAIL" "scenario-b-window-did-not-expire-bucket-still-engaged"
+    return 1
+  fi
+  log "PASS: scenario B — login_throttle window expired correctly"
   return 0
 }
 
+# F-tests-1: every `scenario_X` invocation uses `|| rc=$?` so set -e does
+# NOT abort on the SKIPPED exit-code 3. The default `rc_x=0` prefix covers
+# the success path where the function returned 0 (|| does not fire).
 case "$SCENARIO" in
-  A|a) scenario_a ; rc=$? ;;
-  B|b) scenario_b ; rc=$? ;;
-  all|*) scenario_a ; rc=$? ; if [ "$rc" -eq 0 ]; then scenario_b ; rc=$? ; fi ;;
+  A|a) rc=0 ; scenario_a || rc=$? ;;
+  B|b) rc=0 ; scenario_b || rc=$? ;;
+  all|*)
+    rc_a=0 ; scenario_a || rc_a=$?
+    if [ "$rc_a" -eq 0 ]; then
+      rc_b=0 ; scenario_b || rc_b=$?
+      if [ "$rc_b" -eq 3 ]; then
+        # A passed, B honestly SKIPPED (operator did not opt-in via
+        # INCLUDE_SLOW_SCENARIOS=1). emit() already fired inside scenario_b
+        # with a JSON SKIPPED line; emit a SECOND aggregate line so the
+        # overall verdict is honest (PASS_WITH_SKIPPED_B is the canonical
+        # ecosystem verdict per cycle-rule-schema for partial pass).
+        emit "PASS_WITH_SKIPPED_B" "scenario-a-pass-scenario-b-requires-INCLUDE_SLOW_SCENARIOS=1"
+        exit 0
+      fi
+      rc=$rc_b
+    else
+      rc=$rc_a
+    fi
+    ;;
 esac
 
 if [ "$rc" -eq 0 ]; then
   emit "PASS" "login-rate-limit-engaged"
+  exit 0
+fi
+if [ "$rc" -eq 3 ]; then
+  # Standalone --scenario=B without INCLUDE_SLOW_SCENARIOS=1 → SKIPPED.
+  # emit() already fired inside scenario_b(). Exit 0 so the operator's
+  # CI does not flag a skip as a failure.
   exit 0
 fi
 exit "$rc"
