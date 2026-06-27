@@ -241,17 +241,69 @@ app-dev.loopzero.example {
     }
   }
 
+  # Red Team loopzero-cloud#100 absorption (2026-06-27) — silent MIME outage
+  # on stale chunk requests. Browser tabs already-open before a deploy
+  # have an HTML page that references chunk filenames (e.g.,
+  # /assets/index-OLDHASH.js) that no longer exist on disk. With the
+  # generic catch-all handle below, those .js requests fall through
+  # `try_files {path} /index.html` and the server returns
+  # `200 + text/html + nosniff` for a .js URL → strict-MIME rejection
+  # → blank screen for every logged-in user after every deploy. The
+  # silent version of #95.
+  #
+  # Fix: dedicated /assets/* handle that DOES NOT have try_files
+  # fallback to /index.html. Missing chunk → genuine 404 (the canonical
+  # browser cache-bust signal — Service Worker reloads index.html and
+  # re-imports the new chunk hashes). Plus the canonical immutable
+  # cache header for chunks (vite hashed filenames are content-addressed,
+  # so cache forever is safe).
+  handle /assets/* {
+    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    encode gzip
+    header Cache-Control "public, max-age=31536000, immutable"
+    file_server
+  }
+
+  # Same dedicated handle for the PWA service-worker JS (Workbox emits
+  # sw.js + workbox-*.js at the root, not under /assets/). Without the
+  # explicit handle these would also fall through to /index.html → MIME
+  # reject → PWA dies silently. Named matcher because Caddy v2's
+  # `handle` directive accepts only ONE path argument (verified
+  # 2026-06-27 via Caddy v2.11.3 — multi-path failed reload).
+  @pwa_service_worker {
+    path /sw.js /workbox-*.js
+  }
+  handle @pwa_service_worker {
+    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    encode gzip
+    # Service worker MUST NOT be cached — the browser checks for a new
+    # SW on every visit; cache it and the user is stuck on the old
+    # one forever. Workbox convention.
+    header Cache-Control "no-cache, no-store, must-revalidate"
+    file_server
+  }
+
   # Catch-all: SPA prod-bundle (every path not matched above). Canonical
   # Caddy v2 SPA shape — `root` declared at the handle-block level (NOT
   # via vars placeholder, which silently failed env resolution at request
-  # time on this Caddy build). file_server reads {http.vars.root} set by
-  # `root *`, try_files rewrites missing paths to /index.html, then
-  # file_server serves. Fixed 2026-06-27 per Red Team #95 (P0 blocker —
-  # app-dev returned 404 for /, /index.html, /__config.js despite the
-  # bundle being present + DASHBOARD_DIST env var set).
+  # time on this Caddy build). try_files rewrites missing paths to
+  # /index.html (SPA client-side routing fallback for real routes like
+  # /projects/foo). The dedicated /assets/* handle above means JS chunks
+  # are NEVER mis-served as text/html for stale requests.
+  #
+  # Cache-Control: no-cache on every served path → response cached by
+  # the browser, but MUST revalidate (If-None-Match) on EVERY request.
+  # Pairs with the immutable /assets/* shape: index.html is the
+  # bootstrap that points at hashed chunks; if index.html is cached
+  # forever, the user is stuck on a deploy that may have stale chunk
+  # hashes. Fixed 2026-06-27 per Red Team #95 (P0 blocker — app-dev
+  # returned 404 for /, /index.html, /__config.js despite the bundle
+  # being present + DASHBOARD_DIST env var set) + Red Team #100
+  # absorption (silent MIME outage on stale-chunk requests).
   handle {
     root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
     encode gzip
+    header Cache-Control "no-cache"
     try_files {path} /index.html
     file_server
   }
