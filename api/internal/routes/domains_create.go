@@ -54,9 +54,13 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate domain format
+	// Validate domain format.
+	// Red Team loopzero-cloud#103 closure: was `code: INTERNAL_ERROR` which
+	// connotes a server failure; this is INPUT validation, so emit the
+	// client-classified `INVALID_DOMAIN` code (mapped to 400 in
+	// pkg/errors/http/mapping.go).
 	if err := h.validator.Validate(req.Domain); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INVALID_DOMAIN", "message": err.Error()})
 		return
 	}
 

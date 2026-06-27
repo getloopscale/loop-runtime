@@ -268,6 +268,32 @@ func parseScaleRequest(r *http.Request) (req scaleRequest, hasFixed, hasAuto boo
 			"specify 'replicas' for fixed scaling or 'min'/'max'/'cpu'/'memory' for autoscaling")
 		return
 	}
+	// Red Team loopzero-cloud#103 closure: replicas <= 0 is client input
+	// validation (NOT a server failure), MUST surface as 400 with the
+	// client-classified `INVALID_REPLICAS` code. The Red Team observed
+	// `replicas:-5 -> 500 INVALID_ARGUMENT` — status×code mismatch + 5xx
+	// for a 4xx-class error. Same gate guards autoscaling.min/max < 0.
+	if hasFixed && *req.Replicas <= 0 {
+		err = loopzeroerrors.NewLoopZeroError(
+			"INVALID_REPLICAS",
+			"replicas must be > 0 (use 0 only via 'min: 0' on autoscaling, not 'replicas')",
+			http.StatusBadRequest)
+		return
+	}
+	if req.Min != nil && *req.Min < 0 {
+		err = loopzeroerrors.NewLoopZeroError(
+			"INVALID_REPLICAS",
+			"autoscaling 'min' must be >= 0",
+			http.StatusBadRequest)
+		return
+	}
+	if req.Max != nil && *req.Max <= 0 {
+		err = loopzeroerrors.NewLoopZeroError(
+			"INVALID_REPLICAS",
+			"autoscaling 'max' must be > 0",
+			http.StatusBadRequest)
+		return
+	}
 	return
 }
 

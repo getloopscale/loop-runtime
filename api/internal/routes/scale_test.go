@@ -616,3 +616,94 @@ func TestScaleHandler_NilChecker_NoEnforcement_RedTeam101(t *testing.T) {
 		t.Errorf("Red Team #101: nil checker MUST NOT enforce REPLICAS_EXCEED_PLAN, got %s", w.Body.String())
 	}
 }
+
+// Red Team loopzero-cloud#103 regression-protector — input validation MUST
+// return HTTP 400 with the client-classified `INVALID_REPLICAS` code,
+// never `500 INVALID_ARGUMENT` (status×code mismatch + server-failure
+// connotation for a client-input error). The 3 scenarios lock the 3
+// negative-input axes: fixed replicas <= 0 / autoscaling min < 0 /
+// autoscaling max <= 0.
+
+func TestScaleHandler_FixedReplicasNegative_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
+	h := NewScaleHandler(&fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
+		return true, nil
+	}, true)
+
+	body, _ := json.Marshal(map[string]any{
+		"app":         "web",
+		"environment": "production",
+		"replicas":    -5, // verbatim Red Team #101/#103 secondary observation
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/scale", bytes.NewReader(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "p")
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("Red Team #103: replicas:-5 must be 400 (NOT 500), got %d body=%s",
+			w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "INVALID_REPLICAS") {
+		t.Errorf("Red Team #103: body must include INVALID_REPLICAS code (NOT INVALID_ARGUMENT), got %s",
+			w.Body.String())
+	}
+}
+
+func TestScaleHandler_AutoscalingMinNegative_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
+	h := NewScaleHandler(&fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
+		return true, nil
+	}, true)
+
+	body, _ := json.Marshal(map[string]any{
+		"app":         "web",
+		"environment": "production",
+		"min":         -1,
+		"max":         5,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/scale", bytes.NewReader(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "p")
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("Red Team #103: autoscaling.min:-1 must be 400, got %d body=%s",
+			w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "INVALID_REPLICAS") {
+		t.Errorf("Red Team #103: body must include INVALID_REPLICAS, got %s", w.Body.String())
+	}
+}
+
+func TestScaleHandler_AutoscalingMaxZero_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
+	h := NewScaleHandler(&fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
+		return true, nil
+	}, true)
+
+	body, _ := json.Marshal(map[string]any{
+		"app":         "web",
+		"environment": "production",
+		"min":         1,
+		"max":         0, // sentinel: not just negative, but zero too
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/scale", bytes.NewReader(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "p")
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("Red Team #103: autoscaling.max:0 must be 400, got %d body=%s",
+			w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "INVALID_REPLICAS") {
+		t.Errorf("Red Team #103: body must include INVALID_REPLICAS, got %s", w.Body.String())
+	}
+}
