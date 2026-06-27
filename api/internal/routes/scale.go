@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -65,6 +66,19 @@ type ScaleConfigInput struct {
 // inside withEnvironmentLock (EC-5 lock semantics).
 type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed bool, err error)
 
+// ScaleReplicasChecker mirrors services.PlanCapChecker (cross-package
+// to avoid importing services here). Returns (allowed, planName, cap)
+// for the given tenant + requested replica count.
+//
+// Red Team loopzero-cloud#101 absorption (2026-06-27): the scale endpoint
+// previously had ZERO max-replica enforcement. A Starter-tier tenant
+// could POST replicas:999 and the apply path would honor it (the
+// build path enforced via this same checker, but the LIVE scale path
+// bypassed it entirely). Wiring this checker here closes the bypass.
+type ScaleReplicasChecker interface {
+	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
+}
+
 // ScaleHandler provides the HTTP handler for scaling operations.
 type ScaleHandler struct {
 	projects        ScaleProjectStore
@@ -72,6 +86,7 @@ type ScaleHandler struct {
 	kedaEnabled     bool
 	planTierStore   pkgdomain.PlanTierStore // J-20 T1.1 — resolves tenant's canonical plan
 	podCostPerHour  float64                 // J-20 T1.1 EC-2 — server-authoritative cost rate
+	replicasChecker ScaleReplicasChecker    // Red Team #101 — max-replica plan cap; nil disables
 }
 
 // NewScaleHandler creates a new ScaleHandler.
@@ -101,6 +116,17 @@ func NewScaleHandler(projects ScaleProjectStore, apply ScaleApplyFunc, kedaEnabl
 // nil to exercise validation paths that don't depend on tier resolution.
 func (h *ScaleHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
 	h.planTierStore = s
+}
+
+// SetReplicasChecker wires the per-plan replica cap checker used to
+// reject /scale requests that exceed the tenant's plan limit. Red Team
+// loopzero-cloud#101 (2026-06-27): scale endpoint had ZERO replica cap
+// enforcement before this wiring — Starter tier could set replicas:999.
+// Production setup at setup_orchestrator.go wires the same
+// planLimiterCapAdapter used by the build path so both paths share one
+// truth.
+func (h *ScaleHandler) SetReplicasChecker(c ScaleReplicasChecker) {
+	h.replicasChecker = c
 }
 
 // EnsureProductionWired panics if the handler was constructed without a
@@ -184,7 +210,7 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if lerr := h.enforceLimits(&req, planTier, hasAuto); lerr != nil {
+	if lerr := h.enforceLimits(&req, planTier, hasAuto, uc.TenantID); lerr != nil {
 		writeLoopZeroError(w, lerr)
 		return
 	}
@@ -270,14 +296,51 @@ func (h *ScaleHandler) enforceLimits(
 	req *scaleRequest,
 	planTier pkgdomain.PlanTier,
 	hasAuto bool,
+	tenantID string,
 ) *loopzeroerrors.LoopZeroError {
 	if err := h.enforceKEDA(req, planTier); err != nil {
+		return err
+	}
+	// Red Team loopzero-cloud#101 absorption (2026-06-27): enforce the
+	// per-plan max-replicas cap on EVERY mutation path, not just the
+	// build path. The cap is the same one services.enforceScaling
+	// already uses for loopzero deploy; wiring it here covers loopzero scale
+	// + the dashboard scale form + any direct API client. Without
+	// this, Starter tier could set replicas:999 and the apply path
+	// honored it.
+	if err := h.enforceReplicaCap(req, tenantID); err != nil {
 		return err
 	}
 	if !hasAuto {
 		return nil
 	}
 	return enforceHPABounds(req)
+}
+
+// enforceReplicaCap rejects a scale request whose effective replica
+// count exceeds the tenant's plan cap. For fixed scaling, the cap
+// gates `replicas`. For autoscaling, the cap gates `max` (the
+// ceiling — what the cluster would actually scale TO under load).
+// A nil checker disables enforcement (tests + legacy callsites).
+func (h *ScaleHandler) enforceReplicaCap(req *scaleRequest, tenantID string) *loopzeroerrors.LoopZeroError {
+	if h.replicasChecker == nil {
+		return nil
+	}
+	var requested int
+	switch {
+	case req.Replicas != nil && *req.Replicas > 0:
+		requested = *req.Replicas
+	case req.Max != nil && *req.Max > 0:
+		requested = *req.Max
+	default:
+		return nil
+	}
+	allowed, plan, cap := h.replicasChecker.CheckReplicasValue(tenantID, requested)
+	if allowed {
+		return nil
+	}
+	metrics.PlanLimitViolations.WithLabelValues("max_replicas_per_service", plan).Inc()
+	return loopzeroerrors.NewReplicasExceedPlan(plan, cap, requested, req.App)
 }
 
 // enforceKEDA implements EC-3: scale-to-zero (min == 0) requires plan

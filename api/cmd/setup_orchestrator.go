@@ -221,6 +221,13 @@ func setupOrchestrator(
 	}
 	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	scaleHandler.EnsureProductionWired() // audit M02 #14: panic-on-regression guard
+	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
+	// plan-cap checker the build path uses so the scale endpoint can
+	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
+	// Without this, the scale path silently bypassed the cap.
+	if planCap != nil {
+		scaleHandler.SetReplicasChecker(planCap)
+	}
 
 	// Build list handler — lists builds for a project with optional env
 	// filter PLUS exposes GET /api/v1/projects/{name}/build-envs (T2.2).
