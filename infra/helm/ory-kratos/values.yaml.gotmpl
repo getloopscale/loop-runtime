@@ -126,6 +126,12 @@ kratos:
       flows:
         registration:
           enabled: true
+          # T2.1 of plan kratos-self-service-rate-limit-systemic v1.1 — tighten
+          # registration flow lifespan from chart default (1h) to 10m.
+          # Defense-in-depth pair with edge rate_limit register_throttle 5/min
+          # (T1.2). Existing flows continue with prior TTL after rollout per
+          # EC-10; only new flows pick up the tighter cap.
+          lifespan: 10m
           ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "register" "/register" .Values }}"
           after:
             password:
@@ -136,6 +142,10 @@ kratos:
                 - hook: session
 
         login:
+          # T2.1 of plan kratos-self-service-rate-limit-systemic v1.1 — tighten
+          # login flow lifespan from chart default (1h) to 10m. Defense-in-depth
+          # pair with edge rate_limit login_throttle 10/min (T1.2).
+          lifespan: 10m
           ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "login" "/login" .Values }}"
           # NOTE: login.after hooks are NOT supported in Kratos v26.
           # Kratos creates sessions automatically on successful login.
@@ -146,6 +156,15 @@ kratos:
 
         recovery:
           enabled: true
+          # T2.1 of plan kratos-self-service-rate-limit-systemic v1.1 — tighten
+          # recovery flow lifespan from chart default (1h) to 15m. Slightly
+          # longer than login/register because email delivery (Resend) can be
+          # slower on mobile networks. Closes Red Team loopzero-cloud#89 root cause:
+          # natural cap on email-bomb attack — each new recovery flow per
+          # identity blocked until previous expires (15min → 4 flows/hr/identity
+          # max), defense-in-depth with edge recovery_flow_create_throttle
+          # 5/5min (T1.2). Existing flows continue with prior TTL per EC-10.
+          lifespan: 15m
           ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "recovery" "/recovery" .Values }}"
 
         settings:
