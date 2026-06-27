@@ -36,6 +36,12 @@ SKIP_LIVE=0
 JSON_OUTPUT=0
 SCENARIO="all"
 
+# EC-12 canonical: synthesize a unique cf-connecting-ip per run so the
+# Caddy rate_limit bucket key is isolated from prior test runs (without
+# this, all curl calls share an empty-string bucket key and bucket state
+# leaks across runs). Matches CF prod behavior (per-client bucket).
+SYNTH_IP="${SYNTH_IP:-192.0.2.$(( ( RANDOM % 200 ) + 1 ))}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-live) SKIP_LIVE=1 ; shift ;;
@@ -92,6 +98,7 @@ scenario_a() {
   local flow_json flow_id
   flow_json="$(curl -sS --max-time 10 \
                 "$TARGET_HOST/self-service/login/api" \
+                -H "cf-connecting-ip: $SYNTH_IP" \
                 -H 'Accept: application/json' 2>&1 || true)"
   flow_id="$(printf '%s' "$flow_json" | jq -r '.id // empty' 2>/dev/null || true)"
   if [ -z "$flow_id" ] || [ "$flow_id" = "null" ]; then
@@ -109,6 +116,7 @@ scenario_a() {
             -w '%{http_code}|%{header_json}' \
             -X POST \
             "$TARGET_HOST/self-service/login/methods/password?flow=$flow_id" \
+            -H "cf-connecting-ip: $SYNTH_IP" \
             -H 'Content-Type: application/json' \
             -H 'Accept: application/json' \
             -d '{"identifier":"probe-'"$i"'@example.invalid","password":"wrong-pwd-probe","method":"password"}' \

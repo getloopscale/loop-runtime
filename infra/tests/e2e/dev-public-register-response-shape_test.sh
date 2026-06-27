@@ -40,6 +40,14 @@ SKIP_LIVE=0
 JSON_OUTPUT=0
 SCENARIO="all"
 
+# EC-12 canonical: synthesize a unique cf-connecting-ip per run so the
+# register_throttle bucket key is isolated from prior runs.
+# Scenarios A+B use the same IP (they probe enumeration via different
+# emails, not throttling). Scenario C uses a distinct IP so the burst
+# bucket is fresh and doesn't share state with A+B's 2 hits.
+SYNTH_IP_AB="${SYNTH_IP_AB:-198.51.100.$(( ( RANDOM % 100 ) + 100 ))}"
+SYNTH_IP_C="${SYNTH_IP_C:-203.0.113.$(( ( RANDOM % 100 ) + 100 ))}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-live) SKIP_LIVE=1 ; shift ;;
@@ -87,9 +95,10 @@ preflight_seed
 
 # Body collector — returns the response body of a register submit.
 post_register() {
-  local email="$1" outfile="$2"
+  local email="$1" outfile="$2" client_ip="${3:-$SYNTH_IP_AB}"
   curl -sS --max-time 10 -o "$outfile" -w '%{http_code}' \
     -X POST "$TARGET_HOST/self-service/registration/methods/password" \
+    -H "cf-connecting-ip: $client_ip" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json' \
     -d "{\"method\":\"password\",\"traits.email\":\"$email\",\"traits.name\":\"Probe\",\"password\":\"valid-13c-pwd!\"}" \
@@ -134,7 +143,7 @@ scenario_c() {
   log "Scenario C — 6 rapid POSTs to confirm Slice A register_throttle bucket engages"
   local code last_code
   for i in $(seq 1 6); do
-    last_code="$(post_register "burst-$i@example.invalid" "$TMPDIR/body_c_$i.txt")"
+    last_code="$(post_register "burst-$i@example.invalid" "$TMPDIR/body_c_$i.txt" "$SYNTH_IP_C")"
     log "  burst $i → HTTP $last_code"
   done
   if [ "$last_code" != "429" ]; then

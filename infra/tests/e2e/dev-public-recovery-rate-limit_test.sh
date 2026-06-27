@@ -35,6 +35,14 @@ SKIP_LIVE=0
 JSON_OUTPUT=0
 SCENARIO="all"
 
+# EC-12 canonical: synthesize a unique cf-connecting-ip per run so the
+# Caddy rate_limit bucket key is isolated from prior test invocations
+# (without this, all curl calls share an empty-string bucket key and prior
+# runs persistently consume the 5/5min recovery_flow_create_throttle bucket).
+# Matches Cloudflare prod behavior where each client gets its own bucket.
+SYNTH_IP_A="${SYNTH_IP_A:-198.51.100.$(( ( RANDOM % 200 ) + 1 ))}"
+SYNTH_IP_B="${SYNTH_IP_B:-203.0.113.$(( ( RANDOM % 200 ) + 1 ))}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-live) SKIP_LIVE=1 ; shift ;;
@@ -85,6 +93,7 @@ scenario_a() {
   local code last_code=""
   for i in $(seq 1 6); do
     code="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' \
+            -H "cf-connecting-ip: $SYNTH_IP_A" \
             "$TARGET_HOST/self-service/recovery/browser" 2>&1 || true)"
     log "  request $i → HTTP $code"
     last_code="$code"
@@ -104,6 +113,7 @@ scenario_b() {
   local flow_json flow_id
   flow_json="$(curl -sS --max-time 10 \
                 "$TARGET_HOST/self-service/recovery/api" \
+                -H "cf-connecting-ip: $SYNTH_IP_B" \
                 -H 'Accept: application/json' 2>&1 || true)"
   flow_id="$(printf '%s' "$flow_json" | jq -r '.id // empty' 2>/dev/null || true)"
   if [ -z "$flow_id" ] || [ "$flow_id" = "null" ]; then
@@ -119,6 +129,7 @@ scenario_b() {
             -w '%{http_code}|%{header_json}' \
             -X POST \
             "$TARGET_HOST/self-service/recovery/methods/code?flow=$flow_id" \
+            -H "cf-connecting-ip: $SYNTH_IP_B" \
             -H 'Content-Type: application/json' \
             -H 'Accept: application/json' \
             -d '{"email":"probe-'"$i"'@example.invalid","method":"code"}' \
