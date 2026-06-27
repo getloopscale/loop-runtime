@@ -433,3 +433,140 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing
 			resp.LastBuild.CommitSHA, resp.ActiveRelease.GitCommit)
 	}
 }
+
+// Red Team loopzero-cloud#70/#62 closure: when the queried environment has no
+// last_build AND no active_release, the response MUST list any sibling
+// environments that DO have a SUCCEEDED build under `other_envs_with_releases`
+// so the CLI / dashboard can render an honest hint instead of an empty void.
+//
+// Before this closure, `loopzero status` (and the project overview card)
+// defaulted to env=production and rendered "no deployments yet" — even
+// when the user had a successful preview deploy. That misled adopters into
+// thinking nothing had been built, contradicting the BUILD page that listed
+// the SUCCEEDED preview build.
+//
+// Fixture: 1 SUCCEEDED build in env=preview, NO build / release in env=production.
+// Expected: GET ?env=production returns `other_envs_with_releases:[{environment:"preview",has_release:true}]`.
+func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint_RedTeam70(t *testing.T) {
+	now := time.Now()
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	builds := &fakeStatusBuildStore{
+		builds: []StatusBuild{
+			{
+				ID:          "bld-preview",
+				Environment: "preview",
+				Status:      "SUCCEEDED",
+				CommitSHA:   "abc123",
+				CreatedAt:   now,
+			},
+		},
+	}
+	// No active release in production (the queried env).
+	releases := &fakeStatusReleaseStore{release: nil}
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.LastBuild != nil {
+		t.Fatalf("Red Team #70: production has no build → last_build must be nil, got %+v", resp.LastBuild)
+	}
+	if resp.ActiveRelease != nil {
+		t.Fatalf("Red Team #70: production has no release → active_release must be nil")
+	}
+	if len(resp.OtherEnvsWithReleases) != 1 {
+		t.Fatalf("Red Team #70: want exactly 1 sibling env with release, got %d (%+v)",
+			len(resp.OtherEnvsWithReleases), resp.OtherEnvsWithReleases)
+	}
+	got := resp.OtherEnvsWithReleases[0]
+	if got.Environment != "preview" {
+		t.Errorf("Red Team #70: want sibling environment=preview, got %q", got.Environment)
+	}
+	if !got.HasRelease {
+		t.Errorf("Red Team #70: want has_release=true for sibling env, got false")
+	}
+}
+
+// Companion regression-protector: when the queried env HAS its own build,
+// the hint field MUST stay omitted (no noise on the happy path).
+func TestStatus_EmptyProductionWithNoSiblings_OmitsHint_RedTeam70(t *testing.T) {
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	builds := &fakeStatusBuildStore{builds: []StatusBuild{}} // no builds anywhere
+	releases := &fakeStatusReleaseStore{release: nil}
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.OtherEnvsWithReleases) != 0 {
+		t.Errorf("Red Team #70: empty project → other_envs_with_releases must be empty, got %+v",
+			resp.OtherEnvsWithReleases)
+	}
+
+	// JSON shape: omitempty MUST elide the field entirely when empty
+	// (preserves legacy clients that don't know about the field).
+	if strings.Contains(w.Body.String(), `"other_envs_with_releases"`) {
+		t.Errorf("Red Team #70: omitempty contract — field MUST be elided from JSON when empty, got body=%s",
+			w.Body.String())
+	}
+}
+
+// Boundary case: a sibling env that has a build but it FAILED — should NOT
+// surface as a hint (we only point users at envs that actually have a release).
+func TestStatus_EmptyProductionWithFailedSibling_OmitsHint_RedTeam70(t *testing.T) {
+	now := time.Now()
+	projects := &fakeStatusProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	builds := &fakeStatusBuildStore{
+		builds: []StatusBuild{
+			{
+				ID:          "bld-preview-failed",
+				Environment: "preview",
+				Status:      "FAILED",
+				CreatedAt:   now,
+			},
+		},
+	}
+	releases := &fakeStatusReleaseStore{release: nil}
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	var resp statusResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.OtherEnvsWithReleases) != 0 {
+		t.Errorf("Red Team #70: a FAILED sibling build must NOT surface as a release hint, got %+v",
+			resp.OtherEnvsWithReleases)
+	}
+}
