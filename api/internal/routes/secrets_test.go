@@ -17,6 +17,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -1137,5 +1138,57 @@ func TestSecretBulk_CrossTenantAndNonexistentResponsesByteIdentical(t *testing.T
 	if !bytes.Equal(crossTenantBody, nonexistentBody) {
 		t.Errorf("EC-03 BYTE-IDENTICAL invariant violated.\n  cross-tenant: %s\n  nonexistent:  %s",
 			crossTenantBody, nonexistentBody)
+	}
+}
+
+// Red Team loopzero-cloud#92 regression-protector (2026-06-27): the
+// /api/v1/secrets?project=<name> List endpoint MUST refuse non-existent
+// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty list.
+// Without this, the dashboard's Secrets page rendered functional UI
+// (with "Add secret" form) on top of a deleted project.
+func TestSecretHandler_List_NonExistentProject_Returns404_RedTeam92(t *testing.T) {
+	store := &fakeSecretStoreT01{}
+	checker := &fakeProjectCheckerT12{
+		owned: map[string]string{
+			// tn-test-123 (= defaultUserContext()) owns only "owned-project".
+			// "nonexistent-zzz" is NOT in the map → checker returns nil.
+			"owned-project": "tn-test-123",
+		},
+	}
+	h := NewSecretHandler(store)
+	h.SetProjectChecker(checker)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/secrets?env=production&project=nonexistent-zzz", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("Red Team #92: want 404 PROJECT_NOT_FOUND for missing project, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "PROJECT_NOT_FOUND") {
+		t.Errorf("Red Team #92: error body must include PROJECT_NOT_FOUND code, got %s", w.Body.String())
+	}
+}
+
+func TestSecretHandler_List_ExistingProject_AllowsThrough_RedTeam92(t *testing.T) {
+	store := &fakeSecretStoreT01{}
+	checker := &fakeProjectCheckerT12{
+		owned: map[string]string{"owned-project": "tn-test-123"},
+	}
+	h := NewSecretHandler(store)
+	h.SetProjectChecker(checker)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/secrets?env=production&project=owned-project", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 OK for owned project, got %d body=%s", w.Code, w.Body.String())
 	}
 }

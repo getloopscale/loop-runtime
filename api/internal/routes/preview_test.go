@@ -376,3 +376,96 @@ func TestPreviewHandler_Construction(t *testing.T) {
 		t.Fatal("handler should not be nil")
 	}
 }
+
+// =============================================================================
+// Red Team loopzero-cloud#92 regression-protector (2026-06-27): missing-parent-guard.
+// When a PreviewProjectChecker is wired, every preview handler MUST refuse
+// to operate on non-existent projects with 404 PROJECT_NOT_FOUND instead
+// of 200 + empty list.
+// =============================================================================
+
+type fakePreviewProjectChecker struct {
+	getByNameFn func(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+}
+
+func (f *fakePreviewProjectChecker) GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error) {
+	if f.getByNameFn != nil {
+		return f.getByNameFn(ctx, tenantID, name)
+	}
+	return nil, nil
+}
+
+func TestPreviewHandler_List_NonExistentProject_Returns404(t *testing.T) {
+	// Red Team #92: project does not exist for this tenant → 404
+	// PROJECT_NOT_FOUND (canonical defense + no existence leak).
+	checker := &fakePreviewProjectChecker{
+		getByNameFn: func(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+			return nil, nil // project not found
+		},
+	}
+	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil).WithProjectChecker(checker)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent-zzz/previews", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "project", "nonexistent-zzz")
+	w := httptest.NewRecorder()
+	h.List(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 PROJECT_NOT_FOUND, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "PROJECT_NOT_FOUND") {
+		t.Errorf("response body must include PROJECT_NOT_FOUND code, got %s", w.Body.String())
+	}
+}
+
+func TestPreviewHandler_List_ExistingProject_AllowsThrough(t *testing.T) {
+	// Red Team #92: project exists → handler proceeds normally.
+	checker := &fakePreviewProjectChecker{
+		getByNameFn: func(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+			return &domain.ProjectResult{Name: "api"}, nil
+		},
+	}
+	store := &fakePreviewStore{
+		listByProjectFn: func(_ context.Context, _, _ string) ([]domain.Preview, error) {
+			return []domain.Preview{{ID: "prev-1"}}, nil
+		},
+	}
+	h := NewPreviewHandler(store, nil, nil).WithProjectChecker(checker)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "project", "api")
+	w := httptest.NewRecorder()
+	h.List(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestPreviewHandler_List_NilChecker_BackwardsCompat(t *testing.T) {
+	// Without a wired checker (legacy/test path), the gate is skipped.
+	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "project", "api")
+	w := httptest.NewRecorder()
+	h.List(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (nil checker = no gate), got %d", w.Code)
+	}
+}
+
+func TestPreviewHandler_Get_NonExistentProject_Returns404(t *testing.T) {
+	checker := &fakePreviewProjectChecker{
+		getByNameFn: func(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+			return nil, nil
+		},
+	}
+	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil).WithProjectChecker(checker)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent/previews/prev-1", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParams(req, map[string]string{"project": "nonexistent", "id": "prev-1"})
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 PROJECT_NOT_FOUND on Get, got %d body=%s", w.Code, w.Body.String())
+	}
+}
