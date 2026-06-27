@@ -122,4 +122,3 @@ replace github.com/getloopscale/loopzero/pkg => ../pkg
 
 replace github.com/getloopscale/loopzero/operators/api => ../operators/api
 
-replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts

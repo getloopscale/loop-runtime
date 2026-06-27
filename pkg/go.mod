@@ -41,6 +41,3 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 )
 
-// Red Team #41 (2026-06-27): consume local loopzero-contracts for the new
-// ProjectStatusPreview constant before the version pin cuts over.
-replace github.com/getloopscale/loopzero-contracts => ../../loopzero-contracts

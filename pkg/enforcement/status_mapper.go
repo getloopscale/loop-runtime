@@ -29,7 +29,11 @@ const (
 	ProjectStatusIdle     = plan.ProjectStatusIdle
 	ProjectStatusQueued   = plan.ProjectStatusQueued
 	// Red Team loopzero-cloud#41 (2026-06-27) — preview-only project status.
-	ProjectStatusPreview = plan.ProjectStatusPreview
+	// Declared as a local typed string to avoid pinning the engine on a
+	// not-yet-published loopzero-contracts v0.2 (the canonical constant lives
+	// at loopzero-contracts/plan.ProjectStatusPreview — see follow-up
+	// version-pin cutover runbook). Wire-format identical: "preview".
+	ProjectStatusPreview plan.ProjectStatus = "preview"
 )
 
 // MapBuildStatusToProjectStatus is the exhaustive 7-state mapping.
