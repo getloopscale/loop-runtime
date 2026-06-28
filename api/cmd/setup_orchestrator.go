@@ -77,8 +77,18 @@ func setupOrchestrator(
 	// A nil limiter is legal — means the DB was unavailable (dev without pool)
 	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
 	var planCap services.PlanCapChecker
+	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
+	// store, which historically had NO cap checker — so the deploy-time
+	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
+	// POST /api/v1/projects. Wire the SAME cap adapter onto this store so a deploy
+	// of a NEW project beyond the cap is rejected atomically (one adapter reused
+	// for both the scaling PlanCap and the project-cap checker). nil limiter (dev
+	// without pool) leaves the store unenforced — no behavior change.
+	buildProjectStore := &db.PostgresProjectStore{DB: dbAdapter}
 	if planLimiter != nil {
-		planCap = &planLimiterCapAdapter{limiter: planLimiter}
+		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
+		planCap = capAdapter
+		buildProjectStore.SetProjectCapChecker(capAdapter)
 	}
 
 	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator
@@ -92,7 +102,7 @@ func setupOrchestrator(
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
 		EnvTargetStore:    stores.EnvTargetStore,
-		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ProjectStore:      buildProjectStore, // M5: cap-checker-wired store (closes #106)
 		EventStore:        stores.PgEventStore,
 		Workflow:          workflows.WorkflowSubmitter,
 		Sync:              workflows.SyncClient,
