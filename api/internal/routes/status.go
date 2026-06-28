@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -161,6 +162,16 @@ type rolloutStatusResponse struct {
 	AnalysisStatus string `json:"analysis_status,omitempty"`
 }
 
+// envHintResponse names a sibling environment that has a SUCCEEDED build /
+// active release while the queried env is empty. Surfaced as
+// `other_envs_with_releases` on the status response so the CLI / dashboard
+// can hint "production is empty; preview has an active release" instead of
+// rendering the misleading empty-production view. Red Team #70/#62.
+type envHintResponse struct {
+	Environment string `json:"environment"`
+	HasRelease  bool   `json:"has_release"`
+}
+
 // statusResponse is the JSON response for GET /api/v1/projects/{name}/status.
 type statusResponse struct {
 	Project       string                 `json:"project"`
@@ -169,6 +180,12 @@ type statusResponse struct {
 	ActiveRelease *activeReleaseResponse `json:"active_release"`
 	SyncStatus    string                 `json:"sync_status"`
 	URL           string                 `json:"url"`
+	// Red Team loopzero-cloud#70/#62 closure: when the queried env has no last
+	// build AND no active release, list any sibling envs that DO have a
+	// SUCCEEDED build so the CLI/dashboard can surface a hint instead of
+	// rendering the misleading empty-state view. Omitempty preserves the
+	// legacy shape when no other envs have releases.
+	OtherEnvsWithReleases []envHintResponse `json:"other_envs_with_releases,omitempty"`
 	Scaling       *scalingStatusResponse `json:"scaling,omitempty"`
 	// Rollout is the progressive-delivery state for the active release.
 	// Optional/null when:
@@ -260,12 +277,21 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if release != nil {
-		resp.ActiveRelease = buildActiveReleaseResponse(release)
+		resp.ActiveRelease = buildActiveReleaseResponse(release, builds)
 		resp.SyncStatus = "synced"
 	}
 
 	if resp.LastBuild != nil {
 		resp.Scaling = findScalingForEnv(builds, env)
+	}
+
+	// Red Team loopzero-cloud#70/#62 closure: when the queried env has neither
+	// a last_build nor an active release, surface sibling environments that
+	// DO have a SUCCEEDED build so the CLI / dashboard can replace the
+	// misleading empty-state with an honest "production is empty; preview
+	// has a release" hint. Field is omitempty so the happy path is unaffected.
+	if resp.LastBuild == nil && resp.ActiveRelease == nil {
+		resp.OtherEnvsWithReleases = collectOtherEnvsWithReleases(builds, env)
 	}
 
 	// Build URL — FAANG canonical (J-25 sponsor walkthrough catch 2026-06-12).
@@ -347,14 +373,70 @@ func findLastBuildForEnv(builds []StatusBuild, env string) *lastBuildResponse {
 	return nil
 }
 
+// collectOtherEnvsWithReleases returns the deterministic, deduplicated list
+// of sibling environments (≠ queriedEnv) that have at least one SUCCEEDED
+// build in the result set. Used by StatusHandler.Get to power the empty-env
+// hint (Red Team loopzero-cloud#70/#62).
+//
+// Order: alphabetical for stability across CLI/dashboard renderings (the
+// `builds` slice is most-recent-first, so naive iteration would emit by
+// recency which jitters when builds land out of order). Returns nil — not
+// an empty slice — when no siblings qualify so the `omitempty` JSON tag
+// elides the field entirely.
+func collectOtherEnvsWithReleases(builds []StatusBuild, queriedEnv string) []envHintResponse {
+	seen := make(map[string]struct{}, len(builds))
+	for i := range builds {
+		b := builds[i]
+		if b.Environment == "" || b.Environment == queriedEnv {
+			continue
+		}
+		if b.Status != "SUCCEEDED" {
+			continue
+		}
+		seen[b.Environment] = struct{}{}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]envHintResponse, 0, len(names))
+	for _, name := range names {
+		out = append(out, envHintResponse{Environment: name, HasRelease: true})
+	}
+	return out
+}
+
 // buildActiveReleaseResponse converts the domain release record to the
 // canonical response shape.
-func buildActiveReleaseResponse(release *StatusRelease) *activeReleaseResponse {
+//
+// Red Team loopzero-cloud#85 closure: the user-facing `git_commit` field
+// is the APP commit (`build.commit_sha` — what the user pushed and
+// `loopzero deploy` printed in stdout), NOT the internal gitops repo
+// commit (which is what `releases.git_commit` actually stores for
+// SyncCallbackActivator integrity per MEET-2026-03-31-024 BUG-03). When
+// the active release's build_id matches a build in the result set, we
+// prefer that build's commit_sha. Falls back to release.GitCommit for
+// orphan releases (build pruned, legacy data) so the field is never
+// empty.
+func buildActiveReleaseResponse(release *StatusRelease, builds []StatusBuild) *activeReleaseResponse {
+	commit := release.GitCommit
+	if release.BuildID != "" {
+		for i := range builds {
+			if builds[i].ID == release.BuildID && builds[i].CommitSHA != "" {
+				commit = builds[i].CommitSHA
+				break
+			}
+		}
+	}
 	return &activeReleaseResponse{
 		ID:        release.ID,
 		BuildID:   release.BuildID,
 		Status:    release.Status,
-		GitCommit: release.GitCommit,
+		GitCommit: commit,
 		CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }

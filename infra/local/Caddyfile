@@ -150,6 +150,17 @@ app-dev.loopzero.example {
   # loopzero-cli,loopzero-contracts} workspace layout). Override DASHBOARD_DIST
   # before task invocation if you have a non-standard layout.
   # See docs/operations/operator-local-caddy-workflow.md.
+  # Red Team loopzero-cloud#86 closure path normalization is enforced at the
+  # loopzero-cloud BFF layer (cloud/internal/middleware/path_normalize.go)
+  # because Caddy's `path_regexp` matcher operates on the CLEANED path
+  # (consecutive slashes already collapsed by Caddy's URL parser before
+  # routing). A Caddyfile-side rewrite cannot detect `//engine/*` here
+  # — it would route to `handle /engine/*` correctly only when the
+  # matcher saw the raw URI, which it does not. The BFF middleware
+  # uses Go's `r.RequestURI` (preserves raw double-slash), detects
+  # consecutive slashes BEFORE auth middleware, and emits 308 redirect
+  # to the canonical single-slash form.
+
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
@@ -164,7 +175,7 @@ app-dev.loopzero.example {
     # devtools when prior version stripped Google Fonts via narrower header
     # CSP intersection. Plan caddyfile-app-dev-prod-bundle-file-server-
     # canonical v1.2.
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 

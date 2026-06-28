@@ -124,3 +124,31 @@ func TestStatus_J20ScaleErrors(t *testing.T) {
 		}
 	}
 }
+
+// Red Team loopzero-cloud#103 regression-protector. Both INVALID_ARGUMENT
+// (scale path scaling_types.go:26) AND INVALID_DOMAIN (domains_create
+// validation path) MUST map to HTTP 400 — client input validation
+// returns 4xx, not 500. INTERNAL_ERROR was being used for both paths
+// because of registry omissions. The Red Team observed status×code
+// mismatches (400 INTERNAL_ERROR for domain, 500 INVALID_ARGUMENT for
+// scale -5). These two registry entries close the contract.
+func TestStatus_Validation_RedTeam103(t *testing.T) {
+	tests := []struct {
+		code string
+		want int
+	}{
+		{"INVALID_ARGUMENT", http.StatusBadRequest},
+		{"INVALID_DOMAIN", http.StatusBadRequest},
+		{"INVALID_REPLICAS", http.StatusBadRequest},
+	}
+	for _, tc := range tests {
+		err := &loopzeroerrors.LoopZeroError{Code: tc.code, Message: "x"}
+		if got := Status(err); got != tc.want {
+			t.Errorf("Red Team #103: Status(%s)=%d, want %d (validation errors are 4xx, NEVER 5xx)",
+				tc.code, got, tc.want)
+		}
+		if !IsRegistered(tc.code) {
+			t.Errorf("Red Team #103: registry must include %q (validation contract)", tc.code)
+		}
+	}
+}
