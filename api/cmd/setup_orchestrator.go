@@ -45,6 +45,19 @@ func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int)
 	return result.Allowed, result.Plan, result.Limit
 }
 
+// wireProjectCap is the SINGLE path that wires a per-Account project-cap checker
+// onto a project store. Both project-creating stores — the API store
+// (setup_database.go) and the build-orchestrator store (setup_orchestrator.go) —
+// MUST go through here so they can never diverge again: the divergence (one store
+// capped, one not) was the exact root cause of #106. A nil checker leaves the
+// store unenforced (dev without a pool).
+func wireProjectCap(store *db.PostgresProjectStore, checker db.ProjectCapChecker) {
+	if store == nil || checker == nil {
+		return
+	}
+	store.SetProjectCapChecker(checker)
+}
+
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
 	Orchestrator      *services.BuildOrchestrator
@@ -80,15 +93,16 @@ func setupOrchestrator(
 	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
 	// store, which historically had NO cap checker — so the deploy-time
 	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
-	// POST /api/v1/projects. Wire the SAME cap adapter onto this store so a deploy
-	// of a NEW project beyond the cap is rejected atomically (one adapter reused
-	// for both the scaling PlanCap and the project-cap checker). nil limiter (dev
-	// without pool) leaves the store unenforced — no behavior change.
+	// POST /api/v1/projects. Wire the SAME cap adapter onto this store via the
+	// shared wireProjectCap helper (the one path BOTH project-creating stores go
+	// through, so they can never diverge again — that divergence was the #106 root
+	// cause). The adapter doubles as the scaling PlanCap. nil limiter (dev without
+	// pool) leaves the store unenforced — no behavior change.
 	buildProjectStore := &db.PostgresProjectStore{DB: dbAdapter}
 	if planLimiter != nil {
 		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
 		planCap = capAdapter
-		buildProjectStore.SetProjectCapChecker(capAdapter)
+		wireProjectCap(buildProjectStore, capAdapter)
 	}
 
 	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator

@@ -246,3 +246,42 @@ func TestProjectCapHermeticM5_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *tes
 		t.Fatalf("deploy on a held-env-lock tx over cap must be PROJECTS_EXCEED_PLAN (and not deadlock); got %v", err)
 	}
 }
+
+// Scenario 7 — the RLS-context guard. The real build-submit tx sets
+// `app.tenant_id = <deploying tenant>` (the projects RLS policy). The per-Account
+// cap count is a CROSS-TENANT aggregate that MUST NOT be filtered by that policy,
+// otherwise it would degrade to per-tenant. This reproduces that exact context
+// (set app.tenant_id to the deploying tenant, then drive the deploy on the same
+// tx) and asserts the cap still binds across tenants — pinning the documented
+// BYPASSRLS/owner invariant for the count (see enforceProjectCapTx).
+func TestProjectCapHermeticM5_CrossTenantCountUnaffectedByRLSContext(t *testing.T) {
+	store, std := m4Store(t)
+	pool := testPool(t)
+	const owner, acct, tn1, tn2 = "m5-rls-uid", "acct-m5rls", "tn-m5rls-a", "tn-m5rls-b"
+	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
+	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+
+	// Fill the single slot under tn1, so the account is AT cap via a DIFFERENT
+	// tenant than the one that will deploy.
+	if _, err := std.Exec(`INSERT INTO projects (id,tenant_id,name,created_by) VALUES ($1,$2,$3,$4)`, "proj-rls", tn1, "existing", owner); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ctx := context.Background()
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// Reproduce the build-submit RLS context: app.tenant_id = the DEPLOYING tenant (tn2).
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tn2); err != nil {
+		t.Fatalf("set app.tenant_id: %v", err)
+	}
+	// Deploy a NEW project under tn2. The cross-tenant count must still see tn1's
+	// project (count=1 >= cap=1) and block — if the count were RLS-filtered to
+	// app.tenant_id=tn2 it would see 0 and wrongly allow.
+	err = store.EnsureProject(ctx, &db.PgxTxAdapter{Tx: tx}, tn2, "rls-newproj", owner)
+	if !isCapError(err) {
+		t.Fatalf("cross-tenant cap must bind despite app.tenant_id being set to the deploying tenant; got %v", err)
+	}
+}

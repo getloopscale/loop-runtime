@@ -118,6 +118,19 @@ func resolveAccountAndLock(ctx context.Context, tx DBTX, tenantID string) (strin
 // (misconfigured) fails closed (count >= 0 always). The caller MUST have called
 // resolveAccountAndLock on the same tx first. Shared by createProjectCapped (API)
 // and ensureProjectCapped (deploy) so the cap rule + the count SQL live once.
+//
+// RLS INVARIANT (load-bearing): the count is a CROSS-TENANT aggregate over all
+// the Account's tenants. On the deploy path it runs inside the build-submit tx,
+// which sets `app.tenant_id = <deploying tenant>` (internal/lock — the projects
+// RLS policy `projects_tenant_isolation`). The count therefore REQUIRES a
+// connection that is NOT subject to that policy — i.e. a role with BYPASSRLS or
+// the table owner — otherwise it would be silently filtered to the single
+// deploying tenant and the per-Account cap would degrade to per-tenant. The
+// engine's synchronous request path (API + build-submit) runs on exactly such a
+// pool today (LOOPZERO's main role has rolbypassrls=true); the restricted
+// `loopzero_worker` role is reserved for background loops, never the submit path. If
+// the submit path is ever moved to a non-BYPASSRLS role this count MUST be made
+// RLS-independent (e.g. a SECURITY DEFINER counting function). Tracked separately.
 func enforceProjectCapTx(ctx context.Context, tx DBTX, accountID, plan string, cap int) error {
 	var count int
 	if err := tx.QueryRow(ctx,
@@ -190,6 +203,14 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 // per-Account cap as CreateProject — closing the bypass where `loopzero deploy
 // <new-name>` created a project past the cap. Unlimited (cap < 0) and the
 // nil-checker dev/test path keep the original unenforced idempotent insert.
+//
+// COST (bounded plans only): a bounded-plan deploy now does, before the
+// idempotent insert, one plan resolution + a per-account advisory lock + an
+// existence SELECT + a cross-tenant count — and serializes concurrent deploys of
+// the SAME account on hashtext(accountID) for the (short) remainder of the
+// build-submit tx. Deploys are low-QPS and the locked window is DB-only (the
+// workflow submit is outside it), so this is acceptable; enterprise/unlimited
+// and the nil-checker (dev) path stay zero-overhead (the early returns below).
 func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx DBTX, tenantID, name, createdBy string) error {
 	if s.capChecker != nil {
 		_, plan, cap := s.capChecker.CheckProjectsValue(tenantID, 0)

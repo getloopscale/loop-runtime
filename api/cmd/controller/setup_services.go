@@ -124,6 +124,14 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// ---- Build orchestrator (required by reconcile loop) ----
+	// M5 (#106) note: this orchestrator's project store is DELIBERATELY left
+	// without a ProjectCapChecker. The controller binary's orchestrator is used
+	// ONLY by the build-reconcile loop (OnBuildCompleted / FindReleaseForBuild /
+	// RetryReleaseActivation) — it never calls SubmitBuild/EnsureProject, so no
+	// project is ever created here and the per-Account cap does not apply. The
+	// cap is wired on the API server's orchestrator (cmd/setup_orchestrator.go),
+	// which owns every project-creating path. If the controller is ever changed
+	// to submit/re-submit builds, wire SetProjectCapChecker here too.
 	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 		BuildStore:        buildStore,
 		ReleaseStore:      releaseStore,

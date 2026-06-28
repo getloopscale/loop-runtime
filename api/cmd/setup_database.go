@@ -86,10 +86,10 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 			deps.StdDB = stdDB
 			deps.PlanLimiter = enforcement.NewPlanLimiter(stdDB, logger)
 			// M4 (account-level tenancy, Phase 2): enforce the per-Account project
-			// cap at the single project-creation path. The store resolves the cap
-			// account-scoped + counts under a per-account advisory lock atomically.
-			// Replaces the per-tenant 402 middleware with the canonical 422 cap.
-			projectStore.SetProjectCapChecker(&planLimiterCapAdapter{limiter: deps.PlanLimiter})
+			// cap at the API project-creation path. M5 (#106) routes this through the
+			// shared wireProjectCap helper so the API store and the build-orchestrator
+			// store are wired through ONE path and can never diverge again.
+			wireProjectCap(projectStore, &planLimiterCapAdapter{limiter: deps.PlanLimiter})
 			logger.Info("plan enforcement enabled")
 		}
 	}
