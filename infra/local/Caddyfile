@@ -233,6 +233,20 @@ app-dev.loopzero.example {
     }
   }
 
+  # Red Team loopzero-cloud#112 closure (2026-06-28) — Hydra consent / device-flow
+  # routes wired in loopzero-cloud cmd/main.go:508-511 (consent.Login + Consent +
+  # DeviceVerify + LoginComplete). The CLI device-flow lands the operator at
+  # https://app-dev.loopzero.example/auth/login?login_challenge=<id>; without this
+  # handle the request fell through to the SPA file_server catch-all and React
+  # Router rendered "Page not found" — BLOCKER for `loopzero login --device-flow`,
+  # which was preventing the deploy chain end-to-end (P0 mandate 2026-06-28).
+  # Mirror the /v1/* shape (same Host rewrite + same upstream).
+  handle /auth/* {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
+
   # Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.4 (2026-06-26
   # — closes loopzero-cloud#88): /engine/* is the canonical BFF proxy prefix the
   # dashboard (`engineFetch` in `src/lib/api.ts:197` → `cloudFetch(`/engine${path}`)`)
