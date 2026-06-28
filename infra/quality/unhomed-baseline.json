@@ -1,12 +1,18 @@
 {
-  "total": 170,
+  "total": 172,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 110
+    "test": 112
   },
   "_changelog": [
+    {
+      "date": "2026-06-28",
+      "from": {"total": 170, "test": 110},
+      "to":   {"total": 172, "test": 112},
+      "reason": "Merge of origin/develop into develop integrated the team's Red Team / kratos-self-service-rate-limit LIVE bash regression-protectors (net +2 in the test domain): infra/tests/e2e/dev-public-{login,recovery}-rate-limit_test.sh + dev-public-register-name-maxlength_test.sh + dev-public-engine-large-header-not-431_test.sh + dev-public-redteam-canonical-paths_test.sh + dev-public-register-response-shape_test.sh, net of their hermetic check-*-syntax_test.sh siblings (categorically homed in task quality:gates) and archive/ dogfood wrappers. Each LIVE script reproduces a Red Team symptom verbatim per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25 and is allowlisted in .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (loopzero-cloud#43/#64/#65/#68/#89, kratos-self-service-rate-limit-systemic). These scripts landed on origin/develop without a matching baseline ratchet; this entry reconciles the baseline to the merged state. The account-level-tenancy M3 commits in this same merge add ZERO scripts (pure pg-cloud SQL migrations 000040-000044). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors the entries below."
+    },
     {
       "date": "2026-06-25",
       "from": {"total": 169, "test": 109},
