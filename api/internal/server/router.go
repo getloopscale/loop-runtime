@@ -217,17 +217,11 @@ func NewRouter(cfg Config) *chi.Mux {
 				upgradeURL = "/billing"
 			}
 
-			projectEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
-				Metric: "projects",
-				CountFn: func(tenantID string) int {
-					if cfg.ProjectStore == nil {
-						return 0
-					}
-					ps, _ := cfg.ProjectStore.ListByTenant(context.Background(), tenantID)
-					return len(ps)
-				},
-			}, tenantFromCtx, upgradeURL)
-
+			// M4 (account-level tenancy, Phase 2): the per-TENANT projects 402
+			// middleware was REMOVED here. The project cap is now enforced
+			// per-Account at the single creation path (PostgresProjectStore,
+			// atomic advisory-lock count+insert) with the canonical 422
+			// PROJECTS_EXCEED_PLAN — see cmd/setup_database.go SetProjectCapChecker.
 			buildEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "builds_per_month",
 				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
@@ -258,7 +252,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			}, tenantFromCtx, upgradeURL)
 
 			registerProtectedRoutes(r, cfg, rateLimitMiddlewares, idempotentMiddlewares,
-				projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)
+				buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)
 		})
 	}
 
@@ -274,7 +268,7 @@ func registerProtectedRoutes(
 	cfg Config,
 	rateLimitMiddlewares []func(http.Handler) http.Handler,
 	idempotentMiddlewares []func(http.Handler) http.Handler,
-	projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement func(http.Handler) http.Handler,
+	buildEnforcement, envEnforcement, seatEnforcement func(http.Handler) http.Handler,
 	buildCostGate func(http.Handler) http.Handler,
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
@@ -317,7 +311,7 @@ func registerProtectedRoutes(
 		}
 		r.Get("/api/v1/projects", projects.List)
 		r.Get("/api/v1/projects/{name}", projects.Get)
-		r.With(append(rateLimitMiddlewares, projectEnforcement)...).Post("/api/v1/projects", projects.Create)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)
 	}

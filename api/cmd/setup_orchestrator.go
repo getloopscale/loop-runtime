@@ -33,6 +33,18 @@ func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested in
 	return result.Allowed, result.Plan, result.Limit
 }
 
+// CheckProjectsValue resolves the per-Account project cap (M4). Mirrors
+// CheckReplicasValue; satisfies db.ProjectCapChecker so the project-creation
+// store can enforce the cap atomically. Returns (allowed, plan, cap) where
+// cap < 0 = unlimited.
+func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
+	if a == nil || a.limiter == nil {
+		return true, "dev", -1 // dev/no-limiter → unlimited (no enforcement)
+	}
+	result := a.limiter.CheckProjectsValue(tenantID, current)
+	return result.Allowed, result.Plan, result.Limit
+}
+
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
 	Orchestrator      *services.BuildOrchestrator
