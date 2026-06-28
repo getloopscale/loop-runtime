@@ -93,6 +93,47 @@ func (s *PostgresProjectStore) insertProject(ctx context.Context, input domain.C
 	return domain.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
 }
 
+// resolveAccountAndLock resolves the tenant's Account (tenants.account_id, NOT
+// NULL since M3 000044) and acquires the per-account xact-scoped advisory lock on
+// tx — the canonical engine serialization (internal/lock.WithEnvironmentLock),
+// auto-released when tx commits/rolls back. Both the API create path
+// (createProjectCapped) and the deploy path (EnsureProject) call this so they
+// serialize on the SAME hashtext(accountID) keyspace — the project cap is atomic
+// ACROSS both paths, not just within one. Shared so neither path duplicates the
+// resolve+lock SQL.
+func resolveAccountAndLock(ctx context.Context, tx DBTX, tenantID string) (string, error) {
+	var accountID string
+	if err := tx.QueryRow(ctx, "SELECT account_id FROM tenants WHERE id = $1", tenantID).Scan(&accountID); err != nil {
+		return "", fmt.Errorf("project store: resolve account: %w", err)
+	}
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", accountID); err != nil {
+		return "", fmt.Errorf("project store: advisory lock: %w", err)
+	}
+	return accountID, nil
+}
+
+// enforceProjectCapTx counts the Account's projects under the already-held
+// advisory lock and, if creating one more would exceed cap, increments the
+// violation metric and returns a *LoopZeroError(PROJECTS_EXCEED_PLAN). cap == 0
+// (misconfigured) fails closed (count >= 0 always). The caller MUST have called
+// resolveAccountAndLock on the same tx first. Shared by createProjectCapped (API)
+// and ensureProjectCapped (deploy) so the cap rule + the count SQL live once.
+func enforceProjectCapTx(ctx context.Context, tx DBTX, accountID, plan string, cap int) error {
+	var count int
+	if err := tx.QueryRow(ctx,
+		"SELECT count(*) FROM projects WHERE tenant_id IN (SELECT id FROM tenants WHERE account_id = $1)",
+		accountID,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("project store: count projects: %w", err)
+	}
+	// Block-new-only (ADR-M4-4): creating one more would make count+1 > cap.
+	if count >= cap {
+		metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", plan).Inc()
+		return loopzeroerrors.NewProjectsExceedPlan(plan, cap, count, accountID)
+	}
+	return nil
+}
+
 // createProjectCapped enforces the per-Account project cap ATOMICALLY: one
 // transaction holds a per-account advisory lock across the count + insert, so two
 // concurrent creations at the cap boundary cannot both succeed (the count is
@@ -108,38 +149,19 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 		return domain.ProjectResult{}, fmt.Errorf("project store: cap enforcement requires a pgx pool, got DBTX %T", s.DB)
 	}
 
-	tx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
+	pgtx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return domain.ProjectResult{}, fmt.Errorf("project store: begin tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful Commit
+	defer func() { _ = pgtx.Rollback(ctx) }() // no-op after a successful Commit
+	tx := &PgxTxAdapter{Tx: pgtx}
 
-	// Resolve the Account (tenants.account_id is NOT NULL since M3 000044).
-	var accountID string
-	if err := tx.QueryRow(ctx, "SELECT account_id FROM tenants WHERE id = $1", input.TenantID).Scan(&accountID); err != nil {
-		return domain.ProjectResult{}, fmt.Errorf("project store: resolve account: %w", err)
+	accountID, err := resolveAccountAndLock(ctx, tx, input.TenantID)
+	if err != nil {
+		return domain.ProjectResult{}, err
 	}
-
-	// Per-account advisory lock (xact-scoped — auto-released on commit/rollback),
-	// the canonical engine pattern (internal/lock.WithEnvironmentLock). Serializes
-	// concurrent creations for the SAME Account so the count+insert is atomic.
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", accountID); err != nil {
-		return domain.ProjectResult{}, fmt.Errorf("project store: advisory lock: %w", err)
-	}
-
-	var count int
-	if err := tx.QueryRow(ctx,
-		"SELECT count(*) FROM projects WHERE tenant_id IN (SELECT id FROM tenants WHERE account_id = $1)",
-		accountID,
-	).Scan(&count); err != nil {
-		return domain.ProjectResult{}, fmt.Errorf("project store: count projects: %w", err)
-	}
-
-	// Block-new-only (ADR-M4-4): creating one more would make count+1 > cap.
-	// cap == 0 (misconfigured) → count >= 0 always true → fail closed.
-	if count >= cap {
-		metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", plan).Inc()
-		return domain.ProjectResult{}, loopzeroerrors.NewProjectsExceedPlan(plan, cap, count, accountID)
+	if err := enforceProjectCapTx(ctx, tx, accountID, plan, cap); err != nil {
+		return domain.ProjectResult{}, err
 	}
 
 	id := GenerateProjectID()
@@ -153,7 +175,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 		return domain.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := pgtx.Commit(ctx); err != nil {
 		return domain.ProjectResult{}, fmt.Errorf("project store: commit: %w", err)
 	}
 	return domain.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
@@ -162,7 +184,26 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 // EnsureProject creates a project if it doesn't exist (idempotent).
 // Accepts an explicit DBTX so callers can compose with their existing
 // transaction (release pipeline: project ensure within env lock).
+//
+// M5 (hermetic project-cap, #106): when a ProjectCapChecker is wired and the
+// plan is bounded (cap >= 0), the deploy-time auto-create enforces the SAME
+// per-Account cap as CreateProject — closing the bypass where `loopzero deploy
+// <new-name>` created a project past the cap. Unlimited (cap < 0) and the
+// nil-checker dev/test path keep the original unenforced idempotent insert.
 func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx DBTX, tenantID, name, createdBy string) error {
+	if s.capChecker != nil {
+		_, plan, cap := s.capChecker.CheckProjectsValue(tenantID, 0)
+		if cap >= 0 { // bounded plan → enforce atomically (cap < 0 = unlimited, EC-6)
+			return s.ensureProjectCapped(ctx, tx, tenantID, name, createdBy, plan, cap)
+		}
+	}
+	return s.ensureProjectInsert(ctx, tx, tenantID, name, createdBy)
+}
+
+// ensureProjectInsert is the original idempotent insert (ON CONFLICT
+// (tenant_id, name) DO NOTHING) via the sqlc bridge. Used for the unenforced
+// path (nil checker / unlimited) and as the final insert under the cap lock.
+func (s *PostgresProjectStore) ensureProjectInsert(ctx context.Context, tx DBTX, tenantID, name, createdBy string) error {
 	target := tx
 	if target == nil {
 		target = s.DB
@@ -180,6 +221,76 @@ func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx DBTX, tenan
 		CreatedBy: createdBy,
 	}); err != nil {
 		return fmt.Errorf("project store: ensure project failed: %w", err)
+	}
+	return nil
+}
+
+// ensureProjectCapped enforces the per-Account project cap ATOMICALLY for a
+// genuinely-NEW project on the deploy path. Existence is checked UNDER the
+// advisory lock so a re-deploy to an EXISTING project is never blocked, even when
+// the account is at/over cap (ADR-M5-2, block-new-only).
+//
+// Deadlock-safety (ADR-M5-1): the advisory lock is taken on the CALLER's tx (the
+// build-submit env-lock'd tx) — never a nested BeginTx/connection. The build path
+// holds the env-lock (hashtext("{tenant}:{project}:{env}")) then this account-lock
+// (hashtext(accountID)); the API path takes the account-lock alone; no path takes
+// account→env. The single global order env→account is therefore acyclic. When tx
+// is nil (no caller tx) we open our own tx from the pgx pool (EC-1); without a pgx
+// pool we fail closed rather than bypass the cap.
+func (s *PostgresProjectStore) ensureProjectCapped(ctx context.Context, tx DBTX, tenantID, name, createdBy, plan string, cap int) error {
+	capTx := tx
+	var ownTx pgx.Tx
+	if capTx == nil {
+		adapter, ok := s.DB.(*PgxAdapter)
+		if !ok || adapter.Pool == nil {
+			return fmt.Errorf("project store: cap enforcement requires a pgx pool, got DBTX %T", s.DB)
+		}
+		t, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("project store: begin tx: %w", err)
+		}
+		ownTx = t
+		defer func() { _ = t.Rollback(ctx) }() // no-op after a successful Commit
+		capTx = &PgxTxAdapter{Tx: t}
+	}
+
+	accountID, err := resolveAccountAndLock(ctx, capTx, tenantID)
+	if err != nil {
+		return err
+	}
+
+	// Existence UNDER the lock: an already-existing (tenant_id, name) is a
+	// re-deploy → never blocked (ADR-M5-2). Checked after the lock so it cannot
+	// race a concurrent first-time create of the same project.
+	var one int
+	existErr := capTx.QueryRow(ctx, "SELECT 1 FROM projects WHERE tenant_id = $1 AND name = $2", tenantID, name).Scan(&one)
+	switch {
+	case existErr == nil:
+		// Project exists → no new row, no cap check. Commit our own tx if we own it.
+		if ownTx != nil {
+			if err := ownTx.Commit(ctx); err != nil {
+				return fmt.Errorf("project store: commit: %w", err)
+			}
+		}
+		return nil
+	case errors.Is(existErr, pgx.ErrNoRows) || errors.Is(existErr, ErrNoRows):
+		// Not found → genuinely new → enforce the cap below.
+	default:
+		return fmt.Errorf("project store: existence check: %w", existErr)
+	}
+
+	if err := enforceProjectCapTx(ctx, capTx, accountID, plan, cap); err != nil {
+		return err
+	}
+
+	if err := s.ensureProjectInsert(ctx, capTx, tenantID, name, createdBy); err != nil {
+		return err
+	}
+
+	if ownTx != nil {
+		if err := ownTx.Commit(ctx); err != nil {
+			return fmt.Errorf("project store: commit: %w", err)
+		}
 	}
 	return nil
 }
