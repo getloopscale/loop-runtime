@@ -345,6 +345,29 @@ func TestNewReplicasExceedPlan_FormatsContext(t *testing.T) {
 	}
 }
 
+// M4 T1.1 — per-Account project-cap typed error. Mirrors NewReplicasExceedPlan;
+// the message MUST carry plan name, cap, current count, the offending account,
+// and the upgrade URL (EC-4 — an actionable path like every canonical cap error).
+func TestNewProjectsExceedPlan_FormatsContext(t *testing.T) {
+	err := NewProjectsExceedPlan("starter", 1, 1, "acct-abc123")
+	if err.Code != "PROJECTS_EXCEED_PLAN" {
+		t.Fatalf("unexpected code: %+v", err)
+	}
+	msg := err.Message
+	if !strings.Contains(msg, "Starter") && !strings.Contains(msg, "starter") {
+		t.Errorf("message missing plan name: %s", msg)
+	}
+	if !strings.Contains(msg, "1") {
+		t.Errorf("message missing cap/count: %s", msg)
+	}
+	if !strings.Contains(msg, "acct-abc123") {
+		t.Errorf("message missing account: %s", msg)
+	}
+	if !strings.Contains(msg, "loopzero.example/pricing") {
+		t.Errorf("EC-4: message missing the upgrade URL: %s", msg)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // T1.6 — Stack capture (WrapWithStack) per gate PKG-G08 + ADR-0028 follow-up.
 // ---------------------------------------------------------------------------

@@ -98,6 +98,7 @@ var statusByCode = map[string]int{
 	"FRONTEND_MUST_BE_STATIC":    422,
 	"POD_LIMIT_EXCEEDED":         422,
 	"REPLICAS_EXCEED_PLAN":       422,
+	"PROJECTS_EXCEED_PLAN":       422,
 	"SCALING_AMBIGUOUS":          422,
 	"UNSUPPORTED_FRAMEWORK":      422, // (builds.go framework validation)
 

@@ -410,7 +410,30 @@ var (
 		Code:       "SCALING_AMBIGUOUS",
 		Message:    "'replicas' and 'autoscaling' are mutually exclusive — choose one",
 	}
+
+	// ErrProjectsExceedPlan is returned at project creation when the Account
+	// already holds its plan's project cap. M4 (account-level tenancy, Phase 2):
+	// the cap is per-Account, enforced at the engine's project-creation path.
+	// Factory NewProjectsExceedPlan adds plan + cap + current + account context.
+	ErrProjectsExceedPlan = &LoopZeroError{
+		Code:    "PROJECTS_EXCEED_PLAN",
+		Message: "your account has reached its plan's project limit",
+	}
 )
+
+// NewProjectsExceedPlan creates a PROJECTS_EXCEED_PLAN error with the plan name,
+// the per-Account project cap, the account's current project count, and the
+// account id. M4 — mirrors NewReplicasExceedPlan; the message carries the upgrade
+// URL so the client has an actionable path (EC-4).
+func NewProjectsExceedPlan(plan string, limit, current int, accountID string) *LoopZeroError {
+	return &LoopZeroError{
+		Code: "PROJECTS_EXCEED_PLAN",
+		Message: fmt.Sprintf(
+			"Account '%s' has %d projects — the %s plan allows up to %d. Upgrade at https://loopzero.example/pricing or delete a project.",
+			accountID, current, displayPlanName(plan), limit,
+		),
+	}
+}
 
 // NewReplicasExceedPlan creates a REPLICAS_EXCEED_PLAN error with plan name,
 // plan cap, requested replica count, and the offending app name.
