@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 380,
+  "canonical_sh": 382,
   "_changelog": [
+    {
+      "date": "2026-06-28",
+      "from": 380,
+      "to": 382,
+      "reason": "Plan red-team-77-107-closure v1.0 T1.2+T1.3 \u2014 closes Red Team loopzero-cloud#107 (Traefik writeTimeout=60s cuts customer streaming at ~61s). +2 canonical .sh: (1) infra/tests/e2e/dev-public-customer-app-respondingtimeouts_test.sh (3 LIVE scenarios A/B/C reproducing the cut verbatim pre-fix per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25; OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBR\u00c1VEL), (2) infra/tests/check-dev-public-customer-app-respondingtimeouts-syntax_test.sh (28-assertion structural guard wired in task quality:gates per the categorical infra/tests/check-*-syntax_test.sh sibling pattern). Allowlist entries added in .claude/rules/shell-scripts-allowlist.md \u00a7 Post-baseline additions (plan red-team-77-107-closure \u2014 2026-06-28). The companion engine-side fix in loopzero-cloud#77 (engine list query release-aware fields) ships ZERO new scripts (already implemented 2026-06-27 SQL absorption \u2014 pure SQL/Go canonical chain, no bash regression-protector needed). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-27",
       "from": 378,

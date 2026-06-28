@@ -1,12 +1,18 @@
 {
-  "total": 172,
+  "total": 174,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 112
+    "test": 114
   },
   "_changelog": [
+    {
+      "date": "2026-06-28",
+      "from": {"total": 172, "test": 112},
+      "to":   {"total": 174, "test": 114},
+      "reason": "Plan red-team-77-107-closure v1.0 T1.1+T1.2+T1.3 closes Red Team loopzero-cloud#107 (Traefik writeTimeout=60s cuts customer streaming at ~61s). +2 test-domain delta is the canonical LIVE bash + sibling hermetic guard: infra/tests/e2e/dev-public-customer-app-respondingtimeouts_test.sh (3 LIVE scenarios A/B/C reproducing the cut verbatim pre-fix per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25 — OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL) + infra/tests/check-dev-public-customer-app-respondingtimeouts-syntax_test.sh (28-assertion structural guard wired in task quality:gates per the categorical infra/tests/check-*-syntax_test.sh sibling pattern). T1.4 allowlist entries added in .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (plan red-team-77-107-closure — 2026-06-28). The companion engine-side fix in loopzero-cloud#77 (engine list query release-aware fields) ships ZERO new scripts (already implemented 2026-06-27 SQL absorption — pure SQL/Go canonical chain, no bash regression-protector needed). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors the entries below."
+    },
     {
       "date": "2026-06-28",
       "from": {"total": 170, "test": 110},
@@ -29,7 +35,7 @@
       "date": "2026-06-25",
       "from": {"total": 165, "test": 105},
       "to":   {"total": 166, "test": 106},
-      "reason": "Sprint 5 plan qa-sprint5-cleanup-2026-06-25 v1.0 ships the canonical 3-script triplet for loopzero-cloud#33 LIVE wire-level coverage (T3.1+T3.2+T3.3). The +1 test-domain delta is `infra/tests/e2e/dev-public-deploy-error-surface_test.sh` (OPERATOR HARD STOP LIVE script per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — sponsor JUNTOS browser walkthrough Step 6 gate). T3.1 hermetic guard + T3.3 dogfood wrapper are sibling but the hermetic guard is a check-script (categorically out-of-scope for un-homing per existing pattern siblings infra/tests/check-*-syntax_test.sh) and the dogfood wrapper lives under archive/canonical-tests-v1/scripts/local/ (archive path, not infra/tests/). Migration of LIVE bash to a homed Go capability for the LIVE-wire-test surface is queued as a future hardening slice per the script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md). Owner-authorized hand-edit ratchet UP — sanctioned auditable pattern that mirrors infra/quality/script-count-baseline.json _changelog 2026-06-18 entry. Allowlisted in .claude/rules/shell-scripts-allowlist.md section Post-baseline additions (plan qa-sprint5-cleanup-2026-06-25 — 2026-06-25)."
+      "reason": "Sprint 5 plan qa-sprint5-cleanup-2026-06-25 v1.0 ships the canonical 3-script triplet for loopzero-cloud#33 LIVE wire-level coverage (T3.1+T3.2+T3.3). The +1 test-domain delta is `infra/tests/e2e/dev-public-deploy-error-surface_test.sh` (OPERATOR HARD STOP LIVE script per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — sponsor JUNTOS browser walkthrough Step 6 gate). T3.1 hermetic guard + T3.3 dogfood wrapper are sibling but the hermetic guard is a check-script (categorically out-of-scope for un-homing per existing pattern siblings infra/tests/check-*-syntax_test.sh) and the dogfood wrapper lives under archive/canonical-tests-v1/scripts/local/ (archive path, not infra/tests/). Migration of LIVE bash to a homed Go capability for the LIVE-wire-test surface is queued as a future hardening slice per the script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md). Owner-authorized hand-edit ratchet UP — sanctioned auditable pattern that mirrors infra/quality/script-count-baseline.json _changelog 2026-06-25 entries."
     }
   ]
 }
