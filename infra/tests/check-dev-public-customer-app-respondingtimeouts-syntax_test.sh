@@ -68,7 +68,8 @@ assert "scenario B respects SCENARIO filter" "grep -qE '\\[\\[ -n \"\\\$SCENARIO
 assert "scenario C respects SCENARIO filter" "grep -qE '\\[\\[ -n \"\\\$SCENARIO\" && \"\\\$SCENARIO\" != \"C\" \\]\\]' '$LIVE_SCRIPT'"
 
 # J: writeTimeout regression-protector — scenario A asserts wall-clock window
-assert "scenario A asserts wall-clock window (lower_bound + upper_bound)" "grep -qE 'lower_bound=.+SLOW_SLEEP_SECONDS.+-.+10' '$LIVE_SCRIPT' && grep -qE 'upper_bound=.+SLOW_SLEEP_SECONDS.+\\+.+20' '$LIVE_SCRIPT'"
+# (lower_bound is SLOW_SLEEP_SECONDS minus a margin; upper_bound is plus a margin)
+assert "scenario A asserts wall-clock window (lower_bound + upper_bound)" "grep -qE 'lower_bound=.+SLOW_SLEEP_SECONDS.+-' '$LIVE_SCRIPT' && grep -qE 'upper_bound=.+SLOW_SLEEP_SECONDS.+\\+' '$LIVE_SCRIPT'"
 
 # K: scenario A asserts canonical body shape {"ok":true}
 assert "scenario A asserts canonical body shape {\"ok\":true}" "grep -qE '\"ok\".*true' '$LIVE_SCRIPT'"

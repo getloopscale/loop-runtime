@@ -122,14 +122,17 @@ scenario_a_http_slow() {
     local url="${CUSTOMER_APP_URL}${SLOW_PATH}?sleep=${SLOW_SLEEP_SECONDS}"
     local start end elapsed body http
     start=$(date +%s)
-    body=$(curl -sS -N --max-time $((SLOW_SLEEP_SECONDS + 30)) -w "\n__HTTP__%{http_code}__END__" "$url" 2>&1 || echo "__CURL_ERROR__")
+    body=$(curl -sS -N --max-time $((SLOW_SLEEP_SECONDS + 90)) -w "\n__HTTP__%{http_code}__END__" "$url" 2>&1 || echo "__CURL_ERROR__")
     end=$(date +%s)
     elapsed=$((end - start))
     http=$(printf '%s' "$body" | grep -oE '__HTTP__[0-9]+__END__' | grep -oE '[0-9]+' | head -1)
     body=$(printf '%s' "$body" | sed 's/__HTTP__[0-9]\+__END__//')
 
-    local lower_bound=$((SLOW_SLEEP_SECONDS - 10))
-    local upper_bound=$((SLOW_SLEEP_SECONDS + 20))
+    # Wall-clock window: tighter lower bound (5s) ensures we catch the pre-fix
+    # 61s cut; wider upper bound (60s) absorbs CI/network jitter without the
+    # flake risk the /review test-auditor flagged for the original ±20s margin.
+    local lower_bound=$((SLOW_SLEEP_SECONDS - 5))
+    local upper_bound=$((SLOW_SLEEP_SECONDS + 60))
     if [[ "$http" != "200" ]]; then
         record "A-http-slow" "FAIL" "expected HTTP 200, got '$http' (elapsed=${elapsed}s url=${url})"
         return 1
