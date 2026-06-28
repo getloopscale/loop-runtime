@@ -13,12 +13,19 @@ import (
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
+
+// violationCount reads the per-plan project-cap violation counter (M4 metric).
+func violationCount(plan string) float64 {
+	return testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", plan))
+}
 
 // M4 T3.2 — the per-Account project cap, proven against real PostgreSQL.
 // Proves the cap is per-ACCOUNT (binds across all the Account's tenants), uses
@@ -89,6 +96,11 @@ func mustCreate(t *testing.T, store *db.PostgresProjectStore, tenant, name, owne
 	return err
 }
 
+func isCapError(err error) bool {
+	var te *loopzeroerrors.LoopZeroError
+	return errors.As(err, &te) && te.Code == "PROJECTS_EXCEED_PLAN"
+}
+
 // Scenario 1 — the cap is per-ACCOUNT: a Starter account (cap=1) is blocked at
 // the 2nd project EVEN when the 2nd is created under a DIFFERENT tenant of the
 // same account.
@@ -102,10 +114,15 @@ func TestProjectCapM4_PerAccount_BlocksAcrossTenants(t *testing.T) {
 		t.Fatalf("1st project (under cap) must succeed: %v", err)
 	}
 	// 2nd project under the OTHER tenant of the same account → over the Account cap.
+	before := violationCount("starter")
 	err := mustCreate(t, store, tn2, "second", owner)
 	var te *loopzeroerrors.LoopZeroError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("2nd project (over Account cap, different tenant) must be PROJECTS_EXCEED_PLAN; got %v", err)
+	}
+	// DoD #5: the violation metric increments on rejection (wiring triad pillar c).
+	if got := violationCount("starter"); got != before+1 {
+		t.Fatalf("plan_limit_violation{metric=max_projects_per_account,plan=starter} = %v, want %v (before+1)", got, before+1)
 	}
 }
 
@@ -116,10 +133,16 @@ func TestProjectCapM4_Enterprise_Unlimited(t *testing.T) {
 	m4Seed(t, std, owner, acct, tn1, tn2, "enterprise")
 	t.Cleanup(func() { m4Cleanup(t, std, owner) })
 
+	before := violationCount("enterprise")
 	for i := 0; i < 5; i++ {
 		if err := mustCreate(t, store, tn1, "ent-"+string(rune('a'+i)), owner); err != nil {
 			t.Fatalf("enterprise must never block (project %d): %v", i, err)
 		}
+	}
+	// EC-6: an unlimited account is never even evaluated as a violation — the
+	// metric stays flat (the cap<0 path skips the lock+count+rejection entirely).
+	if got := violationCount("enterprise"); got != before {
+		t.Fatalf("enterprise must NOT increment the violation metric; before=%v after=%v", before, got)
 	}
 }
 
@@ -169,7 +192,7 @@ func TestProjectCapM4_ConcurrentAtBoundary_NeverExceedsCap(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	ok := 0
+	ok, capRejected, otherErr := 0, 0, 0
 	for i := 0; i < 8; i++ { // 8 racers for the single remaining slot
 		wg.Add(1)
 		go func(i int) {
@@ -179,10 +202,16 @@ func TestProjectCapM4_ConcurrentAtBoundary_NeverExceedsCap(t *testing.T) {
 			if i%2 == 0 {
 				tn = tn2
 			}
-			if err := mustCreate(t, store, tn, "race-"+string(rune('a'+i)), owner); err == nil {
-				mu.Lock()
+			err := mustCreate(t, store, tn, "race-"+string(rune('a'+i)), owner)
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
 				ok++
-				mu.Unlock()
+			case isCapError(err):
+				capRejected++ // a loser, rejected for the RIGHT reason (the cap)
+			default:
+				otherErr++ // a loser that failed for an UNRELATED reason — a regression
 			}
 		}(i)
 	}
@@ -190,6 +219,11 @@ func TestProjectCapM4_ConcurrentAtBoundary_NeverExceedsCap(t *testing.T) {
 
 	if ok != 1 {
 		t.Fatalf("exactly ONE racer should win the last slot; %d succeeded", ok)
+	}
+	// The 7 losers must ALL be cap rejections — not lock-timeouts / tx errors (which
+	// would mask a regression while still leaving ok==1).
+	if otherErr != 0 || capRejected != 7 {
+		t.Fatalf("losers must all be PROJECTS_EXCEED_PLAN; capRejected=%d otherErr=%d (want 7, 0)", capRejected, otherErr)
 	}
 	var n int
 	if err := std.QueryRow(`SELECT count(*) FROM projects WHERE tenant_id IN (SELECT id FROM tenants WHERE account_id=$1)`, acct).Scan(&n); err != nil {

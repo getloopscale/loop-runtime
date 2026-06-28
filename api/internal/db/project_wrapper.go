@@ -100,10 +100,12 @@ func (s *PostgresProjectStore) insertProject(ctx context.Context, input domain.C
 func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input domain.CreateProjectInput, plan string, cap int) (domain.ProjectResult, error) {
 	adapter, ok := s.DB.(*PgxAdapter)
 	if !ok || adapter.Pool == nil {
-		// No pool to open a transaction (non-pgx test/dev handle). Without a tx the
-		// advisory lock cannot be xact-scoped, so atomic enforcement is impossible —
-		// fall back to the unenforced insert rather than enforce non-atomically.
-		return s.insertProject(ctx, input)
+		// A cap checker is wired (enforcement intended) but the store has no pgx
+		// pool to open a transaction — atomic enforcement is impossible. FAIL CLOSED
+		// on the quota boundary rather than silently bypass the cap: a non-pgx handle
+		// here is a wiring bug, not a legitimate dev path (the nil-checker branch in
+		// CreateProject already handles the unenforced dev case).
+		return domain.ProjectResult{}, fmt.Errorf("project store: cap enforcement requires a pgx pool, got DBTX %T", s.DB)
 	}
 
 	tx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
