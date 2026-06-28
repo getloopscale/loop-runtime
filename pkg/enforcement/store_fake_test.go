@@ -15,10 +15,11 @@ import (
 // 991-LOC sqlmock setup in limiter_test.go — same coverage, no SQL
 // driver involved.
 type fakeLimitsStore struct {
-	plans  map[string]string         // tenantID -> plan
-	limits map[[2]string][2]int      // [plan, metric] -> [hard, soft]
-	planErr error
-	limErr error
+	plans        map[string]string    // tenantID -> tenant-scoped plan
+	accountPlans map[string]string    // tenantID -> account-scoped plan (M4)
+	limits       map[[2]string][2]int // [plan, metric] -> [hard, soft]
+	planErr      error
+	limErr       error
 }
 
 func (f *fakeLimitsStore) GetTenantPlan(_ context.Context, tenantID string) (string, error) {
@@ -29,6 +30,49 @@ func (f *fakeLimitsStore) GetTenantPlan(_ context.Context, tenantID string) (str
 		return p, nil
 	}
 	return "", sql.ErrNoRows
+}
+
+// GetAccountPlanByTenant (M4) resolves the plan of the tenant's Account.
+func (f *fakeLimitsStore) GetAccountPlanByTenant(_ context.Context, tenantID string) (string, error) {
+	if f.planErr != nil {
+		return "", f.planErr
+	}
+	if p, ok := f.accountPlans[tenantID]; ok {
+		return p, nil
+	}
+	return "", sql.ErrNoRows
+}
+
+// M4 T1.2 — CheckProjectsValue resolves the ACCOUNT plan (not the tenant plan)
+// and the projects cap; allowed iff creating one more stays within the cap
+// (current < hard), with enterprise/unlimited (hard<0) always allowed.
+func TestCheckProjectsValue_AccountScoped_StarterCap1(t *testing.T) {
+	store := &fakeLimitsStore{
+		accountPlans: map[string]string{"tn-a": "starter", "tn-b": "starter"}, // both tenants → same account plan
+		limits:       map[[2]string][2]int{{"starter", "projects"}: {1, 0}},
+	}
+	limiter := NewPlanLimiterWithStore(store, testLogger())
+
+	if r := limiter.CheckProjectsValue("tn-a", 0); !r.Allowed || r.Plan != "starter" || r.Limit != 1 {
+		t.Fatalf("under cap must allow; got %+v", r)
+	}
+	if r := limiter.CheckProjectsValue("tn-a", 1); r.Allowed {
+		t.Fatalf("at cap (current=1, cap=1) must deny; got %+v", r)
+	}
+	if r := limiter.CheckProjectsValue("tn-b", 1); r.Allowed {
+		t.Fatalf("2nd tenant of the same account must also be denied at cap; got %+v", r)
+	}
+}
+
+func TestCheckProjectsValue_Enterprise_Unlimited(t *testing.T) {
+	store := &fakeLimitsStore{
+		accountPlans: map[string]string{"tn-c": "enterprise"},
+		limits:       map[[2]string][2]int{{"enterprise", "projects"}: {-1, 0}},
+	}
+	limiter := NewPlanLimiterWithStore(store, testLogger())
+	if r := limiter.CheckProjectsValue("tn-c", 999999); !r.Allowed {
+		t.Fatalf("enterprise (unlimited) must always allow; got %+v", r)
+	}
 }
 
 func (f *fakeLimitsStore) GetLimits(_ context.Context, plan, metric string) (int, int, error) {

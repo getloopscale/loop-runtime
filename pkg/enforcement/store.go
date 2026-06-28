@@ -40,6 +40,12 @@ type LimitsStore interface {
 	// subscription row exists.
 	GetTenantPlan(ctx context.Context, tenantID string) (string, error)
 
+	// GetAccountPlanByTenant returns the active plan of the tenant's
+	// ACCOUNT (M2: billing/caps are per-Account). M4 uses this to enforce
+	// the project cap at the Account granularity. Resolves via
+	// tenants.account_id (NOT NULL since M3).
+	GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error)
+
 	// GetLimits returns the (hard, soft) limits for the given (plan,
 	// metric) pair. Soft <= 0 means no soft cap; hard < 0 means
 	// unlimited; hard == 0 means missing row (fail closed).
@@ -68,6 +74,26 @@ func (s *sqlLimitsStore) GetTenantPlan(ctx context.Context, tenantID string) (st
 	var plan string
 	err := s.db.QueryRowContext(ctx,
 		"SELECT plan FROM subscriptions WHERE tenant_id = $1 AND status IN ('active', 'trialing') LIMIT 1",
+		tenantID,
+	).Scan(&plan)
+	if err != nil {
+		return "", err
+	}
+	return plan, nil
+}
+
+// GetAccountPlanByTenant implements LimitsStore. M4: resolves the plan of the
+// tenant's Account (one subscription per Account since M2 — UNIQUE(account_id)),
+// joining through tenants.account_id (NOT NULL since M3 000044).
+func (s *sqlLimitsStore) GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("nil sql limits store")
+	}
+	var plan string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT plan FROM subscriptions
+		 WHERE account_id = (SELECT account_id FROM tenants WHERE id = $1)
+		   AND status IN ('active', 'trialing') LIMIT 1`,
 		tenantID,
 	).Scan(&plan)
 	if err != nil {
