@@ -40,12 +40,6 @@ type LimitsStore interface {
 	// subscription row exists.
 	GetTenantPlan(ctx context.Context, tenantID string) (string, error)
 
-	// GetAccountPlanByTenant returns the active plan of the tenant's
-	// ACCOUNT (M2: billing/caps are per-Account). M4 uses this to enforce
-	// the project cap at the Account granularity. Resolves via
-	// tenants.account_id (NOT NULL since M3).
-	GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error)
-
 	// GetLimits returns the (hard, soft) limits for the given (plan,
 	// metric) pair. Soft <= 0 means no soft cap; hard < 0 means
 	// unlimited; hard == 0 means missing row (fail closed).

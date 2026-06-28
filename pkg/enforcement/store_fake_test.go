@@ -70,8 +70,12 @@ func TestCheckProjectsValue_Enterprise_Unlimited(t *testing.T) {
 		limits:       map[[2]string][2]int{{"enterprise", "projects"}: {-1, 0}},
 	}
 	limiter := NewPlanLimiterWithStore(store, testLogger())
-	if r := limiter.CheckProjectsValue("tn-c", 999999); !r.Allowed {
+	r := limiter.CheckProjectsValue("tn-c", 999999)
+	if !r.Allowed {
 		t.Fatalf("enterprise (unlimited) must always allow; got %+v", r)
+	}
+	if r.Limit != -1 {
+		t.Fatalf("unlimited must report Limit=-1 (the skip-lock sentinel, EC-6); got %+v", r)
 	}
 }
 

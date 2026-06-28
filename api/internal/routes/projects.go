@@ -237,6 +237,14 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeLoopZeroError(w, loopzeroerrors.ErrProjectExists)
 			return
 		}
+		// M4: a typed *LoopZeroError from the store (e.g. PROJECTS_EXCEED_PLAN → 422)
+		// must surface as-is, not be collapsed to a 500. The store already counted
+		// the cap atomically + incremented the violation metric.
+		var te *loopzeroerrors.LoopZeroError
+		if errors.As(err, &te) {
+			writeLoopZeroError(w, te)
+			return
+		}
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}

@@ -204,12 +204,14 @@ func (l *PlanLimiter) CheckProjectsValue(tenantID string, current int) LimitResu
 
 	plan := l.getAccountPlan(tenantID)
 	if plan == "enterprise" {
-		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current}
+		// Limit:-1 is the unambiguous "unlimited" sentinel the create path uses
+		// to SKIP the advisory lock + count (EC-6).
+		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current, Limit: -1}
 	}
 
 	hardLimit, _ := l.getLimits(plan, "projects")
 	if hardLimit < 0 {
-		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current}
+		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current, Limit: -1}
 	}
 	if hardLimit == 0 {
 		l.logger.Warn("no projects limit configured (denying by default)",
@@ -265,12 +267,25 @@ func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 	return plan
 }
 
+// accountPlanResolver is the OPTIONAL capability (ISP) a LimitsStore may
+// implement to resolve a tenant's ACCOUNT plan. Kept off the core LimitsStore
+// interface so narrow test fakes are not forced to implement it; only the
+// production sqlLimitsStore (and the enforcement fake) provide it.
+type accountPlanResolver interface {
+	GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error)
+}
+
 // getAccountPlan resolves the plan of the tenant's Account (M4). EC-2: a missing
 // account subscription (or a NULL account_id, impossible post-M3 but defensive)
 // falls back to "starter" — fail-CLOSED to the tightest cap, never silently
-// unlimited.
+// unlimited. A store that does not implement accountPlanResolver degrades to the
+// tenant-scoped plan (pre-M4 behavior) rather than failing.
 func (l *PlanLimiter) getAccountPlan(tenantID string) string {
-	plan, err := l.store.GetAccountPlanByTenant(context.Background(), tenantID)
+	resolver, ok := l.store.(accountPlanResolver)
+	if !ok {
+		return l.getTenantPlan(tenantID) // store has no account resolution — degrade
+	}
+	plan, err := resolver.GetAccountPlanByTenant(context.Background(), tenantID)
 	if err != nil || plan == "" {
 		l.logger.Warn("account subscription missing — falling back to starter plan",
 			"tenant", tenantID, "error", err)
