@@ -170,6 +170,23 @@ func TestWrapSubmitBuildError_PreservesTypedLoopZeroError(t *testing.T) {
 	}
 }
 
+// M5 (#106) — the exact production scenario: EnsureProject (StageEnsureProject)
+// returns PROJECTS_EXCEED_PLAN when a deploy of a new project exceeds the
+// per-Account cap. wrapSubmitBuildError MUST pass the typed *LoopZeroError through
+// unwrapped (NOT re-wrap as a generic SubmitBuildError) so mapBuildError surfaces
+// it as 422 with code PROJECTS_EXCEED_PLAN, not a 500.
+func TestWrapSubmitBuildError_PreservesProjectsExceedPlanFromEnsureStage(t *testing.T) {
+	in := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-m5")
+	out := wrapSubmitBuildError(StageEnsureProject, in)
+	var te *loopzeroerrors.LoopZeroError
+	if !errors.As(out, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
+		t.Fatalf("PROJECTS_EXCEED_PLAN must pass through wrap unwrapped; got %v", out)
+	}
+	if _, ok := AsSubmitBuildError(out); ok {
+		t.Fatal("PROJECTS_EXCEED_PLAN must NOT be re-wrapped as SubmitBuildError (would surface as 500)")
+	}
+}
+
 // Sprint 6 plan T2.1 — nil input contract.
 func TestWrapSubmitBuildError_NilInputReturnsNil(t *testing.T) {
 	if got := wrapSubmitBuildError(StageSubmitWorkflow, nil); got != nil {

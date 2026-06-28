@@ -148,6 +148,27 @@ func TestMapBuildError_PreservesTypedLoopZeroErrorDispatch(t *testing.T) {
 	}
 }
 
+// M5 (#106) — a deploy-path PROJECTS_EXCEED_PLAN (returned by EnsureProject when
+// a new project would exceed the per-Account cap) surfaces as HTTP 422 with its
+// own code, NOT a generic 500. Mirrors the scale-cap #101 surfacing and is the
+// mechanical oracle for the M5 DoD "typed 422 surfaced through the deploy path".
+func TestMapBuildError_ProjectsExceedPlan_SurfacesAs422(t *testing.T) {
+	capErr := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-m5")
+	w := httptest.NewRecorder()
+	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), capErr)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("HTTP status = %d, want 422", w.Code)
+	}
+	body := decodeBody(t, w)
+	if code, _ := body["code"].(string); code != "PROJECTS_EXCEED_PLAN" {
+		t.Errorf("code = %q, want PROJECTS_EXCEED_PLAN", code)
+	}
+	if msg, _ := body["message"].(string); strings.Contains(msg, "Something went wrong") {
+		t.Errorf("deploy cap rejection must not collapse to the generic 500 message; got %q", msg)
+	}
+}
+
 // T3.1 — genuinely-unknown errors (NOT from the orchestrator) still get the
 // generic ErrInternalError catchall, but Sprint 6 narrows this surface so
 // only request-decode-class errors reach here in practice.
