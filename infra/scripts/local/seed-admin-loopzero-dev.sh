@@ -212,7 +212,20 @@ INSERT INTO users (id, email, username, display_name)
 VALUES ('${kratos_id}', '${EMAIL}', '${USERNAME}', '${DISPLAY_NAME}')
 ON CONFLICT (id) DO NOTHING;
 
--- (2) tenants row owned by the user (reuse if any exists)
+-- (2a) accounts bootstrap (canonical post migration 000044 — tenants.account_id NOT NULL).
+-- Deterministic account_id from sha256 keeps it idempotent across re-runs.
+-- ON CONFLICT (owner_id) DO NOTHING honors the UNIQUE(owner_id) constraint
+-- created in migration 000034.
+INSERT INTO accounts (id, display_name, plan, owner_id)
+VALUES (
+  'acct-' || substring(encode(sha256(('${kratos_id}-account')::bytea), 'hex'), 1, 16),
+  '${DISPLAY_NAME}',
+  'starter',
+  '${kratos_id}'
+)
+ON CONFLICT (owner_id) DO NOTHING;
+
+-- (2b) tenants row owned by the user (reuse if any exists)
 --
 -- Canonical tenant_id format (per cloud/internal/auth/tenant.go:226
 -- generateTenantID): tn-{16 hex chars} = 19 chars total. Deterministic via
@@ -223,16 +236,19 @@ ON CONFLICT (id) DO NOTHING;
 -- 2026-06-09 during T6.1: 89-char ns rejected → ENV_PROVISION_FAILED).
 -- Aligns seed with the production naming policy (no divergent generator,
 -- no hardcoded literal — substring derived from same canonical hash input).
-INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
+INSERT INTO tenants (id, display_name, slug, owner_id, cell_id, account_id)
 SELECT
   'tn-' || substring(encode(sha256(('${kratos_id}-${TENANT_SLUG}')::bytea), 'hex'), 1, 16),
   '${DISPLAY_NAME}',
   '${TENANT_SLUG}',
   '${kratos_id}',
-  'cell-default'
-WHERE NOT EXISTS (
-  SELECT 1 FROM tenants WHERE owner_id = '${kratos_id}'
-);
+  'cell-default',
+  a.id
+FROM accounts a
+WHERE a.owner_id = '${kratos_id}'
+  AND NOT EXISTS (
+    SELECT 1 FROM tenants WHERE owner_id = '${kratos_id}'
+  );
 
 -- (3) EC-3a: tenant_members(role=owner) — idempotent
 INSERT INTO tenant_members (tenant_id, user_id, role)
@@ -252,6 +268,25 @@ UPDATE users SET active_tenant_id = (SELECT id FROM tenants WHERE owner_id = '${
 WHERE id = '${kratos_id}'
   AND (active_tenant_id IS NULL
        OR active_tenant_id NOT IN (SELECT id FROM tenants WHERE owner_id = '${kratos_id}'));
+
+-- (6) 2026-06-29 (closes #118 root cause): subscriptions row needed so
+-- enforcement.GetTenantPlan can resolve plan tier at POST /api/v1/projects.
+-- Without it, ResolvePlanTier surfaces sql.ErrNoRows → 503 PLATFORM_DEGRADED
+-- → EnsureTenant never fires → Tenant CR missing on k3d-loopzero-mgmt → deploys
+-- fail. Plan='starter' is the canonical onboarding tier; Step 9 of
+-- seed-post-cleanroom-all.sh (seed-tenant-fixture-canonical.sh) MAY upgrade
+-- a specific tenant to 'team' afterward. ON CONFLICT (account_id) DO NOTHING
+-- honors the UNIQUE(account_id) constraint (one subscription per account).
+INSERT INTO subscriptions (id, tenant_id, account_id, plan, status)
+SELECT
+  'sub-dev-' || t.id,
+  t.id,
+  t.account_id,
+  'starter',
+  'active'
+FROM tenants t
+WHERE t.owner_id = '${kratos_id}'
+ON CONFLICT (account_id) DO NOTHING;
 
 COMMIT;
 SQL
@@ -544,6 +579,121 @@ except Exception:
   return 0
 }
 
+# --- Canonical project + Tenant CR provisioning (2026-06-29, closes #118) ---
+#
+# Per plan seed-post-cleanroom-tenant-cr-provisioning v1.0 (ADR-1 + ADR-3):
+# the only path that materializes a Tenant CR on k3d-loopzero-mgmt is the
+# canonical signup-style POST /api/v1/projects on loopzero-api. Calling it with
+# the freshly-minted HMAC JWT fires the full provisioning chain:
+#   PG: projects row
+#   K8s: Tenant CR (api/internal/k8s/tenant_cr_manager.go:68 EnsureTenant)
+#   PG+K8s: production + preview envs (EnvironmentEnsurer, projects.go:333)
+#
+# Without this, the QA Red Team identity has PG state but no K8s tenant CR,
+# so the tenant-operator can never reconcile and deploys fail downstream
+# (Red Team loopzero-cloud#118).
+#
+# Idempotent: 201 = created, 409 PROJECT_EXISTS = already done (treat as
+# success), 5xx = fail-loud with operator-actionable hint.
+CANONICAL_SEED_PROJECT="${CANONICAL_SEED_PROJECT:-seed}"
+
+ensure_canonical_project() {
+  local jwt
+  jwt="$(cat "$SESSION_JWT_FILE" 2>/dev/null || true)"
+  if [ -z "$jwt" ] ; then
+    log "WARN: SESSION_JWT_FILE empty; skipping canonical project provisioning"
+    log "      (rerun seed-admin-loopzero-dev.sh AFTER loopzero-cloud Ready; #118 stays open)"
+    return 1
+  fi
+
+  # GET-first idempotency probe. The M4 plan-cap enforcement at
+  # routes/projects.go counts existing projects BEFORE the POST path,
+  # returning 422 PROJECTS_EXCEED_PLAN when at cap. That's a legitimate
+  # error shape — but for our seed it just means "the canonical project
+  # already exists, Tenant CR is already provisioned, work is done."
+  # Probing the list first lets us short-circuit cleanly without
+  # ambiguating 422 (cap-hit-existing vs cap-hit-with-different-project).
+  local list_file list_code already
+  list_file="$(mktemp -t seed-admin-projlist-XXXXXX.json)"
+  list_code="$(curl -s -o "$list_file" -w '%{http_code}' \
+    --max-time 10 -H "Authorization: Bearer ${jwt}" \
+    "${PUBLIC_CLOUD_URL}/engine/api/v1/projects" 2>&1 || true)"
+  if [ "$list_code" = "200" ] ; then
+    already="$(python3 -c '
+import json, sys, os
+try:
+  d = json.load(open(sys.argv[1]))
+  for p in d.get("projects", []) or []:
+    if p.get("name") == os.environ.get("CANONICAL_SEED_PROJECT", "seed"):
+      sys.stdout.write("1"); break
+except Exception:
+  pass
+' "$list_file" 2>/dev/null || true)"
+    if [ "$already" = "1" ] ; then
+      log "Canonical project '${CANONICAL_SEED_PROJECT}' already present — idempotent, Tenant CR preserved"
+      rm -f "$list_file"
+      return 0
+    fi
+  fi
+  rm -f "$list_file"
+
+  local body http_code resp_file
+  resp_file="$(mktemp -t seed-admin-project-XXXXXX.json)"
+  body="{\"name\":\"${CANONICAL_SEED_PROJECT}\"}"
+
+  http_code="$(curl -s -o "$resp_file" -w '%{http_code}' \
+    --max-time 30 -X POST \
+    -H "Authorization: Bearer ${jwt}" \
+    -H "Content-Type: application/json" \
+    -H "Origin: https://app-dev.loopzero.example" \
+    "${PUBLIC_CLOUD_URL}/engine/api/v1/projects" \
+    -d "$body" 2>&1 || true)"
+
+  case "$http_code" in
+    201)
+      log "Canonical project '${CANONICAL_SEED_PROJECT}' created — Tenant CR will be provisioned by loopzero-api/EnsureTenant"
+      rm -f "$resp_file"
+      return 0
+      ;;
+    409)
+      # PROJECT_EXISTS — race with another seed run OR list-probe missed it.
+      log "Canonical project '${CANONICAL_SEED_PROJECT}' already exists (HTTP 409) — idempotent, Tenant CR preserved"
+      rm -f "$resp_file"
+      return 0
+      ;;
+    401|403)
+      log "ERROR: loopzero-api rejected JWT (HTTP ${http_code}) for canonical project provisioning"
+      log "       Re-run: bash $(basename "$0") --refresh-only --verify"
+      rm -f "$resp_file"
+      return 4
+      ;;
+    503)
+      local degraded_code
+      degraded_code="$(python3 -c 'import json,sys
+try:
+  d=json.load(open(sys.argv[1])); sys.stdout.write(d.get("code","") or "")
+except Exception: pass' "$resp_file" 2>/dev/null || true)"
+      log "ERROR: loopzero-api ${degraded_code:-PLATFORM_DEGRADED} on POST /engine/api/v1/projects"
+      log "       Check: kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api"
+      log "       Retry: bash $(basename "$0") (after loopzero-api Ready)"
+      rm -f "$resp_file"
+      return 2
+      ;;
+    000)
+      log "ERROR: ${PUBLIC_CLOUD_URL} unreachable (HTTP 000)"
+      log "       Check: tilt up running? helmfile sync clean?"
+      rm -f "$resp_file"
+      return 2
+      ;;
+    *)
+      log "ERROR: unexpected HTTP ${http_code} from POST /engine/api/v1/projects"
+      log "       Response: $(head -c 400 "$resp_file" 2>/dev/null || echo '<empty>')"
+      rm -f "$resp_file"
+      return 2
+      ;;
+  esac
+}
+
 # --- Main -------------------------------------------------------------------
 
 main() {
@@ -587,6 +737,12 @@ main() {
   # (~/.loopzero/local-dogfood-token.txt; aud="loopzero-engine", NO tenant_id)
   # which is engine-direct only.
   persist_session_jwt || log "WARN: session JWT persist skipped (--verify did not mint OR cloud unreachable)"
+
+  # CANONICAL FIX 2026-06-29 (closes Red Team loopzero-cloud#118): provision
+  # canonical seed project so Tenant CR materializes on k3d-loopzero-mgmt.
+  # Failure here does NOT block the seed (session JWT remains usable for
+  # login + non-deploy flows), but #118 will stay open until re-run.
+  ensure_canonical_project || log "WARN: canonical project provisioning failed — #118 may re-open"
 
   log "DONE — session ready at ${SESSION_FILE}"
 }
