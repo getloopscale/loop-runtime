@@ -1,12 +1,18 @@
 {
-  "total": 176,
+  "total": 177,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 116
+    "test": 117
   },
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": {"total": 176, "test": 116},
+      "to":   {"total": 177, "test": 117},
+      "reason": "Plan loopzero-promote-no-op-fail-loud-p0 v1.0 closes Red Team loopzero-cloud#120 P0 BLOCKER (loopzero promote silent no-op — rel-rel- double-prefix + .loopzero.local URL regression of #61 on promote path + activation canary). +1 test-domain delta sanctioned per the categorical pattern: 1 LIVE bash infra/tests/e2e/dev-public-promote-no-op_test.sh (3 LIVE scenarios A/B/C reproducing #120 verbatim pre-fix per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25 — RED 0/3 PASS confirmed 2026-06-29). Sibling hermetic guard infra/tests/check-dev-public-promote-no-op-syntax_test.sh categorically homed in task quality:gates per the pattern; dogfood wrapper archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh lives under archive/ (excluded from un-homed count). Engineering-side fix in api/internal/services/promotion_orchestrator.go (line 155 double-prefix + line 286-289 BaseDomain→PublicDomain fallback) + api/cmd/setup_orchestrator.go (wire cfg.PublicDomain). 3 new Go unit tests (TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix + TestPromote_PublicDomain_PreferredOverBase + TestPromote_PublicDomainEmpty_FallsBackToBaseDomain) all PASS post-fix. OPERATOR HARD STOP for LIVE per cleanroom-up-live-test-mandate.md. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors the entries below."
+    },
     {
       "date": "2026-06-29",
       "from": {"total": 174, "test": 114},

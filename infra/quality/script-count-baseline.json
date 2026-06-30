@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 389,
+  "canonical_sh": 392,
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": 389,
+      "to": 392,
+      "reason": "Plan loopzero-promote-no-op-fail-loud-p0 v1.0 closes Red Team loopzero-cloud#120 P0 BLOCKER (loopzero promote silent no-op). +3 canonical .sh: (1) infra/tests/e2e/dev-public-promote-no-op_test.sh (3 LIVE scenarios A canonical-release-ID-regex + B no-loopzero.local-yes-prod-dev URL + C 90s activation canary — OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — reproduces #120 verbatim pre-fix RED 0/3 PASS), (2) infra/tests/check-dev-public-promote-no-op-syntax_test.sh (21-assertion hermetic structural guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh (S1 hermetic + S2 Go -race promotion suite + S3 LIVE bash aggregator wrapper registered in dogfood-all.sh WRAPPERS array). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25: every issue closure ships a LIVE bash regression-protector. Allowlist entries added under § Post-baseline additions (plan loopzero-promote-no-op-fail-loud-p0 — 2026-06-30). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors the entries below."
+    },
     {
       "date": "2026-06-29",
       "from": 382,

@@ -195,7 +195,15 @@ func setupOrchestrator(
 		Sync:       workflows.SyncClient,
 		Locker:     stores.Locker,
 		BaseDomain: cfg.BaseDomain,
-		Logger:     logger,
+		// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61
+		// regression): wire cfg.PublicDomain so the promote response URL is
+		// the canonical user-facing host (prod-dev.loopzero.example) not the
+		// internal placeholder (loopzero.local). Empty PublicDomain falls back
+		// to BaseDomain inside the orchestrator (back-compat for local
+		// Tilt dev where LOOPZERO_PUBLIC_DOMAIN is unset). Mirrors the canonical
+		// pattern already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
+		PublicDomain: cfg.PublicDomain,
+		Logger:       logger,
 	})
 	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
 	promoteHandler := routes.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)

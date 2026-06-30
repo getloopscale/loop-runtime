@@ -61,7 +61,16 @@ type PromotionOrchestratorDeps struct {
 	Sync       PromotionSyncClient
 	Locker     EnvironmentLocker
 	BaseDomain string
-	Logger     *slog.Logger
+	// PublicDomain is the canonical wildcard domain used to compose user-facing
+	// Live URLs (e.g., "prod-dev.loopzero.example"). When non-empty it takes
+	// precedence over BaseDomain in the response URL — mirroring the post-#61
+	// retrofit applied to ReleaseConvergenceLoop + SyncCallbackActivator
+	// (setup_orchestrator.go:296-302). BaseDomain is the internal cluster
+	// domain (e.g., "loopzero.local") and was previously leaking into the promote
+	// response — Red Team loopzero-cloud#120 sub-finding 3 (regression of #61 on
+	// the promote path which was missed during the original retrofit).
+	PublicDomain string
+	Logger       *slog.Logger
 }
 
 // PromotionRequest contains the inputs for a promotion operation.
@@ -152,7 +161,15 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		// hardening; the canonical lifecycle is READY → (push) →
 		// GitMirrorCompleted → PENDING → (sync) → SyncCompleted → ACTIVE.
 		newRelease = &db.Release{
-			ID:            "rel-" + id.GenerateReleaseID(),
+			// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 2):
+			// id.GenerateReleaseID() ALREADY includes the canonical "rel-"
+			// prefix per pkg/id/id.go:40 ("rel-{16hex}"). The manual prefix
+			// concatenation here produced "rel-rel-{16hex}" — failing
+			// id.IsValidReleaseID() and confusing downstream consumers.
+			// PG releases.id has no CHECK constraint enforcing the format
+			// (migrations/000001_initial_schema.up.sql:156), so the malformed
+			// ID persisted silently — the bug was invisible at the DB layer.
+			ID:            id.GenerateReleaseID(),
 			BuildID:       sourceRelease.BuildID,
 			TenantID:      req.TenantID,
 			ProjectID:     req.ProjectID,
@@ -283,9 +300,20 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		// Do not fail the promotion — the convergence loop will pick it up
 	}
 
+	// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61 regression
+	// on promote path): prefer PublicDomain over BaseDomain so the response URL
+	// is the canonical user-facing Live URL ("prod-dev.loopzero.example") not the
+	// internal cluster placeholder ("loopzero.local"). Fallback to BaseDomain
+	// preserves back-compat for setups (local Tilt dev) where LOOPZERO_PUBLIC_DOMAIN
+	// is unset. Mirrors the canonical pattern at setup_orchestrator.go:296-302
+	// already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
 	url := ""
-	if o.deps.BaseDomain != "" {
-		url = fmt.Sprintf("https://%s-%s.%s", req.ProjectName, req.ToEnv, o.deps.BaseDomain)
+	domain := o.deps.PublicDomain
+	if domain == "" {
+		domain = o.deps.BaseDomain
+	}
+	if domain != "" {
+		url = fmt.Sprintf("https://%s-%s.%s", req.ProjectName, req.ToEnv, domain)
 	}
 
 	logger.Info("promotion completed",
