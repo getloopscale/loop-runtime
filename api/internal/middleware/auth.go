@@ -159,11 +159,16 @@ func ValidateAdminAPIKey(provided string) bool {
 // divergence made the secret impossible to audit/rotate consistently —
 // this middleware enforces a single auth gate.
 //
-// Secret lookup order (first non-empty wins):
+// Secret lookup (qa-sprint2-cleanup-2026-06-24 T1.0 narrow — closes loopzero-cloud#16):
 //  1. LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (canonical, per ADR D3)
-//  2. LOOPZERO_SERVICE_AUTH_SECRET (legacy fallback during migration window)
+//  2. LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS (canonical rotation sibling)
 //
-// Both support dual-key rotation via *_PREVIOUS counterparts.
+// The legacy LOOPZERO_SERVICE_AUTH_SECRET (+ its _PREVIOUS sibling) is the secret the
+// cloud /engine/* proxy adds to EVERY forwarded user-JWT request. Accepting it here
+// would let any owner-JWT request reach admin endpoints — exactly the #16 bypass.
+// The legacy env REMAINS valid for the user-JWT proxy on NON-admin routes
+// (consumed by AuthWithTTL below), so the proxy keeps working; this middleware
+// just refuses to honor it for admin authorization.
 //
 // Uses subtle.ConstantTimeCompare for timing-attack resistance.
 func RequireAdminService(next http.Handler) http.Handler {
@@ -176,15 +181,13 @@ func RequireAdminService(next http.Handler) http.Handler {
 			return
 		}
 		canonical := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
-		legacy := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
 		canonicalPrev := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS")
-		legacyPrev := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
 
 		match := func(expected string) bool {
 			return expected != "" &&
 				subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 		}
-		if match(canonical) || match(canonicalPrev) || match(legacy) || match(legacyPrev) {
+		if match(canonical) || match(canonicalPrev) {
 			next.ServeHTTP(w, r)
 			return
 		}

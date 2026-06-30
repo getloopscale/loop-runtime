@@ -345,6 +345,29 @@ func TestNewReplicasExceedPlan_FormatsContext(t *testing.T) {
 	}
 }
 
+// M4 T1.1 — per-Account project-cap typed error. Mirrors NewReplicasExceedPlan;
+// the message MUST carry plan name, cap, current count, the offending account,
+// and the upgrade URL (EC-4 — an actionable path like every canonical cap error).
+func TestNewProjectsExceedPlan_FormatsContext(t *testing.T) {
+	err := NewProjectsExceedPlan("starter", 1, 1, "acct-abc123")
+	if err.Code != "PROJECTS_EXCEED_PLAN" {
+		t.Fatalf("unexpected code: %+v", err)
+	}
+	msg := err.Message
+	if !strings.Contains(msg, "Starter") && !strings.Contains(msg, "starter") {
+		t.Errorf("message missing plan name: %s", msg)
+	}
+	if !strings.Contains(msg, "1") {
+		t.Errorf("message missing cap/count: %s", msg)
+	}
+	if !strings.Contains(msg, "acct-abc123") {
+		t.Errorf("message missing account: %s", msg)
+	}
+	if !strings.Contains(msg, "loopzero.example/pricing") {
+		t.Errorf("EC-4: message missing the upgrade URL: %s", msg)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // T1.6 — Stack capture (WrapWithStack) per gate PKG-G08 + ADR-0028 follow-up.
 // ---------------------------------------------------------------------------
@@ -535,5 +558,311 @@ func TestNewHPATargetBoundsViolated_MemoryField(t *testing.T) {
 		if !strings.Contains(err.Message, frag) {
 			t.Errorf("Message must include %q; got %q", frag, err.Message)
 		}
+	}
+}
+
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T2.3 (closes loopzero-cloud#34):
+// NewBuildSubmitFailedFromReason composes "<summary>: <detail>" mirroring
+// Sprint 5's NewSourceUploadFailedFromPushReason. The #34 regression guard
+// asserts the misleading "Something went wrong. Try again, or check `loopzero
+// status`" text NEVER surfaces when a discriminated reason is provided.
+
+func TestNewBuildSubmitFailedFromReason_ComposesDetail(t *testing.T) {
+	cases := []struct {
+		name        string
+		reasonLabel string
+		detail      string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "WorkflowFailed composes verbatim cause",
+			reasonLabel: "BuildSubmitWorkflowFailed",
+			detail:      "argo client: 503 Service Unavailable",
+			wantSubs:    []string{"Build trigger failed at workflow submit", "503"},
+			// Sprint 6 ADR D3: the #34 catchall anti-pattern is replacing
+			// detail with a generic template — assert it NEVER reappears.
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "ProjectEnsureFailed preserves operator diagnostic",
+			reasonLabel: "BuildSubmitProjectEnsureFailed",
+			detail:      "tenant lookup failed: no rows",
+			wantSubs:    []string{"ensuring the project exists", "tenant lookup failed"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "DBWriteFailed preserves DB error verbatim",
+			reasonLabel: "BuildSubmitDBWriteFailed",
+			detail:      "pq: duplicate key value violates unique constraint",
+			wantSubs:    []string{"database write step", "duplicate key"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "AppNormalizeFailed preserves shape error",
+			reasonLabel: "BuildSubmitAppNormalizeFailed",
+			detail:      "invalid runtime declared for app foo",
+			wantSubs:    []string{"validating one of the apps", "invalid runtime"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "UnknownDownstream surfaces verbatim cause",
+			reasonLabel: "BuildSubmitUnknown",
+			detail:      "some genuinely-unknown downstream failure",
+			wantSubs:    []string{"cause not classified", "genuinely-unknown"},
+			wantNotSubs: []string{"Something went wrong"},
+		},
+		{
+			name:        "Empty detail uses summary alone (no trailing colon)",
+			reasonLabel: "BuildSubmitWorkflowFailed",
+			detail:      "",
+			wantSubs:    []string{"Build trigger failed at workflow submit"},
+			wantNotSubs: []string{": "},
+		},
+		{
+			name:        "Unknown reason label falls back to neutral generic",
+			reasonLabel: "BogusUnknownLabel",
+			detail:      "ignored when label is unknown",
+			wantSubs:    []string{ErrBuildSubmitFailed.Message},
+			wantNotSubs: []string{"ignored when label"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewBuildSubmitFailedFromReason(tc.reasonLabel, tc.detail)
+			if err.Code != "BUILD_SUBMIT_FAILED" {
+				t.Errorf("Code = %q, want BUILD_SUBMIT_FAILED (Rule 4 — exit-code stability)", err.Code)
+			}
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q (#34 regression guard)", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
+// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T2.4 (closes loopzero-cloud#33):
+// NewSourceUploadFailedFromPushReason composes "<summary>: <detail>" so the
+// verbatim cause is always preserved in the user-facing message. Vercel CLI
+// canonical pattern — see knowledge-base/references/vercel/packages/cli/
+// test/unit/util/deploy/process-deployment.test.ts:17-19 (original + hint).
+
+func TestNewSourceUploadFailedFromPushReason_ComposesDetail(t *testing.T) {
+	cases := []struct {
+		name        string
+		reasonLabel string
+		detail      string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "RemoteRejectedPush composes verbatim cause",
+			reasonLabel: "RemoteRejectedPush",
+			detail:      "pre-receive hook declined",
+			wantSubs:    []string{"The remote rejected the push", "pre-receive hook declined"},
+			// Sprint 5 ADR D3: replacing the detail with "Verify your project
+			// name is unused" is the QA #33 anti-pattern — assert the
+			// misleading text never appears.
+			wantNotSubs: []string{"Verify your project name is unused"},
+		},
+		{
+			name:        "UnknownDownstream surfaces verbatim cause",
+			reasonLabel: "UnknownDownstream",
+			detail:      "repo locked by another process",
+			wantSubs:    []string{"Source upload failed", "repo locked by another process"},
+		},
+		{
+			name:        "SourceBackendAuthFailure preserves operator diagnostic",
+			reasonLabel: "SourceBackendAuthFailure",
+			detail:      "server returned 401 Unauthorized",
+			wantSubs:    []string{"Source backend rejected authentication", "401"},
+		},
+		{
+			name:        "SourceBackendCapacity preserves quota detail",
+			reasonLabel: "SourceBackendCapacity",
+			detail:      "quota exceeded on remote",
+			wantSubs:    []string{"Source backend is out of capacity", "quota exceeded"},
+		},
+		{
+			name:        "SourceBackendUnreachable preserves network diagnostic",
+			reasonLabel: "SourceBackendUnreachable",
+			detail:      "dial tcp: connection refused",
+			wantSubs:    []string{"Source backend is unreachable", "connection refused"},
+		},
+		{
+			name:        "Empty detail uses summary alone (no trailing colon)",
+			reasonLabel: "RemoteRejectedPush",
+			detail:      "",
+			wantSubs:    []string{"The remote rejected the push"},
+			wantNotSubs: []string{": "},
+		},
+		{
+			name:        "Unknown reason label falls back to neutral generic message",
+			reasonLabel: "BogusUnknownLabel",
+			detail:      "ignored when label is unknown",
+			wantSubs:    []string{ErrSourceUploadFailed.Message},
+			wantNotSubs: []string{"ignored when label"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewSourceUploadFailedFromPushReason(tc.reasonLabel, tc.detail)
+			if err.Code != "SOURCE_UPLOAD_FAILED" {
+				t.Errorf("Code = %q, want SOURCE_UPLOAD_FAILED (Rule 4 — exit-code stability)", err.Code)
+			}
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q (regression guard)", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — trace-id fallback per
+// Red Team #35 original suggestion ("Separar mensagem-de-cliente (genérica
+// + trace-id) de causa-de-log (verbatim, server-side)"). The Sprint 7
+// aggressive scrub closes the info-disclosure, but for some inputs the
+// scrub collapses detail to placeholder-only — at which point trace-id
+// is the operator's correlation handle to server-side log.
+
+func TestNewSourceUploadFailedFromPushReasonWithTrace(t *testing.T) {
+	cases := []struct {
+		name        string
+		reason      string
+		detail      string
+		traceID     string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "Sprint 5 backward-compat — useful detail composes verbatim, no trace-id appended",
+			reason:      "RemoteRejectedPush",
+			detail:      "pre-receive hook declined for branch main",
+			traceID:     "abc-123",
+			wantSubs:    []string{"pre-receive hook declined for branch main"},
+			wantNotSubs: []string{"Reference: abc-123", "Contact support"},
+		},
+		{
+			name:        "Sprint 8 #35 fallback — fully-scrubbed placeholder-only detail uses trace-id",
+			reason:      "RemoteRejectedPush",
+			detail:      "<orchestrator>: <op>",
+			traceID:     "trace-xyz",
+			wantSubs:    []string{"The remote rejected the push", "Reference: trace-xyz", "Contact support"},
+			wantNotSubs: []string{"<orchestrator>", "<op>"},
+		},
+		{
+			name:        "Sprint 8 #35 fallback — empty detail + trace-id present",
+			reason:      "BundleMalformed",
+			detail:      "",
+			traceID:     "tid-empty",
+			wantSubs:    []string{"source bundle is malformed", "Reference: tid-empty"},
+		},
+		{
+			name:        "Sprint 5 backward-compat — empty trace-id leaves summary without Reference suffix",
+			reason:      "BundleMalformed",
+			detail:      "",
+			traceID:     "",
+			wantSubs:    []string{"source bundle is malformed"},
+			wantNotSubs: []string{"Reference:", "Contact support"},
+		},
+		{
+			name:        "Unknown reason + trace-id — neutral generic + Reference",
+			reason:      "BogusUnknownLabel",
+			detail:      "ignored",
+			traceID:     "tid-unknown",
+			wantSubs:    []string{"Reference: tid-unknown"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewSourceUploadFailedFromPushReasonWithTrace(tc.reason, tc.detail, tc.traceID)
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
+func TestNewBuildSubmitFailedFromReasonWithTrace(t *testing.T) {
+	cases := []struct {
+		name        string
+		reason      string
+		detail      string
+		traceID     string
+		wantSubs    []string
+		wantNotSubs []string
+	}{
+		{
+			name:        "Useful detail composes verbatim — Sprint 6 backward-compat",
+			reason:      "BuildSubmitWorkflowFailed",
+			detail:      "argo: connection refused dialing 10.0.0.5:2746",
+			traceID:     "ignored-when-useful",
+			wantSubs:    []string{"connection refused"},
+			wantNotSubs: []string{"Reference: ignored-when-useful"},
+		},
+		{
+			name:        "Scrubbed-to-placeholders detail falls back to trace-id",
+			reason:      "BuildSubmitWorkflowFailed",
+			detail:      "<orchestrator>: <op>",
+			traceID:     "build-trace-1",
+			wantSubs:    []string{"Build trigger failed at workflow submit", "Reference: build-trace-1"},
+			wantNotSubs: []string{"<orchestrator>"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewBuildSubmitFailedFromReasonWithTrace(tc.reason, tc.detail, tc.traceID)
+			for _, want := range tc.wantSubs {
+				if !strings.Contains(err.Message, want) {
+					t.Errorf("Message %q must contain %q", err.Message, want)
+				}
+			}
+			for _, notWant := range tc.wantNotSubs {
+				if strings.Contains(err.Message, notWant) {
+					t.Errorf("Message %q must NOT contain %q", err.Message, notWant)
+				}
+			}
+		})
+	}
+}
+
+func TestIsUsefulDetail_Boundaries(t *testing.T) {
+	cases := []struct {
+		name   string
+		detail string
+		want   bool
+	}{
+		{"empty is not useful", "", false},
+		{"short string is not useful", "fail", false},
+		{"placeholder-only is not useful", "<orchestrator>: <op>", false},
+		{"placeholder + short prose is not useful", "<scope> <op>", false},
+		{"genuine cause is useful", "connection refused dialing host:2746", true},
+		{"cause with embedded placeholder is useful when prose remains", "<orchestrator>: connection refused on retry", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isUsefulDetail(tc.detail); got != tc.want {
+				t.Errorf("isUsefulDetail(%q) = %v, want %v", tc.detail, got, tc.want)
+			}
+		})
 	}
 }

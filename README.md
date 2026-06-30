@@ -610,6 +610,12 @@ For ArgoCD L3 + downstream consumers. Use `loopzero-common` library for consiste
 | **TruffleHog** | `ci.yml` | Secret scanner (`--only-verified`) |
 | **sigstore policy-controller** | `infra/helm/policy-controller/` | Admission deny-by-default; `loopzero-images-warn` warn-mode ClusterImagePolicy |
 
+> **Reusable image workflow.** Besides `build-images.yml` (loopzero's own images → DOCR/k8s), this repo
+> hosts a **reusable** `build-publish.yml` consumed cross-repo by sibling projects (e.g. `loopzero-cloud`
+> publishes its `loopzero-cloud` + `loopzero-dashboard` GHCR images through it — keyless cosign + SBOM + SLSA).
+> It exposes a `runner` input (default `ubuntu-latest`) so callers on the billing-blocked org can build
+> on a self-hosted runner: `runner: '["self-hosted","linux","x64"]'`.
+
 ### Quality & Validation Gates (CI-enforced)
 
 | Tool | Where | What it does |

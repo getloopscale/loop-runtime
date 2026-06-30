@@ -39,7 +39,12 @@ var suggestions = map[ErrorClass]string{
 	ErrorClassCosignFailed:    "Image signing failed. Operator may need to rotate the signing key.",
 	ErrorClassRegistryAuth:    "Could not push to image registry. Verify pull secret and registry credentials.",
 	ErrorClassDockerfileLint:  "Dockerfile failed validation. See lint output for the specific violation.",
-	ErrorClassLoopZeroYAMLInvalid: "loopzero.yaml could not be parsed. Run `loopzero validate` locally.",
+	// Red Team loopzero-cloud#123 — guide the customer to the canonical manifest
+	// (loopzerokit v2 emits `.loopzero/services.json`; the legacy `loopzero.yaml` has
+	// been retired). The class name stays `LOOPZERO_YAML_INVALID` for engine
+	// compat — Classify() still matches "loopzero.yaml" substrings upstream — but
+	// the user-visible suggestion is honest.
+	ErrorClassLoopZeroYAMLInvalid: "Project manifest could not be parsed. Check your `.loopzero/services.json` and run `loopzero validate` locally.",
 	ErrorClassCancelledByUser: "Deploy was cancelled. Trigger a new deploy when ready.",
 	ErrorClassWorkflowDeleted: "Build was interrupted by an operator. Trigger a new deploy.",
 	ErrorClassUnknown:         "Build step failed. See build logs for details.",

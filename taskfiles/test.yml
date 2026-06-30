@@ -252,6 +252,12 @@ tasks:
       - kubectl apply -f infra/tests/k6/manifests/testrun-l4-distributed.yaml
       - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
 
+  k6:distributed:l5:
+    desc: Run distributed L5 multi-cell test via k6 Operator (16 pods, ~4h) — 5,000 tenants
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/testrun-l5-distributed.yaml
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
+
   k6:soak:apply:
     desc: Apply weekly soak CronJob + alerts to cluster
     cmds:

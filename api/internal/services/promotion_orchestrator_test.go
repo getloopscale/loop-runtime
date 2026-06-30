@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	pkgid "github.com/getloopscale/loopzero/pkg/id"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -601,5 +602,102 @@ func TestPromote_ReleaseAlreadyPending_RejectsRetry(t *testing.T) {
 	}
 	if loopzeroErr.Code != "INVALID_TRANSITION" {
 		t.Errorf("expected INVALID_TRANSITION, got %s", loopzeroErr.Code)
+	}
+}
+
+// TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix — Red Team loopzero-cloud#120
+// sub-finding 2: pre-fix the orchestrator concatenated "rel-" + id.GenerateReleaseID()
+// at line 155, producing "rel-rel-<16hex>" (failing id.IsValidReleaseID + confusing
+// downstream consumers). Post-fix: id.GenerateReleaseID alone produces the canonical
+// "rel-<16hex>" format.
+func TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix(t *testing.T) {
+	fx := newPromoteTestFixture()
+	result, err := fx.orch.Promote(context.Background(), fx.req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.NewRelease == nil {
+		t.Fatal("expected NewRelease to be set")
+	}
+	if !pkgid.IsValidReleaseID(result.NewRelease.ID) {
+		t.Errorf("Red Team #120 — NewRelease.ID=%q is NOT canonical (^rel-[0-9a-f]{16}$); likely double-prefix bug returned", result.NewRelease.ID)
+	}
+	if strings.HasPrefix(result.NewRelease.ID, "rel-rel-") {
+		t.Errorf("Red Team #120 — NewRelease.ID=%q has duplicate 'rel-' prefix (promotion_orchestrator.go:155 regression)", result.NewRelease.ID)
+	}
+}
+
+// TestPromote_PublicDomain_PreferredOverBase — Red Team loopzero-cloud#120
+// sub-finding 3 (regression of #61): pre-fix the URL was built from BaseDomain
+// only ("loopzero.local" internal). Post-fix PublicDomain takes precedence so the
+// response URL is the canonical Live URL.
+func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
+	rs := newFakePromotionReleaseStore()
+	src := &db.Release{
+		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
+		Apps: json.RawMessage(`[]`),
+	}
+	rs.releases["rel-src-1"] = src
+	rs.activeByEnv["tn-1-proj-1-preview"] = src
+	orch := NewPromotionOrchestrator(PromotionOrchestratorDeps{
+		Releases: rs, EnvTargets: newFakePromotionEnvTargetStore(),
+		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
+		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
+		Locker:       &fakePromotionLocker{},
+		BaseDomain:   "loopzero.local",          // internal cluster domain (#61 leaker)
+		PublicDomain: "prod-dev.loopzero.example", // canonical public — should win
+		Logger:       slog.Default(),
+	})
+	result, err := orch.Promote(context.Background(), PromotionRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", ProjectName: "my-app",
+		FromEnv: "preview", ToEnv: "production", CorrelationID: "c", UserID: "u",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(result.URL, "loopzero.local") {
+		t.Errorf("Red Team #120 — URL %q must NOT contain 'loopzero.local' when PublicDomain is set", result.URL)
+	}
+	if !strings.Contains(result.URL, "prod-dev.loopzero.example") {
+		t.Errorf("Red Team #120 — URL %q must contain canonical PublicDomain 'prod-dev.loopzero.example'", result.URL)
+	}
+	want := "https://my-app-production.prod-dev.loopzero.example"
+	if result.URL != want {
+		t.Errorf("expected URL %q, got %q", want, result.URL)
+	}
+}
+
+// TestPromote_PublicDomainEmpty_FallsBackToBaseDomain — back-compat: when
+// LOOPZERO_PUBLIC_DOMAIN is unset (local Tilt dev), URL falls back to BaseDomain.
+// This preserves the pre-#120 behavior for setups that haven't set PublicDomain.
+func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
+	rs := newFakePromotionReleaseStore()
+	src := &db.Release{
+		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
+		Apps: json.RawMessage(`[]`),
+	}
+	rs.releases["rel-src-1"] = src
+	rs.activeByEnv["tn-1-proj-1-preview"] = src
+	orch := NewPromotionOrchestrator(PromotionOrchestratorDeps{
+		Releases: rs, EnvTargets: newFakePromotionEnvTargetStore(),
+		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
+		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
+		Locker:       &fakePromotionLocker{},
+		BaseDomain:   "dev.loopzero.example",
+		PublicDomain: "", // unset — should fall back
+		Logger:       slog.Default(),
+	})
+	result, err := orch.Promote(context.Background(), PromotionRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", ProjectName: "my-app",
+		FromEnv: "preview", ToEnv: "production", CorrelationID: "c", UserID: "u",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "https://my-app-production.dev.loopzero.example"
+	if result.URL != want {
+		t.Errorf("expected fallback URL %q, got %q", want, result.URL)
 	}
 }

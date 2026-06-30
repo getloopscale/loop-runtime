@@ -62,10 +62,13 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	poolCollector := metrics.NewPoolStatsCollector(poolCfg.Pool, logger)
 	poolCollector.Start(context.Background(), 15*time.Second)
 
+	// Concrete project store kept in a typed var so M4 can wire the per-Account
+	// project-cap checker onto it once the PlanLimiter is built below.
+	projectStore := &db.PostgresProjectStore{DB: poolCfg}
 	deps := &DatabaseDeps{
 		DBAdapter:     poolCfg,
 		MemberStore:   &db.PostgresMembershipStore{DB: poolCfg},
-		ProjectStore:  &db.PostgresProjectStore{DB: poolCfg},
+		ProjectStore:  projectStore,
 		DBHealth:      poolCfg,
 		PoolCollector: poolCollector,
 	}
@@ -82,6 +85,11 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		} else {
 			deps.StdDB = stdDB
 			deps.PlanLimiter = enforcement.NewPlanLimiter(stdDB, logger)
+			// M4 (account-level tenancy, Phase 2): enforce the per-Account project
+			// cap at the API project-creation path. M5 (#106) routes this through the
+			// shared wireProjectCap helper so the API store and the build-orchestrator
+			// store are wired through ONE path and can never diverge again.
+			wireProjectCap(projectStore, &planLimiterCapAdapter{limiter: deps.PlanLimiter})
 			logger.Info("plan enforcement enabled")
 		}
 	}

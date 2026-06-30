@@ -190,6 +190,44 @@ func (l *PlanLimiter) CheckValue(tenantID, metric string, requested int) LimitRe
 	return result
 }
 
+// CheckProjectsValue answers "may this Account create one more project?" given
+// its CURRENT project count. M4 (account-level tenancy, Phase 2): unlike
+// CheckValue (tenant-scoped), it resolves the ACCOUNT plan + the per-Account
+// `projects` cap. Allowed iff creating one more stays within the cap
+// (current < hard); enterprise / unlimited (hard < 0) always allowed; a missing
+// limit row fails closed. The COUNT is supplied by the caller (the atomic
+// in-transaction count in the create path — T2.1).
+func (l *PlanLimiter) CheckProjectsValue(tenantID string, current int) LimitResult {
+	if !l.hasStore() {
+		return LimitResult{Allowed: true, Plan: "dev", Metric: "projects", Current: current}
+	}
+
+	plan := l.getAccountPlan(tenantID)
+	if plan == "enterprise" {
+		// Limit:-1 is the unambiguous "unlimited" sentinel the create path uses
+		// to SKIP the advisory lock + count (EC-6).
+		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current, Limit: -1}
+	}
+
+	hardLimit, _ := l.getLimits(plan, "projects")
+	if hardLimit < 0 {
+		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current, Limit: -1}
+	}
+	if hardLimit == 0 {
+		l.logger.Warn("no projects limit configured (denying by default)",
+			"tenant", tenantID, "plan", plan, "current", current)
+		return LimitResult{Allowed: false, Plan: plan, Metric: "projects", Current: current, Limit: 0}
+	}
+
+	result := LimitResult{Plan: plan, Metric: "projects", Current: current, Limit: hardLimit}
+	result.Allowed = current < hardLimit // creating one more makes count current+1 ≤ hard
+	if !result.Allowed {
+		l.logger.Info("account at project cap",
+			"tenant", tenantID, "plan", plan, "current", current, "hard_limit", hardLimit)
+	}
+	return result
+}
+
 // GetBuildTimeout returns the build timeout for a tenant's plan (in seconds).
 func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
 	if !l.hasStore() {
@@ -220,6 +258,36 @@ func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 	plan, err := l.store.GetTenantPlan(context.Background(), tenantID)
 	if err != nil || plan == "" {
 		l.logger.Warn("subscription row missing — falling back to starter plan",
+			"tenant", tenantID, "error", err)
+		if l.OnFallbackStarter != nil {
+			l.OnFallbackStarter()
+		}
+		return "starter"
+	}
+	return plan
+}
+
+// accountPlanResolver is the OPTIONAL capability (ISP) a LimitsStore may
+// implement to resolve a tenant's ACCOUNT plan. Kept off the core LimitsStore
+// interface so narrow test fakes are not forced to implement it; only the
+// production sqlLimitsStore (and the enforcement fake) provide it.
+type accountPlanResolver interface {
+	GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error)
+}
+
+// getAccountPlan resolves the plan of the tenant's Account (M4). EC-2: a missing
+// account subscription (or a NULL account_id, impossible post-M3 but defensive)
+// falls back to "starter" — fail-CLOSED to the tightest cap, never silently
+// unlimited. A store that does not implement accountPlanResolver degrades to the
+// tenant-scoped plan (pre-M4 behavior) rather than failing.
+func (l *PlanLimiter) getAccountPlan(tenantID string) string {
+	resolver, ok := l.store.(accountPlanResolver)
+	if !ok {
+		return l.getTenantPlan(tenantID) // store has no account resolution — degrade
+	}
+	plan, err := resolver.GetAccountPlanByTenant(context.Background(), tenantID)
+	if err != nil || plan == "" {
+		l.logger.Warn("account subscription missing — falling back to starter plan",
 			"tenant", tenantID, "error", err)
 		if l.OnFallbackStarter != nil {
 			l.OnFallbackStarter()

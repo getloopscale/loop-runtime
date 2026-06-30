@@ -631,3 +631,111 @@ func TestEnvs_List_ReturnsProjectInEachEntry_M2(t *testing.T) {
 		t.Errorf("response missing project=api entry, got %s", body)
 	}
 }
+
+// Red Team loopzero-cloud#48 regression-protector — A01:2021 Broken Access
+// Control / CWE-639. The Red Team verbatim reproduction:
+//
+//	GET /api/v1/environments?project=zzz-does-not-exist-999
+//	  -> 200 total=3 (filter SILENTLY IGNORED — bypass)
+//
+// The canonical fix MUST honor `?project=` server-side:
+//   - if the project does NOT belong to the caller's tenant -> 404 PROJECT_NOT_FOUND
+//   - if it DOES, filter the response to entries whose Project matches
+//     (preserving the legacy production entry with empty Project for backward compat)
+//
+// The 3 regression-protectors below lock the 3-axis attack surface
+// (filter-honored / cross-tenant-rejected / under-filter-allowed) per
+// feedback_issue_fix_requires_failing_e2e_test_2026_06_25.
+
+func TestEnvs_List_FilterByProjectHonored_RedTeam48(t *testing.T) {
+	mgr := &fakeEnvMgr{
+		envs: []EnvironmentEntry{
+			{Name: "production", Status: "active"}, // legacy — must always surface
+			{Name: "staging", Status: "active", Project: "web"},
+			{Name: "qa", Status: "active", Project: "api"},
+		},
+	}
+	// The user owns BOTH projects in their tenant — only `web` matches the filter.
+	pl := &fakeProjectLookup{exists: map[string]bool{
+		"tn-test-123::web": true,
+		"tn-test-123::api": true,
+	}}
+	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments?project=web", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+	h.List(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	// production (legacy, empty Project) + staging (Project=web) should survive
+	if !strings.Contains(body, `"project":"web"`) {
+		t.Errorf("Red Team #48: response missing project=web entry, got %s", body)
+	}
+	if strings.Contains(body, `"project":"api"`) {
+		t.Errorf("Red Team #48: project=web filter must EXCLUDE api entries, got %s", body)
+	}
+}
+
+func TestEnvs_List_FilterByCrossTenantProjectRejected_RedTeam48(t *testing.T) {
+	mgr := &fakeEnvMgr{
+		envs: []EnvironmentEntry{
+			{Name: "production", Status: "active"},
+			{Name: "staging", Status: "active", Project: "web"},
+		},
+	}
+	// Caller's tenant only owns `web`; `someone-elses-project` belongs to a
+	// different tenant (or doesn't exist at all). Must 404 PROJECT_NOT_FOUND
+	// — matching the Create handler's EC-1 SEPA-CRITICAL pattern.
+	pl := &fakeProjectLookup{exists: map[string]bool{"tn-test-123::web": true}}
+	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/environments?project=someone-elses-project", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+	h.List(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("Red Team #48: cross-tenant filter must 404 PROJECT_NOT_FOUND, got %d body=%s",
+			w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "PROJECT_NOT_FOUND") {
+		t.Errorf("Red Team #48: body must include PROJECT_NOT_FOUND code, got %s", w.Body.String())
+	}
+}
+
+func TestEnvs_List_NoFilter_LegacyShapeUnchanged_RedTeam48(t *testing.T) {
+	mgr := &fakeEnvMgr{
+		envs: []EnvironmentEntry{
+			{Name: "production", Status: "active"},
+			{Name: "staging", Status: "active", Project: "web"},
+		},
+	}
+	// Even with projectStore wired, an empty ?project= MUST surface all
+	// envs the tenant owns (legacy J-10 dashboard shape). The filter only
+	// engages when the query param is non-empty.
+	pl := &fakeProjectLookup{exists: map[string]bool{"tn-test-123::web": true}}
+	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+	h.List(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Total != 2 {
+		t.Errorf("no-filter must return all 2 envs (legacy shape), got total=%d", resp.Total)
+	}
+}

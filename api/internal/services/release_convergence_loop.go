@@ -66,9 +66,10 @@ type ReleaseConvergenceLoop struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	baseDomain string
-	logger     *slog.Logger
-	cfg        ReleaseConvergenceLoopConfig
+	baseDomain   string
+	publicDomain string // release-blockers-2026-06-25-set v1.1 #61 — canonical wildcard for deploy.completed URL (mirrors SyncCallbackActivator.publicDomain).
+	logger       *slog.Logger
+	cfg          ReleaseConvergenceLoopConfig
 
 	sem    chan struct{}
 	active sync.Map
@@ -91,7 +92,7 @@ func NewReleaseConvergenceLoop(
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},
-	baseDomain string,
+	baseDomain, publicDomain string,
 	logger *slog.Logger,
 	cfg ReleaseConvergenceLoopConfig,
 ) *ReleaseConvergenceLoop {
@@ -114,6 +115,7 @@ func NewReleaseConvergenceLoop(
 		locker:         locker,
 		eventStore:     eventStore,
 		baseDomain:     baseDomain,
+		publicDomain:   publicDomain,
 		logger:         logger,
 		cfg:            cfg,
 		sem:            make(chan struct{}, cfg.MaxConcurrent),
@@ -363,7 +365,7 @@ func (r *ReleaseConvergenceLoop) checkSync(ctx context.Context, appName string, 
 
 func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *db.Release) {
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		apps := releaseAppsToActivationApps(release, r.baseDomain)
+		apps := releaseAppsToActivationApps(release, r.baseDomain, r.publicDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
 		return ActivateReleaseKernel(ctx, tx, release, r.releaseStore, r.envTargetStore, r.eventStore, apps, duration, r.logger)
 	})

@@ -91,26 +91,166 @@ func sourceRepoName(tenantID, projectID string) (string, error) {
 // PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
 // detects the format, and pushes to the Gitea source repo.
 // Returns PushResult with SourceID and optionally a GitBundlePath for S3.
+//
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loopzero-cloud#31):
+// PushBundle now returns typed *PushBundleError for each failure mode so
+// SourceHandler.Upload can map to a specific actionable Message instead of
+// the misleading legacy "Ensure your git history is clean" string. Downstream
+// helpers (pushGitBundle / pushTarBundle) continue to return untyped
+// fmt.Errorf for backward-compat; PushBundle wraps their non-typed errors as
+// ReasonRemoteRejectedPush at the outer boundary (the handler's gitea-race
+// substring discriminator takes precedence over this for F-03 preservation).
+//
+// The size ceiling (MaxBundleBytes) is enforced via io.LimitReader+1 — when
+// io.ReadAll returns more than MaxBundleBytes we know the underlying reader
+// had >= MaxBundleBytes+1 bytes available, which is the canonical
+// ReasonBundleTooLarge signal.
 func (s *GiteaSourceStore) PushBundle(ctx context.Context, tenantID, projectID string, bundle io.Reader) (PushResult, error) {
-	data, err := io.ReadAll(bundle)
+	// Cap the read at MaxBundleBytes+1 so an oversized payload is detected
+	// without buffering the entire body. Per ReasonBundleTooLarge contract.
+	limited := io.LimitReader(bundle, MaxBundleBytes+1)
+	data, err := io.ReadAll(limited)
 	if err != nil {
-		return PushResult{}, fmt.Errorf("gitea source: reading bundle: %w", err)
+		return PushResult{}, NewPushBundleError(
+			ReasonArchiveReadError, err,
+			"could not read the source archive from the upload stream",
+		)
+	}
+	if len(data) > MaxBundleBytes {
+		return PushResult{}, NewPushBundleError(
+			ReasonBundleTooLarge, nil,
+			fmt.Sprintf("bundle exceeds %d-byte limit", MaxBundleBytes),
+		)
 	}
 	if len(data) == 0 {
-		return PushResult{}, fmt.Errorf("gitea source: bundle is empty")
+		return PushResult{}, NewPushBundleError(
+			ReasonBundleMalformed, nil,
+			"the uploaded bundle is empty",
+		)
 	}
 
 	// Detect bundle format by magic bytes:
 	//   tar.gz: 0x1f 0x8b (gzip magic)
 	//   git bundle: "# v2 git bundle\n" or "# v3 git bundle\n"
 	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
-		return s.pushTarBundle(ctx, tenantID, projectID, data)
+		result, err := s.pushTarBundle(ctx, tenantID, projectID, data)
+		if err != nil {
+			return PushResult{}, wrapDownstreamPushError(err)
+		}
+		return result, nil
 	}
 	sourceID, err := s.pushGitBundle(ctx, tenantID, projectID, data)
 	if err != nil {
-		return PushResult{}, err
+		return PushResult{}, wrapDownstreamPushError(err)
 	}
 	return PushResult{SourceID: sourceID}, nil
+}
+
+// wrapDownstreamPushError lifts an untyped error returned by pushGitBundle /
+// pushTarBundle into a typed *PushBundleError so SourceHandler.Upload sees a
+// uniform contract at the outer boundary.
+//
+// EC-3 absorption: ErrInvalidTenantOrProject (sentinel) is preserved as-is —
+// PushBundle itself never owns the tenant-name validation, so the handler's
+// pre-existing `errors.Is(err, source.ErrInvalidTenantOrProject)` ladder
+// discriminator continues to short-circuit BEFORE the typed-error mapping.
+// gitea-race substring matches are also preserved unchanged for F-03 —
+// IsGiteaRaceCondition is consulted by the handler ladder BEFORE this typed
+// wrap is interpreted.
+func wrapDownstreamPushError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// Preserve the sentinel chain so errors.Is(err, ErrInvalidTenantOrProject)
+	// keeps working at the handler.
+	if errors.Is(err, ErrInvalidTenantOrProject) {
+		return err
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+
+	// 1. Network class (Sprint 4 — unchanged): backend unreachable (DNS / TCP
+	//    refused / TLS / timeout). Detail is intentionally FIXED to avoid
+	//    leaking internal DNS / addresses to the operator UI (scrubInternalTerms
+	//    would partially redact them anyway). The verbatim cause remains
+	//    available via errors.Unwrap for operator logs (see source.go handler).
+	//    Sprint 5 ADR D3 composition (verbatim cause in Detail) applies to the
+	//    other 4 buckets below; the network bucket is the deliberate exception.
+	if isNetworkClass(lower) {
+		return NewPushBundleError(ReasonSourceBackendUnreachable, err,
+			"source backend is unreachable (network or DNS failure)")
+	}
+	// 2. Auth class (Sprint 5 — NEW per ADR D2): 401 / 403 / authentication-
+	//    required / permission-denied patterns. The detail preserves the
+	//    verbatim cause for the operator's diagnosis.
+	if isAuthClass(lower) {
+		return NewPushBundleError(ReasonSourceBackendAuthFailure, err, msg)
+	}
+	// 3. Capacity class (Sprint 5 — NEW): 507 / quota-exceeded / no-space-left
+	//    patterns. The detail preserves the verbatim cause.
+	if isCapacityClass(lower) {
+		return NewPushBundleError(ReasonSourceBackendCapacity, err, msg)
+	}
+	// 4. Genuine remote-rejected (Sprint 5 — NARROWED per ADR D2): only the
+	//    literal git "pre-receive hook declined" pattern reaches this bucket.
+	//    The handler's gitea-race substring check still intercepts generic
+	//    "remote rejected" / "cannot lock ref" / "stale info" patterns at the
+	//    DEPLOY_IN_PROGRESS 409 ladder entry BEFORE pushErr.Reason is consulted
+	//    (EC-3 preserved).
+	if isGenuineRemoteRejected(lower) {
+		return NewPushBundleError(ReasonRemoteRejectedPush, err, msg)
+	}
+	// 5. Default mapping (Sprint 5 — CHANGED per ADR D2): unknown downstream.
+	//    Sprint 4 incorrectly defaulted here to ReasonRemoteRejectedPush, which
+	//    caused QA Red Team #33 — operators saw "Verify your project name is
+	//    unused" on fresh names where no collision existed. The new catchall
+	//    preserves the verbatim cause in Detail so the operator sees what
+	//    actually went wrong rather than a fabricated specific diagnosis.
+	return NewPushBundleError(ReasonUnknownDownstream, err, msg)
+}
+
+// isNetworkClass reports whether lower-cased msg matches a network-unreachable
+// pattern (Sprint 4 substrings preserved verbatim).
+func isNetworkClass(lower string) bool {
+	return strings.Contains(lower, "connection refused") ||
+		strings.Contains(lower, "no such host") ||
+		strings.Contains(lower, "i/o timeout") ||
+		strings.Contains(lower, "tls handshake") ||
+		strings.Contains(lower, "eof") ||
+		strings.Contains(lower, "context deadline exceeded") ||
+		strings.Contains(lower, "dial tcp")
+}
+
+// isAuthClass reports whether lower-cased msg matches an auth-class pattern.
+// Sprint 5 plan ADR D2 (closes loopzero-cloud#33).
+func isAuthClass(lower string) bool {
+	return strings.Contains(lower, "401") ||
+		strings.Contains(lower, "403") ||
+		strings.Contains(lower, "authentication required") ||
+		strings.Contains(lower, "authorization failed") ||
+		strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "forbidden") ||
+		strings.Contains(lower, "unauthorized")
+}
+
+// isCapacityClass reports whether lower-cased msg matches a capacity-class
+// pattern. Sprint 5 plan ADR D2.
+func isCapacityClass(lower string) bool {
+	return strings.Contains(lower, "507") ||
+		strings.Contains(lower, "quota exceeded") ||
+		strings.Contains(lower, "no space left") ||
+		strings.Contains(lower, "insufficient storage") ||
+		strings.Contains(lower, "disk full")
+}
+
+// isGenuineRemoteRejected reports whether lower-cased msg matches a LITERAL
+// git pre-receive rejection pattern. Sprint 5 plan ADR D2: narrows the bucket
+// from Sprint 4's catchall to only the actual git stderr signature, so generic
+// gitea-race "remote rejected" substrings continue to be handled by the route
+// handler's DEPLOY_IN_PROGRESS 409 ladder (EC-3 preserved).
+func isGenuineRemoteRejected(lower string) bool {
+	return strings.Contains(lower, "pre-receive hook declined") ||
+		strings.Contains(lower, "pre-receive hook failed")
 }
 
 // pushGitBundle handles git bundle format (original flow).

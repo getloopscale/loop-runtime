@@ -76,6 +76,26 @@ func (s *sqlLimitsStore) GetTenantPlan(ctx context.Context, tenantID string) (st
 	return plan, nil
 }
 
+// GetAccountPlanByTenant implements LimitsStore. M4: resolves the plan of the
+// tenant's Account (one subscription per Account since M2 — UNIQUE(account_id)),
+// joining through tenants.account_id (NOT NULL since M3 000044).
+func (s *sqlLimitsStore) GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("nil sql limits store")
+	}
+	var plan string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT plan FROM subscriptions
+		 WHERE account_id = (SELECT account_id FROM tenants WHERE id = $1)
+		   AND status IN ('active', 'trialing') LIMIT 1`,
+		tenantID,
+	).Scan(&plan)
+	if err != nil {
+		return "", err
+	}
+	return plan, nil
+}
+
 // GetLimits implements LimitsStore.
 func (s *sqlLimitsStore) GetLimits(ctx context.Context, plan, metric string) (int, int, error) {
 	if s == nil || s.db == nil {

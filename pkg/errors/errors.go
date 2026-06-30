@@ -17,6 +17,7 @@ package errors
 
 import (
 	"fmt"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -25,6 +26,13 @@ import (
 // enough for any realistic LoopZero call chain (handler → service → store →
 // driver), and bounded so cost stays in the ~150ns range.
 const stackDepth = 32
+
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — precompiled regex
+// for trace-id composition helpers (isUsefulDetail / composeMessageWithTraceID).
+var (
+	placeholderRE = regexp.MustCompile(`<[^>]+>`)
+	whitespaceRE  = regexp.MustCompile(`\s+`)
+)
 
 // LoopZeroError is a typed, transport-agnostic error.
 // It carries a machine-readable Code and a human Message; HTTP status
@@ -315,10 +323,18 @@ var (
 		Message:    "a required field is missing",
 	}
 
-	// ErrSourceUploadFailed is returned when pushing the bundle to the source store fails.
+	// ErrSourceUploadFailed is the neutral fallback returned when pushing the
+	// bundle to the source store fails AND the typed PushBundleError mapping
+	// (see source.NewSourceUploadFailedFromPushReason) cannot identify a
+	// specific reason. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
+	// (closes loopzero-cloud#31): replaced the legacy actively-misleading
+	// "Ensure your git history is clean and try again." text (the user's git
+	// history WAS clean in the QA report; the real failure was elsewhere)
+	// with a neutral fallback. Specific actionable text is now emitted by
+	// reason-specific messages keyed off PushBundleError.Reason.
 	ErrSourceUploadFailed = &LoopZeroError{
 		Code:       "SOURCE_UPLOAD_FAILED",
-		Message:    "Failed to upload source code. Ensure your git history is clean and try again.",
+		Message:    "The source upload failed. Please retry; if the issue persists, contact support.",
 	}
 
 	// ErrInvalidTenantOrProject is returned when tenantID or projectID fails
@@ -394,7 +410,30 @@ var (
 		Code:       "SCALING_AMBIGUOUS",
 		Message:    "'replicas' and 'autoscaling' are mutually exclusive — choose one",
 	}
+
+	// ErrProjectsExceedPlan is returned at project creation when the Account
+	// already holds its plan's project cap. M4 (account-level tenancy, Phase 2):
+	// the cap is per-Account, enforced at the engine's project-creation path.
+	// Factory NewProjectsExceedPlan adds plan + cap + current + account context.
+	ErrProjectsExceedPlan = &LoopZeroError{
+		Code:    "PROJECTS_EXCEED_PLAN",
+		Message: "your account has reached its plan's project limit",
+	}
 )
+
+// NewProjectsExceedPlan creates a PROJECTS_EXCEED_PLAN error with the plan name,
+// the per-Account project cap, the account's current project count, and the
+// account id. M4 — mirrors NewReplicasExceedPlan; the message carries the upgrade
+// URL so the client has an actionable path (EC-4).
+func NewProjectsExceedPlan(plan string, limit, current int, accountID string) *LoopZeroError {
+	return &LoopZeroError{
+		Code: "PROJECTS_EXCEED_PLAN",
+		Message: fmt.Sprintf(
+			"Account '%s' has %d projects — the %s plan allows up to %d. Upgrade at https://loopzero.example/pricing or delete a project.",
+			accountID, current, displayPlanName(plan), limit,
+		),
+	}
+}
 
 // NewReplicasExceedPlan creates a REPLICAS_EXCEED_PLAN error with plan name,
 // plan cap, requested replica count, and the offending app name.
@@ -583,4 +622,181 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 			field, minBound, maxBound, got,
 		),
 	}
+}
+
+// NewSourceUploadFailedFromPushReason returns a LoopZeroError with a reason-
+// specific Message keyed off the PushBundleError.Reason string. Sprint 4
+// plan qa-sprint4-cleanup-2026-06-25 T3.3 (closes loopzero-cloud#31).
+//
+// `reasonLabel` is the canonical string emitted by source.PushBundleErrorReason.String()
+// — kept as a string to avoid pulling api/internal/source into pkg/errors
+// (DIP boundary preserved: pkg/errors stays leaf-package).
+//
+// Per ADR D3 of the plan: Code stays SOURCE_UPLOAD_FAILED for backward-compat
+// with loopzero-cli EXIT_CODES (3 = deploy failure). The Message field is the
+// only thing that varies per reason.
+//
+// CR-9 cloud abstraction (loopzero-cloud/CLAUDE.md Rule 3): Messages say "source
+// backend" NOT "Gitea", "remote" NOT "git push" — internal terms are forbidden
+// in user-facing strings.
+func NewSourceUploadFailedFromPushReason(reasonLabel, detail string) *LoopZeroError {
+	return NewSourceUploadFailedFromPushReasonWithTrace(reasonLabel, detail, "")
+}
+
+// NewSourceUploadFailedFromPushReasonWithTrace is the trace-id-aware variant
+// per Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 (closes the Red Team
+// suggestion in loopzero-cloud#35: "Separar mensagem-de-cliente (genérica +
+// trace-id) de causa-de-log (verbatim, server-side)"). The existing
+// NewSourceUploadFailedFromPushReason delegates here with empty traceID for
+// backward compatibility — call sites that have a correlation ID available
+// (HTTP handlers via correlation.Read(r)) call this one directly.
+//
+// Composition logic (per Sprint 7 #35 ADR D2):
+//   - Scrubbed detail is "useful" (≥ 20 chars AND not exclusively redaction
+//     placeholders) → compose "<summary>: <verbatim detail>" (Sprint 5 DX).
+//   - Scrubbed detail is empty / fully-collapsed / placeholder-only → fall
+//     back to "<summary>. Reference: <trace-id>. Contact support if it
+//     persists." (no information disclosure; trace-id correlates server log).
+//   - Unknown reason label → neutral generic + optional trace-id appended.
+func NewSourceUploadFailedFromPushReasonWithTrace(reasonLabel, detail, traceID string) *LoopZeroError {
+	summary, ok := summaryByPushReason[reasonLabel]
+	if !ok {
+		return &LoopZeroError{
+			Code:    "SOURCE_UPLOAD_FAILED",
+			Message: appendTraceIDFallback(ErrSourceUploadFailed.Message, traceID),
+		}
+	}
+	return &LoopZeroError{
+		Code:    "SOURCE_UPLOAD_FAILED",
+		Message: composeMessageWithTraceID(summary, detail, traceID),
+	}
+}
+
+// ErrBuildSubmitFailed is the canonical LoopZeroError for build-trigger failures
+// that REACH the orchestrator (vs INTERNAL_ERROR which stays for unexpected
+// failures outside the orchestrator's responsibility). Sprint 6 plan qa-
+// sprint6-cleanup-2026-06-25 ADR D3 (closes loopzero-cloud#34) — distinct code
+// so loopzero-cli + dashboards + telemetry can switch on it cleanly.
+var ErrBuildSubmitFailed = &LoopZeroError{
+	Code:    "BUILD_SUBMIT_FAILED",
+	Message: "The build could not be triggered. Try again, or check `loopzero status` for details.",
+}
+
+// NewBuildSubmitFailedFromReason mirrors NewSourceUploadFailedFromPushReason
+// (Sprint 5) for the build-trigger surface. The reasonLabel is the canonical
+// SubmitBuildErrorReason.String() output emitted by api/internal/services;
+// keeping it as a string preserves the DIP boundary (pkg/errors imports
+// nothing from api/internal/services). Per Sprint 6 ADR D3, the message is
+// composed as "<actionable summary>: <verbatim detail>" so the operator
+// sees BOTH the actionable summary AND the underlying cause — same Vercel
+// canonical pattern Sprint 5 introduced.
+//
+// CR-9: zero internal terms in summaries (no Argo / Workflow / Postgres /
+// Gitea names). Detail is already scrubbed by api/internal/services
+// NewSubmitBuildError via source.ScrubInternalTerms.
+func NewBuildSubmitFailedFromReason(reasonLabel, detail string) *LoopZeroError {
+	return NewBuildSubmitFailedFromReasonWithTrace(reasonLabel, detail, "")
+}
+
+// NewBuildSubmitFailedFromReasonWithTrace is the trace-id-aware variant per
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1. Mirrors
+// NewSourceUploadFailedFromPushReasonWithTrace for the build-trigger surface.
+func NewBuildSubmitFailedFromReasonWithTrace(reasonLabel, detail, traceID string) *LoopZeroError {
+	summary, ok := summaryByBuildSubmitReason[reasonLabel]
+	if !ok {
+		return &LoopZeroError{
+			Code:    "BUILD_SUBMIT_FAILED",
+			Message: appendTraceIDFallback(ErrBuildSubmitFailed.Message, traceID),
+		}
+	}
+	return &LoopZeroError{
+		Code:    "BUILD_SUBMIT_FAILED",
+		Message: composeMessageWithTraceID(summary, detail, traceID),
+	}
+}
+
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — composition helpers.
+// Closes the Red Team's #35 suggestion of separating client-facing
+// (generic + trace-id) from server-side log (verbatim cause).
+//
+// The Sprint 5/6 composition won when detail was a benign verbatim cause
+// (e.g., "connection refused", "quota exceeded"). The Sprint 7 #35 scrub
+// extension correctly redacted internal terms — but for SOME inputs the
+// scrub collapsed detail to `<orchestrator>: <op>` placeholders only,
+// which leaks zero info but ALSO surfaces zero diagnostic. The trace-id
+// fallback gives the operator a correlation handle to support without
+// leaking implementation details.
+
+// composeMessageWithTraceID is the canonical "<summary>: <verbatim detail>"
+// composer that DOWNGRADES to "<summary>. Reference: <trace-id>." when the
+// scrubbed detail is empty or fully reduced to placeholders. KISS: a single
+// branch on isUsefulDetail.
+func composeMessageWithTraceID(summary, detail, traceID string) string {
+	if isUsefulDetail(detail) {
+		return summary + ": " + detail
+	}
+	return appendTraceIDFallback(summary, traceID)
+}
+
+// appendTraceIDFallback adds "Reference: <trace-id>. Contact support if it
+// persists." to an existing summary when traceID is non-empty; otherwise
+// returns the summary unchanged (preserves Sprint 5/6 backward-compat for
+// callers without a correlation ID).
+func appendTraceIDFallback(summary, traceID string) string {
+	if traceID == "" {
+		return summary
+	}
+	if !strings.HasSuffix(summary, ".") {
+		summary += "."
+	}
+	return summary + " Reference: " + traceID + ". Contact support if it persists."
+}
+
+// isUsefulDetail reports whether the scrubbed detail still carries
+// actionable information for the operator. "Useful" means: ≥ 20 chars
+// AND not exclusively `<...>` placeholders + whitespace + punctuation.
+// Threshold 20 chosen empirically — shorter than "Source backend is
+// unreachable: " (28 chars) but longer than "<orchestrator>" (14 chars)
+// so the heuristic flips at the right boundary.
+//
+// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 isolation: the
+// threshold + placeholder stripper live here (NOT in pushbundle_error.go)
+// so pkg/errors stays the single composition seam. DIP preserved.
+func isUsefulDetail(detail string) bool {
+	if len(detail) < 20 {
+		return false
+	}
+	// Strip placeholders + collapse whitespace; if what remains is empty
+	// or punctuation-only, the detail is non-informative.
+	stripped := placeholderRE.ReplaceAllString(detail, "")
+	stripped = whitespaceRE.ReplaceAllString(stripped, " ")
+	stripped = strings.Trim(stripped, " :;.,!?-")
+	return len(stripped) >= 8
+}
+
+// summaryByBuildSubmitReason — Sprint 6 ADR D3 canonical mapper. Sibling of
+// summaryByPushReason (Sprint 5).
+var summaryByBuildSubmitReason = map[string]string{
+	"BuildSubmitWorkflowFailed":      "Build trigger failed at workflow submit",
+	"BuildSubmitProjectEnsureFailed": "Build trigger failed while ensuring the project exists",
+	"BuildSubmitDBWriteFailed":       "Build trigger failed at a database write step",
+	"BuildSubmitAppNormalizeFailed":  "Build trigger failed validating one of the apps",
+	"BuildSubmitUnknown":             "Build trigger failed (cause not classified)",
+}
+
+// summaryByPushReason is the canonical operator-actionable summary keyed on
+// the source.PushBundleErrorReason String() output. Sprint 5 plan ADR D3 +
+// D1 — extends the Sprint 4 set with auth/capacity/unknown reasons; messages
+// are composed as "<summary>: <verbatim detail>" by
+// NewSourceUploadFailedFromPushReason. CR-9: zero internal terms (no Gitea /
+// MinIO / Kubernetes references).
+var summaryByPushReason = map[string]string{
+	"SourceBackendUnreachable": "Source backend is unreachable (network or DNS failure)",
+	"RemoteRejectedPush":       "The remote rejected the push",
+	"BundleMalformed":          "The source bundle is malformed. Re-run `loopzero deploy` from your project root",
+	"BundleTooLarge":           "The source bundle exceeds the size limit. Reduce the size of your source tree",
+	"ArchiveReadError":         "Could not read the source archive. Check your project files and try again",
+	"SourceBackendAuthFailure": "Source backend rejected authentication",
+	"SourceBackendCapacity":    "Source backend is out of capacity",
+	"UnknownDownstream":        "Source upload failed (cause not classified)",
 }

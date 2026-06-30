@@ -51,12 +51,29 @@ type PreviewCRPhaseLookup interface {
 	GetPhases(ctx context.Context, previewIDs []string) (map[string]string, error)
 }
 
+// PreviewProjectChecker — narrow ISP interface used to verify that the
+// project URL parameter belongs to the authenticated tenant before any
+// preview handler proceeds. Optional dependency: when nil, the existence
+// check is skipped (legacy/test path). Wire via `WithProjectChecker`
+// from setup_server.go for production (the existing
+// *db.PostgresProjectStore already matches this signature — no adapter
+// needed, same shape used by `SecretProjectChecker`).
+//
+// Red Team loopzero-cloud#92 absorption (2026-06-27): without this gate,
+// GET /api/v1/projects/<nonexistent>/previews returned 200 with an empty
+// list, so the dashboard's Previews UI rendered functional UI for a
+// deleted/non-existent project.
+type PreviewProjectChecker interface {
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+}
+
 // PreviewHandler handles preview environment API endpoints.
 type PreviewHandler struct {
-	store       PreviewStore
-	service     PreviewService
-	logger      *slog.Logger
-	phaseLookup PreviewCRPhaseLookup
+	store          PreviewStore
+	service        PreviewService
+	logger         *slog.Logger
+	phaseLookup    PreviewCRPhaseLookup
+	projectChecker PreviewProjectChecker
 }
 
 // NewPreviewHandler creates a new PreviewHandler. service may be nil if
@@ -75,12 +92,28 @@ func (h *PreviewHandler) WithPhaseLookup(p PreviewCRPhaseLookup) *PreviewHandler
 	return h
 }
 
+// WithProjectChecker wires the parent-project existence gate (Red Team
+// loopzero-cloud#92 absorption). Fluent setter.
+func (h *PreviewHandler) WithProjectChecker(c PreviewProjectChecker) *PreviewHandler {
+	h.projectChecker = c
+	return h
+}
+
 // requestTimeout is applied to every preview HTTP handler. Generous enough
 // for slow PG, tight enough that idle requests don't block forever.
 const previewRequestTimeout = 30 * time.Second
 
 // Auth + project URL parameter extraction. Returns (tenantID, projectName,
 // ok). When ok=false, an error response has already been written.
+//
+// Red Team loopzero-cloud#92 absorption (2026-06-27): when a ProjectChecker
+// is wired, this gate ALSO verifies that the project name exists for the
+// authenticated tenant. Without this, every preview handler (List / Get
+// / Delete / Create) would render an empty/200 response for non-existent
+// projects, causing the dashboard sub-view UI to render on top of a
+// deleted project. PROJECT_NOT_FOUND is the same shape whether the
+// project belongs to another tenant or doesn't exist anywhere (no
+// existence leak per CWE-204).
 func (h *PreviewHandler) authAndProject(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -91,6 +124,17 @@ func (h *PreviewHandler) authAndProject(w http.ResponseWriter, r *http.Request) 
 	if strings.TrimSpace(project) == "" {
 		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required"))
 		return "", "", false
+	}
+	if h.projectChecker != nil {
+		proj, err := h.projectChecker.GetByName(r.Context(), uc.TenantID, project)
+		if err != nil {
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return "", "", false
+		}
+		if proj == nil {
+			writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(project))
+			return "", "", false
+		}
 	}
 	return uc.TenantID, project, true
 }

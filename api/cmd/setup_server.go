@@ -363,9 +363,16 @@ func buildServerConfig(
 		// phase so dashboard reflects operator-observed status. Manager
 		// is canonical (k8sDeps.PreviewCRMgr), not a per-handler
 		// adapter — same dynamic client + namespace const as Tenant CRs.
+		//
+		// Red Team loopzero-cloud#92 absorption (2026-06-27): wire the
+		// ProjectChecker so /previews handlers reject non-existent
+		// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty
+		// list. Existing *db.PostgresProjectStore matches the narrow
+		// interface signature — no adapter needed.
 		sc.PreviewHandler = routes.
 			NewPreviewHandler(previewStore, previewService, logger).
-			WithPhaseLookup(k8sDeps.PreviewCRMgr)
+			WithPhaseLookup(k8sDeps.PreviewCRMgr).
+			WithProjectChecker(&db.PostgresProjectStore{DB: dbAdapter})
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
@@ -565,9 +572,18 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 		return
 	}
 
-	// Empty namespace = all namespaces. Build pipelines run under per-tenant
-	// namespaces (tn-<tenantID>) so listing everything is the cheapest path.
-	source := services.NewK8sWorkflowNodeSource(dyn, "", 2*time.Second, logger)
+	// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T2.1 (closes loopzero-cloud#37):
+	// scope the workflow watcher to the `argo` namespace specifically. The
+	// pre-Sprint-8 empty namespace `""` was interpreted by kubernetes as
+	// cluster-scope LIST, which the Sprint 7 RBAC fix (namespace-scoped Role
+	// for argo/loopzero-workflow-submitter) does NOT grant. The watcher then 403'd
+	// every poll → couldn't observe workflow state → reconcile loop blocked
+	// → release stuck in SYNC_FAILED → `active_release: null` (#37 root cause).
+	// All LoopZero Workflow CRs are created in the `argo` namespace by the build
+	// orchestrator (workflow_submitter.go); the pre-Sprint-8 comment about
+	// per-tenant namespaces was incorrect — workflows have ALWAYS lived in
+	// argo, only the build PODS run per-tenant. KISS + least privilege.
+	source := services.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
 	// terminalIDs is nil — first-tick startup may emit duplicate step events
 	// for already-running workflows; the watcher's internal lastPhase dedup
 	// catches duplicates from tick 2 onwards. A future enhancement can wire

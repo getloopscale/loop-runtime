@@ -32,7 +32,7 @@ import (
 // example at the time: an ACTIVE release + a CANCELLED most-recent
 // build. The project IS Live regardless of what the latest build did.
 func TestMapProjectStatus_ActiveReleaseTrumpsCancelledBuild(t *testing.T) {
-	got := enforcement.MapProjectStatus("ACTIVE", statemachine.BuildCancelled)
+	got := enforcement.MapProjectStatus("ACTIVE", statemachine.BuildCancelled, "production")
 	if got != enforcement.ProjectStatusLive {
 		t.Errorf("got %q; want %q (ACTIVE release should override cancelled build)",
 			got, enforcement.ProjectStatusLive)
@@ -45,7 +45,7 @@ func TestMapProjectStatus_ActiveReleaseTrumpsCancelledBuild(t *testing.T) {
 // production. The project is Live until the user rolls back OR a
 // successful redeploy supersedes the active release.
 func TestMapProjectStatus_ActiveReleaseTrumpsFailedBuild(t *testing.T) {
-	got := enforcement.MapProjectStatus("ACTIVE", statemachine.BuildFailed)
+	got := enforcement.MapProjectStatus("ACTIVE", statemachine.BuildFailed, "production")
 	if got != enforcement.ProjectStatusLive {
 		t.Errorf("got %q; want %q (ACTIVE release should override failed build)",
 			got, enforcement.ProjectStatusLive)
@@ -57,7 +57,7 @@ func TestMapProjectStatus_ActiveReleaseTrumpsFailedBuild(t *testing.T) {
 // existing in-flight bucket) so the StatusDot animates and the user
 // knows the project is mid-flight, not Live.
 func TestMapProjectStatus_RollingBackReleaseIsBuilding(t *testing.T) {
-	got := enforcement.MapProjectStatus("ROLLING_BACK", statemachine.BuildSucceeded)
+	got := enforcement.MapProjectStatus("ROLLING_BACK", statemachine.BuildSucceeded, "production")
 	if got != enforcement.ProjectStatusBuilding {
 		t.Errorf("got %q; want %q",
 			got, enforcement.ProjectStatusBuilding)
@@ -69,7 +69,7 @@ func TestMapProjectStatus_RollingBackReleaseIsBuilding(t *testing.T) {
 // The project IS Failed; do NOT fall back to the latest build.
 func TestMapProjectStatus_FailedReleaseIsFailed(t *testing.T) {
 	for _, releaseState := range []string{"FAILED", "ROLLBACK_FAILED"} {
-		got := enforcement.MapProjectStatus(releaseState, statemachine.BuildSucceeded)
+		got := enforcement.MapProjectStatus(releaseState, statemachine.BuildSucceeded, "production")
 		if got != enforcement.ProjectStatusFailed {
 			t.Errorf("%q: got %q; want %q",
 				releaseState, got, enforcement.ProjectStatusFailed)
@@ -92,7 +92,7 @@ func TestMapProjectStatus_NoReleaseFallsBackToLatestBuild(t *testing.T) {
 		{statemachine.BuildFailed, enforcement.ProjectStatusFailed},
 	}
 	for _, c := range cases {
-		got := enforcement.MapProjectStatus("", c.buildState)
+		got := enforcement.MapProjectStatus("", c.buildState, "production")
 		if got != c.want {
 			t.Errorf("empty release + build=%q: got %q; want %q",
 				c.buildState, got, c.want)
@@ -108,7 +108,7 @@ func TestMapProjectStatus_NoReleaseFallsBackToLatestBuild(t *testing.T) {
 // "broken" for an action the user explicitly took.
 func TestMapProjectStatus_CancelledBuildIsIdleNotFailed(t *testing.T) {
 	// No release yet → fall through to latest build → CANCELLED → Idle.
-	got := enforcement.MapProjectStatus("", statemachine.BuildCancelled)
+	got := enforcement.MapProjectStatus("", statemachine.BuildCancelled, "production")
 	if got != enforcement.ProjectStatusIdle {
 		t.Errorf("got %q; want %q (cancelled != failed)",
 			got, enforcement.ProjectStatusIdle)
@@ -125,7 +125,7 @@ func TestMapProjectStatus_CancelledBuildIsIdleNotFailed(t *testing.T) {
 // release and no build at all. Defensive Idle (matches the
 // MapBuildStatusToProjectStatus empty-state behavior).
 func TestMapProjectStatus_EmptyEverythingIsIdle(t *testing.T) {
-	got := enforcement.MapProjectStatus("", "")
+	got := enforcement.MapProjectStatus("", "", "")
 	if got != enforcement.ProjectStatusIdle {
 		t.Errorf("got %q; want %q", got, enforcement.ProjectStatusIdle)
 	}
@@ -139,10 +139,45 @@ func TestMapProjectStatus_EmptyEverythingIsIdle(t *testing.T) {
 // serving traffic).
 func TestMapProjectStatus_SupersededReleaseFallsBackToBuild(t *testing.T) {
 	for _, terminalRelease := range []string{"SUPERSEDED", "ROLLED_BACK", "CANCELLED"} {
-		got := enforcement.MapProjectStatus(terminalRelease, statemachine.BuildFailed)
+		got := enforcement.MapProjectStatus(terminalRelease, statemachine.BuildFailed, "production")
 		if got != enforcement.ProjectStatusFailed {
 			t.Errorf("%q + BuildFailed: got %q; want %q (terminal release should fall back)",
 				terminalRelease, got, enforcement.ProjectStatusFailed)
 		}
+	}
+}
+
+// TestMapProjectStatus_RedTeam41_PreviewOnlyProject — Red Team
+// loopzero-cloud#41 absorption (2026-06-27). A project with 12 successful
+// builds, all environment=preview, AND zero active production releases
+// previously rendered "Live" badge with "URL PENDING" hint across 4
+// surfaces. With the latestBuildEnv signal, the canonical aggregator
+// returns ProjectStatusPreview so the dashboard renders a distinct
+// "Preview" badge (no contradiction between badge + URL state).
+func TestMapProjectStatus_RedTeam41_PreviewOnlyProject(t *testing.T) {
+	got := enforcement.MapProjectStatus("", statemachine.BuildSucceeded, "preview")
+	if got != enforcement.ProjectStatusPreview {
+		t.Errorf("Red Team #41: BuildSucceeded + preview env + no release MUST map to Preview, got %q", got)
+	}
+}
+
+// TestMapProjectStatus_RedTeam41_ProductionBuildSucceededIsLive — control:
+// a SUCCEEDED build in production env STILL returns Live when there's no
+// release (the historical behavior). Only the preview-env case diverges.
+func TestMapProjectStatus_RedTeam41_ProductionBuildSucceededIsLive(t *testing.T) {
+	got := enforcement.MapProjectStatus("", statemachine.BuildSucceeded, "production")
+	if got != enforcement.ProjectStatusLive {
+		t.Errorf("Red Team #41 control: production env succeeded build STAYS Live, got %q", got)
+	}
+}
+
+// TestMapProjectStatus_RedTeam41_ActiveReleaseStillWinsOverPreviewBuild —
+// release-state SoT remains authoritative. Even with a preview-env latest
+// build, an ACTIVE production release maps to Live (the project IS
+// serving traffic from the prior production release).
+func TestMapProjectStatus_RedTeam41_ActiveReleaseStillWinsOverPreviewBuild(t *testing.T) {
+	got := enforcement.MapProjectStatus("ACTIVE", statemachine.BuildSucceeded, "preview")
+	if got != enforcement.ProjectStatusLive {
+		t.Errorf("Red Team #41: ACTIVE release MUST trump preview build env, got %q", got)
 	}
 }

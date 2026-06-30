@@ -68,6 +68,21 @@ var statusByCode = map[string]int{
 	"MULTIPART_FIELD_ORDER":      http.StatusBadRequest, // 400 (Plan v1.2 T6.1 — services_json must precede bundle)
 	"SERVICES_JSON_TOO_LARGE":    http.StatusRequestEntityTooLarge, // 413 (Plan v1.2 T6.1 — 256 KB cap)
 	"HPA_TARGET_OUT_OF_BOUNDS":   http.StatusBadRequest, // 400 (J-20 Scale plan v1.1 T1.3 + EC-4)
+	// Red Team loopzero-cloud#103 closure (2026-06-27) — validation errors at
+	// the input boundary MUST return 4xx with client-classified codes,
+	// NOT 5xx with INTERNAL_ERROR (server-failure connotation). The 3
+	// codes below close 3 specific Red Team observations:
+	//   - INVALID_ARGUMENT — scale path (db/scaling_types.go:26 already
+	//     used this code; the missing registry entry caused 500). Comment
+	//     there says "Status 400 inferred" — the inference happens HERE.
+	//   - INVALID_DOMAIN — replaces INTERNAL_ERROR for domain format
+	//     validation in domains_create.go.
+	//   - INVALID_REPLICAS — replaces 500 INVALID_ARGUMENT for `replicas:-5`
+	//     specifically; covers the Red Team's secondary observation
+	//     (status×code mismatch on the scale negative path).
+	"INVALID_ARGUMENT":           http.StatusBadRequest, // 400 (Red Team #103 — input boundary 4xx contract)
+	"INVALID_DOMAIN":             http.StatusBadRequest, // 400 (Red Team #103 — domain format validation)
+	"INVALID_REPLICAS":           http.StatusBadRequest, // 400 (Red Team #103 — scale replicas <= 0)
 
 	"PLAN_UPGRADE_REQUIRED": http.StatusPaymentRequired, // 402 (J-20 Scale plan v1.1 T1.2 + EC-3 — KEDA scale-to-zero requires Pro+)
 
@@ -83,6 +98,7 @@ var statusByCode = map[string]int{
 	"FRONTEND_MUST_BE_STATIC":    422,
 	"POD_LIMIT_EXCEEDED":         422,
 	"REPLICAS_EXCEED_PLAN":       422,
+	"PROJECTS_EXCEED_PLAN":       422,
 	"SCALING_AMBIGUOUS":          422,
 	"UNSUPPORTED_FRAMEWORK":      422, // (builds.go framework validation)
 

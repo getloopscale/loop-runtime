@@ -137,11 +137,20 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 
 	// Admin endpoints — operator primitives, X-Service-Auth only (no user
-	// context). Handler enforces LOOPZERO_ADMIN_API=true + service-auth match
-	// itself (admin_evict.go:73-83). Sibling of /webhooks/github so it
-	// bypasses the user-auth middleware that requires identity headers.
+	// context). Sibling of /webhooks/github so it bypasses the user-auth
+	// middleware that requires identity headers.
+	//
+	// qa-sprint2-cleanup-2026-06-24 T1.2 (closes loopzero-cloud#16): /evict now
+	// wraps the handler with middleware.RequireAdminService (chi canonical
+	// r.With form). The middleware reads only LOOPZERO_ADMIN_SERVICE_AUTH_SECRET
+	// (canonical) + _PREVIOUS — NOT the legacy LOOPZERO_SERVICE_AUTH_SECRET that
+	// the cloud /engine/* proxy carries on user-JWT requests. The handler
+	// still enforces LOOPZERO_ADMIN_API=true as a separate defense-in-depth gate.
 	if cfg.AdminEvictor != nil {
-		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
+		r.With(middleware.RequireAdminService).Post(
+			"/api/v1/admin/tenants/evict",
+			routes.AdminEvictHandler(cfg.AdminEvictor),
+		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if cfg.AdminPinner != nil {
@@ -208,17 +217,11 @@ func NewRouter(cfg Config) *chi.Mux {
 				upgradeURL = "/billing"
 			}
 
-			projectEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
-				Metric: "projects",
-				CountFn: func(tenantID string) int {
-					if cfg.ProjectStore == nil {
-						return 0
-					}
-					ps, _ := cfg.ProjectStore.ListByTenant(context.Background(), tenantID)
-					return len(ps)
-				},
-			}, tenantFromCtx, upgradeURL)
-
+			// M4 (account-level tenancy, Phase 2): the per-TENANT projects 402
+			// middleware was REMOVED here. The project cap is now enforced
+			// per-Account at the single creation path (PostgresProjectStore,
+			// atomic advisory-lock count+insert) with the canonical 422
+			// PROJECTS_EXCEED_PLAN — see cmd/setup_database.go SetProjectCapChecker.
 			buildEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "builds_per_month",
 				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
@@ -249,7 +252,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			}, tenantFromCtx, upgradeURL)
 
 			registerProtectedRoutes(r, cfg, rateLimitMiddlewares, idempotentMiddlewares,
-				projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)
+				buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)
 		})
 	}
 
@@ -265,7 +268,7 @@ func registerProtectedRoutes(
 	cfg Config,
 	rateLimitMiddlewares []func(http.Handler) http.Handler,
 	idempotentMiddlewares []func(http.Handler) http.Handler,
-	projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement func(http.Handler) http.Handler,
+	buildEnforcement, envEnforcement, seatEnforcement func(http.Handler) http.Handler,
 	buildCostGate func(http.Handler) http.Handler,
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
@@ -308,7 +311,7 @@ func registerProtectedRoutes(
 		}
 		r.Get("/api/v1/projects", projects.List)
 		r.Get("/api/v1/projects/{name}", projects.Get)
-		r.With(append(rateLimitMiddlewares, projectEnforcement)...).Post("/api/v1/projects", projects.Create)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/projects", projects.Create)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}", projects.Delete)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{name}/environments/{env}", projects.DeleteEnvironment)
 	}

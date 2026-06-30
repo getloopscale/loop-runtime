@@ -16,10 +16,23 @@ type stubLister struct {
 	exists    atomic.Bool
 	err       error
 	callCount atomic.Int32
+	// m37 plan (2026-06-25): capture (project, env) so per-(project, env)
+	// tuple assertions are possible.
+	gotProject string
+	gotEnv     string
+	// existsByTuple, when set, overrides the simple `exists` toggle:
+	// HasEnvironment returns existsByTuple[project+"|"+envName].
+	// Lets a single stubLister model multiple distinct tuples.
+	existsByTuple map[string]bool
 }
 
-func (s *stubLister) HasEnvironment(_ context.Context, _, _ string) (bool, error) {
+func (s *stubLister) HasEnvironment(_ context.Context, _, project, envName string) (bool, error) {
 	s.callCount.Add(1)
+	s.gotProject = project
+	s.gotEnv = envName
+	if s.existsByTuple != nil {
+		return s.existsByTuple[project+"|"+envName], s.err
+	}
 	return s.exists.Load(), s.err
 }
 
@@ -41,7 +54,13 @@ func (s *stubAdder) AddEnvironment(_ context.Context, _, project, envName string
 		return s.err
 	}
 	if s.onAddBecome && s.lister != nil {
+		// Legacy fixtures (no tuple map): toggle the simple `exists` bool.
 		s.lister.exists.Store(true)
+		// m37 fixtures (tuple map): also flip the new (project, env) tuple
+		// so the post-Add poll loop sees the entry as present.
+		if s.lister.existsByTuple != nil {
+			s.lister.existsByTuple[project+"|"+envName] = true
+		}
 	}
 	return nil
 }
@@ -383,5 +402,117 @@ func TestEnsureEnvironment_EmptyProjectPreservesLegacyPath_M2(t *testing.T) {
 	}
 	if adder.gotEnv != "production" {
 		t.Errorf("expected env=production propagated, got %q", adder.gotEnv)
+	}
+}
+
+// =============================================================================
+// m37 — Tenant CR per-(project, env) shallow check canonical fix
+// Plan: m37-tenant-cr-project-sync-canonical-fix v1.0
+// Closes #37 cenário 4 (BUILD → RELEASE → URL)
+// =============================================================================
+
+// TestEnsureEnvironment_DifferentProjectSameEnvName_TriggersAddEnvironment
+// is the m37 RED test. Reproduces the QA Red Team's #37 scenario verbatim:
+//
+//   - Tenant `tn-1` already has `(project=qa-redteam-dogfood, env=preview)` in
+//     spec.environments[].
+//   - Operator runs `loopzero deploy` for `(project=loopzerokit-example, env=preview)`.
+//   - Pre-m37 (project-agnostic shallow check): HasEnvironment returned
+//     exists=true on env-name match, EnsureEnvironment returned early,
+//     AddEnvironment never called → Tenant CR stale → AppProject destinations
+//     never updated → ArgoCD sync failed → no Live URL.
+//   - Post-m37 (per-(project, env) tuple shallow check): HasEnvironment for
+//     (loopzerokit-example, preview) returns exists=false (only qa-redteam-dogdood
+//     tuple is in the map), AddEnvironment fires, Tenant CR gains the new
+//     tuple, downstream chain succeeds.
+func TestEnsureEnvironment_DifferentProjectSameEnvName_TriggersAddEnvironment(t *testing.T) {
+	// Stub lister with the EXACT verbatim #37 dev-public state:
+	// existing tuple (qa-redteam-dogfood, preview).
+	lister := &stubLister{
+		existsByTuple: map[string]bool{
+			"qa-redteam-dogfood|preview": true,
+			"qa-redteam-dogfood|production": true,
+		},
+	}
+	adder := &stubAdder{
+		// When AddEnvironment fires, mark the NEW tuple as existing so the
+		// poll loop exits without timeout.
+		onAddBecome: true,
+		lister:      lister,
+	}
+	e := &EnvironmentEnsurer{
+		Lister:       lister,
+		Adder:        adder,
+		WaitTimeout:  500 * time.Millisecond,
+		PollInterval: 25 * time.Millisecond,
+	}
+
+	// Deploy the QA Red Team scenario: NEW project (loopzerokit-example), env name
+	// (preview) that ALREADY exists for a DIFFERENT project on the same tenant.
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "loopzerokit-example", "preview")
+	if err != nil {
+		// Sanity: we set onAddBecome=true so after AddEnvironment fires,
+		// the lister flips exists=true for the new tuple. If the test
+		// times out here, the production-impl bug is masking the assertion.
+		t.Fatalf("EnsureEnvironment must succeed when AddEnvironment fires for a new project: %v", err)
+	}
+	// PRIMARY assertion (m37 RED): AddEnvironment MUST have been called
+	// exactly once with the new (project, env) tuple. Pre-m37 it was 0
+	// because the project-agnostic shallow check returned exists=true on
+	// the qa-redteam-dogfood entry's name match.
+	if got := adder.callCount.Load(); got != 1 {
+		t.Errorf("expected exactly 1 AddEnvironment call for new (project=loopzerokit-example, env=preview), got %d (pre-m37 was 0 — the silent no-op #37 bug)", got)
+	}
+	if adder.gotProject != "loopzerokit-example" {
+		t.Errorf("expected AddEnvironment project=loopzerokit-example, got %q", adder.gotProject)
+	}
+	if adder.gotEnv != "preview" {
+		t.Errorf("expected AddEnvironment env=preview, got %q", adder.gotEnv)
+	}
+	// Secondary: the lister captured the most recent tuple it was queried
+	// with — proves the new per-(project, env) call shape reaches it.
+	if lister.gotProject != "loopzerokit-example" {
+		t.Errorf("expected Lister.HasEnvironment called with project=loopzerokit-example, got %q", lister.gotProject)
+	}
+}
+
+// TestEnsureEnvironment_SameProjectSameEnvName_IsNoOp is the negative-direction
+// guard for the m37 fix: when the SAME (project, env) tuple already exists,
+// the ensurer must short-circuit (idempotent) without calling AddEnvironment.
+// Otherwise the fix would double the k8s round-trips on the happy path.
+func TestEnsureEnvironment_SameProjectSameEnvName_IsNoOp(t *testing.T) {
+	lister := &stubLister{
+		existsByTuple: map[string]bool{
+			"loopzerokit-example|preview": true,
+		},
+	}
+	adder := &stubAdder{}
+	e := &EnvironmentEnsurer{Lister: lister, Adder: adder}
+
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "loopzerokit-example", "preview"); err != nil {
+		t.Errorf("expected nil for existing (project, env) tuple, got %v", err)
+	}
+	if adder.callCount.Load() != 0 {
+		t.Errorf("expected ZERO AddEnvironment calls for existing tuple (idempotent), got %d", adder.callCount.Load())
+	}
+}
+
+// TestEnsureEnvironment_LegacyEmptyProject_HonoredOnShallowCheck is the
+// ADR D2 regression-protector: production-legacy tuples carry empty Project
+// and must still no-op when the same name is queried with project="".
+func TestEnsureEnvironment_LegacyEmptyProject_HonoredOnShallowCheck(t *testing.T) {
+	lister := &stubLister{
+		existsByTuple: map[string]bool{
+			"|production": true, // legacy entry: project=""
+		},
+	}
+	adder := &stubAdder{}
+	e := &EnvironmentEnsurer{Lister: lister, Adder: adder}
+
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "", "production"); err != nil {
+		t.Errorf("expected nil for existing legacy tuple (project=\"\"), got %v", err)
+	}
+	if adder.callCount.Load() != 0 {
+		t.Errorf("expected ZERO AddEnvironment calls for legacy tuple no-op, got %d", adder.callCount.Load())
 	}
 }

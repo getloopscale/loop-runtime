@@ -102,6 +102,31 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-preview.sh"           # J-23
   "archive/canonical-tests-v1/scripts/local/dogfood-live-url.sh"          # J-25
   "archive/canonical-tests-v1/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
+  "archive/canonical-tests-v1/scripts/local/dogfood-seed-post-cleanroom-tenant-cr.sh"  # Red Team #118 (2026-06-29)
+  "archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh"                  # Red Team #120 P0 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh"  # Red Team #121 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh"                       # Red Team #124 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-repository-route-canonical.sh" # Red Team #102 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-status-no-retry-4xx.sh"       # Red Team #96 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-overview-recent-deploys-status-env-badges.sh" # Red Team #97 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-profile-name-layout-bounded.sh"       # Red Team #71 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-route-swap-no-stale-content.sh"      # Red Team #73 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-register-preserve-name-email-on-error.sh" # Red Team #74 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-register-duplicate-account-product-copy.sh" # Red Team #75 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-overview-humanized-last-deploy-time.sh" # Red Team #76 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-humanize-author-uuid.sh"  # Red Team #78 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-heading-hierarchy-no-h2-skip.sh"     # Red Team #79 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-recovery-code-input-otp-a11y.sh"    # Red Team #80 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-onboarding-progressbar-a11y.sh"     # Red Team #81 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-create-project-sheet-no-roadmap-jargon.sh" # Red Team #82 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-create-project-input-error-aria-link.sh"  # Red Team #83 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-loopzero-cloud-memory-exports-race-deterministic.sh"  # Red Team #104 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-auth-form-id-name.sh"                  # Red Team #51 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-onboarding-derive-deploy.sh"          # Red Team #56 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-registration-alias.sh"                # Red Team #55 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh

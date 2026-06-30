@@ -94,14 +94,32 @@ ports:
     protocol: TCP
 
 # --- Global Timeouts ---
+#
+# Plan red-team-77-107-closure v1.0 T1.1 (closes Red Team loopzero-cloud#107)
+# bumps three values from the original 60s/120s/60s cap to Vercel-Pro-parity
+# 300s/600s/300s on the customer-app HTTPS surface (websecure entryPoint).
+# Pre-fix: any response taking > ~61s (SSE / AI streaming / long-poll / large
+# upload) was cut by Traefik's writeTimeout. Post-fix ceiling is 5min HTTP,
+# 10min idle, 5min TTFB — covers > 99% of legitimate customer backends per
+# the Vercel/Cloudflare/Netlify SOTA matrix recorded in the plan's ADR D1.
+#
+# ADRs (red-team-77-107-closure-plan.md):
+#   D1 — writeTimeout 300s (NOT 0s — slowloris exposure; 5min ceiling auditable)
+#   D2 — responseHeaderTimeout 300s in lockstep (TTFB cap matches D1 ceiling)
+#   D3 — idleTimeout 600s (SSE reconnect amortization; idle != active write)
+#   D4 — single values.yaml change (no per-env overlay — both mgmt + workload
+#        Traefik tolerate 5min; only workload NEEDS it)
+#
+# readTimeout=60s (request body), web entryPoint=10s (ACME HTTP-01 + 80→443
+# redirect), and dialTimeout=30s preserved — none of those affect streaming.
 additionalArguments:
   - "--entryPoints.websecure.transport.respondingTimeouts.readTimeout=60s"
-  - "--entryPoints.websecure.transport.respondingTimeouts.writeTimeout=60s"
-  - "--entryPoints.websecure.transport.respondingTimeouts.idleTimeout=120s"
+  - "--entryPoints.websecure.transport.respondingTimeouts.writeTimeout=300s"
+  - "--entryPoints.websecure.transport.respondingTimeouts.idleTimeout=600s"
   - "--entryPoints.web.transport.respondingTimeouts.readTimeout=10s"
   - "--entryPoints.web.transport.respondingTimeouts.writeTimeout=10s"
   - "--serversTransport.forwardingTimeouts.dialTimeout=30s"
-  - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=60s"
+  - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=300s"
 
 # --- Metrics ---
 metrics:

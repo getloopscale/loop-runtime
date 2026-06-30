@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services"
@@ -102,6 +103,14 @@ type fakeRollbackSyncClient struct {
 
 func (f *fakeRollbackSyncClient) TriggerSync(_ context.Context, _ string) error {
 	return f.triggerErr
+}
+
+// WaitForSync satisfies the RollbackSyncClient interface (added when the
+// interface was extended; this fake never blocks on sync confirmation in
+// these tests — the rollback orchestrator paths under test stop at
+// TriggerSync). Kept as a no-op so the test file compiles.
+func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+	return nil
 }
 
 // --- Tests ---

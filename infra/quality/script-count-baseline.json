@@ -1,6 +1,108 @@
 {
-  "canonical_sh": 411,
+  "canonical_sh": 404,
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": 401,
+      "to": 404,
+      "reason": "Red Team loopzero-cloud#122 (dashboard fail-loud on deploy errors — 2 surfaces). +3 canonical .sh: (1) infra/tests/e2e/dev-public-deployment-detail-fail-loud_test.sh (2 LIVE bundle-grep scenarios A timeline-empty-state literal + B throwOnError opt-in), (2) infra/tests/check-dev-public-deployment-detail-fail-loud-syntax_test.sh (23-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh (S1 hermetic + S2 vitest + S3 LIVE aggregator registered in dogfood-all.sh WRAPPERS). Dashboard-side fix: BuildTimelineLive + useRedeploy + deployment-detail (plumb restBuildStatus). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-30",
+      "from": 398,
+      "to": 401,
+      "reason": "Red Team loopzero-cloud#123 (engine error message stale loopzero.yaml/apps: → canonical .loopzero/services.json/services:). +3 canonical .sh: (1) infra/tests/e2e/dev-public-build-error-canonical-manifest_test.sh (2 LIVE scenarios A canonical-guidance + B legacy-absent regression-protector), (2) infra/tests/check-dev-public-build-error-canonical-manifest-syntax_test.sh (23-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh (S1 hermetic + S2 Go unit + S3 LIVE aggregator registered in dogfood-all.sh WRAPPERS array). Engine-side string fix in api/internal/routes/builds.go:326 + api/internal/services/error_classifier.go:42. Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-30",
+      "from": 395,
+      "to": 398,
+      "reason": "Red Team loopzero-cloud#124 (Dashboard health-truth divergence — Status 'Healthy' emitido com KPIs todos ausentes enquanto Live URL serve 502). +3 canonical .sh: (1) infra/tests/e2e/dev-public-dashboard-health-truth_test.sh (3 LIVE scenarios A status-endpoint-auth-200 + B bundle-grep 'Unknown' verdict literal + C ACTIVE+synced+no-replicas ground-truth shape — OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md), (2) infra/tests/check-dev-public-dashboard-health-truth-syntax_test.sh (22-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh (S1 hermetic + S2 vitest project-status + S3 LIVE aggregator, registered in dogfood-all.sh WRAPPERS array). Dashboard fix in dashboard/src/pages/project-status.tsx: signal-aware verdict (release-active AND ≥1 serving signal → Healthy, else → Unknown). Family of #41/#77/#94 — platform must not assert health it cannot prove. Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-30",
+      "from": 392,
+      "to": 395,
+      "reason": "Red Team loopzero-cloud#121 (Deployments tab ACTIVE/Live URL misattribution). +3 canonical .sh: (1) infra/tests/e2e/dev-public-dashboard-deployments-active-row-attribution_test.sh (3 LIVE scenarios A per-env status / B bundle-grep proof / C per-env environments shape), (2) infra/tests/check-dev-public-dashboard-deployments-active-row-attribution-syntax_test.sh (21-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh (S1 hermetic + S2 vitest + S3 LIVE aggregator, registered in dogfood-all.sh WRAPPERS array). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-30",
+      "from": 389,
+      "to": 392,
+      "reason": "Plan loopzero-promote-no-op-fail-loud-p0 v1.0 closes Red Team loopzero-cloud#120 P0 BLOCKER (loopzero promote silent no-op). +3 canonical .sh: (1) infra/tests/e2e/dev-public-promote-no-op_test.sh (3 LIVE scenarios A canonical-release-ID-regex + B no-loopzero.local-yes-prod-dev URL + C 90s activation canary — OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — reproduces #120 verbatim pre-fix RED 0/3 PASS), (2) infra/tests/check-dev-public-promote-no-op-syntax_test.sh (21-assertion hermetic structural guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh (S1 hermetic + S2 Go -race promotion suite + S3 LIVE bash aggregator wrapper registered in dogfood-all.sh WRAPPERS array). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25: every issue closure ships a LIVE bash regression-protector. Allowlist entries added under § Post-baseline additions (plan loopzero-promote-no-op-fail-loud-p0 — 2026-06-30). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors the entries below."
+    },
+    {
+      "date": "2026-06-29",
+      "from": 382,
+      "to": 389,
+      "reason": "Plan seed-post-cleanroom-tenant-cr-provisioning v1.0 closes Red Team loopzero-cloud#118 (QA Red Team identity loga em dev-public mas Tenant CR ausente em k3d-loopzero-mgmt — deploys falham). +5 attributable: (1) infra/tests/e2e/dev-public-seed-post-cleanroom-tenant-cr_test.sh (2 LIVE scenarios A admin + B redteam-qa OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — reproduces #118 verbatim pre-fix), (2) infra/tests/check-dev-public-seed-post-cleanroom-tenant-cr-syntax_test.sh (20-assertion hermetic structural guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-seed-post-cleanroom-tenant-cr.sh (S1 hermetic + S2 LIVE aggregator wrapper registered in dogfood-all.sh WRAPPERS array). (4)+(5) Retroactive #117 closure orphans paired to preserve allowlist invariant: infra/tests/e2e/dev-public-auth-email-delivery_test.sh + infra/tests/check-dev-public-auth-email-delivery-syntax_test.sh (registered in shell-scripts-allowlist.md but not committed in the prior session). +2 reconciliation: prior-session staged-but-uncommitted scripts that merged via develop without baseline ratchet — this entry reconciles. Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25: every issue closure ships a LIVE bash regression-protector. Allowlist entries added under § Post-baseline additions (plan seed-post-cleanroom-tenant-cr-provisioning — 2026-06-29). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern — mirrors the entries below."
+    },
+    {
+      "date": "2026-06-28",
+      "from": 380,
+      "to": 382,
+      "reason": "Plan red-team-77-107-closure v1.0 T1.2+T1.3 \u2014 closes Red Team loopzero-cloud#107 (Traefik writeTimeout=60s cuts customer streaming at ~61s). +2 canonical .sh: (1) infra/tests/e2e/dev-public-customer-app-respondingtimeouts_test.sh (3 LIVE scenarios A/B/C reproducing the cut verbatim pre-fix per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25; OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBR\u00c1VEL), (2) infra/tests/check-dev-public-customer-app-respondingtimeouts-syntax_test.sh (28-assertion structural guard wired in task quality:gates per the categorical infra/tests/check-*-syntax_test.sh sibling pattern). Allowlist entries added in .claude/rules/shell-scripts-allowlist.md \u00a7 Post-baseline additions (plan red-team-77-107-closure \u2014 2026-06-28). The companion engine-side fix in loopzero-cloud#77 (engine list query release-aware fields) ships ZERO new scripts (already implemented 2026-06-27 SQL absorption \u2014 pure SQL/Go canonical chain, no bash regression-protector needed). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-27",
+      "from": 378,
+      "to": 379,
+      "reason": "T3.5 of plan kratos-self-service-rate-limit-systemic v1.1 \u2014 dev-public-register-response-shape_test.sh LIVE regression-protector for Red Team loopzero-cloud#43 (response-shape unifier closure proof + scenario C bucket-coexistence)"
+    },
+    {
+      "date": "2026-06-27",
+      "from": 373,
+      "to": 378,
+      "reason": "Plan kratos-self-service-rate-limit-systemic v1.1 \u2014 5 net new canonical .sh scripts in Phase 1+2: (1) infra/scripts/local/caddy-build-canonical.sh canonical xcaddy builder bundling BOTH caddy-dns/cloudflare + mholt/caddy-ratelimit@5625512 per T1.1 EC-1+EC-6, (2) infra/tests/check-caddy-build-canonical-syntax_test.sh hermetic 23-assertion structural test per T1.1, (3) infra/tests/e2e/dev-public-login-rate-limit_test.sh LIVE bash regression-protector for Red Team loopzero-cloud#68 per T1.4 (canonical flow-init + burst-to-/methods/* pattern per EC-5), (4) infra/tests/e2e/dev-public-recovery-rate-limit_test.sh LIVE bash regression-protector for Red Team loopzero-cloud#89 per T1.5 (asserts BOTH recovery_throttle + recovery_flow_create_throttle zones engage per EC-5). (5) caddy-build-with-cloudflare.sh stays at allowlist but bumped from 106-line standalone to 18-line deprecation shim per T1.1 EC-1 (net +0 entries but kept canonical so operator paths preserved). Subtotal Phase 1: +4 new (no net change for shim). Phase 2 T2.2 ory-kratos-lifespan_test.sh hermetic helm-template test pending separate commit. Phase 3 T3.5 dev-public-register-response-shape_test.sh pending separate commit. Cumulative target post-Phase-3 is 379. Allowlist entries under \u00a7 Post-baseline additions (plan kratos-self-service-rate-limit-systemic \u2014 2026-06-27)."
+    },
+    {
+      "date": "2026-06-26",
+      "from": 372,
+      "to": 373,
+      "reason": "Red Team loopzero-cloud#65 closure \u2014 new LIVE bash infra/tests/e2e/dev-public-register-name-maxlength_test.sh (~155 LOC) per memory feedback_issue_fix_requires_failing_e2e_test_2026_06_25 + feedback_close_issue_update_live_dev_public_2026_06_22. Initializes Kratos self-service registration flow via browser API, submits adversarial 20 000-char Name (verbatim from #65 repro), asserts HTTP 400 + Kratos schema validation error referencing the maxLength constraint. LIVE 2026-06-26 PASS post Kratos ConfigMap patch + rollout: `length must be <= 256, but got 20000` (was 200 OK pre-fix). Companion to: dashboard JS validateMaxLength helper (loopzero-cloud commit aeaaf4f) + HTML maxLength={256} on register Name Input + Kratos identity schema cap (this commit) \u2014 4-layer defense-in-depth canonical. Allowlist entry under \u00a7 Post-baseline additions (Red Team #65 closure \u2014 2026-06-26). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-26",
+      "from": 371,
+      "to": 372,
+      "reason": "Red Team loopzero-cloud#64 closure \u2014 new LIVE bash infra/tests/e2e/dev-public-engine-large-header-not-431_test.sh (~115 LOC) per memory feedback_issue_fix_requires_failing_e2e_test_2026_06_25 (sponsor verbatim 2026-06-25 'every issue closure must include LIVE bash that reproduces verbatim'). Probes /engine/api/v1/{projects,auth/whoami,domains} + /v1/auth/me with a fake-but-structurally-valid 27 KB Bearer token; asserts each endpoint returns != 431 (typically 401 invalid-JWT proving the transport layer accepts the header size). User-reported status 2026-06-26 said the symptom 'sumiu' but asked for o teste fiel para cravar \u2014 this script IS o teste fiel. Regression-protector going forward: any gateway-limit drift OR proxy chain change that re-introduces the 431 symptom fires hermetically (--skip-live mode) before reaching dev-public. Allowlist entry under \u00a7 Post-baseline additions (Red Team #64 closure \u2014 2026-06-26). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-25",
+      "from": 368,
+      "to": 371,
+      "reason": "Plan m37-tenant-cr-project-sync-canonical-fix v1.0 \u2014 adds the canonical 3-script triplet for loopzero-cloud#37 cen\u00e1rio 4 LIVE end-to-end coverage (BUILD \u2192 RELEASE \u2192 URL). Sprint 8 fix shipped the engine watcher namespace-scoped LIST (correct, LIVE), but the QA Red Team re-test caught a SECOND root cause: `EnvironmentLister.HasEnvironment` shallow check was project-agnostic, so a NEW project deploy against an existing tenant silently no-op'd (Tenant CR `spec.environments[]` never gained the new tuple \u2192 AppProject destinations stale \u2192 ArgoCD sync fail \u2192 no Live URL). m37 plan extends the Lister interface to per-(project, env) tuple semantic and ships the matching LIVE triplet: infra/tests/e2e/dev-public-deploy-live-url_test.sh (4 scenarios A-D covering Tenant CR tuple extension + AppProject destinations + release ACTIVE with URL + HTTP 200..399 probe), infra/tests/check-dev-public-deploy-live-url-syntax_test.sh (hermetic 27/27 PASS), archive/canonical-tests-v1/scripts/local/dogfood-deploy-live-url.sh (4-suite aggregate). All 3 allowlisted in shell-scripts-allowlist.md \u00a7 Post-baseline additions (plan m37-...). Per the INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25: cen\u00e1rio-4 LIVE proof is the close-#37 contract. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-25",
+      "from": 361,
+      "to": 368,
+      "reason": "Sprint 8 plan qa-sprint8-cleanup-2026-06-25 v1.0 \u2014 retroactively ships the canonical 3-script triplet debt for Sprint 6 (#34, +3 scripts) + completes the Sprint 7 (#35, +2 scripts) + Sprint 7 (#36, +2 scripts) triplets. Per the new INQUEBR\u00c1VEL feedback `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` (sponsor verbatim 2026-06-25): every issue closure now requires hermetic syntax + LIVE bash + dogfood wrapper triplet \u2014 not just Go-side tests. Files: (Sprint 6 #34) infra/tests/e2e/dev-public-build-trigger-error-surface_test.sh + infra/tests/check-dev-public-build-trigger-error-surface-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-build-trigger-error-surface.sh; (Sprint 7 #36) infra/tests/check-dev-public-build-rbac-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-build-rbac.sh; (Sprint 7 #35) infra/tests/check-dev-public-info-disclosure-scrub-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-info-disclosure-scrub.sh. All 7 allowlisted in shell-scripts-allowlist.md \u00a7 Post-baseline additions (plan qa-sprint8-cleanup-2026-06-25 \u2014 2026-06-25). All 3 hermetic syntax tests PASS clean (29/29 + 25/25 + 26/26). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-25",
+      "from": 359,
+      "to": 361,
+      "reason": "Sprint 7 plan qa-sprint7-cleanup-2026-06-25 v1.0 \u2014 adds 2 LIVE E2E scripts for loopzero-cloud#35 (info-disclosure CWE-209) + #36 (Argo RBAC BLOCKER): infra/tests/e2e/dev-public-build-rbac_test.sh (4 scenarios A-D incl. JWT sub-claim assertion + auth can-i + build-submit-202 + verbatim-Unauthorized-absent) and infra/tests/e2e/dev-public-info-disclosure-scrub_test.sh (7 scenarios A trigger + B-F assert NO forbidden terms + G negative-direction guard). Both allowlisted in shell-scripts-allowlist.md \u00a7 Post-baseline additions (plan qa-sprint7-cleanup-2026-06-25). Per the NEW INQUEBR\u00c1VEL feedback (sponsor verbatim 2026-06-25 \u2014 `feedback_issue_fix_requires_failing_e2e_test_2026_06_25`): issue fix DEMANDS E2E LIVE that RED pre-fix. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-25",
+      "from": 356,
+      "to": 359,
+      "reason": "Sprint 5 plan qa-sprint5-cleanup-2026-06-25 v1.0 \u2014 adds 3 canonical scripts for loopzero-cloud#33 LIVE wire-level coverage: infra/tests/check-dev-public-deploy-error-surface-syntax_test.sh (hermetic guard, 20 assertions PASS), infra/tests/e2e/dev-public-deploy-error-surface_test.sh (LIVE 4-scenario OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBR\u00c1VEL), archive/canonical-tests-v1/scripts/local/dogfood-deploy-error-surface.sh (aggregate wrapper). All 3 allowlisted in .claude/rules/shell-scripts-allowlist.md \u00a7 Post-baseline additions (plan qa-sprint5-cleanup-2026-06-25 \u2014 2026-06-25). Per the canonical 3-script triplet pattern (sibling: J-21/J-10/J-20 triplets). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
+    {
+      "date": "2026-06-24",
+      "from": 355,
+      "to": 356,
+      "reason": "T1.2 of plan loopzero-cloud-14-device-flow-csrf-secure-fix v3.0 \u2014 adds infra/tests/helm/ory-hydra-cookie-secure-attribute_test.sh (KEEP-CI-WIRED 9/9 PASS hermetic source-level test for the canonical hydra.dev:false cookie Secure attribute fix in dev-public overlay). Allowlisted per D4 criteria (Necessary + Simple + CI-wired + Allowlisted in shell-scripts-allowlist.md). Sibling pattern of ory-hydra-canonical-urls_test.sh; not migrable to Go gate within #14 scope (the future infra/tests/helm/ bash \u2192 Go re-home is a queued hardening slice per ADR 2026-06-17-quality-gate-baseline-reanchor.md)."
+    },
+    {
+      "date": "2026-06-24",
+      "from": 411,
+      "to": 355,
+      "reason": "Ratchet DOWN after migrating the gate from filepath.WalkDir (on-disk tree, ignored .gitignore) to `git ls-files` (tracked index only) per issue #151 / CHG-2026-06-24-002 (sponsor-direct T2). 355 is the deterministic count of tracked canonical .sh \u2014 identical for this commit on any machine and in CI (the old WalkDir reported 427 here with discover reference clones present vs 354 on a clean checkout, depending purely on working-tree junk). NOT a deletion of 56 scripts: the previous 411 ceiling included gitignored/untracked .sh that were never part of the program. The script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md) continues to ratchet DOWN from 355. Hand-edit to preserve this _changelog (script-count --update-baseline would wipe it)."
+    },
     {
       "date": "2026-06-18",
       "from": 409,

@@ -49,6 +49,10 @@ tasks:
       - /tmp/loopzero-ops quality trufflehog-scan
       - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
+      - /tmp/loopzero-ops quality caddyfile-csp   # plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 — operator-local-edge Caddyfile invariants (no CSP / no Vite handle 404 / 4 preserved headers / reverse_proxy + plan kratos-self-service-rate-limit-systemic v1.1 invariants 12-15 rate-limit + trusted_proxies + register-route)
+      # F-wire-7 absorption: plan kratos-self-service-rate-limit-systemic v1.1 hermetic structural gates.
+      - bash infra/tests/check-caddy-build-canonical-syntax_test.sh   # T1.1 hermetic — Caddy xcaddy bundles BOTH cloudflare + ratelimit
+      - bash infra/tests/helm/ory-kratos-lifespan_test.sh             # T2.2 hermetic — Kratos lifespan overlay golden test
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
@@ -64,6 +68,7 @@ tasks:
       - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
       - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
       - bash infra/tests/check-fulcio-oidc-diagnose_test.sh     # M07 keyless: Fulcio OIDC trust diagnose script (T0.2 plan 2026-05-28)
+      - bash infra/tests/check-k6-load-rigor_test.sh            # k6 load rigor: dropped_iterations threshold + L5 distributed + per-level doc (plan k6-load-test-rigor-fixes)
       - bash infra/tests/check-seed-loopzero-secrets_test.sh        # vault-INT T8.1 EC-21: idempotent Vault seed script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-rotate-secret_test.sh            # vault-INT T8.1 EC-22: cross-binary atomic rotation script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-vault-sync_test.sh               # vault-INT Phase 9 T9.1: ESO sync status check (replaces loopzero_config_secret_source metric, plan 2026-06-02 v1.8 D11)

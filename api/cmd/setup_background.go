@@ -275,9 +275,12 @@ func createCoreLoops(
 		},
 	)
 
+	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain (canonical
+	// LOOPZERO_PUBLIC_DOMAIN) preferred over BaseDomain for deploy.completed
+	// URL so it matches `loopzero status`.
 	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, workflows.SyncClient, stores.Locker,
-		stores.EventStore, cfg.BaseDomain, logger,
+		stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 		services.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,
 			SyncTimeout:   300 * time.Second,

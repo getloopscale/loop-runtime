@@ -295,7 +295,7 @@ func newSyncCallbackFixture() *syncCallbackFixture {
 	logger := slog.Default()
 
 	return &syncCallbackFixture{
-		activator:      services.NewSyncCallbackActivator(rs, et, locker, es, "test.local", logger),
+		activator:      services.NewSyncCallbackActivator(rs, et, locker, es, "test.local", "", logger),
 		releaseStore:   rs,
 		envTargetStore: et,
 		eventStore:     es,

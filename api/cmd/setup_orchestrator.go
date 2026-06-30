@@ -33,6 +33,31 @@ func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested in
 	return result.Allowed, result.Plan, result.Limit
 }
 
+// CheckProjectsValue resolves the per-Account project cap (M4). Mirrors
+// CheckReplicasValue; satisfies db.ProjectCapChecker so the project-creation
+// store can enforce the cap atomically. Returns (allowed, plan, cap) where
+// cap < 0 = unlimited.
+func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
+	if a == nil || a.limiter == nil {
+		return true, "dev", -1 // dev/no-limiter → unlimited (no enforcement)
+	}
+	result := a.limiter.CheckProjectsValue(tenantID, current)
+	return result.Allowed, result.Plan, result.Limit
+}
+
+// wireProjectCap is the SINGLE path that wires a per-Account project-cap checker
+// onto a project store. Both project-creating stores — the API store
+// (setup_database.go) and the build-orchestrator store (setup_orchestrator.go) —
+// MUST go through here so they can never diverge again: the divergence (one store
+// capped, one not) was the exact root cause of #106. A nil checker leaves the
+// store unenforced (dev without a pool).
+func wireProjectCap(store *db.PostgresProjectStore, checker db.ProjectCapChecker) {
+	if store == nil || checker == nil {
+		return
+	}
+	store.SetProjectCapChecker(checker)
+}
+
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
 	Orchestrator      *services.BuildOrchestrator
@@ -65,8 +90,19 @@ func setupOrchestrator(
 	// A nil limiter is legal — means the DB was unavailable (dev without pool)
 	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
 	var planCap services.PlanCapChecker
+	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
+	// store, which historically had NO cap checker — so the deploy-time
+	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
+	// POST /api/v1/projects. Wire the SAME cap adapter onto this store via the
+	// shared wireProjectCap helper (the one path BOTH project-creating stores go
+	// through, so they can never diverge again — that divergence was the #106 root
+	// cause). The adapter doubles as the scaling PlanCap. nil limiter (dev without
+	// pool) leaves the store unenforced — no behavior change.
+	buildProjectStore := &db.PostgresProjectStore{DB: dbAdapter}
 	if planLimiter != nil {
-		planCap = &planLimiterCapAdapter{limiter: planLimiter}
+		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
+		planCap = capAdapter
+		wireProjectCap(buildProjectStore, capAdapter)
 	}
 
 	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator
@@ -80,7 +116,7 @@ func setupOrchestrator(
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
 		EnvTargetStore:    stores.EnvTargetStore,
-		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ProjectStore:      buildProjectStore, // M5: cap-checker-wired store (closes #106)
 		EventStore:        stores.PgEventStore,
 		Workflow:          workflows.WorkflowSubmitter,
 		Sync:              workflows.SyncClient,
@@ -159,7 +195,15 @@ func setupOrchestrator(
 		Sync:       workflows.SyncClient,
 		Locker:     stores.Locker,
 		BaseDomain: cfg.BaseDomain,
-		Logger:     logger,
+		// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61
+		// regression): wire cfg.PublicDomain so the promote response URL is
+		// the canonical user-facing host (prod-dev.loopzero.example) not the
+		// internal placeholder (loopzero.local). Empty PublicDomain falls back
+		// to BaseDomain inside the orchestrator (back-compat for local
+		// Tilt dev where LOOPZERO_PUBLIC_DOMAIN is unset). Mirrors the canonical
+		// pattern already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
+		PublicDomain: cfg.PublicDomain,
+		Logger:       logger,
 	})
 	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
 	promoteHandler := routes.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
@@ -221,6 +265,13 @@ func setupOrchestrator(
 	}
 	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	scaleHandler.EnsureProductionWired() // audit M02 #14: panic-on-regression guard
+	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
+	// plan-cap checker the build path uses so the scale endpoint can
+	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
+	// Without this, the scale path silently bypassed the cap.
+	if planCap != nil {
+		scaleHandler.SetReplicasChecker(planCap)
+	}
 
 	// Build list handler — lists builds for a project with optional env
 	// filter PLUS exposes GET /api/v1/projects/{name}/build-envs (T2.2).
@@ -250,8 +301,13 @@ func setupOrchestrator(
 
 	// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 	// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
+	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain is the
+	// canonical public wildcard (LOOPZERO_PUBLIC_DOMAIN) — same source
+	// status.go uses — so deploy.completed SSE URL matches `loopzero status`.
+	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
+	// behavior for envs without a public override).
 	syncCallbackActivator := services.NewSyncCallbackActivator(
-		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, logger,
+		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	)
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
 	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead

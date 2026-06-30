@@ -10,9 +10,37 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
+
+// M4 T3.1 — when the store rejects creation with the per-Account cap typed error
+// (PROJECTS_EXCEED_PLAN), the handler surfaces it as HTTP 422 (not a 500), so the
+// client gets the actionable upgrade message. Mirrors the #101 scale-cap 422.
+func TestProjects_Create_CapExceeded_Returns422(t *testing.T) {
+	store := &fakeProjectStore{
+		createErr: loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-x"),
+	}
+	h := NewProjectHandler(store, &fakeTenantCRMgr{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(`{"name":"api"}`))
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+	h.Create(w, req)
+
+	if w.Code != 422 {
+		t.Fatalf("want 422 (PROJECTS_EXCEED_PLAN), got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "PROJECTS_EXCEED_PLAN") {
+		t.Errorf("response missing the typed code: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "loopzero.example/pricing") {
+		t.Errorf("response missing the upgrade URL (EC-4): %s", w.Body.String())
+	}
+}
 
 // --- Fake ProjectStore ---
 

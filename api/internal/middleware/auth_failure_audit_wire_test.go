@@ -94,6 +94,84 @@ func TestAuthFailureAudit_Wire_RequireAdminService_MissingHeader(t *testing.T) {
 	}
 }
 
+// TestRequireAdminService_RejectsLegacySecret asserts the qa-sprint2-cleanup-2026-06-24
+// EC-1 narrow (closes loopzero-cloud#16): post-T1.0 the middleware accepts ONLY the
+// canonical LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (+ its _PREVIOUS rotation sibling) — NOT
+// the legacy LOOPZERO_SERVICE_AUTH_SECRET that the cloud /engine/* proxy carries on every
+// forwarded user-JWT request. Before T1.0 the middleware also matched `legacy`, so
+// any tenant-owner JWT routed via the proxy passed the admin auth gate; the QA Red
+// Team filed #16 against that bypass.
+func TestRequireAdminService_RejectsLegacySecret(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "canonical-admin-secret")
+	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "legacy-proxy-secret")
+	// Ensure rotation siblings are empty so we isolate the legacy-vs-canonical decision.
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS", "")
+	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS", "")
+
+	handler := RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next must not be called when only the legacy proxy secret is provided")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/x", nil)
+	req.Header.Set("X-Service-Auth", "legacy-proxy-secret") // the secret the proxy adds
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want 403 (middleware narrowed to canonical-only), got %d", w.Code)
+	}
+}
+
+// TestRequireAdminService_AcceptsCanonical asserts the canonical secret still authorises
+// admin requests post-T1.0 (the narrow MUST NOT break legitimate operator-side calls).
+func TestRequireAdminService_AcceptsCanonical(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "canonical-admin-secret")
+	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "legacy-proxy-secret")
+
+	called := false
+	handler := RequireAdminService(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/x", nil)
+	req.Header.Set("X-Service-Auth", "canonical-admin-secret")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 with canonical secret, got %d", w.Code)
+	}
+	if !called {
+		t.Fatal("next handler must be invoked when canonical secret matches")
+	}
+}
+
+// TestRequireAdminService_AcceptsCanonicalPrevious asserts the canonical _PREVIOUS
+// rotation sibling still authorises (rotation use case preserved).
+func TestRequireAdminService_AcceptsCanonicalPrevious(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "new-canonical-admin-secret")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS", "old-canonical-admin-secret")
+
+	called := false
+	handler := RequireAdminService(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/x", nil)
+	req.Header.Set("X-Service-Auth", "old-canonical-admin-secret")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 with canonical _PREVIOUS, got %d", w.Code)
+	}
+	if !called {
+		t.Fatal("next handler must be invoked when canonical _PREVIOUS matches")
+	}
+}
+
 // -----------------------------------------------------------------------------
 // RequireAdmin
 // -----------------------------------------------------------------------------
