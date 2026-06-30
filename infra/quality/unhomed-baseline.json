@@ -1,12 +1,18 @@
 {
-  "total": 177,
+  "total": 178,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 117
+    "test": 118
   },
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": {"total": 177, "test": 117},
+      "to":   {"total": 178, "test": 118},
+      "reason": "Red Team loopzero-cloud#121 (Deployments tab `● ACTIVE` + Live URL attributed by global `activeBuildId === b.build_id` comparison — promoted releases share build_ids cross-env so preview rows inherited the production marker). +1 test-domain delta: LIVE bash infra/tests/e2e/dev-public-dashboard-deployments-active-row-attribution_test.sh (3 scenarios A/B/C). Sibling hermetic guard + dogfood wrapper categorically homed / under archive/. Dashboard-side fix in dashboard/src/pages/deployments.tsx (added `useProjectStatus({env:'preview'})` + per-row `activeBuildIdByEnv[b.environment] === b.build_id` + per-row `urlByEnv[b.environment]`). Vitest 5/5 PASS post-fix (1 new RED→GREEN scenario). Bundle confirms `env:\"preview\"` literal in deployments-*.js chunk. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": {"total": 176, "test": 116},

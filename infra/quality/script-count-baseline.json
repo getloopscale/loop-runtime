@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 392,
+  "canonical_sh": 395,
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": 392,
+      "to": 395,
+      "reason": "Red Team loopzero-cloud#121 (Deployments tab ACTIVE/Live URL misattribution). +3 canonical .sh: (1) infra/tests/e2e/dev-public-dashboard-deployments-active-row-attribution_test.sh (3 LIVE scenarios A per-env status / B bundle-grep proof / C per-env environments shape), (2) infra/tests/check-dev-public-dashboard-deployments-active-row-attribution-syntax_test.sh (21-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh (S1 hermetic + S2 vitest + S3 LIVE aggregator, registered in dogfood-all.sh WRAPPERS array). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": 389,
