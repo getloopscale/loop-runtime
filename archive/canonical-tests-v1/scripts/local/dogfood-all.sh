@@ -113,6 +113,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-status-no-retry-4xx.sh"       # Red Team #96 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-overview-recent-deploys-status-env-badges.sh" # Red Team #97 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-profile-name-layout-bounded.sh"       # Red Team #71 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-route-swap-no-stale-content.sh"      # Red Team #73 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh
