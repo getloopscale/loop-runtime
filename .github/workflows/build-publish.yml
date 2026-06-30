@@ -11,6 +11,7 @@ on:
       context:    { required: false, type: string,  default: "." }
       registry:   { required: false, type: string,  default: "ghcr.io/getloopscale" }
       sign:       { required: false, type: boolean, default: false }   # SBOM+provenance+cosign only on release
+      runner:     { required: false, type: string,  default: '["ubuntu-latest"]' }   # JSON array; callers on a billing-blocked account pass '["self-hosted","linux","x64"]'
     secrets:
       GOMOD_TOKEN:                                                      # cross-repo read for the pinned private loopzero-contracts module (M5)
         required: false
@@ -20,7 +21,7 @@ permissions:
   id-token: write   # consumed only when sign=true (keyless cosign); harmless otherwise
 jobs:
   build-publish:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }} # default ubuntu-latest; callers may pass a self-hosted label set
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
