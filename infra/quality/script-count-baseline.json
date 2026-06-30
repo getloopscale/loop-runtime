@@ -1,6 +1,14 @@
 {
-  "canonical_sh": 404,
+  "canonical_sh": 410,
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": 404,
+      "to": 410,
+      "reason": "Plan c13-valid-destructive-config-chaos (+3) + reconciliation of the #98 develop drift (+3). Provenance-exact decomposition: baseline 404 was set at #122 (commit 1b37debc); THEN the #98 triplet (commit c9c3b2ce) landed 3 canonical .sh on develop WITHOUT ratcheting (infra/tests/e2e/dev-public-dashboard-status-preview-only-honest_test.sh + infra/tests/check-dev-public-dashboard-status-preview-only-honest-syntax_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh) → develop was already at 407 over its own 404 baseline; this entry reconciles that drift (precedent: the 2026-06-29 #118 entry '+2 reconciliation' + the 2026-06-18 409->411 'already-merged reviewed work ... WITHOUT ratcheting'). The c13 triplet adds the other +3: infra/scripts/local/chaos-scenarios/c13-valid-destructive-config.sh (LIVE chaos bash, KEEP-OPERATOR), infra/tests/check-chaos-c13-syntax_test.sh (hermetic guard, KEEP-CI-WIRED, 20 assertions, wired in task quality:gates), archive/canonical-tests-v1/scripts/local/dogfood-c13-valid-destructive-config.sh (aggregator, registered in dogfood-all.sh WRAPPERS). All 6 allowlisted in shell-scripts-allowlist.md. 404 + 3 (#98 drift) + 3 (c13) = 410, matches the git ls-files gate count. The LIVE chaos run is operator+sponsor HARD STOP per cleanroom-up-live-test-mandate.md; the autonomous proof is the Go test + benchmark (10313 ns/op). The script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md) remains the path to ratchet DOWN. Owner-authorized hand-edit ratchet UP per the sanctioned auditable pattern — mirrors the entries below.",
+      "_superseded_from_401": 401,
+      "_note": "the original 401->404 #122 entry is preserved below"
+    },
     {
       "date": "2026-06-30",
       "from": 401,
