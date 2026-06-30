@@ -105,6 +105,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-seed-post-cleanroom-tenant-cr.sh"  # Red Team #118 (2026-06-29)
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh"                  # Red Team #120 P0 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh"  # Red Team #121 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh"                       # Red Team #124 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh

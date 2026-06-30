@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 395,
+  "canonical_sh": 398,
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": 395,
+      "to": 398,
+      "reason": "Red Team loopzero-cloud#124 (Dashboard health-truth divergence — Status 'Healthy' emitido com KPIs todos ausentes enquanto Live URL serve 502). +3 canonical .sh: (1) infra/tests/e2e/dev-public-dashboard-health-truth_test.sh (3 LIVE scenarios A status-endpoint-auth-200 + B bundle-grep 'Unknown' verdict literal + C ACTIVE+synced+no-replicas ground-truth shape — OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md), (2) infra/tests/check-dev-public-dashboard-health-truth-syntax_test.sh (22-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh (S1 hermetic + S2 vitest project-status + S3 LIVE aggregator, registered in dogfood-all.sh WRAPPERS array). Dashboard fix in dashboard/src/pages/project-status.tsx: signal-aware verdict (release-active AND ≥1 serving signal → Healthy, else → Unknown). Family of #41/#77/#94 — platform must not assert health it cannot prove. Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": 392,

@@ -1,12 +1,18 @@
 {
-  "total": 178,
+  "total": 179,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 118
+    "test": 119
   },
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": {"total": 178, "test": 118},
+      "to":   {"total": 179, "test": 119},
+      "reason": "Red Team loopzero-cloud#124 (Dashboard `Status: Healthy` falso-positivo — emitido por `dashboard/src/pages/project-status.tsx:169` baseado em `active_release.status === 'ACTIVE'` apenas; control plane GREEN [build SUCCEEDED + release ACTIVE + sync synced + URL populated] enquanto Live URL serve HTTP 502 sustentado [LIVE repro 2026-06-30 ~13min]). +1 test-domain delta: LIVE bash `infra/tests/e2e/dev-public-dashboard-health-truth_test.sh` (3 scenarios A/B/C). Sibling hermetic guard `infra/tests/check-dev-public-dashboard-health-truth-syntax_test.sh` (22 assertions, wired in `task quality:gates`) categorically homed under quality:gates per the canonical sibling pattern. Dogfood wrapper `archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh` lives under archive/ (excluded from un-homed count). Dashboard-side fix in `dashboard/src/pages/project-status.tsx` (signal-aware verdict: `Healthy` requires release-active AND ≥1 serving signal — `replicas_ready` / `scaling.replicas` / Prometheus KPIs; emits `Unknown` when active release lacks any data-plane proof, mirroring sibling `ProjectHealthCard` empty-state pattern). Vitest project-status.test.tsx 3/3 PASS post-fix (1 new RED→GREEN for #124). Bundle proof: `project-status-BjMs1wE3.js` carries `\"Unknown\"` verdict literal post-build. Family of #41/#77/#94 — platform must not assert health it cannot prove. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": {"total": 177, "test": 117},
