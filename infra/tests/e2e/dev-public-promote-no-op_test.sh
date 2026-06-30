@@ -148,6 +148,11 @@ call_promote() {
 
 get_env_sha() {
   # Returns last_deploy_sha for the project's TO_ENV, empty if missing.
+  # NOTE (2026-06-30 post-fix validation): last_deploy_sha is sourced from
+  # the SOURCE release's git_commit field — when consecutive promotes use
+  # the SAME source release, the sha stays identical EVEN THOUGH activation
+  # succeeded (the env_target.active_release_id correctly transitions).
+  # For a true activation canary use get_env_last_deploy_ts instead.
   local env_resp
   env_resp="$(curl -s --max-time 10 -H "Authorization: Bearer ${JWT}" \
     "${PUBLIC_CLOUD_URL}/engine/api/v1/environments?project=${PROJECT_NAME}" 2>&1 || true)"
@@ -155,16 +160,34 @@ get_env_sha() {
     '.environments[]? | select(.name == $env) | .last_deploy_sha // ""' 2>/dev/null | head -1
 }
 
+get_env_last_deploy_ts() {
+  # Returns last_deploy timestamp (ISO-8601) for the project's TO_ENV.
+  # Canonical activation canary — moves whenever a promote successfully
+  # activates a new release in the target env, even when the source
+  # release's git_commit is unchanged.
+  local env_resp
+  env_resp="$(curl -s --max-time 10 -H "Authorization: Bearer ${JWT}" \
+    "${PUBLIC_CLOUD_URL}/engine/api/v1/environments?project=${PROJECT_NAME}" 2>&1 || true)"
+  printf '%s' "$env_resp" | jq -r --arg env "$TO_ENV" \
+    '.environments[]? | select(.name == $env) | .last_deploy // ""' 2>/dev/null | head -1
+}
+
 # --- Shared promote invocation (used by all 3 scenarios) -------------------
 
 PROMOTE_RESP="$(mktemp -t promote-resp-XXXXXX.json)"
 trap 'rm -f "$PROMOTE_RESP"' EXIT
 
-# Capture pre-state for scenario C
+# Capture pre-state for scenario C — canonical activation canary uses
+# last_deploy timestamp, not last_deploy_sha (which derives from the source
+# release's git_commit and stays identical across consecutive promotes of
+# the same preview release; the env_target.active_release_id transitions
+# correctly even when the sha doesn't move).
+TS_PRE=""
 SHA_PRE=""
 if [ -z "$SCENARIO" ] || [ "$SCENARIO" = "C" ] ; then
+  TS_PRE="$(get_env_last_deploy_ts || true)"
   SHA_PRE="$(get_env_sha || true)"
-  log "Pre-promote state: ${TO_ENV} last_deploy_sha=${SHA_PRE:-<empty>}"
+  log "Pre-promote state: ${TO_ENV} last_deploy=${TS_PRE:-<empty>} sha=${SHA_PRE:-<empty>}"
 fi
 
 log "Invoking POST /engine/api/v1/projects/${PROJECT_NAME}/promote (from=${FROM_ENV} to=${TO_ENV})..."
@@ -227,33 +250,37 @@ scenario_b() {
   record_pass "B (url='${url}' on canonical public domain)"
 }
 
-# --- Scenario C — Activation canary (sha changes within window) ------------
+# --- Scenario C — Activation canary (last_deploy timestamp moves) ----------
+#
+# Canonical canary: a successful promote MUST move the target env's
+# last_deploy timestamp (because env_target.active_release_id transitions to
+# the new release row + audit_log captures the activation event). We do NOT
+# check last_deploy_sha here because it derives from the SOURCE release's
+# git_commit — consecutive promotes of the same preview release preserve
+# the sha by design (the release content didn't change).
 
 scenario_c() {
-  log "Scenario C — production sha changes within ${ACTIVATION_WINDOW_SECONDS}s (activation canary)"
+  log "Scenario C — production last_deploy timestamp moves within ${ACTIVATION_WINDOW_SECONDS}s (activation canary)"
   case "$PROMOTE_CODE" in
     200|202) ;;
     *)
-      # Fail-loud is acceptable per ADR-3 — if promote returns ≠ 200/202 with typed error, that's also a PASS
+      # Fail-loud is acceptable per ADR-3 — typed error + non-2xx code is also a valid contract
       record_pass "C (promote returned HTTP ${PROMOTE_CODE} — fail-loud accepted per ADR-3)"
       return 0
       ;;
   esac
-  if [ -z "$SHA_PRE" ] ; then
-    log "  (no pre-promote sha — env may be brand-new; checking post-promote shows non-empty sha instead)"
-  fi
-  local elapsed=0 sha_post=""
+  local elapsed=0 ts_post=""
   while [ "$elapsed" -lt "$ACTIVATION_WINDOW_SECONDS" ] ; do
     sleep 10
     elapsed=$((elapsed + 10))
-    sha_post="$(get_env_sha || true)"
-    log "  t+${elapsed}s sha=${sha_post:-<empty>}"
-    if [ -n "$sha_post" ] && [ "$sha_post" != "$SHA_PRE" ] ; then
-      record_pass "C (sha changed from '${SHA_PRE:-<empty>}' to '${sha_post}' within ${elapsed}s)"
+    ts_post="$(get_env_last_deploy_ts || true)"
+    log "  t+${elapsed}s last_deploy=${ts_post:-<empty>}"
+    if [ -n "$ts_post" ] && [ "$ts_post" != "$TS_PRE" ] ; then
+      record_pass "C (last_deploy moved from '${TS_PRE:-<empty>}' to '${ts_post}' within ${elapsed}s — release activated)"
       return 0
     fi
   done
-  record_fail "C" "${TO_ENV} sha unchanged (still '${sha_post:-<empty>}') after ${ACTIVATION_WINDOW_SECONDS}s — no-op activation (deferred-debug per plan ADR-3)"
+  record_fail "C" "${TO_ENV} last_deploy unchanged (still '${ts_post:-<empty>}') after ${ACTIVATION_WINDOW_SECONDS}s — no-op activation"
 }
 
 # --- Main -------------------------------------------------------------------
