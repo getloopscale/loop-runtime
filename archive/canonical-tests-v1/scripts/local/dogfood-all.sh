@@ -127,6 +127,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-auth-form-id-name.sh"                  # Red Team #51 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-onboarding-derive-deploy.sh"          # Red Team #56 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-registration-alias.sh"                # Red Team #55 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-defer-jwt-exchange.sh"                # Red Team #50 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh
