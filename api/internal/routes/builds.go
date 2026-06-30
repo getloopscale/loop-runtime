@@ -321,13 +321,27 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// the gap — empty bodies now reach the guard as 500 INTERNAL_ERROR.
 	// Fail fast at the system boundary with a typed 400 instead.
 	if len(req.Apps) == 0 {
+		// Red Team loopzero-cloud#126 — when this is a redeploy_of request and
+		// the source build itself has no apps (legacy seed data or synthetic
+		// fixture), the user has no local `.loopzero/services.json` to edit;
+		// pointing them there is misleading. Surface a redeploy-specific
+		// message that names the source build and explains the actionable
+		// fix: pick a source build that has apps.
+		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
+		if req.RedeployOf != "" {
+			detail = fmt.Sprintf(
+				"Source build %s has no apps to redeploy. Pick a build that completed with at least one app.",
+				req.RedeployOf,
+			)
+		}
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			// Red Team loopzero-cloud#123 — guide the customer to the canonical
-			// `.loopzero/services.json` (loopzerokit v2). The legacy `loopzero.yaml` /
-			// `apps:` has been retired; following stale guidance leads users
-			// to edit a file the build silently ignores.
-			"At least one app is required. Check your `.loopzero/services.json` for a `services:` array.",
+			// Red Team loopzero-cloud#123 — when this is a fresh deploy, guide
+			// the customer to the canonical `.loopzero/services.json` (loopzerokit
+			// v2). The legacy `loopzero.yaml` / `apps:` has been retired;
+			// following stale guidance leads users to edit a file the build
+			// silently ignores.
+			detail,
 			400,
 		))
 		return

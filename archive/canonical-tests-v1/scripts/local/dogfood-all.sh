@@ -131,6 +131,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-loopzero-cloud-billing-seats-from-tenant-members.sh" # Red Team #42 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-upgrade-error-actionable.sh"          # Red Team #40 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-engine-project-cap-rls-independent.sh"         # Red Team #111 (2026-06-30, latent-risk)
+  "archive/canonical-tests-v1/scripts/local/dogfood-engine-redeploy-empty-source-message.sh"       # Red Team #126 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh

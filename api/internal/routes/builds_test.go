@@ -541,3 +541,47 @@ func TestBuilds_Redeploy_BodyParamsIgnored(t *testing.T) {
 		t.Errorf("expected source lookup for bld-source, got %q", orch.redeployBuildSeen)
 	}
 }
+
+// Red Team loopzero-cloud#126 — when redeploy_of points at a build whose source
+// has empty Apps (legacy seed data, synthetic test fixture, etc.), the
+// handler USED to return the generic missing-apps error message that tells
+// the user to "Check your `.loopzero/services.json` for a `services:` array."
+// That guidance is wrong for a redeploy: the user did not produce the build,
+// has no local manifest to edit, and the canonical fix is "use a different
+// source build that has apps." This test pins the redeploy-specific error
+// shape: typed 400 MISSING_FIELD, message names the empty source build, and
+// does NOT mention `.loopzero/services.json` (irrelevant in this code path).
+func TestBuilds_Redeploy_SourceWithoutAppsReturnsCanonicalRedeployError(t *testing.T) {
+	orch := &fakeBuildOrch{
+		redeploySource: &RedeploySource{
+			ProjectID:   "my-project",
+			Environment: "production",
+			CommitSHA:   "abc1234",
+			Apps:        []AppInput{},
+		},
+	}
+	h := NewBuildHandler(orch, slog.Default())
+
+	body := `{"redeploy_of":"bld-source-empty"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_FIELD")) {
+		t.Fatalf("want MISSING_FIELD code; body=%s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("no apps to redeploy")) {
+		t.Fatalf("want 'no apps to redeploy' redeploy-specific message; body=%s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("bld-source-empty")) {
+		t.Fatalf("want source build id named in message for actionability; body=%s", w.Body.String())
+	}
+	if bytes.Contains(w.Body.Bytes(), []byte(".loopzero/services.json")) {
+		t.Fatalf("redeploy error MUST NOT mention .loopzero/services.json (irrelevant in redeploy path); body=%s", w.Body.String())
+	}
+}
