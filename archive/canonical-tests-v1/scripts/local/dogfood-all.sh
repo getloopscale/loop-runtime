@@ -122,6 +122,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-recovery-code-input-otp-a11y.sh"    # Red Team #80 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-onboarding-progressbar-a11y.sh"     # Red Team #81 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-create-project-sheet-no-roadmap-jargon.sh" # Red Team #82 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-create-project-input-error-aria-link.sh"  # Red Team #83 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
   #   J-02 dogfood-register.sh
   #   J-03 dogfood-verification.sh
