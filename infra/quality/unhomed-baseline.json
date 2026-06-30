@@ -1,12 +1,18 @@
 {
-  "total": 181,
+  "total": 183,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 121
+    "test": 123
   },
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": {"total": 181, "test": 121},
+      "to":   {"total": 183, "test": 123},
+      "reason": "Plan c13-valid-destructive-config-chaos + a reconciliation of a pre-existing develop drift. The +2 test-domain delta decomposes HONESTLY (measured via the classifier in pkg/quality/unhomedlogic/check.go: develop allowlist = 182/test-122, HEAD = 183/test-123, baseline file = 181/test-121): (1) +1 RECONCILIATION — the #98 triplet hermetic guard infra/tests/check-dev-public-dashboard-status-preview-only-honest-syntax_test.sh (KEEP-CI-WIRED, test domain) landed on develop via c9c3b2ce AFTER the last baseline bump (1b37debc, #122) WITHOUT re-ratcheting → develop was already at 182/122 over its own 181/121 baseline; this entry reconciles that drift (precedent: the 2026-06-28 170→172 entry 'reconciles the baseline to the merged state'). NOT c13's. (2) +1 c13 — the c13 hermetic guard infra/tests/check-chaos-c13-syntax_test.sh (KEEP-CI-WIRED, test domain, 20 assertions, wired in task quality:gates). c13's other two scripts are NOT counted: the LIVE bash infra/scripts/local/chaos-scenarios/c13-valid-destructive-config.sh + the dogfood wrapper (archive/) both carry KEEP-OPERATOR (homed by marker, no reimplementable-logic body). All three allowlisted in shell-scripts-allowlist.md. The LIVE chaos run is operator+sponsor HARD STOP per cleanroom-up-live-test-mandate.md; the autonomous proof is the Go test + benchmark (10313 ns/op). Owner-authorized hand-edit ratchet UP per the sanctioned auditable pattern — mirrors the entries below."
+    },
     {
       "date": "2026-06-30",
       "from": {"total": 180, "test": 120},
