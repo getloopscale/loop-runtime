@@ -323,7 +323,11 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if len(req.Apps) == 0 {
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			"At least one app is required. Check your loopzero.yaml for an `apps:` section.",
+			// Red Team loopzero-cloud#123 — guide the customer to the canonical
+			// `.loopzero/services.json` (loopzerokit v2). The legacy `loopzero.yaml` /
+			// `apps:` has been retired; following stale guidance leads users
+			// to edit a file the build silently ignores.
+			"At least one app is required. Check your `.loopzero/services.json` for a `services:` array.",
 			400,
 		))
 		return

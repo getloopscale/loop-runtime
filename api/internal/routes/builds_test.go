@@ -152,6 +152,22 @@ func TestBuilds_Create_MissingApps(t *testing.T) {
 	if !bytes.Contains(w.Body.Bytes(), []byte("app is required")) {
 		t.Fatalf("want 'app is required' message hint; body=%s", w.Body.String())
 	}
+
+	// Red Team loopzero-cloud#123 — the error message must guide the customer to
+	// the canonical manifest (.loopzero/services.json v2 / services: []), not the
+	// LEGACY loopzero.yaml / apps: section. Following the stale guidance leads the
+	// user to create/edit a loopzero.yaml that the build silently ignores
+	// (.loopzero/services.json is the only manifest loopzerokit emits and the engine
+	// consumes — see loopzero-cloud/CLAUDE.md § How loopzero-cloud connects).
+	if bytes.Contains(w.Body.Bytes(), []byte("loopzero.yaml")) {
+		t.Fatalf("RED #123: message must NOT reference legacy loopzero.yaml; body=%s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(".loopzero/services.json")) {
+		t.Fatalf("RED #123: message MUST reference canonical .loopzero/services.json; body=%s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("services:")) {
+		t.Fatalf("RED #123: message MUST reference canonical `services:` array; body=%s", w.Body.String())
+	}
 }
 
 func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {

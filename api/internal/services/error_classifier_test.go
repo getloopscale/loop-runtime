@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -90,6 +91,23 @@ func TestSuggestionFor_UnknownClassFallsBack(t *testing.T) {
 	got := SuggestionFor("NOVEL_CLASS_NOT_IN_MAP")
 	if got != suggestions[ErrorClassUnknown] {
 		t.Fatalf("expected fallback to UNKNOWN suggestion, got %q", got)
+	}
+}
+
+// Red Team loopzero-cloud#123 — the LOOPZERO_YAML_INVALID suggestion (the only
+// user-facing string in this map that named a manifest) must guide the
+// customer to the canonical `.loopzero/services.json`, not the legacy
+// `loopzero.yaml`. ErrorClassLoopZeroYAMLInvalid stays as an internal class name
+// (engine-side errors may still mention "loopzero.yaml" during the v2
+// transition; Classify() still matches that substring upstream); the
+// SUGGESTION the dashboard renders is what must be honest.
+func TestSuggestionFor_LoopZeroYAMLInvalid_CanonicalManifest_123(t *testing.T) {
+	got := SuggestionFor(ErrorClassLoopZeroYAMLInvalid)
+	if strings.Contains(got, "loopzero.yaml") {
+		t.Fatalf("RED #123: suggestion must NOT reference legacy loopzero.yaml; got %q", got)
+	}
+	if !strings.Contains(got, ".loopzero/services.json") {
+		t.Fatalf("RED #123: suggestion MUST reference canonical .loopzero/services.json; got %q", got)
 	}
 }
 
