@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 401,
+  "canonical_sh": 404,
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": 401,
+      "to": 404,
+      "reason": "Red Team loopzero-cloud#122 (dashboard fail-loud on deploy errors — 2 surfaces). +3 canonical .sh: (1) infra/tests/e2e/dev-public-deployment-detail-fail-loud_test.sh (2 LIVE bundle-grep scenarios A timeline-empty-state literal + B throwOnError opt-in), (2) infra/tests/check-dev-public-deployment-detail-fail-loud-syntax_test.sh (23-assertion hermetic guard wired in task quality:gates), (3) archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh (S1 hermetic + S2 vitest + S3 LIVE aggregator registered in dogfood-all.sh WRAPPERS). Dashboard-side fix: BuildTimelineLive + useRedeploy + deployment-detail (plumb restBuildStatus). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": 398,

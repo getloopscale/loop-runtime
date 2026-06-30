@@ -1,12 +1,18 @@
 {
-  "total": 180,
+  "total": 181,
   "by_domain": {
     "bootstrap": 35,
     "drill": 16,
     "other": 9,
-    "test": 120
+    "test": 121
   },
   "_changelog": [
+    {
+      "date": "2026-06-30",
+      "from": {"total": 180, "test": 120},
+      "to":   {"total": 181, "test": 121},
+      "reason": "Red Team loopzero-cloud#122 (dashboard fail-loud — 2 surfaces: surface 1 BuildTimelineLive renderizava 'Connecting to build stream…' forever quando build morria pre-SSE; surface 2 RedeployDialog engolia 4xx problem+json porque useRedeploy chamava engineFetch sem throwOnError). +1 test-domain delta: LIVE bash infra/tests/e2e/dev-public-deployment-detail-fail-loud_test.sh (2 bundle-grep scenarios A 'Build failed before any step ran' literal + B 'throwOnError' literal). Sibling hermetic guard categorically homed in task quality:gates per the pattern. Dashboard-side fix: (a) BuildTimelineLive aceita restBuildStatus prop + renders TerminalEmptyState honest copy quando empty + status terminal; (b) deployment-detail.tsx plumba build.status; (c) use-redeploy.ts passa { throwOnError: true } para engineFetch. Vitest 1116/1124 PASS post-fix (3 novos RED→GREEN). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Family of #41/#63/#77 (fail-loud violated). Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": {"total": 179, "test": 119},
