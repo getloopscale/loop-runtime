@@ -47,20 +47,6 @@ jobs:
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      - name: Login to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to Docker Hub (optional)
-        if: ${{ inputs.dockerhub_image != '' && env.DOCKERHUB_TOKEN != '' }}
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Compute tags (community-standard channels)
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
@@ -101,6 +87,25 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: .trivyignore
+
+      # Registry login happens HERE — AFTER the (slow, cold-cache) Trivy build-for-scan — so the
+      # GHCR token is FRESH at push time. A long build (e.g. a native-compile image via the Trivy
+      # double-build, ~14 min cold) would otherwise outlive a token fetched at job start → buildkit
+      # re-auths anonymously → 403 on the attestation push. The build-for-scan above needs no
+      # registry login (it loads locally + uses the GHA cache + a public base image).
+      - name: Login to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub (optional)
+        if: ${{ inputs.dockerhub_image != '' && env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # --- Build + push (cache-identical to the scanned image when trivy=true) ---
       - name: Build + push (SBOM + SLSA mode=max on release)

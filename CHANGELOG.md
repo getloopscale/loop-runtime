@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Reusable `build-publish.yml`: move the GHCR/Docker Hub **login to after the Trivy build-for-scan** (right before the push) so a long cold build (Trivy double-build + native compile, ~14 min) cannot outlive the GHCR token → no more anonymous-token 403 on the attestation push. Surfaced cutting the first signed `themory:0.27.0`. (`.github/workflows/build-publish.yml`)
 - Reusable `build-publish.yml` hardened to a single org-standard pipeline: every action **SHA-pinned**, SLSA provenance bumped to `mode=max`, and three opt-in inputs added — `trivy` (CRITICAL/HIGH image gate), `verify` (identity-pinned cosign verify), `dockerhub_image` (optional Docker Hub publish). Backward-compatible: existing callers (loopzero-cloud) are unchanged. Lets `loopzero-traefik-mcp` + `loopzero-memory` drop their bespoke build+sign and converge here. (`.github/workflows/build-publish.yml`)
 
 - README — documented the **reusable `build-publish.yml`** (consumed cross-repo, e.g. by `loopzero-cloud` for its GHCR images) and its new `runner` input that lets billing-blocked callers build on a self-hosted runner. (`README.md`)
