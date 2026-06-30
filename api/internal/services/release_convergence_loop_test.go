@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -650,7 +651,8 @@ func TestL22_ForceReconcileDoesNotFireBeforeRetriggersExhausted(t *testing.T) {
 //	Assertion 1 — backdated past timeout → SYNC_FAILED + the specific health reason.
 //	Assertion 2 — recent (not timed-out) synced+unhealthy → stays PENDING (neither
 //	              failed nor activated), proving the health-gate, which is what makes
-//	              this test non-redundant vs the generic timeout test (:254).
+//	              this test non-redundant vs the generic timeout test
+//	              (TestReleaseConvergenceLoop_PendingRelease_TimedOut_FailsRelease).
 func TestReleaseConvergenceLoop_SyncedButUnhealthy_TimedOut_FailsLoud(t *testing.T) {
 	cfg := ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 3 * time.Minute, MaxConcurrent: 1}
 
@@ -723,11 +725,15 @@ func TestReleaseConvergenceLoop_SyncedButUnhealthy_TimedOut_FailsLoud(t *testing
 // BenchmarkReleaseConvergenceLoop_FailLoudTick measures the single verifyRelease
 // tick latency to fail a timed-out release. Deterministic — CreatedAt is backdated
 // past the SyncTimeout so the timeout branch fires in one tick with NO real sleep
-// (plan ADR D2). The reported ns/op is the fail-loud processing cost; the enforced
-// budget is the configured SyncTimeout (180s). The per-iteration store rebuild is
-// excluded from the timer (EC-2) via Stop/StartTimer.
+// (plan ADR D2). The per-iteration store rebuild is excluded from the timer (EC-2)
+// via Stop/StartTimer. A DISCARD logger isolates the fail-loud PROCESSING cost from
+// synchronous slog I/O (review F1) — without it the ns/op would be dominated by log
+// writes, not the state transition. The enforced budget is the configured
+// SyncTimeout (180s); the reported ns/op is the processing cost the loop incurs to
+// detect + fail a timed-out release.
 func BenchmarkReleaseConvergenceLoop_FailLoudTick(b *testing.B) {
 	cfg := ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 180 * time.Second, MaxConcurrent: 1}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil)) // F1: isolate processing cost from log I/O
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		rs := newFakeConvergenceReleaseStore()
@@ -743,7 +749,7 @@ func BenchmarkReleaseConvergenceLoop_FailLoudTick(b *testing.B) {
 		loop := NewReleaseConvergenceLoop(
 			rs, newFakeConvergenceEnvTargetStore(),
 			&fakeConvergenceSyncClient{synced: true, healthy: false}, &fakeConvergenceLocker{},
-			&fakeConvergenceEventStore{}, "dev.loopzero.example", "", slog.Default(), cfg,
+			&fakeConvergenceEventStore{}, "dev.loopzero.example", "", quiet, cfg,
 		)
 		target := &rs.pending[0]
 		b.StartTimer()

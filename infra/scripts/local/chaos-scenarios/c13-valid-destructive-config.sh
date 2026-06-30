@@ -14,7 +14,7 @@
 # PENDING and is failed loud at the 180s SyncTimeout (:81,:240). This is the
 # LIVE/E2E proof of that fail-loud boundary; the deterministic Go proof lives
 # in TestReleaseConvergenceLoop_SyncedButUnhealthy_TimedOut_FailsLoud + the
-# BenchmarkReleaseConvergenceLoop_FailLoudTick (~13477 ns/op).
+# BenchmarkReleaseConvergenceLoop_FailLoudTick (~10313 ns/op, discard-logger isolated).
 #
 # NO chaos-mesh (plan ADR D3): the fault is a CONFIG fault injected through the
 # normal deploy path, NOT an infra fault. There is therefore NO EC-11
