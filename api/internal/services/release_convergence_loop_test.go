@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,15 +158,21 @@ func (f *fakeConvergenceSyncClient) TerminateOperation(_ context.Context, _ stri
 
 type fakeConvergenceEventStore struct {
 	mu     sync.Mutex
-	events []struct{ BuildID, EventType string }
+	events []struct {
+		BuildID, EventType string
+		Data               json.RawMessage
+	}
 	nextID int64
 }
 
-func (f *fakeConvergenceEventStore) Append(_ context.Context, buildID, eventType string, _ json.RawMessage) (int64, error) {
+func (f *fakeConvergenceEventStore) Append(_ context.Context, buildID, eventType string, data json.RawMessage) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.nextID++
-	f.events = append(f.events, struct{ BuildID, EventType string }{buildID, eventType})
+	f.events = append(f.events, struct {
+		BuildID, EventType string
+		Data               json.RawMessage
+	}{buildID, eventType, data})
 	return f.nextID, nil
 }
 
@@ -178,6 +185,20 @@ func (f *fakeConvergenceEventStore) hasEvent(eventType string) bool {
 		}
 	}
 	return false
+}
+
+// eventData returns the JSON payload of the first event matching eventType,
+// or nil if no such event was appended. Used to assert the failure reason
+// carried in the SSE payload (OLM-style assert-phase-AND-reason rigor).
+func (f *fakeConvergenceEventStore) eventData(eventType string) json.RawMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, e := range f.events {
+		if e.EventType == eventType {
+			return e.Data
+		}
+	}
+	return nil
 }
 
 type fakeConvergenceLocker struct{}
@@ -613,5 +634,119 @@ func TestL22_ForceReconcileDoesNotFireBeforeRetriggersExhausted(t *testing.T) {
 
 	if client.forceCount != 0 {
 		t.Errorf("L22 escalation MUST wait for maxSyncRetriggers exhaustion; got %d ForceReconcile calls", client.forceCount)
+	}
+}
+
+// --- c13: valid-but-destructive config fail-loud (plan c13-valid-destructive-config-chaos T1.1) ---
+//
+// A schema-valid config whose workload SYNCS but never becomes HEALTHY (e.g. a
+// readiness path that always 404s) is the "valid-but-destructive config" class.
+// LoopZero's ACTIVE transition is HEALTH-GATED (release_convergence_loop.go:192,118),
+// so such a release stays PENDING and is failed loud at the SyncTimeout
+// (release_convergence_loop.go:81,240). This test locks that fail-loud boundary
+// with TWO assertions — mirroring OLM's assert-phase-AND-reason rigor
+// (knowledge-base/references/operator-lifecycle-manager/.../operator_test.go:1299):
+//
+//	Assertion 1 — backdated past timeout → SYNC_FAILED + the specific health reason.
+//	Assertion 2 — recent (not timed-out) synced+unhealthy → stays PENDING (neither
+//	              failed nor activated), proving the health-gate, which is what makes
+//	              this test non-redundant vs the generic timeout test (:254).
+func TestReleaseConvergenceLoop_SyncedButUnhealthy_TimedOut_FailsLoud(t *testing.T) {
+	cfg := ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 3 * time.Minute, MaxConcurrent: 1}
+
+	// --- Assertion 1: backdated past timeout → fail loud ---
+	rs := newFakeConvergenceReleaseStore()
+	vdRelease := db.Release{
+		ID: "rel-vd", BuildID: "build-vd", TenantID: "tn-1",
+		ProjectID: "proj-1", Environment: "production",
+		Status:    string(statemachine.ReleasePending),
+		CreatedAt: time.Now().Add(-10 * time.Minute), // way past SyncTimeout
+		Apps:      json.RawMessage(`[{"name":"api","rendering":"container"}]`),
+	}
+	rs.pending = []db.Release{vdRelease}
+	rs.releases["rel-vd"] = &vdRelease
+
+	es := &fakeConvergenceEventStore{}
+	// valid-but-destructive: ArgoCD reports synced=true but the workload is unhealthy.
+	syncClient := &fakeConvergenceSyncClient{synced: true, healthy: false}
+
+	loop := NewReleaseConvergenceLoop(
+		rs, newFakeConvergenceEnvTargetStore(), syncClient, &fakeConvergenceLocker{}, es,
+		"dev.loopzero.example", "", slog.Default(), cfg,
+	)
+
+	// verifyRelease runs the per-release path synchronously (no goroutine), so no poll needed.
+	loop.verifyRelease(context.Background(), &rs.pending[0])
+
+	if got := rs.getStatus("rel-vd"); got != string(statemachine.ReleaseSyncFailed_) {
+		t.Fatalf("Assertion 1: expected SYNC_FAILED, got %q", got)
+	}
+	if !es.hasEvent("deploy.sync_failed") {
+		t.Error("Assertion 1: expected deploy.sync_failed SSE event")
+	}
+	// OLM-style assert-phase-AND-reason: the SSE payload must carry the health reason.
+	var payload struct {
+		Reason string `json:"reason"`
+	}
+	if data := es.eventData("deploy.sync_failed"); data != nil {
+		_ = json.Unmarshal(data, &payload)
+	}
+	if !strings.Contains(payload.Reason, "did not become healthy") {
+		t.Errorf("Assertion 1: expected reason to contain %q, got %q", "did not become healthy", payload.Reason)
+	}
+
+	// --- Assertion 2 (EC-1): recent synced+unhealthy is HEALTH-GATED, not instant-failed nor activated ---
+	rs2 := newFakeConvergenceReleaseStore()
+	recent := db.Release{
+		ID: "rel-recent", BuildID: "build-recent", TenantID: "tn-1",
+		ProjectID: "proj-1", Environment: "production",
+		Status:    string(statemachine.ReleasePending),
+		CreatedAt: time.Now(), // NOT past timeout
+		Apps:      json.RawMessage(`[{"name":"api","rendering":"container"}]`),
+	}
+	rs2.pending = []db.Release{recent}
+	rs2.releases["rel-recent"] = &recent
+
+	loop2 := NewReleaseConvergenceLoop(
+		rs2, newFakeConvergenceEnvTargetStore(),
+		&fakeConvergenceSyncClient{synced: true, healthy: false}, &fakeConvergenceLocker{},
+		&fakeConvergenceEventStore{}, "dev.loopzero.example", "", slog.Default(), cfg,
+	)
+	loop2.verifyRelease(context.Background(), &rs2.pending[0])
+
+	// Health-gated: an unhealthy release neither activates nor instantly fails — it waits.
+	if got := rs2.getStatus("rel-recent"); got != "" {
+		t.Errorf("Assertion 2: recent synced+unhealthy release must stay PENDING (health-gated); got status transition %q", got)
+	}
+}
+
+// BenchmarkReleaseConvergenceLoop_FailLoudTick measures the single verifyRelease
+// tick latency to fail a timed-out release. Deterministic — CreatedAt is backdated
+// past the SyncTimeout so the timeout branch fires in one tick with NO real sleep
+// (plan ADR D2). The reported ns/op is the fail-loud processing cost; the enforced
+// budget is the configured SyncTimeout (180s). The per-iteration store rebuild is
+// excluded from the timer (EC-2) via Stop/StartTimer.
+func BenchmarkReleaseConvergenceLoop_FailLoudTick(b *testing.B) {
+	cfg := ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 180 * time.Second, MaxConcurrent: 1}
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rs := newFakeConvergenceReleaseStore()
+		rel := db.Release{
+			ID: "rel-bench", BuildID: "build-bench", TenantID: "tn-1",
+			ProjectID: "proj-1", Environment: "production",
+			Status:    string(statemachine.ReleasePending),
+			CreatedAt: time.Now().Add(-181 * time.Second), // past the 180s budget
+			Apps:      json.RawMessage(`[{"name":"api","rendering":"container"}]`),
+		}
+		rs.pending = []db.Release{rel}
+		rs.releases["rel-bench"] = &rel
+		loop := NewReleaseConvergenceLoop(
+			rs, newFakeConvergenceEnvTargetStore(),
+			&fakeConvergenceSyncClient{synced: true, healthy: false}, &fakeConvergenceLocker{},
+			&fakeConvergenceEventStore{}, "dev.loopzero.example", "", slog.Default(), cfg,
+		)
+		target := &rs.pending[0]
+		b.StartTimer()
+		loop.verifyRelease(context.Background(), target)
 	}
 }
