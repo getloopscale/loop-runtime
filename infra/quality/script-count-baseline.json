@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 404,
+  "canonical_sh": 477,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 404,
+      "to": 477,
+      "reason": "Batch ratchet UP for canonical triplets shipped across Red Team sprints 6-9 (24 issues × 3 canonical .sh = 72) + Red Team loopzero-cloud#127 Caddyfile hermetic guard (+1) = +73 total. Each closure adds the canonical triplet per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25: (a) LIVE bash `infra/tests/e2e/dev-public-{slug}_test.sh` (2-6 scenarios reproducing the issue verbatim); (b) hermetic guard `infra/tests/check-dev-public-{slug}-syntax_test.sh` (18-30 assertions wired in `task quality:gates`); (c) dogfood aggregator `archive/canonical-tests-v1/scripts/local/dogfood-{slug}.sh` (S1 hermetic + S2 unit + S3 LIVE aggregator, registered in dogfood-all.sh WRAPPERS array). Issues covered — dashboard-side: #121 deployments per-env attribution, #98 status preview-only honest, #102 repository-route alias, #96 no-retry 4xx, #97 recent-deploys badges, #71 profile name layout, #73 route swap stale, #74 preserve name/email, #75 duplicate account copy, #76 humanize last-deploy time, #78 humanize deployer UUID, #79 heading hierarchy, #80 recovery OTP a11y, #81 progressbar a11y, #82 no roadmap jargon, #83 create-project aria-link, #50 defer JWT exchange, #51 form id+name, #55 registration alias, #56 onboarding derive deploy. Engine-side: #40 upgrade error, #42 seats from tenant_members, #104 memory-exports race, #111 project-cap RLS-independent, #126 redeploy empty-source msg. Plus loopzero-cloud#127 Caddyfile no-docker-network-ip hermetic guard (this session's +1). Full expansion available in git log for `infra/tests/e2e/dev-public-*_test.sh` since commit 1b37debc (last individual ratchet closure for #122). Companion to the sibling KEEP-CI-WIRED classifier fix in the same session (both close baseline drift classes that blocked the loopzero-cloud#127 push). Owner-authorized hand-edit batch-ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-06-30",
       "from": 401,
