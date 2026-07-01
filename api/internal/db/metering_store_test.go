@@ -10,6 +10,7 @@ package db
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -582,5 +583,143 @@ func TestMeteringStore_MeterComputeSplit_MultiMonthGap_NoMisattribution(t *testi
 	pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE tenant_id=$1`, tenantID).Scan(&totalRows)
 	if totalRows != 2 {
 		t.Errorf("usage rows=%d, want 2 (no middle-period row from a multi-month gap)", totalRows)
+	}
+}
+
+// TestMeteringStore_MeterCompute_ExactlyOnce_TwoConcurrentPasses — the core
+// at-most-once money invariant: two concurrent ticks with the SAME `expected`
+// (two leaders / a double-fire) race the CAS (last_metered_at = @expected); EXACTLY
+// ONE advances, the other sees the moved cursor → 0 rows → held. The counter is
+// billed ONCE (no double-bill), one usage row. Run with -race.
+func TestMeteringStore_MeterCompute_ExactlyOnce_TwoConcurrentPasses(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-once"
+	const cellID = "cell-ws-once"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+	in := MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: time.Hour, PlanTier: "starter",
+	}
+
+	const n = 2
+	type res struct {
+		advanced bool
+		delta    int64
+		err      error
+	}
+	out := make([]res, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			a, d, e := store.MeterCompute(ctx, in)
+			out[i] = res{a, d, e}
+		}(i)
+	}
+	wg.Wait()
+
+	advancedCount := 0
+	for _, r := range out {
+		if r.err != nil {
+			t.Errorf("concurrent MeterCompute err: %v", r.err)
+		}
+		if r.advanced {
+			advancedCount++
+			if r.delta != 5 {
+				t.Errorf("advanced delta=%d, want 5", r.delta)
+			}
+		} else if r.delta != 0 {
+			t.Errorf("held delta=%d, want 0", r.delta)
+		}
+	}
+	if advancedCount != 1 {
+		t.Errorf("advanced count=%d, want EXACTLY 1 (CAS at-most-once — no double-bill)", advancedCount)
+	}
+
+	var counter, usageRows int64
+	if err := pool.QueryRow(ctx, `SELECT value FROM cost_counters WHERE tenant_id=$1`, tenantID).Scan(&counter); err != nil {
+		t.Fatalf("read counter: %v", err)
+	}
+	if counter != 5 {
+		t.Errorf("counter=%d, want 5 (billed exactly once, not twice)", counter)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE tenant_id=$1`, tenantID).Scan(&usageRows); err != nil {
+		t.Fatalf("read usage: %v", err)
+	}
+	if usageRows != 1 {
+		t.Errorf("usage rows=%d, want 1", usageRows)
+	}
+}
+
+// TestMeteringStore_MeterCompute_FencedWriterRejected — SC-6: a writer presenting
+// a generation_id that does NOT match the loop's own leader_generations row (a
+// zombie leader from a superseded generation) is fenced out — the CTE fence
+// subquery yields 0 rows → held → no bill.
+func TestMeteringStore_MeterCompute_FencedWriterRejected(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-fence"
+	const cellID = "cell-ws-fence"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+
+	adv, delta, err := store.MeterCompute(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen + 1, // stale — the leader row holds meteringGen
+		LoopName: meteringLoopName, LeaderCell: cellID, MaxDelta: time.Hour, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterCompute: %v", err)
+	}
+	if adv {
+		t.Error("advanced=true, want false (stale fence generation rejected — SC-6)")
+	}
+	if delta != 0 {
+		t.Errorf("delta=%d, want 0 (fenced)", delta)
+	}
+	var counterRows int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM cost_counters WHERE tenant_id=$1`, tenantID).Scan(&counterRows); err != nil {
+		t.Fatalf("read counter: %v", err)
+	}
+	if counterRows != 0 {
+		t.Errorf("cost_counters rows=%d, want 0 (fenced writer must not bill)", counterRows)
+	}
+}
+
+// TestMeteringStore_MeterCompute_NegativeDeltaClockSkew_NoDecrement — SC-1: a
+// backward DB clock (now() < last_metered_at, cursor seeded in the future) fails
+// the monotonicity guard → 0 rows → held → the cursor is NOT rewound and nothing
+// is billed. Prevents a clock skew from decrementing a counter or re-billing.
+func TestMeteringStore_MeterCompute_NegativeDeltaClockSkew_NoDecrement(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-skew"
+	const cellID = "cell-ws-skew"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() + interval '1 hour'")
+	store := NewMeteringStore(pool)
+
+	adv, delta, err := store.MeterCompute(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: time.Hour, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterCompute: %v", err)
+	}
+	if adv {
+		t.Error("advanced=true, want false (now() < last_metered_at → SC-1 monotonicity holds)")
+	}
+	if delta != 0 {
+		t.Errorf("delta=%d, want 0 (backward clock held)", delta)
+	}
+	var cursorUnchanged bool
+	if err := pool.QueryRow(ctx,
+		`SELECT last_metered_at = $2::timestamptz FROM metering_cursor WHERE tenant_id=$1`, tenantID, expected,
+	).Scan(&cursorUnchanged); err != nil {
+		t.Fatalf("read cursor: %v", err)
+	}
+	if !cursorUnchanged {
+		t.Error("cursor moved on a backward clock (SC-1 rewind — money bug)")
 	}
 }
