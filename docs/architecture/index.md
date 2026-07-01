@@ -16,6 +16,9 @@ Architecture docs organized per domain. Per `/architecture-docs` skill conventio
 
 ## Index by domain
 
+### Diagrams (cross-cutting)
+- [`eraser-diagrams-index.md`](eraser-diagrams-index.md) — Living index of the 17 Eraser architecture diagrams (workspace "LoopZero"), incl. a unified **System Landscape (View 0)** entry point + **multi-cell placement/routing (View 12)** + **AWS-first target (View 13 runtime + View 14 IaC + View 15 exposure)**: Core Four-Planes deploy flow + supply-chain/observability/product-surface/memory/MCP-gateway/promptly views + META Model B credential-broker fabric + LoopZeroKit build-source seam + CI (Argo Events) + DR (Velero). Each view scoped + cross-validated against `file:line` evidence (2026-07-01).
+
 ### API
 - [`api/withenvironmentlock-coverage.md`](api/withenvironmentlock-coverage.md) — withEnvironmentLock audit per mutating route. 34 routes classified (18 LOCKED-SERVICE + 16 NO-LOCK-REQUIRED + 0 REVIEW). Closes M02 HIGH gap; T1.3 + iter 6 follow-up of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
 

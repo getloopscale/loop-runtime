@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LoopZero — AWS-first Cost Calculator</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#171d26; --panel2:#1e2630; --line:#2b3543;
+    --fg:#e6edf3; --mut:#8b98a9; --accent:#4c9aff; --green:#3fb950; --red:#f85149;
+    --amber:#d29922; --purple:#a371f7; --mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{padding:20px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{margin:0 0 4px;font-size:19px}
+  .sub{color:var(--mut);font-size:13px}
+  .warn{margin:14px 24px 0;padding:10px 14px;border:1px solid var(--amber);border-radius:8px;
+        background:rgba(210,153,34,.08);color:#f0d38a;font-size:12.5px}
+  .grid{display:grid;grid-template-columns:1fr 340px;gap:18px;padding:18px 24px;align-items:start}
+  @media(max-width:1000px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel h2{margin:0;padding:11px 14px;font-size:13px;letter-spacing:.03em;text-transform:uppercase;
+            color:var(--mut);border-bottom:1px solid var(--line);background:var(--panel2)}
+  .row{display:grid;grid-template-columns:1fr 92px 92px 92px;gap:8px;padding:7px 14px;align-items:center;
+       border-bottom:1px solid #202834}
+  .row:last-child{border-bottom:0}
+  .row .lbl{font-size:13px}
+  .row .lbl small{display:block;color:var(--mut);font-size:11px}
+  .row.head{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.03em;background:#131922}
+  input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+        border-radius:6px;padding:5px 7px;font-family:var(--mono);font-size:12.5px;text-align:right}
+  input:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+  .sub-t{font-family:var(--mono);text-align:right;color:var(--green);font-size:12.5px}
+  .example input{border-color:#3a4a2e}
+  .prem{display:grid;grid-template-columns:1fr 110px;gap:8px 12px;padding:12px 14px}
+  .prem label{font-size:13px;align-self:center}
+  .prem label small{display:block;color:var(--mut);font-size:11px}
+  .out{position:sticky;top:16px}
+  .big{font-family:var(--mono);font-size:26px;font-weight:600}
+  .kpi{padding:14px;border-bottom:1px solid var(--line)}
+  .kpi .k{color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+  .kpi .v{font-family:var(--mono);font-size:20px;margin-top:2px}
+  .pos{color:var(--green)} .neg{color:var(--red)} .accent{color:var(--accent)} .pur{color:var(--purple)}
+  .bd{padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .bd div{display:flex;justify-content:space-between;padding:2px 0}
+  .bd b{color:var(--fg);font-weight:500}
+  footer{color:var(--mut);font-size:12px;padding:8px 24px 28px}
+  .tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--mut);margin-left:6px}
+  .tag.ex{border-color:#3a4a2e;color:#9fca7a}
+</style>
+</head>
+<body>
+<header>
+  <h1>LoopZero — AWS-first Cost Calculator <span class="tag">us-east-1</span></h1>
+  <div class="sub">Modelo derivado das Views 13 / 14 / 15 (arquitetura AWS-first, ADR 2026-06-17). Custo AWS/mês + custo por tenant + margem.</div>
+</header>
+
+<div class="warn">
+  ✅ <b>EC2 / RDS / ElastiCache = preços REAIS</b> (Vantage MCP, us-east-1, m8g/r7g). ⚠️ Edge/rede (ALB, NAT, CloudFront, WAF, Route53, S3, ECR, KMS) ainda <b>aproximados</b> — Vantage cobre instâncias, não esses serviços; verifique na fatura. Tudo editável. Campos com borda verde = <span class="tag ex">EXEMPLO</span> (sizing) — troque pelos seus.
+</div>
+
+<div class="grid">
+  <div>
+    <!-- PREMISSAS -->
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Premissas de escala <span class="tag ex">EXEMPLO — edite</span></h2>
+      <div class="prem example">
+        <label>Tenants (total)</label><input type="number" id="tenants" value="50000">
+        <label>Workload cells<small>25 = ~2000/cell (subir maxPerCell); 100 se manter 500</small></label><input type="number" id="cells" value="25">
+        <label>Nós fixos (mgmt+build)</label><input type="number" id="fixedNodes" value="10">
+        <label>Receita blended / tenant / mês (US$)<small>ARPU: mix free/starter/pro</small></label><input type="number" id="revPerTenant" value="8">
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Premissas do cenário 50k (ultrathink — edite)</h2>
+      <div style="padding:12px 14px;font-size:12.5px;color:var(--mut);line-height:1.65">
+        <div style="margin:3px 0"><b class="accent">Cells = 25</b> (~2.000 tenants/cell). Com maxPerCell=500 seriam <b>100 cells → +$5.300/mês só de EKS control-plane</b>. Densidade real vem do <b>KEDA scale-to-zero</b> — 50k tenants ≠ 50k pods.</div>
+        <div style="margin:3px 0"><b class="accent">Nós = derivados</b> pelo Modelo de Capacidade (abaixo): pods/nó = min(CPU-request, memória, ENI/pod-density) → nº de nós. <b>2 maiores levers</b>: % ativo e pods/tenant. Habilitar <b>prefix delegation</b> destrava o teto ENI.</div>
+        <div style="margin:3px 0"><b class="accent">RDS = 5 bancos de domínio</b> (memory·promptly·rag·lens·trust) × (Multi-AZ + read replicas). Read-heavy (memory/rag pgvector) justificam as réplicas. <b class="neg">NÃO é per-tenant</b> — per-tenant RDS = 50k instâncias = milhões/mês.</div>
+        <div style="margin:3px 0"><b class="accent">ECR 60 TB = ~$6k/mês</b>. <b>Lifecycle policy</b> (keep last N digests) é o lever — sem ela cresce sem limite.</div>
+        <div style="margin:3px 0"><b class="neg">Route53 = zonas de plataforma, NÃO per-cliente.</b> Se OD7 virar 1 zona/cliente: 50k × $0,50 = <b>$25k/mês</b>. Evitar via ACM wildcard + zona compartilhada.</div>
+        <div style="margin:3px 0"><b class="accent">Tráfego = simulado</b> (CloudFront 50 TB egress + 2 bi req/mês) — o mais incerto; ajuste com dado real.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Modelo de capacidade (deriva o nº de nós de app)</h2>
+      <div class="prem">
+        <label>Tenants ativos no pico (%)<small>KEDA scale-to-zero</small></label><input type="number" id="activePct" value="10">
+        <label>Pods por tenant ativo<small>server + worker</small></label><input type="number" step="0.1" id="podsPerTenant" value="1.5">
+        <label>CPU request / pod (m)<small>renderer.go:161 → 100m</small></label><input type="number" id="cpuReqM" value="100">
+        <label>Memória request / pod (Mi)<small>default 128Mi</small></label><input type="number" id="memReqMi" value="128">
+        <label>vCPU por nó<small>m7g.2xlarge = 8</small></label><input type="number" id="nodeVcpu" value="8">
+        <label>Memória por nó (GiB)<small>m7g.2xlarge = 32</small></label><input type="number" id="nodeMemGiB" value="32">
+        <label>Reserva sistema + DaemonSet (%)</label><input type="number" id="reservePct" value="15">
+        <label>ENI max pods/nó (sem prefix-del)<small>m7g.2xlarge ≈ 58</small></label><input type="number" id="eniMaxPods" value="58">
+        <label>Cap prefix delegation</label><input type="number" id="prefixCap" value="110">
+        <label>Overhead de nós por cell<small>Traefik/KEDA/ESO</small></label><input type="number" id="overheadPerCell" value="2">
+        <label>Prefix delegation habilitado?</label><input type="checkbox" id="prefixDeleg" checked style="width:auto;justify-self:start;transform:scale(1.3)">
+      </div>
+      <div class="bd" id="capReadout" style="border-top:1px solid var(--line)"></div>
+    </div>
+
+    <!-- Line-item panels are generated by JS -->
+    <div id="panels"></div>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="panel out">
+    <h2>Resultado</h2>
+    <div class="kpi"><div class="k">AWS total / mês</div><div class="v big accent" id="oTotal">–</div></div>
+    <div class="kpi"><div class="k">Custo por tenant / mês</div><div class="v" id="oPerTenant">–</div></div>
+    <div class="kpi"><div class="k">Receita por tenant / mês</div><div class="v pur" id="oRev">–</div></div>
+    <div class="kpi"><div class="k">Margem por tenant / mês</div><div class="v" id="oMargin">–</div></div>
+    <div class="kpi"><div class="k">Margem bruta</div><div class="v" id="oMarginPct">–</div></div>
+    <div class="bd" id="breakdown"></div>
+  </div>
+</div>
+
+<footer>
+  Fórmulas: EKS control-plane = (2 fixos + cells) × preço/cluster · Compute = (nós fixos + cells×nós/cell) × preço/nó ·
+  demais serviços = qtd × preço unitário. Custo/tenant = total ÷ tenants. Margem/tenant = receita/tenant − custo/tenant.
+  Gerado a partir de <code>docs/architecture/eraser-diagrams-index.md</code> (Views 13/14/15).
+</footer>
+
+<script>
+// ---- Model: [group, id, label, hint, qtyDefault, isDerived, unitDefault, unitLabel] ----
+// qty is either a fixed input OR derived from premissas (isDerived => computed live)
+const ITEMS = [
+  ['COMPUTE (Class A)', 'eks',      'EKS control plane',        'clusters (2 fixos + cells)', null, 'clusters', 73,   '$/cluster·mês'],
+  ['COMPUTE (Class A)', 'ec2',      'EC2 nós (derivado)',       'm8g.2xlarge 1yr RI · Vantage', null,'nodes',   173,  '$/nó·mês (on-dem 262 / spot 89 / SP 191 / RI 173)'],
+  ['DATA (Class A)',    'rdsMem',   'RDS memory (pgvector)',     'db.m8g.2xlarge · MultiAZ + 2 réplicas', 4, false, 160, '$/inst·mês (RI · Vantage on-dem $490)'],
+  ['DATA (Class A)',    'rdsRag',   'RDS rag (pgvector)',        'db.m8g.2xlarge · MultiAZ + 2 réplicas', 4, false, 160, '$/inst·mês (RI · Vantage on-dem $490)'],
+  ['DATA (Class A)',    'rdsLens',  'RDS lens (read-heavy)',     'db.m8g.xlarge · MultiAZ + 2 réplicas',  4, false, 80,  '$/inst·mês (RI · Vantage on-dem $245)'],
+  ['DATA (Class A)',    'rdsProm',  'RDS promptly',              'db.m8g.large · MultiAZ + 1 réplica',    3, false, 40,  '$/inst·mês (RI · Vantage on-dem $123)'],
+  ['DATA (Class A)',    'rdsTrust', 'RDS trust',                 'db.m8g.large · MultiAZ + 1 réplica',    3, false, 40,  '$/inst·mês (RI · Vantage on-dem $123)'],
+  ['DATA (Class A)',    'rdsStore', 'RDS storage (GB)',          'memory+rag pgvector = maior', 4000, false,     0.115,'$/GB·mês'],
+  ['DATA (Class A)',    'rdsProxy', 'RDS Proxy (1 por banco)',   'pooler txn-mode',            6,    false,     50,   '$/proxy·mês'],
+  ['DATA (Class A)',    'cache',    'ElastiCache r7g.large',     'Valkey (−20% vs Redis) · Vantage',3, false,  128,  '$/nó·mês (Valkey 128 / Redis 160 on-dem)'],
+  ['DATA (Class A)',    's3',       'S3 storage (GB)',           'bundles+static+SBOM+state',  15000,false,     0.023,'$/GB·mês'],
+  ['DATA (Class A)',    'ecr',      'ECR storage (GB)',          '⚠️ lifecycle policy = lever',60000,false,     0.10, '$/GB·mês'],
+  ['EDGE / NETWORK',    'alb',      'ALB (shared) + LCU',        'base + LCU sob carga',       2,    false,     60,   '$/ALB·mês'],
+  ['EDGE / NETWORK',    'nat',      'NAT Gateway (base)',        '1 por AZ (3 AZ)',            3,    false,     33,   '$/GW·mês'],
+  ['EDGE / NETWORK',    'natGB',    'NAT data-processed (GB)',   '⚠️ estimativa',              5000, false,     0.045,'$/GB'],
+  ['EDGE / NETWORK',    'cfEgress', 'CloudFront egress (GB)',    '⚠️ VILÃO — 50 TB simulado',  50000,false,     0.085,'$/GB'],
+  ['EDGE / NETWORK',    'cfReq',    'CloudFront requests (M)',   'bilhões/mês (simulado)',     2000, false,     0.75, '$/M req'],
+  ['EDGE / NETWORK',    'waf',      'WAF (ACL+rules+requests)',  'SOC2: ~7 managed groups',    1,    false,     1300, '$/mês (inclui req charge)'],
+  ['EDGE / NETWORK',    'r53',      'Route53 hosted zones',      'plataforma — NÃO per-cliente!',8,  false,     0.90, '$/zona·mês'],
+  ['SECURITY (Class A)','kms',      'KMS keys',                  'CMK + crown-jewel',          8,    false,     1.10, '$/key·mês'],
+  ['SECURITY (Class A)','sm',       'Secrets Manager secrets',   'platform secrets',           30,   false,     0.45, '$/secret·mês'],
+];
+
+const $ = id => document.getElementById(id);
+const money = n => '$' + n.toLocaleString('en-US',{maximumFractionDigits:0});
+const money2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// build panels grouped
+const panels = $('panels');
+let curGroup = null, panel = null;
+for(const it of ITEMS){
+  const [group,id,label,hint,qtyDef,derived,unitDef,unitLbl] = it;
+  if(group!==curGroup){
+    curGroup=group;
+    panel=document.createElement('div'); panel.className='panel'; panel.style.marginBottom='16px';
+    panel.innerHTML='<h2>'+group+'</h2><div class="row head"><div>Item</div><div>Qtd</div><div>Preço unit.</div><div>Subtotal</div></div>';
+    panels.appendChild(panel);
+  }
+  const row=document.createElement('div'); row.className='row';
+  const qtyCell = derived
+    ? '<div class="sub-t" id="q_'+id+'" title="derivado das premissas">–</div>'
+    : '<input type="number" id="q_'+id+'" value="'+qtyDef+'">';
+  row.innerHTML =
+    '<div class="lbl">'+label+'<small>'+hint+' · '+unitLbl+'</small></div>'+
+    qtyCell+
+    '<input type="number" step="any" id="u_'+id+'" value="'+unitDef+'">'+
+    '<div class="sub-t" id="s_'+id+'">–</div>';
+  panel.appendChild(row);
+}
+
+function podsPerNode(){
+  const rp=(+$('reservePct').value||0)/100;
+  const cpuCeil=Math.floor((+$('nodeVcpu').value*1000*(1-rp))/(+$('cpuReqM').value||1));   // CPU-request packing
+  const memCeil=Math.floor((+$('nodeMemGiB').value*1024*(1-rp))/(+$('memReqMi').value||1)); // memory packing
+  const podCeil=$('prefixDeleg').checked?(+$('prefixCap').value||110):(+$('eniMaxPods').value||58); // EKS ENI/IP ceiling
+  return {cpuCeil,memCeil,podCeil,ppn:Math.max(1,Math.min(cpuCeil,memCeil,podCeil))};
+}
+function totalNodes(){
+  const tenants=+$('tenants').value||0, active=(+$('activePct').value||0)/100, ppt=+$('podsPerTenant').value||1;
+  const cells=+$('cells').value||0, fixed=+$('fixedNodes').value||0, ovh=+$('overheadPerCell').value||0;
+  const activePods=tenants*active*ppt;
+  const {ppn}=podsPerNode();
+  const appNodes=Math.ceil(activePods/ppn);
+  return {activePods,ppn,appNodes,total:appNodes+cells*ovh+fixed};
+}
+function rdsInstances(){
+  const dbs=+$('domainDBs').value||0, rep=+$('replicasPerDB').value||0, az=$('rdsMultiAZ').checked?2:1;
+  return dbs*(az+rep);                          // (primary+standby) + read replicas, per domain DB
+}
+function derivedQty(id){
+  const cells=+$('cells').value||0;
+  if(id==='eks') return 2+cells;              // mgmt + build + N cells
+  if(id==='ec2') return totalNodes().total;   // derived from capacity model
+  if(id==='rds') return rdsInstances();       // derived from domain-DB model
+  return 0;
+}
+
+function recompute(){
+  let total=0;
+  for(const it of ITEMS){
+    const id=it[1], derived=it[5];
+    let qty;
+    if(derived){ qty=derivedQty(id); const q=$('q_'+id); if(q) q.textContent=qty; }
+    else qty=+$('q_'+id).value||0;
+    const unit=+$('u_'+id).value||0;
+    const sub=qty*unit;
+    $('s_'+id).textContent=money(sub);
+    total+=sub;
+  }
+  const tenants=Math.max(1,+$('tenants').value||1);
+  const rev=+$('revPerTenant').value||0;
+  const perTenant=total/tenants;
+  const margin=rev-perTenant;
+  const marginPct= rev>0 ? (margin/rev*100) : 0;
+
+  $('oTotal').textContent=money(total)+' /mês';
+  $('oPerTenant').textContent=money2(perTenant)+' /tenant';
+  $('oRev').textContent=money2(rev)+' /tenant';
+  const m=$('oMargin'); m.textContent=money2(margin)+' /tenant'; m.className='v '+(margin>=0?'pos':'neg');
+  const mp=$('oMarginPct'); mp.textContent=(rev>0?marginPct.toFixed(1)+'%':'—'); mp.className='v '+(margin>=0?'pos':'neg');
+
+  // breakdown by group
+  const groups={};
+  for(const it of ITEMS){ const g=it[0], id=it[1], derived=it[5];
+    const qty=derived?derivedQty(id):(+$('q_'+id).value||0);
+    groups[g]=(groups[g]||0)+qty*(+$('u_'+id).value||0);
+  }
+  $('breakdown').innerHTML=Object.entries(groups)
+    .map(([g,v])=>'<div><span>'+g.replace(/\s*\(Class A\)/,'')+'</span><b>'+money(v)+' ('+(v/total*100||0).toFixed(0)+'%)</b></div>').join('');
+
+  // capacity readout — show the derivation, not just the result
+  const cap=podsPerNode(), tn=totalNodes();
+  const binding = cap.ppn===cap.cpuCeil?'CPU-request':(cap.ppn===cap.podCeil?'ENI/pod-density':'memória');
+  const cellsN=+$('cells').value||0, fixedN=+$('fixedNodes').value||0, ovhN=+$('overheadPerCell').value||0;
+  $('capReadout').innerHTML=
+    '<div><span>Pods por nó = min(3 tetos)</span><b>'+cap.ppn+' <span style="color:var(--mut)">(gargalo: '+binding+' · CPU '+cap.cpuCeil+' / mem '+cap.memCeil+' / pod '+cap.podCeil+')</span></b></div>'+
+    '<div><span>Pods ativos ('+$('activePct').value+'% × '+$('podsPerTenant').value+'/tenant)</span><b>'+Math.round(tn.activePods).toLocaleString()+'</b></div>'+
+    '<div><span>Nós = app + overhead·cells + fixos</span><b>'+tn.appNodes+' + '+(cellsN*ovhN)+' + '+fixedN+' = '+tn.total+'</b></div>';
+}
+document.addEventListener('input',recompute);
+document.addEventListener('change',recompute);
+recompute();
+</script>
+</body>
+</html>
