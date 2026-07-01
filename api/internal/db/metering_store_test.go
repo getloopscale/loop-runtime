@@ -11,12 +11,78 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
+
+// meteringPool opens a pgxpool on LOOPZERO_E2E_DATABASE_URL (owner — the happy-path
+// wrapper test proves tx-orchestration + delta-threading; the RLS-load-bearing
+// proof lives in the loopzero_worker-DSN negative twin). Skips when the harness is
+// not wired. The pool-owning MeteringStore commits its OWN tx, so the test can
+// NOT use an outer BEGIN…ROLLBACK — teardown is FK-ordered DELETEs via t.Cleanup.
+func meteringPool(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
+	dsn := os.Getenv("LOOPZERO_E2E_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("LOOPZERO_E2E_DATABASE_URL not set — real-PG metering wrapper test skipped")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return ctx, pool
+}
+
+// seedMeteringFixtureCommitted seeds the FK chain + leader_generations +
+// metering_cursor via the pool (COMMITTED, so the store's own tx sees it),
+// idempotent (FK-ordered DELETE first so a crashed prior run doesn't collide),
+// and registers a t.Cleanup that removes the rows. Returns the stored cursor.
+func seedMeteringFixtureCommitted(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID, cellID string, cursorSQL string) time.Time {
+	t.Helper()
+	cleanupMeteringTenant(ctx, pool, tenantID, cellID)
+	t.Cleanup(func() { cleanupMeteringTenant(ctx, pool, tenantID, cellID) })
+	exec := func(sql string, args ...any) {
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("seed %q: %v", sql, err)
+		}
+	}
+	u, a := "u-"+tenantID, "a-"+tenantID
+	exec(`INSERT INTO users(id,email,username) VALUES ($1,$2,$3)`, u, tenantID+"@t.io", tenantID)
+	exec(`INSERT INTO accounts(id,display_name,owner_id) VALUES ($1,$2,$3)`, a, tenantID, u)
+	exec(`INSERT INTO tenants(id,slug,owner_id,account_id,cell_id) VALUES ($1,$1,$2,$3,$4)`, tenantID, u, a, cellID)
+	exec(`INSERT INTO leader_generations(name,cell_id,holder,generation_id,acquired_at,heartbeat_at)
+	       VALUES ($1,$2,'pod-x',$3,now(),now())`, meteringLoopName, cellID, meteringGen)
+	exec(`INSERT INTO metering_cursor(tenant_id,metric,cell_id,last_metered_at) VALUES ($1,'cpu_core_seconds',$2, `+cursorSQL+`)`, tenantID, cellID)
+
+	var expected time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT last_metered_at FROM metering_cursor WHERE tenant_id=$1 AND metric='cpu_core_seconds' AND cell_id=$2`,
+		tenantID, cellID,
+	).Scan(&expected); err != nil {
+		t.Fatalf("read seeded cursor: %v", err)
+	}
+	return expected
+}
+
+// cleanupMeteringTenant removes all rows a metering fixture created, FK-ordered.
+// leader_generations is scoped by (name, cellID) — each test uses a unique cellID
+// so concurrent fixtures never collide on the (name, cell_id) key.
+func cleanupMeteringTenant(ctx context.Context, pool *pgxpool.Pool, tenantID, cellID string) {
+	_, _ = pool.Exec(ctx, `DELETE FROM usage_records WHERE tenant_id=$1`, tenantID)
+	_, _ = pool.Exec(ctx, `DELETE FROM cost_counters WHERE tenant_id=$1`, tenantID)
+	_, _ = pool.Exec(ctx, `DELETE FROM metering_cursor WHERE tenant_id=$1`, tenantID)
+	_, _ = pool.Exec(ctx, `DELETE FROM leader_generations WHERE name=$1 AND cell_id=$2`, meteringLoopName, cellID)
+	_, _ = pool.Exec(ctx, `DELETE FROM tenants WHERE id=$1`, tenantID)
+	_, _ = pool.Exec(ctx, `DELETE FROM accounts WHERE id=$1`, "a-"+tenantID)
+	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, "u-"+tenantID)
+}
 
 const (
 	meteringLoopName   = "compute-metering"
@@ -206,5 +272,82 @@ func TestMeterComputeSplit_ReturnsTwoPeriodCosts(t *testing.T) {
 	}
 	if row.P2Start.Time != p2Start.Time {
 		t.Errorf("p2_start = %v, want %v (period_end(expected), NOT period_of(now()))", row.P2Start.Time, p2Start.Time)
+	}
+}
+
+// TestMeteringStore_MeterCompute_SamePeriod_WritesCounterAndUsage — the wrapper's
+// same-period path: ONE tx (SET LOCAL app.tenant_id='' → MeterCompute CTE →
+// UpsertUsageRecord) writes cost_counters += delta AND one usage_records row for
+// (tenant,metric,period), and reports advanced=true. RED against the not-yet-existing
+// MeteringStore/MeterInput/NewMeteringStore/MeterCompute (compile failure).
+func TestMeteringStore_MeterCompute_SamePeriod_WritesCounterAndUsage(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-mc-same"
+	const cellID = "cell-ws-mc-same"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '10 seconds'")
+
+	store := NewMeteringStore(pool)
+	advanced, delta, err := store.MeterCompute(ctx, MeterInput{
+		TenantID:     tenantID,
+		Metric:       "cpu_core_seconds",
+		CellID:       cellID,
+		Expected:     expected,
+		ReqMillicore: 500,
+		Gen:          meteringGen,
+		LoopName:     meteringLoopName,
+		LeaderCell:   cellID,
+		MaxDelta:     time.Hour,
+		PlanTier:     "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterCompute: %v", err)
+	}
+	if !advanced {
+		t.Error("advanced = false, want true (cursor advanced, delta metered)")
+	}
+	if delta != 5 { // metering_cost(500, 10s) = 5
+		t.Errorf("delta = %d, want 5", delta)
+	}
+
+	// cost_counters += delta in expected's period.
+	var counter int64
+	if err := pool.QueryRow(ctx,
+		`SELECT value FROM cost_counters WHERE tenant_id=$1 AND metric='cpu_core_seconds'
+		   AND period_start = metering_period_start($2::timestamptz)`,
+		tenantID, expected,
+	).Scan(&counter); err != nil {
+		t.Fatalf("read cost_counter: %v", err)
+	}
+	if counter != 5 {
+		t.Errorf("cost_counter = %d, want 5", counter)
+	}
+
+	// exactly ONE usage_records row for the period, quantity == delta.
+	var usageRows, usageQty int64
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*), COALESCE(sum(quantity),0) FROM usage_records
+		   WHERE tenant_id=$1 AND metric='cpu_core_seconds'
+		     AND period_start = metering_period_start($2::timestamptz)`,
+		tenantID, expected,
+	).Scan(&usageRows, &usageQty); err != nil {
+		t.Fatalf("read usage_records: %v", err)
+	}
+	if usageRows != 1 {
+		t.Errorf("usage_records rows = %d, want 1 (one row per period)", usageRows)
+	}
+	if usageQty != 5 {
+		t.Errorf("usage_records quantity = %d, want 5 (== delta)", usageQty)
+	}
+
+	// cursor advanced past expected (SC-1 forward-only).
+	var advancedCursor bool
+	if err := pool.QueryRow(ctx,
+		`SELECT last_metered_at > $2::timestamptz FROM metering_cursor WHERE tenant_id=$1`,
+		tenantID, expected,
+	).Scan(&advancedCursor); err != nil {
+		t.Fatalf("read cursor: %v", err)
+	}
+	if !advancedCursor {
+		t.Error("cursor last_metered_at did not advance past expected")
 	}
 }
