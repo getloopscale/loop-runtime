@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # LIVE bash regression-protector for Red Team loopzero-cloud#104 closure
 # (TestMemoryExports_CreateIgnoresClientFilename was flaky under `-race`
 # at ~2/10 fail because `h.Create(rec, req)` spawned a detached exports-
@@ -58,8 +59,6 @@
 #                 + `loopzero-cloud/tests/unit/memory_exports_test.go:52 + 229`
 # Allowlist:      .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (#104)
 # Companion (CI): infra/tests/check-dev-public-loopzero-cloud-memory-exports-race-deterministic-syntax_test.sh
-
-set -euo pipefail
 
 PLAN_SLUG="loopzero-cloud-memory-exports-race-deterministic"
 ISSUE_REF="loopzero-cloud#104"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # LIVE bash regression-protector for Red Team loopzero-cloud#111 closure
 # (latent risk: the per-Account project-cap count in
 # `enforceProjectCapTx` is a CROSS-TENANT aggregate
@@ -61,8 +62,6 @@
 #                 + `api/tests/integration/project_cap_hermetic_m5_test.go:257`
 # Allowlist:      .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (#111)
 # Companion (CI): infra/tests/check-dev-public-engine-project-cap-rls-independent-syntax_test.sh
-
-set -euo pipefail
 
 PLAN_SLUG="engine-project-cap-rls-independent"
 ISSUE_REF="loopzero-cloud#111"
