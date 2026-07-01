@@ -101,7 +101,19 @@ SELECT
   COALESCE(jsonb_array_length(latest_build.apps_spec), 0)::bigint AS apps_count,
   COALESCE(latest_build.apps_spec->0->>'type', '')::text AS latest_framework_raw,
   COALESCE(latest_build.environment, '')::text AS latest_build_environment,
-  COALESCE(active_release.status, '')::text AS active_release_status_raw
+  COALESCE(active_release.status, '')::text AS active_release_status_raw,
+  -- T3.1 of plan dashboard-badge-data-plane-poller — closes Red Team
+  -- loopzero-cloud#128. Surfaces the most recent data-plane readiness
+  -- snapshot persisted by the DataPlanePoller (Runnable in
+  -- loopzero-app-operator) into the dashboard /projects list so the badge
+  -- can distinguish control-plane ACTIVE + data-plane-serving from
+  -- control-plane ACTIVE + data-plane-down. Prefers `kind='permanent'`
+  -- env_targets (production-flavor) because the badge on the list is
+  -- a per-project verdict, not per-env. Rows without a snapshot yet
+  -- (Cleanroom warm-up window before the first poller tick) surface
+  -- as NULL — the dashboard maps NULL to the honest "Unknown" state.
+  replicas_snap.last_replicas_ready_value AS last_replicas_ready_value,
+  replicas_snap.last_replicas_ready_at AS last_replicas_ready_at
 FROM projects p
 LEFT JOIN LATERAL (
   SELECT COUNT(*) AS cnt
@@ -144,6 +156,21 @@ LEFT JOIN LATERAL (
   ORDER BY r.created_at DESC, r.id DESC
   LIMIT 1
 ) active_release ON true
+LEFT JOIN LATERAL (
+  -- T3.1 data-plane snapshot LATERAL — companion to migration 000045.
+  -- Picks the most recently scraped snapshot for a permanent env; the
+  -- partial index `idx_environment_targets_last_replicas_ready_at`
+  -- (WHERE NOT NULL) keeps this ordered scan cheap even during
+  -- Cleanroom warm-up when most rows are still NULL.
+  SELECT et.last_replicas_ready_value, et.last_replicas_ready_at
+  FROM environment_targets et
+  WHERE et.tenant_id = p.tenant_id
+    AND et.project_id = p.name
+    AND et.kind = 'permanent'
+    AND et.last_replicas_ready_at IS NOT NULL
+  ORDER BY et.last_replicas_ready_at DESC
+  LIMIT 1
+) replicas_snap ON true
 WHERE p.tenant_id = $1
 ORDER BY p.name;
 

@@ -10,6 +10,6 @@
 
 DROP INDEX IF EXISTS idx_env_targets_last_replicas_ready_at;
 
-ALTER TABLE env_targets
+ALTER TABLE environment_targets
   DROP COLUMN IF EXISTS last_replicas_ready_at,
   DROP COLUMN IF EXISTS last_replicas_ready_value;

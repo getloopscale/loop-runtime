@@ -297,6 +297,21 @@ type ProjectSummary struct {
 	// production releases rendered Live across 4 surfaces. Empty string
 	// when no builds exist.
 	LatestBuildEnvironment string `json:"latest_build_environment,omitempty"`
+	// LastReplicasReadyValue + LastReplicasReadyAt — T3.2 of plan
+	// dashboard-badge-data-plane-poller closing Red Team loopzero-cloud#128
+	// (badge lies "Live" when control-plane ACTIVE + data-plane 502).
+	// The DataPlanePoller Runnable in loopzero-app-operator scrapes
+	// kube_deployment_status_replicas_ready per (tenant,project,env)
+	// tuple and UPDATEs environment_targets on each tick. Surfaced here
+	// via the ListProjectsWithSummaryByTenant LATERAL join for the
+	// permanent (production-flavor) env. Nil means no snapshot yet —
+	// the dashboard maps NULL to the honest "Unknown" state per EC-7
+	// no-flicker headroom, NOT to Live-or-Down. Pointer + `omitempty`
+	// forces key absence on the wire (value-type time.Time with omitempty
+	// silently serializes `"0001-01-01T00:00:00Z"` — the same trap #118
+	// fixed for LastDeployAt).
+	LastReplicasReadyValue *int       `json:"last_replicas_ready_value,omitempty"`
+	LastReplicasReadyAt    *time.Time `json:"last_replicas_ready_at,omitempty"`
 }
 
 // ProjectStore abstracts project persistence (DIP).

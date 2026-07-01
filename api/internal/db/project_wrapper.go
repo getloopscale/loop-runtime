@@ -405,6 +405,22 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			t := r.LastDeployAt.Time
 			out.LastDeployAt = &t
 		}
+		// T3.2 of plan dashboard-badge-data-plane-poller (Red Team
+		// loopzero-cloud#128). Both pgtype fields carry .Valid=false when
+		// the environment_targets row has no data-plane snapshot yet
+		// (Cleanroom warm-up window before the first DataPlanePoller
+		// tick OR the poller is disabled via the env-gate). Nil pointers
+		// + `json:"...,omitempty"` produce absent JSON keys — the
+		// dashboard maps absence to the honest "Unknown" state without
+		// collapsing it to Down.
+		if r.LastReplicasReadyValue.Valid {
+			v := int(r.LastReplicasReadyValue.Int32)
+			out.LastReplicasReadyValue = &v
+		}
+		if r.LastReplicasReadyAt.Valid {
+			t := r.LastReplicasReadyAt.Time
+			out.LastReplicasReadyAt = &t
+		}
 		results = append(results, out)
 	}
 	return results, nil

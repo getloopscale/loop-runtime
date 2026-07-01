@@ -6,7 +6,7 @@
 // invariant lives in api/tests/integration/migration_045_*_test.go
 // (integration companion; requires live PG).
 //
-// Migration adds two nullable snapshot columns to env_targets so the
+// Migration adds two nullable snapshot columns to environment_targets so the
 // list-page badge can be data-plane-aware (populated by the
 // data-plane poller shipped alongside — see plan T2.1).
 
@@ -26,7 +26,7 @@ func readMigration045(t *testing.T, direction string) string {
 	migrationPath := filepath.Join(
 		filepath.Dir(thisFile),
 		"..", "..", "internal", "db", "migrations",
-		"000045_env_targets_last_replicas_ready."+direction+".sql",
+		"000045_environment_targets_last_replicas_ready."+direction+".sql",
 	)
 	data, err := os.ReadFile(migrationPath)
 	if err != nil {
@@ -53,22 +53,22 @@ func TestMigration045_UpAddsCanonicalColumns(t *testing.T) {
 		}
 	}
 
-	// Must ALTER env_targets specifically — not any other table.
-	if !strings.Contains(sql, "ALTER TABLE env_targets") {
-		t.Errorf("migration 000045 up.sql must target ALTER TABLE env_targets (poller writes to this table)")
+	// Must ALTER environment_targets specifically — not any other table.
+	if !strings.Contains(sql, "ALTER TABLE environment_targets") {
+		t.Errorf("migration 000045 up.sql must target ALTER TABLE environment_targets (poller writes to this table)")
 	}
 }
 
 // TestMigration045_UpCreatesPartialIndex asserts the partial index
 // pattern per blueprint Q4 answer + plan T1.1 acceptance. Partial
 // index skips NULL rows so it stays proportional to actually-polled
-// envs (not the full env_targets table).
+// envs (not the full environment_targets table).
 func TestMigration045_UpCreatesPartialIndex(t *testing.T) {
 	sql := readMigration045(t, "up")
 
 	requiredFragments := []string{
 		"CREATE INDEX IF NOT EXISTS idx_env_targets_last_replicas_ready_at",
-		"ON env_targets (last_replicas_ready_at DESC)",
+		"ON environment_targets (last_replicas_ready_at DESC)",
 		"WHERE last_replicas_ready_at IS NOT NULL",
 	}
 	for _, fragment := range requiredFragments {
