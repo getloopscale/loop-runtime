@@ -68,10 +68,15 @@ assert "E1 command palette Search literal probe"  grep -Fq 'Search' "$SCRIPT"
 assert "E2 FAB visible-text literal probe"        grep -Fq 'Get your app live' "$SCRIPT"
 assert "E3 primary token darker probe"            grep -Fq -- '--primary' "$SCRIPT"
 
-# --- Section F: source-side fix landed (contrast override) ---
+# --- Section F: source-side fix landed (contrast override + escape) ---
 assert "F1 index.css exists"                      test -f "$INDEX_CSS"
-assert "F2 --primary override in @theme"          grep -Eq '(--primary:[[:space:]]*oklch\(0\.(5[0-5]|4[5-9]))' "$INDEX_CSS"
+assert "F2 --primary override in :root"           grep -Eq '(--primary:[[:space:]]*oklch\(0\.(5[0-5]|4[5-9]))' "$INDEX_CSS"
 assert "F3 comment cites #163"                    grep -Fq '#163' "$INDEX_CSS"
+# v2: catches Red Team's specificity finding — .dark block MUST redeclare
+# --primary or @loopzero/ui/tokens.css .dark override wins on real runtime.
+assert "F4 .dark scope --primary override"        grep -Pzoq '\.dark\s*\{\s*[^}]*--primary:\s*oklch\(0\.(5[0-5]|4[5-9])' "$INDEX_CSS"
+# v2: escape for text-primary on dark bg (span truncate 4.37 case).
+assert "F5 .text-primary utility escape"          grep -Pzoq '\.text-primary\s*\{\s*color:' "$INDEX_CSS"
 
 # --- Section G: aria-label mirror visible text (command palette + FAB) ---
 assert "G1 top-bar aria-label starts with Search" grep -Fq 'Search — open command palette' "$TOPBAR"

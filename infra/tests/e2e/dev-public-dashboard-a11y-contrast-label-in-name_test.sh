@@ -80,12 +80,33 @@ should_run() {
 # onboarding FAB); scenarios A + B both target it.
 locate_entry_chunk() {
   local index_html chunk
-  index_html=$(curl -sSk "$APP_URL/" || echo "")
+  index_html=$(curl -sSk --retry 5 --retry-delay 1 --retry-all-errors --max-time 60 "$APP_URL/" 2>/dev/null || echo "")
   chunk=$(echo "$index_html" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)
   if [ -z "$chunk" ]; then
     return 1
   fi
   echo "$chunk"
+}
+
+# Fetch a chunk into a tmp file (avoids bash-string capture truncation
+# on large binary-ish JS blobs) + a minimum-size guard.  The entry
+# chunk is ~68 KB; anything below 40 KB triggers a retry.  Uses
+# HTTP/1.1 to defeat intermittent Caddy HTTP/2 early-close on
+# modulepreload-heavy chunks.  Output: path to the tmp file, caller
+# is responsible for `rm -f`.
+fetch_chunk_file() {
+  local url="$1" tmp tries=0 size=0
+  tmp=$(mktemp)
+  while [ $tries -lt 5 ]; do
+    curl -sSk --http1.1 --retry 3 --retry-delay 1 --retry-all-errors --max-time 60 "$url" -o "$tmp" 2>/dev/null || true
+    size=$(wc -c < "$tmp" 2>/dev/null || echo 0)
+    if [ "$size" -ge 40000 ]; then
+      break
+    fi
+    tries=$((tries + 1))
+    sleep 1
+  done
+  printf '%s' "$tmp"
 }
 
 preflight() {
@@ -119,13 +140,14 @@ scenario_a() {
     return 0
   fi
 
-  local body
-  body=$(curl -sSk "$APP_URL/$chunk" || echo "")
-  if echo "$body" | grep -Fq 'Search — open command palette'; then
+  local tmp
+  tmp=$(fetch_chunk_file "$APP_URL/$chunk")
+  if grep -Fq 'Search — open command palette' "$tmp"; then
     pass "A1 entry chunk carries 'Search — open command palette' aria-label"
   else
     fail "A1 entry chunk missing 'Search — open command palette' aria-label"
   fi
+  rm -f "$tmp"
 }
 
 scenario_b() {
@@ -143,13 +165,13 @@ scenario_b() {
     return 0
   fi
 
-  local body
-  body=$(curl -sSk "$APP_URL/$chunk" || echo "")
+  local tmp
+  tmp=$(fetch_chunk_file "$APP_URL/$chunk")
 
   # Visible-text literal "Get your app live" still ships (was there pre-fix
   # too — the guard is that the aria-label carries it in the RIGHT order:
   # visible-text first per WCAG 2.5.3 Label in Name).
-  if echo "$body" | grep -Fq 'Get your app live'; then
+  if grep -Fq 'Get your app live' "$tmp"; then
     pass "B1 entry chunk carries 'Get your app live' visible-text literal"
   else
     fail "B1 entry chunk missing 'Get your app live' literal"
@@ -160,11 +182,12 @@ scenario_b() {
   # ordering is `<count>/<total> — Get your app live`. Vite emits the
   # runtime concat as ` — Get your app live. Click to expand.` — grep
   # the DASH-Get-your prefix as the shipping proof.
-  if echo "$body" | grep -Fq ' — Get your app live. Click to expand.'; then
+  if grep -Fq ' — Get your app live. Click to expand.' "$tmp"; then
     pass "B2 FAB aria-label uses ' — Get your app live. Click to expand.' suffix (badge-first ordering)"
   else
     fail "B2 FAB aria-label missing badge-first ordering fingerprint"
   fi
+  rm -f "$tmp"
 }
 
 scenario_c() {
@@ -180,7 +203,7 @@ scenario_c() {
   # for the darker --primary override marker (the "#163" comment or the
   # oklch value).
   local index_html
-  index_html=$(curl -sSk "$APP_URL/" || echo "")
+  index_html=$(curl -sSk --retry 3 --retry-delay 1 --max-time 30 "$APP_URL/" || echo "")
   local css_chunks
   css_chunks=$(echo "$index_html" | grep -oE 'assets/[A-Za-z0-9_-]+\.css' | head -3 || true)
   if [ -z "$css_chunks" ]; then
@@ -190,22 +213,46 @@ scenario_c() {
 
   # Vite minifies `oklch(0.55 0.22 296)` → `oklch(55% .22 296)` (percent
   # notation). Match either form so the test survives a minifier tweak.
-  local found=0
+  # Red Team #163 v1 caught that a :root-only override is dead in the
+  # app's actual runtime theme (`.dark` scope wins by CSS cascade); v2
+  # requires the darker override to appear ALSO within a .dark scope.
+  local found_root=0
+  local found_dark=0
+  local found_text_escape=0
   local darker_pattern='oklch\((0\.5[0-5]|5[0-5]%)'
   while IFS= read -r css; do
     [ -z "$css" ] && continue
-    local body
-    body=$(curl -sSk "$APP_URL/$css" || echo "")
-    if echo "$body" | grep -Eq -- "--primary:[[:space:]]*$darker_pattern"; then
-      found=1
-      break
+    local tmp
+    tmp=$(fetch_chunk_file "$APP_URL/$css")
+    if grep -Eq -- "--primary:[[:space:]]*$darker_pattern" "$tmp"; then
+      found_root=1
     fi
+    # Look for `.dark{…--primary:oklch(0.55…}` — minifier collapses
+    # whitespace but the ordering `.dark{...--primary:oklch(0.5X` is
+    # stable regardless of other declarations in the block.
+    if grep -Eq -- "\.dark\{[^}]*--primary:[[:space:]]*$darker_pattern" "$tmp"; then
+      found_dark=1
+    fi
+    if grep -Eq -- '\.text-primary\{color:oklch' "$tmp"; then
+      found_text_escape=1
+    fi
+    rm -f "$tmp"
   done <<< "$css_chunks"
 
-  if [ "$found" -eq 1 ]; then
-    pass "C1 CSS bundle carries --primary darker override (oklch(0.5X ...))"
+  if [ "$found_root" -eq 1 ]; then
+    pass "C1 CSS bundle carries --primary darker override at some scope"
   else
     fail "C1 CSS bundle does not carry --primary darker override — token still at default 0.628"
+  fi
+  if [ "$found_dark" -eq 1 ]; then
+    pass "C2 --primary darker override scoped to .dark (v2 — Red Team specificity fix)"
+  else
+    fail "C2 .dark { --primary: oklch(0.5X ...) } missing — @loopzero/ui .dark selector will win at runtime"
+  fi
+  if [ "$found_text_escape" -eq 1 ]; then
+    pass "C3 .text-primary escape → primary-glow (span truncate on dark bg case)"
+  else
+    fail "C3 .text-primary color escape missing — span truncate stays at 4.37 on dark bg"
   fi
 }
 
