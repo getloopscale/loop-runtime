@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 491,
+  "canonical_sh": 494,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 491,
+      "to": 494,
+      "reason": "Red Team loopzero-cloud#158 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-promote-ensure-env_test.sh (3-scenario LIVE \u2014 boot log wire + source-level method + non-existent project typed 4xx) + infra/tests/check-dev-public-promote-ensure-env-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-promote-ensure-env.sh (aggregator with Go unit tests). Fix: PromoteHandler.WithEnvironmentEnsurer wired in composition root + EnsureEnvironment call in promote handler (analog of m37/#37 fix on the promote path). Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 488,
