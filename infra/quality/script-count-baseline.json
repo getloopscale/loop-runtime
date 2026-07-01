@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 506,
+  "canonical_sh": 509,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 506,
+      "to": 509,
+      "reason": "Red Team loopzero/loopzero#163 closure canonical triplet \u2014 +3 net. MAJOR a11y WCAG 1.4.3 (contraste AA) + WCAG 2.5.3 (label-in-name): --primary token oklch(0.628) ~ #995ffe reprovava AA em 2 surfaces (3.87 white-on-primary + 4.37 primary-on-dark), e aria-labels do command palette button + FAB onboarding n\u00e3o continham o texto vis\u00edvel. New scripts: infra/tests/e2e/dev-public-dashboard-a11y-contrast-label-in-name_test.sh (3-scenario LIVE bundle-grep \u2014 Search aria-label + FAB badge-first + --primary darker in CSS bundle) + infra/tests/check-dev-public-dashboard-a11y-contrast-label-in-name-syntax_test.sh (29-assertion hermetic guard incl. fix-source presence checks) + archive/canonical-tests-v1/scripts/local/dogfood-dashboard-a11y-contrast-label-in-name.sh (S1 + S2 + S3 aggregator). Fix multi-layer em loopzero-cloud: (a) dashboard/src/index.css @theme override \u2014 --primary: oklch(0.55 0.22 296) darker, passes AA vs white; (b) top-bar.tsx aria-label starts with visible 'Search' verbatim; (c) onboarding-panel.tsx FAB aria-label starts with '{completed}/{total}' badge visible text. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 503,

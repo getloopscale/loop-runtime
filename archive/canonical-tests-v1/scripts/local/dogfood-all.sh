@@ -116,6 +116,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh"                    # Red Team loopzero-cloud#160 (2026-07-01) — loopzero logs sem --build "No builds found" apesar de builds existirem
   "archive/canonical-tests-v1/scripts/local/dogfood-cli-promote-non-tty.sh"                               # Red Team loopzero-cloud#161 (2026-07-01) — promote non-TTY hang
   "archive/canonical-tests-v1/scripts/local/dogfood-signup-auth-check-email.sh"                           # Red Team loopzero/loopzero#162 (2026-07-01) — BLOCKER P0 signup /auth/check-email 404
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-a11y-contrast-label-in-name.sh"             # Red Team loopzero/loopzero#163 (2026-07-01) — MAJOR a11y WCAG 1.4.3 + 2.5.3
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)
