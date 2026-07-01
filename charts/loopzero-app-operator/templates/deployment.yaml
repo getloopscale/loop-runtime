@@ -68,16 +68,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "loopzero-common.fullname" . }}
-          {{- if .Values.runtimeKubeconfigMount.enabled }}
-          # T1.4a of deep-review-remediation-plan (closes find_arch_002 / find_arch_007 partial):
-          # mount the cell-aware Secret + set RUNTIME_KUBECONFIG env so the
-          # operator binary can resolve per-cell runtime clients via
-          # CellAwareRuntimeClientFactory.
-          #
-          # When .Values.runtimeKubeconfigMount.requireRunning is true (set
-          # post-rollout), the operator main flips LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
-          # which fail-fasts on missing/broken kubeconfig (per ADR D3).
+          {{- if or .Values.runtimeKubeconfigMount.enabled (and .Values.dataPlanePoller .Values.dataPlanePoller.enabled) }}
           env:
+            {{- if .Values.runtimeKubeconfigMount.enabled }}
+            # T1.4a of deep-review-remediation-plan (closes find_arch_002 / find_arch_007 partial):
+            # mount the cell-aware Secret + set RUNTIME_KUBECONFIG env so the
+            # operator binary can resolve per-cell runtime clients via
+            # CellAwareRuntimeClientFactory.
+            #
+            # When .Values.runtimeKubeconfigMount.requireRunning is true (set
+            # post-rollout), the operator main flips LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
+            # which fail-fasts on missing/broken kubeconfig (per ADR D3).
             - name: RUNTIME_KUBECONFIG
               value: {{ .Values.runtimeKubeconfigMount.path | default "/etc/loopzero/runtime/kubeconfig" }}
             - name: RUNTIME_KUBE_CONTEXT
@@ -85,6 +86,22 @@ spec:
             {{- if .Values.runtimeKubeconfigMount.requireRunning }}
             - name: LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
               value: "true"
+            {{- end }}
+            {{- end }}
+            {{- if and .Values.dataPlanePoller .Values.dataPlanePoller.enabled }}
+            {{- with .Values.dataPlanePoller }}
+            # T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
+            # Fail-fast on missing pgUrl/prometheusUrl — refuses to start
+            # rather than silently no-op.
+            - name: LOOPZERO_DATA_PLANE_POLLER_ENABLED
+              value: "true"
+            - name: LOOPZERO_DATA_PLANE_POLLER_PG_URL
+              value: {{ required "dataPlanePoller.pgUrl is required when dataPlanePoller.enabled=true" .pgUrl | quote }}
+            - name: LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL
+              value: {{ required "dataPlanePoller.prometheusUrl is required when dataPlanePoller.enabled=true" .prometheusUrl | quote }}
+            - name: LOOPZERO_DATA_PLANE_POLLER_INTERVAL
+              value: {{ .interval | default "30s" | quote }}
+            {{- end }}
             {{- end }}
           {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
