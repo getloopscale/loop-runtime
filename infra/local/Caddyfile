@@ -534,12 +534,25 @@ auth-dev.loopzero.example {
 #   bash infra/scripts/local/caddy-build-with-cloudflare.sh
 # once per host; idempotent. `caddy list-modules | grep dns.providers`
 # must show `dns.providers.cloudflare` for this block to issue certs.
+#
+# Red Team loopzero-cloud#127 root cause (2026-06-30 → 2026-07-01):
+# the upstream was previously `https://172.18.0.10:443` — a hardcoded
+# Docker network IP. Docker network 172.18.0.0/16 assigns container IPs
+# via DHCP; k3d cluster containers get a new IP on every `docker restart`
+# / `k3d cluster create`. The IP `172.18.0.10` drifted from
+# k3d-loopzero-workload-serverlb to k3d-loopzero-vault-serverlb after a restart
+# and every customer-app request silently routed to VAULT → 502
+# sustentado for the ENTIRE Red Team dev-public probe surface. The
+# canonical stable form is `https://127.0.0.1:8443` — k3d declares the
+# workload serverlb host-port mapping (443 → 8443) which does NOT drift
+# across restarts. Regression-protector:
+# infra/tests/check-caddyfile-no-docker-network-ip_test.sh (hermetic).
 *.preview-dev.loopzero.example {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     resolvers 1.1.1.1
   }
-  reverse_proxy https://172.18.0.10:443 {
+  reverse_proxy https://127.0.0.1:8443 {
     header_up Host {http.request.host.labels.3}.loopzero.local
     transport http {
       tls_insecure_skip_verify
@@ -569,12 +582,21 @@ auth-dev.loopzero.example {
 #
 # TLS via Cloudflare DNS-01 challenge (LE prod). CF_API_TOKEN env var
 # canonical (same as preview block above).
+#
+# Red Team loopzero-cloud#127 root cause (2026-06-30 → 2026-07-01): same
+# as the *.preview-dev.loopzero.example block above — the previous
+# `https://172.18.0.10:443` hardcoded Docker network IP drifted from
+# k3d-loopzero-workload-serverlb to k3d-loopzero-vault-serverlb after a docker
+# restart and every customer-app request routed to VAULT → 502
+# sustentado. Canonical stable form: `https://127.0.0.1:8443`.
+# Regression-protector:
+# infra/tests/check-caddyfile-no-docker-network-ip_test.sh (hermetic).
 *.prod-dev.loopzero.example {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     resolvers 1.1.1.1
   }
-  reverse_proxy https://172.18.0.10:443 {
+  reverse_proxy https://127.0.0.1:8443 {
     header_up Host {http.request.host.labels.3}.loopzero.local
     transport http {
       tls_insecure_skip_verify
