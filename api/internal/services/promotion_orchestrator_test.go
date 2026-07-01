@@ -181,7 +181,7 @@ func TestPromote_HappyPath(t *testing.T) {
 		Environment: "staging",
 		Status:      string(statemachine.ReleaseActive),
 		GitCommit:   "abc123",
-		Apps:        json.RawMessage(`[{"name":"api","url":"https://api.staging.dev.loopzero.example"}]`),
+		Apps:        json.RawMessage(`[{"name":"api","type":"server","url":"https://api.staging.dev.loopzero.example"}]`),
 	}
 	rs.releases["rel-src-1"] = sourceRelease
 	rs.activeByEnv["tn-1-proj-1-staging"] = sourceRelease
@@ -241,8 +241,9 @@ func TestPromote_HappyPath(t *testing.T) {
 	if result.ToEnv != "production" {
 		t.Errorf("expected to production, got %s", result.ToEnv)
 	}
-	if result.URL != "https://my-api-production.dev.loopzero.example" {
-		t.Errorf("expected URL, got %s", result.URL)
+	// Red Team #159 canonical formula: `{tenant}-{project}-{entryApp}-{env}.{domain}`.
+	if result.URL != "https://tn-1-my-api-api-production.dev.loopzero.example" {
+		t.Errorf("expected canonical URL, got %s", result.URL)
 	}
 
 	// Verify git push was to target environment
@@ -493,7 +494,7 @@ func newPromoteTestFixture() promoteTestFixture {
 		Environment: "staging",
 		Status:      string(statemachine.ReleaseActive),
 		GitCommit:   "src-commit-t21",
-		Apps:        json.RawMessage(`[{"name":"api","url":"https://api.staging.dev.loopzero.example"}]`),
+		Apps:        json.RawMessage(`[{"name":"api","type":"server","url":"https://api.staging.dev.loopzero.example"}]`),
 	}
 	rs.releases[sourceRelease.ID] = sourceRelease
 	rs.activeByEnv["tn-t21-proj-t21-staging"] = sourceRelease
@@ -631,12 +632,17 @@ func TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix(t *testing.T) {
 // sub-finding 3 (regression of #61): pre-fix the URL was built from BaseDomain
 // only ("loopzero.local" internal). Post-fix PublicDomain takes precedence so the
 // response URL is the canonical Live URL.
+//
+// 2026-07-01 (Red Team loopzero-cloud#159): the URL formula is now the FAANG
+// canonical `naming.AppURL` — includes tenant + entryApp segments so the URL
+// matches the IngressRoute Host rule. Fixture apps updated to include
+// `type: "server"` so entryApp resolves.
 func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 	rs := newFakePromotionReleaseStore()
 	src := &db.Release{
 		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
-		Apps: json.RawMessage(`[]`),
+		Apps: json.RawMessage(`[{"name":"api","type":"server","url":"https://api.preview.dev.loopzero.example"}]`),
 	}
 	rs.releases["rel-src-1"] = src
 	rs.activeByEnv["tn-1-proj-1-preview"] = src
@@ -662,7 +668,8 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 	if !strings.Contains(result.URL, "prod-dev.loopzero.example") {
 		t.Errorf("Red Team #120 — URL %q must contain canonical PublicDomain 'prod-dev.loopzero.example'", result.URL)
 	}
-	want := "https://my-app-production.prod-dev.loopzero.example"
+	// Red Team #159 canonical FAANG formula: tn + project + entryApp + env
+	want := "https://tn-1-my-app-api-production.prod-dev.loopzero.example"
 	if result.URL != want {
 		t.Errorf("expected URL %q, got %q", want, result.URL)
 	}
@@ -671,12 +678,14 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 // TestPromote_PublicDomainEmpty_FallsBackToBaseDomain — back-compat: when
 // LOOPZERO_PUBLIC_DOMAIN is unset (local Tilt dev), URL falls back to BaseDomain.
 // This preserves the pre-#120 behavior for setups that haven't set PublicDomain.
+//
+// 2026-07-01 (Red Team #159): URL formula now canonical (tenant + entryApp).
 func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
 	rs := newFakePromotionReleaseStore()
 	src := &db.Release{
 		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
-		Apps: json.RawMessage(`[]`),
+		Apps: json.RawMessage(`[{"name":"api","type":"server","url":"https://api.preview.dev.loopzero.example"}]`),
 	}
 	rs.releases["rel-src-1"] = src
 	rs.activeByEnv["tn-1-proj-1-preview"] = src
@@ -696,8 +705,91 @@ func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "https://my-app-production.dev.loopzero.example"
+	// Red Team #159 canonical FAANG formula (fallback BaseDomain path).
+	want := "https://tn-1-my-app-api-production.dev.loopzero.example"
 	if result.URL != want {
 		t.Errorf("expected fallback URL %q, got %q", want, result.URL)
+	}
+}
+
+// TestPromote_URL_UsesCanonicalNamingFormula_RedTeam159 — locks the FAANG
+// canonical URL formula (naming.AppURL) that promote now uses so it matches
+// the IngressRoute Host rule + status.go emission. Pre-fix the URL was
+// `{project}-{env}.{domain}` which produced hostnames like
+// `loopzerokit-example-production.prod-dev.loopzero.example` that Traefik 404'd
+// because they lacked the tenant + entryApp segments — the exact user-visible
+// symptom of #159 (CLI reports success + URL that 404s while the real ingress
+// serves 200 at a different hostname).
+func TestPromote_URL_UsesCanonicalNamingFormula_RedTeam159(t *testing.T) {
+	rs := newFakePromotionReleaseStore()
+	src := &db.Release{
+		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1ae1c0d930691e45", ProjectID: "loopzerokit-example",
+		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
+		// FAANG entryApp resolution: server > frontend non-static > empty.
+		// This fixture mirrors the Red Team's actual repro loopzerokit-example.
+		Apps: json.RawMessage(`[{"name":"app","type":"server","url":"https://preview.dev.loopzero.example"}]`),
+	}
+	rs.releases["rel-src-1"] = src
+	rs.activeByEnv["tn-1ae1c0d930691e45-loopzerokit-example-preview"] = src
+	orch := NewPromotionOrchestrator(PromotionOrchestratorDeps{
+		Releases: rs, EnvTargets: newFakePromotionEnvTargetStore(),
+		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
+		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
+		Locker:       &fakePromotionLocker{},
+		PublicDomain: "prod-dev.loopzero.example",
+		Logger:       slog.Default(),
+	})
+	result, err := orch.Promote(context.Background(), PromotionRequest{
+		TenantID:  "tn-1ae1c0d930691e45",
+		ProjectID: "loopzerokit-example", ProjectName: "loopzerokit-example",
+		FromEnv: "preview", ToEnv: "production", CorrelationID: "c", UserID: "u",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Canonical: `{tenant}-{project}-{entryApp}-{env}.{domain}` — matches
+	// IngressRoute Host rule + status.go emission (SAME URL both surfaces
+	// print → user can copy either and it opens).
+	wantCanonical := "https://tn-1ae1c0d930691e45-loopzerokit-example-app-production.prod-dev.loopzero.example"
+	if result.URL != wantCanonical {
+		t.Errorf("Red Team #159 — URL %q must equal canonical FAANG %q", result.URL, wantCanonical)
+	}
+	// Anti-regression: URL MUST NOT emit the legacy simplified formula.
+	legacyWrong := "https://loopzerokit-example-production.prod-dev.loopzero.example"
+	if result.URL == legacyWrong {
+		t.Errorf("Red Team #159 — URL %q is the legacy formula that produced Traefik 404", result.URL)
+	}
+}
+
+// TestPromote_URL_EmptyWhenNoEntryApp_RedTeam159 — worker-only / static-only
+// releases resolve entryApp=""; per ADR D3 fail-closed, promote must return
+// URL="" (not a synthetic hostname that 404s). Same semantic status.go uses.
+func TestPromote_URL_EmptyWhenNoEntryApp_RedTeam159(t *testing.T) {
+	rs := newFakePromotionReleaseStore()
+	src := &db.Release{
+		ID: "rel-src-2", BuildID: "build-2", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "def",
+		// No server, only static frontend → entryApp empty
+		Apps: json.RawMessage(`[{"name":"web","type":"frontend","rendering":"static"}]`),
+	}
+	rs.releases["rel-src-2"] = src
+	rs.activeByEnv["tn-1-proj-1-preview"] = src
+	orch := NewPromotionOrchestrator(PromotionOrchestratorDeps{
+		Releases: rs, EnvTargets: newFakePromotionEnvTargetStore(),
+		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"def": []byte("y")}},
+		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
+		Locker:       &fakePromotionLocker{},
+		PublicDomain: "prod-dev.loopzero.example",
+		Logger:       slog.Default(),
+	})
+	result, err := orch.Promote(context.Background(), PromotionRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", ProjectName: "static-site",
+		FromEnv: "preview", ToEnv: "production", CorrelationID: "c", UserID: "u",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.URL != "" {
+		t.Errorf("Red Team #159 — URL %q must be empty when entryApp resolves empty (worker-only / static-only); status.go does the same", result.URL)
 	}
 }
