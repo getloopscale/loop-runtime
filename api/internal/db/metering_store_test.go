@@ -458,3 +458,129 @@ func TestMeteringStore_MeterCompute_ZeroDelta_NoUsageRow(t *testing.T) {
 		t.Error("cursor did not advance on the scale-to-zero tick")
 	}
 }
+
+// TestMeteringStore_MeterComputeSplit_WritesTwoUsageRecords — the split wrapper
+// writes TWO usage_records from ONE straddling advance: tail→P1 {P1Start,P1End},
+// head→P2 {P2Start,P2End}. Asserts EACH row's period_start explicitly (SEPA MAJOR:
+// swapping the tail/head period pairing silently mis-bills across two Stripe
+// periods and compiles clean). Seed: expected 10s before this month's boundary,
+// max_delta 20s → tail 10s (cost 5, P1=prior month), head 10s (cost 5, P2=this month).
+func TestMeteringStore_MeterComputeSplit_WritesTwoUsageRecords(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-split"
+	const cellID = "cell-ws-split"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "metering_period_start(now()) - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+
+	adv, delta, err := store.MeterComputeSplit(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: 20 * time.Second, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterComputeSplit: %v", err)
+	}
+	if !adv {
+		t.Error("advanced=false, want true")
+	}
+	if delta != 10 {
+		t.Errorf("delta=%d, want 10 (tail 5 + head 5 = metering_cost(500, max_delta))", delta)
+	}
+
+	// tail → P1: assert the FULL window (period_start AND period_end) — a wrong
+	// period_end on the right start still mis-bills the Stripe billing window.
+	var p1Qty int64
+	var p1EndOK bool
+	if err := pool.QueryRow(ctx,
+		`SELECT quantity, period_end = metering_period_end($2::timestamptz)
+		   FROM usage_records WHERE tenant_id=$1 AND period_start=metering_period_start($2::timestamptz)`,
+		tenantID, expected,
+	).Scan(&p1Qty, &p1EndOK); err != nil {
+		t.Fatalf("read P1 usage: %v", err)
+	}
+	if p1Qty != 5 {
+		t.Errorf("P1 usage quantity=%d, want 5 (tail)", p1Qty)
+	}
+	if !p1EndOK {
+		t.Error("P1 usage period_end != metering_period_end(expected) (wrong Stripe window)")
+	}
+	// head → P2: period_start=period_end(expected) AND period_end=period_end(period_end(expected)).
+	var p2Qty int64
+	var p2EndOK bool
+	if err := pool.QueryRow(ctx,
+		`SELECT quantity, period_end = metering_period_end(metering_period_end($2::timestamptz))
+		   FROM usage_records WHERE tenant_id=$1 AND period_start=metering_period_end($2::timestamptz)`,
+		tenantID, expected,
+	).Scan(&p2Qty, &p2EndOK); err != nil {
+		t.Fatalf("read P2 usage: %v", err)
+	}
+	if p2Qty != 5 {
+		t.Errorf("P2 usage quantity=%d, want 5 (head)", p2Qty)
+	}
+	if !p2EndOK {
+		t.Error("P2 usage period_end != metering_period_end(period_end(expected)) (wrong Stripe window)")
+	}
+	// exactly TWO usage rows total.
+	var totalRows int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE tenant_id=$1`, tenantID).Scan(&totalRows); err != nil {
+		t.Fatalf("count usage: %v", err)
+	}
+	if totalRows != 2 {
+		t.Errorf("usage rows=%d, want 2 (split writes tail->P1 + head->P2)", totalRows)
+	}
+}
+
+// TestMeteringStore_MeterComputeSplit_MultiMonthGap_NoMisattribution — the SC-7
+// distinction (MEET-006): with a multi-month straddle, head MUST land in the
+// period right AFTER expected (metering_period_end(expected)), NEVER period_of(now).
+// Seed: expected = 10s before the month-boundary two months ago, max_delta 20s →
+// tail→P(expected) [3 months ago], head→P(expected)+1 [2 months ago]. now is this
+// month; NEITHER usage row may fall in period_of(now), and no middle month opens.
+func TestMeteringStore_MeterComputeSplit_MultiMonthGap_NoMisattribution(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-mmgap"
+	const cellID = "cell-ws-mmgap"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID,
+		"metering_period_start(now() - interval '2 months') - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+
+	adv, delta, err := store.MeterComputeSplit(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: 20 * time.Second, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterComputeSplit: %v", err)
+	}
+	if !adv || delta != 10 {
+		t.Fatalf("advanced=%v delta=%d, want true 10 (clamp bounds the multi-month gap to max_delta)", adv, delta)
+	}
+
+	// head MUST be in metering_period_end(expected), NOT period_of(now()).
+	var headInExpectedNext, rowInNow int64
+	if err := pool.QueryRow(ctx,
+		`SELECT quantity FROM usage_records WHERE tenant_id=$1 AND period_start=metering_period_end($2::timestamptz)`,
+		tenantID, expected,
+	).Scan(&headInExpectedNext); err != nil {
+		t.Fatalf("read head usage (period_end(expected)): %v", err)
+	}
+	if headInExpectedNext != 5 {
+		t.Errorf("head usage in period_end(expected)=%d, want 5", headInExpectedNext)
+	}
+	// ZERO rows in period_of(now) — the misattribution MEET-006 rejected.
+	if err := pool.QueryRow(ctx,
+		`SELECT COALESCE(sum(quantity),0) FROM usage_records WHERE tenant_id=$1 AND period_start=metering_period_start(now())`,
+		tenantID,
+	).Scan(&rowInNow); err != nil {
+		t.Fatalf("read now-period usage: %v", err)
+	}
+	if rowInNow != 0 {
+		t.Errorf("usage in period_of(now)=%d, want 0 (head must NOT key into now's period — MEET-006)", rowInNow)
+	}
+	// exactly TWO usage rows (no middle month opened).
+	var totalRows int64
+	pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE tenant_id=$1`, tenantID).Scan(&totalRows)
+	if totalRows != 2 {
+		t.Errorf("usage rows=%d, want 2 (no middle-period row from a multi-month gap)", totalRows)
+	}
+}

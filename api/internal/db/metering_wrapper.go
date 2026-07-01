@@ -113,6 +113,73 @@ func (s *MeteringStore) MeterCompute(ctx context.Context, in MeterInput) (advanc
 	return true, row.Delta, nil
 }
 
+func (in MeterInput) splitParams() generated.MeterComputeSplitParams {
+	return generated.MeterComputeSplitParams{
+		ReqMillicore: in.ReqMillicore,
+		TenantID:     in.TenantID,
+		Metric:       in.Metric,
+		CellID:       in.CellID,
+		Expected:     pgtype.Timestamptz{Time: in.Expected, Valid: true},
+		Gen:          in.Gen,
+		LoopName:     in.LoopName,
+		LeaderCell:   in.LeaderCell,
+		MaxDelta:     pgtype.Interval{Microseconds: in.MaxDelta.Microseconds(), Valid: true},
+		PlanTier:     in.PlanTier,
+	}
+}
+
+// MeterComputeSplit runs the ADR-9 period-rollover writer (SC-7 total-clamp) + up
+// to TWO usage_records upserts in ONE RLS-bypass tx: the tail cost bills into P1
+// (expected's period) and the head cost into P2 (the period right after — keyed
+// off metering_period_end(expected), NEVER now()'s period, MEET-006). Each portion
+// is written to its OWN period window (P1Start/P1End vs P2Start/P2End); a zero-cost
+// portion writes no row. Returns advanced=true with the clamped total (tail+head),
+// or advanced=false/delta 0 on HELD (no straddle / lost CAS / stale fence).
+func (s *MeteringStore) MeterComputeSplit(ctx context.Context, in MeterInput) (advanced bool, delta int64, err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, 0, err
+	}
+	defer func() { _ = ignoreTxClosed(tx.Rollback(ctx)) }()
+
+	if _, err = tx.Exec(ctx, setLocalNullTenant); err != nil {
+		return false, 0, err
+	}
+
+	q := generated.New()
+	row, err := q.MeterComputeSplit(ctx, tx, in.splitParams())
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, 0, ignoreTxClosed(tx.Commit(ctx))
+	}
+	if err != nil {
+		return false, 0, err
+	}
+
+	// tail → P1 (expected's period); head → P2 (the next period). Pair each cost
+	// with its OWN window — swapping silently mis-bills across two Stripe periods.
+	if row.TailCost > 0 {
+		if err = q.UpsertUsageRecord(ctx, tx, generated.UpsertUsageRecordParams{
+			ID: uuid.NewString(), TenantID: in.TenantID, Metric: in.Metric,
+			Quantity: row.TailCost, PeriodStart: row.P1Start, PeriodEnd: row.P1End,
+		}); err != nil {
+			return false, 0, err
+		}
+	}
+	if row.HeadCost > 0 {
+		if err = q.UpsertUsageRecord(ctx, tx, generated.UpsertUsageRecordParams{
+			ID: uuid.NewString(), TenantID: in.TenantID, Metric: in.Metric,
+			Quantity: row.HeadCost, PeriodStart: row.P2Start, PeriodEnd: row.P2End,
+		}); err != nil {
+			return false, 0, err
+		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return false, 0, err
+	}
+	return true, row.TailCost + row.HeadCost, nil
+}
+
 // setLocalNullTenant is the transaction-scoped RLS bypass the worker uses to scan
 // across tenants (mig 000023 :127-142). MUST be inside the same tx as the writes.
 const setLocalNullTenant = `SET LOCAL app.tenant_id = ''`
