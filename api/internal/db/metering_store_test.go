@@ -351,3 +351,110 @@ func TestMeteringStore_MeterCompute_SamePeriod_WritesCounterAndUsage(t *testing.
 		t.Error("cursor last_metered_at did not advance past expected")
 	}
 }
+
+// TestMeteringStore_MeterCompute_Held_NoBill — the money-critical HELD branch:
+// a second tick with a now-stale `expected` (cursor already advanced) MUST fail
+// the CAS (0 rows → pgx.ErrNoRows), report advanced=false/delta=0, and write NO
+// bill — counter, usage rows, and cursor all UNCHANGED from the first advance.
+// SC-1/SC-2/SC-6 all funnel to this "held → no bill" path.
+func TestMeteringStore_MeterCompute_Held_NoBill(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-held"
+	const cellID = "cell-ws-held"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+	in := MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: time.Hour, PlanTier: "starter",
+	}
+
+	// First tick advances the cursor + bills.
+	adv1, d1, err := store.MeterCompute(ctx, in)
+	if err != nil {
+		t.Fatalf("first MeterCompute: %v", err)
+	}
+	if !adv1 || d1 != 5 {
+		t.Fatalf("first tick: advanced=%v delta=%d, want true 5", adv1, d1)
+	}
+	snap := func() (counter, usageRows int64, cursor time.Time) {
+		if err := pool.QueryRow(ctx, `SELECT COALESCE(sum(value),0) FROM cost_counters WHERE tenant_id=$1`, tenantID).Scan(&counter); err != nil {
+			t.Fatalf("snap counter: %v", err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE tenant_id=$1`, tenantID).Scan(&usageRows); err != nil {
+			t.Fatalf("snap usage: %v", err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT last_metered_at FROM metering_cursor WHERE tenant_id=$1`, tenantID).Scan(&cursor); err != nil {
+			t.Fatalf("snap cursor: %v", err)
+		}
+		return
+	}
+	c1, u1, cur1 := snap()
+
+	// Second tick with the SAME (now stale) expected → HELD.
+	adv2, d2, err := store.MeterCompute(ctx, in)
+	if err != nil {
+		t.Fatalf("held tick errored (want nil — HELD is a business outcome): %v", err)
+	}
+	if adv2 {
+		t.Error("held tick advanced=true, want false (stale expected → CAS fails)")
+	}
+	if d2 != 0 {
+		t.Errorf("held delta=%d, want 0", d2)
+	}
+
+	c2, u2, cur2 := snap()
+	if c2 != c1 {
+		t.Errorf("HELD changed counter: %d -> %d (must not bill)", c1, c2)
+	}
+	if u2 != u1 {
+		t.Errorf("HELD added usage row(s): %d -> %d (must not bill)", u1, u2)
+	}
+	if !cur2.Equal(cur1) {
+		t.Errorf("HELD moved cursor: %v -> %v (SC-1: no re-advance)", cur1, cur2)
+	}
+}
+
+// TestMeteringStore_MeterCompute_ZeroDelta_NoUsageRow — a scale-to-zero tick
+// (EC-1, req_millicore=0) advances the cursor and bills 0, but writes NO usage
+// record (no spurious 0-quantity Stripe line). advanced=true, delta=0.
+func TestMeteringStore_MeterCompute_ZeroDelta_NoUsageRow(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-zero"
+	const cellID = "cell-ws-zero"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+
+	adv, delta, err := store.MeterCompute(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 0, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: time.Hour, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterCompute: %v", err)
+	}
+	if !adv {
+		t.Error("advanced=false, want true (scale-to-zero advances the cursor, bills 0)")
+	}
+	if delta != 0 {
+		t.Errorf("delta=%d, want 0 (req_millicore=0)", delta)
+	}
+
+	var usageRows int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM usage_records WHERE tenant_id=$1`, tenantID).Scan(&usageRows); err != nil {
+		t.Fatalf("read usage: %v", err)
+	}
+	if usageRows != 0 {
+		t.Errorf("usage_records rows=%d, want 0 (no spurious 0-quantity row)", usageRows)
+	}
+
+	var cursorAdvanced bool
+	if err := pool.QueryRow(ctx,
+		`SELECT last_metered_at > $2::timestamptz FROM metering_cursor WHERE tenant_id=$1`, tenantID, expected,
+	).Scan(&cursorAdvanced); err != nil {
+		t.Fatalf("read cursor: %v", err)
+	}
+	if !cursorAdvanced {
+		t.Error("cursor did not advance on the scale-to-zero tick")
+	}
+}
