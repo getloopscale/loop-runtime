@@ -689,6 +689,13 @@ tasks:
     cmds:
       - bash infra/scripts/local/setup-cross-cluster-networking.sh
       - bash infra/scripts/local/update-cross-cluster-ips.sh
+      # T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
+      # Patches mgmt CoreDNS NodeHosts so `k3d-loopzero-workload-server-0`
+      # resolves — required for the mgmt Prometheus scrape of the workload
+      # cluster's kube-state-metrics NodePort (values-prometheus.yaml).
+      # Idempotent (diff-then-patch). Same mechanism J-17 Loki cross-
+      # cluster uses (memory j17-aprendizado-coredns-cross-cluster-build-lb).
+      - bash infra/scripts/local/networking-cross-cluster-coredns.sh
 
   tokens:provision:
     desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
