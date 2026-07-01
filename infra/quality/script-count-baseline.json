@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 503,
+  "canonical_sh": 506,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 503,
+      "to": 506,
+      "reason": "Red Team loopzero/loopzero#162 closure canonical triplet \u2014 +3 net. BLOCKER P0: post-signup redirect /auth/check-email returned 404 Caddy raw because handle /auth/* proxied everything to BFF that only serves 4 OAuth handlers \u2014 signup funnel broken. New scripts: infra/tests/e2e/dev-public-signup-auth-check-email_test.sh (2-scenario LIVE \u2014 /auth/check-email + /auth/verify each return 200 + text/html, no Caddy raw 404) + infra/tests/check-dev-public-signup-auth-check-email-syntax_test.sh (29-assertion hermetic guard, includes fix-source presence checks: dashboard/src/app.tsx routes + CheckEmailPage + Caddyfile @auth_bff matcher) + archive/canonical-tests-v1/scripts/local/dogfood-signup-auth-check-email.sh (S1 hermetic + S2 vitest + S3 LIVE bash aggregator). Fix multi-layer: (a) Caddyfile named matcher @auth_bff restricts BFF proxy to 4 real OAuth routes; (b) dashboard SPA registers /auth/check-email \u2192 new CheckEmailPage + /auth/verify \u2192 Navigate to /verification; (c) new dashboard/src/pages/check-email.tsx. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Sponsor gating: Fase 4 congelada at\u00e9 #162 fechado."
+    },
     {
       "date": "2026-07-01",
       "from": 500,
