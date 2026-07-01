@@ -742,3 +742,35 @@ func TestArgoAppName_empty_env(t *testing.T) {
 		t.Error("should return error for empty env")
 	}
 }
+
+// Red Team loopzero-cloud#41 regression-protector (2026-06-27): IsPreviewEnv
+// must cover the legacy literal "preview" env name AND the broader
+// "preview-*" prefix the CLI emitted before the canonical "preview-pr-N"
+// pattern was introduced. LIVE DB inspection 2026-06-27 confirmed a row
+// with environment='preview' + kind='permanent' (legacy data) that the
+// strict prefix predicate missed → SQL count of "production envs"
+// included it incorrectly.
+func TestIsPreviewEnv_RedTeam41(t *testing.T) {
+	tests := []struct {
+		envName string
+		want    bool
+	}{
+		{"preview-pr-123", true},   // canonical pattern
+		{"preview-pr-1", true},     // canonical pattern (single digit)
+		{"preview", true},          // legacy CLI literal — Red Team #41 catch
+		{"preview-feature", true},  // broader "preview-*" prefix
+		{"production", false},      // explicit non-preview
+		{"staging", false},         // explicit non-preview
+		{"prod", false},            // short form
+		{"", false},                // empty
+		{"my-preview", false},      // contains "preview" but doesn't start with it
+	}
+	for _, tt := range tests {
+		t.Run(tt.envName, func(t *testing.T) {
+			got := IsPreviewEnv(tt.envName)
+			if got != tt.want {
+				t.Errorf("IsPreviewEnv(%q) = %v, want %v", tt.envName, got, tt.want)
+			}
+		})
+	}
+}

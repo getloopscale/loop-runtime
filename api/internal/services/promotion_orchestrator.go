@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/id"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // PromotionReleaseStore abstracts release persistence for the promotion orchestrator (DIP).
@@ -307,13 +308,27 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	// preserves back-compat for setups (local Tilt dev) where LOOPZERO_PUBLIC_DOMAIN
 	// is unset. Mirrors the canonical pattern at setup_orchestrator.go:296-302
 	// already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
+	//
+	// 2026-07-01 (closes Red Team loopzero-cloud#159): switch from the simplified
+	// legacy formula `{ProjectName}-{ToEnv}.{domain}` (which produced hostnames
+	// like `loopzerokit-example-production.prod-dev.loopzero.example` that Traefik 404'd
+	// because they lacked the tenant + entryApp segments) to the FAANG canonical
+	// naming.AppURL(tenantID, projectID, entryApp, envName, publicDomain) — the
+	// SAME formula the IngressRoute renderer + status.go already use. EntryApp
+	// is resolved from newRelease.Apps via the canonical
+	// naming.ResolveEntryAppFromApps SoT (server > frontend non-static > empty).
+	// When entryApp resolves empty (worker-only / static-only release) URL is
+	// suppressed — fail-closed matches status.go's ADR D3 pattern (dashboard
+	// then renders "URL pending"). Pre-fix: promote reported success + URL
+	// that 404s; post-fix: promote emits the same URL that serves.
 	url := ""
 	domain := o.deps.PublicDomain
 	if domain == "" {
 		domain = o.deps.BaseDomain
 	}
-	if domain != "" {
-		url = fmt.Sprintf("https://%s-%s.%s", req.ProjectName, req.ToEnv, domain)
+	entryApp := naming.ResolveEntryAppFromApps(newRelease.Apps)
+	if domain != "" && entryApp != "" {
+		url = naming.AppURL(req.TenantID, req.ProjectName, entryApp, req.ToEnv, domain)
 	}
 
 	logger.Info("promotion completed",

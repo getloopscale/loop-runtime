@@ -299,6 +299,16 @@ run_step "15-seed-stripe-secret-canonical" "bash $SCRIPT_DIR/seed-stripe-secret-
 # separate rotation cadence: webhook secret vs API key per Stripe runbook).
 run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-keys-canonical.sh $VERIFY_FLAG"
 
+# Step 15c (NEW 2026-07-01 — Red Team loopzero-cloud#156) — Stripe test-mode
+# webhook endpoint provisioning + real whsec capture. Without this the
+# canonical fulfillment flow (payment → checkout.session.completed →
+# plan promotion) is dead because Stripe has no endpoint to POST to, and
+# the placeholder `whsec_dev_*` in dev-credentials.json would fail
+# signature validation even if events arrived. Idempotent: skips when
+# endpoint already exists AND whsec canonical. SKIP graceful when
+# stripe.api_key placeholder/missing (standalone-multi tier).
+run_step "15c-seed-stripe-webhook-endpoint-canonical" "bash $SCRIPT_DIR/seed-stripe-webhook-endpoint-canonical.sh $VERIFY_FLAG"
+
 # Step 16 (NEW 2026-07-01 — plan dashboard-badge-data-plane-poller T6.1) —
 # data-plane poller first-tick warm-up. EC-2 absorption: without this,
 # the first /projects render post `task setup` is a wall of `Unknown`

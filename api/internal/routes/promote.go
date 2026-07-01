@@ -73,6 +73,14 @@ type PromoteHandler struct {
 	projects   PromoteProjectStore
 	service    PromoteService
 	baseDomain string
+	// envEnsurer closes Red Team loopzero-cloud#158 — the promote path was
+	// missing the m37/#37 EnsureEnvironment retrofit that builds.go had.
+	// Without it, promoting to a not-yet-existing production env leaves
+	// the Tenant CR spec.environments[] short of the (project, env)
+	// tuple → AppProject destinations never extend → ArgoCD sync fails
+	// with "namespace not permitted" → release ends in SYNC_FAILED and
+	// the CLI reports success with a URL that never serves (404).
+	envEnsurer EnvironmentEnsurer
 }
 
 // NewPromoteHandler creates a new PromoteHandler.
@@ -82,6 +90,16 @@ func NewPromoteHandler(projects PromoteProjectStore, service PromoteService, bas
 		service:    service,
 		baseDomain: baseDomain,
 	}
+}
+
+// WithEnvironmentEnsurer wires an EnvironmentEnsurer so the promote handler
+// auto-creates the target (production/staging/…) Environment CR before
+// attempting the release-target creation. Nil ensurer (default) preserves
+// legacy behavior (target env must pre-exist). Mirrors
+// BuildHandler.WithEnvironmentEnsurer. Closes Red Team loopzero-cloud#158.
+func (h *PromoteHandler) WithEnvironmentEnsurer(e EnvironmentEnsurer) *PromoteHandler {
+	h.envEnsurer = e
+	return h
 }
 
 // Create handles POST /api/v1/projects/{name}/promote.
@@ -133,6 +151,33 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// `X-Correlation-ID` so existing CLI clients keep working through
 	// one release cycle (helper emits a deprecation WARN on legacy hits).
 	correlationID := correlation.Read(r)
+
+	// Red Team loopzero-cloud#158: auto-create the target env before the release
+	// row is created. Symptomatic pre-fix state: promote → SetDesired created
+	// the env_target row + release row, but the Tenant CR spec.environments[]
+	// was missing (project, ToEnv) → AppProject destinations never extended
+	// to include the target namespace → ArgoCD Application `tn-<tenant>-<env>`
+	// stays OutOfSync/Missing → release → SYNC_FAILED → CLI still reports
+	// success with a URL that 404s. Mirror of the m37/#37 EnsureEnvironment
+	// retrofit already applied to the builds path (builds.go:363-370).
+	//
+	// Nil ensurer preserves legacy behavior (env must pre-exist). Idempotent
+	// on already-existing envs. Failure surfaces as a typed error → JSON.
+	if h.envEnsurer != nil {
+		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, name, req.To); ensureErr != nil {
+			var loopzeroErr *loopzeroerrors.LoopZeroError
+			if errors.As(ensureErr, &loopzeroErr) {
+				writeLoopZeroError(w, loopzeroErr)
+				return
+			}
+			slog.Error("promote: EnsureEnvironment failed",
+				"error", ensureErr.Error(), "tenant_id", uc.TenantID,
+				"project", name, "to", req.To,
+			)
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
+	}
 
 	// Execute promotion
 	result, err := h.service.Promote(ctx, PromoteInput{

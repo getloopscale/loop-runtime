@@ -1,6 +1,54 @@
 {
-  "canonical_sh": 484,
+  "canonical_sh": 509,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 506,
+      "to": 509,
+      "reason": "Red Team loopzero/loopzero#163 closure canonical triplet \u2014 +3 net. MAJOR a11y WCAG 1.4.3 (contraste AA) + WCAG 2.5.3 (label-in-name): --primary token oklch(0.628) ~ #995ffe reprovava AA em 2 surfaces (3.87 white-on-primary + 4.37 primary-on-dark), e aria-labels do command palette button + FAB onboarding n\u00e3o continham o texto vis\u00edvel. New scripts: infra/tests/e2e/dev-public-dashboard-a11y-contrast-label-in-name_test.sh (3-scenario LIVE bundle-grep \u2014 Search aria-label + FAB badge-first + --primary darker in CSS bundle) + infra/tests/check-dev-public-dashboard-a11y-contrast-label-in-name-syntax_test.sh (29-assertion hermetic guard incl. fix-source presence checks) + archive/canonical-tests-v1/scripts/local/dogfood-dashboard-a11y-contrast-label-in-name.sh (S1 + S2 + S3 aggregator). Fix multi-layer em loopzero-cloud: (a) dashboard/src/index.css @theme override \u2014 --primary: oklch(0.55 0.22 296) darker, passes AA vs white; (b) top-bar.tsx aria-label starts with visible 'Search' verbatim; (c) onboarding-panel.tsx FAB aria-label starts with '{completed}/{total}' badge visible text. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 503,
+      "to": 506,
+      "reason": "Red Team loopzero/loopzero#162 closure canonical triplet \u2014 +3 net. BLOCKER P0: post-signup redirect /auth/check-email returned 404 Caddy raw because handle /auth/* proxied everything to BFF that only serves 4 OAuth handlers \u2014 signup funnel broken. New scripts: infra/tests/e2e/dev-public-signup-auth-check-email_test.sh (2-scenario LIVE \u2014 /auth/check-email + /auth/verify each return 200 + text/html, no Caddy raw 404) + infra/tests/check-dev-public-signup-auth-check-email-syntax_test.sh (29-assertion hermetic guard, includes fix-source presence checks: dashboard/src/app.tsx routes + CheckEmailPage + Caddyfile @auth_bff matcher) + archive/canonical-tests-v1/scripts/local/dogfood-signup-auth-check-email.sh (S1 hermetic + S2 vitest + S3 LIVE bash aggregator). Fix multi-layer: (a) Caddyfile named matcher @auth_bff restricts BFF proxy to 4 real OAuth routes; (b) dashboard SPA registers /auth/check-email \u2192 new CheckEmailPage + /auth/verify \u2192 Navigate to /verification; (c) new dashboard/src/pages/check-email.tsx. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Sponsor gating: Fase 4 congelada at\u00e9 #162 fechado."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 500,
+      "to": 503,
+      "reason": "Red Team loopzero-cloud#161 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-cli-promote-non-tty_test.sh (3-scenario LIVE \u2014 isNonInteractive declared + wired + version bump) + infra/tests/check-dev-public-cli-promote-non-tty-syntax_test.sh (20-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-cli-promote-non-tty.sh. Fix in loopzero-cli: PromoteDeps.isNonInteractive + register/deploy.ts wires !stdin.isTTY + rl.on('close') EOF=N defense-in-depth. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 497,
+      "to": 500,
+      "reason": "Red Team loopzero-cloud#160 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-cli-logs-listbuilds-inference_test.sh (3-scenario LIVE \u2014 /builds endpoint contract + CLI source uses listBuilds + version bump gate) + infra/tests/check-dev-public-cli-logs-listbuilds-inference-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh (aggregator with CLI unit tests). Fix in loopzero-cli: logs.ts adds listBuilds as PRIMARY inference source (same SoT as `loopzero build list`) with fallback to getProjectStatus. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 494,
+      "to": 497,
+      "reason": "Red Team loopzero-cloud#159 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-promote-canonical-url_test.sh (3-scenario LIVE \u2014 SoT ResolveEntryAppFromApps + naming.AppURL + anti-silent-success) + infra/tests/check-dev-public-promote-canonical-url-syntax_test.sh (24-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-promote-canonical-url.sh (aggregator with Go unit tests). Fix: new pkg/naming/entry_app.go SoT + promotion_orchestrator.go switches to naming.AppURL canonical formula (analog of J-25 status.url fix on the promote path). Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 491,
+      "to": 494,
+      "reason": "Red Team loopzero-cloud#158 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-promote-ensure-env_test.sh (3-scenario LIVE \u2014 boot log wire + source-level method + non-existent project typed 4xx) + infra/tests/check-dev-public-promote-ensure-env-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-promote-ensure-env.sh (aggregator with Go unit tests). Fix: PromoteHandler.WithEnvironmentEnsurer wired in composition root + EnsureEnvironment call in promote handler (analog of m37/#37 fix on the promote path). Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 488,
+      "to": 491,
+      "reason": "Red Team loopzero-cloud#157 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-billing-pro-price-canonical_test.sh (2-scenario LIVE \u2014 Stripe price unit_amount + /v1/billing/checkout amount_total) + infra/tests/check-dev-public-billing-pro-price-canonical-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-billing-pro-price-canonical.sh (aggregator registered in dogfood-all.sh WRAPPERS). Fix path: Stripe test-mode Pro price recreated at $29.00 canonical (MEET-2026-05-12 D4=B); old $19 price deactivated. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
+    {
+      "date": "2026-07-01",
+      "from": 484,
+      "to": 488,
+      "reason": "Red Team loopzero-cloud#156 closure canonical triplet + new seed script \u2014 +4 net. New scripts: infra/scripts/local/seed-stripe-webhook-endpoint-canonical.sh (Stripe test-mode webhook endpoint provisioning + real whsec capture) + infra/tests/check-seed-stripe-webhook-endpoint-canonical-syntax_test.sh (30-assertion hermetic guard) + infra/tests/e2e/dev-public-billing-webhook-fulfillment_test.sh (3-scenario LIVE) + archive/canonical-tests-v1/scripts/local/dogfood-billing-webhook-fulfillment.sh (aggregator registered in dogfood-all.sh WRAPPERS). Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 482,

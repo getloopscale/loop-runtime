@@ -109,6 +109,14 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-projects-badge-data-plane-aware.sh"    # Red Team #128 (2026-07-01) — plan dashboard-badge-data-plane-poller
   "archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-seed-restarts-cloud.sh"          # Red Team loopzero/loopzero#154 (2026-07-01) — billing 404 upgrade dead
   "archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-price-ids-seed-canonical.sh"    # Red Team loopzero/loopzero#155 (2026-07-01) — BILLING_NOT_CONFIGURED (Stripe price IDs unset)
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-webhook-fulfillment.sh"                 # Red Team loopzero-cloud#156 (2026-07-01) — payment succeeds but plan stays starter (webhook not delivered)
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-pro-price-canonical.sh"                  # Red Team loopzero-cloud#157 (2026-07-01) — preço divergente (Stripe $19 vs UI $29)
+  "archive/canonical-tests-v1/scripts/local/dogfood-promote-ensure-env.sh"                           # Red Team loopzero-cloud#158 (2026-07-01)
+  "archive/canonical-tests-v1/scripts/local/dogfood-promote-canonical-url.sh"                           # Red Team loopzero-cloud#159 (2026-07-01) — loopzero promote imprime URL sem prefixo de tenant (404)
+  "archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh"                    # Red Team loopzero-cloud#160 (2026-07-01) — loopzero logs sem --build "No builds found" apesar de builds existirem
+  "archive/canonical-tests-v1/scripts/local/dogfood-cli-promote-non-tty.sh"                               # Red Team loopzero-cloud#161 (2026-07-01) — promote non-TTY hang
+  "archive/canonical-tests-v1/scripts/local/dogfood-signup-auth-check-email.sh"                           # Red Team loopzero/loopzero#162 (2026-07-01) — BLOCKER P0 signup /auth/check-email 404
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-a11y-contrast-label-in-name.sh"             # Red Team loopzero/loopzero#163 (2026-07-01) — MAJOR a11y WCAG 1.4.3 + 2.5.3
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)

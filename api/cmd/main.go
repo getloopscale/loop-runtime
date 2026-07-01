@@ -306,6 +306,19 @@ func main() {
 		// the same instance so the project Create handler can also use it
 		// for ADR D4 production env auto-create (see srvCfg assignment below).
 		projectEnvEnsurer = ensurer
+		// Red Team loopzero-cloud#158: promote path was missing the m37/#37
+		// EnsureEnvironment retrofit that builds/projects already had.
+		// Without it, `loopzero promote --from preview --to production` for a
+		// project whose production env had NEVER been created reported
+		// success but Tenant CR spec.environments[] stayed short of the
+		// (project, "production") tuple → AppProject destinations never
+		// extended → ArgoCD sync failed → release SYNC_FAILED → the printed
+		// URL 404s. Wire the SAME ensurer instance so all three code paths
+		// (builds / project-create / promote) share one canonical ensurer.
+		if orchDeps != nil && orchDeps.PromoteHandler != nil {
+			orchDeps.PromoteHandler = orchDeps.PromoteHandler.WithEnvironmentEnsurer(ensurer)
+			logger.Info("env ensurer wired to promote handler — promote --to <novo> will auto-create target env (#158)")
+		}
 		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5); also wired to project Create handler for ADR D4 production env auto-create (T4.1)")
 	}
 

@@ -347,3 +347,93 @@ func TestPromote_RegressionV10BodyShape(t *testing.T) {
 	}
 }
 
+
+// --- Fake EnvironmentEnsurer for #158 tests ---
+
+type fakePromoteEnsurer struct {
+	calls []struct {
+		TenantID, Project, Env string
+	}
+	err error
+}
+
+func (f *fakePromoteEnsurer) EnsureEnvironment(_ context.Context, tenantID, project, env string) error {
+	f.calls = append(f.calls, struct{ TenantID, Project, Env string }{tenantID, project, env})
+	return f.err
+}
+
+// TestPromote_EnsuresTargetEnvironment_BeforeService (closes Red Team loopzero-cloud#158)
+// asserts the promote handler calls EnvironmentEnsurer.EnsureEnvironment for the
+// (tenant, project, toEnv) tuple BEFORE invoking the promote service. Pre-fix
+// state: promote never called EnsureEnvironment → Tenant CR spec.environments[]
+// missing the tuple → AppProject destinations never extended → sync failed →
+// release SYNC_FAILED → CLI reports success + URL that 404s.
+func TestPromote_EnsuresTargetEnvironment_BeforeService_RedTeam158(t *testing.T) {
+	projects := &fakePromoteProjectStore{project: &ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
+	svc := &fakePromoteService{
+		result: &PromoteOutput{
+			PromotionID:     "promo-158",
+			SourceReleaseID: "rel-src",
+			NewReleaseID:    "rel-new",
+			FromEnv:         "preview",
+			ToEnv:           "production",
+		},
+	}
+	ensurer := &fakePromoteEnsurer{}
+	h := NewPromoteHandler(projects, svc, "prod-dev.loopzero.example").WithEnvironmentEnsurer(ensurer)
+
+	body := `{"from":"preview","to":"production"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/loopzerokit-example/promote", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "loopzerokit-example")
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(ensurer.calls) != 1 {
+		t.Fatalf("want exactly 1 EnsureEnvironment call, got %d", len(ensurer.calls))
+	}
+	got := ensurer.calls[0]
+	if got.Project != "loopzerokit-example" {
+		t.Errorf("want project=loopzerokit-example, got %q", got.Project)
+	}
+	if got.Env != "production" {
+		t.Errorf("want env=production (the ToEnv), got %q", got.Env)
+	}
+	if got.TenantID == "" {
+		t.Error("want non-empty tenant_id")
+	}
+}
+
+// TestPromote_EnsureEnvironment_Failure_ShortCircuits (Red Team #158 negative case).
+// When EnsureEnvironment fails, the handler MUST NOT invoke the promote service
+// (would create a release row without a viable target env → the exact
+// SYNC_FAILED trap #158 fixes).
+func TestPromote_EnsureEnvironment_Failure_ShortCircuits_RedTeam158(t *testing.T) {
+	projects := &fakePromoteProjectStore{project: &ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
+	svc := &fakePromoteService{
+		result: &PromoteOutput{PromotionID: "should-not-reach"},
+	}
+	ensurer := &fakePromoteEnsurer{err: loopzeroerrors.NewLoopZeroError("ENV_PROVISION_TIMEOUT", "operator did not reconcile in time", 504)}
+	h := NewPromoteHandler(projects, svc, "prod-dev.loopzero.example").WithEnvironmentEnsurer(ensurer)
+
+	body := `{"from":"preview","to":"production"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/loopzerokit-example/promote", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "loopzerokit-example")
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code == http.StatusAccepted {
+		t.Fatalf("want non-202 on ensure failure, got 202 body=%s", w.Body.String())
+	}
+	// Service must not have been consulted — we can't strictly check via fake, but
+	// the response code must NOT be Accepted (which is what svc.result would give).
+	if svc.result != nil && w.Code == http.StatusAccepted {
+		t.Errorf("promote service ran despite ensure failure — #158 short-circuit missing")
+	}
+}

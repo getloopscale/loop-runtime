@@ -234,14 +234,24 @@ app-dev.loopzero.example {
   }
 
   # Red Team loopzero-cloud#112 closure (2026-06-28) — Hydra consent / device-flow
-  # routes wired in loopzero-cloud cmd/main.go:508-511 (consent.Login + Consent +
-  # DeviceVerify + LoginComplete). The CLI device-flow lands the operator at
+  # routes wired in loopzero-cloud cmd/main.go:542-545 (consent.Login + LoginComplete +
+  # Consent + DeviceVerify). The CLI device-flow lands the operator at
   # https://app-dev.loopzero.example/auth/login?login_challenge=<id>; without this
   # handle the request fell through to the SPA file_server catch-all and React
   # Router rendered "Page not found" — BLOCKER for `loopzero login --device-flow`,
   # which was preventing the deploy chain end-to-end (P0 mandate 2026-06-28).
   # Mirror the /v1/* shape (same Host rewrite + same upstream).
-  handle /auth/* {
+  #
+  # Red Team loopzero/loopzero#162 (2026-07-01): the previous `handle /auth/*` captured
+  # EVERY path under /auth/*, but the BFF only registers the 4 OAuth-flow routes
+  # below. Post-signup redirects to /auth/check-email (register_proxy.go:98) +
+  # email verify link at /auth/verify hit the BFF and returned 404 Caddy raw
+  # ("page not found") — signup funnel broken. Fix: named matcher @auth_bff
+  # restricts the proxy to the 4 real BFF routes; everything else under /auth/*
+  # (check-email, verify, …) falls through to the SPA catch-all so React Router
+  # can render the SPA route.
+  @auth_bff path /auth/login /auth/login/complete /auth/consent /auth/device
+  handle @auth_bff {
     reverse_proxy localhost:13002 {
       header_up Host cloud-dev.loopzero.example
     }

@@ -64,15 +64,23 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
-# Layer 1 — subscription
+# Layer 1 — subscription (canonical post migration 000034: UNIQUE(account_id),
+# account_id NOT NULL). Resolve account_id from tenants table.
 if [[ "$SKIP_PLAN" == "0" ]]; then
   SUB_ID="sub-dev-$TENANT_ID"
+  ACCOUNT_ID=$(kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" \
+    exec postgresql-0 -c postgresql -- \
+    env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
+    "SELECT account_id FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null | tr -d '[:space:]')
+  if [[ -z "$ACCOUNT_ID" ]]; then
+    fail "could not resolve account_id for tenant $TENANT_ID"
+  fi
   kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" \
     exec postgresql-0 -c postgresql -- \
     env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -c \
-    "INSERT INTO subscriptions (id, tenant_id, plan, status) VALUES ('$SUB_ID', '$TENANT_ID', '$PLAN_TIER', 'active') ON CONFLICT (tenant_id) DO UPDATE SET plan='$PLAN_TIER', status='active', updated_at=now();" \
+    "INSERT INTO subscriptions (id, tenant_id, account_id, plan, status) VALUES ('$SUB_ID', '$TENANT_ID', '$ACCOUNT_ID', '$PLAN_TIER', 'active') ON CONFLICT (account_id) DO UPDATE SET plan='$PLAN_TIER', status='active', updated_at=now();" \
     >/dev/null 2>&1
-  log "Layer 1: tenant $TENANT_ID subscription upserted → plan=$PLAN_TIER status=active"
+  log "Layer 1: tenant $TENANT_ID (account $ACCOUNT_ID) subscription upserted → plan=$PLAN_TIER status=active"
 else
   log "Layer 1 SKIP: --skip-plan"
 fi
