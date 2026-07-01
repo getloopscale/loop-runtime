@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 488,
+  "canonical_sh": 491,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 488,
+      "to": 491,
+      "reason": "Red Team loopzero-cloud#157 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-billing-pro-price-canonical_test.sh (2-scenario LIVE \u2014 Stripe price unit_amount + /v1/billing/checkout amount_total) + infra/tests/check-dev-public-billing-pro-price-canonical-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-billing-pro-price-canonical.sh (aggregator registered in dogfood-all.sh WRAPPERS). Fix path: Stripe test-mode Pro price recreated at $29.00 canonical (MEET-2026-05-12 D4=B); old $19 price deactivated. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 484,

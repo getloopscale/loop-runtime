@@ -110,6 +110,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-seed-restarts-cloud.sh"          # Red Team loopzero/loopzero#154 (2026-07-01) — billing 404 upgrade dead
   "archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-price-ids-seed-canonical.sh"    # Red Team loopzero/loopzero#155 (2026-07-01) — BILLING_NOT_CONFIGURED (Stripe price IDs unset)
   "archive/canonical-tests-v1/scripts/local/dogfood-billing-webhook-fulfillment.sh"                 # Red Team loopzero-cloud#156 (2026-07-01) — payment succeeds but plan stays starter (webhook not delivered)
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-pro-price-canonical.sh"                  # Red Team loopzero-cloud#157 (2026-07-01) — preço divergente (Stripe $19 vs UI $29)
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)
