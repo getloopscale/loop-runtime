@@ -99,41 +99,50 @@ const meterCompute = `-- name: MeterCompute :one
 
 WITH adv AS (
   UPDATE metering_cursor SET last_metered_at = now()
-  WHERE tenant_id = $2::text
-    AND metric = $3::text
-    AND cell_id = $4::text
-    AND last_metered_at = $5::timestamptz
+  WHERE tenant_id = $3::text
+    AND metric = $4::text
+    AND cell_id = $5::text
+    AND last_metered_at = $2::timestamptz
     AND now() > metering_cursor.last_metered_at
-    AND metering_period_of(now()) = metering_period_of($5::timestamptz)
+    AND metering_period_of(now()) = metering_period_of($2::timestamptz)
     AND $6::bigint = (SELECT generation_id FROM leader_generations
                         WHERE name = $7::text AND cell_id = $8::text)
-  RETURNING GREATEST(LEAST(now() - $5::timestamptz, $9::interval), interval '0') AS elapsed
+  RETURNING GREATEST(LEAST(now() - $2::timestamptz, $9::interval), interval '0') AS elapsed
 ),
 ins AS (
   INSERT INTO cost_counters (tenant_id, metric, period_start, period_end, plan_tier, value)
-    SELECT $2::text, $3::text,
-           metering_period_start($5::timestamptz),
-           metering_period_end($5::timestamptz),
+    SELECT $3::text, $4::text,
+           metering_period_start($2::timestamptz),
+           metering_period_end($2::timestamptz),
            $10::text,
            metering_cost($1::bigint, elapsed)
     FROM adv
     ON CONFLICT (tenant_id, metric, period_start)
       DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
 )
-SELECT metering_cost($1::bigint, elapsed) AS delta FROM adv
+SELECT metering_cost($1::bigint, elapsed) AS delta,
+       metering_period_start($2::timestamptz) AS period_start,
+       metering_period_end($2::timestamptz) AS period_end
+FROM adv
 `
 
 type MeterComputeParams struct {
 	ReqMillicore int64              `json:"req_millicore"`
+	Expected     pgtype.Timestamptz `json:"expected"`
 	TenantID     string             `json:"tenant_id"`
 	Metric       string             `json:"metric"`
 	CellID       string             `json:"cell_id"`
-	Expected     pgtype.Timestamptz `json:"expected"`
 	Gen          int64              `json:"gen"`
 	LoopName     string             `json:"loop_name"`
 	LeaderCell   string             `json:"leader_cell"`
 	MaxDelta     pgtype.Interval    `json:"max_delta"`
 	PlanTier     string             `json:"plan_tier"`
+}
+
+type MeterComputeRow struct {
+	Delta       int64              `json:"delta"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
 }
 
 // ============================================================================
@@ -150,33 +159,33 @@ type MeterComputeParams struct {
 // `adv` yields 0 rows → the top-level SELECT returns 0 rows → pgx.ErrNoRows,
 // which the wrapper reads as "held, nothing metered" (skip usage). The data-
 // modifying CTEs execute regardless of the final SELECT (Postgres WITH semantics).
-func (q *Queries) MeterCompute(ctx context.Context, db DBTX, arg MeterComputeParams) (int64, error) {
+func (q *Queries) MeterCompute(ctx context.Context, db DBTX, arg MeterComputeParams) (MeterComputeRow, error) {
 	row := db.QueryRow(ctx, meterCompute,
 		arg.ReqMillicore,
+		arg.Expected,
 		arg.TenantID,
 		arg.Metric,
 		arg.CellID,
-		arg.Expected,
 		arg.Gen,
 		arg.LoopName,
 		arg.LeaderCell,
 		arg.MaxDelta,
 		arg.PlanTier,
 	)
-	var delta int64
-	err := row.Scan(&delta)
-	return delta, err
+	var i MeterComputeRow
+	err := row.Scan(&i.Delta, &i.PeriodStart, &i.PeriodEnd)
+	return i, err
 }
 
 const meterComputeSplit = `-- name: MeterComputeSplit :one
 WITH adv AS (
   UPDATE metering_cursor SET last_metered_at = now()
-  WHERE tenant_id = $2::text
-    AND metric = $3::text
-    AND cell_id = $4::text
-    AND last_metered_at = $5::timestamptz
+  WHERE tenant_id = $3::text
+    AND metric = $4::text
+    AND cell_id = $5::text
+    AND last_metered_at = $2::timestamptz
     AND now() > metering_cursor.last_metered_at
-    AND metering_period_of(now()) <> metering_period_of($5::timestamptz)
+    AND metering_period_of(now()) <> metering_period_of($2::timestamptz)
     AND $6::bigint = (SELECT generation_id FROM leader_generations
                         WHERE name = $7::text AND cell_id = $8::text)
   -- SC-7 (MEET-006): clamp the TOTAL gap to max_delta, then split the clamped
@@ -184,14 +193,14 @@ WITH adv AS (
   -- keeps the window under one period past expected (ADR-8): at most one boundary,
   -- P2 is exactly the next period, tail plus head equals the clamped total.
   RETURNING
-    metering_split_tail($5::timestamptz, $9::interval) AS tail,
-    metering_split_head($5::timestamptz, $9::interval) AS head
+    metering_split_tail($2::timestamptz, $9::interval) AS tail,
+    metering_split_head($2::timestamptz, $9::interval) AS head
 ),
 p1 AS (
   INSERT INTO cost_counters (tenant_id, metric, period_start, period_end, plan_tier, value)
-    SELECT $2::text, $3::text,
-           metering_period_start($5::timestamptz),
-           metering_period_end($5::timestamptz),
+    SELECT $3::text, $4::text,
+           metering_period_start($2::timestamptz),
+           metering_period_end($2::timestamptz),
            $10::text,
            metering_cost($1::bigint, tail)
     FROM adv
@@ -203,29 +212,44 @@ p2 AS (
   -- expected is that period's start), NOT the period of now(): a long clamped gap
   -- must not key head into now()'s period. The clamp guarantees head lands here.
   INSERT INTO cost_counters (tenant_id, metric, period_start, period_end, plan_tier, value)
-    SELECT $2::text, $3::text,
-           metering_period_end($5::timestamptz),
-           metering_period_end(metering_period_end($5::timestamptz)),
+    SELECT $3::text, $4::text,
+           metering_period_end($2::timestamptz),
+           metering_period_end(metering_period_end($2::timestamptz)),
            $10::text,
            metering_cost($1::bigint, head)
     FROM adv
     ON CONFLICT (tenant_id, metric, period_start)
       DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
 )
-SELECT (metering_cost($1::bigint, tail) + metering_cost($1::bigint, head))::bigint AS delta FROM adv
+SELECT metering_cost($1::bigint, tail) AS tail_cost,
+       metering_cost($1::bigint, head) AS head_cost,
+       metering_period_start($2::timestamptz) AS p1_start,
+       metering_period_end($2::timestamptz) AS p1_end,
+       metering_period_end($2::timestamptz) AS p2_start,
+       metering_period_end(metering_period_end($2::timestamptz)) AS p2_end
+FROM adv
 `
 
 type MeterComputeSplitParams struct {
 	ReqMillicore int64              `json:"req_millicore"`
+	Expected     pgtype.Timestamptz `json:"expected"`
 	TenantID     string             `json:"tenant_id"`
 	Metric       string             `json:"metric"`
 	CellID       string             `json:"cell_id"`
-	Expected     pgtype.Timestamptz `json:"expected"`
 	Gen          int64              `json:"gen"`
 	LoopName     string             `json:"loop_name"`
 	LeaderCell   string             `json:"leader_cell"`
 	MaxDelta     pgtype.Interval    `json:"max_delta"`
 	PlanTier     string             `json:"plan_tier"`
+}
+
+type MeterComputeSplitRow struct {
+	TailCost int64              `json:"tail_cost"`
+	HeadCost int64              `json:"head_cost"`
+	P1Start  pgtype.Timestamptz `json:"p1_start"`
+	P1End    pgtype.Timestamptz `json:"p1_end"`
+	P2Start  pgtype.Timestamptz `json:"p2_start"`
+	P2End    pgtype.Timestamptz `json:"p2_end"`
 }
 
 // ADR-9 period-rollover writer. Fires ONLY on a real straddle (SC-2 <> predicate).
@@ -237,22 +261,29 @@ type MeterComputeSplitParams struct {
 // Returns the CLAMPED TOTAL delta (tail_compute + head_compute) so the wrapper threads
 // the same bounded quantity into usage_records. HELD (no straddle / lost CAS / stale
 // fence) → `adv` yields 0 rows → 0-row SELECT → pgx.ErrNoRows (wrapper: skip usage).
-func (q *Queries) MeterComputeSplit(ctx context.Context, db DBTX, arg MeterComputeSplitParams) (int64, error) {
+func (q *Queries) MeterComputeSplit(ctx context.Context, db DBTX, arg MeterComputeSplitParams) (MeterComputeSplitRow, error) {
 	row := db.QueryRow(ctx, meterComputeSplit,
 		arg.ReqMillicore,
+		arg.Expected,
 		arg.TenantID,
 		arg.Metric,
 		arg.CellID,
-		arg.Expected,
 		arg.Gen,
 		arg.LoopName,
 		arg.LeaderCell,
 		arg.MaxDelta,
 		arg.PlanTier,
 	)
-	var delta int64
-	err := row.Scan(&delta)
-	return delta, err
+	var i MeterComputeSplitRow
+	err := row.Scan(
+		&i.TailCost,
+		&i.HeadCost,
+		&i.P1Start,
+		&i.P1End,
+		&i.P2Start,
+		&i.P2End,
+	)
+	return i, err
 }
 
 const seedMeteringCursor = `-- name: SeedMeteringCursor :exec

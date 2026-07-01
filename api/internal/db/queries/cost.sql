@@ -67,7 +67,10 @@ ins AS (
     ON CONFLICT (tenant_id, metric, period_start)
       DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
 )
-SELECT metering_cost(@req_millicore::bigint, elapsed) AS delta FROM adv;
+SELECT metering_cost(@req_millicore::bigint, elapsed) AS delta,
+       metering_period_start(@expected::timestamptz) AS period_start,
+       metering_period_end(@expected::timestamptz) AS period_end
+FROM adv;
 
 -- name: MeterComputeSplit :one
 -- ADR-9 period-rollover writer. Fires ONLY on a real straddle (SC-2 <> predicate).
@@ -122,7 +125,13 @@ p2 AS (
     ON CONFLICT (tenant_id, metric, period_start)
       DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
 )
-SELECT (metering_cost(@req_millicore::bigint, tail) + metering_cost(@req_millicore::bigint, head))::bigint AS delta FROM adv;
+SELECT metering_cost(@req_millicore::bigint, tail) AS tail_cost,
+       metering_cost(@req_millicore::bigint, head) AS head_cost,
+       metering_period_start(@expected::timestamptz) AS p1_start,
+       metering_period_end(@expected::timestamptz) AS p1_end,
+       metering_period_end(@expected::timestamptz) AS p2_start,
+       metering_period_end(metering_period_end(@expected::timestamptz)) AS p2_end
+FROM adv;
 
 -- name: SeedMeteringCursor :exec
 -- Seed-if-absent to now() on first sight (EC-10 — zero charge for the pre-existence
