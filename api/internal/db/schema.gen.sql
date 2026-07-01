@@ -94,6 +94,42 @@ BEGIN
 END;
 $$;
 
+-- Name: metering_cost(bigint, interval); Type: FUNCTION; Schema: public; Owner: -
+
+CREATE FUNCTION public.metering_cost(req_millicore bigint, dur interval) RETURNS bigint
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT (req_millicore * EXTRACT(EPOCH FROM dur) / 1000)::bigint $$;
+
+-- Name: metering_period_end(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+
+CREATE FUNCTION public.metering_period_end(ts timestamp with time zone) RETURNS timestamp with time zone
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT metering_period_start(ts) + interval '1 month' $$;
+
+-- Name: metering_period_of(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+
+CREATE FUNCTION public.metering_period_of(ts timestamp with time zone) RETURNS timestamp with time zone
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT metering_period_start(ts) $$;
+
+-- Name: metering_period_start(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+
+CREATE FUNCTION public.metering_period_start(ts timestamp with time zone) RETURNS timestamp with time zone
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT date_trunc('month', ts AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' $$;
+
+-- Name: metering_split_head(timestamp with time zone, interval); Type: FUNCTION; Schema: public; Owner: -
+
+CREATE FUNCTION public.metering_split_head(expected timestamp with time zone, max_delta interval) RETURNS interval
+    LANGUAGE sql STABLE PARALLEL SAFE
+    AS $$ SELECT GREATEST(LEAST(now(), expected + max_delta) - metering_period_end(expected), interval '0') $$;
+
+-- Name: metering_split_tail(timestamp with time zone, interval); Type: FUNCTION; Schema: public; Owner: -
+
+CREATE FUNCTION public.metering_split_tail(expected timestamp with time zone, max_delta interval) RETURNS interval
+    LANGUAGE sql STABLE PARALLEL SAFE
+    AS $$ SELECT GREATEST(LEAST(metering_period_end(expected), LEAST(now(), expected + max_delta)) - expected, interval '0') $$;
+
 -- Name: populate_cell_id_from_tenant(); Type: FUNCTION; Schema: public; Owner: -
 
 CREATE FUNCTION public.populate_cell_id_from_tenant() RETURNS trigger
@@ -299,7 +335,7 @@ CREATE TABLE public.cost_counters (
     period_end timestamp with time zone NOT NULL,
     value bigint DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT cost_counters_metric_check CHECK ((metric = ANY (ARRAY['egress_bytes'::text, 'docr_pulls'::text, 'build_minutes'::text]))),
+    CONSTRAINT cost_counters_metric_check CHECK ((metric = ANY (ARRAY['egress_bytes'::text, 'docr_pulls'::text, 'build_minutes'::text, 'cpu_core_seconds'::text, 'mem_gb_seconds'::text]))),
     CONSTRAINT cost_counters_plan_tier_check CHECK ((plan_tier = ANY (ARRAY['starter'::text, 'pro'::text, 'team'::text, 'enterprise'::text])))
 );
 
@@ -439,6 +475,23 @@ CREATE TABLE public.memory_webhooks (
     CONSTRAINT memory_webhooks_events_check CHECK ((jsonb_typeof(events) = 'array'::text)),
     CONSTRAINT memory_webhooks_label_check CHECK (((length(label) >= 1) AND (length(label) <= 64))),
     CONSTRAINT memory_webhooks_url_check CHECK ((url ~* '^https?://'::text))
+);
+
+-- Name: metering_config; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.metering_config (
+    id boolean DEFAULT true NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    CONSTRAINT metering_config_singleton CHECK ((id = true))
+);
+
+-- Name: metering_cursor; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.metering_cursor (
+    tenant_id text NOT NULL,
+    metric text NOT NULL,
+    cell_id text NOT NULL,
+    last_metered_at timestamp with time zone NOT NULL
 );
 
 -- Name: plan_limits; Type: TABLE; Schema: public; Owner: -
@@ -705,7 +758,7 @@ CREATE TABLE public.usage_records (
     id text NOT NULL,
     tenant_id text NOT NULL,
     metric text NOT NULL,
-    quantity integer DEFAULT 0 NOT NULL,
+    quantity bigint DEFAULT 0 NOT NULL,
     period_start timestamp with time zone NOT NULL,
     period_end timestamp with time zone NOT NULL,
     reported_to_stripe boolean DEFAULT false NOT NULL,
@@ -887,6 +940,16 @@ ALTER TABLE ONLY public.memory_webhook_deliveries
 
 ALTER TABLE ONLY public.memory_webhooks
     ADD CONSTRAINT memory_webhooks_pkey PRIMARY KEY (id);
+
+-- Name: metering_config metering_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.metering_config
+    ADD CONSTRAINT metering_config_pkey PRIMARY KEY (id);
+
+-- Name: metering_cursor metering_cursor_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.metering_cursor
+    ADD CONSTRAINT metering_cursor_pkey PRIMARY KEY (tenant_id, metric, cell_id);
 
 -- Name: plan_limits plan_limits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 

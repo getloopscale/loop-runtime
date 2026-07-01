@@ -7,6 +7,8 @@ package generated
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getActiveCostCounter = `-- name: GetActiveCostCounter :one
@@ -63,4 +65,244 @@ func (q *Queries) GetActiveCostCounter(ctx context.Context, db DBTX, arg GetActi
 		&i.Value,
 	)
 	return i, err
+}
+
+const getCellForTenant = `-- name: GetCellForTenant :one
+SELECT cell_id FROM tenants WHERE id = $1::text
+`
+
+// The canonical placement SoT (INV I2 / tenant-guardian C1). Run in the
+// SET LOCAL app.tenant_id=” RLS-bypass context. NoRows → caller skips (harmless).
+func (q *Queries) GetCellForTenant(ctx context.Context, db DBTX, tenantID string) (string, error) {
+	row := db.QueryRow(ctx, getCellForTenant, tenantID)
+	var cell_id string
+	err := row.Scan(&cell_id)
+	return cell_id, err
+}
+
+const getPlanTierForTenant = `-- name: GetPlanTierForTenant :one
+SELECT COALESCE(plan, 'starter')::text AS plan_tier
+FROM subscriptions
+WHERE tenant_id = $1::text AND status = 'active'
+`
+
+// EC-4: plan_tier from the subscriptions BILLING status (NOT tenant lifecycle).
+// Missing/none → caller defaults to 'starter' + loopzero_metering_missing_plan_total WARN.
+func (q *Queries) GetPlanTierForTenant(ctx context.Context, db DBTX, tenantID string) (string, error) {
+	row := db.QueryRow(ctx, getPlanTierForTenant, tenantID)
+	var plan_tier string
+	err := row.Scan(&plan_tier)
+	return plan_tier, err
+}
+
+const meterCompute = `-- name: MeterCompute :one
+
+WITH adv AS (
+  UPDATE metering_cursor SET last_metered_at = now()
+  WHERE tenant_id = $2::text
+    AND metric = $3::text
+    AND cell_id = $4::text
+    AND last_metered_at = $5::timestamptz
+    AND now() > metering_cursor.last_metered_at
+    AND metering_period_of(now()) = metering_period_of($5::timestamptz)
+    AND $6::bigint = (SELECT generation_id FROM leader_generations
+                        WHERE name = $7::text AND cell_id = $8::text)
+  RETURNING GREATEST(LEAST(now() - $5::timestamptz, $9::interval), interval '0') AS elapsed
+),
+ins AS (
+  INSERT INTO cost_counters (tenant_id, metric, period_start, period_end, plan_tier, value)
+    SELECT $2::text, $3::text,
+           metering_period_start($5::timestamptz),
+           metering_period_end($5::timestamptz),
+           $10::text,
+           metering_cost($1::bigint, elapsed)
+    FROM adv
+    ON CONFLICT (tenant_id, metric, period_start)
+      DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
+)
+SELECT metering_cost($1::bigint, elapsed) AS delta FROM adv
+`
+
+type MeterComputeParams struct {
+	ReqMillicore int64              `json:"req_millicore"`
+	TenantID     string             `json:"tenant_id"`
+	Metric       string             `json:"metric"`
+	CellID       string             `json:"cell_id"`
+	Expected     pgtype.Timestamptz `json:"expected"`
+	Gen          int64              `json:"gen"`
+	LoopName     string             `json:"loop_name"`
+	LeaderCell   string             `json:"leader_cell"`
+	MaxDelta     pgtype.Interval    `json:"max_delta"`
+	PlanTier     string             `json:"plan_tier"`
+}
+
+// ============================================================================
+// Compute metering producer (plan metering-compute-loop T2.3).
+// ADR-4 (same-period) + ADR-9 (period-split) atomic data-modifying CTEs.
+// period fns concretized as pure-UTC date_trunc (EC-7). Every SC guard is in
+// the CTE (SQL, not Go), governed by the single DB now() that advances the cursor.
+// ============================================================================
+// ADR-4 same-period writer. Advances the cursor (CAS + SC-1 monotonicity + SC-2
+// same-period predicate + SC-6 fence) and, only if it advanced, adds the delta
+// to the cost_counters row (upsert). Returns the delta written (bigint) so the
+// wrapper can thread the SAME quantity into usage_records in the same tx. When
+// the cursor is HELD (lost CAS / backward clock / period straddle / stale fence),
+// `adv` yields 0 rows → the top-level SELECT returns 0 rows → pgx.ErrNoRows,
+// which the wrapper reads as "held, nothing metered" (skip usage). The data-
+// modifying CTEs execute regardless of the final SELECT (Postgres WITH semantics).
+func (q *Queries) MeterCompute(ctx context.Context, db DBTX, arg MeterComputeParams) (int64, error) {
+	row := db.QueryRow(ctx, meterCompute,
+		arg.ReqMillicore,
+		arg.TenantID,
+		arg.Metric,
+		arg.CellID,
+		arg.Expected,
+		arg.Gen,
+		arg.LoopName,
+		arg.LeaderCell,
+		arg.MaxDelta,
+		arg.PlanTier,
+	)
+	var delta int64
+	err := row.Scan(&delta)
+	return delta, err
+}
+
+const meterComputeSplit = `-- name: MeterComputeSplit :one
+WITH adv AS (
+  UPDATE metering_cursor SET last_metered_at = now()
+  WHERE tenant_id = $2::text
+    AND metric = $3::text
+    AND cell_id = $4::text
+    AND last_metered_at = $5::timestamptz
+    AND now() > metering_cursor.last_metered_at
+    AND metering_period_of(now()) <> metering_period_of($5::timestamptz)
+    AND $6::bigint = (SELECT generation_id FROM leader_generations
+                        WHERE name = $7::text AND cell_id = $8::text)
+  -- SC-7 (MEET-006): clamp the TOTAL gap to max_delta, then split the clamped
+  -- window at the boundary (metering_split_tail/head, migration 000048). The clamp
+  -- keeps the window under one period past expected (ADR-8): at most one boundary,
+  -- P2 is exactly the next period, tail plus head equals the clamped total.
+  RETURNING
+    metering_split_tail($5::timestamptz, $9::interval) AS tail,
+    metering_split_head($5::timestamptz, $9::interval) AS head
+),
+p1 AS (
+  INSERT INTO cost_counters (tenant_id, metric, period_start, period_end, plan_tier, value)
+    SELECT $2::text, $3::text,
+           metering_period_start($5::timestamptz),
+           metering_period_end($5::timestamptz),
+           $10::text,
+           metering_cost($1::bigint, tail)
+    FROM adv
+    ON CONFLICT (tenant_id, metric, period_start)
+      DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
+),
+p2 AS (
+  -- P2 is the period immediately after expected's period (metering_period_end of
+  -- expected is that period's start), NOT the period of now(): a long clamped gap
+  -- must not key head into now()'s period. The clamp guarantees head lands here.
+  INSERT INTO cost_counters (tenant_id, metric, period_start, period_end, plan_tier, value)
+    SELECT $2::text, $3::text,
+           metering_period_end($5::timestamptz),
+           metering_period_end(metering_period_end($5::timestamptz)),
+           $10::text,
+           metering_cost($1::bigint, head)
+    FROM adv
+    ON CONFLICT (tenant_id, metric, period_start)
+      DO UPDATE SET value = cost_counters.value + EXCLUDED.value, plan_tier = EXCLUDED.plan_tier
+)
+SELECT (metering_cost($1::bigint, tail) + metering_cost($1::bigint, head))::bigint AS delta FROM adv
+`
+
+type MeterComputeSplitParams struct {
+	ReqMillicore int64              `json:"req_millicore"`
+	TenantID     string             `json:"tenant_id"`
+	Metric       string             `json:"metric"`
+	CellID       string             `json:"cell_id"`
+	Expected     pgtype.Timestamptz `json:"expected"`
+	Gen          int64              `json:"gen"`
+	LoopName     string             `json:"loop_name"`
+	LeaderCell   string             `json:"leader_cell"`
+	MaxDelta     pgtype.Interval    `json:"max_delta"`
+	PlanTier     string             `json:"plan_tier"`
+}
+
+// ADR-9 period-rollover writer. Fires ONLY on a real straddle (SC-2 <> predicate).
+// Advances the cursor to now() (SC-4 continuation, never reset to the boundary),
+// then splits the max_delta-CLAMPED window from expected to LEAST(now, expected plus
+// max_delta) at the boundary: tail to P1 (expected's period), head to P2 (the next).
+// SC-7 (MEET-006): clamping the TOTAL bounds over-billing symmetrically with
+// MeterCompute AND guarantees at most one boundary (no middle-period misattribution).
+// Returns the CLAMPED TOTAL delta (tail_compute + head_compute) so the wrapper threads
+// the same bounded quantity into usage_records. HELD (no straddle / lost CAS / stale
+// fence) → `adv` yields 0 rows → 0-row SELECT → pgx.ErrNoRows (wrapper: skip usage).
+func (q *Queries) MeterComputeSplit(ctx context.Context, db DBTX, arg MeterComputeSplitParams) (int64, error) {
+	row := db.QueryRow(ctx, meterComputeSplit,
+		arg.ReqMillicore,
+		arg.TenantID,
+		arg.Metric,
+		arg.CellID,
+		arg.Expected,
+		arg.Gen,
+		arg.LoopName,
+		arg.LeaderCell,
+		arg.MaxDelta,
+		arg.PlanTier,
+	)
+	var delta int64
+	err := row.Scan(&delta)
+	return delta, err
+}
+
+const seedMeteringCursor = `-- name: SeedMeteringCursor :exec
+INSERT INTO metering_cursor (tenant_id, metric, cell_id, last_metered_at)
+VALUES ($1::text, $2::text, $3::text, now())
+ON CONFLICT (tenant_id, metric, cell_id) DO NOTHING
+`
+
+type SeedMeteringCursorParams struct {
+	TenantID string `json:"tenant_id"`
+	Metric   string `json:"metric"`
+	CellID   string `json:"cell_id"`
+}
+
+// Seed-if-absent to now() on first sight (EC-10 — zero charge for the pre-existence
+// window). Idempotent: an existing cursor is untouched.
+func (q *Queries) SeedMeteringCursor(ctx context.Context, db DBTX, arg SeedMeteringCursorParams) error {
+	_, err := db.Exec(ctx, seedMeteringCursor, arg.TenantID, arg.Metric, arg.CellID)
+	return err
+}
+
+const upsertUsageRecord = `-- name: UpsertUsageRecord :exec
+INSERT INTO usage_records (id, tenant_id, metric, quantity, period_start, period_end)
+VALUES ($1::text, $2::text, $3::text, $4::bigint, $5::timestamptz, $6::timestamptz)
+ON CONFLICT (tenant_id, metric, period_start) DO UPDATE SET quantity = usage_records.quantity + EXCLUDED.quantity
+`
+
+type UpsertUsageRecordParams struct {
+	ID          string             `json:"id"`
+	TenantID    string             `json:"tenant_id"`
+	Metric      string             `json:"metric"`
+	Quantity    int64              `json:"quantity"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+}
+
+// Same-tx accumulate into the Stripe-reported usage feed (BIGINT quantity, mig 000047).
+// ONE row per (tenant, metric, period_start) — enforced by the UNIQUE index
+// idx_usage_tenant_metric_period (000001). The conflict target MUST be that tuple,
+// NOT the id PK: a fresh @id per tick would never hit an id-conflict, so the 2nd
+// write of a period would violate the unique index (hard error) instead of
+// accumulating. @id is a fresh UUID used only when the period's row is first created.
+func (q *Queries) UpsertUsageRecord(ctx context.Context, db DBTX, arg UpsertUsageRecordParams) error {
+	_, err := db.Exec(ctx, upsertUsageRecord,
+		arg.ID,
+		arg.TenantID,
+		arg.Metric,
+		arg.Quantity,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+	)
+	return err
 }

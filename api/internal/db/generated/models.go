@@ -222,6 +222,18 @@ type MemoryWebhookDelivery struct {
 	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 }
 
+type MeteringConfig struct {
+	ID      bool `json:"id"`
+	Enabled bool `json:"enabled"`
+}
+
+type MeteringCursor struct {
+	TenantID      string             `json:"tenant_id"`
+	Metric        string             `json:"metric"`
+	CellID        string             `json:"cell_id"`
+	LastMeteredAt pgtype.Timestamptz `json:"last_metered_at"`
+}
+
 type PlanLimit struct {
 	Plan      string `json:"plan"`
 	Metric    string `json:"metric"`
@@ -425,7 +437,7 @@ type UsageRecord struct {
 	ID               string             `json:"id"`
 	TenantID         string             `json:"tenant_id"`
 	Metric           string             `json:"metric"`
-	Quantity         int32              `json:"quantity"`
+	Quantity         int64              `json:"quantity"`
 	PeriodStart      pgtype.Timestamptz `json:"period_start"`
 	PeriodEnd        pgtype.Timestamptz `json:"period_end"`
 	ReportedToStripe bool               `json:"reported_to_stripe"`
