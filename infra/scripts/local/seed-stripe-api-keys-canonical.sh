@@ -95,3 +95,13 @@ if [[ "$VERIFY" == "1" ]]; then
     exit 1
   fi
 fi
+
+# Red Team loopzero/loopzero#154 closure (2026-07-01): roll out loopzero-cloud so the
+# pod's `envFrom.secretRef.loopzero-stripe-api-keys` re-reads STRIPE_API_KEY.
+# Without this, boot-order matters: pod started BEFORE this seed runs
+# sees cfg.StripeAPIKey empty → `billingHandler == nil` → /v1/billing*
+# routes never wired → 404 from chi router → upgrade Starter→Pro dead.
+# Mirrors the canonical pattern in seed-broker-canonical.sh Layer 4.
+kubectl --context "$MGMT_CONTEXT" -n loopzero-system rollout restart deployment/loopzero-cloud >/dev/null
+kubectl --context "$MGMT_CONTEXT" -n loopzero-system rollout status deployment/loopzero-cloud --timeout=120s >/dev/null
+log "Layer 4: loopzero-cloud restarted (env STRIPE_API_KEY now wired via envFrom)"
