@@ -228,3 +228,6 @@ tools/gen-service-auth-ed25519/gen-service-auth-ed25519
 
 # loop-cross-validation SQLite working DB (reports are committed; DB is scratch)
 cross-validation-output/*.db
+.metering-pg.env
+halt-loop-prompts/
+knowledge-base/implementations/.progress-*.json
