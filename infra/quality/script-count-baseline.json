@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 484,
+  "canonical_sh": 488,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 484,
+      "to": 488,
+      "reason": "Red Team loopzero-cloud#156 closure canonical triplet + new seed script \u2014 +4 net. New scripts: infra/scripts/local/seed-stripe-webhook-endpoint-canonical.sh (Stripe test-mode webhook endpoint provisioning + real whsec capture) + infra/tests/check-seed-stripe-webhook-endpoint-canonical-syntax_test.sh (30-assertion hermetic guard) + infra/tests/e2e/dev-public-billing-webhook-fulfillment_test.sh (3-scenario LIVE) + archive/canonical-tests-v1/scripts/local/dogfood-billing-webhook-fulfillment.sh (aggregator registered in dogfood-all.sh WRAPPERS). Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 482,
