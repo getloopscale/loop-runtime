@@ -306,14 +306,20 @@ run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-
 # tick populates env_targets.last_replicas_ready_*). Rather than add a
 # bespoke --first-tick-sync CLI flag (parsimony rung 5), we simply wait
 # one canonical interval + a small buffer for the poller's ticker to
-# fire naturally. Env-gated: only fires when the operator is expected
-# to be running the poller (LOOPZERO_DATA_PLANE_POLLER_ENABLED=true — which
-# app-operator's env-gate honors). The wait is idempotent + cheap.
-if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-}" == "true" ]]; then
+# fire naturally.
+#
+# Gate reads the CHART-INJECTED ConfigMap value (not shell env) so
+# whether the poller is enabled is decided by helmfile overlay per env
+# (dev-public: enabled=true; standalone-multi: not declared → treated
+# as disabled). Legacy shell-env override kept for local dev workflows.
+POLLER_ENABLED_CFG="$(kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" \
+  -n loopzero-system get configmap loopzero-app-operator \
+  -o jsonpath='{.data.LOOPZERO_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
+if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then
   POLLER_WARMUP_S="${LOOPZERO_DATA_PLANE_POLLER_WARMUP_S:-45}"
   run_step "16-data-plane-poller-first-tick" "sleep $POLLER_WARMUP_S && log '   data-plane poller warmed up (${POLLER_WARMUP_S}s wait)' && true"
 else
-  skip_step "16-data-plane-poller-first-tick" "skipped — LOOPZERO_DATA_PLANE_POLLER_ENABLED != true (poller not wired for this env)"
+  skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-app-operator ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
 fi
 
 # Summary
