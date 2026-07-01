@@ -460,10 +460,24 @@ auth-dev.loopzero.example {
   # (Kratos public) so this prefix wins via Caddy's first-match-wins
   # semantic. Edge rate_limit register_throttle (T1.2) still applies
   # because it's evaluated at the host level before any handle.
-  @bff_register_paths {
-    path /self-service/registration/methods/password /self-service/registration
+  #
+  # Split into two explicit handles (was a single `@bff_register_paths`
+  # named matcher). Functional behavior is identical (both paths still
+  # reverse-proxy to the loopzero-cloud BFF at localhost:13002 with the
+  # canonical `Host: cloud-dev.loopzero.example` header); the explicit shape
+  # is required by the `caddyfile-csp` gate's canonical detection
+  # (`handle /self-service/registration/methods/password { ... }` +
+  # `handle /self-service/registration { ... }` — assertions
+  # `assert_register_route_proxied_to_cloud` per Red Team #43 T3.2/T3.3).
+  # KISS wins over DRY here: the two-line duplication is worth
+  # gate-detectability (each block is 5 lines; sum 10 vs 7 with matcher
+  # + 2 blocks — the matcher form is not fundamentally shorter).
+  handle /self-service/registration/methods/password {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
   }
-  handle @bff_register_paths {
+  handle /self-service/registration {
     reverse_proxy localhost:13002 {
       header_up Host cloud-dev.loopzero.example
     }

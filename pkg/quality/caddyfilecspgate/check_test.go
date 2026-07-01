@@ -416,6 +416,67 @@ func TestCheck_RegressionDetected_TryFilesAtTopLevel_v13(t *testing.T) {
 	}
 }
 
+// Regression-protector (v1.5, 2026-07-01): a `try_files {path} /index.html`
+// substring inside a COMMENT line MUST NOT match the tryFilesRe regex — pre-
+// fix the loose regex `try_files\s+\{path\}\s+/index\.html` picked up the
+// commented reference at `# \`try_files {path} /index.html\` and the server
+// returns` (line 274 of the production Caddyfile) as if it were the real
+// directive, then walked backward and reported the nearest enclosing handle
+// (`handle /engine/*`) as the — wrong — enclosing block. Fix: the regex now
+// anchors on `^\s*try_files` (start-of-line + optional whitespace), which
+// never matches a `#`-prefixed comment line. This test verifies the fix by
+// pairing a commented reference (inside `handle /engine/*`) with the real
+// directive (inside `handle {}`); pre-fix this Caddyfile would FAIL with the
+// wrong enclosing handle; post-fix it PASSES cleanly.
+func TestCheck_TryFilesCommentReferenceMustNotFalsePositive_v15(t *testing.T) {
+	// The commented reference lives INSIDE handle /engine/* — pre-fix, this
+	// tripped the walker into reporting /engine/* as the enclosing handle for
+	// the (real) try_files that actually lives inside handle {} below.
+	caddyfileWithCommentedTryFiles := canonicalGlobalConfigBlock + `
+app-dev.loopzero.example {
+  header {
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  }
+
+  handle /sessions/* {
+    reverse_proxy localhost:14433
+  }
+  handle /self-service/* {
+    reverse_proxy localhost:14433
+  }
+  handle /v1/* {
+    reverse_proxy localhost:13002
+  }
+  handle /engine/* {
+    reverse_proxy localhost:13002
+    # NOTE: the SPA-fallback ` + "`try_files {path} /index.html`" + ` is deliberately
+    # NOT declared inside this /engine/* handle — it lives in the catch-all
+    # ` + "`handle {}`" + ` at the end of the block. This comment used to false-positive
+    # the invariant-11 walker under the pre-v1.5 loose regex.
+  }
+
+  handle {
+    root * {env.DASHBOARD_DIST}
+    encode gzip
+    file_server
+    try_files {path} /index.html
+  }
+}
+` + canonicalAuthDevBlock
+	dir := makeCaddyfile(t, caddyfileWithCommentedTryFiles)
+	out, err := Check(Config{RepoRoot: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("want Pass=true when try_files is commented in handle /engine/* AND real try_files lives in handle {} — got Pass=false Violations=%v", out.Violations)
+	}
+}
+
 func TestCheck_BlockNotFound(t *testing.T) {
 	dir := makeCaddyfile(t, `# no app-dev block here
 cloud-dev.loopzero.example {

@@ -240,7 +240,14 @@ func Check(cfg Config) (*Outcome, error) {
 
 	// Invariant 10 (v2): try_files {path} /index.html SPA-routing fallback
 	// PRESENT (so client-side routes return the SPA's index.html).
-	tryFilesRe := regexp.MustCompile(`try_files\s+\{path\}\s+/index\.html`)
+	// Regex requires start-of-line + optional leading whitespace before the
+	// directive (v1.5 tightening — closes the false positive where a
+	// `try_files {path} /index.html` reference INSIDE A COMMENT line
+	// `  # \`try_files {path} /index.html\` and the server returns` matched
+	// the loose regex and made the invariant-11 walker report the wrong
+	// enclosing handle. Comments start with `#` after leading whitespace, so
+	// `^\s*try_files` never matches a commented reference).
+	tryFilesRe := regexp.MustCompile(`(?m)^\s*try_files\s+\{path\}\s+/index\.html`)
 	if !tryFilesRe.MatchString(block) {
 		out.Pass = false
 		out.Violations = append(out.Violations,
