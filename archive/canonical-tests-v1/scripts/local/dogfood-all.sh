@@ -106,6 +106,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh"                  # Red Team #120 P0 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh"  # Red Team #121 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh"                       # Red Team #124 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-projects-badge-data-plane-aware.sh"    # Red Team #128 (2026-07-01) — plan dashboard-badge-data-plane-poller
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)
