@@ -32,11 +32,33 @@ package app
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
+
+// PromV1Adapter wraps prometheus/client_golang/api/prometheus/v1.API to
+// satisfy PrometheusInstantClient. The upstream `Query` returns
+// (model.Value, Warnings, error); this adapter type-asserts the Value
+// as model.Vector (canonical for instant queries) and surfaces a clear
+// error on shape mismatch so misconfigured queries fail loud.
+type PromV1Adapter struct{ API promv1.API }
+
+// Query implements PrometheusInstantClient.
+func (a *PromV1Adapter) Query(ctx context.Context, q string, t time.Time) (model.Vector, error) {
+	val, _, err := a.API.Query(ctx, q, t)
+	if err != nil {
+		return nil, err
+	}
+	vec, ok := val.(model.Vector)
+	if !ok {
+		return nil, fmt.Errorf("prometheus query returned %T, expected model.Vector", val)
+	}
+	return vec, nil
+}
 
 // PollQuery joins replicas_ready with kube_deployment_labels to
 // extract loopzero.io/{tenant,project,environment} from the vector without
