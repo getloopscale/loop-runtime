@@ -28,6 +28,16 @@ func TestClassify_KeepIsHomed(t *testing.T) {
 		{".claude/hooks/task-completed.sh", "grandfathered — harness hook", Homed},
 		{"infra/scripts/break-glass.sh", "KEEP-OPERATOR — live emergency", Homed},
 		{"infra/kubeconform-schemas/validate-helmfile-templates.sh", "KEEP-CI-ORCHESTRATOR", Homed},
+		// KEEP-CI-WIRED is the marker used by every canonical hermetic guard
+		// wired into `task quality:gates` (all `infra/tests/check-*-syntax_test.sh`
+		// pairs shipped since 2026-05). It is functionally equivalent to
+		// KEEP-CI-ORCHESTRATOR — the script IS the CI gate itself, not
+		// reimplementable operational logic. Recognizing it prevents the
+		// canonical hermetic pattern from silently ratcheting the baseline
+		// on every Red Team closure (baseline drift 121→146 since 2026-06-30
+		// which triggered the un-homed-logic gate to block PRs on legitimate
+		// CI-wired guards).
+		{"infra/tests/check-caddyfile-no-docker-network-ip_test.sh", "KEEP-CI-WIRED — hermetic guard wired in task quality:gates", Homed},
 		{"infra/scripts/quality/coverage-cli.sh", "REVIEW-NEEDED", Unhomed},
 		{"infra/tests/parity/validate-matrix.sh", "MIGRATE-GINKGO", Unhomed},
 		{"infra/helmfile/scripts/generate-secrets.sh", "MIGRATE-GENERATOR", Unhomed},

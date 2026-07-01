@@ -74,7 +74,15 @@ func hasReimplementableLogic(body string) bool {
 var shellsExternalRe = regexp.MustCompile(`\b(gh|npm|go|node|curl|psql)\b`)
 
 // homedMarkers are the disposition tags that mean "justified keep".
-var homedMarkers = []string{"KEEP-OPERATOR", "KEEP-CI-ORCHESTRATOR"}
+// KEEP-CI-WIRED is the marker used by every canonical hermetic guard wired
+// into `task quality:gates` (all `infra/tests/check-*-syntax_test.sh` pairs
+// shipped since 2026-05). The script IS the CI gate itself — pure grep on
+// source, zero network, zero kubectl — functionally equivalent to
+// KEEP-CI-ORCHESTRATOR. Recognizing this marker prevents the canonical
+// hermetic pattern from silently ratcheting the baseline on every Red Team
+// closure (baseline drift 121→146 since 2026-06-30 which blocked PRs on
+// legitimate CI-wired guards).
+var homedMarkers = []string{"KEEP-OPERATOR", "KEEP-CI-ORCHESTRATOR", "KEEP-CI-WIRED"}
 
 // classify decides homed-ness from the script path + its allowlist justificativa.
 // Harness hooks (.claude/) and runtime container entrypoints are homed; an
