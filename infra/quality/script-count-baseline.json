@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 482,
+  "canonical_sh": 484,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 482,
+      "to": 484,
+      "reason": "Red Team loopzero/loopzero#155 closure canonical triplet \u2014 +2 net (hermetic guard EXTENDED, not new). New scripts: infra/tests/e2e/dev-public-billing-stripe-price-ids-seed-canonical_test.sh + archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-price-ids-seed-canonical.sh. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 480,
