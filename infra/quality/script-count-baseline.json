@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 494,
+  "canonical_sh": 497,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 494,
+      "to": 497,
+      "reason": "Red Team loopzero-cloud#159 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-promote-canonical-url_test.sh (3-scenario LIVE \u2014 SoT ResolveEntryAppFromApps + naming.AppURL + anti-silent-success) + infra/tests/check-dev-public-promote-canonical-url-syntax_test.sh (24-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-promote-canonical-url.sh (aggregator with Go unit tests). Fix: new pkg/naming/entry_app.go SoT + promotion_orchestrator.go switches to naming.AppURL canonical formula (analog of J-25 status.url fix on the promote path). Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 491,
