@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 477,
+  "canonical_sh": 480,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 477,
+      "to": 480,
+      "reason": "Plan dashboard-badge-data-plane-poller (Red Team loopzero-cloud#128) T5.1 + T5.2 + T5.3 canonical triplet. +3 canonical .sh: (1) infra/tests/e2e/dev-public-dashboard-projects-badge-data-plane-aware_test.sh (3 LIVE scenarios A engine wire / B bundle 4-state literals / C kubectl scale --replicas=0 → poller tick → last_replicas_ready_value=0); (2) infra/tests/check-dev-public-dashboard-projects-badge-data-plane-aware-syntax_test.sh (31-assertion hermetic guard wired in task quality:gates); (3) archive/canonical-tests-v1/scripts/local/dogfood-dashboard-projects-badge-data-plane-aware.sh (S1 hermetic + S2 vitest projects + S3 LIVE aggregator registered in dogfood-all.sh WRAPPERS). Per INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25. Owner-authorized hand-edit ratchet UP per sanctioned auditable pattern."
+    },
     {
       "date": "2026-07-01",
       "from": 404,
