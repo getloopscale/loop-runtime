@@ -114,6 +114,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-ensure-env.sh"                           # Red Team loopzero-cloud#158 (2026-07-01)
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-canonical-url.sh"                           # Red Team loopzero-cloud#159 (2026-07-01) — loopzero promote imprime URL sem prefixo de tenant (404)
   "archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh"                    # Red Team loopzero-cloud#160 (2026-07-01) — loopzero logs sem --build "No builds found" apesar de builds existirem
+  "archive/canonical-tests-v1/scripts/local/dogfood-cli-promote-non-tty.sh"                               # Red Team loopzero-cloud#161 (2026-07-01) — promote non-TTY hang
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)

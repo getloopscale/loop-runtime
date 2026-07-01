@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 500,
+  "canonical_sh": 503,
   "_changelog": [
+    {
+      "date": "2026-07-01",
+      "from": 500,
+      "to": 503,
+      "reason": "Red Team loopzero-cloud#161 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-cli-promote-non-tty_test.sh (3-scenario LIVE \u2014 isNonInteractive declared + wired + version bump) + infra/tests/check-dev-public-cli-promote-non-tty-syntax_test.sh (20-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-cli-promote-non-tty.sh. Fix in loopzero-cli: PromoteDeps.isNonInteractive + register/deploy.ts wires !stdin.isTTY + rl.on('close') EOF=N defense-in-depth. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+    },
     {
       "date": "2026-07-01",
       "from": 497,
