@@ -130,12 +130,15 @@ nodeSelector: {}
 # snapshots into env_targets. Consumed by ListProjectsWithSummaryByTenant
 # LATERAL JOIN so the /projects list badge is data-plane-aware.
 #
-# Default OFF: env-gated + fail-fast on missing pgUrl/prometheusUrl —
-# refuses to start on partial config rather than silently no-op.
+# Injected into the operator ConfigMap (envFrom) — the 4 keys are
+# ALWAYS present with defaults, so the CONFIG.md ↔ ConfigMap
+# set-equality gate is satisfied. Runtime fail-fast lives in the
+# binary (`operators/cmd/app-operator/main.go`): when ENABLED=true,
+# missing PG_URL / PROMETHEUS_URL exits non-zero.
 #
-# Enabling requires the two egress targets to be reachable — the chart's
-# NetworkPolicy adds `monitoring/prometheus:9090` egress AUTOMATICALLY
-# when this block sets `enabled: true` (see .Values.networkPolicy).
+# The chart's NetworkPolicy auto-adds `monitoring/prometheus:9090`
+# egress when this block sets `enabled: true` (see the loopzero-common
+# helper).
 dataPlanePoller:
   enabled: false
   # PG DSN for the LATERAL-JOIN table (env_targets). Same DB the engine

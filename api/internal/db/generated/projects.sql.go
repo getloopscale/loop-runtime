@@ -254,7 +254,7 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
   -- T3.1 data-plane snapshot LATERAL — companion to migration 000045.
   -- Picks the most recently scraped snapshot for a permanent env; the
-  -- partial index ` + "`" + `idx_env_targets_last_replicas_ready_at` + "`" + `
+  -- partial index ` + "`" + `idx_environment_targets_last_replicas_ready_at` + "`" + `
   -- (WHERE NOT NULL) keeps this ordered scan cheap even during
   -- Cleanroom warm-up when most rows are still NULL.
   SELECT et.last_replicas_ready_value, et.last_replicas_ready_at
@@ -284,7 +284,7 @@ type ListProjectsWithSummaryByTenantRow struct {
 	LatestFrameworkRaw     string             `json:"latest_framework_raw"`
 	LatestBuildEnvironment string             `json:"latest_build_environment"`
 	ActiveReleaseStatusRaw string             `json:"active_release_status_raw"`
-	LastReplicasReadyValue pgtype.Int4        `json:"last_replicas_ready_value"`
+	LastReplicasReadyValue *int32             `json:"last_replicas_ready_value"`
 	LastReplicasReadyAt    pgtype.Timestamptz `json:"last_replicas_ready_at"`
 }
 

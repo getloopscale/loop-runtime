@@ -413,8 +413,8 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 		// + `json:"...,omitempty"` produce absent JSON keys — the
 		// dashboard maps absence to the honest "Unknown" state without
 		// collapsing it to Down.
-		if r.LastReplicasReadyValue.Valid {
-			v := int(r.LastReplicasReadyValue.Int32)
+		if r.LastReplicasReadyValue != nil {
+			v := int(*r.LastReplicasReadyValue)
 			out.LastReplicasReadyValue = &v
 		}
 		if r.LastReplicasReadyAt.Valid {

@@ -70,7 +70,8 @@ func (q *Queries) DeleteEnvironmentTargetsByKind(ctx context.Context, db DBTX, a
 
 const getEnvironmentTarget = `-- name: GetEnvironmentTarget :one
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at, kind
+       active_release_id, updated_by, correlation_id, updated_at, kind,
+       last_replicas_ready_value, last_replicas_ready_at
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 `
@@ -98,13 +99,16 @@ func (q *Queries) GetEnvironmentTarget(ctx context.Context, db DBTX, arg GetEnvi
 		&i.CorrelationID,
 		&i.UpdatedAt,
 		&i.Kind,
+		&i.LastReplicasReadyValue,
+		&i.LastReplicasReadyAt,
 	)
 	return i, err
 }
 
 const listEnvironmentTargetsByProject = `-- name: ListEnvironmentTargetsByProject :many
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at, kind
+       active_release_id, updated_by, correlation_id, updated_at, kind,
+       last_replicas_ready_value, last_replicas_ready_at
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2
 `
@@ -136,6 +140,8 @@ func (q *Queries) ListEnvironmentTargetsByProject(ctx context.Context, db DBTX, 
 			&i.CorrelationID,
 			&i.UpdatedAt,
 			&i.Kind,
+			&i.LastReplicasReadyValue,
+			&i.LastReplicasReadyAt,
 		); err != nil {
 			return nil, err
 		}
