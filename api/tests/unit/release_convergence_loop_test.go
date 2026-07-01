@@ -264,7 +264,7 @@ func TestReleaseConvergenceLoop_ActivatesPendingRelease(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -320,7 +320,7 @@ func TestReleaseConvergenceLoop_TimesOutStaleRelease(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
 		},
 	)
@@ -373,7 +373,7 @@ func TestReleaseConvergenceLoop_SkipsWhenNotReady(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -415,7 +415,7 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, terminatingSyncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
 		},
 	)
@@ -458,7 +458,7 @@ func TestReleaseConvergenceLoop_HandlesEmptyPendingList(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 50 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -575,7 +575,7 @@ func TestReleaseConvergenceLoop_RetriggersSyncForStalledRelease(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -618,7 +618,7 @@ func TestReleaseConvergenceLoop_DoesNotRetriggerRecentRelease(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -653,7 +653,7 @@ func TestHealthCheckActiveReleases_DetectsDivergence(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval:      1 * time.Second,     // slow PENDING ticker
 			HealthInterval: 100 * time.Millisecond, // fast health ticker for test
 			SyncTimeout:   5 * time.Minute,
@@ -692,7 +692,7 @@ func TestHealthCheckActiveReleases_ClearsDivergenceWhenHealthy(t *testing.T) {
 
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
 			Interval:      1 * time.Second,
 			HealthInterval: 100 * time.Millisecond,
 			SyncTimeout:   5 * time.Minute,
