@@ -787,6 +787,46 @@ func TestMeteringStore_GetCellForTenant(t *testing.T) {
 	}
 }
 
+// TestMeteringStore_GetMeteringCursor_ReturnsSeededValue — the worker reads the
+// current cursor (the CAS target it threads into MeterInput.Expected) via
+// GetMeteringCursor. A seeded cursor is returned found=true with its exact value.
+func TestMeteringStore_GetMeteringCursor_ReturnsSeededValue(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-getcursor"
+	const cellID = "cell-ws-getcursor"
+	seeded := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '90 seconds'")
+
+	store := NewMeteringStore(pool)
+	got, found, err := store.GetMeteringCursor(ctx, tenantID, "cpu_core_seconds", cellID)
+	if err != nil {
+		t.Fatalf("GetMeteringCursor: %v", err)
+	}
+	if !found {
+		t.Fatal("found=false, want true for a seeded cursor")
+	}
+	if !got.Equal(seeded) {
+		t.Errorf("cursor=%v, want seeded %v", got, seeded)
+	}
+}
+
+// TestMeteringStore_GetMeteringCursor_NotFoundBeforeSeed — an unseeded (tenant,
+// metric, cell) returns found=false + zero time + nil error (pgx.ErrNoRows is
+// absorbed, never leaked to the caller). The worker seeds first (SC-5), then reads.
+func TestMeteringStore_GetMeteringCursor_NotFoundBeforeSeed(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	store := NewMeteringStore(pool)
+	got, found, err := store.GetMeteringCursor(ctx, "tn-never-seeded-xyz", "cpu_core_seconds", "cell-none")
+	if err != nil {
+		t.Fatalf("GetMeteringCursor(unseeded): %v", err)
+	}
+	if found {
+		t.Error("found=true, want false for an unseeded cursor")
+	}
+	if !got.IsZero() {
+		t.Errorf("cursor=%v, want zero time when not found", got)
+	}
+}
+
 // TestMeteringStore_SeedMeteringCursor_Idempotent — seeds the cursor to now() on
 // first sight (SC-5/EC-10); a second seed is a no-op (existing cursor untouched).
 func TestMeteringStore_SeedMeteringCursor_Idempotent(t *testing.T) {

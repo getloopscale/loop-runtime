@@ -133,6 +133,16 @@ SELECT metering_cost(@req_millicore::bigint, tail) AS tail_cost,
        metering_period_end(metering_period_end(@expected::timestamptz)) AS p2_end
 FROM adv;
 
+-- name: GetMeteringCursor :one
+-- Read the current cursor value — the CAS target the worker threads into
+-- MeterInput.Expected each tick (ADR-4/ADR-9: last_metered_at = @expected). Pure
+-- read; the wrapper absorbs pgx.ErrNoRows to (zero, found=false) so the worker
+-- seeds first (SeedMeteringCursor, SC-5) then reads. metering_cursor has no RLS.
+SELECT last_metered_at FROM metering_cursor
+WHERE tenant_id = @tenant_id::text
+  AND metric = @metric::text
+  AND cell_id = @cell_id::text;
+
 -- name: SeedMeteringCursor :exec
 -- Seed-if-absent to now() on first sight (EC-10 — zero charge for the pre-existence
 -- window). Idempotent: an existing cursor is untouched.

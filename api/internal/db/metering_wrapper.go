@@ -190,6 +190,24 @@ func (s *MeteringStore) SeedMeteringCursor(ctx context.Context, tenantID, metric
 	})
 }
 
+// GetMeteringCursor reads the current cursor value for (tenant, metric, cell) —
+// the CAS target the worker threads into MeterInput.Expected each tick (ADR-4/ADR-9:
+// the CTE advances only WHERE last_metered_at = @expected). found=false on NoRows
+// (the cursor has not been seeded yet; the worker seeds first via SeedMeteringCursor,
+// SC-5, then reads). metering_cursor has no RLS — no SET LOCAL needed.
+func (s *MeteringStore) GetMeteringCursor(ctx context.Context, tenantID, metric, cellID string) (cursor time.Time, found bool, err error) {
+	ts, err := generated.New().GetMeteringCursor(ctx, s.pool, generated.GetMeteringCursorParams{
+		TenantID: tenantID, Metric: metric, CellID: cellID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return ts.Time, true, nil
+}
+
 // GetPlanTierForTenant returns the tenant's active billing plan tier, defaulting
 // to "starter" when no active subscription exists (EC-4 — a missing plan is not
 // fatal; the tenant is metered at the free tier). subscriptions has no RLS.

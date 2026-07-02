@@ -80,6 +80,30 @@ func (q *Queries) GetCellForTenant(ctx context.Context, db DBTX, tenantID string
 	return cell_id, err
 }
 
+const getMeteringCursor = `-- name: GetMeteringCursor :one
+SELECT last_metered_at FROM metering_cursor
+WHERE tenant_id = $1::text
+  AND metric = $2::text
+  AND cell_id = $3::text
+`
+
+type GetMeteringCursorParams struct {
+	TenantID string `json:"tenant_id"`
+	Metric   string `json:"metric"`
+	CellID   string `json:"cell_id"`
+}
+
+// Read the current cursor value — the CAS target the worker threads into
+// MeterInput.Expected each tick (ADR-4/ADR-9: last_metered_at = @expected). Pure
+// read; the wrapper absorbs pgx.ErrNoRows to (zero, found=false) so the worker
+// seeds first (SeedMeteringCursor, SC-5) then reads. metering_cursor has no RLS.
+func (q *Queries) GetMeteringCursor(ctx context.Context, db DBTX, arg GetMeteringCursorParams) (pgtype.Timestamptz, error) {
+	row := db.QueryRow(ctx, getMeteringCursor, arg.TenantID, arg.Metric, arg.CellID)
+	var last_metered_at pgtype.Timestamptz
+	err := row.Scan(&last_metered_at)
+	return last_metered_at, err
+}
+
 const getPlanTierForTenant = `-- name: GetPlanTierForTenant :one
 SELECT COALESCE(plan, 'starter')::text AS plan_tier
 FROM subscriptions
