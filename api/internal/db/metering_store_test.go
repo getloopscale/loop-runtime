@@ -912,3 +912,105 @@ func TestMeteringStore_MeterComputeSplit_ContinuesNotResets(t *testing.T) {
 		t.Error("cursor not advanced past the boundary — expected continuation to now()")
 	}
 }
+
+// meteringWorkerPool opens a pool as the GENUINE loopzero_worker role (RLS applies,
+// rolbypassrls=false) via LOOPZERO_E2E_WORKER_DATABASE_URL. Skips when unset. Fails
+// LOUD if the DSN resolves to a BYPASSRLS role — an owner connection would make
+// the RLS twin theatre (it bypasses the policy unconditionally). SEPA CRITICAL #1.
+func meteringWorkerPool(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
+	dsn := os.Getenv("LOOPZERO_E2E_WORKER_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("LOOPZERO_E2E_WORKER_DATABASE_URL not set — loopzero_worker RLS test skipped")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("worker pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	var bypass bool
+	if err := pool.QueryRow(ctx, `SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user`).Scan(&bypass); err != nil {
+		t.Fatalf("check bypassrls: %v", err)
+	}
+	if bypass {
+		t.Fatal("LOOPZERO_E2E_WORKER_DATABASE_URL connects as a BYPASSRLS role — the RLS twin would be theatre; use a genuine loopzero_worker DSN")
+	}
+	return ctx, pool
+}
+
+// TestMeteringStore_MeterCompute_UnderRealWorkerRLS — the wrapper writes SUCCEED
+// on a genuine loopzero_worker connection (RLS enforced, no bypass): the SET LOCAL
+// app.tenant_id='' inside the tx satisfies the cost_counters policy so the
+// cross-tenant write is allowed. Proves the money-writer works under production
+// RLS, not just under the owner-bypass used by the other tests.
+func TestMeteringStore_MeterCompute_UnderRealWorkerRLS(t *testing.T) {
+	wctx, workerPool := meteringWorkerPool(t)
+	octx, ownerPool := meteringPool(t)
+	const tenantID = "tn-ws-rls"
+	const cellID = "cell-ws-rls"
+	expected := seedMeteringFixtureCommitted(t, octx, ownerPool, tenantID, cellID, "now() - interval '10 seconds'")
+
+	store := NewMeteringStore(workerPool)
+	adv, delta, err := store.MeterCompute(wctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: time.Hour, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("wrapper under loopzero_worker RLS: %v (SET LOCAL='' should satisfy the policy)", err)
+	}
+	if !adv || delta != 5 {
+		t.Errorf("advanced=%v delta=%d, want true 5 (write succeeds under real RLS)", adv, delta)
+	}
+	var counter int64
+	if err := ownerPool.QueryRow(octx, `SELECT value FROM cost_counters WHERE tenant_id=$1`, tenantID).Scan(&counter); err != nil {
+		t.Fatalf("read counter (owner view): %v", err)
+	}
+	if counter != 5 {
+		t.Errorf("counter=%d, want 5 (loopzero_worker wrote via SET LOCAL='')", counter)
+	}
+}
+
+// TestMeteringStore_WithoutRLSBypass_WritesZeroRows — the negative twin: on a
+// loopzero_worker connection carrying a LEAKED foreign app.tenant_id and WITHOUT the
+// wrapper's reset, the raw CTE's cost_counters write violates the RLS policy and
+// is rejected — NO counter row for the target tenant. Proves the wrapper's
+// SET LOCAL app.tenant_id='' is load-bearing against a leaked pooled setting.
+func TestMeteringStore_WithoutRLSBypass_WritesZeroRows(t *testing.T) {
+	wctx, workerPool := meteringWorkerPool(t)
+	octx, ownerPool := meteringPool(t)
+	const tenantID = "tn-ws-noby"
+	const cellID = "cell-ws-noby"
+	expected := seedMeteringFixtureCommitted(t, octx, ownerPool, tenantID, cellID, "now() - interval '10 seconds'")
+
+	// Raw CTE on a loopzero_worker tx with a LEAKED foreign app.tenant_id and NO reset.
+	tx, err := workerPool.Begin(wctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback(wctx)
+	if _, err := tx.Exec(wctx, `SET LOCAL app.tenant_id = 'some-other-tenant'`); err != nil {
+		t.Fatalf("set leaked tenant: %v", err)
+	}
+	_, err = generated.New().MeterCompute(wctx, tx, generated.MeterComputeParams{
+		ReqMillicore: 500, TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID,
+		Expected:  pgtype.Timestamptz{Time: expected, Valid: true},
+		Gen:       meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta:  pgtype.Interval{Microseconds: 3600 * 1_000_000, Valid: true},
+		PlanTier:  "starter",
+	})
+	if err == nil {
+		t.Error("raw write with a leaked foreign app.tenant_id succeeded — RLS not enforced (SET LOCAL='' IS load-bearing)")
+	}
+	_ = tx.Rollback(wctx)
+
+	// No counter row for the target tenant (the blocked write left nothing).
+	var rows int64
+	if err := ownerPool.QueryRow(octx, `SELECT count(*) FROM cost_counters WHERE tenant_id=$1`, tenantID).Scan(&rows); err != nil {
+		t.Fatalf("read counter rows (owner view): %v", err)
+	}
+	if rows != 0 {
+		t.Errorf("cost_counters rows=%d, want 0 (leaked-setting write must be blocked by RLS)", rows)
+	}
+}
