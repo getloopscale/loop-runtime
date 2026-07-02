@@ -65,7 +65,7 @@ env:
   # Local Hydra in loopzero-auth ns serves the JWKS for loopzero-api JWT verification.
   # JWKS_URL: internal cluster URL is faster + avoids outbound TLS — same
   # public keys regardless of fetch path.
-  JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  JWKS_URL: "https://auth-dev.loopzero.example/.well-known/jwks.json"
   # CANONICAL FIX 2026-06-15 dev-public LIVE auth chain: JWT_ISSUER MUST
   # match the `iss` claim set by Hydra at token mint time. Hydra is
   # configured with `urls.self.issuer` = https://auth-dev.loopzero.example/
@@ -73,7 +73,7 @@ env:
   # tokens carry the public URL as issuer. loopzero-api validation MUST
   # accept that same public URL. Before this fix loopzero-api expected
   # internal cluster URL, rejecting all browser-minted JWTs with 401.
-  JWT_ISSUER: "https://auth-dev.loopzero.example/"
+  JWT_ISSUER: "https://auth-dev.loopzero.example"
   # BuildKit (in k3d-loopzero-build) pushes tenant images to k3d-loopzero-registry
   # via plain HTTP — canonical for local dev k3d topology. loopzero-api
   # configures BuildKit submitter with this hint so registry-config
