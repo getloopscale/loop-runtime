@@ -373,6 +373,10 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			CreatedBy:          r.CreatedBy,
 			EnvironmentCount:   r.EnvironmentCount,
 			ProductionEnvCount: r.ProductionEnvCount,
+			// Red Team loopzero-cloud#134 (2026-07-02): "LIVE ENVS" counter must
+			// reflect envs with a currently-serving ACTIVE release (preview
+			// or permanent), not the legacy production_env_count subset.
+			ActiveEnvCount: r.ActiveEnvCount,
 			// Sponsor LIVE-caught 2026-06-18: the aggregate status MUST
 			// consider release state, not just latest build. A cancelled
 			// build with a still-ACTIVE release is Live, not Failed.
