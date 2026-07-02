@@ -90,6 +90,14 @@ data = re.sub(r'consent: http://localhost:\d+/[\w/-]*consent', f'consent: https:
 data = re.sub(r'logout: http://localhost:\d+/[\w/-]*logout', f'logout: https://{app}/logout', data)
 data = re.sub(r'error: http://localhost:\d+/[\w/-]*error', f'error: https://{app}/auth/error', data)
 
+# NOTE: CSRF cookie config (serve.cookies.{domain,same_site_mode,secure}) is
+# declared in the canonical helmfile overlay:
+#   infra/helmfile/values/dev-public/ory-hydra.yaml.gotmpl (v3.1 2026-07-02).
+# That overlay survives Cleanroom rebuilds via helmfile sync; this script only
+# rewrites runtime-injected localhost URL drift left by the chart defaults.
+# Combined defense — overlay for declarative state, this script for post-
+# Cleanroom URL sanity check.
+
 sys.stdout.write(data)
 ")
 
