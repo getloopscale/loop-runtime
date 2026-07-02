@@ -84,13 +84,16 @@ func (s *TenantStoreSqlc) ListTenantIDsByPattern(ctx context.Context, pattern st
 }
 
 // DeleteTenantsFKOrdered runs the 8-step FK-safe cascade for the given
-// tenant IDs. The caller MUST supply a tx (DBTX) so the whole cascade
-// is atomic — either every row for every tenant in the list is gone,
-// or none of them are. No-op (zero counts) for empty input.
+// tenant IDs, plus a 9th SC-5 (ADR-13) step that GCs the compute-metering
+// cursors (no FK to tenants; order-free). The caller MUST supply a tx
+// (DBTX) so the whole cascade is atomic — either every row for every
+// tenant in the list is gone, or none of them are. No-op (zero counts)
+// for empty input.
 //
 // FK order (validated by tools/admin-evict-tenants.sh step 5):
-//   environment_targets → releases → build_apps → builds → projects →
-//   subscriptions → tenant_members → tenants
+//
+//	environment_targets → releases → build_apps → builds → projects →
+//	subscriptions → tenant_members → tenants
 //
 // Each child table is purged before its parent. Releases/build_apps
 // reference builds (not tenants directly), so they use a sub-SELECT.
@@ -118,6 +121,9 @@ func (s *TenantStoreSqlc) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs 
 		{"subscriptions", func() (int64, error) { return s.q.AdminEvictSubscriptions(ctx, dbtx, tenantIDs) }, &counts.Subscriptions},
 		{"tenant_members", func() (int64, error) { return s.q.AdminEvictTenantMembers(ctx, dbtx, tenantIDs) }, &counts.TenantMembers},
 		{"tenants", func() (int64, error) { return s.q.AdminEvictTenants(ctx, dbtx, tenantIDs) }, &counts.Tenants},
+		// SC-5 (ADR-13) — GC the compute-metering cursors so a reused tenant_id
+		// cannot bill a stale window. No FK to tenants, so order is free.
+		{"metering_cursor", func() (int64, error) { return s.q.AdminEvictMeteringCursors(ctx, dbtx, tenantIDs) }, &counts.MeteringCursors},
 	}
 
 	for i, st := range steps {
@@ -139,7 +145,6 @@ func (s *TenantStoreSqlc) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs 
 // store.
 
 // lifecycle store. `pool` MUST implement SqlcBridge.
-
 
 // RequestDeletion inserts a pending deletion record. Idempotent: if
 // the tenant already has a pending deletion, returns the EXISTING

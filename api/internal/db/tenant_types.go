@@ -35,6 +35,7 @@ type TenantDeletionCounts struct {
 	Subscriptions      int64 `json:"subscriptions"`
 	TenantMembers      int64 `json:"tenant_members"`
 	Tenants            int64 `json:"tenants"`
+	MeteringCursors    int64 `json:"metering_cursors"` // SC-5 (ADR-13) — compute-metering cursor GC
 }
 
 // AdminTenantStore is the minimal contract consumed by the admin

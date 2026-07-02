@@ -278,7 +278,7 @@ func TestMeterComputeSplit_ReturnsTwoPeriodCosts(t *testing.T) {
 }
 
 // TestMeteringStore_MeterCompute_SamePeriod_WritesCounterAndUsage — the wrapper's
-// same-period path: ONE tx (SET LOCAL app.tenant_id='' → MeterCompute CTE →
+// same-period path: ONE tx (SET LOCAL app.tenant_id=” → MeterCompute CTE →
 // UpsertUsageRecord) writes cost_counters += delta AND one usage_records row for
 // (tenant,metric,period), and reports advanced=true. RED against the not-yet-existing
 // MeteringStore/MeterInput/NewMeteringStore/MeterCompute (compile failure).
@@ -1023,6 +1023,42 @@ func TestMeteringStore_NamespacesForTenant_ZeroProjects_EmptyNotError(t *testing
 	}
 }
 
+// TestTenantStoreSqlc_DeleteTenantsFKOrdered_GCsMeteringCursor_SC5 — SC-5 (ADR-13):
+// evicting a tenant GCs its metering_cursor rows alongside the other per-tenant
+// deletes, so a reused/reprovisioned tenant_id cannot bill a stale
+// [old_last_metered_at, now()] window (resurrection double-bill).
+func TestTenantStoreSqlc_DeleteTenantsFKOrdered_GCsMeteringCursor_SC5(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-gc"
+	const cellID = "cell-ws-gc"
+	seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now()")
+
+	var before int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metering_cursor WHERE tenant_id=$1`, tenantID).Scan(&before); err != nil {
+		t.Fatalf("count cursor before: %v", err)
+	}
+	if before != 1 {
+		t.Fatalf("precondition: metering_cursor rows=%d, want 1", before)
+	}
+
+	store := NewTenantStoreSqlc(&PgxAdapter{Pool: pool})
+	counts, err := store.DeleteTenantsFKOrdered(ctx, []string{tenantID})
+	if err != nil {
+		t.Fatalf("DeleteTenantsFKOrdered: %v", err)
+	}
+	if counts.MeteringCursors != 1 {
+		t.Errorf("counts.MeteringCursors=%d, want 1 (SC-5 GC)", counts.MeteringCursors)
+	}
+
+	var after int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metering_cursor WHERE tenant_id=$1`, tenantID).Scan(&after); err != nil {
+		t.Fatalf("count cursor after: %v", err)
+	}
+	if after != 0 {
+		t.Errorf("metering_cursor rows=%d after eviction, want 0 (a reused tenant_id must not bill a stale window — SC-5)", after)
+	}
+}
+
 // TestMeteringStore_SeedMeteringCursor_Idempotent — seeds the cursor to now() on
 // first sight (SC-5/EC-10); a second seed is a no-op (existing cursor untouched).
 func TestMeteringStore_SeedMeteringCursor_Idempotent(t *testing.T) {
@@ -1177,7 +1213,7 @@ func meteringWorkerPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 
 // TestMeteringStore_MeterCompute_UnderRealWorkerRLS — the wrapper writes SUCCEED
 // on a genuine loopzero_worker connection (RLS enforced, no bypass): the SET LOCAL
-// app.tenant_id='' inside the tx satisfies the cost_counters policy so the
+// app.tenant_id=” inside the tx satisfies the cost_counters policy so the
 // cross-tenant write is allowed. Proves the money-writer works under production
 // RLS, not just under the owner-bypass used by the other tests.
 func TestMeteringStore_MeterCompute_UnderRealWorkerRLS(t *testing.T) {
@@ -1212,7 +1248,7 @@ func TestMeteringStore_MeterCompute_UnderRealWorkerRLS(t *testing.T) {
 // loopzero_worker connection carrying a LEAKED foreign app.tenant_id and WITHOUT the
 // wrapper's reset, the raw CTE's cost_counters write violates the RLS policy and
 // is rejected — NO counter row for the target tenant. Proves the wrapper's
-// SET LOCAL app.tenant_id='' is load-bearing against a leaked pooled setting.
+// SET LOCAL app.tenant_id=” is load-bearing against a leaked pooled setting.
 func TestMeteringStore_WithoutRLSBypass_WritesZeroRows(t *testing.T) {
 	wctx, workerPool := meteringWorkerPool(t)
 	octx, ownerPool := meteringPool(t)
@@ -1231,10 +1267,10 @@ func TestMeteringStore_WithoutRLSBypass_WritesZeroRows(t *testing.T) {
 	}
 	_, err = generated.New().MeterCompute(wctx, tx, generated.MeterComputeParams{
 		ReqMillicore: 500, TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID,
-		Expected:  pgtype.Timestamptz{Time: expected, Valid: true},
-		Gen:       meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
-		MaxDelta:  pgtype.Interval{Microseconds: 3600 * 1_000_000, Valid: true},
-		PlanTier:  "starter",
+		Expected: pgtype.Timestamptz{Time: expected, Valid: true},
+		Gen:      meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: pgtype.Interval{Microseconds: 3600 * 1_000_000, Valid: true},
+		PlanTier: "starter",
 	})
 	if err == nil {
 		t.Error("raw write with a leaked foreign app.tenant_id succeeded — RLS not enforced (SET LOCAL='' IS load-bearing)")

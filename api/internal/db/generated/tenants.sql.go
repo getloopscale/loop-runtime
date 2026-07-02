@@ -57,6 +57,23 @@ func (q *Queries) AdminEvictEnvironmentTargets(ctx context.Context, db DBTX, dol
 	return result.RowsAffected(), nil
 }
 
+const adminEvictMeteringCursors = `-- name: AdminEvictMeteringCursors :execrows
+DELETE FROM metering_cursor
+WHERE tenant_id = ANY($1::text[])
+`
+
+// SC-5 (ADR-13, plan metering-compute-loop) — GC the compute-metering cursors on
+// tenant eviction, so a reused/reprovisioned tenant_id cannot bill a stale
+// [old_last_metered_at, now()] window (resurrection double-bill). metering_cursor
+// has no FK to tenants, so ordering vs the other evict steps does not matter.
+func (q *Queries) AdminEvictMeteringCursors(ctx context.Context, db DBTX, dollar_1 []string) (int64, error) {
+	result, err := db.Exec(ctx, adminEvictMeteringCursors, dollar_1)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminEvictProjects = `-- name: AdminEvictProjects :execrows
 DELETE FROM projects
 WHERE tenant_id = ANY($1::text[])
