@@ -36,6 +36,34 @@ var (
 		Name: "loopzero_metering_panics_total",
 		Help: "Total metering passes that panicked and were recovered (ADR-1).",
 	})
+
+	// tenantsMeteredTotal counts individual tenants successfully metered. Compared
+	// against the active-tenant count (loopzero_tenants_active), a persistent shortfall
+	// in rate(tenants_metered_total) is the subset-miss detector: a bug that silently
+	// skips a slice of the fleet leaves this counter lagging the active gauge.
+	tenantsMeteredTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_metering_tenants_metered_total",
+		Help: "Total tenants successfully metered (vs loopzero_tenants_active — subset-miss detector).",
+	})
+
+	// passDurationSeconds is the wall-clock of one RunOnce pass. Its p95 approaching
+	// the tick interval is the informer-ceiling signal (the fleet no longer fits in
+	// one interval → widen the interval or shard the loop). Buckets span sub-second
+	// (tiny fleets) to minutes (1500-tenant load).
+	passDurationSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "loopzero_metering_pass_duration_seconds",
+		Help:    "Wall-clock duration of one metering pass (informer-ceiling signal).",
+		Buckets: []float64{0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300},
+	})
+
+	// secondsSinceLastSuccess is the freshness gauge: seconds elapsed since the last
+	// completed pass, refreshed each tick. Alerts fire when it exceeds ~3×interval
+	// (the loop is stuck: stalled RunOnce, lost leadership without release, wedged
+	// informer). A stale metering loop under-bills silently — this gauge is the alarm.
+	secondsSinceLastSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_metering_seconds_since_last_success",
+		Help: "Seconds since the last completed metering pass (freshness — alert on >3×interval).",
+	})
 )
 
 // PrometheusMetrics is the production metering.Metrics, backed by the package
@@ -62,7 +90,22 @@ func (PrometheusMetrics) Panic() {
 
 // Held is a no-op: a HELD write (lost CAS / backward clock / period straddle /
 // stale fence) has no dedicated counter in the plan's canonical loopzero_metering_*
-// list. The loop's tenants_metered_total vs the active-tenant count (S4) is the
+// list. The loop's tenants_metered_total vs the active-tenant count is the
 // subset-miss signal that surfaces persistent holds; a per-hold counter would be
 // an invented metric (rejected — do not invent counters the plan did not declare).
 func (PrometheusMetrics) Held() {}
+
+// TenantMetered increments the per-tenant success counter (subset-miss detector).
+func (PrometheusMetrics) TenantMetered() {
+	tenantsMeteredTotal.Inc()
+}
+
+// PassDuration observes one pass's wall-clock (informer-ceiling histogram).
+func (PrometheusMetrics) PassDuration(seconds float64) {
+	passDurationSeconds.Observe(seconds)
+}
+
+// SecondsSinceLastSuccess sets the freshness gauge (staleness alarm).
+func (PrometheusMetrics) SecondsSinceLastSuccess(s float64) {
+	secondsSinceLastSuccess.Set(s)
+}

@@ -48,16 +48,17 @@ type LoopConfig struct {
 func NewWorkerLoop(pool *pgxpool.Pool, crClient client.Client, cellProvider CellClientProvider, cfg LoopConfig) *Loop {
 	store := db.NewMeteringStore(pool)
 	metrics := NewPrometheusMetrics()
+	clock := SystemClock{}
 	worker := &Worker{
 		Lister:         &CRTenantLister{Client: crClient},
 		Store:          store,
 		Namespaces:     store,
 		PodListers:     NewCellPodListerFactory(cellProvider),
-		Clock:          SystemClock{},
+		Clock:          clock,
 		Metrics:        metrics,
 		Lease:          cfg.Lease,
 		MaxDelta:       cfg.MaxDelta,
 		MaxConcurrency: cfg.MaxConcurrency,
 	}
-	return NewLoop(worker, store, metrics, cfg.Interval)
+	return NewLoop(worker, store, metrics, clock, cfg.Interval)
 }

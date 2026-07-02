@@ -120,17 +120,33 @@ type fakeClock struct{ now time.Time }
 func (c fakeClock) Now() time.Time { return c.now }
 
 type fakeMetrics struct {
-	mu            sync.Mutex
-	cellErrors    int
-	advancedCalls int
-	heldCalls     int
-	panicCalls    int
+	mu                 sync.Mutex
+	cellErrors         int
+	advancedCalls      int
+	heldCalls          int
+	panicCalls         int
+	tenantMeteredCalls int
+	passDurations      []float64
+	lastFreshness      float64
+	freshnessCalls     int
 }
 
 func (m *fakeMetrics) CellError()       { m.mu.Lock(); m.cellErrors++; m.mu.Unlock() }
 func (m *fakeMetrics) Advanced(_ int64) { m.mu.Lock(); m.advancedCalls++; m.mu.Unlock() }
 func (m *fakeMetrics) Held()            { m.mu.Lock(); m.heldCalls++; m.mu.Unlock() }
 func (m *fakeMetrics) Panic()           { m.mu.Lock(); m.panicCalls++; m.mu.Unlock() }
+func (m *fakeMetrics) TenantMetered()   { m.mu.Lock(); m.tenantMeteredCalls++; m.mu.Unlock() }
+func (m *fakeMetrics) PassDuration(s float64) {
+	m.mu.Lock()
+	m.passDurations = append(m.passDurations, s)
+	m.mu.Unlock()
+}
+func (m *fakeMetrics) SecondsSinceLastSuccess(s float64) {
+	m.mu.Lock()
+	m.lastFreshness = s
+	m.freshnessCalls++
+	m.mu.Unlock()
+}
 
 // fakeTenantLister returns a fixed active-tenant list (or an error) for RunOnce.
 type fakeTenantLister struct {
@@ -179,6 +195,9 @@ func TestMeterTenant_SameMonth_DispatchesMeterCompute(t *testing.T) {
 	}
 	if metrics.advancedCalls != 1 {
 		t.Errorf("advanced metric=%d, want 1", metrics.advancedCalls)
+	}
+	if metrics.tenantMeteredCalls != 1 {
+		t.Errorf("tenant_metered metric=%d, want 1 (a clean pass counts the tenant — subset-miss detector)", metrics.tenantMeteredCalls)
 	}
 	if store.lastInput.Gen != 7 || store.lastInput.ReqMillicore != 500 || store.lastInput.CellID != "cell-1" || store.lastInput.LoopName != "compute-metering" {
 		t.Errorf("MeterInput = %+v, want Gen=7 ReqMillicore=500 CellID=cell-1 LoopName=compute-metering", store.lastInput)
@@ -234,6 +253,9 @@ func TestMeterTenant_CollectError_SC3_NoMeterNoSeed(t *testing.T) {
 	}
 	if metrics.cellErrors != 1 {
 		t.Errorf("cellErrors=%d, want 1", metrics.cellErrors)
+	}
+	if metrics.tenantMeteredCalls != 0 {
+		t.Errorf("tenant_metered=%d, want 0 — a tenant that ERRORED must NOT count as metered (excluded from subset detector)", metrics.tenantMeteredCalls)
 	}
 }
 

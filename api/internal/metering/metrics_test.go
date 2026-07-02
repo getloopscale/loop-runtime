@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // TestPrometheusMetrics_SatisfiesInterface — compile-time proof the concrete impl
@@ -69,4 +70,57 @@ func TestPrometheusMetrics_Held_IsNoOpNotPanic(t *testing.T) {
 	if testutil.ToFloat64(cellErrorsTotal) != cellBefore {
 		t.Error("Held touched cell_errors_total, want no-op")
 	}
+}
+
+// TestPrometheusMetrics_TenantMetered_IncrementsCounter — TenantMetered() adds one
+// to tenants_metered_total (S4b subset-miss detector: compared against the active
+// gauge, a lagging rate exposes a silently-skipped slice of the fleet).
+func TestPrometheusMetrics_TenantMetered_IncrementsCounter(t *testing.T) {
+	m := NewPrometheusMetrics()
+	before := testutil.ToFloat64(tenantsMeteredTotal)
+	m.TenantMetered()
+	if got := testutil.ToFloat64(tenantsMeteredTotal) - before; got != 1 {
+		t.Errorf("tenants_metered_total delta=%v, want 1", got)
+	}
+}
+
+// TestPrometheusMetrics_PassDuration_ObservesHistogram — PassDuration(s) observes
+// one sample into pass_duration_seconds (the informer-ceiling histogram). A
+// histogram exposes multiple series, so ToFloat64 does not apply — the sample
+// count is read via the dto write.
+func TestPrometheusMetrics_PassDuration_ObservesHistogram(t *testing.T) {
+	m := NewPrometheusMetrics()
+	before := histSampleCount(t)
+	m.PassDuration(3.5)
+	if got := histSampleCount(t) - before; got != 1 {
+		t.Errorf("pass_duration_seconds sample count delta=%d, want 1", got)
+	}
+}
+
+// TestPrometheusMetrics_SecondsSinceLastSuccess_SetsGauge — SecondsSinceLastSuccess(s)
+// SETS (not adds) the freshness gauge to the absolute staleness value.
+func TestPrometheusMetrics_SecondsSinceLastSuccess_SetsGauge(t *testing.T) {
+	m := NewPrometheusMetrics()
+	m.SecondsSinceLastSuccess(123)
+	if got := testutil.ToFloat64(secondsSinceLastSuccess); got != 123 {
+		t.Errorf("seconds_since_last_success=%v, want 123 (Set, not Add)", got)
+	}
+	m.SecondsSinceLastSuccess(7) // a Set overwrites, never accumulates
+	if got := testutil.ToFloat64(secondsSinceLastSuccess); got != 7 {
+		t.Errorf("seconds_since_last_success=%v after re-Set, want 7", got)
+	}
+}
+
+// histSampleCount reads the cumulative observation count of the pass-duration
+// histogram (the promauto Histogram exposes a series count, not a scalar, so the
+// dto write is the way to assert an Observe landed).
+func histSampleCount(t *testing.T) uint64 {
+	t.Helper()
+	var metric dto.Metric
+	if err := passDurationSeconds.(interface {
+		Write(*dto.Metric) error
+	}).Write(&metric); err != nil {
+		t.Fatalf("write pass_duration_seconds: %v", err)
+	}
+	return metric.GetHistogram().GetSampleCount()
 }
