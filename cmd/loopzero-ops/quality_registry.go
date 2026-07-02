@@ -126,6 +126,12 @@ var taskWiredWord = regexp.MustCompile(`loopzero-ops quality ([a-z0-9][a-z0-9-]*
 // `#` comment can never be mistaken for a wired gate. A read or parse failure
 // returns a typed error naming the path — never a silent empty set (which would
 // mislabel every gate unwired and defeat the oracle).
+//
+// Known limitation (no occurrences in the live taskfile): a gate name embedded
+// inside a shell string within a cmd (e.g. `echo "loopzero-ops quality X"`) counts X
+// as wired, and a gate invoked only via `preconditions:` (not `cmds:`) is not
+// counted. Both are acceptable for the repo's convention (all real invocations
+// are direct `- <path>loopzero-ops quality <gate>` cmds items).
 func taskWiredSet(taskfilePath string) (map[string]bool, error) {
 	data, err := os.ReadFile(taskfilePath)
 	if err != nil {
