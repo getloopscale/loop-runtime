@@ -22,7 +22,7 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	k "github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -36,11 +36,11 @@ var errSecretTypeMismatch = fmt.Errorf("secret type mismatch: deleted for recrea
 // reconcileBuildNamespace orchestrates the build-{tenantID} namespace provisioning.
 // Each step is idempotent via CreateOrUpdate. Steps are extracted into focused functions.
 func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) (err error) {
-	ctx, span := shared.StartChildSpan(ctx, "tenant.build.namespace")
+	ctx, span := reconcilehelpers.StartChildSpan(ctx, "tenant.build.namespace")
 	defer span.End()
 	defer func() {
 		if err != nil {
-			shared.RecordError(span, err)
+			reconcilehelpers.RecordError(span, err)
 		}
 	}()
 	buildNs, err := naming.BuildNamespace(tenant.Name)
@@ -121,12 +121,12 @@ func (r *TenantReconciler) ensureBuildQuota(ctx context.Context, buildNs string,
 }
 
 // ensureBuildLimitRange creates or updates the LimitRange for default resource requests/limits.
-// Phase 3 v40: delegates to shared.ApplyContainerLimitRange so the build
+// Phase 3 v40: delegates to reconcilehelpers.ApplyContainerLimitRange so the build
 // LimitRange shares the canonical creation path with tenant + preview
 // LimitRanges. Only the constants differ (build vs tenant defaults).
 func (r *TenantReconciler) ensureBuildLimitRange(ctx context.Context, buildNs string) error {
-	return shared.ApplyContainerLimitRange(ctx, r.BuildClient, buildNs, k.LimitRangeBuild, "build limitrange",
-		shared.LimitRangeContainerDefaults{
+	return reconcilehelpers.ApplyContainerLimitRange(ctx, r.BuildClient, buildNs, k.LimitRangeBuild, "build limitrange",
+		reconcilehelpers.LimitRangeContainerDefaults{
 			CPU:           k.BuildLimitDefaultCPU,
 			Memory:        k.BuildLimitDefaultMemory,
 			RequestCPU:    k.BuildLimitDefaultRequestCPU,

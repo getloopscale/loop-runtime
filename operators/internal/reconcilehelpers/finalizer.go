@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package shared
+package reconcilehelpers
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 //
 // Usage:
 //
-//	if err := shared.EnsureFinalizer(ctx, r.Client, &x, xFinalizer, req.NamespacedName); err != nil {
+//	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &x, xFinalizer, req.NamespacedName); err != nil {
 //	    return ctrl.Result{}, err
 //	}
 //

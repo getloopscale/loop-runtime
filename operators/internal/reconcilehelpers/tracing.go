@@ -4,7 +4,7 @@
 // Package shared provides cross-controller utilities shared by all operator
 // binaries. Extracted from internal/controller to enable multi-binary split
 // (ADR D2 — operator-controller-extraction-plan.md).
-package shared
+package reconcilehelpers
 
 import (
 	"context"
@@ -54,7 +54,7 @@ func SetSuccess(span trace.Span) {
 // Call with defer at the start of each Reconcile method:
 //
 //	start := time.Now()
-//	defer func() { shared.ReconcileOutcome(controllerName, start, retErr) }()
+//	defer func() { reconcilehelpers.ReconcileOutcome(controllerName, start, retErr) }()
 func ReconcileOutcome(controller string, start time.Time, err error) {
 	duration := time.Since(start).Seconds()
 	result := "success"

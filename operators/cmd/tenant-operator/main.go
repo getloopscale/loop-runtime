@@ -34,7 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
@@ -91,8 +91,8 @@ func main() {
 	// registry no one read. ContextLogger via NewContextLogger is the
 	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
-	if shared.PprofEnabled() {
-		shared.StartPprofServer()
+	if reconcilehelpers.PprofEnabled() {
+		reconcilehelpers.StartPprofServer()
 	}
 
 	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16 +
@@ -165,7 +165,7 @@ func main() {
 		setupLog.Error(nil, "BUILD_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	buildClient, err := shared.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
+	buildClient, err := reconcilehelpers.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
 	if err != nil {
 		setupLog.Error(err, "failed to create build cluster client")
 		os.Exit(1)
@@ -176,7 +176,7 @@ func main() {
 		setupLog.Error(nil, "RUNTIME_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
 	if err != nil {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)
@@ -275,7 +275,7 @@ func main() {
 
 	// fix-all-platform-issues-plan T1.1: cell-aware Environment reconciler.
 	// Routes namespace/RBAC/NetworkPolicy/Quota writes per tenant.spec.cellID.
-	envFactory := shared.NewCellAwareRuntimeClientFactory(
+	envFactory := reconcilehelpers.NewCellAwareRuntimeClientFactory(
 		mgr.GetClient(), runtimeClient, "loopzero-system")
 	if err := tenant.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, envFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")

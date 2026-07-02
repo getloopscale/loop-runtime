@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package shared
+package reconcilehelpers
 
 import (
 	"testing"
 )
 
-// TestPprofEnabled exercises shared.PprofEnabled (the canonical pprof gate
+// TestPprofEnabled exercises reconcilehelpers.PprofEnabled (the canonical pprof gate
 // used by all 4 split binaries via cmd/{tenant,app,preview,platform}-operator).
 //
 // Migrated from cmd/pprof_test.go which exercised the monolith's

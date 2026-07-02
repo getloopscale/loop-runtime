@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package shared
+package reconcilehelpers
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -39,7 +39,7 @@ import (
 // Apply at controller setup:
 //
 //	ctrl.NewControllerManagedBy(mgr).
-//	    For(&loopzerov1.Tenant{}, builder.WithPredicates(shared.OperatorPredicates())).
+//	    For(&loopzerov1.Tenant{}, builder.WithPredicates(reconcilehelpers.OperatorPredicates())).
 //	    Owns(...).
 //	    Complete(...)
 //
@@ -57,11 +57,11 @@ func OperatorPredicates() predicate.Predicate {
 // ForOption is a convenience that wraps OperatorPredicates() in
 // builder.WithPredicates() so call sites stay one-line:
 //
-//	For(&loopzerov1.Tenant{}, shared.ForOption())
+//	For(&loopzerov1.Tenant{}, reconcilehelpers.ForOption())
 //
 // Equivalent to:
 //
-//	For(&loopzerov1.Tenant{}, builder.WithPredicates(shared.OperatorPredicates()))
+//	For(&loopzerov1.Tenant{}, builder.WithPredicates(reconcilehelpers.OperatorPredicates()))
 func ForOption() builder.ForOption {
 	return builder.WithPredicates(OperatorPredicates())
 }

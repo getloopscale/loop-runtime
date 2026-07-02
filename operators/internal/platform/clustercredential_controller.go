@@ -27,7 +27,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/metrics"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
@@ -64,16 +64,16 @@ var clusterCredentialDetailTypes = []string{conditions.TypeConnected}
 
 // Reconcile handles the reconciliation loop for ClusterCredential resources.
 func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := shared.StartReconcileSpan(ctx, "clustercredential", req.Name, req.Namespace)
+	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "clustercredential", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			shared.RecordError(span, retErr)
+			reconcilehelpers.RecordError(span, retErr)
 		} else {
-			shared.SetSuccess(span)
+			reconcilehelpers.SetSuccess(span)
 		}
-		shared.ReconcileOutcome("clustercredential", start, retErr)
+		reconcilehelpers.ReconcileOutcome("clustercredential", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -94,7 +94,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// mutation per ADR-0025. Defer ensures it runs even on early return
 	// or panic from internal helpers (resolveKubeconfig, checkConnectivity)
 	// that have their own Status().Update sites.
-	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.ClusterCredential { return &loopzerov1.ClusterCredential{} },
 		func(x *loopzerov1.ClusterCredential) *[]metav1.Condition { return &x.Status.Conditions },
 		clusterCredentialDetailTypes)()
@@ -103,7 +103,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.reconcileDelete(ctx, &cr)
 	}
 
-	if err := shared.EnsureFinalizer(ctx, r.Client, &cr, clusterCredentialFinalizer, req.NamespacedName); err != nil {
+	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &cr, clusterCredentialFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -211,7 +211,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr 
 // checkConnectivity validates that the cluster is reachable via /healthz.
 // Returns (false, result, nil) if unreachable (status updated, requeue set).
 func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
-	ctx, span := shared.StartChildSpan(ctx, "clustercredential.connectivity.check")
+	ctx, span := reconcilehelpers.StartChildSpan(ctx, "clustercredential.connectivity.check")
 	defer span.End()
 	logger := log.FromContext(ctx)
 
@@ -503,7 +503,7 @@ func SetupClusterCredentialController(mgr ctrl.Manager, argoCDNamespace string) 
 		CAFetcher:       newKubeRootCAFetcher(),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ClusterCredential{}, shared.ForOption()).
+		For(&loopzerov1.ClusterCredential{}, reconcilehelpers.ForOption()).
 		// D-02: Watch Secrets -- when a kubeconfig Secret is updated (e.g.,
 		// rotated by Pulumi), find the ClusterCredentials that reference it
 		// and requeue them immediately.

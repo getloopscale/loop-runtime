@@ -15,13 +15,13 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 )
 
 // reconcileNamespace ensures the namespace exists via CreateOrUpdate.
 // fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
 func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loopzerov1.Environment, nsName, tenantName string) error {
-	ctx, span := shared.StartChildSpan(ctx, "environment.namespace.ensure")
+	ctx, span := reconcilehelpers.StartChildSpan(ctx, "environment.namespace.ensure")
 	defer span.End()
 	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
 	if err != nil {
@@ -98,5 +98,5 @@ func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzer
 	}
 
 	// LimitRange (always created)
-	return shared.ApplyTenantLimitRange(ctx, runtimeClient, nsName, "limitrange")
+	return reconcilehelpers.ApplyTenantLimitRange(ctx, runtimeClient, nsName, "limitrange")
 }

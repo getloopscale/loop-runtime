@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 )
 
 // Sprint 5 / T1.2 — preview namespace hardening.
@@ -42,13 +42,13 @@ const (
 //
 // Identical defense-in-depth posture as EnvironmentReconciler — uses the
 // same constants so platform-wide audits don't have to special-case
-// previews. Phase 3 v37: delegates to shared.ApplyTenantNetworkPolicies
+// previews. Phase 3 v37: delegates to reconcilehelpers.ApplyTenantNetworkPolicies
 // to eliminate the 3-function cross-package duplication with environment_network.go.
 //
 // drift-baseline.md port #3: r.ingressNS() resolves the Traefik namespace
 // (configurable via INGRESS_NAMESPACE env, defaults to constants.NamespaceIngress).
 func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context, nsName string) error {
-	return shared.ApplyTenantNetworkPolicies(ctx, r.RuntimeClient, nsName, r.ingressNS(), "preview networkpolicy")
+	return reconcilehelpers.ApplyTenantNetworkPolicies(ctx, r.RuntimeClient, nsName, r.ingressNS(), "preview networkpolicy")
 }
 
 // reconcilePreviewServiceAccount ensures the `loopzero-app` ServiceAccount
@@ -117,5 +117,5 @@ func (r *PreviewReconciler) reconcilePreviewQuota(ctx context.Context, nsName st
 		return fmt.Errorf("preview resourcequota %s/%s: %w", nsName, constants.QuotaTenant, err)
 	}
 
-	return shared.ApplyTenantLimitRange(ctx, r.RuntimeClient, nsName, "preview limitrange")
+	return reconcilehelpers.ApplyTenantLimitRange(ctx, r.RuntimeClient, nsName, "preview limitrange")
 }

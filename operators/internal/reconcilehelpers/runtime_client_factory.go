@@ -28,7 +28,7 @@
 // Future work: integrate ClusterCredential reconcile event watcher to
 // invalidate cache on Secret update).
 
-package shared
+package reconcilehelpers
 
 import (
 	"context"
