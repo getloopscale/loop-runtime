@@ -7,12 +7,28 @@ package metering
 // metering-compute-loop T3.1). No cluster, no DB — corev1.Pod fixtures only.
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// fakePodLister returns canned pods per namespace, or a canned error, for the
+// collectNamespaces tests (no cluster).
+type fakePodLister struct {
+	byNS  map[string][]corev1.Pod
+	errNS map[string]error
+}
+
+func (f fakePodLister) ListPods(ctx context.Context, namespace string) ([]corev1.Pod, error) {
+	if e, ok := f.errNS[namespace]; ok {
+		return nil, e
+	}
+	return f.byNS[namespace], nil
+}
 
 // podWith builds a scheduled Running pod with one container requesting cpuReq
 // (e.g. "500m") + memReq (e.g. "1Gi").
@@ -100,5 +116,48 @@ func TestSumComputeRequests_InitAndSidecar(t *testing.T) {
 	cpuB, _ := sumComputeRequests([]corev1.Pod{sidecar})
 	if cpuB != 700 {
 		t.Errorf("sidecar cpu=%d, want 700 (regular 500 + sidecar 200)", cpuB)
+	}
+}
+
+
+// TestCollectNamespaces_SumsAcrossNamespaces — collect lists pods across all a
+// tenant's (project,env) namespaces on a cell and sums the effective request.
+func TestCollectNamespaces_SumsAcrossNamespaces(t *testing.T) {
+	lister := fakePodLister{byNS: map[string][]corev1.Pod{
+		"loopzero-acme-web-prod":    {podWith("500m", "512Mi")},
+		"loopzero-acme-worker-prod": {podWith("250m", "256Mi"), podWith("250m", "256Mi")},
+	}}
+	cpu, mem, err := collectNamespaces(context.Background(), lister, []string{"loopzero-acme-web-prod", "loopzero-acme-worker-prod"})
+	if err != nil {
+		t.Fatalf("collectNamespaces: %v", err)
+	}
+	if cpu != 1000 { // 500 + 250 + 250
+		t.Errorf("cpuMillicores=%d, want 1000", cpu)
+	}
+	if mem != 1<<30 { // 512Mi + 256Mi + 256Mi = 1Gi
+		t.Errorf("memBytes=%d, want %d (1Gi)", mem, int64(1<<30))
+	}
+}
+
+// TestCollectNamespaces_ListErrorShortCircuits — SC-3: a pod-list failure on ANY
+// namespace short-circuits with a non-nil error and ZERO totals; the caller MUST
+// NOT meter (never swallow a read failure to Σreq=0, which would advance the
+// cursor over an unmeasured interval → silent under-bill).
+func TestCollectNamespaces_ListErrorShortCircuits(t *testing.T) {
+	boom := errors.New("cell unreachable")
+	lister := fakePodLister{
+		byNS:  map[string][]corev1.Pod{"loopzero-acme-web-prod": {podWith("500m", "512Mi")}},
+		errNS: map[string]error{"loopzero-acme-worker-prod": boom},
+	}
+	cpu, mem, err := collectNamespaces(context.Background(), lister,
+		[]string{"loopzero-acme-web-prod", "loopzero-acme-worker-prod"})
+	if err == nil {
+		t.Fatal("collectNamespaces returned nil error on a list failure — SC-3 violated (must short-circuit, never swallow to 0)")
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("error does not wrap the underlying list failure: %v", err)
+	}
+	if cpu != 0 || mem != 0 {
+		t.Errorf("totals=(%d,%d) on a read failure, want (0,0) — no partial sum may leak to a meter write", cpu, mem)
 	}
 }
