@@ -40,6 +40,15 @@ service:
   nodePort: 30001
 
 env:
+  # CANONICAL FIX 2026-07-02 (Red Team #133): Argo build workflow's
+  # sign-image + attest-image steps must reference the locally-imported
+  # k3d cosign/syft images, NOT the DOCR defaults from api/internal/argo/
+  # constants.go (which require prod DOCR pull secrets). Without these
+  # overrides, build stalls at sign-image-app with ImagePullBackOff
+  # 401 Unauthorized against DigitalOcean Container Registry.
+  # Mirrors infra/helm/loopzero-api/values-dev.yaml canonical dev-mode.
+  LOOPZERO_COSIGN_IMAGE: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
+  LOOPZERO_SYFT_IMAGE: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
   # CANONICAL FIX 2026-06-15 (goal "continue until ALL tests pass"):
   # OpenBao Transit chain enabled in dev-public. role_id comes from
   # `bao read auth/approle/role/loopzero-api/role-id` after
