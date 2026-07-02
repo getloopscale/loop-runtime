@@ -255,6 +255,29 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
+### M9 — [ ] Engine Architecture Hardening
+
+**Objective:** apply the 8-step behavior-preserving migration plan from the FAANG-level architecture audit (score 77/100, verdict `REFACTOR LIGHTLY`, report `architect-output/architecture-report.md`) to fix all 5 MEDIUM findings — oversized flat packages, one god file, `pkg/quality` boundary misfit, one generic god-folder, and mixed-responsibility operator package. **Why now:** de-risk before the `loopzero-contracts`/`loopzero-cloud` extractions — finding #3 (`pkg/quality` would be dragged into the contracts base) hardens into real debt post-split, and every step is behavior-preserving today.
+
+> **Governance note:** classified **T2** (ratified). **APPROVED_WITH_CONDITIONS** at `docs/meetings/records/MEET-2026-07-02-001.md` (Review Board + PDR + CVP + contract-api-operators + state-guardian; no T3 escalation, no veto). Engineering start is unblocked once the 12 mandatory actions are wired — the load-bearing ones: MA-1 build `loopzero-ops quality --list` gate-set oracle FIRST (before step 3); MA-2 deliver as 8 atomic `develop→main` PRs (not one mega-PR); MA-7 keep `store` the only exported status-mutation path (no `db/generated` bypass of `SafeTransition`); MA-9 operator split stays one binary/one manager. Step 7 (gate self-registration) re-classified low→**HIGH** (silent gate un-wire risk). Per-step validation is hermetic (`go build && go test && task quality:gates && task lint` + envtest), NOT per-step LIVE.
+
+**Definition of done:**
+
+- [ ] Steps 1+2 (risk: low, `behavior_change: none`): `operators/internal/shared` renamed to `reconcilehelpers`; Environment reconciler extracted from `operators/internal/tenant` into `operators/internal/environment` — `go build ./... && go test ./...` green
+- [ ] Steps 3+4 (risk: medium, `behavior_change: none`): `pkg/quality` (14.6k LOC ≈ 59% of `pkg/`) relocated out of the shared-contracts base + gate importers rewired + scanned paths externalized — `task quality:gates` green AND `pkg/` LOC drops materially
+- [ ] Steps 5+6 (risk: medium, `behavior_change: none`): `api/internal/db` (70 files/14.8k LOC) split into generated/repository/store; `api/internal/services` (56 files/12.3k LOC, 86 structs) grouped by domain — `cd api && go test ./internal/db/... ./internal/services/...` green
+- [ ] Step 7 (risk: low, `behavior_change: minor`): `cmd/loopzero-ops/quality_subcmd.go` (2909 LOC god file) refactored to per-gate self-registration — `task quality:gates` green, gate behavior identical
+- [ ] Step 8 (verification): no new import cycles (`go build ./...` authoritative); `go test ./... && task lint` green after EVERY step; re-run `/loop-codebase-architect loopzero/` scores ≥ 85 (Keep band)
+
+**Dependencies:** none — orthogonal to the dashboard journeys M0..M8; can start at any time independent of journey progress.
+
+**Top risks:**
+
+1. Import rewiring across ~38k LOC of flat packages (db/services/routes) can break call sites the compiler misses at the edges (reflection, build tags). Mitigation: incremental per-step `go build && go test` gate; every step `behavior_change: none`.
+2. `pkg/quality` relocation is a T2 change (shared `pkg/`) that could destabilize the 77 CI quality gates if a gate importer path is missed. Mitigation: `task quality:gates` after steps 3/4/7; T2 governance meeting before implementation.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |
