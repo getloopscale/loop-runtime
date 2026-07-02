@@ -1014,3 +1014,49 @@ func TestMeteringStore_WithoutRLSBypass_WritesZeroRows(t *testing.T) {
 		t.Errorf("cost_counters rows=%d, want 0 (leaked-setting write must be blocked by RLS)", rows)
 	}
 }
+
+// TestMeteringStore_MeterCompute_ClampsLongGap — ADR-8: a stale cursor within the
+// SAME month bills at most max_delta of catch-up, not the full raw gap (a long
+// leader outage must not over-bill). Seed the cursor at this month's start (same
+// month), max_delta 30s → the same-period writer clamps elapsed to 30s. Asserts
+// delta == the DB-computed clamped cost AND (when the gap exceeds max_delta) that
+// the clamp strictly reduced the charge below the raw gap.
+func TestMeteringStore_MeterCompute_ClampsLongGap(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-clamp"
+	const cellID = "cell-ws-clamp"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "metering_period_start(now())")
+	store := NewMeteringStore(pool)
+
+	adv, delta, err := store.MeterCompute(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: 30 * time.Second, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterCompute: %v", err)
+	}
+	if !adv {
+		t.Fatal("expected advance")
+	}
+
+	var clamped, raw int64
+	var gapExceedsMaxDelta bool
+	if err := pool.QueryRow(ctx,
+		`SELECT metering_cost(500, LEAST(now() - $1::timestamptz, interval '30 seconds')),
+		        metering_cost(500, now() - $1::timestamptz),
+		        (now() - $1::timestamptz) > interval '30 seconds'`,
+		expected,
+	).Scan(&clamped, &raw, &gapExceedsMaxDelta); err != nil {
+		t.Fatalf("compute expected clamp: %v", err)
+	}
+	if delta != clamped {
+		t.Errorf("delta=%d, want %d (clamped to max_delta 30s)", delta, clamped)
+	}
+	if gapExceedsMaxDelta && !(clamped < raw) {
+		t.Errorf("clamp did not reduce the charge: clamped=%d raw=%d (ADR-8 clamp inert)", clamped, raw)
+	}
+	if !gapExceedsMaxDelta {
+		t.Logf("note: test ran within 30s of the month start (gap=%ds-ish); clamp bite not exercised this run", 0)
+	}
+}
