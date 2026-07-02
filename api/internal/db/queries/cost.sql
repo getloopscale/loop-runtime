@@ -133,6 +133,12 @@ SELECT metering_cost(@req_millicore::bigint, tail) AS tail_cost,
        metering_period_end(metering_period_end(@expected::timestamptz)) AS p2_end
 FROM adv;
 
+-- name: GetMeteringEnabled :one
+-- Read the observe-only kill-switch (metering_config singleton, migration 000046).
+-- The loop reads this per-tick and skips the pass when disabled. EC-5: an absent
+-- row → pgx.ErrNoRows → the wrapper defaults to DISABLED (fail-safe). No RLS.
+SELECT enabled FROM metering_config WHERE id = true;
+
 -- name: GetMeteringCursor :one
 -- Read the current cursor value — the CAS target the worker threads into
 -- MeterInput.Expected each tick (ADR-4/ADR-9: last_metered_at = @expected). Pure

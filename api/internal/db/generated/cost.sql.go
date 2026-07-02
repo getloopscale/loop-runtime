@@ -104,6 +104,20 @@ func (q *Queries) GetMeteringCursor(ctx context.Context, db DBTX, arg GetMeterin
 	return last_metered_at, err
 }
 
+const getMeteringEnabled = `-- name: GetMeteringEnabled :one
+SELECT enabled FROM metering_config WHERE id = true
+`
+
+// Read the observe-only kill-switch (metering_config singleton, migration 000046).
+// The loop reads this per-tick and skips the pass when disabled. EC-5: an absent
+// row → pgx.ErrNoRows → the wrapper defaults to DISABLED (fail-safe). No RLS.
+func (q *Queries) GetMeteringEnabled(ctx context.Context, db DBTX) (bool, error) {
+	row := db.QueryRow(ctx, getMeteringEnabled)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const getPlanTierForTenant = `-- name: GetPlanTierForTenant :one
 SELECT COALESCE(plan, 'starter')::text AS plan_tier
 FROM subscriptions

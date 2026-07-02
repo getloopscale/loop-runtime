@@ -827,6 +827,101 @@ func TestMeteringStore_GetMeteringCursor_NotFoundBeforeSeed(t *testing.T) {
 	}
 }
 
+// restoreMeteringConfig resets the metering_config singleton to enabled=false
+// (its seeded state) both now and via t.Cleanup — the kill-switch tests mutate
+// the shared singleton row, so each restores it to avoid cross-test bleed.
+func restoreMeteringConfig(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	reset := func() {
+		_, _ = pool.Exec(ctx, `INSERT INTO metering_config (id, enabled) VALUES (true, false)
+			ON CONFLICT (id) DO UPDATE SET enabled = false`)
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// TestMeteringStore_IsMeteringEnabled_DisabledWhenSeeded — observe-only ships with
+// the kill-switch OFF (EC-5): the seeded singleton reads enabled=false, found=true.
+func TestMeteringStore_IsMeteringEnabled_DisabledWhenSeeded(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	restoreMeteringConfig(t, ctx, pool)
+	store := NewMeteringStore(pool)
+
+	enabled, found, err := store.IsMeteringEnabled(ctx)
+	if err != nil {
+		t.Fatalf("IsMeteringEnabled: %v", err)
+	}
+	if !found {
+		t.Error("found=false, want true (the seeded singleton row exists)")
+	}
+	if enabled {
+		t.Error("enabled=true, want false (observe-only ships DISABLED — EC-5)")
+	}
+}
+
+// TestMeteringStore_IsMeteringEnabled_EnabledWhenFlagTrue — after an operator flips
+// the switch, the reader reports enabled=true.
+func TestMeteringStore_IsMeteringEnabled_EnabledWhenFlagTrue(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	restoreMeteringConfig(t, ctx, pool)
+	if _, err := pool.Exec(ctx, `UPDATE metering_config SET enabled = true WHERE id = true`); err != nil {
+		t.Fatalf("flip switch: %v", err)
+	}
+	store := NewMeteringStore(pool)
+
+	enabled, found, err := store.IsMeteringEnabled(ctx)
+	if err != nil {
+		t.Fatalf("IsMeteringEnabled: %v", err)
+	}
+	if !found || !enabled {
+		t.Errorf("enabled=%v found=%v, want true true (operator flipped the kill-switch)", enabled, found)
+	}
+}
+
+// TestMeteringStore_IsMeteringEnabled_AbsentRow_EC5_DefaultDisabled — EC-5: a
+// deleted config row is NOT an error; it defaults to DISABLED (found=false), so a
+// producer that lost its kill-switch row never bills. The caller (loop) WARNs.
+func TestMeteringStore_IsMeteringEnabled_AbsentRow_EC5_DefaultDisabled(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	restoreMeteringConfig(t, ctx, pool)
+	if _, err := pool.Exec(ctx, `DELETE FROM metering_config WHERE id = true`); err != nil {
+		t.Fatalf("delete config row: %v", err)
+	}
+	store := NewMeteringStore(pool)
+
+	enabled, found, err := store.IsMeteringEnabled(ctx)
+	if err != nil {
+		t.Fatalf("an absent config row must not error (EC-5): %v", err)
+	}
+	if found {
+		t.Error("found=true, want false (row deleted — EC-5 absent path)")
+	}
+	if enabled {
+		t.Error("enabled=true on an absent row — EC-5 violated (must default DISABLED)")
+	}
+}
+
+// TestMeteringStore_IsMeteringEnabled_QueryError_FailsSafeDisabled — the
+// load-bearing fail-safe: on a real query error (here a cancelled context), the
+// reader returns enabled=false + the error. A metering producer that cannot read
+// its own kill-switch MUST NOT bill (never enabled=true on error).
+func TestMeteringStore_IsMeteringEnabled_QueryError_FailsSafeDisabled(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	restoreMeteringConfig(t, ctx, pool)
+	store := NewMeteringStore(pool)
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel() // force the query to fail
+
+	enabled, _, err := store.IsMeteringEnabled(cancelled)
+	if err == nil {
+		t.Fatal("want a query error on a cancelled context")
+	}
+	if enabled {
+		t.Error("enabled=true on a query error — fail-safe violated (unreadable kill-switch must never bill)")
+	}
+}
+
 // TestMeteringStore_SeedMeteringCursor_Idempotent — seeds the cursor to now() on
 // first sight (SC-5/EC-10); a second seed is a no-op (existing cursor untouched).
 func TestMeteringStore_SeedMeteringCursor_Idempotent(t *testing.T) {

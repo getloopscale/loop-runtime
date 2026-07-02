@@ -208,6 +208,25 @@ func (s *MeteringStore) GetMeteringCursor(ctx context.Context, tenantID, metric,
 	return ts.Time, true, nil
 }
 
+// IsMeteringEnabled reads the observe-only kill-switch (metering_config singleton).
+// The loop reads it per-tick and skips the pass when disabled. EC-5 fail-safe:
+//   - absent row (pgx.ErrNoRows) → (false, found=false, nil) — DISABLED; the caller
+//     WARNs (a seeded-then-deleted config row is an operational alarm).
+//   - a real query error → (false, false, err) — the error is surfaced, and enabled
+//     is NEVER true: a metering producer that cannot read its own kill-switch MUST
+//     NOT bill (fail-safe, mirrors SC-3's read-failure HOLD). Never swallowed (Rule 8).
+// metering_config has no RLS — no SET LOCAL needed.
+func (s *MeteringStore) IsMeteringEnabled(ctx context.Context) (enabled bool, found bool, err error) {
+	en, err := generated.New().GetMeteringEnabled(ctx, s.pool)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	return en, true, nil
+}
+
 // GetPlanTierForTenant returns the tenant's active billing plan tier, defaulting
 // to "starter" when no active subscription exists (EC-4 — a missing plan is not
 // fatal; the tenant is metered at the free tier). subscriptions has no RLS.
