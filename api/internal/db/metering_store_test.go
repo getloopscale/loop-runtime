@@ -823,3 +823,92 @@ func TestMeteringStore_SeedMeteringCursor_Idempotent(t *testing.T) {
 		t.Errorf("SeedMeteringCursor not idempotent: %v -> %v (would zero a live cursor)", first, second)
 	}
 }
+
+// TestMeteringStore_DispatchClockDisagreement_HoldsNotMisbills — SC-2: the
+// same-period vs split dispatch is governed by the DB now() period predicate, not
+// the Go clock. If the worker's Go-clock guess picks the WRONG writer at a period
+// boundary, the DB predicate yields 0 rows (HELD) — never a misbill/negative head.
+// Both directions: same-period writer on an actual straddle HOLDS; split writer on
+// an actual same-period HOLDS. The correct writer bills on the next tick.
+func TestMeteringStore_DispatchClockDisagreement_HoldsNotMisbills(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	store := NewMeteringStore(pool)
+
+	// Direction 1: actual straddle, but the SAME-PERIOD writer is invoked → the
+	// `period_of(now()) = period_of(expected)` predicate fails → HELD.
+	t.Run("same-period-writer-on-straddle-holds", func(t *testing.T) {
+		const tenantID = "tn-ws-disp1"
+		const cellID = "cell-ws-disp1"
+		expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "metering_period_start(now()) - interval '10 seconds'")
+		adv, delta, err := store.MeterCompute(ctx, MeterInput{
+			TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+			ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+			MaxDelta: time.Hour, PlanTier: "starter",
+		})
+		if err != nil {
+			t.Fatalf("MeterCompute: %v", err)
+		}
+		if adv || delta != 0 {
+			t.Errorf("same-period writer on a straddle: advanced=%v delta=%d, want false 0 (SC-2 HOLD)", adv, delta)
+		}
+	})
+
+	// Direction 2: actual same-period, but the SPLIT writer is invoked → the
+	// `period_of(now()) <> period_of(expected)` predicate fails → HELD.
+	t.Run("split-writer-on-same-period-holds", func(t *testing.T) {
+		const tenantID = "tn-ws-disp2"
+		const cellID = "cell-ws-disp2"
+		expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now() - interval '10 seconds'")
+		adv, delta, err := store.MeterComputeSplit(ctx, MeterInput{
+			TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+			ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+			MaxDelta: time.Hour, PlanTier: "starter",
+		})
+		if err != nil {
+			t.Fatalf("MeterComputeSplit: %v", err)
+		}
+		if adv || delta != 0 {
+			t.Errorf("split writer on same-period: advanced=%v delta=%d, want false 0 (SC-2 HOLD)", adv, delta)
+		}
+	})
+}
+
+// TestMeteringStore_MeterComputeSplit_ContinuesNotResets — SC-4: after a split the
+// cursor advances to now() (continuation), NEVER to the boundary B. Resetting to B
+// would re-meter [B, now()] on the next tick (double-count). Cursor is
+// period-independent (PK has no period column).
+func TestMeteringStore_MeterComputeSplit_ContinuesNotResets(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-cont"
+	const cellID = "cell-ws-cont"
+	expected := seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "metering_period_start(now()) - interval '10 seconds'")
+	store := NewMeteringStore(pool)
+
+	adv, _, err := store.MeterComputeSplit(ctx, MeterInput{
+		TenantID: tenantID, Metric: "cpu_core_seconds", CellID: cellID, Expected: expected,
+		ReqMillicore: 500, Gen: meteringGen, LoopName: meteringLoopName, LeaderCell: cellID,
+		MaxDelta: time.Hour, PlanTier: "starter",
+	})
+	if err != nil {
+		t.Fatalf("MeterComputeSplit: %v", err)
+	}
+	if !adv {
+		t.Fatal("expected the split to advance")
+	}
+
+	// cursor = now() (past the boundary B), NOT reset to B = metering_period_end(expected).
+	var pastBoundary, atBoundary bool
+	if err := pool.QueryRow(ctx,
+		`SELECT last_metered_at > metering_period_end($2::timestamptz),
+		        last_metered_at = metering_period_end($2::timestamptz)
+		   FROM metering_cursor WHERE tenant_id=$1`, tenantID, expected,
+	).Scan(&pastBoundary, &atBoundary); err != nil {
+		t.Fatalf("read cursor: %v", err)
+	}
+	if atBoundary {
+		t.Error("cursor reset to boundary B — SC-4 violated (would re-meter [B, now()] next tick)")
+	}
+	if !pastBoundary {
+		t.Error("cursor not advanced past the boundary — expected continuation to now()")
+	}
+}
