@@ -16,6 +16,15 @@ tasks:
     cmds:
       - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
 
+  gate-list:
+    desc: "MA-1 oracle — print the gate inventory (NAME/WIRED/SUMMARY) + the registered-vs-wired split"
+    deps: [build]
+    cmds:
+      # Pillar 1 (caller): exercises `loopzero-ops quality --list` end-to-end.
+      - /tmp/loopzero-ops quality --list
+      # Pillar 3 (runtime signal): the operator-visible split.
+      - 'echo "registered=$(/tmp/loopzero-ops quality --list --names | wc -l) wired=$(/tmp/loopzero-ops quality --list | grep -cP ''\twired\t'') unwired=$(/tmp/loopzero-ops quality --list | grep -cP ''\tunwired\t'')"'
+
   hermetic:
     desc: Run pkg/quality hermetic Go tests + verify both modules build
     cmds:
