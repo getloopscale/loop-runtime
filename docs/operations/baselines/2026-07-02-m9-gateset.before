@@ -1,6 +1,6 @@
-# M9 gate-set oracle baseline — frozen 2026-07-02
-# Source: loopzero-ops quality --list | sort (MA-1, MEET-2026-07-02-001)
-# Contract: M9 steps 4 & 7 MUST diff their post-change --list against this byte-for-byte.
+# M9 gate-set oracle baseline — frozen 2026-07-02 (native --list order; do NOT sort)
+# Source: loopzero-ops quality --list  (MA-1, MEET-2026-07-02-001)
+# MA-3 check: loopzero-ops quality --list | diff - <(grep -v '^#' THIS_FILE)  MUST be empty
 # Split at freeze: registered=70 wired=30 unwired=40
 # NAME<TAB>WIRED<TAB>SUMMARY
 acyclic-graph	wired	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
@@ -14,8 +14,8 @@ baseline-update	unwired	Updates the committed steady-state baseline artifact.
 caddyfile-csp	wired	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
 cli-bundle-size	unwired	Guards the CLI published bundle size against regression.
 cli-exit-codes	wired	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
-clusterimagepolicy-mode	unwired	Validates the sigstore ClusterImagePolicy enforcement mode.
 cluster-role-no-secrets-star	wired	Forbids unconditional cluster-wide secrets/configmaps RBAC grants.
+clusterimagepolicy-mode	unwired	Validates the sigstore ClusterImagePolicy enforcement mode.
 contract-consumers	unwired	Verifies cross-repo contract consumers stay in sync with the contract.
 corrections-txt-closed	wired	Asserts CORRECTIONS.txt items are all closed.
 correlation-header	wired	Correlation-ID header is forwarded across the request path.

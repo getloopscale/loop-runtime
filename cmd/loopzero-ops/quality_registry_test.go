@@ -232,12 +232,12 @@ func TestOracle_SurfacesRegisteredVsWiredSplit(t *testing.T) {
 	t.Logf("MEASURED oracle split: registered=%d wired=%d unwired=%d", len(reg), len(wired), len(reg)-len(wired))
 }
 
-// writeFixtureTaskfile writes a minimal taskfile invoking the given gate names
-// (via the canonical `loopzero-ops quality <name>` token) and returns its path.
+// writeFixtureTaskfile writes a minimal, valid taskfile invoking the given gate
+// names under a `cmds:` block and returns its path.
 func writeFixtureTaskfile(t *testing.T, wiredGates ...string) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("version: '3'\ntasks:\n  quality:gates:\n    cmds:\n")
+	b.WriteString("version: '3'\ntasks:\n  gates:\n    cmds:\n")
 	for _, g := range wiredGates {
 		b.WriteString("      - /tmp/loopzero-ops quality " + g + "\n")
 	}
@@ -246,4 +246,165 @@ func writeFixtureTaskfile(t *testing.T, wiredGates ...string) string {
 		t.Fatalf("write fixture taskfile: %v", err)
 	}
 	return p
+}
+
+// writeRawTaskfile writes exact YAML content and returns its path.
+func writeRawTaskfile(t *testing.T, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "quality.yml")
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatalf("write raw taskfile: %v", err)
+	}
+	return p
+}
+
+// T3 (structural) — a gate mentioned in a `desc:` block scalar (or a comment) is
+// NOT a real invocation and MUST NOT be reported wired. Regression guard for the
+// review finding that a line-anchored regex mislabeled desc-block gates wired.
+func TestTaskWiredSet_IgnoresDescBlockAndComments(t *testing.T) {
+	tf := writeRawTaskfile(t, `version: '3'
+tasks:
+  docs:
+    desc: |
+      Example: - /tmp/loopzero-ops quality tenant-predicate
+    cmds:
+      # commented: /tmp/loopzero-ops quality trivy-scan
+      - echo "no real gate here"
+  real:
+    cmds:
+      - /tmp/loopzero-ops quality advisory-lock-scope
+`)
+	got, err := taskWiredSet(tf)
+	if err != nil {
+		t.Fatalf("taskWiredSet: %v", err)
+	}
+	if !got["advisory-lock-scope"] {
+		t.Error("real cmds invocation advisory-lock-scope not detected")
+	}
+	if got["tenant-predicate"] {
+		t.Error("gate in a desc: block scalar was wrongly reported wired (the oracle must not lie)")
+	}
+	if got["trivy-scan"] {
+		t.Error("gate in a # comment was wrongly reported wired")
+	}
+	if len(got) != 1 {
+		t.Errorf("wired set should be exactly {advisory-lock-scope}, got %v", got)
+	}
+}
+
+// T3 — the map form of a cmds item (`- cmd: ...`) is detected too.
+func TestTaskWiredSet_MapCmdForm(t *testing.T) {
+	tf := writeRawTaskfile(t, `version: '3'
+tasks:
+  gates:
+    cmds:
+      - cmd: /tmp/loopzero-ops quality script-count
+      - task: some-other-task
+`)
+	got, err := taskWiredSet(tf)
+	if err != nil {
+		t.Fatalf("taskWiredSet: %v", err)
+	}
+	if !got["script-count"] || len(got) != 1 {
+		t.Errorf("map-form cmd not detected correctly, got %v", got)
+	}
+}
+
+// T3 (negative) — a malformed YAML taskfile returns a typed parse error, not empty.
+func TestTaskWiredSet_MalformedYAMLErrors(t *testing.T) {
+	tf := writeRawTaskfile(t, "version: '3'\ntasks:\n  gates:\n  cmds: [unbalanced\n")
+	_, err := taskWiredSet(tf)
+	if err == nil {
+		t.Fatal("malformed taskfile returned nil error (must fail loud)")
+	}
+	if !strings.Contains(err.Error(), "quality.yml") {
+		t.Errorf("parse error should name the path, got: %v", err)
+	}
+}
+
+// T2 (negative) — runQualityListTo returns rc 1 on a missing taskfile (error
+// plumbed through the list command, not only through taskWiredSet).
+func TestQualityList_MissingTaskfileRC1(t *testing.T) {
+	var buf bytes.Buffer
+	rc := runQualityListTo(&buf, []string{"--names", "--taskfile", filepath.Join(t.TempDir(), "nope.yml")})
+	if rc != 1 {
+		t.Errorf("runQualityListTo on missing taskfile rc=%d, want 1", rc)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("no gate output expected on error, got %q", buf.String())
+	}
+}
+
+// T2 (negative) — an unknown flag returns rc 1.
+func TestQualityList_BadFlagRC1(t *testing.T) {
+	var buf bytes.Buffer
+	if rc := runQualityListTo(&buf, []string{"--nope"}); rc != 1 {
+		t.Errorf("runQualityListTo --nope rc=%d, want 1", rc)
+	}
+}
+
+// T2 — --json wins over --names when both are passed (documented precedence).
+func TestQualityList_JSONWinsOverNames(t *testing.T) {
+	tf := writeFixtureTaskfile(t, "advisory-lock-scope")
+	var buf bytes.Buffer
+	if rc := runQualityListTo(&buf, []string{"--json", "--names", "--taskfile", tf}); rc != 0 {
+		t.Fatalf("rc=%d", rc)
+	}
+	var out []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Errorf("--json --names should still emit JSON (json precedence), got: %s", buf.String())
+	}
+}
+
+// T2 (edge) — a taskfile with zero gate invocations lists all gates unwired.
+func TestQualityList_ZeroWiredTaskfile(t *testing.T) {
+	tf := writeRawTaskfile(t, "version: '3'\ntasks:\n  noop:\n    cmds:\n      - echo hi\n")
+	var buf bytes.Buffer
+	if rc := runQualityListTo(&buf, []string{"--taskfile", tf}); rc != 0 {
+		t.Fatalf("rc=%d", rc)
+	}
+	if strings.Contains(buf.String(), "\twired\t") {
+		t.Error("a taskfile with no gate invocations must report every gate unwired")
+	}
+	if lines := strings.Count(strings.TrimSpace(buf.String()), "\n") + 1; lines != len(gateRegistry) {
+		t.Errorf("still expected %d gate lines, got %d", len(gateRegistry), lines)
+	}
+}
+
+// T4 / MA-3 — the frozen baseline IS the oracle self-check: the current --list
+// output (default format, against the live taskfile) MUST byte-match the frozen
+// baseline's gate lines. This catches a single silent un-wire (30->29) at unit
+// time AND proves the committed baseline is in the oracle's native order (not a
+// locale-sorted copy). Re-freeze the baseline via `loopzero-ops quality --list` when
+// gates are consciously added/wired.
+func TestOracle_MatchesFrozenBaseline(t *testing.T) {
+	const baseline = "../../docs/operations/baselines/2026-07-02-m9-gateset.before"
+	const liveTaskfile = "../../taskfiles/quality.yml"
+	if _, err := os.Stat(baseline); err != nil {
+		t.Skipf("frozen baseline not found (%v)", err)
+	}
+	raw, err := os.ReadFile(baseline)
+	if err != nil {
+		t.Fatalf("read baseline: %v", err)
+	}
+	// Baseline gate lines = non-comment, non-blank lines.
+	var want []string
+	for _, ln := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		want = append(want, ln)
+	}
+
+	var buf bytes.Buffer
+	if rc := runQualityListTo(&buf, []string{"--taskfile", liveTaskfile}); rc != 0 {
+		t.Fatalf("runQualityListTo(live) rc=%d", rc)
+	}
+	got := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("live --list diverged from the frozen baseline (a gate was added/removed/un-wired, "+
+			"or the baseline is stale). Re-freeze with `loopzero-ops quality --list` after a conscious change.\n"+
+			"got %d lines, baseline %d lines", len(got), len(want))
+	}
 }

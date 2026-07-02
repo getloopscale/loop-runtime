@@ -11,6 +11,8 @@ import (
 	"os"
 	"regexp"
 	"sort"
+
+	"gopkg.in/yaml.v3"
 )
 
 // gateSpec is one entry in the canonical gate registry: the stable gate name
@@ -110,29 +112,77 @@ func gateRegistrySet() map[string]bool {
 	return out
 }
 
-// taskWiredWord matches a canonical gate invocation on a YAML command-list line
-// (`- <path>loopzero-ops quality <gate>`), not a prose mention like a task `desc:`.
-// Anchoring to the `- ` cmd item excludes descriptions such as
-// "Build the loopzero-ops quality binary" that would otherwise capture a false gate.
-// The gate name must start alphanumeric ([a-z0-9]) so meta-flags of the tool
-// itself (`--list`, `--names`, `--json`, `--help`) are NOT counted as gates.
+// taskWiredWord captures the gate name in a `loopzero-ops quality <gate>` invocation.
+// The gate name must start alphanumeric ([a-z0-9]) so the tool's own meta-flags
+// (`--list`, `--names`, `--json`, `--help`) are NOT counted as gates. Applied
+// ONLY to command strings extracted from `cmds:` blocks (see collectCmdStrings),
+// so prose, `desc:` block scalars, and comments cannot leak a false gate.
 // Compiled once at package scope.
-var taskWiredWord = regexp.MustCompile(`(?m)^\s*-\s+\S*loopzero-ops quality ([a-z0-9][a-z0-9-]*)`)
+var taskWiredWord = regexp.MustCompile(`loopzero-ops quality ([a-z0-9][a-z0-9-]*)`)
 
-// taskWiredSet returns the set of gate names invoked in the given taskfile via
-// the canonical `loopzero-ops quality <name>` token. A read failure returns a typed
-// error naming the path — never a silent empty set (which would mislabel every
-// gate unwired and defeat the oracle).
+// taskWiredSet returns the set of gate names actually invoked by the given
+// taskfile. Detection is STRUCTURAL: the taskfile is YAML-parsed and only the
+// command strings under `cmds:` sequences are scanned — a `desc:` mention or a
+// `#` comment can never be mistaken for a wired gate. A read or parse failure
+// returns a typed error naming the path — never a silent empty set (which would
+// mislabel every gate unwired and defeat the oracle).
 func taskWiredSet(taskfilePath string) (map[string]bool, error) {
 	data, err := os.ReadFile(taskfilePath)
 	if err != nil {
 		return nil, fmt.Errorf("read taskfile %s: %w", taskfilePath, err)
 	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse taskfile %s: %w", taskfilePath, err)
+	}
 	out := map[string]bool{}
-	for _, m := range taskWiredWord.FindAllStringSubmatch(string(data), -1) {
-		out[m[1]] = true
+	for _, cmd := range collectCmdStrings(&doc) {
+		for _, m := range taskWiredWord.FindAllStringSubmatch(cmd, -1) {
+			out[m[1]] = true
+		}
 	}
 	return out, nil
+}
+
+// collectCmdStrings walks a parsed taskfile and returns every command string
+// reachable under a `cmds:` sequence. A cmds item is either a scalar (the
+// command) or a mapping with a `cmd:` key (Task's map form); `task:`/`defer:`
+// items carry no shell command and are skipped. Nodes outside `cmds:` (desc,
+// vars, comments) are never scanned.
+func collectCmdStrings(n *yaml.Node) []string {
+	var out []string
+	var walk func(node *yaml.Node)
+	walk = func(node *yaml.Node) {
+		if node == nil {
+			return
+		}
+		if node.Kind == yaml.MappingNode {
+			for i := 0; i+1 < len(node.Content); i += 2 {
+				key, val := node.Content[i], node.Content[i+1]
+				if key.Value == "cmds" && val.Kind == yaml.SequenceNode {
+					for _, item := range val.Content {
+						switch item.Kind {
+						case yaml.ScalarNode:
+							out = append(out, item.Value)
+						case yaml.MappingNode:
+							for j := 0; j+1 < len(item.Content); j += 2 {
+								if item.Content[j].Value == "cmd" {
+									out = append(out, item.Content[j+1].Value)
+								}
+							}
+						}
+					}
+				}
+				walk(val)
+			}
+			return
+		}
+		for _, c := range node.Content {
+			walk(c)
+		}
+	}
+	walk(n)
+	return out
 }
 
 // runQualityList is the production entry point for `loopzero-ops quality --list`.

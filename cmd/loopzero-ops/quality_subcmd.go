@@ -91,6 +91,16 @@ const qualityHelp = `loopzero-ops quality — quality gate orchestrator
 USAGE:
   loopzero-ops quality <gate> [flags]
 
+INTROSPECTION:
+  --list          Print the gate inventory as NAME<TAB>WIRED<TAB>SUMMARY, sorted
+                  and byte-stable (the M9 gate-set oracle). WIRED = the gate is
+                  invoked by the quality:gates task.
+                  Flags:
+                    --names         names only, one per line (for a per-gate loop)
+                    --json          JSON array of {name, wired, summary}
+                    --taskfile PATH taskfile scanned for the wired bit
+                                    (default: "taskfiles/quality.yml")
+
 GATES:
   scripts-audit   Walk repo, classify .sh files, emit CSV to stdout
                   Flags:
