@@ -16,6 +16,8 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // MeterInput is the domain-shaped request the metering worker passes for one
@@ -206,6 +209,51 @@ func (s *MeteringStore) GetMeteringCursor(ctx context.Context, tenantID, metric,
 		return time.Time{}, false, err
 	}
 	return ts.Time, true, nil
+}
+
+// NamespacesForTenant returns the canonical Kubernetes namespaces the worker must
+// meter for a tenant: naming.Namespace(tenantID, project.name, env) for EVERY
+// (project, env) tuple the tenant owns (ADR-5). It composes the two existing
+// PG reads — ListProjectsByTenant × ListEnvironmentTargetsByProject — and derives
+// each namespace via the SAME canonical builder as tenant_cr_manager + the
+// manifest renderer, so the metered namespaces byte-match the real ones (a
+// mismatch would list pods in a nonexistent namespace → under-bill). This closes
+// v1.1's single-namespace bug (metering only loopzero-<tenant> systematically
+// under-billed multi-project tenants). No RLS on the read (control-plane pool).
+//
+// Edge cases: zero projects → empty slice, nil error (an Active CR whose PG rows
+// were removed mid-race meters nothing). Zero env_targets for a project → that
+// project contributes no namespace. A naming.Namespace error (a stored
+// project/env whose combined name exceeds 63 chars — already rejected at
+// AddEnvironment, so defensive) skips that namespace with a WARN and continues;
+// an un-renderable namespace has no real pods, so skipping does not under-bill.
+func (s *MeteringStore) NamespacesForTenant(ctx context.Context, tenantID string) ([]string, error) {
+	q := generated.New()
+	projects, err := q.ListProjectsByTenant(ctx, s.pool, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("metering: list projects for tenant %s: %w", tenantID, err)
+	}
+
+	namespaces := make([]string, 0, len(projects))
+	for _, p := range projects {
+		targets, terr := q.ListEnvironmentTargetsByProject(ctx, s.pool, generated.ListEnvironmentTargetsByProjectParams{
+			TenantID:  tenantID,
+			ProjectID: p.ID,
+		})
+		if terr != nil {
+			return nil, fmt.Errorf("metering: list env targets for project %s (tenant %s): %w", p.Name, tenantID, terr)
+		}
+		for _, tgt := range targets {
+			ns, nerr := naming.Namespace(tenantID, p.Name, tgt.Environment)
+			if nerr != nil {
+				slog.WarnContext(ctx, "metering: skipping un-renderable namespace (already rejected at env creation)",
+					"tenant_id", tenantID, "project", p.Name, "env", tgt.Environment, "err", nerr)
+				continue
+			}
+			namespaces = append(namespaces, ns)
+		}
+	}
+	return namespaces, nil
 }
 
 // IsMeteringEnabled reads the observe-only kill-switch (metering_config singleton).

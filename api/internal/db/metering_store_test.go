@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // meteringPool opens a pgxpool on LOOPZERO_E2E_DATABASE_URL (owner — the happy-path
@@ -919,6 +920,106 @@ func TestMeteringStore_IsMeteringEnabled_QueryError_FailsSafeDisabled(t *testing
 	}
 	if enabled {
 		t.Error("enabled=true on a query error — fail-safe violated (unreadable kill-switch must never bill)")
+	}
+}
+
+// seedMeteringProjectsEnvs seeds the given projectName→[]env spec: one dummy
+// build+release (to satisfy every environment_targets.desired_release_id FK) +
+// the projects + the environment_targets. Registers an FK-ordered cleanup; it is
+// registered AFTER seedMeteringFixtureCommitted's cleanup, so LIFO runs it FIRST
+// (before the fixture deletes the tenant/user those rows reference).
+func seedMeteringProjectsEnvs(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID string, spec map[string][]string) {
+	t.Helper()
+	exec := func(sql string, args ...any) {
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("seed %q: %v", sql, err)
+		}
+	}
+	u := "u-" + tenantID
+	buildID, relID := "b-"+tenantID, "r-"+tenantID
+	exec(`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
+	       VALUES ($1,$2,'_','_','SUCCEEDED','c',$3)`, buildID, tenantID, u)
+	exec(`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by)
+	       VALUES ($1,$2,$3,'_','_','ACTIVE','c',$4)`, relID, buildID, tenantID, u)
+	pid := map[string]string{}
+	for pname := range spec {
+		id := "p-" + tenantID + "-" + pname
+		pid[pname] = id
+		exec(`INSERT INTO projects (id, name, tenant_id, created_by) VALUES ($1,$2,$3,$4)`, id, pname, tenantID, u)
+	}
+	for pname, envs := range spec {
+		for _, env := range envs {
+			exec(`INSERT INTO environment_targets (tenant_id, project_id, environment, desired_release_id, updated_by, correlation_id)
+			       VALUES ($1,$2,$3,$4,$5,'c')`, tenantID, pid[pname], env, relID, u)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM environment_targets WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM releases WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM builds WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM projects WHERE tenant_id=$1`, tenantID)
+	})
+}
+
+// TestMeteringStore_NamespacesForTenant_AllProjectEnvNamespaces — ADR-5: the
+// tenant's metered namespaces are naming.Namespace(tenant, project, env) for EVERY
+// (project, env) tuple, NOT a single loopzero-<tenant> ns (v1.1's single-ns
+// under-billing bug). Asserts the EXACT set — a missing ns is the regression.
+func TestMeteringStore_NamespacesForTenant_AllProjectEnvNamespaces(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-ns"
+	const cellID = "cell-ws-ns"
+	seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now()")
+	seedMeteringProjectsEnvs(t, ctx, pool, tenantID, map[string][]string{
+		"web": {"staging", "production"},
+		"api": {"staging"},
+	})
+	store := NewMeteringStore(pool)
+
+	got, err := store.NamespacesForTenant(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("NamespacesForTenant: %v", err)
+	}
+
+	want := map[string]bool{}
+	for _, tuple := range [][2]string{{"web", "staging"}, {"web", "production"}, {"api", "staging"}} {
+		ns, nerr := naming.Namespace(tenantID, tuple[0], tuple[1])
+		if nerr != nil {
+			t.Fatalf("naming.Namespace(%v): %v", tuple, nerr)
+		}
+		want[ns] = true
+	}
+	if len(got) != len(want) {
+		t.Fatalf("NamespacesForTenant returned %d namespaces %v, want %d %v (ADR-5: every project×env, not a single ns)",
+			len(got), got, len(want), want)
+	}
+	for _, ns := range got {
+		if !want[ns] {
+			t.Errorf("unexpected namespace %q (not in the project×env set)", ns)
+		}
+		delete(want, ns)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing namespaces %v (the v1.1 single-ns under-billing bug)", want)
+	}
+}
+
+// TestMeteringStore_NamespacesForTenant_ZeroProjects_EmptyNotError — a tenant with
+// no projects meters nothing: empty slice, no error (tenant-guardian note 1 — an
+// Active CR whose PG rows were removed mid-race).
+func TestMeteringStore_NamespacesForTenant_ZeroProjects_EmptyNotError(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-ns-empty"
+	const cellID = "cell-ws-ns-empty"
+	seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now()")
+	store := NewMeteringStore(pool)
+
+	got, err := store.NamespacesForTenant(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("NamespacesForTenant(no projects): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want empty (a tenant with no projects meters nothing)", got)
 	}
 }
 
