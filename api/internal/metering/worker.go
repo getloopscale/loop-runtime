@@ -66,9 +66,10 @@ type Clock interface {
 // implementation + the remaining counters land in T3.2 (DIP keeps the worker
 // unit-testable with a counting fake).
 type Metrics interface {
-	CellError()          // a cell/collect read failed — the cursor was HELD (SC-3)
+	CellError()           // a cell/collect read failed — the cursor was HELD (SC-3)
 	Advanced(delta int64) // the cursor advanced; delta cpu_core_seconds were billed
 	Held()                // the write HELD (lost CAS / backward clock / straddle / stale fence)
+	Panic()               // a metering pass panicked and was recovered (ADR-1 — never crash)
 }
 
 // Worker meters every active tenant once per RunOnce pass, gated by the leader

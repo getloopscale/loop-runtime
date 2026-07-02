@@ -28,6 +28,14 @@ var (
 		Name: "loopzero_metering_cell_errors_total",
 		Help: "Total cell/collect read failures that held a tenant's metering cursor (SC-3).",
 	})
+
+	// panicsTotal counts metering passes that panicked and were recovered by the
+	// loop's panic-recovery boundary (ADR-1 — a panic must never crash the
+	// controller). A non-zero value is an alarm: the pass is not completing.
+	panicsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_metering_panics_total",
+		Help: "Total metering passes that panicked and were recovered (ADR-1).",
+	})
 )
 
 // PrometheusMetrics is the production metering.Metrics, backed by the package
@@ -45,6 +53,11 @@ func (PrometheusMetrics) Advanced(delta int64) {
 // CellError counts a cell/collect read failure (SC-3 cursor HOLD).
 func (PrometheusMetrics) CellError() {
 	cellErrorsTotal.Inc()
+}
+
+// Panic counts a recovered metering-pass panic (loopzero_metering_panics_total).
+func (PrometheusMetrics) Panic() {
+	panicsTotal.Inc()
 }
 
 // Held is a no-op: a HELD write (lost CAS / backward clock / period straddle /

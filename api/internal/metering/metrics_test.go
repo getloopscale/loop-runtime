@@ -44,6 +44,17 @@ func TestPrometheusMetrics_CellError_IncrementsCellErrors(t *testing.T) {
 	}
 }
 
+// TestPrometheusMetrics_Panic_IncrementsPanicsTotal — Panic() counts a recovered
+// metering-pass panic (ADR-1 — the loop never crashes the controller).
+func TestPrometheusMetrics_Panic_IncrementsPanicsTotal(t *testing.T) {
+	m := NewPrometheusMetrics()
+	before := testutil.ToFloat64(panicsTotal)
+	m.Panic()
+	if got := testutil.ToFloat64(panicsTotal) - before; got != 1 {
+		t.Errorf("panics_total delta=%v, want 1", got)
+	}
+}
+
 // TestPrometheusMetrics_Held_IsNoOpNotPanic — Held() has no canonical counter in
 // the plan's list; the impl is a documented no-op (must not panic, must not
 // touch the two real counters).

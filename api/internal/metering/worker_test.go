@@ -124,11 +124,13 @@ type fakeMetrics struct {
 	cellErrors    int
 	advancedCalls int
 	heldCalls     int
+	panicCalls    int
 }
 
 func (m *fakeMetrics) CellError()       { m.mu.Lock(); m.cellErrors++; m.mu.Unlock() }
 func (m *fakeMetrics) Advanced(_ int64) { m.mu.Lock(); m.advancedCalls++; m.mu.Unlock() }
 func (m *fakeMetrics) Held()            { m.mu.Lock(); m.heldCalls++; m.mu.Unlock() }
+func (m *fakeMetrics) Panic()           { m.mu.Lock(); m.panicCalls++; m.mu.Unlock() }
 
 // fakeTenantLister returns a fixed active-tenant list (or an error) for RunOnce.
 type fakeTenantLister struct {
