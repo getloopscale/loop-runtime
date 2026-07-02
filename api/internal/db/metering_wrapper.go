@@ -180,6 +180,42 @@ func (s *MeteringStore) MeterComputeSplit(ctx context.Context, in MeterInput) (a
 	return true, row.TailCost + row.HeadCost, nil
 }
 
+// SeedMeteringCursor seeds the (tenant, metric, cell) cursor to now() on first
+// sight (SC-5 / EC-10 — zero charge for the pre-existence window). Idempotent:
+// an existing cursor is left untouched (ON CONFLICT DO NOTHING), so a re-seed can
+// never rewind a live cursor. metering_cursor has no RLS — no SET LOCAL needed.
+func (s *MeteringStore) SeedMeteringCursor(ctx context.Context, tenantID, metric, cellID string) error {
+	return generated.New().SeedMeteringCursor(ctx, s.pool, generated.SeedMeteringCursorParams{
+		TenantID: tenantID, Metric: metric, CellID: cellID,
+	})
+}
+
+// GetPlanTierForTenant returns the tenant's active billing plan tier, defaulting
+// to "starter" when no active subscription exists (EC-4 — a missing plan is not
+// fatal; the tenant is metered at the free tier). subscriptions has no RLS.
+func (s *MeteringStore) GetPlanTierForTenant(ctx context.Context, tenantID string) (string, error) {
+	tier, err := generated.New().GetPlanTierForTenant(ctx, s.pool, tenantID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "starter", nil
+	}
+	return tier, err
+}
+
+// GetCellForTenant returns the tenant's canonical cell placement (tenants.cell_id,
+// the placement SoT per INV I2 — NEVER the CR spec.cellID mirror). found=false on
+// NoRows (a CR Active whose PG tenants row was deleted mid-race has no projects
+// anyway — the caller skips it, not fatal). tenants has no RLS.
+func (s *MeteringStore) GetCellForTenant(ctx context.Context, tenantID string) (cell string, found bool, err error) {
+	cell, err = generated.New().GetCellForTenant(ctx, s.pool, tenantID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return cell, true, nil
+}
+
 // setLocalNullTenant is the transaction-scoped RLS bypass the worker uses to scan
 // across tenants (mig 000023 :127-142). MUST be inside the same tx as the writes.
 const setLocalNullTenant = `SET LOCAL app.tenant_id = ''`

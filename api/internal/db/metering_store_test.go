@@ -723,3 +723,103 @@ func TestMeteringStore_MeterCompute_NegativeDeltaClockSkew_NoDecrement(t *testin
 		t.Error("cursor moved on a backward clock (SC-1 rewind — money bug)")
 	}
 }
+
+// TestMeteringStore_GetPlanTierForTenant — reads the active billing plan tier;
+// defaults to "starter" when no active subscription exists (EC-4).
+func TestMeteringStore_GetPlanTierForTenant(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-plan"
+	const cellID = "cell-ws-plan"
+	seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now()")
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO subscriptions(id,tenant_id,account_id,plan,status) VALUES ($1,$2,$3,'pro','active')`,
+		"sub-"+tenantID, tenantID, "a-"+tenantID,
+	); err != nil {
+		t.Fatalf("seed subscription: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(ctx, `DELETE FROM subscriptions WHERE tenant_id=$1`, tenantID) })
+
+	store := NewMeteringStore(pool)
+	tier, err := store.GetPlanTierForTenant(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("GetPlanTierForTenant: %v", err)
+	}
+	if tier != "pro" {
+		t.Errorf("tier=%q, want pro", tier)
+	}
+
+	// No active subscription → starter (EC-4).
+	tier2, err := store.GetPlanTierForTenant(ctx, "tn-nonexistent")
+	if err != nil {
+		t.Fatalf("GetPlanTierForTenant(missing): %v", err)
+	}
+	if tier2 != "starter" {
+		t.Errorf("missing-plan tier=%q, want starter (EC-4 default)", tier2)
+	}
+}
+
+// TestMeteringStore_GetCellForTenant — reads tenants.cell_id (canonical placement
+// SoT, INV I2); found=false on NoRows (caller skips, not fatal).
+func TestMeteringStore_GetCellForTenant(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-cell"
+	const cellID = "cell-ws-cell-xyz"
+	seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now()")
+	store := NewMeteringStore(pool)
+
+	cell, found, err := store.GetCellForTenant(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("GetCellForTenant: %v", err)
+	}
+	if !found {
+		t.Error("found=false, want true")
+	}
+	if cell != cellID {
+		t.Errorf("cell=%q, want %q (canonical tenants.cell_id)", cell, cellID)
+	}
+
+	_, found2, err := store.GetCellForTenant(ctx, "tn-nonexistent")
+	if err != nil {
+		t.Fatalf("GetCellForTenant(missing): %v", err)
+	}
+	if found2 {
+		t.Error("found=true for nonexistent tenant, want false (skip, not fatal)")
+	}
+}
+
+// TestMeteringStore_SeedMeteringCursor_Idempotent — seeds the cursor to now() on
+// first sight (SC-5/EC-10); a second seed is a no-op (existing cursor untouched).
+func TestMeteringStore_SeedMeteringCursor_Idempotent(t *testing.T) {
+	ctx, pool := meteringPool(t)
+	const tenantID = "tn-ws-seed"
+	const cellID = "cell-ws-seed"
+	seedMeteringFixtureCommitted(t, ctx, pool, tenantID, cellID, "now()")
+	// Remove the fixture's cursor so SeedMeteringCursor creates it.
+	if _, err := pool.Exec(ctx, `DELETE FROM metering_cursor WHERE tenant_id=$1`, tenantID); err != nil {
+		t.Fatalf("clear cursor: %v", err)
+	}
+	store := NewMeteringStore(pool)
+
+	if err := store.SeedMeteringCursor(ctx, tenantID, "cpu_core_seconds", cellID); err != nil {
+		t.Fatalf("SeedMeteringCursor: %v", err)
+	}
+	var cnt int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metering_cursor WHERE tenant_id=$1`, tenantID).Scan(&cnt); err != nil {
+		t.Fatalf("count cursor: %v", err)
+	}
+	if cnt != 1 {
+		t.Errorf("cursor rows=%d, want 1 after seed", cnt)
+	}
+	var first time.Time
+	pool.QueryRow(ctx, `SELECT last_metered_at FROM metering_cursor WHERE tenant_id=$1`, tenantID).Scan(&first)
+
+	// Second seed is idempotent — must NOT reset the cursor.
+	if err := store.SeedMeteringCursor(ctx, tenantID, "cpu_core_seconds", cellID); err != nil {
+		t.Fatalf("SeedMeteringCursor (2nd): %v", err)
+	}
+	var second time.Time
+	pool.QueryRow(ctx, `SELECT last_metered_at FROM metering_cursor WHERE tenant_id=$1`, tenantID).Scan(&second)
+	if !second.Equal(first) {
+		t.Errorf("SeedMeteringCursor not idempotent: %v -> %v (would zero a live cursor)", first, second)
+	}
+}
