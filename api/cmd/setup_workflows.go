@@ -10,23 +10,25 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/getloopscale/loopzero/api/internal/argo"
 	"github.com/getloopscale/loopzero/api/internal/argocd"
+	"github.com/getloopscale/loopzero/api/internal/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/services"
-	"github.com/getloopscale/loopzero/api/internal/cfkv"
 )
 
 // WorkflowDeps holds workflow submitter, sync client, gitops pusher, and KV client.
 type WorkflowDeps struct {
 	// WorkflowSubmitter is circuit-breaker-wrapped.
-	WorkflowSubmitter *services.CircuitBreakerWorkflowSubmitter
-	SyncClient        *services.CircuitBreakerSyncClient
+	WorkflowSubmitter *platform.CircuitBreakerWorkflowSubmitter
+	SyncClient        *platform.CircuitBreakerSyncClient
 	GitOpsPusher      *gitops.GiteaGitOpsPusher
 	KVClient          services.StaticRoutingClient
 }
@@ -39,18 +41,18 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	// The workflow no longer calls the API. Build completion is detected
 	// by the BuildReconcileLoop polling Argo Workflow CRDs.
 	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:          cfg.BuildKubeconfig,
-		Context:             cfg.BuildKubeContext,
-		RegistryURL:         cfg.RegistryURL,
-		RegistryInsecure:    cfg.RegistryInsecure,
-		BaseDomain:          cfg.BaseDomain,
-		HarborRegistryURL:   cfg.HarborRegistryURL,
-		CosignKeyless:       cfg.CosignKeyless,       // v1.1 EC-3 wire env var
-		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
-		CosignFulcioURL:     cfg.CosignFulcioURL,
-		CosignRekorURL:      cfg.CosignRekorURL,
+		Kubeconfig:            cfg.BuildKubeconfig,
+		Context:               cfg.BuildKubeContext,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		HarborRegistryURL:     cfg.HarborRegistryURL,
+		CosignKeyless:         cfg.CosignKeyless,       // v1.1 EC-3 wire env var
+		CosignAttestEnabled:   cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
-		Env:                   cfg.Env,                  // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010 per-tenant Fulcio audience)
+		Env:                   cfg.Env,                   // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010 per-tenant Fulcio audience)
 	})
 	if cfg.CosignKeyless {
 		logger.Info("cosign keyless mode ENABLED",
@@ -65,9 +67,9 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	// REVIEW-FIX: Wire CircuitBreakerWorkflowSubmitter to protect against
 	// Argo Workflow API outages. Without this, 10 concurrent deploys against
 	// a down Argo controller waste ~70s in retries instead of failing fast.
-	workflowSubmitter := services.NewCircuitBreakerWorkflowSubmitter(
+	workflowSubmitter := platform.NewCircuitBreakerWorkflowSubmitter(
 		rawWorkflowSubmitter,
-		services.CircuitBreakerConfig{
+		platform.CircuitBreakerConfig{
 			OpenThreshold:  cfg.CBOpenThreshold,
 			CloseThreshold: cfg.CBCloseThreshold,
 			RetryInterval:  cfg.CBRetryInterval,
@@ -119,7 +121,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 		syncCfg.Token = cfg.ArgocdToken
 	}
 	rawSyncClient := argocd.NewSyncClient(syncCfg)
-	syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
+	syncClient := platform.NewCircuitBreakerSyncClient(rawSyncClient, platform.CircuitBreakerConfig{
 		OpenThreshold:  cfg.CBOpenThreshold,
 		CloseThreshold: cfg.CBCloseThreshold,
 		RetryInterval:  cfg.CBRetryInterval,

@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package services implements business logic orchestration.
-package services
+package platform
 
 import (
 	"context"

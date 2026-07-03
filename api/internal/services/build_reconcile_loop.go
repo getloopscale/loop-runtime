@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
@@ -59,12 +61,6 @@ type BuildReconcileLoopConfig struct {
 	// MEET-053 A-07: When CellLister is set, CellID is ignored and the
 	// loop iterates over all cells returned by the lister each tick.
 	CellID string
-}
-
-// CellLister returns the list of active cell IDs.
-// MEET-053 A-07: Used by BuildReconcileLoop to process all cells.
-type CellLister interface {
-	ListCellIDs(ctx context.Context) ([]string, error)
 }
 
 // BuildReconcileLoop continuously reconciles non-terminal builds against
@@ -149,11 +145,11 @@ type BuildReconcileLoop struct {
 	// scale-50k-plan). When non-nil and enabled, claim/release go
 	// through PG for cross-replica dedup visibility. The sync.Map
 	// above remains as the fast-path local check.
-	pgDedup *PGClaimDedup
+	pgDedup *platform.PGClaimDedup
 
 	// cellLister returns all active cell IDs for multi-cell iteration.
 	// MEET-053 A-07: When set, reconcile processes builds from ALL cells.
-	cellLister CellLister
+	cellLister shared.CellLister
 
 	// BRC-003 fix: tracks activation attempt counts per build ID.
 	// After maxActivationAttempts consecutive failures, the build is failed
@@ -211,14 +207,14 @@ func NewBuildReconcileLoop(
 //	loop := NewBuildReconcileLoop(...)
 //	loop.WithPGClaims(pgDedup)
 //	loop.Start(ctx)
-func (r *BuildReconcileLoop) WithPGClaims(dedup *PGClaimDedup) {
+func (r *BuildReconcileLoop) WithPGClaims(dedup *platform.PGClaimDedup) {
 	r.pgDedup = dedup
 }
 
 // WithCellLister enables multi-cell iteration per tick.
 // MEET-053 A-07: When set, reconcile processes builds from ALL known cells
 // instead of only cfg.CellID. This ensures non-default cells are not abandoned.
-func (r *BuildReconcileLoop) WithCellLister(lister CellLister) {
+func (r *BuildReconcileLoop) WithCellLister(lister shared.CellLister) {
 	r.cellLister = lister
 }
 

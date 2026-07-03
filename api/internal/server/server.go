@@ -56,7 +56,7 @@ type Config struct {
 	// optional EnvironmentEnsurer wired into the project Create handler
 	// so every new project gets a `production` env auto-created. Reuses
 	// the same EnvironmentEnsurer interface (and concrete
-	// services.EnvironmentEnsurer implementation) already wired by the
+	// platform.EnvironmentEnsurer implementation) already wired by the
 	// build handler — single source of truth for env creation / PG
 	// environments row writes. nil-safe: when nil, ProjectHandler.Create
 	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).

@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	domainsvc "github.com/getloopscale/loopzero/api/internal/services/domain"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/logging"
 )
 
@@ -167,11 +168,11 @@ func newTestProvisioner(
 	buildStore *fakeDomainBuildReader,
 	gitops *fakeGitOpsPusher,
 	locker *fakeEnvironmentLocker,
-) *services.DomainProvisioner {
-	return services.NewDomainProvisioner(
+) *domainsvc.DomainProvisioner {
+	return domainsvc.NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, locker,
 		logging.NewLogger("test"),
-		services.DomainProvisionerConfig{
+		domainsvc.DomainProvisionerConfig{
 			Interval:    1 * time.Second,
 			BaseDomain:  "dev.loopzero.example",
 			RegistryURL: "registry.example.com",

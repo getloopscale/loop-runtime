@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
@@ -31,7 +33,7 @@ type controllerDeps struct {
 	buildReaper            *services.BuildReaper
 	releaseReaper          *services.ReleaseReaper
 	releaseConvergenceLoop *services.ReleaseConvergenceLoop
-	idempotencyCleaner     *services.IdempotencyCleaner
+	idempotencyCleaner     *platform.IdempotencyCleaner
 	eventPruner            *sse.EventPruner
 }
 
@@ -77,9 +79,9 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		logger.Error("failed to create workflow submitter", "error", err)
 		panic("fatal: workflow submitter creation failed") // unreachable after os.Exit
 	}
-	workflowSubmitter := services.NewCircuitBreakerWorkflowSubmitter(
+	workflowSubmitter := platform.NewCircuitBreakerWorkflowSubmitter(
 		rawWorkflowSubmitter,
-		services.CircuitBreakerConfig{
+		platform.CircuitBreakerConfig{
 			OpenThreshold:  cfg.CBOpenThreshold,
 			CloseThreshold: cfg.CBCloseThreshold,
 			RetryInterval:  cfg.CBRetryInterval,
@@ -104,7 +106,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		Insecure:   cfg.ArgocdInsecure,
 		HTTPClient: argocdHTTPClient,
 	})
-	syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
+	syncClient := platform.NewCircuitBreakerSyncClient(rawSyncClient, platform.CircuitBreakerConfig{
 		OpenThreshold:  cfg.CBOpenThreshold,
 		CloseThreshold: cfg.CBCloseThreshold,
 		RetryInterval:  cfg.CBRetryInterval,
@@ -227,7 +229,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Idempotency cleaner ----
-	idempotencyCleaner := services.NewIdempotencyCleaner(
+	idempotencyCleaner := platform.NewIdempotencyCleaner(
 		&store.PostgresIdempotencyStore{DB: dbAdapter},
 		logger,
 		1*time.Hour,

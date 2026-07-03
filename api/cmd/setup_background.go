@@ -10,6 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
+	domainsvc "github.com/getloopscale/loopzero/api/internal/services/domain"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -161,7 +167,7 @@ func setupDomains(
 	workflows *WorkflowDeps,
 	cfg config.Config,
 	logger *slog.Logger,
-) (*routes.DomainHandler, *services.DomainProvisioner, *services.DomainHealthChecker, *cfzone.Client) {
+) (*routes.DomainHandler, *domainsvc.DomainProvisioner, *domainsvc.DomainHealthChecker, *cfzone.Client) {
 	cnameTarget := "cname." + cfg.BaseDomain
 	domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
 	dnsVerifier := &domain.DNSVerifier{}
@@ -175,10 +181,10 @@ func setupDomains(
 		logger.Info("custom domains: TXT verification mode (v1)")
 	}
 
-	domainProvisioner := services.NewDomainProvisioner(
+	domainProvisioner := domainsvc.NewDomainProvisioner(
 		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
 		workflows.GitOpsPusher, stores.Locker, logger,
-		services.DomainProvisionerConfig{
+		domainsvc.DomainProvisionerConfig{
 			Interval:          30 * time.Second,
 			BaseDomain:        cfg.BaseDomain,
 			RegistryURL:       cfg.RegistryURL,
@@ -190,8 +196,8 @@ func setupDomains(
 		domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
 	}
 
-	domainHealthChecker := services.NewDomainHealthChecker(
-		stores.DomainStore, logger, services.DomainHealthCheckerConfig{
+	domainHealthChecker := domainsvc.NewDomainHealthChecker(
+		stores.DomainStore, logger, domainsvc.DomainHealthCheckerConfig{
 			CNAMETarget: cnameTarget,
 			GraceDays:   14,
 			StaleDays:   7,
@@ -215,8 +221,8 @@ func createCoreLoops(
 	orchDeps *OrchestratorDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	domainProvisioner *services.DomainProvisioner,
-	domainHealthChecker *services.DomainHealthChecker,
+	domainProvisioner *domainsvc.DomainProvisioner,
+	domainHealthChecker *domainsvc.DomainHealthChecker,
 	cfg config.Config,
 	logger *slog.Logger,
 ) []bgLoop {
@@ -243,7 +249,7 @@ func createCoreLoops(
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 		},
 	)
-	if lister, ok := cellRouter.(services.CellLister); ok {
+	if lister, ok := cellRouter.(shared.CellLister); ok {
 		reconcileLoop.WithCellLister(lister)
 	}
 
@@ -290,7 +296,7 @@ func createCoreLoops(
 		},
 	)
 
-	idempotencyCleaner := services.NewIdempotencyCleaner(
+	idempotencyCleaner := platform.NewIdempotencyCleaner(
 		&store.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
 	)
 	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
@@ -301,7 +307,7 @@ func createCoreLoops(
 	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
 	// (1 year default). Was implemented but never wired, leaving audit_log to
 	// grow unbounded. PruneOnce runs nightly at 02:00 local via Start().
-	auditLogPruner := services.NewAuditLogPruner(dbAdapter.Pool, services.AuditLogPrunerOpts{
+	auditLogPruner := platform.NewAuditLogPruner(dbAdapter.Pool, platform.AuditLogPrunerOpts{
 		Logger: logger,
 	})
 
@@ -320,9 +326,9 @@ func createCoreLoops(
 	}
 
 	// OrphanDetector (conditional on CellLister + OrphanedTenantQuerier)
-	if lister, ok := cellRouter.(services.CellLister); ok {
-		if querier, ok2 := interface{}(stores.CellStore).(services.OrphanedTenantQuerier); ok2 {
-			orphanDetector := services.NewOrphanDetector(lister, querier, logger, 60*time.Second)
+	if lister, ok := cellRouter.(shared.CellLister); ok {
+		if querier, ok2 := interface{}(stores.CellStore).(platform.OrphanedTenantQuerier); ok2 {
+			orphanDetector := platform.NewOrphanDetector(lister, querier, logger, 60*time.Second)
 			loops = append(loops, bgLoop{"orphan-detector", orphanDetector.Start})
 		}
 	}
@@ -343,8 +349,8 @@ func createOptionalLoops(
 	// KVReconciler (optional)
 	if workflows.KVClient != nil {
 		if kvC, ok := workflows.KVClient.(*cfkv.Client); ok {
-			if kvSource, ok2 := interface{}(stores.BuildStore).(services.KVRoutingSource); ok2 {
-				kvReconciler := services.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
+			if kvSource, ok2 := interface{}(stores.BuildStore).(platform.KVRoutingSource); ok2 {
+				kvReconciler := platform.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
 				loops = append(loops, bgLoop{"kv-reconciler", kvReconciler.Start})
 			}
 		}
@@ -352,8 +358,8 @@ func createOptionalLoops(
 
 	// DomainCFReconciler (optional)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
-		if cfStore, ok := interface{}(stores.DomainStore).(services.CFZoneReconcilerStore); ok {
-			domainCFReconciler := services.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
+		if cfStore, ok := interface{}(stores.DomainStore).(domainsvc.CFZoneReconcilerStore); ok {
+			domainCFReconciler := domainsvc.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
 			loops = append(loops, bgLoop{"domain-cf-reconciler", domainCFReconciler.Start})
 		}
 	}
@@ -405,8 +411,8 @@ func startLeaderLoops(
 	orchDeps *OrchestratorDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	domainProvisioner *services.DomainProvisioner,
-	domainHealthChecker *services.DomainHealthChecker,
+	domainProvisioner *domainsvc.DomainProvisioner,
+	domainHealthChecker *domainsvc.DomainHealthChecker,
 	cfZoneClient *cfzone.Client,
 	cfg config.Config,
 	logger *slog.Logger,

@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -27,7 +29,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/tracing"
 
 	"k8s.io/klog/v2"
@@ -266,7 +267,7 @@ func main() {
 		//   - 2026-06-25 (this plan): tuple-aware match closes both gaps:
 		//     legacy (project="") matches ONLY entries with empty Project;
 		//     post-M2 tuples match by exact (Name, Project) pair.
-		lister, adder := services.NewEnvManagerAdapter(
+		lister, adder := platform.NewEnvManagerAdapter(
 			k8sDeps.TenantCRMgr.AddEnvironment,
 			func(ctx context.Context, tenantID, project, envName string) (any, error) {
 				envs, err := k8sDeps.TenantCRMgr.ListEnvironments(ctx, tenantID)
@@ -290,14 +291,14 @@ func main() {
 		// suite timeout. Pre-Sprint-A baseline (commit 098b6846, 2026-05-31)
 		// passou 112/0/20 em 1h11m SEM esse gate. Re-enable após confirmar
 		// hypothesis OR re-tune PollInterval/WaitTimeout para minimizar custo.
-		ensurer := &services.EnvironmentEnsurer{
+		ensurer := &platform.EnvironmentEnsurer{
 			Lister: lister,
 			Adder:  adder,
 			Logger: logger,
 		}
 		if os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true" {
 			if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
-				ensurer.ReadinessChecker = services.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+				ensurer.ReadinessChecker = platform.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
 				logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
 			}
 		} else {
@@ -331,7 +332,7 @@ func main() {
 	// K8s creator (the same SecretK8sSync used by POST /api/v1/secrets).
 	if buildHandler != nil && stores != nil && k8sDeps != nil && k8sDeps.SecretK8sSync != nil {
 		if pgStore, ok := stores.SecretStore.(*store.PostgresSecretStore); ok {
-			resyncer := &services.SecretResyncer{
+			resyncer := &platform.SecretResyncer{
 				Store:  pgStore,
 				K8s:    k8sDeps.SecretK8sSync,
 				Logger: logger,

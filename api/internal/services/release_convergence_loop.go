@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
@@ -79,7 +81,7 @@ type ReleaseConvergenceLoop struct {
 
 	// pgDedup is the optional PG-backed dedup layer (Phase 0.2,
 	// scale-50k-plan). Same pattern as BuildReconcileLoop.
-	pgDedup *PGClaimDedup
+	pgDedup *platform.PGClaimDedup
 
 	// MEET-2026-03-31-023 T1-5: track sync retrigger attempts per release.
 	// Prevents infinite retry loops (max 3 retriggers per release).

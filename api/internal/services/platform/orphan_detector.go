@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package platform
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // OrphanedTenantQuerier returns the set of cell_ids that have tenants assigned
@@ -26,7 +27,7 @@ type OrphanedTenantQuerier interface {
 // MEET-053 D-04: Emits loopzero_orphaned_tenants gauge and logs warnings.
 // Manual remediation is acceptable for Phase 1; automatic migration is Phase 2.
 type OrphanDetector struct {
-	cellLister CellLister
+	cellLister shared.CellLister
 	querier    OrphanedTenantQuerier
 	logger     *slog.Logger
 	interval   time.Duration
@@ -34,7 +35,7 @@ type OrphanDetector struct {
 
 // NewOrphanDetector creates a detector that runs every interval.
 func NewOrphanDetector(
-	cellLister CellLister,
+	cellLister shared.CellLister,
 	querier OrphanedTenantQuerier,
 	logger *slog.Logger,
 	interval time.Duration,

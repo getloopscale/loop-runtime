@@ -11,16 +11,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 func TestWorkflowCircuitBreaker_ClosedState_DelegatesToInner(t *testing.T) {
 	// Arrange
 	inner := &fakeWorkflowSubmitter{}
-	cb := services.NewCircuitBreakerWorkflowSubmitter(inner, services.CircuitBreakerConfig{
+	cb := platform.NewCircuitBreakerWorkflowSubmitter(inner, platform.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2,
 		RetryInterval:  30 * time.Second,
@@ -44,7 +45,7 @@ func TestWorkflowCircuitBreaker_ClosedState_DelegatesToInner(t *testing.T) {
 func TestWorkflowCircuitBreaker_OpensAfterThresholdFailures(t *testing.T) {
 	// Arrange
 	inner := &fakeWorkflowSubmitter{err: fmt.Errorf("connection refused")}
-	cb := services.NewCircuitBreakerWorkflowSubmitter(inner, services.CircuitBreakerConfig{
+	cb := platform.NewCircuitBreakerWorkflowSubmitter(inner, platform.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2,
 		RetryInterval:  30 * time.Second,
@@ -70,7 +71,7 @@ func TestWorkflowCircuitBreaker_OpensAfterThresholdFailures(t *testing.T) {
 func TestWorkflowCircuitBreaker_CancelNotProtected(t *testing.T) {
 	// Cancel should always delegate regardless of circuit state
 	inner := &fakeWorkflowSubmitter{err: fmt.Errorf("connection refused")}
-	cb := services.NewCircuitBreakerWorkflowSubmitter(inner, services.CircuitBreakerConfig{
+	cb := platform.NewCircuitBreakerWorkflowSubmitter(inner, platform.CircuitBreakerConfig{
 		OpenThreshold:  1, // open after 1 failure
 		CloseThreshold: 1,
 		RetryInterval:  1 * time.Hour, // won't recover in this test
@@ -89,7 +90,7 @@ func TestWorkflowCircuitBreaker_CancelNotProtected(t *testing.T) {
 func TestWorkflowCircuitBreaker_GetStatusNotProtected(t *testing.T) {
 	// GetStatus should always delegate regardless of circuit state
 	inner := &fakeWorkflowSubmitter{err: fmt.Errorf("connection refused")}
-	cb := services.NewCircuitBreakerWorkflowSubmitter(inner, services.CircuitBreakerConfig{
+	cb := platform.NewCircuitBreakerWorkflowSubmitter(inner, platform.CircuitBreakerConfig{
 		OpenThreshold:  1,
 		CloseThreshold: 1,
 		RetryInterval:  1 * time.Hour,
@@ -111,7 +112,7 @@ func TestWorkflowCircuitBreaker_GetStatusNotProtected(t *testing.T) {
 func TestWorkflowCircuitBreaker_RecoveryProbe(t *testing.T) {
 	// After retryInterval, circuit should allow a recovery probe
 	inner := &fakeWorkflowSubmitter{err: fmt.Errorf("connection refused")}
-	cb := services.NewCircuitBreakerWorkflowSubmitter(inner, services.CircuitBreakerConfig{
+	cb := platform.NewCircuitBreakerWorkflowSubmitter(inner, platform.CircuitBreakerConfig{
 		OpenThreshold:  1,
 		CloseThreshold: 2,
 		RetryInterval:  10 * time.Millisecond, // short for testing

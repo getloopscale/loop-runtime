@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/services/scaling"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -291,7 +293,7 @@ func setupOrchestrator(
 
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
-	projectDeleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	projectDeleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
 		ReleaseStore:      stores.ReleaseStore,
