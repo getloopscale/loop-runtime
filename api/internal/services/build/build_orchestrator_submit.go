@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -231,7 +232,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBu
 	for i, a := range req.Apps {
 		appNames[i] = a.Name
 	}
-	eventData := shared.SafeJSONMarshal(map[string]interface{}{
+	eventData := events.SafeJSONMarshal(map[string]interface{}{
 		"build_id": buildID,
 		"status":   "running",
 		"apps":     appNames,
@@ -349,7 +350,7 @@ func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID, tenant
 	}
 
 	// Emit SSE build.failed so CLI gets notified
-	eventData := shared.SafeJSONMarshal(map[string]string{
+	eventData := events.SafeJSONMarshal(map[string]string{
 		"build_id": buildID,
 		"status":   "failed",
 		"error":    reason,

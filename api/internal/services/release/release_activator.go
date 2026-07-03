@@ -12,12 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
-
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -68,7 +67,6 @@ func NotifyBuildFailed(ctx context.Context, tenantID, projectName, commitSHA, bu
 		onBuildFailed(cbCtx, tenantID, projectName, commitSHA, buildID)
 	}()
 }
-
 
 // ReleaseActivationStore defines the minimal store interface needed by the
 // release activation kernel. Both db.ReleaseStore and ReleaseConvergenceStore
@@ -199,7 +197,7 @@ func ActivateReleaseKernel(
 	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
 
 	// Step 4: Emit deploy.live SSE event.
-	liveData := shared.SafeJSONMarshal(map[string]interface{}{
+	liveData := events.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "live",
 	})
@@ -225,7 +223,7 @@ func ActivateReleaseKernel(
 		}
 		appResults = append(appResults, entry)
 	}
-	completedData := shared.SafeJSONMarshal(map[string]interface{}{
+	completedData := events.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id":        deployID,
 		"status":           "success",
 		"duration_seconds": durationSecs,

@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
-
 	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -75,7 +74,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		}
 
 		// Step 8: emit SSE build.cancelled
-		eventData := shared.SafeJSONMarshal(map[string]string{
+		eventData := events.SafeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "cancelled",
 		})

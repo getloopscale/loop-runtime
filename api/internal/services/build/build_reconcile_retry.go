@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -240,7 +241,7 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 	}
 
 	// Emit SSE build.failed event so the CLI gets notified
-	eventData := shared.SafeJSONMarshal(map[string]string{
+	eventData := events.SafeJSONMarshal(map[string]string{
 		"build_id": build.ID,
 		"status":   "failed",
 		"error":    reason,

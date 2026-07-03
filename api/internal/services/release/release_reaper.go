@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -219,7 +220,7 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 				sseEventType = "deploy.failed"
 			}
 
-			eventData := shared.SafeJSONMarshal(map[string]string{
+			eventData := events.SafeJSONMarshal(map[string]string{
 				"deploy_id":  deriveDeployIDFromRelease(s.ID),
 				"release_id": s.ID,
 				"status":     "failed",

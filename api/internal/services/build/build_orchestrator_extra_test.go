@@ -5,7 +5,6 @@ package build
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -401,17 +400,6 @@ func TestNewBuildOrchestrator_DefaultsSyncTimeout(t *testing.T) {
 	})
 	if orch.argocdSyncTimeout != defaultArgocdSyncTimeout {
 		t.Errorf("expected default sync timeout, got: %v", orch.argocdSyncTimeout)
-	}
-}
-
-func TestSafeJSONMarshal_MapInput(t *testing.T) {
-	data := shared.SafeJSONMarshal(map[string]string{"key": "value"})
-	var parsed map[string]string
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-	if parsed["key"] != "value" {
-		t.Errorf("expected 'value', got %q", parsed["key"])
 	}
 }
 

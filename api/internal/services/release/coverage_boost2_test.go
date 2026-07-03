@@ -443,35 +443,6 @@ func TestReleaseAppsToActivationApps_FallsBackToBaseDomainWhenPublicEmpty_M61(t 
 }
 
 // =============================================================================
-// safeJSONMarshal — cover error handling
-// =============================================================================
-
-func TestSafeJSONMarshal_NilInput(t *testing.T) {
-	data := shared.SafeJSONMarshal(nil)
-	if data == nil {
-		t.Error("expected non-nil result for nil input")
-	}
-}
-
-func TestSafeJSONMarshal_MapWithNestedValues(t *testing.T) {
-	data := shared.SafeJSONMarshal(map[string]interface{}{
-		"deploy_id": "d-abc123",
-		"status":    "success",
-		"duration":  45,
-	})
-	if data == nil {
-		t.Error("expected non-nil result")
-	}
-	var m map[string]interface{}
-	if err := json.Unmarshal(data, &m); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-	if m["deploy_id"] != "d-abc123" {
-		t.Errorf("expected 'd-abc123', got %v", m["deploy_id"])
-	}
-}
-
-// =============================================================================
 // deriveDeployID
 // =============================================================================
 

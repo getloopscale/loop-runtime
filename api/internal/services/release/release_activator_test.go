@@ -4,10 +4,7 @@
 package release
 
 import (
-	"encoding/json"
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 func TestDeriveDeployID_NormalReleaseID(t *testing.T) {
@@ -35,30 +32,5 @@ func TestDeriveDeployID_NoPrefix(t *testing.T) {
 	got := deriveDeployID("abcdef1234567890")
 	if got != "d-abcdef12" {
 		t.Errorf("deriveDeployID = %q, want d-abcdef12", got)
-	}
-}
-
-func TestSafeJSONMarshal_ValidInput(t *testing.T) {
-	data := shared.SafeJSONMarshal(map[string]string{"key": "value"})
-	if data == nil {
-		t.Fatal("expected non-nil result")
-	}
-	var result map[string]string
-	if err := json.Unmarshal(data, &result); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
-	}
-	if result["key"] != "value" {
-		t.Errorf("expected key=value, got %v", result)
-	}
-}
-
-func TestSafeJSONMarshal_UnmarshalableInput(t *testing.T) {
-	// Channels cannot be marshaled to JSON
-	data := shared.SafeJSONMarshal(make(chan int))
-	if data == nil {
-		t.Fatal("expected non-nil fallback result")
-	}
-	if string(data) != "{}" {
-		t.Errorf("expected empty JSON object fallback, got %q", string(data))
 	}
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -229,7 +230,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// MOD-5: Emit SSE build.failed so the CLI gets notified immediately
 		// instead of waiting for the deploy timeout (10 minutes).
 		if r.eventStore != nil {
-			eventData := shared.SafeJSONMarshal(map[string]string{
+			eventData := events.SafeJSONMarshal(map[string]string{
 				"build_id": s.ID,
 				"status":   "failed",
 				"error":    reason,

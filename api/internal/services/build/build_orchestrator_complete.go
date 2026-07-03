@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -95,7 +96,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			if result.Error != "" {
 				failedPayload["error"] = result.Error
 			}
-			eventData := shared.SafeJSONMarshal(failedPayload)
+			eventData := events.SafeJSONMarshal(failedPayload)
 			if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
 				return fmt.Errorf("on build completed: emit build.failed: %w", err)
 			}
@@ -109,7 +110,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		}
 
 		// Emit SSE build.succeeded
-		eventData := shared.SafeJSONMarshal(map[string]string{
+		eventData := events.SafeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "succeeded",
 		})

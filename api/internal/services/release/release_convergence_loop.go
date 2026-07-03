@@ -22,6 +22,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -402,7 +403,7 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 		"release_id", release.ID, "reason", reason)
 
 	// Emit SSE event
-	failedData := shared.SafeJSONMarshal(map[string]interface{}{
+	failedData := events.SafeJSONMarshal(map[string]interface{}{
 		"status": "failed",
 		"reason": reason,
 	})

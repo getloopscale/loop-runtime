@@ -12,6 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -26,7 +27,7 @@ import (
 // fails after a successful build. This ensures the CLI gets notified instead of
 // waiting for a timeout.
 func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID string, activationErr error) {
-	failedData := shared.SafeJSONMarshal(map[string]interface{}{
+	failedData := events.SafeJSONMarshal(map[string]interface{}{
 		"status": "sync_failed",
 		"reason": "ACTIVATION_FAILED",
 		"error":  activationErr.Error(),

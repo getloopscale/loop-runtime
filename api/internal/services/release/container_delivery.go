@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -140,7 +141,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 	}
 
 	// Emit deploy.verifying to show async verification started
-	verifyingData := shared.SafeJSONMarshal(map[string]interface{}{
+	verifyingData := events.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "verifying",
 		"app":       argoAppName,
@@ -397,7 +398,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 				return fmt.Errorf("activate release: transition to GIT_MIRROR_FAILED: %w", err)
 			}
 
-			failedData := shared.SafeJSONMarshal(map[string]interface{}{
+			failedData := events.SafeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "delivery_failed",
 				"error":     pushErr.Error(),
@@ -425,7 +426,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 		}
 
 		// SSE: deploy.delivering (delivery-agnostic name)
-		pendingData := shared.SafeJSONMarshal(map[string]string{
+		pendingData := events.SafeJSONMarshal(map[string]string{
 			"deploy_id": deriveDeployID(release.ID),
 			"status":    "delivering",
 		})
@@ -468,7 +469,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 			}
 
 			// MEET-2026-04-04-029 P6: Use product language, not internal terms.
-			failedData := shared.SafeJSONMarshal(map[string]interface{}{
+			failedData := events.SafeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "failed",
 				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopzero logs` to check application errors.",
