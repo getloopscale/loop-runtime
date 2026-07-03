@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // secret_wrapper_test.go — T7.1 of plan 2026-06-01-p3-infra-observability-
 // test-debt-plan.md v1.1 — regression tests for V9 L19 fix (secret PK
@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // secretL19DBURL returns the PG connection string. Mirrors the convention
@@ -118,7 +119,7 @@ func TestSecret_L19_PKIncludesEnv(t *testing.T) {
 			"DELETE FROM secrets WHERE tenant_id = $1", tenantID)
 	})
 
-	store, err := NewPostgresSecretStore(&PgxAdapter{Pool: pool}, nil)
+	store, err := NewPostgresSecretStore(&db.PgxAdapter{Pool: pool}, nil)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestSecret_L19_UpsertOnDuplicate(t *testing.T) {
 			"DELETE FROM secrets WHERE tenant_id = $1", tenantID)
 	})
 
-	store, err := NewPostgresSecretStore(&PgxAdapter{Pool: pool}, nil)
+	store, err := NewPostgresSecretStore(&db.PgxAdapter{Pool: pool}, nil)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}

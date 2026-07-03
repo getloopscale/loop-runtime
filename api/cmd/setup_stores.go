@@ -112,7 +112,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		EventStore:       pgEventStore,
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
-		BootstrapStore:   &db.PostgresBootstrapStore{DB: dbAdapter},
+		BootstrapStore:   &store.PostgresBootstrapStore{DB: dbAdapter},
 		DomainStore:      &db.PostgresDomainStore{DB: dbAdapter},
 		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,
@@ -149,7 +149,7 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 	}
 	if transit != nil {
 		adapter := adapters.NewVaultTransitAdapter(transit)
-		store, err := db.NewPostgresSecretStoreWithVault(dbAdapter, adapter, encKey)
+		store, err := store.NewPostgresSecretStoreWithVault(dbAdapter, adapter, encKey)
 		if err != nil {
 			return nil, err
 		}
@@ -157,5 +157,5 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 			"legacy_aes_key_present", len(encKey) > 0)
 		return store, nil
 	}
-	return db.NewPostgresSecretStore(dbAdapter, encKey)
+	return store.NewPostgresSecretStore(dbAdapter, encKey)
 }

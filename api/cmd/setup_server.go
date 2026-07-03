@@ -159,7 +159,7 @@ func buildServerConfig(
 		// SqlcBridge (DBTX) — dbAdapter is the pgx-based DBTX, not the
 		// legacy StdDB. StdDB is still retained for enforcement.LimitsStore
 		// which has a wider surface and lives outside api/internal/db/.
-		costStore := db.NewSQLCostStore(dbAdapter)
+		costStore := store.NewSQLCostStore(dbAdapter)
 		costChecker := enforcement.NewCapChecker(costStore)
 		// Reuse the same SQL `subscriptions.plan` lookup PlanLimiter uses,
 		// via a fresh NewSQLLimitsStore. PlanLimiter does not expose its
@@ -167,7 +167,7 @@ func buildServerConfig(
 		// the query is centralized in enforcement.sqlLimitsStore so this
 		// is single-source-of-truth.
 		limitsStore := enforcement.NewSQLLimitsStore(dbDeps.StdDB)
-		planReader := db.NewPlanReader(limitsStore)
+		planReader := store.NewPlanReader(limitsStore)
 		sc.CostEnforcer = middleware.NewCostEnforcer(costChecker, planReader, logger)
 		// Wire PlanTierStore into ScaleHandler + ProjectHandler so they
 		// resolve the canonical tier (per ADR D4 of plan
@@ -249,7 +249,7 @@ func buildServerConfig(
 		billingHandler := routes.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
 		if dbDeps != nil && dbDeps.StdDB != nil {
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
-			billingHandler.WithCostSource(db.NewSQLCostStore(dbAdapter))
+			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
 		}
 		// T2.7 of maturity-3-62-to-4-0-roadmap: wire Stripe Customer
 		// Portal SDK if STRIPE_SECRET_KEY env is set. Production sets

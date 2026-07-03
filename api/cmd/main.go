@@ -330,7 +330,7 @@ func main() {
 	// secret store (PostgresSecretStore.ListForResync) and a workload
 	// K8s creator (the same SecretK8sSync used by POST /api/v1/secrets).
 	if buildHandler != nil && stores != nil && k8sDeps != nil && k8sDeps.SecretK8sSync != nil {
-		if pgStore, ok := stores.SecretStore.(*db.PostgresSecretStore); ok {
+		if pgStore, ok := stores.SecretStore.(*store.PostgresSecretStore); ok {
 			resyncer := &services.SecretResyncer{
 				Store:  pgStore,
 				K8s:    k8sDeps.SecretK8sSync,

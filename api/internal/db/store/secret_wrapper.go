@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // secret_wrapper.go — sqlc-backed implementation of
 // PostgresSecretStore. T2.2 (Batch B #4) of plan
@@ -24,6 +24,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -61,7 +63,7 @@ var vaultPrefix = []byte("vault:v1:")
 // prefix detection to avoid panic on NULL/empty PG rows (e.g., legacy data
 // or partial-write race conditions).
 type PostgresSecretStore struct {
-	DB            DBTX
+	DB            db.DBTX
 	encryptionKey []byte // 32-byte key for AES-256-GCM; nil disables encryption (read AES fallback only)
 
 	// Vault transit client (T3.4/T3.5 — optional). When set, write path
@@ -72,7 +74,7 @@ type PostgresSecretStore struct {
 // NewPostgresSecretStore creates a secret store with optional AES encryption.
 // key must be exactly 32 bytes (AES-256) or nil to disable encryption.
 // Use NewPostgresSecretStoreWithVault for FAANG dual-path (T3.5 canonical).
-func NewPostgresSecretStore(db DBTX, key []byte) (*PostgresSecretStore, error) {
+func NewPostgresSecretStore(db db.DBTX, key []byte) (*PostgresSecretStore, error) {
 	if key != nil && len(key) != 32 {
 		return nil, fmt.Errorf("secret_store: encryption key must be 32 bytes, got %d", len(key))
 	}
@@ -88,7 +90,7 @@ func NewPostgresSecretStore(db DBTX, key []byte) (*PostgresSecretStore, error) {
 //
 // T3.5 of openbao-adoption v1.3 (FAANG dual-path per user "Siga o que for
 // mais FAANG" decision iter 27).
-func NewPostgresSecretStoreWithVault(db DBTX, vaultClient VaultTransitClient, legacyAESKey []byte) (*PostgresSecretStore, error) {
+func NewPostgresSecretStoreWithVault(db db.DBTX, vaultClient VaultTransitClient, legacyAESKey []byte) (*PostgresSecretStore, error) {
 	if vaultClient == nil {
 		return nil, fmt.Errorf("secret_store: vault client required for Vault-canonical mode")
 	}
@@ -440,7 +442,7 @@ func (s *PostgresSecretStore) bridge() (generated.DBTX, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("secret_store: nil DB")
 	}
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("secret_store: DBTX %T does not implement SqlcBridge", s.DB)
 	}

@@ -20,7 +20,7 @@ import (
 )
 
 // VaultTransitAdapter wraps a pkg/vault.Transit so it satisfies the
-// db.VaultTransitClient interface required by PostgresSecretStore's
+// store.VaultTransitClient interface required by PostgresSecretStore's
 // decryptFromStore dispatch.
 //
 // Production wiring: cmd/setup_server.go constructs *vault.TransitClient

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // secret_wrapper_transit_test.go — T3.4/T3.5 of openbao-adoption v1.3.
 //

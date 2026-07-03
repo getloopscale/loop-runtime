@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 // namespaceTerminatingRetryWindow bounds how long ResyncEnv waits for a
@@ -49,9 +49,9 @@ type SecretResyncer struct {
 
 // SecretResyncStore is the PG-side read contract — returns plaintext
 // (name, app, value) tuples for resync. Implemented by
-// db.PostgresSecretStore.ListForResync.
+// store.PostgresSecretStore.ListForResync.
 type SecretResyncStore interface {
-	ListForResync(ctx context.Context, tenantID, projectID, env string) ([]db.SecretResyncEntry, error)
+	ListForResync(ctx context.Context, tenantID, projectID, env string) ([]store.SecretResyncEntry, error)
 }
 
 // SecretK8sCreator is the workload-cluster write contract — creates or
@@ -119,7 +119,7 @@ func (r *SecretResyncer) ResyncEnv(ctx context.Context, tenantID, projectID, env
 // countFailed is a placeholder for tracking how many secrets failed —
 // the current impl returns 1 when firstErr is set since we propagate
 // only firstErr. Future enhancement: track per-secret failure list.
-func countFailed(entries []db.SecretResyncEntry, firstErr error) int {
+func countFailed(entries []store.SecretResyncEntry, firstErr error) int {
 	if firstErr == nil {
 		return 0
 	}
@@ -137,7 +137,7 @@ func countFailed(entries []db.SecretResyncEntry, firstErr error) int {
 //
 // LIVE-caught dogfood-trio 2026-06-02 Journey 03 Secrets Lifecycle —
 // see namespaceTerminatingRetryWindow comment for the full timeline.
-func (r *SecretResyncer) syncOneWithTerminatingRetry(ctx context.Context, tenantID, projectID, env string, e db.SecretResyncEntry) error {
+func (r *SecretResyncer) syncOneWithTerminatingRetry(ctx context.Context, tenantID, projectID, env string, e store.SecretResyncEntry) error {
 	deadline := time.Now().Add(namespaceTerminatingRetryWindow)
 	attempt := 0
 	for {

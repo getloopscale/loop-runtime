@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // bootstrap_wrapper.go — sqlc-backed implementation of
 // PostgresBootstrapStore (struct in this same file, no separate
@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/placement"
@@ -37,7 +39,7 @@ import (
 // rows-affected so `created=true` reflects whether ANY of the 4
 // records were inserted on this call.
 type PostgresBootstrapStore struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // Bootstrap creates the admin user, tenant, tenant membership, and
@@ -57,14 +59,14 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.Boots
 	// When AssignCell runs under the advisory lock serializer, it
 	// injects the transaction into the context. Using it here ensures
 	// count-and-pick + INSERT run in the same transaction.
-	db := s.DB
+	conn := s.DB
 	if tx := placement.TxFromContext(ctx); tx != nil {
-		db = &PgxTxAdapter{Tx: tx}
+		conn = &db.PgxTxAdapter{Tx: tx}
 	}
 
-	bridge, ok := db.(SqlcBridge)
+	bridge, ok := conn.(db.SqlcBridge)
 	if !ok {
-		return "", "", false, fmt.Errorf("bootstrap store: DBTX %T does not implement SqlcBridge", db)
+		return "", "", false, fmt.Errorf("bootstrap store: DBTX %T does not implement SqlcBridge", conn)
 	}
 	q := generated.New()
 	gdb := bridge.GeneratedDB()

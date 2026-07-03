@@ -37,13 +37,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 // fakeSecretResyncStore implements SecretResyncStore with a configurable
 // fixed entry list (or error).
 type fakeSecretResyncStore struct {
-	entries []db.SecretResyncEntry
+	entries []store.SecretResyncEntry
 	err     error
 	calls   int
 	lastT   string
@@ -51,7 +51,7 @@ type fakeSecretResyncStore struct {
 	lastE   string
 }
 
-func (f *fakeSecretResyncStore) ListForResync(_ context.Context, tenantID, projectID, env string) ([]db.SecretResyncEntry, error) {
+func (f *fakeSecretResyncStore) ListForResync(_ context.Context, tenantID, projectID, env string) ([]store.SecretResyncEntry, error) {
 	f.calls++
 	f.lastT, f.lastP, f.lastE = tenantID, projectID, env
 	if f.err != nil {
@@ -111,7 +111,7 @@ func (f *fakeSecretK8sCreator) callsCopy() []secretCall {
 // sync that the original POST /secrets call missed.
 func TestSecretResyncer_L20_FirstDeploy(t *testing.T) {
 	store := &fakeSecretResyncStore{
-		entries: []db.SecretResyncEntry{
+		entries: []store.SecretResyncEntry{
 			{Name: "db-password", App: "api", Value: "supersecret"},
 		},
 	}
@@ -190,7 +190,7 @@ func TestSecretResyncer_L20_NilResyncer_NotSynced(t *testing.T) {
 // namespace — each pod-start failure has its own surfacing path.
 func TestSecretResyncer_L20_PerSecretError_DoesNotAbort(t *testing.T) {
 	store := &fakeSecretResyncStore{
-		entries: []db.SecretResyncEntry{
+		entries: []store.SecretResyncEntry{
 			{Name: "ok-1", App: "api", Value: "v1"},
 			{Name: "fail-2", App: "api", Value: "v2"},
 			{Name: "ok-3", App: "worker", Value: "v3"},
@@ -258,7 +258,7 @@ func TestSecretResyncer_NamespaceTerminating_Retries(t *testing.T) {
 		},
 	}
 	store := &fakeSecretResyncStore{
-		entries: []db.SecretResyncEntry{
+		entries: []store.SecretResyncEntry{
 			{Name: "SECRET_PING", App: "api", Value: "v1"},
 		},
 	}
@@ -286,7 +286,7 @@ func TestSecretResyncer_NamespaceTerminating_TimeoutFailsExplicit(t *testing.T) 
 		},
 	}
 	store := &fakeSecretResyncStore{
-		entries: []db.SecretResyncEntry{
+		entries: []store.SecretResyncEntry{
 			{Name: "SECRET", App: "api", Value: "v"},
 		},
 	}
@@ -323,7 +323,7 @@ func TestSecretResyncer_NonTerminatingError_FailsFast(t *testing.T) {
 		},
 	}
 	store := &fakeSecretResyncStore{
-		entries: []db.SecretResyncEntry{
+		entries: []store.SecretResyncEntry{
 			{Name: "SECRET", App: "api", Value: "v"},
 		},
 	}

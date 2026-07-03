@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // cost_wrapper.go — sqlc-backed implementation of SQLCostStore.
 // T2.2 (Batch B #5) of plan
@@ -24,6 +24,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/jackc/pgx/v5"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
@@ -37,7 +39,7 @@ import (
 // T2.2 Batch B #5: field type widened from *sql.DB → DBTX (pgx-based,
 // shared with the rest of the migrated stores).
 type SQLCostStore struct {
-	db DBTX
+	db db.DBTX
 }
 
 // NewSQLCostStore constructs a CostStore backed by a DBTX (typically
@@ -46,7 +48,7 @@ type SQLCostStore struct {
 // Nil-safe: if db is nil (boot-time, tests), the returned store still
 // works — every GetCounter returns (zero, false, error) which the
 // CapChecker treats as fail-open.
-func NewSQLCostStore(db DBTX) *SQLCostStore {
+func NewSQLCostStore(db db.DBTX) *SQLCostStore {
 	return &SQLCostStore{db: db}
 }
 
@@ -69,7 +71,7 @@ func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric p
 		return planpkg.CostCounter{}, false, loopzeroerrors.ErrInternalError.Wrap("nil SQLCostStore")
 	}
 
-	bridge, ok := s.db.(SqlcBridge)
+	bridge, ok := s.db.(db.SqlcBridge)
 	if !ok {
 		return planpkg.CostCounter{}, false, fmt.Errorf("cost store: DBTX %T does not implement SqlcBridge", s.db)
 	}
