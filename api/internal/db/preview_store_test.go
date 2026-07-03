@@ -19,7 +19,7 @@ import (
 // _RequestDeletion_Success/NotFoundOrCrossTenant/DBError,
 // _UpdateStatus_Success/NotFound, _UpdateBuild_Success/NotFound,
 // _UpdateURL_Success) ALL used previewFakeQuery / previewFakeExec /
-// fakeDBTX stub responses to verify PostgresPreviewStore behaviors.
+// FakeDBTX stub responses to verify PostgresPreviewStore behaviors.
 // With T2.2 #1 migrating to sqlc-backed via SqlcBridge, the fake
 // pattern is incompatible — the wrapper returns a typed error when
 // the DBTX/tx doesn't satisfy SqlcBridge (fail-fast per T0.6 reshape

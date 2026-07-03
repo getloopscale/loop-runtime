@@ -17,53 +17,7 @@ import (
 // Test fakes — enhanced DBTX implementation for unit testing
 // =============================================================================
 
-// fakeDBTX implements DBTX with configurable responses per call.
-type fakeDBTX struct {
-	// execResult is returned by Exec calls.
-	execResult ExecResult
-	// execErr is returned by Exec calls.
-	execErr error
-	// queryRows is returned by Query calls.
-	queryRows Rows
-	// queryErr is returned by Query calls.
-	queryErr error
-	// queryRowResult is returned by QueryRow calls.
-	queryRowResult Row
-	// capturedSQL records the last SQL executed via Exec.
-	capturedSQL string
-	// capturedArgs records the last args passed to Exec.
-	capturedArgs []any
-	// execCalls counts how many times Exec was called.
-	execCalls int
-}
-
-func (f *fakeDBTX) Query(_ context.Context, sql string, args ...any) (Rows, error) {
-	f.capturedSQL = sql
-	f.capturedArgs = args
-	if f.queryErr != nil {
-		return nil, f.queryErr
-	}
-	if f.queryRows != nil {
-		return f.queryRows, nil
-	}
-	return &sliceRows{}, nil
-}
-
-func (f *fakeDBTX) Exec(_ context.Context, sql string, args ...any) (ExecResult, error) {
-	f.capturedSQL = sql
-	f.capturedArgs = args
-	f.execCalls++
-	return f.execResult, f.execErr
-}
-
-func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
-	f.capturedSQL = sql
-	f.capturedArgs = args
-	if f.queryRowResult != nil {
-		return f.queryRowResult
-	}
-	return emptyRow{}
-}
+// FakeDBTX implements DBTX with configurable responses per call.
 
 // =============================================================================
 // safeTransition tests (DELETED iter 38)
@@ -76,7 +30,6 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 // 9 other machines). The previous Build+Release-specific table-driven
 // test is subsumed by the broader per-machine coverage.
 
-
 // =============================================================================
 // Build Store tests — DELETED in T1.2b of plan
 // 2026-05-29-sqlc-migration v1.3
@@ -85,7 +38,7 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 // 22 sub-tests previously here (TestBuildStore_Create_*,
 // _GetByID_*, _HasActiveBuild_*, _UpdateStatus_*,
 // _Setters_*, _SetAppsSpec_*, _GetBuildApps_*,
-// _ListByProject*, _CancelActiveBuilds_*) ALL used `fakeDBTX` to verify
+// _ListByProject*, _CancelActiveBuilds_*) ALL used `FakeDBTX` to verify
 // PostgresBuildStore behaviors against stub responses. With T1.2b
 // deleting PostgresBuildStore and replacing it with BuildStoreSqlc
 // (sqlc-backed via SqlcBridge), these tests can no longer compile.
@@ -128,7 +81,7 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 // _GetByIDForTenant_*, _GetLatestByBuildID_*, _SetGitCommit_*,
 // _FindPendingReleases_*, _FindActiveReleases_*,
 // _FindPendingReleasesByTenantEnv_*, _ListByEnv_*, _GetByIDTx_*) ALL
-// used `fakeDBTX` to verify PostgresReleaseStore behaviors against stub
+// used `FakeDBTX` to verify PostgresReleaseStore behaviors against stub
 // responses. With T1.1c2c deleting PostgresReleaseStore and replacing
 // it with ReleaseStoreSqlc (sqlc-backed via SqlcBridge), these tests
 // can no longer compile.
@@ -159,7 +112,6 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 // 2 when a real-PG-gated unit test harness is wired (pgxmock or
 // LOOPZERO_E2E_DATABASE_URL).
 
-
 // =============================================================================
 // =============================================================================
 // Domain Store tests — DELETED in T2.1 #9 of plan
@@ -169,7 +121,7 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 // All Domain Store test sub-blocks across stores_test.go (lines
 // 294-473 + 812-876) and stores_extra_test.go (3 sections: Domain
 // Store additional + Background methods + CF Zone methods) used
-// fakeDBTX / recordingDBTX / countingDBTX stubs to verify
+// FakeDBTX / RecordingDBTX / countingDBTX stubs to verify
 // PostgresDomainStore behaviors. With T2.1 #9 migrating the 3-file
 // legacy split (domain_store.go + domain_store_background.go +
 // domain_store_cfzone.go) to a single sqlc-backed wrapper via
@@ -197,7 +149,7 @@ func (f *fakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 // 8 sub-tests previously here (TestProjectStore_CreateProject_Success/
 // UniqueViolation, _EnsureProject_Success/ConflictIsIdempotent,
 // _DeleteProject_Success/NotFound, _GetByName_NotFoundReturnsNil,
-// _ListByTenant_EmptyReturnsEmptySlice) used fakeDBTX/recordingDBTX
+// _ListByTenant_EmptyReturnsEmptySlice) used FakeDBTX/RecordingDBTX
 // stubs to verify PostgresProjectStore behaviors. With T2.1 #4
 // migrating to sqlc-backed via SqlcBridge, the fake pattern is
 // incompatible.
@@ -247,7 +199,7 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // Success/Empty, _DeleteTenantsFKOrdered_EmptyNoOp/ExecutesAllSteps/
 // ErrorStopsExecution) + the failOnNthExecDBTX wrapper + TestTruncateSQL
 // (testing the now-removed truncateSQL helper that lived in
-// tenant_store.go) — ALL used fakeDBTX-based stubs to verify
+// tenant_store.go) — ALL used FakeDBTX-based stubs to verify
 // PostgresTenantStore behaviors. With T1.4 deleting PostgresTenantStore
 // and replacing it with TenantStoreSqlc (sqlc-backed via SqlcBridge),
 // the stub pattern is incompatible.
@@ -277,7 +229,6 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness is
 // wired.
 
-
 // =============================================================================
 // Team Store tests — DELETED in T2.1 #5 of plan
 // 2026-05-29-sqlc-migration v1.3
@@ -286,7 +237,7 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // 7 sub-tests previously here (TestTeamStore_AddMember_Success,
 // _RemoveMember_Success, _UpdateMemberRole_Success/NotFound,
 // _ListMembers_Empty, _GetMember_NotFound, _GetUserByUsername_NotFound)
-// used fakeDBTX/recordingDBTX stubs to verify PostgresTeamStore.
+// used FakeDBTX/RecordingDBTX stubs to verify PostgresTeamStore.
 // With T2.1 #5 migrating to sqlc-backed via SqlcBridge, the fake
 // pattern is incompatible.
 //
@@ -307,7 +258,6 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // helper it tested. Username is now a column on users, not derived from
 // the id. See migration 000037 and team_store.go.
 
-
 // =============================================================================
 // Environment Target Store tests — DELETED in T2.1 #6 of plan
 // 2026-05-29-sqlc-migration v1.3
@@ -316,7 +266,7 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // 8 sub-tests previously here (TestEnvironmentTargetStore_Mutators
 // with 3 mutators × 2 variants = 6 sub-tests +
 // _Get_NotFoundReturnsNil + _ListByProject_EmptyReturnsEmptySlice)
-// used fakeDBTX/recordingDBTX stubs to verify
+// used FakeDBTX/RecordingDBTX stubs to verify
 // PostgresEnvironmentTargetStore. With T2.1 #6 migrating to sqlc-
 // backed via SqlcBridge, the fake pattern is incompatible.
 //
@@ -343,7 +293,7 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 //
 // 4 sub-tests previously here (TestIdempotencyStore_Get_NotFound
 // ReturnsNil, _Get_Success, _Store_Success, _Cleanup_Success) used
-// fakeDBTX-based stubs to verify PostgresIdempotencyStore behaviors.
+// FakeDBTX-based stubs to verify PostgresIdempotencyStore behaviors.
 // With T2.1 widening the DB field to db.DBTX + sqlc-backed methods
 // dispatching through SqlcBridge, the fake pattern is incompatible.
 //
@@ -383,9 +333,9 @@ func TestAuditStore_ListAuditEntries_NilDB(t *testing.T) {
 // TestAuditStore_ListAuditEntries_EmptyResult — DELETED in T1.5 of
 // plan 2026-05-29-sqlc-migration v1.3.
 //
-// The fakeDBTX-based test cannot run against the sqlc-backed
+// The FakeDBTX-based test cannot run against the sqlc-backed
 // PostgresAuditStore.ListAuditEntries — the wrapper bridges to
-// generated.DBTX via SqlcBridge, which fakeDBTX deliberately doesn't
+// generated.DBTX via SqlcBridge, which FakeDBTX deliberately doesn't
 // implement (T0.6 reshape matrix). The empty-result behavior is
 // PRESERVED structurally: when CountAuditLogForTenant returns 0 +
 // ListAuditLogForTenant returns no rows, the wrapper emits
@@ -402,7 +352,7 @@ func TestAuditStore_ListAuditEntries_NilDB(t *testing.T) {
 // =============================================================================
 
 func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 15}}
+	fake := &FakeDBTX{ExecResult: ExecResult{RowsAffected: 15}}
 	store := &PostgresBuildGCStore{DB: fake}
 
 	count, err := store.DeleteOldBuilds(context.Background(), 30*24*time.Hour, 10)
@@ -422,7 +372,7 @@ func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
 // T2.2 #6 of plan 2026-05-29-sqlc-migration v1.3.
 //
 // DeleteOldWebhookDeliveries was migrated to sqlc-backed via
-// SqlcBridge; the previous fakeDBTX stub is incompatible with the
+// SqlcBridge; the previous FakeDBTX stub is incompatible with the
 // bridge dispatch. KEEP-INVARIANT (sqlc emits the same `DELETE FROM
 // github_webhook_deliveries WHERE received_at < $1` shape; RowsAffected
 // surfaces through :execrows return) preserved structurally. Phase 2
@@ -434,7 +384,7 @@ func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
 // ADR-1 D5).
 
 func TestBuildGCStore_DeleteOldBuilds_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("table locked")}
+	fake := &FakeDBTX{ExecErr: fmt.Errorf("table locked")}
 	store := &PostgresBuildGCStore{DB: fake}
 
 	_, err := store.DeleteOldBuilds(context.Background(), 30*24*time.Hour, 10)
