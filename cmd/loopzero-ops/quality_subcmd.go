@@ -37,6 +37,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingdata"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardpromtool"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dbgeneratedboundary"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/decisionsdeletion"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/divergencematrix"
@@ -404,6 +405,8 @@ func runQuality(args []string) int {
 		return runSqlcSync(args[1:])
 	case "sqlc-tx-prop":
 		return runSqlcTxProp(args[1:])
+	case "db-generated-boundary":
+		return runDbGeneratedBoundary(args[1:])
 	case "tenant-predicate":
 		return runTenantPredicate(args[1:])
 	case "corrections-txt-closed":
@@ -2809,6 +2812,36 @@ func runSqlcTxProp(args []string) int {
 		return 1
 	}
 	fmt.Printf("sqlc-tx-prop: PASS — %d .go files scanned; no pool-bound sqlc calls inside withEnvironmentLock\n", outcome.Scanned)
+	return 0
+}
+
+// runDbGeneratedBoundary enforces MA-7 Gate A of the M9 db-split: no file under
+// api/internal/{services,routes,server} imports api/internal/db/generated.
+// ADR .claude/knowledge-base/decisions/2026-07-03-m9-db-store-subpackage-topology.md D3.
+func runDbGeneratedBoundary(args []string) int {
+	fs := flag.NewFlagSet("db-generated-boundary", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := dbgeneratedboundary.Check(dbgeneratedboundary.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "db-generated-boundary: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "db-generated-boundary: FAIL \u2014 %d violation(s) (scanned %d .go files):\n",
+			len(outcome.Violations), outcome.Scanned)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s:%d imports %s\n", v.File, v.Line, v.Import)
+		}
+		fmt.Fprintf(os.Stderr, "\nFix: %s\n", dbgeneratedboundary.ActionableFix())
+		return 1
+	}
+	fmt.Printf("db-generated-boundary: PASS \u2014 %d .go files scanned; no outer-layer imports of db/generated (MA-7 Gate A)\n", outcome.Scanned)
 	return 0
 }
 

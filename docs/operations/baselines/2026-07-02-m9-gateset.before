@@ -27,6 +27,7 @@ crd-semantic-diff	-	Semantic diff of CRD schemas to catch breaking spec changes.
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
 dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
+db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
 decisions-deletion	-	Guards deletion of decision/ADR records.
 divergence-matrix	-	Checks the local-vs-prod divergence matrix is current.
 dockerfile-no-docker-hub	gates	Forbids unqualified docker.io/Docker Hub base images.
