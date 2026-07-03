@@ -110,26 +110,26 @@ func TestReleaseStore_ColumnCascade_AllSelectsRoundTrip(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	adapter := &db.PgxAdapter{Pool: pool}
-	store := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
+	relStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	ctx := context.Background()
 	rel, wantURL := seedColumnCascadeRow(t, pool)
 
 	// 1) GetByID
-	if got, err := store.GetByID(ctx, rel.ID); err != nil {
+	if got, err := relStore.GetByID(ctx, rel.ID); err != nil {
 		t.Fatalf("GetByID: %v", err)
 	} else {
 		assertRekorURL(t, "GetByID", got, wantURL)
 	}
 
 	// 2) GetByIDForTenant
-	if got, err := store.GetByIDForTenant(ctx, rel.TenantID, rel.ID); err != nil {
+	if got, err := relStore.GetByIDForTenant(ctx, rel.TenantID, rel.ID); err != nil {
 		t.Fatalf("GetByIDForTenant: %v", err)
 	} else {
 		assertRekorURL(t, "GetByIDForTenant", got, wantURL)
 	}
 
 	// 3) GetActiveByEnv — release is ACTIVE.
-	if got, err := store.GetActiveByEnv(ctx, rel.TenantID, rel.ProjectID, rel.Environment); err != nil {
+	if got, err := relStore.GetActiveByEnv(ctx, rel.TenantID, rel.ProjectID, rel.Environment); err != nil {
 		t.Fatalf("GetActiveByEnv: %v", err)
 	} else {
 		assertRekorURL(t, "GetActiveByEnv", got, wantURL)
@@ -137,7 +137,7 @@ func TestReleaseStore_ColumnCascade_AllSelectsRoundTrip(t *testing.T) {
 
 	// 4) ListByEnv (limit 10) — expect at least one release; assert URL
 	// on the row matching our seeded ID.
-	rows, err := store.ListByEnv(ctx, rel.TenantID, rel.ProjectID, rel.Environment, 10)
+	rows, err := relStore.ListByEnv(ctx, rel.TenantID, rel.ProjectID, rel.Environment, 10)
 	if err != nil {
 		t.Fatalf("ListByEnv: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestReleaseStore_ColumnCascade_AllSelectsRoundTrip(t *testing.T) {
 	assertRekorURL(t, "ListByEnv", found, wantURL)
 
 	// 5) GetLatestByBuildID
-	if got, err := store.GetLatestByBuildID(ctx, rel.BuildID); err != nil {
+	if got, err := relStore.GetLatestByBuildID(ctx, rel.BuildID); err != nil {
 		t.Fatalf("GetLatestByBuildID: %v", err)
 	} else {
 		assertRekorURL(t, "GetLatestByBuildID", got, wantURL)
@@ -171,7 +171,7 @@ func TestReleaseStore_ColumnCascade_NullURL_NoFalseString(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	adapter := &db.PgxAdapter{Pool: pool}
-	store := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
+	relStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	ctx := context.Background()
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -202,11 +202,11 @@ func TestReleaseStore_ColumnCascade_NullURL_NoFalseString(t *testing.T) {
 		CreatedBy:                "system:test",
 		ImageAttestationRekorURL: nil, // legacy / attest-disabled path
 	}
-	if err := store.Create(ctx, adapter, rel); err != nil {
+	if err := relStore.Create(ctx, adapter, rel); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	got, err := store.GetByID(ctx, releaseID)
+	got, err := relStore.GetByID(ctx, releaseID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
