@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/alertrunbooks"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correlationheader"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardpromtool"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orphanalerts"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runtimeslo"
+)
+
+// M9 Step 7: quality gate entry points for the "observability" theme, decomposed out of the
+// former quality_subcmd.go god file. Each func is referenced as a Run in
+// gateRegistry (quality_registry.go) — the single source of truth
+// (ADR 2026-07-03-m9-step7-gate-registration-mechanism).
+
+// runDashboardPromtool validates Grafana dashboards JSON syntax (always)
+// and PromQL queries via promtool (skip-on-missing). T4.3 of plan
+// 2026-05-26-maturity-3-62-to-4-0-roadmap.
+func runDashboardPromtool(args []string) int {
+	fs := flag.NewFlagSet("dashboard-promtool", flag.ContinueOnError)
+	dashboardsDir := fs.String("dir", "infra/helm/monitoring/dashboards", "dashboard directory to scan")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := dashboardpromtool.Check(context.Background(),
+		dashboardpromtool.Config{DashboardsDir: *dashboardsDir})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dashboard-promtool: %v\n", err)
+		return 5
+	}
+	if len(outcome.SyntaxErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "dashboard-promtool: FAIL — %d JSON syntax errors:\n", len(outcome.SyntaxErrors))
+		for _, e := range outcome.SyntaxErrors {
+			fmt.Fprintf(os.Stderr, "  %s\n", e)
+		}
+		return 1
+	}
+	if len(outcome.PromtoolErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "dashboard-promtool: FAIL — %d PromQL parse errors:\n", len(outcome.PromtoolErrors))
+		for _, e := range outcome.PromtoolErrors {
+			fmt.Fprintf(os.Stderr, "  %s\n", e)
+		}
+		return 1
+	}
+	if outcome.PromtoolSkipped {
+		fmt.Printf("dashboard-promtool: PASS (JSON syntax %d/%d) — promtool SKIP (%s)\n",
+			outcome.TotalScanned, outcome.TotalScanned, outcome.PromtoolReason)
+	} else {
+		fmt.Printf("dashboard-promtool: PASS — %d dashboards (JSON syntax + PromQL semantic)\n",
+			outcome.TotalScanned)
+	}
+	return 0
+}
+
+func runRuntimeSLO(args []string) int {
+	fs := flag.NewFlagSet("runtime-slo", flag.ContinueOnError)
+	logFile := fs.String("log", "/tmp/go-test-output.log", "go test -v output log")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := runtimeslo.Check(runtimeslo.Config{LogFile: *logFile, Limits: runtimeslo.DefaultLimits()})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[runtime-slo] %v\n", err)
+		return 5
+	}
+	if o.Skipped {
+		fmt.Printf("[runtime-slo] no go test log at %s — skip\n", *logFile)
+		return 0
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[runtime-slo] FAIL: %d test(s)/suite(s) over SLO:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "[runtime-slo] for legitimate slow tests, add: // slow_test: <issue-url>")
+		return 1
+	}
+	fmt.Println("[runtime-slo] PASS — all tests/suites within SLO")
+	return 0
+}
+
+func runAlertRunbooks(args []string) int {
+	fs := flag.NewFlagSet("alert-runbooks", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := alertrunbooks.Check(alertrunbooks.Config{Root: *root})
+	if !o.Pass {
+		for _, v := range o.Violations {
+			fmt.Printf("RUNBOOK-MISSING VIOLATION: %s\n", v)
+		}
+		fmt.Fprintf(os.Stderr, "\nFAIL — %d alert(s) without runbook annotation.\n", len(o.Violations))
+		fmt.Fprintln(os.Stderr, "To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
+		fmt.Fprintln(os.Stderr, "alert name to ExceptionList (pkg/quality/alertrunbooks) with an explanation.")
+		return 1
+	}
+	fmt.Println("PASS — every alert has a runbook (or is in the exception list).")
+	return 0
+}
+
+func runOrphanAlerts(args []string) int {
+	fs := flag.NewFlagSet("orphan-alerts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := orphanalerts.Check(orphanalerts.Config{Root: *root})
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "FAIL — %d orphan alert(s) (vector(0) > 1 placeholder, metric not emitted):\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  ORPHAN-ALERT VIOLATION: %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Either wire the real metric + rewrite the expr, OR add the alert name to")
+		fmt.Fprintln(os.Stderr, "ExceptionList (pkg/quality/orphanalerts) with a comment + linked work item.")
+		return 1
+	}
+	fmt.Println("PASS — no orphan alerts.")
+	return 0
+}
+
+// runCorrelationHeader scans api/internal/routes/*.go for direct
+// r.Header.Get("(X-)?Correlation-ID") literals. Routes MUST go through
+// api/internal/correlation.Read(r) instead (T6.1 of plan
+// 2026-06-01-p3-infra-observability-test-debt, ADR D5 — closes val-002).
+func runCorrelationHeader(args []string) int {
+	fs := flag.NewFlagSet("correlation-header", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := correlationheader.Check(correlationheader.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "correlation-header: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in routes/:\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fix: replace with `id := correlation.Read(r)` (api/internal/correlation).")
+		fmt.Fprintln(os.Stderr, "The helper handles backward-compat (X-Correlation-ID fallback) + deprecation WARN.")
+		return 1
+	}
+	fmt.Println("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/")
+	return 0
+}

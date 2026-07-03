@@ -26,88 +26,118 @@ import (
 type gateSpec struct {
 	Name    string
 	Summary string
+	// Run is the gate's entry point (flag parse -> Check -> print -> exit code).
+	// json:"-" keeps gateSpec marshalable (a func field otherwise errors
+	// json.Marshal). M9 Step 7: merging Name+Summary+Run into one entry makes
+	// this literal the single source of truth per gate — no separate dispatch
+	// switch to drift against (ADR 2026-07-03-m9-step7-gate-registration-mechanism).
+	Run func([]string) int `json:"-"`
 }
 
-// gateRegistry enumerates every `loopzero-ops quality <name>` gate. Kept in sync
-// with the dispatch switch by TestGateRegistry_CoversAllSwitchCases. Ordering
-// here is not load-bearing (--list sorts); alphabetical for reviewability.
+// gateRegistry is the SINGLE SOURCE OF TRUTH for every `loopzero-ops quality <name>`
+// gate: Name + Summary + Run in one entry. runQuality dispatches by map-lookup
+// over this slice (no switch); --list renders Name+Summary from it. The gate
+// funcs live in quality_gates_*.go (thematic decomposition). Ordering here is
+// not load-bearing (--list sorts); alphabetical for reviewability.
+// A gate is added by ONE line here + its func in a theme file — nothing else.
 var gateRegistry = []gateSpec{
-	{"acyclic-graph", "Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle."},
-	{"advisory-lock-scope", "Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed."},
-	{"agpl-isolation", "Verifies AGPL-licensed code stays isolated from proprietary import paths."},
-	{"alert-runbooks", "Every Prometheus alert has a linked runbook annotation."},
-	{"anonymous-auth", "Forbids anonymous/unauthenticated access on protected API surfaces."},
-	{"base-image-digest", "Base images are pinned by digest, not floating tags."},
-	{"baseline-compare", "Compares a captured steady-state baseline against the current state."},
-	{"baseline-update", "Updates the committed steady-state baseline artifact."},
-	{"caddyfile-csp", "Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit)."},
-	{"cli-bundle-size", "Guards the CLI published bundle size against regression."},
-	{"cli-exit-codes", "Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only)."},
-	{"clusterimagepolicy-mode", "Validates the sigstore ClusterImagePolicy enforcement mode."},
-	{"cluster-role-no-secrets-star", "Forbids unconditional cluster-wide secrets/configmaps RBAC grants."},
-	{"contract-consumers", "Verifies cross-repo contract consumers stay in sync with the contract."},
-	{"corrections-txt-closed", "Asserts CORRECTIONS.txt items are all closed."},
-	{"correlation-header", "Correlation-ID header is forwarded across the request path."},
-	{"cosign-cutover", "Enforces the cosign keyed→keyless cutover deadline ratchet."},
-	{"coverage-diff", "Diffs test coverage against a baseline to catch regressions."},
-	{"coverage-merge", "Merges per-package coverage profiles into one report."},
-	{"crd-semantic-diff", "Semantic diff of CRD schemas to catch breaking spec changes."},
-	{"dangling-data-refs", "Detects data/file references that no longer resolve after a change."},
-	{"dangling-script-refs", "Detects shell-script references that no longer resolve after a change."},
-	{"dashboard-promtool", "Validates Grafana dashboard + Prometheus rules via promtool."},
-	{"decisions-deletion", "Guards deletion of decision/ADR records."},
-	{"divergence-matrix", "Checks the local-vs-prod divergence matrix is current."},
-	{"dockerfile-no-docker-hub", "Forbids unqualified docker.io/Docker Hub base images."},
-	{"drill-creds-isolation", "Ensures DR-drill credentials are isolated from production."},
-	{"drill-outputs-consumers", "Verifies drill Pulumi-output consumers use the canonical schema."},
-	{"git-diff-to-lines", "Utility: converts a git diff into a changed-line set for other gates."},
-	{"helm-diff-structural", "Structural pre-sync Helm diff to catch drift before apply."},
-	{"helm-drift", "Detects drift between rendered Helm charts and the deployed state."},
-	{"helm-overlap-parity", "Keeps the dual Helm chart systems (infra/helm vs charts) in parity."},
-	{"migration-test-coverage", "Every DB migration has corresponding test coverage."},
-	{"mock-budget", "Caps the number of mocks per test (SRP smell budget)."},
-	{"no-aes-remaining", "Calendar-gated: fails on remaining AES code paths post-transit migration."},
-	{"no-env-vault-secrets", "Forbids secrets-as-env-var regression after the ESO/OpenBao migration."},
-	{"no-legacy-sa-token-secret", "Forbids legacy kubernetes.io/service-account-token Secrets."},
-	{"no-migrate-force", "Forbids forced/destructive DB migration operations."},
-	{"no-new-bash", "Blocks new .sh files not in the shell-scripts allowlist."},
-	{"no-pulumi-inline-secrets", "Forbids inline secret literals in Pulumi code."},
-	{"no-shell-wrap", "Forbids thin shell wrappers around pure-logic that belongs in Go."},
-	{"orphan-alerts", "Detects Prometheus alerts with no owning dashboard/runbook."},
-	{"pkg-usage-matrix", "Verifies the pkg/ cross-component usage matrix is current."},
-	{"postgresql-pdb-config", "Validates the PostgreSQL PodDisruptionBudget configuration."},
-	{"prod-image-digests", "Production manifests reference images by digest."},
-	{"prod-image-tags", "Forbids mutable :latest-style image tags in production manifests."},
-	{"quarantine-protect", "Protects the canonical-tests-v1 quarantine from accidental edits."},
-	{"regression-matrix", "Verifies the regression-test matrix covers required scenarios."},
-	{"regression-test", "Asserts a regression test exists for tracked fixed bugs."},
-	{"runtime-slo", "Validates runtime SLO definitions and thresholds."},
-	{"script-count", "Tracks the total shell-script count against the reduction target."},
-	{"scripts-audit", "Audits shell scripts against the allowlist ledger."},
-	{"security-context", "Enforces pod securityContext (non-root, limits, probes)."},
-	{"service-auth-rotation", "Enforces the Ed25519 service-auth key rotation cadence."},
-	{"shell-hygiene", "Lints shell scripts for strict-mode and hygiene rules."},
-	{"skip-link", "Verifies accessibility skip-link presence in the dashboard."},
-	{"spotcheck-dimension", "Spot-checks a maturity-audit dimension against evidence."},
-	{"sqlc-sync", "Committed sqlc generated/ is in sync with the schema codegen."},
-	{"sqlc-tx-prop", "Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock."},
-	{"db-generated-boundary", "MA-7 Gate A: no services/routes/server imports internal/db/generated."},
-	{"ma7-status-locality", "MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/."},
-	{"services-acyclic", "M9 Step 6: services bounded-context imports form the frozen acyclic DAG."},
-	{"stack-coverage", "Verifies the tool-inventory stack-coverage claims via grep."},
-	{"taskfile-interface", "Validates the Taskfile public-interface contract."},
-	{"template-compliance", "Checks documents comply with their canonical templates."},
-	{"tenant-predicate", "Enforces the multi-tenant isolation predicate (security veto-backed)."},
-	{"test-deletion", "Guards deletion of test files against coverage loss."},
-	{"test-pyramid", "Validates the unit/integration/e2e test-pyramid balance."},
-	{"test-targets", "Verifies Taskfile test targets exist and are wired."},
-	{"transit-coverage", "Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store)."},
-	{"trivy-scan", "Runs Trivy CVE scanning on filesystem/images."},
-	{"trufflehog-scan", "Runs TruffleHog verified-secret scanning."},
-	{"unhomed-logic", "Forbids un-homed operational logic that belongs in a pkg/quality gate."},
+	{"acyclic-graph", "Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.", runAcyclicGraph},
+	{"advisory-lock-scope", "Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.", runAdvisoryLockScope},
+	{"agpl-isolation", "Verifies AGPL-licensed code stays isolated from proprietary import paths.", runAGPLIsolation},
+	{"alert-runbooks", "Every Prometheus alert has a linked runbook annotation.", runAlertRunbooks},
+	{"anonymous-auth", "Forbids anonymous/unauthenticated access on protected API surfaces.", runAnonymousAuth},
+	{"base-image-digest", "Base images are pinned by digest, not floating tags.", runBaseImageDigest},
+	{"baseline-compare", "Compares a captured steady-state baseline against the current state.", runBaselineCompare},
+	{"baseline-update", "Updates the committed steady-state baseline artifact.", runBaselineUpdate},
+	{"caddyfile-csp", "Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).", runCaddyfileCSP},
+	{"cli-bundle-size", "Guards the CLI published bundle size against regression.", runCLIBundleSize},
+	{"cli-exit-codes", "Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).", runCLIExitCodes},
+	{"clusterimagepolicy-mode", "Validates the sigstore ClusterImagePolicy enforcement mode.", runClusterImagePolicyMode},
+	{"cluster-role-no-secrets-star", "Forbids unconditional cluster-wide secrets/configmaps RBAC grants.", runClusterRoleNoSecretsStar},
+	{"contract-consumers", "Verifies cross-repo contract consumers stay in sync with the contract.", runContractConsumers},
+	{"corrections-txt-closed", "Asserts CORRECTIONS.txt items are all closed.", runCorrectionsTxtClosed},
+	{"correlation-header", "Correlation-ID header is forwarded across the request path.", runCorrelationHeader},
+	{"cosign-cutover", "Enforces the cosign keyed→keyless cutover deadline ratchet.", runCosignCutover},
+	{"coverage-diff", "Diffs test coverage against a baseline to catch regressions.", runCoverageDiff},
+	{"coverage-merge", "Merges per-package coverage profiles into one report.", runCoverageMerge},
+	{"crd-semantic-diff", "Semantic diff of CRD schemas to catch breaking spec changes.", runCRDSemanticDiff},
+	{"dangling-data-refs", "Detects data/file references that no longer resolve after a change.", runDanglingDataRefs},
+	{"dangling-script-refs", "Detects shell-script references that no longer resolve after a change.", runDanglingScriptRefs},
+	{"dashboard-promtool", "Validates Grafana dashboard + Prometheus rules via promtool.", runDashboardPromtool},
+	{"decisions-deletion", "Guards deletion of decision/ADR records.", runDecisionsDeletion},
+	{"divergence-matrix", "Checks the local-vs-prod divergence matrix is current.", runDivergenceMatrix},
+	{"dockerfile-no-docker-hub", "Forbids unqualified docker.io/Docker Hub base images.", runDockerfileNoDockerHub},
+	{"drill-creds-isolation", "Ensures DR-drill credentials are isolated from production.", runDrillCredsIsolation},
+	{"drill-outputs-consumers", "Verifies drill Pulumi-output consumers use the canonical schema.", runDrillOutputsConsumers},
+	{"git-diff-to-lines", "Utility: converts a git diff into a changed-line set for other gates.", runGitDiffToLines},
+	{"helm-diff-structural", "Structural pre-sync Helm diff to catch drift before apply.", runHelmDiffStructural},
+	{"helm-drift", "Detects drift between rendered Helm charts and the deployed state.", runHelmDrift},
+	{"helm-overlap-parity", "Keeps the dual Helm chart systems (infra/helm vs charts) in parity.", runHelmOverlapParity},
+	{"migration-test-coverage", "Every DB migration has corresponding test coverage.", runMigrationTestCoverage},
+	{"mock-budget", "Caps the number of mocks per test (SRP smell budget).", runMockBudget},
+	{"no-aes-remaining", "Calendar-gated: fails on remaining AES code paths post-transit migration.", runNoAESRemaining},
+	{"no-env-vault-secrets", "Forbids secrets-as-env-var regression after the ESO/OpenBao migration.", runNoEnvVaultSecrets},
+	{"no-legacy-sa-token-secret", "Forbids legacy kubernetes.io/service-account-token Secrets.", runNoLegacySATokenSecret},
+	{"no-migrate-force", "Forbids forced/destructive DB migration operations.", runNoMigrateForce},
+	{"no-new-bash", "Blocks new .sh files not in the shell-scripts allowlist.", runNoNewBash},
+	{"no-pulumi-inline-secrets", "Forbids inline secret literals in Pulumi code.", runNoPulumiInlineSecrets},
+	{"no-shell-wrap", "Forbids thin shell wrappers around pure-logic that belongs in Go.", runNoShellWrap},
+	{"orphan-alerts", "Detects Prometheus alerts with no owning dashboard/runbook.", runOrphanAlerts},
+	{"pkg-usage-matrix", "Verifies the pkg/ cross-component usage matrix is current.", runPkgUsageMatrix},
+	{"postgresql-pdb-config", "Validates the PostgreSQL PodDisruptionBudget configuration.", runPostgresqlPDBConfig},
+	{"prod-image-digests", "Production manifests reference images by digest.", runProdImageDigests},
+	{"prod-image-tags", "Forbids mutable :latest-style image tags in production manifests.", runProdImageTags},
+	{"quarantine-protect", "Protects the canonical-tests-v1 quarantine from accidental edits.", runQuarantineProtect},
+	{"regression-matrix", "Verifies the regression-test matrix covers required scenarios.", runRegressionMatrix},
+	{"regression-test", "Asserts a regression test exists for tracked fixed bugs.", runRegressionTest},
+	{"runtime-slo", "Validates runtime SLO definitions and thresholds.", runRuntimeSLO},
+	{"script-count", "Tracks the total shell-script count against the reduction target.", runScriptCount},
+	{"scripts-audit", "Audits shell scripts against the allowlist ledger.", runScriptsAudit},
+	{"security-context", "Enforces pod securityContext (non-root, limits, probes).", runSecurityContext},
+	{"service-auth-rotation", "Enforces the Ed25519 service-auth key rotation cadence.", runServiceAuthRotation},
+	{"shell-hygiene", "Lints shell scripts for strict-mode and hygiene rules.", runShellHygiene},
+	{"skip-link", "Verifies accessibility skip-link presence in the dashboard.", runSkipLink},
+	{"spotcheck-dimension", "Spot-checks a maturity-audit dimension against evidence.", runSpotcheckDimension},
+	{"sqlc-sync", "Committed sqlc generated/ is in sync with the schema codegen.", runSqlcSync},
+	{"sqlc-tx-prop", "Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.", runSqlcTxProp},
+	{"db-generated-boundary", "MA-7 Gate A: no services/routes/server imports internal/db/generated.", runDbGeneratedBoundary},
+	{"ma7-status-locality", "MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.", runMa7StatusLocality},
+	{"services-acyclic", "M9 Step 6: services bounded-context imports form the frozen acyclic DAG.", runServicesAcyclic},
+	{"stack-coverage", "Verifies the tool-inventory stack-coverage claims via grep.", runStackCoverage},
+	{"taskfile-interface", "Validates the Taskfile public-interface contract.", runTaskfileInterface},
+	{"template-compliance", "Checks documents comply with their canonical templates.", runTemplateCompliance},
+	{"tenant-predicate", "Enforces the multi-tenant isolation predicate (security veto-backed).", runTenantPredicate},
+	{"test-deletion", "Guards deletion of test files against coverage loss.", runTestDeletion},
+	{"test-pyramid", "Validates the unit/integration/e2e test-pyramid balance.", runTestPyramid},
+	{"test-targets", "Verifies Taskfile test targets exist and are wired.", runTestTargets},
+	{"transit-coverage", "Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store).", runTransitCoverage},
+	{"trivy-scan", "Runs Trivy CVE scanning on filesystem/images.", runTrivyScan},
+	{"trufflehog-scan", "Runs TruffleHog verified-secret scanning.", runTrufflehogScan},
+	{"unhomed-logic", "Forbids un-homed operational logic that belongs in a pkg/quality gate.", runUnhomedLogic},
 }
 
 // gateRegistrySet returns the registry names as a set for membership checks.
+// gateDispatch builds the name->gate lookup used by runQuality. It PANICS on a
+// duplicate Name: a dup would otherwise silently collapse (map overwrite) while
+// --list stayed byte-identical (both entries carry a non-nil Run) — the exact
+// silent-un-wire failure mode M9 Step 7 must make impossible. A nil Run also
+// panics (a registered gate with no entry point is a wiring bug). Tests
+// (TestRegistry_CountNilAndNoDup) assert both conditions so the panic is never
+// reached in a shipped binary; it is the fail-fast backstop.
+func gateDispatch() map[string]gateSpec {
+	m := make(map[string]gateSpec, len(gateRegistry))
+	for _, g := range gateRegistry {
+		if _, dup := m[g.Name]; dup {
+			panic(fmt.Sprintf("quality: duplicate gate name %q in gateRegistry", g.Name))
+		}
+		if g.Run == nil {
+			panic(fmt.Sprintf("quality: gate %q has nil Run (registered but not wired)", g.Name))
+		}
+		m[g.Name] = g
+	}
+	return m
+}
+
 func gateRegistrySet() map[string]bool {
 	out := make(map[string]bool, len(gateRegistry))
 	for _, g := range gateRegistry {

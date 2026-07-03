@@ -31,7 +31,7 @@ func TestCheck_EmptyRoot_Errors(t *testing.T) {
 
 func TestCheck_PreEnforcement_AESPresent_WARNonly(t *testing.T) {
 	tmp := t.TempDir()
-	writeGo(t, tmp, "api/internal/db/secret_wrapper.go", `package db
+	writeGo(t, tmp, "api/internal/db/store/secret_wrapper.go", `package db
 import "crypto/aes"
 func x() { _, _ = aes.NewCipher(nil) }
 `)
@@ -61,7 +61,7 @@ func x() { _, _ = aes.NewCipher(nil) }
 
 func TestCheck_PostEnforcement_AESPresent_FAIL(t *testing.T) {
 	tmp := t.TempDir()
-	writeGo(t, tmp, "api/internal/db/secret_wrapper.go", `package db
+	writeGo(t, tmp, "api/internal/db/store/secret_wrapper.go", `package db
 import "crypto/aes"
 func x() { _, _ = aes.NewCipher(nil) }
 `)
@@ -97,7 +97,7 @@ func TestCheck_PostEnforcement_AESDeleted_PASS(t *testing.T) {
 
 func TestCheck_CommentedAES_Ignored(t *testing.T) {
 	tmp := t.TempDir()
-	writeGo(t, tmp, "api/internal/db/secret_wrapper.go", `package db
+	writeGo(t, tmp, "api/internal/db/store/secret_wrapper.go", `package db
 // import "crypto/aes" — removed in T10.3
 /*
    aes.NewCipher used to live here.
@@ -118,11 +118,11 @@ func x() {}
 
 func TestCheck_Allowlist(t *testing.T) {
 	tmp := t.TempDir()
-	writeGo(t, tmp, "api/internal/db/secret_wrapper.go", `import "crypto/aes"`)
+	writeGo(t, tmp, "api/internal/db/store/secret_wrapper.go", `import "crypto/aes"`)
 	out, err := Check(Config{
 		RepoRoot:       tmp,
 		NowOverride:    CutoverDay.Add(EnforcementDelay + 24*time.Hour),
-		AllowlistPaths: []string{"api/internal/db/secret_wrapper.go"},
+		AllowlistPaths: []string{"api/internal/db/store/secret_wrapper.go"},
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)

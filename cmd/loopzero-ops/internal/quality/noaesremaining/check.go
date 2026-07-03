@@ -10,7 +10,7 @@
 // any AES code path remains in the secret store (vault:v1: prefix is the
 // only acceptable on-the-wire format).
 //
-// Scope of the AES grep: `api/internal/db/secret_wrapper.go` (canonical
+// Scope of the AES grep: `api/internal/db/store/secret_wrapper.go` (canonical
 // store file) plus any *.go file in api/ that imports crypto/aes from
 // a path touching secret encryption.
 //
@@ -63,7 +63,7 @@ type Hit struct {
 
 // scanPaths are the canonical AES-bearing files (post-T2.6 migration).
 var scanPaths = []string{
-	"api/internal/db/secret_wrapper.go",
+	"api/internal/db/store/secret_wrapper.go",
 }
 
 // aesMarkers are heuristics flagging a remaining AES code path.

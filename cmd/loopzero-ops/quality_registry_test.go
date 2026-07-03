@@ -11,33 +11,136 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 )
 
-// switchCaseGates returns the set of gate names dispatched by the quality
-// runner's `switch args[0]` (excluding the --help/-h/help/--list meta cases and
-// the default). This is the authoritative gate set the registry must match.
-//
-// Relocation-proof (MA-3 / verification-architect condition 3): it AST-parses
-// EVERY non-test *.go in the package and extracts the case labels from the
-// `runQuality` FuncDecl wherever it lives — NOT a hard-read of one filename. A
-// future step that splits or moves the dispatch out of quality_subcmd.go cannot
-// silently defeat the parity guarantee. Scoping to the runQuality function (not
-// a whole-file glob) excludes the unrelated top-level command switches
-// (chaos/drill/archive/…) in sibling files.
-func switchCaseGates(t *testing.T) map[string]bool {
+// captureQualityOutput runs fn while capturing os.Stdout and os.Stderr, returning
+// the two streams plus fn's return code. runQuality writes help/errors directly
+// to the process streams, so the meta/error-path characterization test
+// (TestRunQuality_MetaBehaviorUnchanged) redirects them to pipes to assert WHICH
+// stream each path uses — the behavior the deleted switch-parse guard never covered.
+func captureQualityOutput(t *testing.T, fn func() int) (stdout, stderr string, rc int) {
 	t.Helper()
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatalf("glob package *.go: %v", err)
+	origOut, origErr := os.Stdout, os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout, os.Stderr = wOut, wErr
+	defer func() { os.Stdout, os.Stderr = origOut, origErr }()
+
+	rc = fn()
+
+	_ = wOut.Close()
+	_ = wErr.Close()
+	var bo, be bytes.Buffer
+	_, _ = bo.ReadFrom(rOut)
+	_, _ = be.ReadFrom(rErr)
+	return bo.String(), be.String(), rc
+}
+
+// TestRunQuality_MetaBehaviorUnchanged pins the dispatcher's meta/error paths
+// (empty args, --help/-h/help, --list, unknown gate). These were UNTESTED under
+// the old switch and are exactly what the map-dispatch rewrite could silently
+// drop (verification-architect BLOCKER B1). Characterization test: GREEN against
+// the current code, held GREEN through the refactor = behavior-identity proof.
+func TestRunQuality_MetaBehaviorUnchanged(t *testing.T) {
+	t.Run("empty_args_help_to_stderr_rc1", func(t *testing.T) {
+		out, err, rc := captureQualityOutput(t, func() int { return runQuality(nil) })
+		if rc != 1 {
+			t.Errorf("empty args rc=%d, want 1", rc)
+		}
+		if out != "" {
+			t.Errorf("empty args wrote to stdout: %q", out)
+		}
+		if err != qualityHelp {
+			t.Errorf("empty args stderr != qualityHelp (len err=%d want=%d)", len(err), len(qualityHelp))
+		}
+	})
+	for _, flag := range []string{"--help", "-h", "help"} {
+		t.Run("help_"+flag+"_to_stdout_rc0", func(t *testing.T) {
+			out, err, rc := captureQualityOutput(t, func() int { return runQuality([]string{flag}) })
+			if rc != 0 {
+				t.Errorf("%s rc=%d, want 0", flag, rc)
+			}
+			if err != "" {
+				t.Errorf("%s wrote to stderr: %q", flag, err)
+			}
+			if out != qualityHelp {
+				t.Errorf("%s stdout != qualityHelp (len out=%d want=%d)", flag, len(out), len(qualityHelp))
+			}
+		})
 	}
-	meta := map[string]bool{"--help": true, "-h": true, "help": true, "--list": true}
-	out := map[string]bool{}
-	found := false
+	t.Run("unknown_gate_help_to_stderr_rc1", func(t *testing.T) {
+		out, err, rc := captureQualityOutput(t, func() int { return runQuality([]string{"definitely-not-a-gate"}) })
+		if rc != 1 {
+			t.Errorf("unknown gate rc=%d, want 1", rc)
+		}
+		if out != "" {
+			t.Errorf("unknown gate wrote to stdout: %q", out)
+		}
+		if !strings.HasPrefix(err, "unknown gate: definitely-not-a-gate\n") {
+			t.Errorf("unknown gate stderr missing the 'unknown gate: <name>' line; got prefix %.40q", err)
+		}
+		if !strings.Contains(err, qualityHelp) {
+			t.Error("unknown gate stderr must also include qualityHelp")
+		}
+	})
+}
+
+// TestRegistry_CountNilAndNoDup is the anti-silent-un-wire guard (verification-
+// architect H1 + principal-architect BLOCKER). One source of truth means the
+// dispatch map MUST equal the registry: no nil Run (registered-but-not-wired),
+// no duplicate Name (a dup silently collapses the map while --list stays
+// byte-identical). gateDispatch panics on either; this asserts it does not.
+func TestRegistry_CountNilAndNoDup(t *testing.T) {
+	seen := map[string]bool{}
+	for _, g := range gateRegistry {
+		if g.Run == nil {
+			t.Errorf("gate %q has nil Run (registered but not wired)", g.Name)
+		}
+		if g.Name == "" || strings.TrimSpace(g.Summary) == "" {
+			t.Errorf("gate %q has empty Name or Summary", g.Name)
+		}
+		if seen[g.Name] {
+			t.Errorf("duplicate gate name in registry: %q", g.Name)
+		}
+		seen[g.Name] = true
+	}
+	// dispatch map size == registry size proves no dup collapsed the map.
+	if got := len(gateDispatch()); got != len(gateRegistry) {
+		t.Errorf("dispatch map size=%d != registry len=%d (a duplicate Name collapsed the map)", got, len(gateRegistry))
+	}
+}
+
+// TestRunQuality_DispatchCoversRegistry proves every registered gate is
+// reachable through the dispatcher (no gate that --list advertises but runQuality
+// cannot run). Behavioral replacement for the deleted TestGateRegistry_CoversAllSwitchCases.
+func TestRunQuality_DispatchCoversRegistry(t *testing.T) {
+	disp := gateDispatch()
+	for _, g := range gateRegistry {
+		if _, ok := disp[g.Name]; !ok {
+			t.Errorf("gate %q is in --list but not reachable via runQuality dispatch", g.Name)
+		}
+	}
+}
+
+// TestEveryGateRunFuncIsRegistered closes the Option-A hole the design review
+// flagged (principal-architect): a `func run*(args []string) int` defined in a
+// theme file but never referenced in gateRegistry would be silently dead — Go
+// does not flag unused package-level funcs. AST-scan package main for gate-shaped
+// run funcs; every one MUST be a registered Run (via reflect), except the two
+// explicit meta funcs (runQuality itself + runQualityList).
+func TestEveryGateRunFuncIsRegistered(t *testing.T) {
+	registered := registeredRunFuncShortNames(t)
+	meta := map[string]bool{"runQuality": true, "runQualityList": true}
+	// scoped to quality_*.go: sibling subcommands (chaos/drill/pulumi/main) share
+	// the func(args []string) int shape but are not quality gates.
+	files, _ := filepath.Glob("quality_*.go")
 	fset := token.NewFileSet()
+	var orphans []string
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
@@ -48,63 +151,114 @@ func switchCaseGates(t *testing.T) map[string]bool {
 		}
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "runQuality" || fn.Recv != nil {
+			if !ok || fn.Recv != nil || !strings.HasPrefix(fn.Name.Name, "run") {
 				continue
 			}
-			found = true
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				cc, ok := n.(*ast.CaseClause)
-				if !ok {
-					return true
-				}
-				for _, expr := range cc.List {
-					lit, ok := expr.(*ast.BasicLit)
-					if !ok || lit.Kind != token.STRING {
-						continue
-					}
-					name, err := strconv.Unquote(lit.Value)
-					if err != nil || meta[name] {
-						continue
-					}
-					out[name] = true
-				}
-				return true
-			})
+			if !gateShapedSignature(fn) {
+				continue
+			}
+			name := fn.Name.Name
+			if meta[name] || registered[name] {
+				continue
+			}
+			orphans = append(orphans, name+" ("+f+")")
 		}
 	}
-	if !found {
-		t.Fatal("runQuality FuncDecl not found in any package *.go (relocation-proof parity read is broken)")
+	sort.Strings(orphans)
+	if len(orphans) > 0 {
+		t.Errorf("gate-shaped run funcs defined but NOT registered in gateRegistry (silent dead code): %v", orphans)
+	}
+}
+
+// TestRegisteredRunFuncMatchesName catches wrong-func-binding in the bulk move
+// (verification-architect M1): trivy-scan must bind runTrivyScan, not
+// runTrufflehogScan. --list is blind to Run, so only this reflect guard catches it.
+func TestRegisteredRunFuncMatchesName(t *testing.T) {
+	for _, g := range gateRegistry {
+		// Case-insensitive: gate funcs use uppercase acronyms (runCLIExitCodes,
+		// runRuntimeSLO) that a mechanical kebab->Camel cannot reproduce. EqualFold
+		// still catches a genuine wrong-func-binding (trivy-scan -> runTrufflehogScan
+		// differ even case-folded); it only tolerates the acronym-casing convention.
+		want := "run" + kebabToCamel(g.Name)
+		got := shortFuncName(runtime.FuncForPC(reflect.ValueOf(g.Run).Pointer()).Name())
+		if !strings.EqualFold(got, want) {
+			t.Errorf("gate %q bound to %s, want (case-insensitive) %s (wrong-func-binding)", g.Name, got, want)
+		}
+	}
+}
+
+// TestGateSpec_JSONMarshalable guards the json:"-" on Run (verification-architect
+// M2): a func field otherwise errors json.Marshal.
+func TestGateSpec_JSONMarshalable(t *testing.T) {
+	if _, err := json.Marshal(gateRegistry); err != nil {
+		t.Fatalf("gateRegistry must stay json-marshalable (Run needs json:\"-\"): %v", err)
+	}
+}
+
+// gateShapedSignature reports whether fn is `func(args []string) int` — the gate
+// entry-point shape.
+func gateShapedSignature(fn *ast.FuncDecl) bool {
+	ft := fn.Type
+	if ft.Params == nil || len(ft.Params.List) != 1 {
+		return false
+	}
+	if ft.Results == nil || len(ft.Results.List) != 1 {
+		return false
+	}
+	// param: []string
+	arr, ok := ft.Params.List[0].Type.(*ast.ArrayType)
+	if !ok {
+		return false
+	}
+	elt, ok := arr.Elt.(*ast.Ident)
+	if !ok || elt.Name != "string" {
+		return false
+	}
+	// result: int
+	res, ok := ft.Results.List[0].Type.(*ast.Ident)
+	return ok && res.Name == "int"
+}
+
+// registeredRunFuncShortNames returns the short names (e.g. "runTrivyScan") of
+// every func bound as a Run in gateRegistry.
+func registeredRunFuncShortNames(t *testing.T) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	for _, g := range gateRegistry {
+		if g.Run == nil {
+			continue
+		}
+		out[shortFuncName(runtime.FuncForPC(reflect.ValueOf(g.Run).Pointer()).Name())] = true
 	}
 	return out
 }
 
-// T1 / T4 — the registry must cover exactly the switch case set (drift guard).
-func TestGateRegistry_CoversAllSwitchCases(t *testing.T) {
-	sw := switchCaseGates(t)
-	reg := gateRegistrySet()
+// shortFuncName strips the package path from a runtime func name
+// ("github.com/…/main.runTrivyScan" -> "runTrivyScan").
+func shortFuncName(full string) string {
+	if i := strings.LastIndexByte(full, '.'); i >= 0 {
+		return full[i+1:]
+	}
+	return full
+}
 
-	var missing, extra []string
-	for name := range sw {
-		if !reg[name] {
-			missing = append(missing, name)
+// kebabToCamel turns "trivy-scan" into "TrivyScan".
+func kebabToCamel(s string) string {
+	var b strings.Builder
+	up := true
+	for _, r := range s {
+		if r == '-' {
+			up = true
+			continue
 		}
-	}
-	for name := range reg {
-		if !sw[name] {
-			extra = append(extra, name)
+		if up && r >= 'a' && r <= 'z' {
+			b.WriteRune(r - 32)
+		} else {
+			b.WriteRune(r)
 		}
+		up = false
 	}
-	sort.Strings(missing)
-	sort.Strings(extra)
-	if len(missing) > 0 {
-		t.Errorf("registry MISSING gates present in the dispatch switch: %v", missing)
-	}
-	if len(extra) > 0 {
-		t.Errorf("registry has EXTRA gates absent from the dispatch switch: %v", extra)
-	}
-	if len(sw) != len(reg) {
-		t.Errorf("gate count mismatch: switch=%d registry=%d", len(sw), len(reg))
-	}
+	return b.String()
 }
 
 // T1 — every registry entry is well-formed: non-empty name + non-empty summary, unique names.

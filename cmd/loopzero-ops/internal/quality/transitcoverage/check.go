@@ -45,7 +45,7 @@ type Outcome struct {
 
 // target file paths (relative to RepoRoot)
 const (
-	secretWrapperPath = "api/internal/db/secret_wrapper.go"
+	secretWrapperPath = "api/internal/db/store/secret_wrapper.go"
 )
 
 // canonical constant we MUST find in secret_wrapper.go

@@ -4,7 +4,7 @@
 -- T2.1 (Batch A #4) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
 -- v1.3. Multi-tenant — every query carries `tenant_id` predicate
 -- (projects is in TenantOwnedTables). ProjectStore is consumed by 5
--- prod call sites via struct-literal `&db.PostgresProjectStore{DB:
+-- prod call sites via struct-literal `&store.PostgresProjectStore{DB:
 -- dbAdapter}` — preserved in T2.1 #4.
 --
 -- Schema: projects table has UNIQUE constraint on (tenant_id, name)

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// writeFixture writes content to api/internal/db/secret_wrapper.go under a tmp root.
+// writeFixture writes content to api/internal/db/store/secret_wrapper.go under a tmp root.
 func writeFixture(t *testing.T, content string) string {
 	t.Helper()
 	root := t.TempDir()
