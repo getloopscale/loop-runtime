@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
+	forgemodel "github.com/getloopscale/loopzero-forge/model"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -289,10 +290,62 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 	}
 
 	return &deploycontracts.WorkflowStatus{
-		Phase:      phase,
-		FinishedAt: status.FinishedAt,
-		Outputs:    extractStepOutputs(wf.Object),
+		Phase:          phase,
+		FinishedAt:     status.FinishedAt,
+		Outputs:        extractStepOutputs(wf.Object),
+		StuckPodReason: extractStuckPodReason(status),
 	}, nil
+}
+
+// extractStuckPodReason walks the workflow's per-node status looking for pod
+// nodes wedged in image-pull failure states. Red Team loopzero-cloud#133.
+//
+// Argo mirrors pod-level container-status reasons into `wf.status.nodes[*].message`
+// verbatim. The three kubelet reasons that produce a permanently-stuck workflow
+// (workflow.Phase stays "Running" while the pod cannot start) are:
+//   - ImagePullBackOff       (kubelet gave up retrying)
+//   - ErrImagePull           (initial pull failure — precedes ImagePullBackOff)
+//   - CreateContainerError   (image pulled but container config invalid)
+//
+// Returns the offending node's Message (empty when no pod node is stuck).
+// Only Pod-typed nodes are considered — StepGroup / DAG parent nodes echo
+// the same failure message and would produce redundant reasons.
+func extractStuckPodReason(status *forgemodel.WorkflowStatusDetail) string {
+	if status == nil {
+		return ""
+	}
+	for _, node := range status.Nodes {
+		if node.Type != "Pod" {
+			continue
+		}
+		if node.Message == "" {
+			continue
+		}
+		if containsStuckSignal(node.Message) {
+			return node.Message
+		}
+	}
+	return ""
+}
+
+// stuckSignals are the substrings that identify a pod stuck at image-pull.
+// Sourced from kubelet's canonical reason strings (kubernetes/pkg/kubelet/images).
+var stuckSignals = []string{
+	"ImagePullBackOff",
+	"ErrImagePull",
+	"CreateContainerError",
+	"Back-off pulling image",
+}
+
+func containsStuckSignal(msg string) bool {
+	for _, sig := range stuckSignals {
+		for i := 0; i+len(sig) <= len(msg); i++ {
+			if msg[i:i+len(sig)] == sig {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // extractStepOutputs walks `status.nodes[*]` on a workflow CR and

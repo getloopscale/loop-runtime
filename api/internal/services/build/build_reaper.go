@@ -129,6 +129,16 @@ func (r *BuildReaper) ReapOnce(ctx context.Context) int {
 	return r.reap(ctx)
 }
 
+// reaperStuckPodReason returns the actionable operator message for a build
+// that was reaped because its workflow pods were wedged in ImagePullBackOff
+// / ErrImagePull / CreateContainerError past the RunningTimeout window.
+// Red Team loopzero-cloud#133. The message MUST name the container image and
+// point at the fix path (registry auth / image existence) rather than the
+// generic RUNNING-timeout copy which mis-blames slow builds.
+func reaperStuckPodReason(stuckPodReason string) string {
+	return fmt.Sprintf("Build was stuck at container image pull for more than 30 minutes (%s). Likely cause: the container image does not exist OR the workflow does not have credentials to pull it (private registry auth). Next: check the workflow overlay `LOOPZERO_COSIGN_IMAGE` / `LOOPZERO_SYFT_IMAGE` / build-image tags point at a real, pullable image; verify the build cluster has registry credentials.", stuckPodReason)
+}
+
 // reaperReason returns a human-readable reason for a reaper timeout event.
 // LEVE-1: Single source of truth for reaper reason strings — eliminates DRY violation.
 //
@@ -187,20 +197,40 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// If the workflow is still actively running, do NOT reap — the build is
 		// legitimately slow, not stuck. Only reap when the workflow is gone,
 		// failed, or we can't determine its state.
+		//
+		// Red Team loopzero-cloud#133 override: when the workflow reports Phase=Running
+		// but the underlying pod is wedged in ImagePullBackOff / ErrImagePull /
+		// CreateContainerError past the RunningTimeout window, the workflow will
+		// never make progress. Reap with a stuck-pod-shaped reason so the operator
+		// sees "container image can't be pulled" instead of the generic timeout copy.
+		var stuckPodReason string
 		if build.WorkflowID != "" && r.workflow != nil {
 			wfStatus, wfErr := r.workflow.GetStatus(ctx, "argo", build.WorkflowID)
 			if wfErr != nil {
 				r.logger.Warn("build reaper: cannot verify workflow state, proceeding with reap",
 					"build_id", s.ID, "workflow_id", build.WorkflowID, "error", wfErr)
 			} else if wfStatus != nil && (wfStatus.Phase == "Running" || wfStatus.Phase == "Pending") {
-				r.logger.Warn("build reaper: workflow still active despite timeout — skipping reap",
-					"build_id", s.ID, "workflow_id", build.WorkflowID, "phase", wfStatus.Phase,
-					"state", s.State, "timeout_event", s.Event)
-				continue
+				if wfStatus.StuckPodReason != "" {
+					// #133: pod-level stuck-state override — reap with a pod-shaped reason.
+					stuckPodReason = wfStatus.StuckPodReason
+					r.logger.Warn("build reaper: workflow pod stuck in image-pull failure — reaping",
+						"build_id", s.ID, "workflow_id", build.WorkflowID, "phase", wfStatus.Phase,
+						"stuck_pod_reason", stuckPodReason)
+				} else {
+					r.logger.Warn("build reaper: workflow still active despite timeout — skipping reap",
+						"build_id", s.ID, "workflow_id", build.WorkflowID, "phase", wfStatus.Phase,
+						"state", s.State, "timeout_event", s.Event)
+					continue
+				}
 			}
 		}
 
-		reason := reaperReason(s.Event)
+		var reason string
+		if stuckPodReason != "" {
+			reason = reaperStuckPodReason(stuckPodReason)
+		} else {
+			reason = reaperReason(s.Event)
+		}
 
 		err = r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 			// Re-fetch inside lock

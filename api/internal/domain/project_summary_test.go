@@ -61,6 +61,43 @@ func TestProjectSummary_WireFormat_OmitsNilReplicasReadyFields(t *testing.T) {
 	}
 }
 
+// TestProjectSummary_WireFormat_SerializesActiveEnvCount asserts the
+// canonical wire shape for the Red Team loopzero-cloud#134 fix: the
+// `active_env_count` field surfaces the count of env_targets that
+// have a currently-serving ACTIVE release. Preview OR permanent env
+// kinds both qualify — the truth "LIVE" the dashboard label promises.
+//
+// Pre-fix bug: dashboard used `production_env_count` (kind='permanent'
+// subset only) so a preview env with an ACTIVE release + Live URL
+// serving 200 rendered as `LIVE ENVS: 0` — the counter contradicted
+// the Live URL shown on the same page.
+//
+// This test locks the wire contract for the new field so the SQL
+// layer + wrapper + dashboard all agree on the semantic.
+func TestProjectSummary_WireFormat_SerializesActiveEnvCount(t *testing.T) {
+	s := ProjectSummary{
+		ID:             "proj-preview-only",
+		Name:           "loopzerokit-example",
+		TeamID:         "tn-1234",
+		ActiveEnvCount: 1, // preview env with ACTIVE release
+		// production_env_count intentionally 0 — no permanent env wired
+		ProductionEnvCount: 0,
+	}
+
+	raw, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal ProjectSummary: %v", err)
+	}
+	got := string(raw)
+
+	if !strings.Contains(got, "\"active_env_count\":1") {
+		t.Errorf("wire format missing active_env_count=1 — Red Team #134 fix; payload=%s", got)
+	}
+	if !strings.Contains(got, "\"production_env_count\":0") {
+		t.Errorf("wire format missing production_env_count=0 (must coexist); payload=%s", got)
+	}
+}
+
 // TestProjectSummary_WireFormat_SerializesNonNilReplicasReadyFields
 // asserts the positive case — when the poller has emitted a snapshot,
 // both fields serialize under their canonical JSON keys with the raw

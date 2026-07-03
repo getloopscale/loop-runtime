@@ -258,6 +258,23 @@ type ProjectSummary struct {
 	// Dashboard renders this as the canonical "Live envs" count;
 	// EnvironmentCount stays for backwards compat as the all-kinds total.
 	ProductionEnvCount int64 `json:"production_env_count"`
+	// ActiveEnvCount is the count of env_targets that have a currently
+	// serving ACTIVE release (preview OR permanent kind). This is what
+	// the dashboard "LIVE ENVS" counter SHOULD reflect — a project with
+	// a preview env in the ACTIVE state + Live URL serving 200 must
+	// count as 1, not 0. Red Team loopzero-cloud#134 absorption (2026-07-02).
+	//
+	// Semantic distinction:
+	//   - EnvironmentCount   — all env_targets (any kind, any release state)
+	//   - ProductionEnvCount — kind='permanent' subset (any release state)
+	//   - ActiveEnvCount     — any kind WITH corresponding release.status='ACTIVE'
+	//
+	// Legacy `production_env_count` stays for the `isPreviewOnly`
+	// heuristic (dashboard `project-detail.tsx`) which asks a different
+	// question: "was any PERMANENT env provisioned?" — not "how many
+	// envs are currently live?". The two counters answer different
+	// questions on the same page; conflating them was the #134 bug.
+	ActiveEnvCount int64 `json:"active_env_count"`
 	// LastDeployStatus is one of: "live", "building", "failed", "idle",
 	// "queued" — derived from the latest build's status via
 	// pkg/enforcement.MapBuildStatusToProjectStatus.

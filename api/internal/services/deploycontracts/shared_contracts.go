@@ -105,6 +105,19 @@ type WorkflowStatus struct {
 	// parameter name (e.g., "signature", "digest"). Empty/nil if the
 	// workflow declared no outputs (legacy or non-build workflows).
 	Outputs map[string]map[string]string
+
+	// Red Team loopzero-cloud#133: pod-level stuck-state signal. When Argo reports
+	// the workflow Phase as "Running" but the underlying pod is wedged in
+	// ImagePullBackOff / ErrImagePull / CreateContainerError sustained past
+	// the RunningTimeout window, the reaper's M-03 "skip if workflow still
+	// active" heuristic backfires — the workflow will never make progress but
+	// the M-03 gate keeps protecting it. StuckPodReason surfaces the pod-level
+	// failure category so the reaper can override M-03 and reap the build with
+	// an actionable typed message. Empty when no stuck pod signal is present.
+	//
+	// Populated by WorkflowSubmitter.GetStatus from `wf.status.nodes[*].message`
+	// which Argo copies from Kubernetes pod containerStatuses.reason.
+	StuckPodReason string
 }
 
 // GitOpsPushOpts contains everything needed to push manifests to the GitOps repo.
