@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
@@ -78,39 +80,39 @@ func (f *fakeLockerStatic) WithLock(_ context.Context, _, _, _ string, fn func(t
 // =============================================================================
 
 func TestPGClaimDedup_Disabled_TryClaimAlwaysTrue(t *testing.T) {
-	d := NewPGClaimDedup(nil, false, "pod-1")
+	d := platform.NewPGClaimDedup(nil, false, "pod-1")
 	if !d.TryClaim(context.Background(), "builds", "bld-001") {
 		t.Error("disabled TryClaim should always return true")
 	}
 }
 
 func TestPGClaimDedup_Disabled_ReleaseIsNoop(t *testing.T) {
-	d := NewPGClaimDedup(nil, false, "pod-1")
+	d := platform.NewPGClaimDedup(nil, false, "pod-1")
 	// Should not panic
 	d.Release(context.Background(), "builds", "bld-001")
 }
 
 func TestPGClaimDedup_Disabled_IsProcessingPGReturnsFalse(t *testing.T) {
-	d := NewPGClaimDedup(nil, false, "pod-1")
+	d := platform.NewPGClaimDedup(nil, false, "pod-1")
 	if d.IsProcessingPG(context.Background(), "builds", "bld-001") {
 		t.Error("disabled IsProcessingPG should return false")
 	}
 }
 
 func TestPGClaimDedup_NilStore_TryClaimTrue(t *testing.T) {
-	d := NewPGClaimDedup(nil, true, "pod-1")
+	d := platform.NewPGClaimDedup(nil, true, "pod-1")
 	if !d.TryClaim(context.Background(), "builds", "bld-001") {
 		t.Error("nil store TryClaim should return true")
 	}
 }
 
 func TestPGClaimDedup_NilStore_ReleaseIsNoop(t *testing.T) {
-	d := NewPGClaimDedup(nil, true, "pod-1")
+	d := platform.NewPGClaimDedup(nil, true, "pod-1")
 	d.Release(context.Background(), "builds", "bld-001")
 }
 
 func TestPGClaimDedup_NilStore_IsProcessingPGFalse(t *testing.T) {
-	d := NewPGClaimDedup(nil, true, "pod-1")
+	d := platform.NewPGClaimDedup(nil, true, "pod-1")
 	if d.IsProcessingPG(context.Background(), "builds", "bld-001") {
 		t.Error("nil store IsProcessingPG should return false")
 	}
