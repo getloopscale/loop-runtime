@@ -73,6 +73,16 @@ func TestRunQuality_MetaBehaviorUnchanged(t *testing.T) {
 			}
 		})
 	}
+	t.Run("list_delegates_rc0", func(t *testing.T) {
+		// --list must route to runQualityList (rc 0); the taskfile fixture keeps
+		// it hermetic. Closes the literal Condition-1 wording (verification-architect).
+		_, _, rc := captureQualityOutput(t, func() int {
+			return runQuality([]string{"--list", "--taskfile", "../../taskfiles/quality.yml"})
+		})
+		if rc != 0 {
+			t.Errorf("--list rc=%d, want 0", rc)
+		}
+	})
 	t.Run("unknown_gate_help_to_stderr_rc1", func(t *testing.T) {
 		out, err, rc := captureQualityOutput(t, func() int { return runQuality([]string{"definitely-not-a-gate"}) })
 		if rc != 1 {
