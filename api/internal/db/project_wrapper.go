@@ -84,7 +84,7 @@ func (s *PostgresProjectStore) insertProject(ctx context.Context, input domain.C
 		Name:      input.Name,
 		CreatedBy: input.CreatedBy,
 	}); err != nil {
-		if isPGUniqueViolation(err) {
+		if IsPGUniqueViolation(err) {
 			return domain.ProjectResult{}, domain.ErrProjectExists
 		}
 		return domain.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
@@ -182,7 +182,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 		"INSERT INTO projects (id, tenant_id, name, created_by) VALUES ($1, $2, $3, $4)",
 		id, input.TenantID, input.Name, input.CreatedBy,
 	); err != nil {
-		if isPGUniqueViolation(err) {
+		if IsPGUniqueViolation(err) {
 			return domain.ProjectResult{}, domain.ErrProjectExists
 		}
 		return domain.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)

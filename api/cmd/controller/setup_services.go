@@ -44,7 +44,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// Satisfies db.BuildStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition + concurrent-deploy
 	// rejection preserved at store layer (D4).
-	buildStore := db.NewBuildStoreSqlc(dbAdapter)
+	buildStore := store.NewBuildStoreSqlc(dbAdapter)
 	// T1.3.b of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
 	// EventStore must be constructed BEFORE releaseStore so AppendSideEffect
 	// can emit signal.changed events via canonical SSE infrastructure.
@@ -53,7 +53,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
 	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1).
-	releaseStore := db.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
+	releaseStore := store.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	domainStore := &db.PostgresDomainStore{DB: dbAdapter}
 

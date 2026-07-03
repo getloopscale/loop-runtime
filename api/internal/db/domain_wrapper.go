@@ -69,7 +69,7 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *domain.CustomDomain
 		VerificationToken: d.VerificationToken,
 		TlsStatus:         d.TLSStatus,
 	}); err != nil {
-		if isPGUniqueViolation(err) {
+		if IsPGUniqueViolation(err) {
 			return domain.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create: %w", err)
@@ -98,7 +98,7 @@ func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *domain.Cu
 		CfNameservers:      d.CFNameservers,
 		DnsRecordsImported: d.DNSRecordsImported,
 	}); err != nil {
-		if isPGUniqueViolation(err) {
+		if IsPGUniqueViolation(err) {
 			return domain.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create with cf zone: %w", err)

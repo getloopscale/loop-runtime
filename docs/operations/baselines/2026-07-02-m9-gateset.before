@@ -37,6 +37,7 @@ git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for oth
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
 helm-drift	-	Detects drift between rendered Helm charts and the deployed state.
 helm-overlap-parity	gates	Keeps the dual Helm chart systems (infra/helm vs charts) in parity.
+ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.
 migration-test-coverage	-	Every DB migration has corresponding test coverage.
 mock-budget	-	Caps the number of mocks per test (SRP smell budget).
 no-aes-remaining	gates	Calendar-gated: fails on remaining AES code paths post-transit migration.

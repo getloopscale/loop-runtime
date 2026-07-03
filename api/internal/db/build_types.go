@@ -41,7 +41,6 @@ import (
 // constant (verified by TestBuildTypedMachine_WireFormatCompatibility),
 // so DB rows persisted under the untyped path read back identically.
 // No migration of `builds.status` column needed.
-var buildMachine = statemachine.NewBuildTypedMachine()
 
 // CellDefault is the cell identifier used by single-cell deployments
 // and as the default for any row created without an explicit cell

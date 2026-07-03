@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // release_wrapper.go — thin Go wrapper around sqlc-generated Queries for
 // the `releases` table, with state-machine integration preserved at the
@@ -37,9 +37,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"log/slog"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -84,12 +86,12 @@ func isReleasesActiveUniqueViolation(err error) bool {
 // Compile-time assertion: ReleaseStoreSqlc satisfies the db.ReleaseStore
 // interface 1:1 so T1.1c2c can swap NewPostgresReleaseStore →
 // NewReleaseStoreSqlc without service-side signature churn.
-var _ ReleaseStore = (*ReleaseStoreSqlc)(nil)
+var _ db.ReleaseStore = (*ReleaseStoreSqlc)(nil)
 
 // ReleaseStoreSqlc is the sqlc-backed store wrapper for releases.
 type ReleaseStoreSqlc struct {
 	q          *generated.Queries
-	pool       DBTX // default fallback for non-tx paths
+	pool       db.DBTX // default fallback for non-tx paths
 	eventStore sseEventStore
 }
 
@@ -131,7 +133,7 @@ func (NoopEventStore) Append(_ context.Context, _ string, _ string, _ json.RawMe
 // Panics on nil to surface mis-wired startups loud + fast — prevents
 // silent dead-feature where SSE realtime path appears installed but
 // emits zero events forever.
-func NewReleaseStoreSqlc(pool DBTX, eventStore sseEventStore) *ReleaseStoreSqlc {
+func NewReleaseStoreSqlc(pool db.DBTX, eventStore sseEventStore) *ReleaseStoreSqlc {
 	if eventStore == nil {
 		panic("ReleaseStoreSqlc requires non-nil EventStore (canonical SSE infrastructure)")
 	}
@@ -145,12 +147,12 @@ func NewReleaseStoreSqlc(pool DBTX, eventStore sseEventStore) *ReleaseStoreSqlc 
 // gen bridges db.DBTX → generated.DBTX. tx wins over pool. Panics if the
 // concrete type does not implement SqlcBridge — by design (test fakes
 // that don't hold a real pgx handle should use pgxmock for sqlc paths).
-func (s *ReleaseStoreSqlc) gen(tx DBTX) generated.DBTX {
+func (s *ReleaseStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		panic(fmt.Sprintf(
 			"release_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
@@ -162,7 +164,7 @@ func (s *ReleaseStoreSqlc) gen(tx DBTX) generated.DBTX {
 
 // Create inserts a Release row. Caller MUST provide a tx when this is
 // invoked inside withEnvironmentLock (sqlctxprop gate enforces).
-func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) error {
+func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx db.DBTX, r *db.Release) error {
 	// V9 dogfood 2026-05-29 LIVE-caught: sqlc-emitted InsertRelease
 	// forces explicit values for columns that PG schema declares as
 	// DEFAULT-bound. The legacy handwritten SQL relied on PG defaults
@@ -232,7 +234,7 @@ func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) erro
 // `-- tenantpredicate:exempt` in queries/releases.sql. Returns
 // ErrReleaseNotFound (via loopzeroerrors) when the row doesn't exist, matching
 // the legacy PostgresReleaseStore contract.
-func (s *ReleaseStoreSqlc) GetByID(ctx context.Context, releaseID string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetByID(ctx context.Context, releaseID string) (*db.Release, error) {
 	row, err := s.q.GetReleaseByID(ctx, s.gen(nil), releaseID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -246,7 +248,7 @@ func (s *ReleaseStoreSqlc) GetByID(ctx context.Context, releaseID string) (*Rele
 // GetByIDTx retrieves a release by ID within a transaction. Used by
 // ActivateReleaseKernel idempotency guard (MEET-2026-03-31-023 T0-1).
 // Cross-tenant by ID, like GetByID.
-func (s *ReleaseStoreSqlc) GetByIDTx(ctx context.Context, tx DBTX, releaseID string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetByIDTx(ctx context.Context, tx db.DBTX, releaseID string) (*db.Release, error) {
 	row, err := s.q.GetReleaseByID(ctx, s.gen(tx), releaseID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -258,7 +260,7 @@ func (s *ReleaseStoreSqlc) GetByIDTx(ctx context.Context, tx DBTX, releaseID str
 }
 
 // GetByIDForTenant is the canonical tenant-isolated lookup.
-func (s *ReleaseStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, releaseID string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, releaseID string) (*db.Release, error) {
 	row, err := s.q.GetReleaseByIDForTenant(ctx, s.gen(nil), generated.GetReleaseByIDForTenantParams{
 		ID:       releaseID,
 		TenantID: tenantID,
@@ -281,13 +283,13 @@ func (s *ReleaseStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, relea
 // Returns loopzeroerrors.ErrReleaseNotFound if the release doesn't exist.
 // Returns loopzeroerrors.InvalidTransition if the event is not valid from
 // the current state.
-func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, releaseID, event string) (*Release, error) {
+func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, releaseID, event string) (*db.Release, error) {
 	// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): this read-modify-write
 	// (fetch → SafeTransition → UPDATE into the partial-unique-index) MUST run in
 	// the caller's transaction under withEnvironmentLock. All 25 release callers +
 	// the reaper already pass a real tx; a nil tx is a wiring bug, not a fallback.
 	if tx == nil {
-		return nil, ErrNilTxStatusMutation
+		return nil, db.ErrNilTxStatusMutation
 	}
 	// 1. Fetch current release (cross-tenant fetch; we need its tenant_id
 	// to scope the UPDATE — matches legacy behavior that UPDATE-ed by id
@@ -335,7 +337,7 @@ func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, releaseID,
 
 // GetActiveByEnv returns the currently-ACTIVE release for an env tuple. At
 // most one ACTIVE release per (tenant, project, env) at any time.
-func (s *ReleaseStoreSqlc) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*db.Release, error) {
 	row, err := s.q.GetActiveByEnv(ctx, s.gen(nil), generated.GetActiveByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -352,7 +354,7 @@ func (s *ReleaseStoreSqlc) GetActiveByEnv(ctx context.Context, tenantID, project
 
 // GetActiveByEnvTx returns the currently-ACTIVE release for an env tuple
 // within a transaction. Used by ActivateReleaseKernel.
-func (s *ReleaseStoreSqlc) GetActiveByEnvTx(ctx context.Context, tx DBTX, tenantID, projectID, env string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error) {
 	row, err := s.q.GetActiveByEnv(ctx, s.gen(tx), generated.GetActiveByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -369,7 +371,7 @@ func (s *ReleaseStoreSqlc) GetActiveByEnvTx(ctx context.Context, tx DBTX, tenant
 
 // GetPreviousRelease returns the most-recent SUPERSEDED-or-ROLLED-BACK
 // release — the canonical rollback target for an env.
-func (s *ReleaseStoreSqlc) GetPreviousRelease(ctx context.Context, tenantID, projectID, env string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetPreviousRelease(ctx context.Context, tenantID, projectID, env string) (*db.Release, error) {
 	row, err := s.q.GetPreviousRelease(ctx, s.gen(nil), generated.GetPreviousReleaseParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -387,7 +389,7 @@ func (s *ReleaseStoreSqlc) GetPreviousRelease(ctx context.Context, tenantID, pro
 // GetLatestByBuildID returns the most-recent release for a build_id
 // (cross-tenant; caller validates ownership). Used by release_inspector +
 // reconcile. Returns (nil, nil) when no release exists for the build.
-func (s *ReleaseStoreSqlc) GetLatestByBuildID(ctx context.Context, buildID string) (*Release, error) {
+func (s *ReleaseStoreSqlc) GetLatestByBuildID(ctx context.Context, buildID string) (*db.Release, error) {
 	row, err := s.q.GetLatestByBuildID(ctx, s.gen(nil), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -400,7 +402,7 @@ func (s *ReleaseStoreSqlc) GetLatestByBuildID(ctx context.Context, buildID strin
 
 // ListByEnv returns up to `limit` releases for a (tenant, project, env)
 // tuple. The `int` parameter is cast to int32 for sqlc compat.
-func (s *ReleaseStoreSqlc) ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]Release, error) {
+func (s *ReleaseStoreSqlc) ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]db.Release, error) {
 	rows, err := s.q.ListReleasesByEnv(ctx, s.gen(nil), generated.ListReleasesByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -410,7 +412,7 @@ func (s *ReleaseStoreSqlc) ListByEnv(ctx context.Context, tenantID, projectID, e
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: list releases by env: %w", err)
 	}
-	out := make([]Release, 0, len(rows))
+	out := make([]db.Release, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedRowToRelease(r))
 	}
@@ -419,7 +421,7 @@ func (s *ReleaseStoreSqlc) ListByEnv(ctx context.Context, tenantID, projectID, e
 
 // SetGitCommit records the git commit SHA on a release after the gitops
 // push. Tenant predicate enforced via internal GetByIDTx lookup.
-func (s *ReleaseStoreSqlc) SetGitCommit(ctx context.Context, tx DBTX, releaseID, commitSHA string) error {
+func (s *ReleaseStoreSqlc) SetGitCommit(ctx context.Context, tx db.DBTX, releaseID, commitSHA string) error {
 	current, err := s.GetByIDTx(ctx, tx, releaseID)
 	if err != nil {
 		return err
@@ -439,7 +441,7 @@ func (s *ReleaseStoreSqlc) SetGitCommit(ctx context.Context, tx DBTX, releaseID,
 // column via PostgreSQL jsonb concat (`||`). Repeated keys overwrite.
 // Idempotent: re-running with the same patch is a no-op semantically.
 // fix-all-platform-issues-plan T4.1.
-func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx DBTX, id string, patch map[string]any) error {
+func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx db.DBTX, id string, patch map[string]any) error {
 	if len(patch) == 0 {
 		return nil
 	}
@@ -481,7 +483,7 @@ func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx DBTX, id str
 // (tenant, project, env) to CANCELLED. Returns the COUNT of releases
 // cancelled. Matches legacy PostgresReleaseStore.CancelAllByEnv contract
 // per ProjectDeleter consumer (project_deleter.go: cancelledReleases > 0).
-func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error) {
+func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, error) {
 	ids, err := s.q.CancelReleasesByEnv(ctx, s.gen(tx), generated.CancelReleasesByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -496,15 +498,15 @@ func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx DBTX, tenantID
 // FindPendingReleases returns up to 100 PENDING releases scoped to the
 // given cell. Reaper path: intentionally cross-tenant within the cell.
 // Empty cellID defaults to CellDefault per multi-cell backward compat.
-func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID string) ([]Release, error) {
+func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID string) ([]db.Release, error) {
 	if cellID == "" {
-		cellID = CellDefault
+		cellID = db.CellDefault
 	}
 	rows, err := s.q.FindPendingReleasesByCell(ctx, s.gen(nil), cellID)
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: find pending releases: %w", err)
 	}
-	out := make([]Release, 0, len(rows))
+	out := make([]db.Release, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedRowToRelease(r))
 	}
@@ -514,15 +516,15 @@ func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID strin
 // FindActiveReleases returns up to 100 ACTIVE releases scoped to the given
 // cell, DISTINCT ON (tenant, project, env) → most-recent per tuple. Used
 // by the convergence-loop health ticker (MEET-2026-03-31-023 T1-4).
-func (s *ReleaseStoreSqlc) FindActiveReleases(ctx context.Context, cellID string) ([]Release, error) {
+func (s *ReleaseStoreSqlc) FindActiveReleases(ctx context.Context, cellID string) ([]db.Release, error) {
 	if cellID == "" {
-		cellID = CellDefault
+		cellID = db.CellDefault
 	}
 	rows, err := s.q.FindActiveReleasesByCell(ctx, s.gen(nil), cellID)
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: find active releases: %w", err)
 	}
-	out := make([]Release, 0, len(rows))
+	out := make([]db.Release, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedRowToRelease(r))
 	}
@@ -533,7 +535,7 @@ func (s *ReleaseStoreSqlc) FindActiveReleases(ctx context.Context, cellID string
 // (tenant, env). Used by the callback-driven activation path
 // (CODE-SCAN-001). Satisfies the optional PendingReleaseByTenantEnvFinder
 // type-asserted by sync_callback_activator.
-func (s *ReleaseStoreSqlc) FindPendingReleasesByTenantEnv(ctx context.Context, tenantID, env string) ([]Release, error) {
+func (s *ReleaseStoreSqlc) FindPendingReleasesByTenantEnv(ctx context.Context, tenantID, env string) ([]db.Release, error) {
 	rows, err := s.q.FindPendingReleasesByTenantEnv(ctx, s.gen(nil), generated.FindPendingReleasesByTenantEnvParams{
 		TenantID:    tenantID,
 		Environment: env,
@@ -541,7 +543,7 @@ func (s *ReleaseStoreSqlc) FindPendingReleasesByTenantEnv(ctx context.Context, t
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: find pending releases by tenant+env: %w", err)
 	}
-	out := make([]Release, 0, len(rows))
+	out := make([]db.Release, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedRowToRelease(r))
 	}
@@ -556,8 +558,8 @@ func (s *ReleaseStoreSqlc) FindPendingReleasesByTenantEnv(ctx context.Context, t
 // PostgresReleaseStore to ReleaseStoreSqlc; db.Release stays.
 // -----------------------------------------------------------------------
 
-func generatedRowToRelease(row generated.Release) *Release {
-	r := &Release{
+func generatedRowToRelease(row generated.Release) *db.Release {
+	r := &db.Release{
 		ID:              row.ID,
 		BuildID:         row.BuildID,
 		TenantID:        row.TenantID,

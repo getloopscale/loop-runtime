@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // build_wrapper.go — thin Go wrapper around sqlc-generated Queries for
 // the `builds` table, with state-machine integration preserved at the
@@ -32,10 +32,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -44,12 +45,12 @@ import (
 )
 
 // Compile-time assertion: BuildStoreSqlc satisfies db.BuildStore 1:1.
-var _ BuildStore = (*BuildStoreSqlc)(nil)
+var _ db.BuildStore = (*BuildStoreSqlc)(nil)
 
 // BuildStoreSqlc is the sqlc-backed store wrapper for builds.
 type BuildStoreSqlc struct {
 	q    *generated.Queries
-	pool DBTX
+	pool db.DBTX
 }
 
 // NewBuildStoreSqlc constructs a sqlc-backed build store. `pool` is the
@@ -58,7 +59,7 @@ type BuildStoreSqlc struct {
 // for reapers + admin paths. Pool MUST implement SqlcBridge (PgxAdapter
 // does); test fakes that don't will panic at query time — deliberate
 // fail-fast to surface mis-wired tests early.
-func NewBuildStoreSqlc(pool DBTX) *BuildStoreSqlc {
+func NewBuildStoreSqlc(pool db.DBTX) *BuildStoreSqlc {
 	return &BuildStoreSqlc{
 		q:    generated.New(),
 		pool: pool,
@@ -67,12 +68,12 @@ func NewBuildStoreSqlc(pool DBTX) *BuildStoreSqlc {
 
 // gen bridges db.DBTX → generated.DBTX. tx wins over pool. Panics if
 // concrete type does not implement SqlcBridge.
-func (s *BuildStoreSqlc) gen(tx DBTX) generated.DBTX {
+func (s *BuildStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		panic(fmt.Sprintf(
 			"build_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
@@ -86,7 +87,7 @@ func (s *BuildStoreSqlc) gen(tx DBTX) generated.DBTX {
 // when empty. Unique-violation (23505) on (tenant, project, env, status)
 // surfaces as ErrDeployInProgress to preserve the concurrent-deploy
 // rejection invariant (Rule 6 + ARCH-002).
-func (s *BuildStoreSqlc) Create(ctx context.Context, tx DBTX, build *Build) error {
+func (s *BuildStoreSqlc) Create(ctx context.Context, tx db.DBTX, build *db.Build) error {
 	if build.ID == "" {
 		build.ID = id.GenerateBuildID()
 	}
@@ -103,7 +104,7 @@ func (s *BuildStoreSqlc) Create(ctx context.Context, tx DBTX, build *Build) erro
 		CommitSha:     dbconv.StringEmptyToNilPtr(build.CommitSHA),
 	})
 	if err != nil {
-		if isPGUniqueViolation(err) {
+		if db.IsPGUniqueViolation(err) {
 			return loopzeroerrors.ErrDeployInProgress
 		}
 		return fmt.Errorf("sqlc: insert build: %w", err)
@@ -114,7 +115,7 @@ func (s *BuildStoreSqlc) Create(ctx context.Context, tx DBTX, build *Build) erro
 // GetByID returns a build by ID with NO tenant filter. HTTP handlers
 // MUST NOT call this — use GetByIDForTenant. Reserved for internal
 // callers (convergence loops, reaper, domain_provisioner).
-func (s *BuildStoreSqlc) GetByID(ctx context.Context, buildID string) (*Build, error) {
+func (s *BuildStoreSqlc) GetByID(ctx context.Context, buildID string) (*db.Build, error) {
 	row, err := s.q.GetBuildByID(ctx, s.gen(nil), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -128,7 +129,7 @@ func (s *BuildStoreSqlc) GetByID(ctx context.Context, buildID string) (*Build, e
 // GetByIDForTenant is the tenant-scoped lookup. Returns ErrBuildNotFound
 // when the build belongs to a different tenant — closing the IDOR vector
 // at the DB layer (find_sec_idor_buildstore).
-func (s *BuildStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*Build, error) {
+func (s *BuildStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
 	row, err := s.q.GetBuildByIDForTenant(ctx, s.gen(nil), generated.GetBuildByIDForTenantParams{
 		ID:       buildID,
 		TenantID: tenantID,
@@ -145,7 +146,7 @@ func (s *BuildStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, buildID
 // HasActiveBuild checks if there is a build in QUEUED, RUNNING, or
 // RELEASING status for the (tenant, project, env). Runs inside the
 // advisory lock transaction (sqlctxprop gate validates tx form).
-func (s *BuildStoreSqlc) HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error) {
+func (s *BuildStoreSqlc) HasActiveBuild(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (bool, error) {
 	exists, err := s.q.HasActiveBuildForEnv(ctx, s.gen(tx), generated.HasActiveBuildForEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -162,13 +163,13 @@ func (s *BuildStoreSqlc) HasActiveBuild(ctx context.Context, tx DBTX, tenantID, 
 // (timing fields are different across {Running, Terminal, Other}).
 // Returns ErrBuildNotFound when the build doesn't exist.
 // Returns loopzeroerrors.InvalidTransition on invalid transitions.
-func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, buildID, event string) (*Build, error) {
+func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, buildID, event string) (*db.Build, error) {
 	// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): this read-modify-write
 	// MUST run in the caller's transaction under withEnvironmentLock. A nil tx
 	// would split GetByIDTx + UPDATE across two pooled connections. Lock-free
 	// callers use UpdateStatusIfCurrent (single-statement CAS) instead.
 	if tx == nil {
-		return nil, ErrNilTxStatusMutation
+		return nil, db.ErrNilTxStatusMutation
 	}
 	current, err := s.getBuildByIDViaTx(ctx, tx, buildID)
 	if err != nil {
@@ -220,7 +221,7 @@ func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, buildID, eve
 // a single conditional UPDATE (WHERE id AND tenant_id AND status=from) applies
 // the write atomically iff the row is still in `from`. 0 rows → (nil, nil): the
 // build already left `from` (a concurrent lock-holder won) → a correct no-op.
-func (s *BuildStoreSqlc) UpdateStatusIfCurrent(ctx context.Context, buildID, tenantID string, from statemachine.BuildPhase, event string) (*Build, error) {
+func (s *BuildStoreSqlc) UpdateStatusIfCurrent(ctx context.Context, buildID, tenantID string, from statemachine.BuildPhase, event string) (*db.Build, error) {
 	newPhase, err := buildMachine.SafeTransition(from, statemachine.BuildPhaseEvent(event))
 	if err != nil {
 		return nil, loopzeroerrors.NewInvalidTransition(string(from), event)
@@ -258,7 +259,7 @@ func (s *BuildStoreSqlc) UpdateStatusIfCurrent(ctx context.Context, buildID, ten
 
 // SetErrorMessage stores the error message and stamps finished_at.
 // Returns ErrBuildNotFound when the row doesn't exist.
-func (s *BuildStoreSqlc) SetErrorMessage(ctx context.Context, tx DBTX, buildID, errorMessage string) error {
+func (s *BuildStoreSqlc) SetErrorMessage(ctx context.Context, tx db.DBTX, buildID, errorMessage string) error {
 	current, err := s.getBuildByIDViaTx(ctx, tx, buildID)
 	if err != nil {
 		return err
@@ -279,7 +280,7 @@ func (s *BuildStoreSqlc) SetErrorMessage(ctx context.Context, tx DBTX, buildID, 
 
 // SetWorkflowID stores the Argo Workflow name. Returns ErrBuildNotFound
 // when the row doesn't exist.
-func (s *BuildStoreSqlc) SetWorkflowID(ctx context.Context, tx DBTX, buildID, workflowID string) error {
+func (s *BuildStoreSqlc) SetWorkflowID(ctx context.Context, tx db.DBTX, buildID, workflowID string) error {
 	current, err := s.getBuildByIDViaTx(ctx, tx, buildID)
 	if err != nil {
 		return err
@@ -299,7 +300,7 @@ func (s *BuildStoreSqlc) SetWorkflowID(ctx context.Context, tx DBTX, buildID, wo
 }
 
 // SetAppsSpec persists the canonicalized app spec JSON for the build.
-func (s *BuildStoreSqlc) SetAppsSpec(ctx context.Context, tx DBTX, buildID string, apps []BuildAppSpec) error {
+func (s *BuildStoreSqlc) SetAppsSpec(ctx context.Context, tx db.DBTX, buildID string, apps []db.BuildAppSpec) error {
 	current, err := s.getBuildByIDViaTx(ctx, tx, buildID)
 	if err != nil {
 		return err
@@ -321,7 +322,7 @@ func (s *BuildStoreSqlc) SetAppsSpec(ctx context.Context, tx DBTX, buildID strin
 // GetBuildApps returns the persisted app specs. Cross-tenant by id —
 // caller MUST validate ownership before invoking (reconcile loop path
 // scopes by cell_id, HTTP handlers use GetByIDForTenant first).
-func (s *BuildStoreSqlc) GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error) {
+func (s *BuildStoreSqlc) GetBuildApps(ctx context.Context, buildID string) ([]db.BuildAppSpec, error) {
 	data, err := s.q.GetBuildApps(ctx, s.gen(nil), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -329,7 +330,7 @@ func (s *BuildStoreSqlc) GetBuildApps(ctx context.Context, buildID string) ([]Bu
 		}
 		return nil, fmt.Errorf("sqlc: get build apps: %w", err)
 	}
-	var apps []BuildAppSpec
+	var apps []db.BuildAppSpec
 	if err := json.Unmarshal(data, &apps); err != nil {
 		return nil, fmt.Errorf("sqlc: unmarshal apps spec: %w", err)
 	}
@@ -337,7 +338,7 @@ func (s *BuildStoreSqlc) GetBuildApps(ctx context.Context, buildID string) ([]Bu
 }
 
 // ListByProject returns builds for a (tenant, project) newest first.
-func (s *BuildStoreSqlc) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error) {
+func (s *BuildStoreSqlc) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]db.Build, error) {
 	rows, err := s.q.ListBuildsByProject(ctx, s.gen(nil), generated.ListBuildsByProjectParams{
 		TenantID:  tenantID,
 		ProjectID: projectID,
@@ -347,7 +348,7 @@ func (s *BuildStoreSqlc) ListByProject(ctx context.Context, tenantID, projectID 
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: list builds by project: %w", err)
 	}
-	out := make([]Build, 0, len(rows))
+	out := make([]db.Build, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedBuildRowToBuild(r))
 	}
@@ -356,7 +357,7 @@ func (s *BuildStoreSqlc) ListByProject(ctx context.Context, tenantID, projectID 
 
 // ListByProjectAndEnv returns (builds, totalCount, error). Empty env
 // falls back to project-only list. Limit clamped to 1-50 (legacy parity).
-func (s *BuildStoreSqlc) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error) {
+func (s *BuildStoreSqlc) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]db.Build, int, error) {
 	if limit < 1 {
 		limit = 20
 	}
@@ -401,7 +402,7 @@ func (s *BuildStoreSqlc) ListByProjectAndEnv(ctx context.Context, tenantID, proj
 	if err != nil {
 		return nil, 0, fmt.Errorf("sqlc: count builds by project+env: %w", err)
 	}
-	out := make([]Build, 0, len(rows))
+	out := make([]db.Build, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedBuildRowToBuild(r))
 	}
@@ -434,15 +435,15 @@ func (s *BuildStoreSqlc) ListEnvsForProject(ctx context.Context, tenantID, proje
 // scoped to the given cell. Reaper path: intentionally cross-tenant
 // within the cell. Empty cellID defaults to CellDefault per multi-cell
 // backward compat.
-func (s *BuildStoreSqlc) FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error) {
+func (s *BuildStoreSqlc) FindActiveBuilds(ctx context.Context, cellID string) ([]db.Build, error) {
 	if cellID == "" {
-		cellID = CellDefault
+		cellID = db.CellDefault
 	}
 	rows, err := s.q.FindActiveBuildsByCell(ctx, s.gen(nil), cellID)
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: find active builds: %w", err)
 	}
-	out := make([]Build, 0, len(rows))
+	out := make([]db.Build, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, *generatedBuildRowToBuild(r))
 	}
@@ -453,7 +454,7 @@ func (s *BuildStoreSqlc) FindActiveBuilds(ctx context.Context, cellID string) ([
 // env). Returns count + workflow_ids (for Argo cancellation). Skips the
 // CANCELLING intermediate state — intentional bulk-op shortcut for
 // project deletion.
-func (s *BuildStoreSqlc) CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error) {
+func (s *BuildStoreSqlc) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, []string, error) {
 	wfIDs, err := s.q.CancelActiveBuildsByEnv(ctx, s.gen(tx), generated.CancelActiveBuildsByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
@@ -476,7 +477,7 @@ func (s *BuildStoreSqlc) CancelActiveBuilds(ctx context.Context, tx DBTX, tenant
 
 // getBuildByIDViaTx fetches a build inside a tx. Cross-tenant: caller
 // uses the returned tenant_id to scope subsequent UPDATEs.
-func (s *BuildStoreSqlc) getBuildByIDViaTx(ctx context.Context, tx DBTX, buildID string) (*Build, error) {
+func (s *BuildStoreSqlc) getBuildByIDViaTx(ctx context.Context, tx db.DBTX, buildID string) (*db.Build, error) {
 	row, err := s.q.GetBuildByID(ctx, s.gen(tx), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -495,8 +496,8 @@ func (s *BuildStoreSqlc) getBuildByIDViaTx(ctx context.Context, tx DBTX, buildID
 // future-facing typed accessors when consumers are ready.
 // -----------------------------------------------------------------------
 
-func generatedBuildRowToBuild(row generated.Build) *Build {
-	b := &Build{
+func generatedBuildRowToBuild(row generated.Build) *db.Build {
+	b := &db.Build{
 		ID:            row.ID,
 		TenantID:      row.TenantID,
 		ProjectID:     row.ProjectID,
@@ -534,22 +535,4 @@ func generatedBuildRowToBuild(row generated.Build) *Build {
 		b.BundleDigest = *row.BundleDigest
 	}
 	return b
-}
-
-// isPGUniqueViolation checks if the err is a Postgres unique-violation
-// error (SQLSTATE 23505). Unlike the legacy `db.UniqueViolationError`
-// pathway, sqlc-backed queries flow through pgx-native types directly
-// (NOT through PgxAdapter.translatePgError), so we must inspect the raw
-// pgconn.PgError. Used by Create to surface ErrDeployInProgress on
-// concurrent-deploy collision (Rule 6 + ARCH-002).
-func isPGUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
-	}
-	// Translated form (legacy callers that wrap raw pg errors through
-	// PgxAdapter still surface UniqueViolationError; preserved here for
-	// defense-in-depth even though sqlc-direct path shouldn't hit it).
-	var uv *UniqueViolationError
-	return errors.As(err, &uv)
 }

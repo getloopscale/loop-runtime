@@ -129,7 +129,7 @@ func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx DBTX, previe
 
 // UpdateBuild associates a build (and optionally a refreshed commit_sha).
 // Empty commitSHA preserves the existing value via COALESCE(NULLIF($2,
-// ''), commit_sha) in the SQL query.
+// ”), commit_sha) in the SQL query.
 func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx DBTX, previewID, buildID, commitSHA string) error {
 	bridge, err := s.txBridge(tx)
 	if err != nil {

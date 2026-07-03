@@ -48,6 +48,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdiffstructural"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdrift"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmoverlapparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/migrationtestcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/mockbudget"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
@@ -407,6 +408,8 @@ func runQuality(args []string) int {
 		return runSqlcTxProp(args[1:])
 	case "db-generated-boundary":
 		return runDbGeneratedBoundary(args[1:])
+	case "ma7-status-locality":
+		return runMa7StatusLocality(args[1:])
 	case "tenant-predicate":
 		return runTenantPredicate(args[1:])
 	case "corrections-txt-closed":
@@ -2845,6 +2848,35 @@ func runDbGeneratedBoundary(args []string) int {
 		fmt.Fprintf(os.Stderr, "db-generated-boundary: WARN \u2014 fenced dir %q absent from tree (a rename may have silently dropped a fence)\n", d)
 	}
 	fmt.Printf("db-generated-boundary: PASS \u2014 %d .go files scanned; no outer-layer imports of db/generated (MA-7 Gate A)\n", outcome.Scanned)
+	return 0
+}
+
+// runMa7StatusLocality enforces MA-7 Gates B+C of the M9 db-split: the sqlc
+// status UPDATE funcs + <machine>.SafeTransition are referenced only from
+// api/internal/db/store/. ADR 2026-07-03-m9-db-store-subpackage-topology D3.
+func runMa7StatusLocality(args []string) int {
+	fs := flag.NewFlagSet("ma7-status-locality", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := ma7statuslocality.Check(ma7statuslocality.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ma7-status-locality: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "ma7-status-locality: FAIL \u2014 %d violation(s) (scanned %d .go files):\n", len(outcome.Violations), outcome.Scanned)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s:%d Gate %s \u2014 %s outside db/store/\n", v.File, v.Line, v.Gate, v.Name)
+		}
+		fmt.Fprintf(os.Stderr, "\nFix: %s\n", ma7statuslocality.ActionableFix())
+		return 1
+	}
+	fmt.Printf("ma7-status-locality: PASS \u2014 %d .go files scanned; status machinery confined to db/store/ (MA-7 Gates B+C)\n", outcome.Scanned)
 	return 0
 }
 

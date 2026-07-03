@@ -20,6 +20,7 @@ package store
 import (
 	"context"
 	"fmt"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"

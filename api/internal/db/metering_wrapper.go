@@ -46,7 +46,7 @@ type MeterInput struct {
 
 // MeteringStore owns a dedicated bounded pgxpool (ADR-10), physically separate
 // from the API pool, connected as loopzero_worker (EffectiveWorkerDatabaseURL) so the
-// SET LOCAL app.tenant_id='' RLS bypass is load-bearing, not incidental.
+// SET LOCAL app.tenant_id=” RLS bypass is load-bearing, not incidental.
 type MeteringStore struct {
 	pool *pgxpool.Pool
 }
@@ -263,6 +263,7 @@ func (s *MeteringStore) NamespacesForTenant(ctx context.Context, tenantID string
 //   - a real query error → (false, false, err) — the error is surfaced, and enabled
 //     is NEVER true: a metering producer that cannot read its own kill-switch MUST
 //     NOT bill (fail-safe, mirrors SC-3's read-failure HOLD). Never swallowed (Rule 8).
+//
 // metering_config has no RLS — no SET LOCAL needed.
 func (s *MeteringStore) IsMeteringEnabled(ctx context.Context) (enabled bool, found bool, err error) {
 	en, err := generated.New().GetMeteringEnabled(ctx, s.pool)

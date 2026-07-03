@@ -78,16 +78,16 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 	// by BuildStoreSqlc.FindActiveBuilds: `if cellID == "" { cellID =
 	// CellDefault }`. We assert it via static-grep of the wrapper source
 	// to avoid the SqlcBridge panic that fake DBTX paths trigger.
-	src, err := osReadFile("build_wrapper.go")
+	src, err := osReadFile("store/build_wrapper.go")
 	if err != nil {
-		t.Fatalf("read build_wrapper.go: %v", err)
+		t.Fatalf("read store/build_wrapper.go: %v", err)
 	}
 	contents := string(src)
 	// The fallback block must be present in the FindActiveBuilds method.
 	// We anchor on the variable name + assignment, not the surrounding
 	// boilerplate, so the test survives cosmetic refactors.
-	if !strings.Contains(contents, `cellID = CellDefault`) {
-		t.Error("BuildStoreSqlc.FindActiveBuilds must contain `cellID = CellDefault` fallback for empty input")
+	if !strings.Contains(contents, `cellID = db.CellDefault`) {
+		t.Error("BuildStoreSqlc.FindActiveBuilds must contain `cellID = db.CellDefault` fallback for empty input")
 	}
 	// And the method must call the sqlc query — without this, the
 	// fallback above is in the wrong scope.

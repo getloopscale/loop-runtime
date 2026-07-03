@@ -318,7 +318,7 @@ func buildServerConfig(
 		// never fires; pass a no-op eventStore that returns 0/nil to
 		// satisfy the non-nil contract without touching sse_events table.
 		sc.ReleaseInspector = services.NewReleaseInspector(
-			db.NewReleaseStoreSqlc(dbAdapter, db.NoopEventStore{}),
+			store.NewReleaseStoreSqlc(dbAdapter, store.NoopEventStore{}),
 			&store.PostgresAuditStore{DB: dbAdapter},
 			nil,
 		)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // release_wrapper_concurrent_activation_test.go — T5.1 CV-M-1 of plan
 // 2026-06-01-p3-infra-observability-test-debt-plan.md v1.1.
@@ -21,12 +21,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -76,9 +78,14 @@ func TestIsReleasesActiveUniqueViolation_UnwrapsChain(t *testing.T) {
 	}
 }
 
-// concurrentActivationDBURL mirrors secretL19DBURL.
+// concurrentActivationDBURL mirrors the package-db test convention
+// (secretL19DBURL). Self-contained here because this test moved to the store
+// package (M9 5b) and can no longer reference the root-db test helper.
 func concurrentActivationDBURL() string {
-	return secretL19DBURL()
+	if u := os.Getenv("DATABASE_URL"); u != "" {
+		return u
+	}
+	return "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
 }
 
 func concurrentActivationPool(t *testing.T) *pgxpool.Pool {
@@ -191,7 +198,7 @@ func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 	// guard — this IS the withEnvironmentLock-scoped path in production).
 	// SyncCompleted is the real PENDING→ACTIVE event, so SafeTransition passes
 	// and UpdateReleaseStatus fires into the partial unique index.
-	adapter := &PgxAdapter{Pool: pool}
+	adapter := &db.PgxAdapter{Pool: pool}
 	store := NewReleaseStoreSqlc(adapter, NoopEventStore{})
 
 	_, err := store.UpdateStatus(ctx, adapter, releaseID2, string(statemachine.ReleaseSyncCompleted))

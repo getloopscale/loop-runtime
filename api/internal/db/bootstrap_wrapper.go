@@ -154,4 +154,3 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.Boots
 
 	return userID, tenantID, anyCreated, nil
 }
-

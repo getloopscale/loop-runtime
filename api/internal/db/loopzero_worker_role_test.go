@@ -190,7 +190,7 @@ func TestWorkerRole_GrantsInvariant_AllTablesAccessible(t *testing.T) {
 // user `loopzero` is a peer-grade role to loopzero_worker, NOT a member).
 // On managed PG (DOKS) the operator GRANTs membership via:
 //
-//   GRANT loopzero_worker TO loopzero;
+//	GRANT loopzero_worker TO loopzero;
 //
 // If membership not granted, the SET ROLE fails and the test SKIPs
 // rather than reporting a misleading failure.

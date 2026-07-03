@@ -25,11 +25,11 @@ import (
 // per-tenant failure injection so the dispatcher's error-wrap behavior
 // can be locked.
 type fakeTransitT22 struct {
-	mu            sync.Mutex
-	decryptCalls  []string // formatted as "tenant:ciphertext"
-	encryptCalls  []string
-	failOnTenant  map[string]error
-	plaintext     []byte
+	mu           sync.Mutex
+	decryptCalls []string // formatted as "tenant:ciphertext"
+	encryptCalls []string
+	failOnTenant map[string]error
+	plaintext    []byte
 }
 
 func (f *fakeTransitT22) EncryptForTenant(_ context.Context, tenantID string, plaintext []byte) (string, error) {

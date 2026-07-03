@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 import (
 	"context"
 	"errors"
 	"os"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -68,7 +70,7 @@ func TestBuildUpdateStatusIfCurrent_UnsupportedTargetRejected_Hermetic(t *testin
 func TestBuildUpdateStatus_RejectsNilTx_Hermetic(t *testing.T) {
 	s := NewBuildStoreSqlc(nil)
 	_, err := s.UpdateStatus(context.Background(), nil, "bld-x", string(statemachine.BPEventStarted))
-	if !errors.Is(err, ErrNilTxStatusMutation) {
+	if !errors.Is(err, db.ErrNilTxStatusMutation) {
 		t.Errorf("UpdateStatus(nil tx) must return ErrNilTxStatusMutation, got %v", err)
 	}
 }
@@ -76,7 +78,7 @@ func TestBuildUpdateStatus_RejectsNilTx_Hermetic(t *testing.T) {
 func TestReleaseUpdateStatus_RejectsNilTx_Hermetic(t *testing.T) {
 	s := NewReleaseStoreSqlc(nil, NoopEventStore{})
 	_, err := s.UpdateStatus(context.Background(), nil, "rel-x", "SyncCompleted")
-	if !errors.Is(err, ErrNilTxStatusMutation) {
+	if !errors.Is(err, db.ErrNilTxStatusMutation) {
 		t.Errorf("UpdateStatus(nil tx) must return ErrNilTxStatusMutation, got %v", err)
 	}
 }
