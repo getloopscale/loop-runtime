@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 )
 
-// PreviewLifecycleService is the slice of services.PreviewService that the
+// PreviewLifecycleService is the slice of preview.PreviewService that the
 // PR webhook handler needs. Defined narrowly per ISP so the deployer can
 // be tested without standing up the full service.
 type PreviewLifecycleService interface {

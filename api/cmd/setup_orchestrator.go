@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/scaling"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
@@ -112,7 +114,7 @@ func setupOrchestrator(
 	// `scaleApply` closure below reuses the same scalingStore (single source
 	// of truth for app_scaling_config IO).
 	scalingStore := store.NewPostgresScalingStore(dbAdapter)
-	scalingResolver := services.NewDBScalingResolver(scalingStore)
+	scalingResolver := scaling.NewDBScalingResolver(scalingStore)
 
 	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,

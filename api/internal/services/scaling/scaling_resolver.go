@@ -8,7 +8,7 @@
 // that row OVERRIDES the value from loopzero.yaml. Otherwise loopzero.yaml is preserved
 // (backward-compat).
 
-package services
+package scaling
 
 import (
 	"context"

@@ -22,7 +22,7 @@
 // Returns &stripe.BillingPortalSession{URL: "https://billing.stripe.com/p/session/..."}
 // with TTL = 30 minutes (one-time-use, Stripe-managed).
 
-package services
+package billing
 
 import (
 	"context"

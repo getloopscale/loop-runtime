@@ -11,6 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/preview"
+
+	"github.com/getloopscale/loopzero/api/internal/services/billing"
+
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -280,7 +284,7 @@ func buildServerConfig(
 				returnURL = "https://app.loopzero.cloud/billing"
 			}
 			billingHandler.WithPortalSessionCreator(
-				services.NewStripePortalSessionCreator(stripeKey),
+				billing.NewStripePortalSessionCreator(stripeKey),
 				returnURL,
 			)
 		}
@@ -344,9 +348,9 @@ func buildServerConfig(
 		// BuildOrchestrator is available (always, post-Sprint-2), the
 		// service can submit builds for previews (best-effort).
 		previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-		var previewService *services.PreviewService
+		var previewService *preview.PreviewService
 		if orchDeps != nil && orchDeps.Orchestrator != nil {
-			ps, perr := services.NewPreviewService(services.PreviewServiceDeps{
+			ps, perr := preview.NewPreviewService(preview.PreviewServiceDeps{
 				Store:               previewStore,
 				Builds:              orchDeps.Orchestrator,
 				BuildApps:           &previewAppsLookupAdapter{builds: stores.BuildStore},

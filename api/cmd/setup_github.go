@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/preview"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
@@ -237,7 +239,7 @@ func setupGitHub(
 	// by event.Action: opened/synchronize/reopened → CreatePreview;
 	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
 	previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
+	previewSvc, psErr := preview.NewPreviewService(preview.PreviewServiceDeps{
 		Store:     previewStore,
 		Builds:    orch,
 		BuildApps: &previewAppsLookupAdapter{builds: stores.BuildStore},

@@ -4,7 +4,7 @@
 // Tests for ScalingResolver — see docs/plans/loopzero-scale-end-to-end-plan.md T1.1.
 // RED tests written FIRST per TDD; implementation in scaling_resolver.go.
 
-package services
+package scaling
 
 import (
 	"context"

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/services/preview"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -93,7 +95,7 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 	return nil
 }
 
-// previewAppsLookupAdapter implements services.PreviewBuildAppsLookup by
+// previewAppsLookupAdapter implements preview.PreviewBuildAppsLookup by
 // copying Apps from the most recent SUCCEEDED build of the (tenant, project).
 // J-23 LIVE catch 2026-06-07: without this, preview builds fail with
 // "WorkflowSpec.Plan must be non-nil" because PR webhooks don't ship
@@ -145,7 +147,7 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 	return out, nil
 }
 
-// previewCRCreatorAdapter bridges services.PreviewCRCreator (services
+// previewCRCreatorAdapter bridges preview.PreviewCRCreator (services
 // package's spec type) to k8s.PreviewCRManager (k8s package's spec
 // type). Two spec types exist to avoid the k8s↔services import cycle;
 // fields are identical so the conversion is a flat copy.
@@ -153,7 +155,7 @@ type previewCRCreatorAdapter struct {
 	mgr *k8s.PreviewCRManager
 }
 
-func (a *previewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec services.PreviewCRSpec) error {
+func (a *previewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec preview.PreviewCRSpec) error {
 	return a.mgr.EnsurePreviewCR(ctx, k8s.PreviewCRSpec{
 		Name:      spec.Name,
 		TenantID:  spec.TenantID,

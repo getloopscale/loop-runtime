@@ -16,7 +16,7 @@ import (
 )
 
 // PreviewCRSpec is the minimal subset of PreviewEnvironment.spec the
-// API submits — kept duplicated from services.PreviewCRSpec to avoid
+// API submits — kept duplicated from preview.PreviewCRSpec to avoid
 // the cycle k8s ↔ services. Same field names.
 type PreviewCRSpec struct {
 	Name      string

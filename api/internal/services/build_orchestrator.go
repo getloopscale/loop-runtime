@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/scaling"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
@@ -82,7 +84,7 @@ type BuildOrchestratorDeps struct {
 	// enforceScaling + BuildAppSpec persistence so DB rows take precedence
 	// (D1) and plan caps operate on resolved config (MEET-2026-04-23-059
 	// Constraint 6). Nil = disabled (yaml-only — backward-compat).
-	ScalingResolver ScalingResolver
+	ScalingResolver scaling.ScalingResolver
 	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
 	// container delivery activator persists per-app signature + SBOM
 	// metadata to release_app_attestations.
@@ -137,11 +139,11 @@ type BuildOrchestrator struct {
 	argocdSyncTimeout   time.Duration
 	kvClient            StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain          string
-	planCap             PlanCapChecker        // B15: nil = enforcement disabled
-	kedaEnabled         bool                  // gates scale-to-zero (min=0)
-	scalingResolver     ScalingResolver       // B40: nil = yaml-only (backward-compat)
-	auditLogger         domain.AuditLogger    // T1.2 mitigation #3: per-sign cosign audit
-	deployTimelineSpawn DeployTimelineSpawner // plan T5.1 — nil-safe
+	planCap             PlanCapChecker          // B15: nil = enforcement disabled
+	kedaEnabled         bool                    // gates scale-to-zero (min=0)
+	scalingResolver     scaling.ScalingResolver // B40: nil = yaml-only (backward-compat)
+	auditLogger         domain.AuditLogger      // T1.2 mitigation #3: per-sign cosign audit
+	deployTimelineSpawn DeployTimelineSpawner   // plan T5.1 — nil-safe
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
