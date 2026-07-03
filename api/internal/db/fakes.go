@@ -12,12 +12,16 @@
 // for moving the remaining entity adapters (whose tests share these fakes) into
 // db/store/ without duplicating the mock ecosystem. Behavior-preserving:
 // verbatim logic, exported names/fields.
+// FOLLOW-UP DEBT (MEET-2026-07-03-001): these exported test doubles live in the
+// production db package because Go forbids the db(in-package test) -> dbtest -> db
+// import cycle. The clean fix is a separate internal/db/dbtest package + converting
+// the root-db in-package tests that consume them to external `package db_test`.
+// Contained to internal/, no runtime path.
 package db
 
 import (
 	"context"
 	"strings"
-
 )
 
 var (
