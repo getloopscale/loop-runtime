@@ -81,7 +81,7 @@ func (a *cfZoneAdapter) DeleteZone(ctx context.Context, zoneID string) error {
 	return a.client.DeleteZone(ctx, zoneID)
 }
 
-// cfZoneStatusAdapter bridges cfzone.Client → services.CFZoneStatusChecker.
+// cfZoneStatusAdapter bridges cfzone.Client → domainsvc.CFZoneStatusChecker.
 type cfZoneStatusAdapter struct {
 	client *cfzone.Client
 }

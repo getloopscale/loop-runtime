@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/logging"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -17,11 +18,11 @@ import (
 // --- fake stale checker ---
 
 type fakeStaleChecker struct {
-	builds []services.StaleBuild
+	builds []build.StaleBuild
 	err    error
 }
 
-func (f *fakeStaleChecker) FindStaleBuilds(_ context.Context, _ string, _, _, _, _ time.Duration) ([]services.StaleBuild, error) {
+func (f *fakeStaleChecker) FindStaleBuilds(_ context.Context, _ string, _, _, _, _ time.Duration) ([]build.StaleBuild, error) {
 	return f.builds, f.err
 }
 
@@ -39,7 +40,7 @@ func TestBuildReaper_ReapsStaleBuild(t *testing.T) {
 	}
 
 	checker := &fakeStaleChecker{
-		builds: []services.StaleBuild{
+		builds: []build.StaleBuild{
 			{ID: "build-stale-1", State: statemachine.BPhRunning, Event: statemachine.BPEventTimeout},
 		},
 	}
@@ -47,7 +48,7 @@ func TestBuildReaper_ReapsStaleBuild(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.BuildReaperConfig{
+	reaper := build.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, build.BuildReaperConfig{
 		QueueTimeout:   5 * time.Minute,
 		RunningTimeout: 30 * time.Minute,
 		CancelTimeout:  60 * time.Second,
@@ -82,7 +83,7 @@ func TestBuildReaper_SkipsTerminalBuilds(t *testing.T) {
 	}
 
 	checker := &fakeStaleChecker{
-		builds: []services.StaleBuild{
+		builds: []build.StaleBuild{
 			{ID: "build-done", State: statemachine.BPhRunning, Event: statemachine.BPEventTimeout},
 		},
 	}
@@ -90,7 +91,7 @@ func TestBuildReaper_SkipsTerminalBuilds(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.DefaultBuildReaperConfig(), nil)
+	reaper := build.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, build.DefaultBuildReaperConfig(), nil)
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())
@@ -114,7 +115,7 @@ func TestBuildReaper_ReapsQueuedBuild(t *testing.T) {
 	}
 
 	checker := &fakeStaleChecker{
-		builds: []services.StaleBuild{
+		builds: []build.StaleBuild{
 			{ID: "build-queued", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
@@ -122,7 +123,7 @@ func TestBuildReaper_ReapsQueuedBuild(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, services.DefaultBuildReaperConfig(), nil)
+	reaper := build.NewBuildReaper(buildStore, checker, locker, nil, nil, logger, build.DefaultBuildReaperConfig(), nil)
 
 	reaped := reaper.ReapOnce(context.Background())
 

@@ -8,14 +8,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	gh "github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
-// repoStoreAdapter bridges db.PostgresRepositoryStore → routes.RepositoryStore.
+// repoStoreAdapter bridges store.PostgresRepositoryStore → routes.RepositoryStore.
 type repoStoreAdapter struct {
-	store *db.PostgresRepositoryStore
+	store *store.PostgresRepositoryStore
 }
 
 func (a *repoStoreAdapter) LinkRepository(ctx context.Context, tenantID, projectName, repoFullName string, installationID int64, defaultBranch string, autoDeploy bool) error {
@@ -66,13 +67,13 @@ func (a *repoStoreAdapter) SaveInstallation(ctx context.Context, id int64, accou
 	return a.store.SaveInstallation(ctx, id, accountLogin, accountType, tenantID)
 }
 
-// installationLookupAdapter bridges db.PostgresRepositoryStore →
+// installationLookupAdapter bridges store.PostgresRepositoryStore →
 // routes.InstallationLookup. Returns the minimal routes.InstallationRecord
 // shape the integrations handler needs for tenant-boundary checks,
 // without dragging the db or github types into the routes package.
 // Plan J-09 T2.1.
 type installationLookupAdapter struct {
-	store *db.PostgresRepositoryStore
+	store *store.PostgresRepositoryStore
 }
 
 func (a *installationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*routes.InstallationRecord, error) {

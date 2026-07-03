@@ -120,7 +120,7 @@ func NewCachedClient(inner *Client, cfg CachedClientConfig) (*CachedClient, erro
 func (cc *CachedClient) installSPKIPin(pinB64 string) error {
 	pinBytes, err := base64.StdEncoding.DecodeString(pinB64)
 	if err != nil {
-		return fmt.Errorf("%w: invalid SPKIPinB64 (not base64): %v", ErrInvalidConfig, err)
+		return fmt.Errorf("%w: invalid SPKIPinB64 (not base64): %w", ErrInvalidConfig, err)
 	}
 	if len(pinBytes) != sha256.Size {
 		return fmt.Errorf("%w: SPKI pin must be base64(SHA256(spki)) = %d bytes, got %d",
@@ -146,6 +146,9 @@ func (cc *CachedClient) installSPKIPin(pinB64 string) error {
 	}
 
 	tlsCfg.VerifyPeerCertificate = makeSPKIPinVerifier(pinBytes)
+	// VerifyConnection enforces the pin on RESUMED sessions too (VerifyPeerCertificate
+	// is skipped on resumption) — closes the gosec G123 bypass.
+	tlsCfg.VerifyConnection = makeSPKIPinConnVerifier(pinBytes)
 	transport.TLSClientConfig = tlsCfg
 	httpClient.Transport = transport
 
@@ -166,11 +169,29 @@ func makeSPKIPinVerifier(pin []byte) func(rawCerts [][]byte, verifiedChains [][]
 		}
 		leaf, err := x509.ParseCertificate(rawCerts[0])
 		if err != nil {
-			return fmt.Errorf("%w: parse leaf cert: %v", ErrSPKIPinMismatch, err)
+			return fmt.Errorf("%w: parse leaf cert: %w", ErrSPKIPinMismatch, err)
 		}
 		spkiHash := sha256.Sum256(leaf.RawSubjectPublicKeyInfo)
 		if !hashesEqual(spkiHash[:], pin) {
 			return fmt.Errorf("%w: leaf SPKI hash does not match pin (cert=%x pin=%x)",
+				ErrSPKIPinMismatch, spkiHash[:8], pin[:8])
+		}
+		return nil
+	}
+}
+
+// makeSPKIPinConnVerifier enforces the same SPKI pin via VerifyConnection, which
+// (unlike VerifyPeerCertificate) DOES run on RESUMED TLS sessions. Without it a
+// resumed session would bypass the pin (gosec G123). Same leaf-SPKI check as
+// makeSPKIPinVerifier, against tls.ConnectionState.PeerCertificates[0].
+func makeSPKIPinConnVerifier(pin []byte) func(cs tls.ConnectionState) error {
+	return func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return fmt.Errorf("%w: no peer cert on connection", ErrSPKIPinMismatch)
+		}
+		spkiHash := sha256.Sum256(cs.PeerCertificates[0].RawSubjectPublicKeyInfo)
+		if !hashesEqual(spkiHash[:], pin) {
+			return fmt.Errorf("%w: leaf SPKI hash does not match pin on connection (cert=%x pin=%x)",
 				ErrSPKIPinMismatch, spkiHash[:8], pin[:8])
 		}
 		return nil
@@ -234,7 +255,7 @@ func (cc *CachedClient) KvGetCached(ctx context.Context, mount, path string) (ma
 				return nil, fmt.Errorf("%w: %s", ErrPermissionDenied, path)
 			}
 		}
-		return nil, fmt.Errorf("%w: %v", ErrVaultUnreachable, err)
+		return nil, fmt.Errorf("%w: %w", ErrVaultUnreachable, err)
 	}
 	if secret == nil || secret.Data == nil {
 		cc.recordFailure()

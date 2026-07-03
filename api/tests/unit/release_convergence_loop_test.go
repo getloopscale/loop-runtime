@@ -11,19 +11,22 @@ import (
 	"testing"
 	"time"
 
+	releasesvc "github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- Fakes for ReleaseConvergenceLoop ---
 
 type fakeConvergenceReleaseStore struct {
-	mu            sync.Mutex
-	pending       []db.Release
-	activeList    []db.Release          // releases returned by FindActiveReleases
-	statuses      map[string]string     // releaseID → current status (guarded by mu)
-	active        map[string]*db.Release // key: tenant:project:env → active release
+	mu         sync.Mutex
+	pending    []db.Release
+	activeList []db.Release           // releases returned by FindActiveReleases
+	statuses   map[string]string      // releaseID → current status (guarded by mu)
+	active     map[string]*db.Release // key: tenant:project:env → active release
 }
 
 func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
@@ -109,7 +112,7 @@ func (f *fakeConvergenceEnvTargetStore) getActiveCalls() int {
 	defer f.mu.Unlock()
 	return f.activeCalls
 }
-func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeConvergenceEnvTargetStore) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -138,7 +141,7 @@ func (f *fakeConvergenceEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, 
 	f.activeCalls++
 	return nil
 }
-func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 
@@ -262,9 +265,9 @@ func TestReleaseConvergenceLoop_ActivatesPendingRelease(t *testing.T) {
 	eventStore := &fakeConvergenceEventStore{}
 	locker := &fakeConvergenceLocker{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -318,9 +321,9 @@ func TestReleaseConvergenceLoop_TimesOutStaleRelease(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
 		},
 	)
@@ -371,9 +374,9 @@ func TestReleaseConvergenceLoop_SkipsWhenNotReady(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -413,9 +416,9 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, terminatingSyncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
 		},
 	)
@@ -456,9 +459,9 @@ func TestReleaseConvergenceLoop_HandlesEmptyPendingList(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 50 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -500,7 +503,7 @@ func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 	}
 
 	// Act: call ActivateReleaseKernel with the stale release
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, staleRelease,
 		releaseStore, envTargetStore, eventStore,
 		nil, 10, testLogger,
@@ -538,7 +541,7 @@ func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
 		nil, 5, testLogger,
@@ -573,9 +576,9 @@ func TestReleaseConvergenceLoop_RetriggersSyncForStalledRelease(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -616,9 +619,9 @@ func TestReleaseConvergenceLoop_DoesNotRetriggerRecentRelease(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 100 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -651,13 +654,13 @@ func TestHealthCheckActiveReleases_DetectsDivergence(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
-			Interval:      1 * time.Second,     // slow PENDING ticker
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
+			Interval:       1 * time.Second,        // slow PENDING ticker
 			HealthInterval: 100 * time.Millisecond, // fast health ticker for test
-			SyncTimeout:   5 * time.Minute,
-			MaxConcurrent: 2,
+			SyncTimeout:    5 * time.Minute,
+			MaxConcurrent:  2,
 		},
 	)
 
@@ -690,13 +693,13 @@ func TestHealthCheckActiveReleases_ClearsDivergenceWhenHealthy(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
-			Interval:      1 * time.Second,
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
+			Interval:       1 * time.Second,
 			HealthInterval: 100 * time.Millisecond,
-			SyncTimeout:   5 * time.Minute,
-			MaxConcurrent: 2,
+			SyncTimeout:    5 * time.Minute,
+			MaxConcurrent:  2,
 		},
 	)
 

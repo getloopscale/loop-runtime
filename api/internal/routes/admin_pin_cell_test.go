@@ -16,7 +16,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // osReadFileC11 — local alias avoiding clash with any other test helper named
@@ -63,7 +65,7 @@ func TestAdminPinCell_FeatureFlagOff_Returns404(t *testing.T) {
 
 func TestAdminPinCell_MissingAuth_Returns403(t *testing.T) {
 	env := map[string]string{
-		"LOOPZERO_ADMIN_API":                "true",
+		"LOOPZERO_ADMIN_API":                 "true",
 		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, &fakePinner{}, env, nil)
@@ -74,7 +76,7 @@ func TestAdminPinCell_MissingAuth_Returns403(t *testing.T) {
 
 func TestAdminPinCell_WrongSecret_Returns403(t *testing.T) {
 	env := map[string]string{
-		"LOOPZERO_ADMIN_API":                "true",
+		"LOOPZERO_ADMIN_API":                 "true",
 		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
 	headers := map[string]string{"X-Service-Auth": "wrong"}
@@ -165,7 +167,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	// T6.1 migration: pinner now returns the sentinel directly so the
 	// handler's errors.Is mapping fires (was string-match before).
-	pinner := &fakePinner{err: services.ErrTenantNotFound}
+	pinner := &fakePinner{err: placementsvc.ErrTenantNotFound}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -175,7 +177,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: services.ErrCellNotPinnable}
+	pinner := &fakePinner{err: placementsvc.ErrCellNotPinnable}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -185,7 +187,7 @@ func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: services.ErrCellAtCapacity}
+	pinner := &fakePinner{err: build.ErrCellAtCapacity}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -323,25 +325,25 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 	}{
 		{
 			name:       "wrapped ErrTenantNotFound returns 404",
-			err:        fmt.Errorf("pin failed: %w", services.ErrTenantNotFound),
+			err:        fmt.Errorf("pin failed: %w", placementsvc.ErrTenantNotFound),
 			wantStatus: http.StatusNotFound,
 			wantCode:   "tenant_not_found",
 		},
 		{
 			name:       "wrapped ErrCellNotFound returns 404",
-			err:        fmt.Errorf("pin failed: %w", services.ErrCellNotFound),
+			err:        fmt.Errorf("pin failed: %w", placementsvc.ErrCellNotFound),
 			wantStatus: http.StatusNotFound,
 			wantCode:   "cell_not_found",
 		},
 		{
 			name:       "wrapped ErrCellNotPinnable returns 409",
-			err:        fmt.Errorf("pin failed: %w", services.ErrCellNotPinnable),
+			err:        fmt.Errorf("pin failed: %w", placementsvc.ErrCellNotPinnable),
 			wantStatus: http.StatusConflict,
 			wantCode:   "cell_not_pinnable",
 		},
 		{
 			name:       "wrapped ErrCellAtCapacity returns 409",
-			err:        fmt.Errorf("pin failed: %w", services.ErrCellAtCapacity),
+			err:        fmt.Errorf("pin failed: %w", build.ErrCellAtCapacity),
 			wantStatus: http.StatusConflict,
 			wantCode:   "cell_at_capacity",
 		},

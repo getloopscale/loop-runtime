@@ -80,7 +80,7 @@ func (c *CachingDatabaseClient) GetCredentials(ctx context.Context, role string)
 	defer c.mu.Unlock()
 
 	if cred, ok := c.cache[role]; ok {
-		remaining := cred.IssuedAt.Add(cred.LeaseDur).Sub(time.Now())
+		remaining := time.Until(cred.IssuedAt.Add(cred.LeaseDur))
 		if remaining > c.refreshWin {
 			return cred, nil
 		}

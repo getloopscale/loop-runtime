@@ -25,7 +25,7 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -57,7 +57,7 @@ type ApplicationReconciler struct {
 	// (dogfood-2026-05-08-fixes T4.2 / ADR D6). nil = single-cell legacy mode:
 	// fast-path Healthy is disabled and Application.phase only converges via
 	// ExposedRoute Reachable. Wiring is in app-operator/main.go.
-	RuntimeFactory shared.RuntimeClientFactory
+	RuntimeFactory reconcilehelpers.RuntimeClientFactory
 }
 
 // applicationDetailTypes per ADR-0025 D3.
@@ -71,16 +71,16 @@ var applicationDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for LoopZeroApplication resources.
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := shared.StartReconcileSpan(ctx, "application", req.Name, req.Namespace)
+	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "application", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			shared.RecordError(span, retErr)
+			reconcilehelpers.RecordError(span, retErr)
 		} else {
-			shared.SetSuccess(span)
+			reconcilehelpers.SetSuccess(span)
 		}
-		shared.ReconcileOutcome("application", start, retErr)
+		reconcilehelpers.ReconcileOutcome("application", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -117,7 +117,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return r.reconcileDelete(ctx, &app)
 	}
 
-	if err := shared.EnsureFinalizer(ctx, r.Client, &app, applicationFinalizer, req.NamespacedName); err != nil {
+	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &app, applicationFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -191,7 +191,7 @@ func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.
 
 // reconcileExposedRoute ensures the ExposedRoute CR exists with correct spec.
 func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *loopzerov1.LoopZeroApplication) error {
-	ctx, span := shared.StartChildSpan(ctx, "application.exposed_route.ensure")
+	ctx, span := reconcilehelpers.StartChildSpan(ctx, "application.exposed_route.ensure")
 	defer span.End()
 
 	logger := log.FromContext(ctx)
@@ -460,9 +460,9 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 // (dogfood-2026-05-08-fixes T4.2). Passing a CellAwareRuntimeClientFactory
 // enables the workload-Pod-Ready fast-path so app.Status.Phase converges
 // to Serving as soon as the Pod is Ready, regardless of ExposedRoute state.
-func SetupApplicationControllerWithFactory(mgr ctrl.Manager, baseDomain string, factory shared.RuntimeClientFactory) error {
+func SetupApplicationControllerWithFactory(mgr ctrl.Manager, baseDomain string, factory reconcilehelpers.RuntimeClientFactory) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.LoopZeroApplication{}, shared.ForOption()).
+		For(&loopzerov1.LoopZeroApplication{}, reconcilehelpers.ForOption()).
 		Owns(&loopzerov1.ExposedRoute{}).
 		Named("application").
 		Complete(&ApplicationReconciler{

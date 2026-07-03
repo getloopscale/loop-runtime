@@ -22,7 +22,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/preview"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
@@ -71,8 +71,8 @@ func main() {
 	// registry no one read. ContextLogger via NewContextLogger is the
 	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
-	if shared.PprofEnabled() {
-		shared.StartPprofServer()
+	if reconcilehelpers.PprofEnabled() {
+		reconcilehelpers.StartPprofServer()
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -94,7 +94,7 @@ func main() {
 		setupLog.Error(nil, "RUNTIME_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
 	if err != nil {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)

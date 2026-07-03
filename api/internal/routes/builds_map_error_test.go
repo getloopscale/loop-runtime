@@ -11,14 +11,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
 // mapBuildError ladder regression + discrimination tests. The ladder order
 // MUST stay: (1) typed *LoopZeroError dispatch including DEPLOY_IN_PROGRESS
-// short-circuit; (2) NEW services.AsSubmitBuildError dispatch with the
+// short-circuit; (2) NEW build.AsSubmitBuildError dispatch with the
 // reason-specific message; (3) fallback to ErrInternalError for genuinely
 // unexpected errors only.
 
@@ -35,18 +36,18 @@ func decodeBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 // code + reason-specific message + verbatim cause composed in.
 func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 	cases := []struct {
-		name           string
-		reason         services.SubmitBuildErrorReason
-		stage          services.SubmitBuildStage
-		cause          error
-		wantCode       string
-		wantMsgHas     []string
-		wantMsgNotHas  []string
+		name          string
+		reason        build.SubmitBuildErrorReason
+		stage         build.SubmitBuildStage
+		cause         error
+		wantCode      string
+		wantMsgHas    []string
+		wantMsgNotHas []string
 	}{
 		{
 			name:     "WorkflowFailed surfaces verbatim cause",
-			reason:   services.ReasonBuildSubmitWorkflowFailed,
-			stage:    services.StageSubmitWorkflow,
+			reason:   build.ReasonBuildSubmitWorkflowFailed,
+			stage:    build.StageSubmitWorkflow,
 			cause:    errors.New("argo client: 503 Service Unavailable"),
 			wantCode: "BUILD_SUBMIT_FAILED",
 			wantMsgHas: []string{
@@ -59,8 +60,8 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 		},
 		{
 			name:     "ProjectEnsureFailed surfaces tenant lookup detail",
-			reason:   services.ReasonBuildSubmitProjectEnsureFailed,
-			stage:    services.StageEnsureProject,
+			reason:   build.ReasonBuildSubmitProjectEnsureFailed,
+			stage:    build.StageEnsureProject,
 			cause:    errors.New("project: tenant lookup failed"),
 			wantCode: "BUILD_SUBMIT_FAILED",
 			wantMsgHas: []string{
@@ -71,8 +72,8 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 		},
 		{
 			name:     "DBWriteFailed surfaces pq driver detail",
-			reason:   services.ReasonBuildSubmitDBWriteFailed,
-			stage:    services.StageCreateBuild,
+			reason:   build.ReasonBuildSubmitDBWriteFailed,
+			stage:    build.StageCreateBuild,
 			cause:    errors.New("pq: duplicate key value"),
 			wantCode: "BUILD_SUBMIT_FAILED",
 			wantMsgHas: []string{
@@ -83,8 +84,8 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 		},
 		{
 			name:     "Unknown surfaces unclassified cause verbatim",
-			reason:   services.ReasonBuildSubmitUnknown,
-			stage:    services.SubmitBuildStage("genuinely-novel-stage"),
+			reason:   build.ReasonBuildSubmitUnknown,
+			stage:    build.SubmitBuildStage("genuinely-novel-stage"),
 			cause:    errors.New("some new failure we did not anticipate"),
 			wantCode: "BUILD_SUBMIT_FAILED",
 			wantMsgHas: []string{
@@ -96,7 +97,7 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			se := services.NewSubmitBuildError(tc.reason, tc.stage, tc.cause, tc.cause.Error())
+			se := build.NewSubmitBuildError(tc.reason, tc.stage, tc.cause, tc.cause.Error())
 			w := httptest.NewRecorder()
 			mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), se)
 			if w.Code != http.StatusInternalServerError {

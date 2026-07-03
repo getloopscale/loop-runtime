@@ -27,16 +27,25 @@ const (
 // Transitions:
 //
 //	"" (empty)  --Create-->          Pending
+//	"" (empty)  --DeleteRequested--> Deleting
 //	Pending     --Provisioned-->     Active
+//	Pending     --ProvisionFailed--> Failed
 //	Pending     --DeleteRequested--> Deleting
+//	Failed      --Retry-->           Pending
+//	Failed      --DeleteRequested--> Deleting
 //	Active      --DeleteRequested--> Deleting
 //
-// Terminal: Deleting (finalizer removal completes object deletion)
+// Terminal: Deleting (finalizer removal completes object deletion).
+// DeleteRequested is reachable from every non-terminal state so a delete that
+// arrives before the first successful reconcile never deadlocks the finalizer
+// (MEET-2026-07-02-002 MA-3).
 func NewEnvironmentMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "Environment",
 		Transitions: []transition{
 			{From: EnvironmentEmpty, Event: EnvironmentCreate, To: EnvironmentPending},
+			// MEET-2026-07-02-002 MA-3: additive edge — delete from Empty.
+			{From: EnvironmentEmpty, Event: EnvironmentDeleteRequested, To: EnvironmentDeleting},
 			{From: EnvironmentPending, Event: EnvironmentProvisioned, To: EnvironmentActive},
 			{From: EnvironmentPending, Event: EnvironmentProvisionFailed, To: EnvironmentFailed},
 			{From: EnvironmentPending, Event: EnvironmentDeleteRequested, To: EnvironmentDeleting},

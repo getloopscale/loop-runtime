@@ -61,7 +61,7 @@ func main() {
 		*write = true
 	}
 
-	if err := os.MkdirAll(*outDir, 0o755); err != nil {
+	if err := os.MkdirAll(*outDir, 0o750); err != nil {
 		fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", *outDir, err)
 		os.Exit(3)
 	}
@@ -95,7 +95,7 @@ func main() {
 func writeAll(outDir string) error {
 	for name, m := range machines() {
 		path := filepath.Join(outDir, name+".dot")
-		if err := os.WriteFile(path, []byte(m.Visualize()), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(m.Visualize()), 0o600); err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
 	}
@@ -109,7 +109,7 @@ func checkDrift(outDir string) ([]string, error) {
 	var drift []string
 	for name, m := range machines() {
 		path := filepath.Join(outDir, name+".dot")
-		actual, err := os.ReadFile(path)
+		actual, err := os.ReadFile(path) //nolint:gosec // G304 false positive: path = fixed outDir flag + name from the compile-time machines() registry, never external input
 		if err != nil {
 			drift = append(drift, name)
 			continue

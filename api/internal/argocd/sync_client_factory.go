@@ -13,7 +13,7 @@ import (
 )
 
 // SyncClientInterface abstracts ArgoCD sync operations.
-// This matches the services.SyncClient interface — both are satisfied
+// This matches the shared.SyncClient interface — both are satisfied
 // by *SyncClient and test doubles. Defined here so the factory can
 // reference it without importing the services package (avoids a cycle).
 type SyncClientInterface interface {

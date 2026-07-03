@@ -67,12 +67,12 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 // documented in feedback_m2_canonical_drift_operator_renderer.
 func TestCanonicalDestNamespace_J23_69(t *testing.T) {
 	cases := []struct {
-		name      string
-		tenant    string
-		project   string
-		env       string
-		want      string
-		wantErr   bool
+		name    string
+		tenant  string
+		project string
+		env     string
+		want    string
+		wantErr bool
 	}{
 		{
 			name:    "canonical: tenant + project + env",
@@ -172,11 +172,12 @@ func TestCanonicalDestNamespaceRejectsEmptyProject(t *testing.T) {
 // fail-loud mode (any canonicalDestNamespace error aborts the build).
 //
 // The plan TDD body declares the contract:
-//   Given a Tenant with 2 projects each having a production env
-//   when TenantController.reconcileArgoCDApp runs
-//   then the AppProject spec.destinations contains both M2 namespaces
-//        (loopzero-tn-X-A-production AND loopzero-tn-X-B-production), never the
-//        M1 2-seg form.
+//
+//	Given a Tenant with 2 projects each having a production env
+//	when TenantController.reconcileArgoCDApp runs
+//	then the AppProject spec.destinations contains both M2 namespaces
+//	     (loopzero-tn-X-A-production AND loopzero-tn-X-B-production), never the
+//	     M1 2-seg form.
 func TestBuildAppProjectDestNamespaces(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -237,12 +238,16 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 			wantErr: "Project is required",
 		},
 		{
-			name: "empty ProjectID on preview — fail-loud per naming.Namespace contract",
+			name: "empty ProjectID on preview — fail-loud per EnvRef contract (ADR D2)",
 			envs: nil,
 			previews: []loopzerov1.PreviewEnvironment{
 				{Spec: loopzerov1.PreviewEnvironmentSpec{ProjectID: "", PRNumber: 9}},
 			},
-			wantErr: "project slug must not be empty",
+			// Preview namespace derivation migrated to pkg/domain.NewEnvRef (ADR D2);
+			// the EnvRef constructor rejects an empty project with "project empty".
+			// (Was "project slug must not be empty" — the stale pre-migration
+			// pkg/naming wording; the fail-loud invariant itself is unchanged.)
+			wantErr: "project empty",
 		},
 		{
 			name: "no envs no previews — empty destination list, no error",

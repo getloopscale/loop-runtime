@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/go-chi/chi/v5"
 )
 
 // T4.4 handler tests:
@@ -25,14 +25,14 @@ import (
 //   - JSON content-type + stable shape
 
 type fakeInspector struct {
-	inspect func(ctx context.Context, releaseID string) (*services.ReleaseInspection, error)
+	inspect func(ctx context.Context, releaseID string) (*release.ReleaseInspection, error)
 }
 
-func (f *fakeInspector) Inspect(ctx context.Context, releaseID string) (*services.ReleaseInspection, error) {
+func (f *fakeInspector) Inspect(ctx context.Context, releaseID string) (*release.ReleaseInspection, error) {
 	return f.inspect(ctx, releaseID)
 }
 
-func setupHandler(t *testing.T, inspector services.ReleaseInspector) http.Handler {
+func setupHandler(t *testing.T, inspector release.ReleaseInspector) http.Handler {
 	t.Helper()
 	r := chi.NewRouter()
 	r.Get("/api/v1/admin/releases/{id}/inspect", AdminReleaseInspectHandler(inspector))
@@ -42,14 +42,14 @@ func setupHandler(t *testing.T, inspector services.ReleaseInspector) http.Handle
 func TestAdminReleaseInspect_HappyPath(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
-	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*services.ReleaseInspection, error) {
-		return &services.ReleaseInspection{
+	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
+		return &release.ReleaseInspection{
 			ReleaseID:       "rel-001",
 			BuildID:         "bld-001",
 			TenantID:        "tn-acme",
 			SigningPath:     "keyless",
 			AttestationPath: "present",
-			AuditLogEntries: []services.ReleaseInspectionAuditRow{},
+			AuditLogEntries: []release.ReleaseInspectionAuditRow{},
 		}, nil
 	}}
 	srv := setupHandler(t, insp)
@@ -65,7 +65,7 @@ func TestAdminReleaseInspect_HappyPath(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-	var body services.ReleaseInspection
+	var body release.ReleaseInspection
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode body: %v\nraw=%s", err, rec.Body.String())
 	}
@@ -124,8 +124,8 @@ func TestAdminReleaseInspect_404_WhenAdminAPIDisabled(t *testing.T) {
 func TestAdminReleaseInspect_404_ForUnknownRelease(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
-	insp := &fakeInspector{inspect: func(_ context.Context, id string) (*services.ReleaseInspection, error) {
-		return nil, services.ErrReleaseInspectionNotFound{ReleaseID: id}
+	insp := &fakeInspector{inspect: func(_ context.Context, id string) (*release.ReleaseInspection, error) {
+		return nil, release.ErrReleaseInspectionNotFound{ReleaseID: id}
 	}}
 	srv := setupHandler(t, insp)
 
@@ -149,15 +149,15 @@ func TestAdminReleaseInspect_Returns_AttestationChain(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
 	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
-	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*services.ReleaseInspection, error) {
-		return &services.ReleaseInspection{
+	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
+		return &release.ReleaseInspection{
 			ReleaseID:                "rel-001",
 			BuildID:                  "bld-001",
 			TenantID:                 "tn-acme",
 			SigningPath:              "keyless",
 			AttestationPath:          "present",
 			ImageAttestationRekorURL: &rekorURL,
-			AuditLogEntries:          []services.ReleaseInspectionAuditRow{},
+			AuditLogEntries:          []release.ReleaseInspectionAuditRow{},
 		}, nil
 	}}
 	srv := setupHandler(t, insp)

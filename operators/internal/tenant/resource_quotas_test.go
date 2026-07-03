@@ -51,7 +51,7 @@ func expectResourceQuotaField(quotaName, namespace string, key corev1.ResourceNa
 // value. Phase 3 helper: collapses 4 near-identical It() blocks per limit
 // type into table-driven entries (default-CPU/default-mem/request-CPU/request-mem).
 func expectLimitRangeField(tenantName string, fieldGetter func(corev1.LimitRangeItem) string, want string) {
-	ns := fmt.Sprintf("loopzero-%s-production", tenantName)
+	ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
 	Eventually(func(g Gomega) {
 		var lr corev1.LimitRange
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -159,15 +159,15 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should create a ResourceQuota named tenant-quota in the runtime namespace", func() {
-			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName))
+			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
 		})
 
 		It("should reflect spec.limits.maxCPU in requests.cpu of tenant-quota", func() {
-			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName), corev1.ResourceRequestsCPU, "8")
+			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName), corev1.ResourceRequestsCPU, "8")
 		})
 
 		It("should reflect spec.limits.maxMemory in requests.memory of tenant-quota", func() {
-			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName), corev1.ResourceRequestsMemory, "16Gi")
+			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName), corev1.ResourceRequestsMemory, "16Gi")
 		})
 
 		AfterAll(func() {
@@ -196,7 +196,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should create a LimitRange named tenant-limits in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
+			ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var lr corev1.LimitRange
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -206,7 +206,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should set Container type in tenant-limits LimitRange", func() {
-			expectLimitRangeContainerType("tenant-limits", fmt.Sprintf("loopzero-%s-production", tenantName))
+			expectLimitRangeContainerType("tenant-limits", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
 		})
 
 		It("should set default CPU limit=500m in tenant-limits", func() {
@@ -242,11 +242,11 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Wait for quota to exist before deleting it.
-			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName))
+			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
 		})
 
 		It("should recreate tenant-quota after it is manually deleted", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
+			ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
 
 			// Simulate infrastructure drift: manually delete the ResourceQuota.
 			var quota corev1.ResourceQuota
@@ -274,7 +274,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should restore the correct CPU and memory values after drift correction", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
+			ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var restored corev1.ResourceQuota
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{

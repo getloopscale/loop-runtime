@@ -82,6 +82,31 @@ SET status = $1,
 WHERE id = $2 AND tenant_id = $3
 RETURNING *;
 
+-- name: UpdateBuildStatusToRunningIfCurrent :one
+-- CAS variant of UpdateBuildStatusToRunning (M9 5b, ADR 2026-07-03-m9-5b-nil-tx-status-atomicity).
+-- Lock-free atomic QUEUED->RUNNING: applies ONLY if the row is still in the
+-- expected `from` status ($4), closing the read-then-write window without a tx
+-- or advisory lock. 0 rows => a concurrent lock-holder already advanced the
+-- build => caller treats it as a superseded no-op. Tenant predicate preserved
+-- (defense-in-depth; caller supplies req.TenantID).
+UPDATE builds
+SET status = $1,
+    started_at = NOW()
+WHERE id = $2 AND tenant_id = $3 AND status = $4
+RETURNING *;
+
+-- name: UpdateBuildStatusToTerminalIfCurrent :one
+-- CAS variant of UpdateBuildStatusToTerminal (M9 5b). Lock-free atomic
+-- transition to a terminal phase, applied ONLY if the row is still in the
+-- expected `from` status ($4). COALESCE handles NULL started_at (duration=0).
+-- 0 rows => superseded no-op.
+UPDATE builds
+SET status = $1,
+    finished_at = NOW(),
+    duration_seconds = COALESCE(EXTRACT(EPOCH FROM (NOW() - started_at))::int, 0)
+WHERE id = $2 AND tenant_id = $3 AND status = $4
+RETURNING *;
+
 -- name: UpdateBuildStatusOther :one
 -- Generic status update for non-timing-marker transitions (RELEASING,
 -- CANCELLING). Tenant predicate preserved.

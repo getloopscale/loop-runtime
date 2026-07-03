@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	forge "github.com/getloopscale/loopzero-forge"
 )
 
 // Sprint 6 / T1.1 — SBOM scan template tests.
@@ -274,15 +274,15 @@ func TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans(t *testing.T) {
 }
 
 func TestWorkflowBuilder_StaticAppHasNoSBOMStep(t *testing.T) {
-	spec := services.WorkflowSpec{
+	spec := deploycontracts.WorkflowSpec{
 		BuildID:       "build-static",
 		TenantID:      "tn-1",
 		ProjectID:     "proj-1",
 		Environment:   "production",
 		CommitSHA:     "abc1234",
 		CorrelationID: "corr-static",
-		Plan: &services.BuildPlan{
-			Apps: []services.AppBuildPlan{
+		Plan: &deploycontracts.BuildPlan{
+			Apps: []deploycontracts.AppBuildPlan{
 				{
 					AppName:          "site",
 					AppType:          "static",

@@ -29,10 +29,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // BillingRow is the minimal interface to read scalar values from a query.
@@ -51,7 +51,7 @@ type BillingPool interface {
 // PortalSessionCreator is the port that BillingHandler.Portal depends
 // on for minting Stripe Customer Portal session URLs. T2.7 of
 // maturity-3-62-to-4-0-roadmap planpkg. Production wiring uses
-// services.StripePortalSessionCreator (real SDK call). When the field
+// billing.StripePortalSessionCreator (real SDK call). When the field
 // is nil, the handler falls back to the legacy placeholder URL — this
 // preserves back-compat for local dev + test environments without a
 // Stripe key configured.

@@ -28,7 +28,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/app"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
@@ -82,8 +82,8 @@ func main() {
 	// via NewContextLogger(baseLogger, spanExtractorFn) and call FromContext
 	// at each reconcile boundary.
 
-	if shared.PprofEnabled() {
-		shared.StartPprofServer()
+	if reconcilehelpers.PprofEnabled() {
+		reconcilehelpers.StartPprofServer()
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -127,11 +127,11 @@ func main() {
 	// observed via task doctor. Pre-flip, the warning + loopzero_app_operator_
 	// cell_factory_disabled_total counter (T1.5/find_arch_007 wired) provides
 	// observability of the degraded mode.
-	var appFactory shared.RuntimeClientFactory
+	var appFactory reconcilehelpers.RuntimeClientFactory
 	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG") == "true"
 	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
 	if runtimeKubeconfig != "" {
-		runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+		runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
 		if err != nil {
 			if requireKubeconfig {
 				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true — refusing to start")
@@ -139,7 +139,7 @@ func main() {
 			}
 			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled (degraded)")
 		} else {
-			appFactory = shared.NewCellAwareRuntimeClientFactory(
+			appFactory = reconcilehelpers.NewCellAwareRuntimeClientFactory(
 				mgr.GetClient(), runtimeClient, "loopzero-system")
 			setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
 		}

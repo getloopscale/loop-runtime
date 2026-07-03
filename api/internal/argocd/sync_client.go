@@ -46,7 +46,7 @@ type SyncClientConfig struct {
 // operations under concurrent load while still bounding circuit-breaker probes.
 const DefaultArgocdClientTimeout = 90 * time.Second
 
-// SyncClient implements services.SyncClient using the ArgoCD REST API.
+// SyncClient implements shared.SyncClient using the ArgoCD REST API.
 // Token is obtained from TokenProvider on each request, enabling zero-downtime rotation.
 // MEET-2026-03-28-015: replaced static token string with TokenProvider interface.
 //

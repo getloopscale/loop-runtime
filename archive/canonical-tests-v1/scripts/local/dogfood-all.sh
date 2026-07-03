@@ -102,6 +102,8 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-preview.sh"           # J-23
   "archive/canonical-tests-v1/scripts/local/dogfood-live-url.sh"          # J-25
   "archive/canonical-tests-v1/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
+  "archive/canonical-tests-v1/scripts/local/dogfood-register.sh"          # J-02 (M0 — provisioning snapshot + completing screen)
+  "archive/canonical-tests-v1/scripts/local/dogfood-verification.sh"      # J-03 (M0 — resend cooldown + PinInput)
   "archive/canonical-tests-v1/scripts/local/dogfood-seed-post-cleanroom-tenant-cr.sh"  # Red Team #118 (2026-06-29)
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh"                  # Red Team #120 P0 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh"  # Red Team #121 (2026-06-30)
@@ -144,8 +146,6 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-engine-project-cap-rls-independent.sh"         # Red Team #111 (2026-06-30, latent-risk)
   "archive/canonical-tests-v1/scripts/local/dogfood-engine-redeploy-empty-source-message.sh"       # Red Team #126 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
-  #   J-02 dogfood-register.sh
-  #   J-03 dogfood-verification.sh
   #   J-06 dogfood-overview.sh
   #   J-12 dogfood-team-rbac.sh
   #   J-13 dogfood-billing.sh

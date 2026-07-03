@@ -12,7 +12,7 @@
 //   - TestSetupSecretStore_NonNilTransitWiresVaultDispatch (T2.5 happy path)
 //   - TestSetupSecretStore_BadAESKeyReturnsError (existing contract preserved)
 //
-// The store-internal dispatcher (encryptForStore/decryptFromStore prefix
+// The got-internal dispatcher (encryptForStore/decryptFromStore prefix
 // detection) is exercised by api/internal/db/secret_wrapper_test.go;
 // this file focuses on the boot-time wire decision: which constructor
 // did we reach?
@@ -23,7 +23,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 // compile-time guarantee: fakeTransit satisfies the same vault.Transit
@@ -33,7 +33,7 @@ import (
 var _ context.Context // keep imports honest if future tests add ctx use
 
 // fakeTransit is a minimal vault.Transit double that records every call
-// so the wire-up assertions can prove the store actually held a reference
+// so the wire-up assertions can prove the got actually held a reference
 // to the same client adapter we passed in.
 type fakeTransit struct {
 	encryptCalls int
@@ -58,24 +58,24 @@ func (f *fakeTransit) Decrypt(ctx context.Context, tenantID string, ciphertext s
 func TestSetupSecretStore_NilTransitFallsBackToLegacyAES(t *testing.T) {
 	// 32-byte hex key for AES-256-GCM (legacy path).
 	const key = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-	store, err := setupSecretStore(nil, key, nil, newTestLogger())
+	got, err := setupSecretStore(nil, key, nil, newTestLogger())
 	if err != nil {
 		t.Fatalf("setupSecretStore: %v", err)
 	}
-	if store == nil {
-		t.Fatalf("setupSecretStore: want non-nil store, got nil")
+	if got == nil {
+		t.Fatalf("setupSecretStore: want non-nil got, got nil")
 	}
-	// Type assert: legacy path returns *db.PostgresSecretStore with
+	// Type assert: legacy path returns *store.PostgresSecretStore with
 	// vault field == nil. Cannot inspect the vault field directly
 	// (unexported), but we can use the type identity as proxy.
-	if _, ok := store.(*db.PostgresSecretStore); !ok {
-		t.Fatalf("setupSecretStore: want *db.PostgresSecretStore, got %T", store)
+	if _, ok := got.(*store.PostgresSecretStore); !ok {
+		t.Fatalf("setupSecretStore: want *store.PostgresSecretStore, got %T", got)
 	}
 }
 
 // TestSetupSecretStore_NonNilTransitWiresVaultDispatch — T2.5 happy
 // path: when transit is non-nil, NewPostgresSecretStoreWithVault is
-// reached. Verified by exercising Set against the returned store; the
+// reached. Verified by exercising Set against the returned got; the
 // fake transit's encryptCalls counter MUST increment, proving the wire
 // path goes Set → encryptForStore → s.vault.EncryptForTenant → fake.
 func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
@@ -83,15 +83,15 @@ func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
 	// unwired but readable (decryptFromStore prefix detection still
 	// dispatches when older rows surface).
 	fake := &fakeTransit{}
-	store, err := setupSecretStore(nil, "", fake, newTestLogger())
+	got, err := setupSecretStore(nil, "", fake, newTestLogger())
 	if err != nil {
 		t.Fatalf("setupSecretStore: %v", err)
 	}
-	if store == nil {
-		t.Fatalf("setupSecretStore: want non-nil store, got nil")
+	if got == nil {
+		t.Fatalf("setupSecretStore: want non-nil got, got nil")
 	}
 	// The wire-up itself is observable via the constructor return
-	// type — vault path returns *db.PostgresSecretStore with
+	// type — vault path returns *store.PostgresSecretStore with
 	// s.vault wired. To assert dispatch actually flows through the
 	// fake transit, we would need a live DBTX to call store.Set;
 	// that is covered in the integration tests
@@ -101,8 +101,8 @@ func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
 	// raising an error here is acceptable (no DB) AND by the
 	// constructor not returning an error (which would happen if the
 	// adapter was nil).
-	if _, ok := store.(*db.PostgresSecretStore); !ok {
-		t.Fatalf("setupSecretStore: want *db.PostgresSecretStore, got %T", store)
+	if _, ok := got.(*store.PostgresSecretStore); !ok {
+		t.Fatalf("setupSecretStore: want *store.PostgresSecretStore, got %T", got)
 	}
 }
 
@@ -111,11 +111,11 @@ func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
 // any vault wiring. Defense against silent fallback to no-encryption.
 func TestSetupSecretStore_BadAESKeyReturnsError(t *testing.T) {
 	const badKey = "not-hex-zzzzz"
-	store, err := setupSecretStore(nil, badKey, nil, newTestLogger())
+	got, err := setupSecretStore(nil, badKey, nil, newTestLogger())
 	if err == nil {
 		t.Fatalf("setupSecretStore: want hex decode error for %q, got nil", badKey)
 	}
-	if store != nil {
-		t.Fatalf("setupSecretStore: want nil store on error, got %T", store)
+	if got != nil {
+		t.Fatalf("setupSecretStore: want nil got on error, got %T", got)
 	}
 }

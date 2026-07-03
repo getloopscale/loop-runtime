@@ -25,7 +25,7 @@ import (
 // The handler is the security boundary. Client UI (dashboard) mirrors the
 // gates for UX but a Free user bypassing the dashboard via raw API MUST
 // land in the same rejection codes here. The `apply` closure (set by
-// api/cmd/setup_orchestrator.go) wraps `db.PostgresScalingStore.Upsert`
+// api/cmd/setup_orchestrator.go) wraps `store.PostgresScalingStore.Upsert`
 // inside withEnvironmentLock — concurrent scale calls on the same
 // (tenant, project, env) tuple serialize via pg_advisory_xact_lock per
 // CLAUDE.md Concurrency Model + EC-5 absorption.
@@ -44,7 +44,7 @@ type ScaleProjectStore interface {
 	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
 }
 
-// ScaleConfigInput is the routes-local mirror of db.ScalingConfig fields the
+// ScaleConfigInput is the routes-local mirror of store.ScalingConfig fields the
 // handler emits. Defined here to avoid circular import (db package already
 // imports routes for attestation_store wiring; routes cannot import db back).
 type ScaleConfigInput struct {
@@ -62,11 +62,11 @@ type ScaleConfigInput struct {
 
 // ScaleApplyFunc upserts the scaling config, returning (changed, error).
 // Bootstrap (api/cmd/setup_orchestrator.go) provides the closure that converts
-// ScaleConfigInput to db.ScalingConfig and calls db.PostgresScalingStore.Upsert
+// ScaleConfigInput to store.ScalingConfig and calls store.PostgresScalingStore.Upsert
 // inside withEnvironmentLock (EC-5 lock semantics).
 type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed bool, err error)
 
-// ScaleReplicasChecker mirrors services.PlanCapChecker (cross-package
+// ScaleReplicasChecker mirrors build.PlanCapChecker (cross-package
 // to avoid importing services here). Returns (allowed, planName, cap)
 // for the given tenant + requested replica count.
 //

@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
@@ -42,12 +43,12 @@ import (
 
 // TestPostgresProjectStoreImplementsInterface — compile-time guard.
 func TestPostgresProjectStoreImplementsInterface(t *testing.T) {
-	var _ routes.ProjectStore = (*db.PostgresProjectStore)(nil)
+	var _ routes.ProjectStore = (*store.PostgresProjectStore)(nil)
 }
 
 func TestGenerateProjectID(t *testing.T) {
 	t.Run("ID has proj- prefix and 8 hex chars", func(t *testing.T) {
-		id := db.GenerateProjectID()
+		id := store.GenerateProjectID()
 		if !strings.HasPrefix(id, "proj-") {
 			t.Errorf("expected proj- prefix, got %q", id)
 		}
@@ -65,7 +66,7 @@ func TestGenerateProjectID(t *testing.T) {
 	t.Run("IDs are unique", func(t *testing.T) {
 		seen := make(map[string]bool)
 		for range 100 {
-			id := db.GenerateProjectID()
+			id := store.GenerateProjectID()
 			if seen[id] {
 				t.Fatalf("duplicate ID generated: %s", id)
 			}

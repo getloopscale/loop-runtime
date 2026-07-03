@@ -10,6 +10,7 @@ digraph Environment {
 	"Pending" [shape=circle];
 
 	"" -> "Pending" [label="Create"];
+	"" -> "Deleting" [label="DeleteRequested"];
 	"Active" -> "Deleting" [label="DeleteRequested"];
 	"Failed" -> "Deleting" [label="DeleteRequested"];
 	"Failed" -> "Pending" [label="Retry"];

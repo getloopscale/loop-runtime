@@ -9,17 +9,26 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
+	"github.com/getloopscale/loopzero/api/internal/services/scaling"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/loki"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // planLimiterCapAdapter bridges *enforcement.PlanLimiter to the
-// services.PlanCapChecker interface required by BuildOrchestrator (B15).
+// build.PlanCapChecker interface required by BuildOrchestrator (B15).
 // Keeps the orchestrator package free of pkg/enforcement imports (DIP).
 type planLimiterCapAdapter struct {
 	limiter *enforcement.PlanLimiter
@@ -34,7 +43,7 @@ func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested in
 }
 
 // CheckProjectsValue resolves the per-Account project cap (M4). Mirrors
-// CheckReplicasValue; satisfies db.ProjectCapChecker so the project-creation
+// CheckReplicasValue; satisfies store.ProjectCapChecker so the project-creation
 // store can enforce the cap atomically. Returns (allowed, plan, cap) where
 // cap < 0 = unlimited.
 func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
@@ -51,7 +60,7 @@ func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int)
 // MUST go through here so they can never diverge again: the divergence (one store
 // capped, one not) was the exact root cause of #106. A nil checker leaves the
 // store unenforced (dev without a pool).
-func wireProjectCap(store *db.PostgresProjectStore, checker db.ProjectCapChecker) {
+func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapChecker) {
 	if store == nil || checker == nil {
 		return
 	}
@@ -60,18 +69,18 @@ func wireProjectCap(store *db.PostgresProjectStore, checker db.ProjectCapChecker
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
-	Orchestrator      *services.BuildOrchestrator
-	BuildOrchestrator routes.BuildOrchestratorService
+	Orchestrator        *build.BuildOrchestrator
+	BuildOrchestrator   routes.BuildOrchestratorService
 	LogsHandler         *routes.LogsHandler
 	LogStreamHandler    *routes.LogStreamHandler
-	RollbackHandler   *routes.RollbackHandler
-	PromoteHandler    *routes.PromoteHandler
+	RollbackHandler     *routes.RollbackHandler
+	PromoteHandler      *routes.PromoteHandler
 	StatusHandler       *routes.StatusHandler
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *routes.ScaleHandler
-	BuildListHandler  *routes.BuildListHandler
-	ProjectDeleter    routes.ProjectDeleter
+	BuildListHandler    *routes.BuildListHandler
+	ProjectDeleter      routes.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 }
 
@@ -89,7 +98,7 @@ func setupOrchestrator(
 	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): wire plan-cap enforcement.
 	// A nil limiter is legal — means the DB was unavailable (dev without pool)
 	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
-	var planCap services.PlanCapChecker
+	var planCap build.PlanCapChecker
 	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
 	// store, which historically had NO cap checker — so the deploy-time
 	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
@@ -98,7 +107,7 @@ func setupOrchestrator(
 	// through, so they can never diverge again — that divergence was the #106 root
 	// cause). The adapter doubles as the scaling PlanCap. nil limiter (dev without
 	// pool) leaves the store unenforced — no behavior change.
-	buildProjectStore := &db.PostgresProjectStore{DB: dbAdapter}
+	buildProjectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	if planLimiter != nil {
 		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
 		planCap = capAdapter
@@ -109,10 +118,10 @@ func setupOrchestrator(
 	// because the orchestrator depends on it via Deps.ScalingResolver. The
 	// `scaleApply` closure below reuses the same scalingStore (single source
 	// of truth for app_scaling_config IO).
-	scalingStore := db.NewPostgresScalingStore(dbAdapter)
-	scalingResolver := services.NewDBScalingResolver(scalingStore)
+	scalingStore := store.NewPostgresScalingStore(dbAdapter)
+	scalingResolver := scaling.NewDBScalingResolver(scalingStore)
 
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
 		EnvTargetStore:    stores.EnvTargetStore,
@@ -130,13 +139,13 @@ func setupOrchestrator(
 		ScalingResolver:   scalingResolver, // B40
 		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
 		// T1.3b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
-		// satisfies db.AppAttestationStore 1:1 — preserves ALL-signed
+		// satisfies store.AppAttestationStore 1:1 — preserves ALL-signed
 		// atomicity invariant + F-S2-01 FK race closure (SaveAppAttestations
 		// Tx requires non-nil tx for atomic release+attestation commit).
-		AppAttestationStore: db.NewAppAttestationStoreSqlc(dbAdapter),
+		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
-		AuditLogger: &db.AuditLogger{DB: dbAdapter},
+		AuditLogger: &store.AuditLogger{DB: dbAdapter},
 		// Plan deploy-timeline-canonical-5-phases T5.1 — per-deploy
 		// 5-phase aggregator spawn hook. Wired to a release_db-only
 		// minimal source set as the canonical v1 — the other 4 source
@@ -171,7 +180,7 @@ func setupOrchestrator(
 	// release-state flip happens ONLY after sync confirmation, never on
 	// trigger-and-hope. Default 120s suffices for single-app loopzerokit;
 	// production-grade monorepo deploys inherit cfg.ArgocdSyncTimeout.
-	rollbackOrch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+	rollbackOrch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:          stores.ReleaseStore,
 		EnvTargets:        stores.EnvTargetStore,
 		GitReader:         workflows.GitOpsPusher,
@@ -182,12 +191,12 @@ func setupOrchestrator(
 		Logger:            logger,
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
-	projectStore := &db.PostgresProjectStore{DB: dbAdapter}
+	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
 		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
-	promotionOrch := services.NewPromotionOrchestrator(services.PromotionOrchestratorDeps{
+	promotionOrch := release.NewPromotionOrchestrator(release.PromotionOrchestratorDeps{
 		Releases:   stores.ReleaseStore,
 		EnvTargets: stores.EnvTargetStore,
 		GitReader:  workflows.GitOpsPusher,
@@ -230,7 +239,7 @@ func setupOrchestrator(
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
-	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
+	// The closure adapts routes.ScaleConfigInput ↔ store.ScalingConfig (avoids circular import).
 	// scalingStore declared above (before BuildOrchestrator) — single instance
 	// shared by scaleApply (write path) and ScalingResolver (read path).
 	// T7.1 of deep-review-remediation-plan (closes find_data_003 HIGH).
@@ -243,7 +252,7 @@ func setupOrchestrator(
 	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
-			c := &db.ScalingConfig{
+			c := &store.ScalingConfig{
 				TenantID:     in.TenantID,
 				ProjectID:    in.ProjectID,
 				Environment:  in.Environment,
@@ -287,11 +296,11 @@ func setupOrchestrator(
 
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
-	projectDeleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	projectDeleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
 		ReleaseStore:      stores.ReleaseStore,
-		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ProjectStore:      &store.PostgresProjectStore{DB: dbAdapter},
 		ScalingStore:      scalingStore,
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,
@@ -306,7 +315,7 @@ func setupOrchestrator(
 	// status.go uses — so deploy.completed SSE URL matches `loopzero status`.
 	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
 	// behavior for envs without a public override).
-	syncCallbackActivator := services.NewSyncCallbackActivator(
+	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	)
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
@@ -320,7 +329,7 @@ func setupOrchestrator(
 	// re-render with the new label.
 	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
-			services.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+			release.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)
 		logger.Info("sync callback activator: label-based lookup wired (code-005 closure)")
 	} else {

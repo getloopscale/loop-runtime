@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LoopZero Bottleneck Simulator</title>
+<link rel="icon" href="data:,"/>
+<!--
+  Interactive simulator for LoopZero's AWS-first target. Finds capacity/latency/chaos
+  bottlenecks. Engine = loopzero-capsim.mjs (pure, unit-tested: `node --test loopzero-capsim.test.mjs`).
+  ES-module import needs http (browsers block module imports over file://):
+      cd docs/operations && python3 -m http.server 8080
+      open http://localhost:8080/loopzero-bottleneck-simulator.html
+-->
+<style>
+  :root{--bg:#0f1419;--panel:#171d26;--panel2:#1e2630;--line:#2b3543;--fg:#e6edf3;--mut:#8b98a9;
+        --blue:#4c9aff;--green:#3fb950;--red:#f85149;--amber:#d29922;--purple:#a371f7;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:baseline;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:16px;margin:0}
+  header .sub{color:var(--mut);font-size:12px}
+  .wrap{display:grid;grid-template-columns:270px 1fr 340px;height:calc(100vh - 52px)}
+  .col{overflow:auto;padding:14px}
+  .controls{border-right:1px solid var(--line);background:var(--panel)}
+  .stage{background:#0c1116}
+  .side{border-left:1px solid var(--line);background:var(--panel)}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:16px 0 8px}
+  h2:first-child{margin-top:0}
+  label{display:block;margin:10px 0 3px;font-size:12px}
+  label .v{float:right;color:var(--blue);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--blue)}
+  .chk{display:flex;align-items:center;gap:8px;margin:9px 0;cursor:pointer}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 12px;cursor:pointer;width:100%;font-size:13px;margin-top:6px}
+  button.on{background:var(--red);border-color:var(--red);color:#fff}
+  button:hover{border-color:var(--blue)}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+  .kpi .n{font-size:19px;font-weight:700;font-family:ui-monospace,monospace}
+  .kpi .l{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em}
+  /* topology */
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 20px}
+  .box{background:var(--panel);border:1.5px solid var(--line);border-radius:9px;padding:8px 10px;min-width:78px;text-align:center;position:relative}
+  .box .em{font-size:17px}.box .t{font-size:11px;font-weight:600}.box .m{font-size:10px;color:var(--mut)}
+  .box.hot{border-color:var(--red);box-shadow:0 0 0 2px #f8514944}
+  .box.warm{border-color:var(--amber)}
+  .box.dead{opacity:.3;border-style:dashed}
+  .arr{color:var(--mut)}
+  .fan{display:flex;flex-direction:column;gap:5px}
+  /* bottleneck rows */
+  .brow{padding:8px 0;border-top:1px solid #202834}
+  .brow:first-child{border-top:0}
+  .brow .top{display:flex;justify-content:space-between;font-size:12px}
+  .brow .lb{font-weight:600}
+  .brow .rho{font-family:ui-monospace,monospace}
+  .bar{height:7px;border-radius:5px;background:#202834;margin:5px 0 3px;overflow:hidden}
+  .bar > i{display:block;height:100%;border-radius:5px}
+  .brow .meta{font-size:10.5px;color:var(--mut)}
+  .callout{background:#f851491a;border:1px solid #f8514955;border-radius:9px;padding:10px 12px;margin-bottom:12px}
+  .callout.ok{background:#3fb9501a;border-color:#3fb95055}
+  .callout b{font-size:13px}
+  .note{color:var(--mut);font-size:11px}
+  table.postures{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+  table.postures th,table.postures td{text-align:left;padding:6px 8px;border-bottom:1px solid #202834}
+  table.postures th{color:var(--mut);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+  table.postures td.num{text-align:right;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏗️ LoopZero Bottleneck Simulator</h1>
+  <span class="sub">AWS-first target · acha o gargalo de capacidade/latência/caos · motor testado (<code>node --test</code>)</span>
+</header>
+
+<div class="wrap">
+  <!-- controls -->
+  <div class="col controls">
+    <h2>Carga</h2>
+    <label>Tenants <span class="v" id="vTenants"></span></label>
+    <input type="range" id="tenants" min="1000" max="120000" step="1000">
+    <label>% ativos (pod rodando) <span class="v" id="vActive"></span></label>
+    <input type="range" id="active" min="1" max="100" step="1">
+    <label>RPS control-plane / tenant <span class="v" id="vPlat"></span></label>
+    <input type="range" id="plat" min="1" max="50" step="1">
+    <label>RPS agente / tenant ativo <span class="v" id="vAgent"></span></label>
+    <input type="range" id="agent" min="0" max="100" step="1">
+
+    <h2>Topologia</h2>
+    <label class="chk"><input type="checkbox" id="prefix"> Prefix delegation (VPC-CNI)</label>
+    <label>maxPerCell (tenants/cluster) <span class="v" id="vMpc"></span></label>
+    <input type="range" id="mpc" min="100" max="2000" step="50">
+    <label>Teto operacional de clusters <span class="v" id="vCeil"></span></label>
+    <input type="range" id="ceil" min="16" max="200" step="4">
+    <label>BFF réplicas <span class="v" id="vBff"></span></label>
+    <input type="range" id="bff" min="2" max="40" step="1">
+    <label>Engine API réplicas <span class="v" id="vEng"></span></label>
+    <input type="range" id="eng" min="2" max="40" step="1">
+    <label>AZs <span class="v" id="vZones"></span></label>
+    <input type="range" id="zones" min="2" max="4" step="1">
+    <label>Regiões AWS <span class="v" id="vRegions"></span></label>
+    <input type="range" id="regions" min="1" max="5" step="1">
+    <label class="chk"><input type="checkbox" id="repl"> Replicação cross-region (active-active)</label>
+
+    <h2>🔥 Chaos</h2>
+    <button id="btnAZ">Derrubar 1 AZ</button>
+    <button id="btnCell" style="margin-top:6px">Derrubar 1 célula</button>
+    <button id="btnRegion" style="margin-top:6px">Derrubar 1 região</button>
+    <button id="btnReset" style="margin-top:10px">↺ Reset defaults</button>
+  </div>
+
+  <!-- stage -->
+  <div class="col stage">
+    <div class="kpis" id="kpis"></div>
+    <h2>Topologia (target AWS) — o nó em vermelho é o gargalo</h2>
+    <div class="flow" id="flow"></div>
+    <div class="note">Modelo analítico (filas M/M/c + packing). Constantes fundamentadas em
+      <code>renderer.go:161</code>, <code>engine.go:91</code> e defaults AWS documentados. RDS
+      <code>max_connections</code> é <b>computado</b> por classe (fórmula AWS). É estimativa de
+      planejamento, não medição de produção.<br>
+      <b>Calibração:</b> <code>muRps</code>/<code>holdSec</code>/<code>regionalOutageAvail</code> são
+      inputs estimados — meça com load test + RDS Performance Insights e ajuste os sliders
+      (ver <code>loopzero-bottleneck-simulator-m1-plan.md § Calibration</code>).</div>
+    <h2 style="margin-top:20px">Trade-off de região — custo × resiliência</h2>
+    <table class="postures" id="postures"></table>
+    <div class="note">Custo = capacidade autoritativa do motor (cells = ⌈tenants/maxPerCell⌉)
+      × preços Vantage RI (guard de consistência com <code>aws-cost-calculator.html</code>).</div>
+  </div>
+
+  <!-- bottleneck panel -->
+  <div class="col side">
+    <h2>Gargalos (utilização ρ)</h2>
+    <div id="callout"></div>
+    <div id="bottlenecks"></div>
+  </div>
+</div>
+
+<script type="module">
+import { scn, simulate, chaos, podsPerNode, cost, comparePostures, mgmtNodes } from './loopzero-capsim.mjs';
+
+const $ = s => document.querySelector(s);
+let over = {};          // scenario overrides from sliders
+let chaosMode = 'none'; // 'none' | 'az' | 'cell' | 'region'
+const rhoFmt = r => Number.isFinite(r) ? r.toFixed(2) : '∞';
+
+const CTRL = [
+  ['tenants','tenants','vTenants', v=>v.toLocaleString('pt-BR'), v=>({tenants:v})],
+  ['active','active','vActive', v=>v+'%', v=>({activeFraction:v/100})],
+  ['plat','platformRpsPerTenant','vPlat', v=>(v/100).toFixed(2)+' rps', v=>({platformRpsPerTenant:v/100})],
+  ['agent','agentRpsPerActiveTenant','vAgent', v=>(v/10).toFixed(1)+' rps', v=>({agentRpsPerActiveTenant:v/10})],
+  ['mpc','maxPerCell','vMpc', v=>v, v=>({maxPerCell:v})],
+  ['ceil','cellSoftCeiling','vCeil', v=>v, v=>({cellSoftCeiling:v})],
+  ['bff','bffReplicas','vBff', v=>v, v=>({bff:{replicas:v}})],
+  ['eng','engineReplicas','vEng', v=>v, v=>({engineApi:{replicas:v}})],
+  ['zones','zones','vZones', v=>v, v=>({zones:v})],
+  ['regions','regions','vRegions', v=>v, v=>({regions:v})],
+];
+// initial slider values from DEFAULTS
+const base = scn();
+function seed(){
+  $('#tenants').value=base.tenants; $('#active').value=Math.round(base.activeFraction*100);
+  $('#plat').value=Math.round(base.platformRpsPerTenant*100); $('#agent').value=Math.round(base.agentRpsPerActiveTenant*10);
+  $('#mpc').value=base.maxPerCell; $('#ceil').value=base.cellSoftCeiling; $('#bff').value=base.bff.replicas; $('#eng').value=base.engineApi.replicas;
+  $('#zones').value=base.zones; $('#prefix').checked=base.prefixDelegation;
+  $('#regions').value=base.regions; $('#repl').checked=base.crossRegionReplication;
+  over={};
+}
+function collect(){
+  over={};
+  for(const [el,,, ,mk] of CTRL){ const v=+$('#'+el).value; Object.assign(over, deepMerge(over, mk(v))); }
+  over.prefixDelegation = $('#prefix').checked;
+  over.crossRegionReplication = $('#repl').checked;
+}
+function deepMerge(a,b){ const o={...a}; for(const k in b){ o[k]=(b[k]&&typeof b[k]==='object')?{...(o[k]||{}),...b[k]}:b[k]; } return o; }
+
+const EMOJI={cloudfront:'📦',alb:'🛡️',bff:'🚪',engine_api:'🖥️',cell_count:'🔷',app_nodes:'🖥️',mgmt_nodes:'🎛️',memory_rds:'🗄️',rag_rds:'🗄️',promptly_rds:'🔑',cache_mem:'⚡'};
+const rhoColor=r=> r>=1?'var(--red)': r>=0.8?'var(--amber)':'var(--green)';
+const rhoClass=r=> r>=1?'hot': r>=0.8?'warm':'';
+
+function render(){
+  collect();
+  const s = scn(over);
+  const R = chaosMode==='az' ? chaos(s,{killAZ:true}) : chaosMode==='cell' ? chaos(s,{killCell:true}) : chaosMode==='region' ? chaos(s,{killRegion:true}) : simulate(s);
+  const p = podsPerNode(s);
+  const c = cost(s);
+  renderPostures(s);
+
+  // slider labels
+  for(const [el,,lab,fmt] of CTRL) $('#'+lab).textContent = fmt(+$('#'+el).value);
+
+  // KPIs
+  $('#kpis').innerHTML = [
+    ['💰 Custo/mês', '$'+Math.round(c.total).toLocaleString('en-US')],
+    ['Clusters EKS (cells)', R.cells],
+    ['Pods ativos', Math.round(R.activePods).toLocaleString('pt-BR')],
+    ['Pods / nó', p.ppn+' ('+p.binding+')'],
+    ['App nodes / total', R.appNodes+' / '+c.totalNodes],
+    ['Mgmt nodes (BFF+Eng+base)', (mn=>mn.nodes+' / '+s.mgmt.nodeSoftCeiling+(mn.floorBound?' (piso HA · packs '+mn.packed+')':' ('+mn.binding+'-bound)'))(mgmtNodes(s))],
+    ['SLA estimado', R.sla+'%'],
+  ].map(([l,n])=>`<div class="kpi"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+  // topology flow (bottleneck node hot)
+  const hot=R.bottleneck.id, warm=new Set(R.components.filter(c=>c.rho>=0.8&&c.rho<1).map(c=>c.id));
+  const bx=(id,em,t,m)=>`<div class="box ${id===hot?'hot':warm.has(id)?'warm':''}"><div class="em">${em}</div><div class="t">${t}</div><div class="m">${m}</div></div>`;
+  const arr='<span class="arr">→</span>';
+  $('#flow').innerHTML =
+    bx('client','👤','Client','') + arr +
+    bx('cloudfront','📦','CloudFront','') + arr +
+    bx('alb','🛡️','ALB+WAF','') + arr +
+    bx('bff','🚪','BFF', rhoStr('bff',R)) + arr +
+    bx('engine_api','🖥️','Engine API', rhoStr('engine_api',R)) + arr +
+    bx('cell_count','🔷',R.cells+' Cells', rhoStr('cell_count',R)) + arr +
+    `<div class="fan">${bx('memory_rds','🗄️','RDS mem',rhoStr('memory_rds',R))}${bx('promptly_rds','🔑','RDS prompt',rhoStr('promptly_rds',R))}${bx('rag_rds','🗄️','RDS rag',rhoStr('rag_rds',R))}${bx('cache_mem','⚡','Cache',rhoStr('cache_mem',R))}</div>`;
+
+  // callout
+  const b=R.bottleneck, over1=b.rho>=1;
+  const chaosLbl = chaosMode==='region'?'REGIÃO down':chaosMode==='az'?'1 AZ down':chaosMode==='cell'?'CÉLULA down ('+(R.cellTenants||0)+' tenants · survivors intactos)':'';
+  $('#callout').innerHTML = `<div class="callout ${over1?'':'ok'}">
+    <b>${over1?'🔴':'🟢'} Gargalo: ${b.label}</b><br>
+    ρ = <b>${rhoFmt(b.rho)}</b> ${over1?'(saturado)':'(folga)'} · ${b.id==='mgmt_nodes'?'<b>dirigido por replicas/plataforma</b> (não por tenants)':'satura em <b>'+satFmt(b.saturatesAtTenants)+'</b> tenants'}
+    ${chaosMode!=='none'?'<br>🔥 <b>'+chaosLbl+'</b> ('+Math.round(R.capLossPct*100)+'% capacidade perdida · SLA '+R.sla+'%)':''}
+    <div class="note" style="margin-top:5px">${b.note||''}</div></div>`;
+
+  // ranked rows
+  $('#bottlenecks').innerHTML = R.components.map(c=>{
+    const pct=Math.min(100,c.rho*100).toFixed(0);
+    return `<div class="brow">
+      <div class="top"><span class="lb">${EMOJI[c.id]||''} ${c.label}</span><span class="rho" style="color:${rhoColor(c.rho)}">ρ ${rhoFmt(c.rho)}</span></div>
+      <div class="bar"><i style="width:${pct}%;background:${rhoColor(c.rho)}"></i></div>
+      <div class="meta">${fmtUsed(c)} · ${c.id==='mgmt_nodes'?'dirigido por replicas/plataforma (não por tenants)':'satura @ '+satFmt(c.saturatesAtTenants)+' tenants'}</div>
+    </div>`;
+  }).join('');
+}
+function renderPostures(s){
+  const P=comparePostures(s,{regions: Math.max(2, s.regions>1?s.regions:3)});
+  const m=n=>'$'+Math.round(n).toLocaleString('en-US');
+  $('#postures').innerHTML='<tr><th>Posture</th><th>Custo/mês</th><th>Blast</th><th>SLA</th><th>Score</th><th>+resiliência</th></tr>'+
+    P.map(r=>`<tr><td>${r.posture}</td><td class="num">${m(r.costPerMonth)}</td><td class="num">${Math.round(r.regionBlastRadiusPct*100)}%</td><td class="num">${r.sla}%</td><td class="num">${r.reviewScore}</td><td class="num">${r.costOfResilienceVsSingle?('+'+m(r.costOfResilienceVsSingle)):'—'}</td></tr>`).join('');
+}
+function rhoStr(id,R){ const c=R.components.find(x=>x.id===id); return c?('ρ '+rhoFmt(c.rho)):''; }
+function fmtUsed(c){ const r=v=>Math.round(v).toLocaleString('pt-BR'); return `${r(c.used)} / ${r(c.capacity)} ${c.unit}`; }
+const satFmt=v=>Number.isFinite(v)?v.toLocaleString('pt-BR'):'∞';
+
+// wire
+document.querySelectorAll('input').forEach(el=>el.addEventListener('input',render));
+function setChaos(mode){ chaosMode = chaosMode===mode ? 'none' : mode;
+  $('#btnAZ').classList.toggle('on', chaosMode==='az');
+  $('#btnCell').classList.toggle('on', chaosMode==='cell');
+  $('#btnRegion').classList.toggle('on', chaosMode==='region'); render(); }
+$('#btnAZ').onclick=()=>setChaos('az');
+$('#btnCell').onclick=()=>setChaos('cell');
+$('#btnRegion').onclick=()=>setChaos('region');
+$('#btnReset').onclick=()=>{ seed(); chaosMode='none'; $('#btnAZ').classList.remove('on'); $('#btnCell').classList.remove('on'); $('#btnRegion').classList.remove('on'); render(); };
+
+seed(); render();
+</script>
+</body>
+</html>

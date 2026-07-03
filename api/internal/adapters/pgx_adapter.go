@@ -50,9 +50,10 @@ func (a *PgxTxDBTX) QueryRow(ctx context.Context, sql string, args ...any) db.Ro
 //
 // Fixes the LIVE panic surfaced in the 2026-05-29 cleanroom dogfood
 // run:
-//   "build_wrapper: DBTX *adapters.PgxTxDBTX does not implement
-//    SqlcBridge — sqlc-backed stores require PgxAdapter /
-//    PgxTxAdapter or pgxmock per T0.6 reshape matrix"
+//
+//	"build_wrapper: DBTX *adapters.PgxTxDBTX does not implement
+//	 SqlcBridge — sqlc-backed stores require PgxAdapter /
+//	 PgxTxAdapter or pgxmock per T0.6 reshape matrix"
 //
 // Root cause: PgxTxDBTX is the lock-side tx adapter (this package);
 // PgxTxAdapter is the placement-side tx adapter (api/internal/db).
@@ -93,12 +94,12 @@ func (r *pgxRowAdapter) Scan(dest ...any) error {
 	return nil
 }
 
-// PoolEnvironmentLocker implements services.EnvironmentLocker using a real pgxpool.Pool.
+// PoolEnvironmentLocker implements shared.EnvironmentLocker using a real pgxpool.Pool.
 // It acquires a transaction-scoped advisory lock (pg_advisory_xact_lock) and
 // adapts the pgx.Tx to db.DBTX before calling the provided function.
 //
 // WHY this adapter exists: lock.WithEnvironmentLock returns pgx.Tx, but
-// services.EnvironmentLocker expects db.DBTX. This adapter bridges that gap.
+// shared.EnvironmentLocker expects db.DBTX. This adapter bridges that gap.
 type PoolEnvironmentLocker struct {
 	Pool *pgxpool.Pool
 }

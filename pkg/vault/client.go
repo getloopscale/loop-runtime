@@ -47,18 +47,18 @@ func NewClient(cfg *Config) (*Client, error) {
 			Insecure:   cfgCopy.TLSInsecureSkipVerify,
 		}
 		if err := sdkCfg.ConfigureTLS(tlsCfg); err != nil {
-			return nil, fmt.Errorf("%w: configure TLS: %v", ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: configure TLS: %w", ErrInvalidConfig, err)
 		}
 	} else if cfgCopy.TLSInsecureSkipVerify {
 		tlsCfg := &openbao.TLSConfig{Insecure: true}
 		if err := sdkCfg.ConfigureTLS(tlsCfg); err != nil {
-			return nil, fmt.Errorf("%w: configure TLS insecure: %v", ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: configure TLS insecure: %w", ErrInvalidConfig, err)
 		}
 	}
 
 	sdk, err := openbao.NewClient(sdkCfg)
 	if err != nil {
-		return nil, fmt.Errorf("%w: SDK NewClient: %v", ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: SDK NewClient: %w", ErrInvalidConfig, err)
 	}
 
 	return &Client{
@@ -97,7 +97,7 @@ func (c *Client) SDK() *openbao.Client {
 func (c *Client) Login(ctx context.Context) error {
 	jwt, err := os.ReadFile(c.cfg.SAJWTPath)
 	if err != nil {
-		return fmt.Errorf("%w: read SA JWT %s: %v", ErrAuthFailed, c.cfg.SAJWTPath, err)
+		return fmt.Errorf("%w: read SA JWT %s: %w", ErrAuthFailed, c.cfg.SAJWTPath, err)
 	}
 	if len(jwt) == 0 {
 		// EC-3 — pod shutdown likely
@@ -141,11 +141,11 @@ func (c *Client) mapAuthErr(err error) error {
 	if errors.As(err, &respErr) {
 		switch respErr.StatusCode {
 		case 400, 401, 403:
-			return fmt.Errorf("%w: %v", ErrAuthFailed, err)
+			return fmt.Errorf("%w: %w", ErrAuthFailed, err)
 		default:
-			return fmt.Errorf("%w: %v", ErrVaultUnreachable, err)
+			return fmt.Errorf("%w: %w", ErrVaultUnreachable, err)
 		}
 	}
 	// Network errors / timeout
-	return fmt.Errorf("%w: %v", ErrVaultUnreachable, err)
+	return fmt.Errorf("%w: %w", ErrVaultUnreachable, err)
 }

@@ -20,10 +20,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
@@ -51,7 +52,7 @@ type pgxQuerier interface {
 }
 
 // tenantCellQuerier is the narrow surface inlineTenantBinding uses on
-// db.PostgresCellStore. Same DIP rationale as pgxQuerier above.
+// store.PostgresCellStore. Same DIP rationale as pgxQuerier above.
 type tenantCellQuerier interface {
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
@@ -163,7 +164,7 @@ var _ routes.TenantCellBindingLookup = (*inlineTenantBinding)(nil)
 // setupSecretFetchDeps composes the three runtime dependencies for the
 // broker handler. Returns nil when any prerequisite is missing so the
 // caller can skip route registration cleanly (LIVE 404 → ESO retries).
-func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *db.PostgresCellStore, auditLogger *db.AuditLogger) *routes.SecretFetchHandlerDeps {
+func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *store.PostgresCellStore, auditLogger *store.AuditLogger) *routes.SecretFetchHandlerDeps {
 	if pool == nil || transit == nil || cellStore == nil || auditLogger == nil {
 		return nil
 	}

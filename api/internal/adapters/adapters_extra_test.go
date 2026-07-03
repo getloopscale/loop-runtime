@@ -8,9 +8,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -19,12 +20,12 @@ import (
 // Quality-Gate Phase 2: Rollback method removed; test exercises the type
 // translation inline (RollbackOrchestrator is concrete, not interface).
 type fakeRollbackOrchestrator struct {
-	result *services.RollbackResult
+	result *release.RollbackResult
 }
 
 func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 	orch := &fakeRollbackOrchestrator{
-		result: &services.RollbackResult{
+		result: &release.RollbackResult{
 			ReactivatedRelease: &db.Release{ID: "rel-old"},
 			RolledBackRelease:  &db.Release{ID: "rel-new"},
 			Environment:        "production",
@@ -33,7 +34,7 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 	}
 
 	// Cannot use &fakeRollbackOrchestrator directly because RollbackServiceAdapter
-	// expects *services.RollbackOrchestrator. Instead, test the type conversion logic inline.
+	// expects *release.RollbackOrchestrator. Instead, test the type conversion logic inline.
 	adapter := &RollbackServiceAdapter{
 		Orchestrator: nil, // we test the mapping logic separately
 	}
@@ -56,7 +57,6 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 		t.Errorf("expected URL, got %s", output.URL)
 	}
 }
-
 
 // --- BuildOrchestratorAdapter additional tests ---
 

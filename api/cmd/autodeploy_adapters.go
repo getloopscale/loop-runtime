@@ -8,10 +8,17 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/preview"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // buildLookupAdapter bridges db.BuildStore → github.BuildLookup.
@@ -27,9 +34,9 @@ func (a *buildLookupAdapter) GetCommitSHA(ctx context.Context, buildID string) (
 	return build.CommitSHA, nil
 }
 
-// repoLookupAdapter bridges db.PostgresRepositoryStore → github.RepositoryLookup.
+// repoLookupAdapter bridges store.PostgresRepositoryStore → github.RepositoryLookup.
 type repoLookupAdapter struct {
-	store *db.PostgresRepositoryStore
+	store *store.PostgresRepositoryStore
 }
 
 func (a *repoLookupAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (string, int64, error) {
@@ -40,9 +47,9 @@ func (a *repoLookupAdapter) GetByProject(ctx context.Context, tenantID, projectN
 	return r.RepoFullName, r.InstallationID, nil
 }
 
-// buildSubmitterAdapter bridges github.BuildSubmitter → services.BuildOrchestrator.
+// buildSubmitterAdapter bridges github.BuildSubmitter → build.BuildOrchestrator.
 type buildSubmitterAdapter struct {
-	orchestrator *services.BuildOrchestrator
+	orchestrator *build.BuildOrchestrator
 	logger       *slog.Logger
 }
 
@@ -58,9 +65,9 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 	// only to this path — preview path silently kept losing it, so PR
 	// previews failed at generate-dockerfile time while push deploys
 	// succeeded against the same loopzero.yaml. Single source of truth now
-	// lives in services.ConvertLoopZeroYamlApps (with hermetic regression
+	// lives in deploycontracts.ConvertLoopZeroYamlApps (with hermetic regression
 	// locks for every extracted field).
-	apps := services.ConvertLoopZeroYamlApps(req.LoopZeroYaml.Apps)
+	apps := deploycontracts.ConvertLoopZeroYamlApps(req.LoopZeroYaml.Apps)
 
 	a.logger.Info("auto-deploy: submitting build",
 		"project", req.ProjectName,
@@ -69,7 +76,7 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		"apps", len(apps),
 	)
 
-	_, err := a.orchestrator.SubmitBuild(ctx, services.SubmitBuildRequest{
+	_, err := a.orchestrator.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectName,
 		Environment:   req.Environment,
@@ -89,7 +96,7 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 	return nil
 }
 
-// previewAppsLookupAdapter implements services.PreviewBuildAppsLookup by
+// previewAppsLookupAdapter implements preview.PreviewBuildAppsLookup by
 // copying Apps from the most recent SUCCEEDED build of the (tenant, project).
 // J-23 LIVE catch 2026-06-07: without this, preview builds fail with
 // "WorkflowSpec.Plan must be non-nil" because PR webhooks don't ship
@@ -98,7 +105,7 @@ type previewAppsLookupAdapter struct {
 	builds db.BuildStore
 }
 
-func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]services.AppSpec, error) {
+func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]deploycontracts.AppSpec, error) {
 	// ListByProject newest first; iterate to find latest SUCCEEDED.
 	const lookbackLimit = 20
 	builds, err := a.builds.ListByProject(ctx, tenantID, projectID, lookbackLimit, 0)
@@ -119,9 +126,9 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 	if err != nil {
 		return nil, fmt.Errorf("preview apps lookup: get apps for %s: %w", sourceBuildID, err)
 	}
-	out := make([]services.AppSpec, 0, len(dbApps))
+	out := make([]deploycontracts.AppSpec, 0, len(dbApps))
 	for _, da := range dbApps {
-		app := services.AppSpec{
+		app := deploycontracts.AppSpec{
 			Name:      da.Name,
 			Type:      da.Type,
 			Rendering: da.Rendering,
@@ -130,7 +137,7 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 			Replicas:  da.Replicas,
 		}
 		if da.Autoscaling != nil {
-			app.Autoscaling = &services.AppAutoscalingSpec{
+			app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
 				MinReplicas: da.Autoscaling.MinReplicas,
 				MaxReplicas: da.Autoscaling.MaxReplicas,
 				TargetCPU:   da.Autoscaling.TargetCPU,
@@ -141,7 +148,7 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 	return out, nil
 }
 
-// previewCRCreatorAdapter bridges services.PreviewCRCreator (services
+// previewCRCreatorAdapter bridges preview.PreviewCRCreator (services
 // package's spec type) to k8s.PreviewCRManager (k8s package's spec
 // type). Two spec types exist to avoid the k8s↔services import cycle;
 // fields are identical so the conversion is a flat copy.
@@ -149,7 +156,7 @@ type previewCRCreatorAdapter struct {
 	mgr *k8s.PreviewCRManager
 }
 
-func (a *previewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec services.PreviewCRSpec) error {
+func (a *previewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec preview.PreviewCRSpec) error {
 	return a.mgr.EnsurePreviewCR(ctx, k8s.PreviewCRSpec{
 		Name:      spec.Name,
 		TenantID:  spec.TenantID,

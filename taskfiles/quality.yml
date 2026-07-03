@@ -16,8 +16,21 @@ tasks:
     cmds:
       - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
 
+  gate-list:
+    desc: "MA-1 oracle — print the gate inventory (NAME/WIRED/SUMMARY) + assert the split"
+    deps: [build]
+    cmds:
+      # Pillar 1 (caller): exercises `loopzero-ops quality --list` end-to-end.
+      - /tmp/loopzero-ops quality --list
+      # Pillar 2 (assertion): the inventory must enumerate every registered gate.
+      - |
+        n=$(/tmp/loopzero-ops quality --list --names | wc -l)
+        [ "$n" -eq 70 ] || { echo "FAIL gate-list: --names emitted $n gates, want 70 (registry drift?)" >&2; exit 1; }
+      # Pillar 3 (runtime signal): the operator-visible split.
+      - 'echo "registered=$(/tmp/loopzero-ops quality --list --names | wc -l) wired=$(/tmp/loopzero-ops quality --list | grep -cP ''\twired\t'') unwired=$(/tmp/loopzero-ops quality --list | grep -cP ''\tunwired\t'')"'
+
   hermetic:
-    desc: Run pkg/quality hermetic Go tests + verify both modules build
+    desc: Run quality-gate hermetic Go tests + verify both modules build
     cmds:
       - cd pkg && go test ./quality/...
       - cd cmd/loopzero-ops && go build ./...
@@ -62,9 +75,12 @@ tasks:
       # (empty queries/, no sqlc imports). Real exercise begins T1.1+.
       - /tmp/loopzero-ops quality sqlc-sync           # T0.3: committed generated/ in-sync with codegen
       - /tmp/loopzero-ops quality sqlc-tx-prop        # T0.4: pool-bound vs tx-bound inside withEnvironmentLock
+      - /tmp/loopzero-ops quality db-generated-boundary  # M9 5a MA-7 Gate A: no outer-layer imports of db/generated (ADR 2026-07-03-m9-db-store-subpackage-topology)
+      - /tmp/loopzero-ops quality ma7-status-locality  # M9 5b MA-7 Gates B+C (ADR 2026-07-03-m9-db-store-subpackage-topology)
+      - /tmp/loopzero-ops quality services-acyclic     # M9 Step 6: services bounded-context acyclic DAG (ADR 2026-07-03-m9-db-store-subpackage-topology)
       - /tmp/loopzero-ops quality tenant-predicate    # T0.5: multi-tenant isolation predicate (security veto-backed)
       # Bash security/governance gates re-homed 2026-05-24 (were unwired since
-      # GitHub Actions removal). TODO: migrate these to pkg/quality Go gates
+      # GitHub Actions removal). TODO: migrate these to loopzero-ops quality Go gates
       # (strategic home) and drop the bash. Until then they run here = enforced.
       - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
       - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
@@ -135,6 +151,9 @@ tasks:
       - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
       - bash infra/tests/check-dev-public-live-url-discoverability-syntax_test.sh  # T5.1 ORPHAN companion 3/4
       - bash infra/tests/check-dev-public-status-url-probe-syntax_test.sh          # T5.1 ORPHAN companion 4/4
+      - bash infra/tests/check-dev-public-register-flow-syntax_test.sh             # M0 J-02 register LIVE-flow hermetic guard (21 assertions)
+      - bash infra/tests/check-dev-public-verification-flow-syntax_test.sh         # M0 J-03 verification LIVE-flow hermetic guard (20 assertions)
+      - bash infra/tests/check-patch-kratos-check-only-readonly_test.sh            # M0 J-01 T5.3 EC-9: patch-kratos --check-only read-only guard (6 assertions)
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
       # shell-lint advisory — invokes infra/scripts/local/shellcheck-advisory.sh.
       # Re-homed from inline `bash -c '...'` after that form broke YAML parsing

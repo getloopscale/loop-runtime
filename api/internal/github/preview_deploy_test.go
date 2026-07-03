@@ -8,7 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 )
@@ -44,11 +45,11 @@ func (f *fakePreviewSvc) DeletePreviewByPR(_ context.Context, tenantID, projectI
 }
 
 type fakeRepoLookup struct {
-	repos    map[string]*db.ProjectRepository
+	repos    map[string]*store.ProjectRepository
 	queryErr error
 }
 
-func (f *fakeRepoLookup) GetByRepo(_ context.Context, name string) (*db.ProjectRepository, error) {
+func (f *fakeRepoLookup) GetByRepo(_ context.Context, name string) (*store.ProjectRepository, error) {
 	if f.queryErr != nil {
 		return nil, f.queryErr
 	}
@@ -74,8 +75,8 @@ func newPREvent(action string, prNumber int, branch, sha, repoName string) webho
 	return e
 }
 
-func newConnectedRepo(repoName, tenantID, projectName string, autoDeploy bool) map[string]*db.ProjectRepository {
-	return map[string]*db.ProjectRepository{
+func newConnectedRepo(repoName, tenantID, projectName string, autoDeploy bool) map[string]*store.ProjectRepository {
+	return map[string]*store.ProjectRepository{
 		repoName: {
 			ID:           "repo-x",
 			TenantID:     tenantID,
@@ -195,7 +196,7 @@ func TestPreviewDeployer_HandlePR_AutoDeployDisabled_NoOp(t *testing.T) {
 
 func TestPreviewDeployer_HandlePR_UnknownRepo_NoOp(t *testing.T) {
 	svc := &fakePreviewSvc{}
-	repos := &fakeRepoLookup{repos: map[string]*db.ProjectRepository{}} // empty
+	repos := &fakeRepoLookup{repos: map[string]*store.ProjectRepository{}} // empty
 	d := NewPreviewDeployer(svc, repos, nil)
 
 	if err := d.HandlePR(newPREvent("opened", 1, "x", "y", "unknown/repo")); err != nil {

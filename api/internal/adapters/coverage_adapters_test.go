@@ -9,9 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // =============================================================================
@@ -46,18 +55,18 @@ func TestPgxRowsAdapter_Delegates(t *testing.T) {
 // via the real orchestrator path (line below), so the fake's interface methods
 // were never invoked and tripped deadcode.
 type fakeSubmitOrchestrator struct {
-	resp *services.SubmitBuildResponse
+	resp *deploycontracts.SubmitBuildResponse
 }
 
 func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 	orch := &fakeSubmitOrchestrator{
-		resp: &services.SubmitBuildResponse{
+		resp: &deploycontracts.SubmitBuildResponse{
 			BuildID:   "bld-001",
 			StreamURL: "/api/v1/builds/bld-001/stream",
 		},
 	}
 	adapter := &BuildOrchestratorAdapter{
-		Orch:       &services.BuildOrchestrator{},
+		Orch:       &build.BuildOrchestrator{},
 		BuildStore: &fakeBuildStore{},
 	}
 
@@ -104,7 +113,7 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 }
 
 func TestBuildOrchestratorAdapter_OnBuildCompleted_TranslatesApps(t *testing.T) {
-	// Verify the app translation from routes.BuildCallbackInput to services.BuildCallbackRequest.
+	// Verify the app translation from routes.BuildCallbackInput to deploycontracts.BuildCallbackRequest.
 	input := routes.BuildCallbackInput{
 		Status: "SUCCEEDED",
 		Apps: []routes.BuildCallbackApp{
@@ -115,9 +124,9 @@ func TestBuildOrchestratorAdapter_OnBuildCompleted_TranslatesApps(t *testing.T) 
 	}
 
 	// Verify translation logic
-	var apps []services.AppRelease
+	var apps []deploycontracts.AppRelease
 	for _, app := range input.Apps {
-		apps = append(apps, services.AppRelease{
+		apps = append(apps, deploycontracts.AppRelease{
 			Name:        app.Name,
 			ImageDigest: app.ImageDigest,
 			URL:         app.URL,
@@ -171,9 +180,9 @@ func TestBuildOrchestratorAdapter_GetBuildStatus_WithDuration(t *testing.T) {
 // =============================================================================
 
 func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
-	// Test that the mapping from db.TenantDeletionCounts to services.TenantDeletionCounts
+	// Test that the mapping from store.TenantDeletionCounts to placementsvc.TenantDeletionCounts
 	// covers all fields.
-	c := db.TenantDeletionCounts{
+	c := store.TenantDeletionCounts{
 		EnvironmentTargets: 10,
 		Releases:           20,
 		BuildApps:          30,
@@ -183,7 +192,7 @@ func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
 		TenantMembers:      3,
 		Tenants:            1,
 	}
-	result := services.TenantDeletionCounts{
+	result := placementsvc.TenantDeletionCounts{
 		EnvironmentTargets: c.EnvironmentTargets,
 		Releases:           c.Releases,
 		BuildApps:          c.BuildApps,
@@ -204,7 +213,7 @@ func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
 
 func TestTenantK8sEvictorAdapter_VerifyFieldMapping(t *testing.T) {
 	// Test that the K8sEvictionCounts mapping covers all fields.
-	result := services.K8sEvictionCounts{
+	result := placementsvc.K8sEvictionCounts{
 		ArgoWorkflowsDeleted: 5,
 		MgmtCRsDeleted:       10,
 		FinalizersCleared:    3,
@@ -220,7 +229,7 @@ func TestTenantK8sEvictorAdapter_VerifyFieldMapping(t *testing.T) {
 // =============================================================================
 
 func TestRollbackServiceAdapter_TypeTranslation(t *testing.T) {
-	// Verify the routes.RollbackInput to services.RollbackRequest mapping.
+	// Verify the routes.RollbackInput to release.RollbackRequest mapping.
 	input := routes.RollbackInput{
 		TenantID:      "tn-acme",
 		ProjectID:     "proj-123",
@@ -232,7 +241,7 @@ func TestRollbackServiceAdapter_TypeTranslation(t *testing.T) {
 		BaseDomain:    "dev.loopzero.example",
 	}
 
-	req := services.RollbackRequest{
+	req := release.RollbackRequest{
 		TenantID:      input.TenantID,
 		ProjectID:     input.ProjectID,
 		ProjectName:   input.ProjectName,
