@@ -7,6 +7,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/services"
@@ -23,7 +25,7 @@ type BuildOrchestratorAdapter struct {
 }
 
 func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
-	var apps []services.AppSpec
+	var apps []shared.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
 		if appType == "" {
@@ -33,7 +35,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		if appPort == 0 && appType == "server" {
 			appPort = 8080
 		}
-		spec := services.AppSpec{
+		spec := shared.AppSpec{
 			Name:      app.Name,
 			Type:      appType,
 			Port:      appPort,
@@ -49,7 +51,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Replicas: app.Replicas,
 		}
 		if app.Autoscaling != nil {
-			spec.Autoscaling = &services.AppAutoscalingSpec{
+			spec.Autoscaling = &shared.AppAutoscalingSpec{
 				MinReplicas: app.Autoscaling.Min,
 				MaxReplicas: app.Autoscaling.Max,
 				TargetCPU:   app.Autoscaling.TargetCPU,
@@ -58,7 +60,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		apps = append(apps, spec)
 	}
 
-	resp, err := a.Orch.SubmitBuild(ctx, services.SubmitBuildRequest{
+	resp, err := a.Orch.SubmitBuild(ctx, shared.SubmitBuildRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
@@ -112,9 +114,9 @@ func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 }
 
 func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
-	var apps []services.AppRelease
+	var apps []shared.AppRelease
 	for _, app := range result.Apps {
-		apps = append(apps, services.AppRelease{
+		apps = append(apps, shared.AppRelease{
 			Name:        app.Name,
 			ImageDigest: app.ImageDigest,
 			URL:         app.URL,
@@ -122,7 +124,7 @@ func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID
 			DurationMs:  app.DurationMs,
 		})
 	}
-	return a.Orch.OnBuildCompleted(ctx, buildID, services.BuildCallbackRequest{
+	return a.Orch.OnBuildCompleted(ctx, buildID, shared.BuildCallbackRequest{
 		Status:    result.Status,
 		Error:     result.Error,
 		Apps:      apps,

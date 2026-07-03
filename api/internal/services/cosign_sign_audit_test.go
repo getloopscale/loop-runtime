@@ -8,6 +8,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // captureAuditLogger records LogAudit calls for assertion.
@@ -48,7 +50,7 @@ func (c *captureAuditLogger) LogAudit(_ context.Context, tenantID, action, actor
 
 func TestEmitCosignSignAudits_NilAuditor_NoOp(t *testing.T) {
 	// Must not panic. Caller should never know whether auditor was wired.
-	emitCosignSignAudits(context.Background(), nil, &buildAuditContext{}, []AppRelease{}, "")
+	emitCosignSignAudits(context.Background(), nil, &buildAuditContext{}, []shared.AppRelease{}, "")
 }
 
 func TestEmitCosignSignAudits_EmptyApps_NoEntries(t *testing.T) {
@@ -57,7 +59,7 @@ func TestEmitCosignSignAudits_EmptyApps_NoEntries(t *testing.T) {
 		BuildID:   "bld-1",
 		TenantID:  "tn-1",
 		CreatedBy: "u-1",
-	}, []AppRelease{}, "corr-1")
+	}, []shared.AppRelease{}, "corr-1")
 
 	if len(audit.entries) != 0 {
 		t.Errorf("want 0 entries for empty apps, got %d", len(audit.entries))
@@ -68,7 +70,7 @@ func TestEmitCosignSignAudits_EmitsOnePerSignedApp(t *testing.T) {
 	audit := &captureAuditLogger{}
 	now := time.Date(2026, 5, 12, 14, 0, 0, 0, time.UTC)
 
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		{
 			Name:              "api",
 			ImageDigest:       "registry/org/api:abc",
@@ -139,7 +141,7 @@ func TestEmitCosignSignAudits_EmitsOnePerSignedApp(t *testing.T) {
 
 func TestEmitCosignSignAudits_SkipsAppsWithoutSupplyChain(t *testing.T) {
 	audit := &captureAuditLogger{}
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		// No signature → skip
 		{Name: "static-frontend", ImageDigestSHA256: "sha256:abc"},
 		// No digest → skip
@@ -164,7 +166,7 @@ func TestEmitCosignSignAudits_FailOpenOnLogError(t *testing.T) {
 	// Auditor returns error — function must NOT panic, NOT return error,
 	// just log internally.
 	audit := &captureAuditLogger{err: errors.New("DB connection refused")}
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		{Name: "api", ImageDigestSHA256: "sha256:def", ImageSignature: "sig-api"},
 	}
 
@@ -184,7 +186,7 @@ func TestEmitCosignSignAudits_FailOpenOnLogError(t *testing.T) {
 
 func TestEmitCosignSignAudits_NilBuildContext_NoPanic(t *testing.T) {
 	audit := &captureAuditLogger{}
-	emitCosignSignAudits(context.Background(), audit, nil, []AppRelease{
+	emitCosignSignAudits(context.Background(), audit, nil, []shared.AppRelease{
 		{Name: "api", ImageDigestSHA256: "sha256:def", ImageSignature: "sig"},
 	}, "")
 	// Pass: function returned without panicking. No assertion on entries
@@ -194,7 +196,7 @@ func TestEmitCosignSignAudits_NilBuildContext_NoPanic(t *testing.T) {
 
 func TestEmitCosignSignAudits_DefaultsSignedAtToNow_WhenAppHasNoTimestamp(t *testing.T) {
 	audit := &captureAuditLogger{}
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		{Name: "api", ImageDigestSHA256: "sha256:def", ImageSignature: "sig"},
 		// No ImageSignedAt set
 	}

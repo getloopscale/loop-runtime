@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -26,9 +27,9 @@ type CircuitBreakerConfig struct {
 type circuitState int
 
 const (
-	circuitClosed  circuitState = iota // normal operation
-	circuitOpen                        // rejecting requests
-	circuitHalfOpen                    // allowing a single probe
+	circuitClosed   circuitState = iota // normal operation
+	circuitOpen                         // rejecting requests
+	circuitHalfOpen                     // allowing a single probe
 )
 
 // CircuitBreakerSyncClient wraps a SyncClient with an in-memory circuit breaker.
@@ -40,23 +41,23 @@ const (
 //
 // Trade-off: state is per-replica, not shared across API instances. This is
 // acceptable because:
-// - Each replica detects ArgoCD failure independently after openThreshold failures
-// - The convergence delay is at most openThreshold × sync attempts (~15s)
-// - Circuit breaker state does not need to survive API restarts — starting
-//   CLOSED and detecting failure naturally is the correct behavior
+//   - Each replica detects ArgoCD failure independently after openThreshold failures
+//   - The convergence delay is at most openThreshold × sync attempts (~15s)
+//   - Circuit breaker state does not need to survive API restarts — starting
+//     CLOSED and detecting failure naturally is the correct behavior
 type CircuitBreakerSyncClient struct {
-	inner          SyncClient
+	inner          shared.SyncClient
 	logger         *slog.Logger
 	openThreshold  int
 	closeThreshold int
 	retryInterval  time.Duration
 
-	mu             sync.RWMutex
-	state          circuitState
-	failureCount   int
-	successCount   int
-	lastFailure    time.Time
-	openedAt       time.Time
+	mu           sync.RWMutex
+	state        circuitState
+	failureCount int
+	successCount int
+	lastFailure  time.Time
+	openedAt     time.Time
 }
 
 // Compile-time assertion that *CircuitBreakerSyncClient satisfies the full
@@ -65,10 +66,10 @@ type CircuitBreakerSyncClient struct {
 // (duck-typed assertions in release_convergence_loop.go that fail silently)
 // to build time. If a future refactor accidentally drops one of the 6 methods,
 // the package fails to compile here rather than silently no-op in production.
-var _ SyncClient = (*CircuitBreakerSyncClient)(nil)
+var _ shared.SyncClient = (*CircuitBreakerSyncClient)(nil)
 
 // NewCircuitBreakerSyncClient creates an in-memory circuit breaker wrapping a SyncClient.
-func NewCircuitBreakerSyncClient(inner SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
+func NewCircuitBreakerSyncClient(inner shared.SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
 	return &CircuitBreakerSyncClient{
 		inner:          inner,
 		logger:         logger,

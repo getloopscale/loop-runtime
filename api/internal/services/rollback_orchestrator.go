@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -38,7 +39,7 @@ type RollbackGitOpsReader interface {
 
 // RollbackGitOpsPusher abstracts manifest push to gitops repo (DIP).
 type RollbackGitOpsPusher interface {
-	Push(ctx context.Context, opts GitOpsPushOpts) (string, error)
+	Push(ctx context.Context, opts shared.GitOpsPushOpts) (string, error)
 }
 
 // RollbackSyncClient abstracts ArgoCD sync operations (DIP).
@@ -59,8 +60,8 @@ type RollbackOrchestratorDeps struct {
 	GitReader  RollbackGitOpsReader
 	GitPusher  RollbackGitOpsPusher
 	Sync       RollbackSyncClient
-	Locker     EnvironmentLocker
-	Delivery   DeliveryActivator // MEET-009: polymorphic rollback delivery
+	Locker     shared.EnvironmentLocker
+	Delivery   shared.DeliveryActivator // MEET-009: polymorphic rollback delivery
 	// ArgocdSyncTimeout bounds the post-trigger sync confirmation wait.
 	// LIVE-caught 2026-06-18 sponsor mandate: DB state flip requires
 	// sync verification (not just trigger). Zero defaults to 120s.
@@ -180,7 +181,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 	// For static (future): push IngressRoute with old release-id path.
 	// MEET-2026-03-26-009: polymorphic rollback via interface.
 	if o.deps.Delivery != nil {
-		if err := o.deps.Delivery.Rollback(ctx, RollbackDeliveryRequest{
+		if err := o.deps.Delivery.Rollback(ctx, shared.RollbackDeliveryRequest{
 			TenantID:      req.TenantID,
 			ProjectID:     req.ProjectID,
 			ProjectName:   req.ProjectName,
@@ -199,7 +200,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		if err != nil {
 			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: fetch manifests: %w", err))
 		}
-		_, err = o.deps.GitPusher.Push(ctx, GitOpsPushOpts{
+		_, err = o.deps.GitPusher.Push(ctx, shared.GitOpsPushOpts{
 			TenantID: req.TenantID, ProjectID: req.ProjectID, Environment: req.Environment,
 			Manifests: string(manifests), ReleaseID: targetRelease.ID, CorrelationID: req.CorrelationID,
 		})

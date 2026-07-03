@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -135,11 +136,11 @@ type fakeGitOpsDeleter struct {
 	removeErr    error
 }
 
-func (f *fakeGitOpsDeleter) Push(_ context.Context, _ GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsDeleter) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
 	f.pushCalled = true
 	return "abc123", nil
 }
-func (f *fakeGitOpsDeleter) Remove(_ context.Context, _ GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsDeleter) Remove(_ context.Context, _ shared.GitOpsRemoveOpts) (string, error) {
 	f.removeCalled = true
 	return "def456", f.removeErr
 }

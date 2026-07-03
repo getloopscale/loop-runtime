@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -20,10 +21,10 @@ import (
 // --- Test doubles for RollbackOrchestrator ---
 
 type fakeRollbackReleaseStore struct {
-	releases     map[string]*db.Release
-	activeByEnv  map[string]*db.Release // key: tenant-project-env
+	releases      map[string]*db.Release
+	activeByEnv   map[string]*db.Release // key: tenant-project-env
 	previousByEnv map[string]*db.Release
-	lastStatus   map[string]string
+	lastStatus    map[string]string
 }
 
 func newFakeRollbackReleaseStore() *fakeRollbackReleaseStore {
@@ -104,15 +105,15 @@ type fakeRollbackGitPusher struct {
 	pushed bool
 }
 
-func (f *fakeRollbackGitPusher) Push(_ context.Context, _ GitOpsPushOpts) (string, error) {
+func (f *fakeRollbackGitPusher) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
 	f.pushed = true
 	return "commit-sha-rollback", nil
 }
 
 type fakeRollbackSyncClient struct {
-	synced       bool
-	waitCalled   bool
-	waitErr      error
+	synced     bool
+	waitCalled bool
+	waitErr    error
 }
 
 func (f *fakeRollbackSyncClient) TriggerSync(_ context.Context, _ string) error {
@@ -327,10 +328,10 @@ type fakeDeliveryActivator struct {
 	rollbackErr    error
 }
 
-func (f *fakeDeliveryActivator) Activate(_ context.Context, _ *db.Build, _ BuildCallbackRequest) error {
+func (f *fakeDeliveryActivator) Activate(_ context.Context, _ *db.Build, _ shared.BuildCallbackRequest) error {
 	return nil
 }
-func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ RollbackDeliveryRequest) error {
+func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ shared.RollbackDeliveryRequest) error {
 	f.rollbackCalled = true
 	return f.rollbackErr
 }

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"sigs.k8s.io/yaml"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"sigs.k8s.io/yaml"
 )
 
 // Script-migration regression tests.
@@ -58,13 +58,13 @@ func marshalTemplate(t *testing.T, tpl interface{}) string {
 
 func TestScriptMigration_DeliverArtifact_EmitsScriptBlock(t *testing.T) {
 	b := NewWorkflowBuilder(testInfraParams())
-	spec := services.WorkflowSpec{
+	spec := shared.WorkflowSpec{
 		TenantID:  "tn-1",
 		ProjectID: "proj-1",
 		BuildID:   "build-1",
 		CommitSHA: "abc1234",
 	}
-	plan := services.AppBuildPlan{
+	plan := shared.AppBuildPlan{
 		AppName:  "api",
 		AppPath:  ".",
 		ImageTag: "registry.example.com/tn-1/api:abc1234",

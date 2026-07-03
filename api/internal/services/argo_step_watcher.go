@@ -77,11 +77,11 @@ type TerminalBuildIDStore interface {
 // watcher is the canonical fan-out point for sub-step visibility in the
 // dashboard (Plan J-17 T1.1).
 type ArgoStepWatcher struct {
-	source       WorkflowNodeSource
-	store        sse.EventStore
-	terminalIDs  TerminalBuildIDStore
-	logger       *slog.Logger
-	now          func() time.Time
+	source      WorkflowNodeSource
+	store       sse.EventStore
+	terminalIDs TerminalBuildIDStore
+	logger      *slog.Logger
+	now         func() time.Time
 
 	// dedup map keyed by buildID + nodeName -> lastPhase. Reset for a
 	// step when it transitions out of a terminal phase back to Pending

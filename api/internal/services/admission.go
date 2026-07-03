@@ -37,9 +37,9 @@ type BuildAdmissionConfig struct {
 type BuildAdmissionGate struct {
 	cfg BuildAdmissionConfig
 
-	mu            sync.Mutex
-	cellCounts    map[string]int // cell_id → active count
-	tenantCounts  map[string]int // "cell:tenant" → active count
+	mu           sync.Mutex
+	cellCounts   map[string]int // cell_id → active count
+	tenantCounts map[string]int // "cell:tenant" → active count
 }
 
 // NewBuildAdmissionGate creates an admission gate with the given config.

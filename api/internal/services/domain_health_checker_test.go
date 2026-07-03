@@ -15,16 +15,16 @@ import (
 // --- Test doubles for DomainHealthChecker ---
 
 type fakeDomainHealthStore struct {
-	pendingDomains     []domain.CustomDomain
-	activeDomains      []domain.CustomDomain
-	stalePending       []domain.CustomDomain
-	staleProvisioning  []domain.CustomDomain
-	tlsExpiring        []domain.CustomDomain
-	verifiedDomains    []string
-	cnameChecked       map[string]int // domain → consecutive failures
-	failedDomains      map[string]string
-	statusUpdated      map[string]string
-	deletedDomains     []string
+	pendingDomains    []domain.CustomDomain
+	activeDomains     []domain.CustomDomain
+	stalePending      []domain.CustomDomain
+	staleProvisioning []domain.CustomDomain
+	tlsExpiring       []domain.CustomDomain
+	verifiedDomains   []string
+	cnameChecked      map[string]int // domain → consecutive failures
+	failedDomains     map[string]string
+	statusUpdated     map[string]string
+	deletedDomains    []string
 }
 
 func newFakeDomainHealthStore() *fakeDomainHealthStore {

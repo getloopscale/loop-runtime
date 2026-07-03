@@ -93,9 +93,9 @@ var (
 // Without the CR patch, the DB and the K8s state diverge and the
 // operator continues writing the previous cell.
 type CellPinner struct {
-	store     CellPinnerStore
-	mgmtKube  dynamic.Interface // optional: when nil, CR patch is skipped
-	mgmtNS    string            // namespace where Tenant CRs live (default "loopzero-system")
+	store    CellPinnerStore
+	mgmtKube dynamic.Interface // optional: when nil, CR patch is skipped
+	mgmtNS   string            // namespace where Tenant CRs live (default "loopzero-system")
 }
 
 // NewCellPinner constructs a pinner with the given persistence backend.

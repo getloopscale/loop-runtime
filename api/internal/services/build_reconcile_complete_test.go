@@ -6,6 +6,8 @@ package services
 import (
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // CHG-2026-04-25-ATTESTATION-WIRE Phase 4 (AC-4.1):
@@ -13,11 +15,11 @@ import (
 // the corresponding AppRelease entry must be enriched with those
 // values plus a server-side SignedAt timestamp.
 func TestEnrichAppReleasesWithAttestation_PopulatesSignatureFields(t *testing.T) {
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		{Name: "api", URL: "https://api.example.com"},
 		{Name: "web", URL: "https://web.example.com"},
 	}
-	status := &WorkflowStatus{
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {
@@ -57,13 +59,13 @@ func TestEnrichAppReleasesWithAttestation_PopulatesSignatureFields(t *testing.T)
 // produce valid AppReleases with empty signature fields. The deploy
 // pipeline must NOT break for these.
 func TestEnrichAppReleasesWithAttestation_NoOutputs_LeavesAppsUntouched(t *testing.T) {
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		{Name: "api", URL: "https://api.example.com", ImageDigest: "registry/api:abc"},
 	}
-	cases := []*WorkflowStatus{
+	cases := []*shared.WorkflowStatus{
 		nil,
-		{Phase: "Succeeded"},                         // no outputs map
-		{Phase: "Succeeded", Outputs: nil},           // explicit nil
+		{Phase: "Succeeded"},               // no outputs map
+		{Phase: "Succeeded", Outputs: nil}, // explicit nil
 		{Phase: "Succeeded", Outputs: map[string]map[string]string{}}, // empty
 		{
 			Phase: "Succeeded",
@@ -100,8 +102,8 @@ func TestEnrichAppReleasesWithAttestation_NoOutputs_LeavesAppsUntouched(t *testi
 // A digest-without-signature is meaningless from a trust standpoint
 // and SignedAt must NOT lie about it.
 func TestEnrichAppReleasesWithAttestation_DigestWithoutSignature_NoSignedAt(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"build-image-api": {"digest": "sha256:abc"}, // no signature
@@ -125,8 +127,8 @@ func TestEnrichAppReleasesWithAttestation_DigestWithoutSignature_NoSignedAt(t *t
 // build-image step's digest, because the cosign step signed the bytes
 // that the cosign-step digest refers to.
 func TestEnrichAppReleasesWithAttestation_CosignDigestPreferredOverBuild(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {
@@ -148,8 +150,8 @@ func TestEnrichAppReleasesWithAttestation_CosignDigestPreferredOverBuild(t *test
 // or signing was skipped), the build-image digest is used as fallback.
 // Useful for workflows where signing is opt-out.
 func TestEnrichAppReleasesWithAttestation_FallsBackToBuildkitDigest(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"build-image-api": {"digest": "sha256:onlybuild"},
@@ -171,8 +173,8 @@ func TestEnrichAppReleasesWithAttestation_FallsBackToBuildkitDigest(t *testing.T
 // =============================================================================
 
 func TestEnrichAppReleases_WithSBOM(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {
@@ -207,8 +209,8 @@ func TestEnrichAppReleases_WithSBOM(t *testing.T) {
 // level + scan failure), the apps array must still be valid and signatures
 // preserved. No error, no panic.
 func TestEnrichAppReleases_SBOMMissing_GracefulDegradation(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {
@@ -233,8 +235,8 @@ func TestEnrichAppReleases_SBOMMissing_GracefulDegradation(t *testing.T) {
 
 // Bad component count (non-integer) must not corrupt the AppRelease.
 func TestEnrichAppReleases_SBOMInvalidCount_SafeDefault(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sbom-api": {
@@ -256,11 +258,11 @@ func TestEnrichAppReleases_SBOMInvalidCount_SafeDefault(t *testing.T) {
 
 // SBOM enriches multi-app builds independently per app.
 func TestEnrichAppReleases_BothSignatureAndSBOM_MultiApp(t *testing.T) {
-	apps := []AppRelease{
+	apps := []shared.AppRelease{
 		{Name: "api"},
 		{Name: "worker"},
 	}
-	status := &WorkflowStatus{
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api":    {"signature": "registry/api:abc@sha256:a", "digest": "sha256:a"},
@@ -291,8 +293,8 @@ func TestEnrichAppReleases_BothSignatureAndSBOM_MultiApp(t *testing.T) {
 // "Runtime-metric proof — releases.image_attestation_rekor_url populated
 // LIVE in Phase 4 = runtime evidence".
 func TestEnrichAppReleasesWithAttestation_PopulatesRekorURL(t *testing.T) {
-	apps := []AppRelease{{Name: "api", URL: "https://api.example.com"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api", URL: "https://api.example.com"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {
@@ -317,8 +319,8 @@ func TestEnrichAppReleasesWithAttestation_PopulatesRekorURL(t *testing.T) {
 // "unknown" is the cosign_attest.go fallback when sed pattern doesn't match.
 // Persisting "unknown" pollutes the DB — must stay empty.
 func TestEnrichAppReleasesWithAttestation_RekorURLUnknown_LeavesEmpty(t *testing.T) {
-	apps := []AppRelease{{Name: "api"}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api"}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": "unknown"},
@@ -337,8 +339,8 @@ func TestEnrichAppReleasesWithAttestation_RekorURLUnknown_LeavesEmpty(t *testing
 // step failed and never wrote the param) MUST leave the field empty —
 // downstream container_delivery.go gates on empty before persisting.
 func TestEnrichAppReleasesWithAttestation_AttestStepMissing_NoOp(t *testing.T) {
-	apps := []AppRelease{{Name: "api", ImageAttestationRekorURL: ""}}
-	status := &WorkflowStatus{
+	apps := []shared.AppRelease{{Name: "api", ImageAttestationRekorURL: ""}}
+	status := &shared.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {"signature": "registry/api@sha256:x", "digest": "sha256:x"},

@@ -81,9 +81,9 @@ type EnvironmentReadinessChecker interface {
 // same (tenant, env) are safe because AddEnvironment uses tenant CR JSON
 // patch semantics (server-side merge).
 type EnvironmentEnsurer struct {
-	Lister  EnvironmentLister
-	Adder   EnvironmentAdder
-	Logger  *slog.Logger
+	Lister EnvironmentLister
+	Adder  EnvironmentAdder
+	Logger *slog.Logger
 	// ReadinessChecker is the optional deep-readiness gate (Environment CR
 	// status.phase). When set, EnsureEnvironment polls for BOTH the shallow
 	// Lister check AND IsReady before returning success. Default nil =

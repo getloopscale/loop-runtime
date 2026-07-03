@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -24,11 +25,11 @@ type ifCurrentCall struct {
 }
 
 type fakeBuildStoreOrch struct {
-	builds    map[string]*db.Build
-	hasActive bool
-	hasActiveErr error
-	createErr error
-	lastStatus map[string]string
+	builds        map[string]*db.Build
+	hasActive     bool
+	hasActiveErr  error
+	createErr     error
+	lastStatus    map[string]string
 	errorMessages map[string]string
 	workflowIDs   map[string]string
 	appsSpec      map[string][]db.BuildAppSpec
@@ -170,7 +171,7 @@ type fakeWorkflowSubmitterOrch struct {
 	workflowID string
 }
 
-func (f *fakeWorkflowSubmitterOrch) Submit(_ context.Context, _ WorkflowSpec) (string, error) {
+func (f *fakeWorkflowSubmitterOrch) Submit(_ context.Context, _ shared.WorkflowSpec) (string, error) {
 	return f.workflowID, f.submitErr
 }
 
@@ -178,7 +179,7 @@ func (f *fakeWorkflowSubmitterOrch) Cancel(_ context.Context, _, _ string) error
 	return f.cancelErr
 }
 
-func (f *fakeWorkflowSubmitterOrch) GetStatus(_ context.Context, _, _ string) (*WorkflowStatus, error) {
+func (f *fakeWorkflowSubmitterOrch) GetStatus(_ context.Context, _, _ string) (*shared.WorkflowStatus, error) {
 	return nil, nil
 }
 
@@ -199,15 +200,15 @@ func TestBuildOrchestrator_SubmitBuild_DeployInProgress(t *testing.T) {
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: bs,
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{workflowID: "wf-1"},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{workflowID: "wf-1"},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps:        []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 
 	if err == nil {
@@ -224,15 +225,15 @@ func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails(t *testing.T) {
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: bs,
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{submitErr: fmt.Errorf("argo unreachable")},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{submitErr: fmt.Errorf("argo unreachable")},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps:        []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 
 	if err == nil {
@@ -256,8 +257,8 @@ func TestBuildOrchestrator_CancelBuild_AlreadyTerminal(t *testing.T) {
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: bs,
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
 	err := orch.CancelBuild(context.Background(), "bld-done")
@@ -276,13 +277,13 @@ func TestBuildOrchestrator_OnBuildCompleted_DuplicateCallback(t *testing.T) {
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: bs,
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-dup", BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-dup", shared.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps:   []AppRelease{{Name: "api"}},
+		Apps:   []shared.AppRelease{{Name: "api"}},
 	})
 	if err != nil {
 		t.Fatalf("duplicate callback should be no-op, got: %v", err)
@@ -299,13 +300,13 @@ func TestBuildOrchestrator_OnBuildCompleted_SuccessNoApps_ReturnsError(t *testin
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: bs,
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-noapp", BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-noapp", shared.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps:   []AppRelease{}, // empty apps with success
+		Apps:   []shared.AppRelease{},
 	})
 	if err == nil {
 		t.Fatal("expected error for success callback with no apps")
@@ -322,11 +323,11 @@ func TestBuildOrchestrator_OnBuildCompleted_FailedBuild(t *testing.T) {
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: bs,
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-fail", BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-fail", shared.BuildCallbackRequest{
 		Status: "failed",
 		Error:  "OOMKilled",
 	})
@@ -366,12 +367,12 @@ func TestBuildOrchestrator_RetryReleaseActivation_WrongState(t *testing.T) {
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore: newFakeBuildStoreOrch(),
 		Locker:     &fakeLockerContainer{},
-		Workflow:    &fakeWorkflowSubmitterOrch{},
-		EventStore:  &fakeEventStoreContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{},
+		EventStore: &fakeEventStoreContainer{},
 	})
 
 	build := &db.Build{ID: "bld-1", Status: "RUNNING"}
-	err := orch.RetryReleaseActivation(context.Background(), build, BuildCallbackRequest{})
+	err := orch.RetryReleaseActivation(context.Background(), build, shared.BuildCallbackRequest{})
 	if err == nil {
 		t.Fatal("expected error for non-RELEASING build")
 	}
@@ -496,8 +497,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_NilKVClient(t *testing.T) {
 
 	// Should not panic when KVClient is nil
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := BuildCallbackRequest{
-		Apps: []AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
+	result := shared.BuildCallbackRequest{
+		Apps: []shared.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
 	}
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
 }
@@ -532,8 +533,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_WritesKV(t *testing.T) {
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := BuildCallbackRequest{
-		Apps: []AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
+	result := shared.BuildCallbackRequest{
+		Apps: []shared.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
 	}
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
 
@@ -555,8 +556,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_SkipsNonStatic(t *testing.T
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := BuildCallbackRequest{
-		Apps: []AppRelease{{Name: "api", Type: "server", Rendering: ""}},
+	result := shared.BuildCallbackRequest{
+		Apps: []shared.AppRelease{{Name: "api", Type: "server", Rendering: ""}},
 	}
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
 
@@ -578,8 +579,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_KVError_NonFatal(t *testing
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := BuildCallbackRequest{
-		Apps: []AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
+	result := shared.BuildCallbackRequest{
+		Apps: []shared.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
 	}
 	// Should not panic
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
@@ -641,9 +642,9 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededBuild(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-ok", BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-ok", shared.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "apiVersion: v1\nkind: Deployment",
 	})
 	if err != nil {
@@ -691,9 +692,9 @@ func TestBuildOrchestrator_OnBuildCompleted_QueuedBuild_ECNRace(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-ecn", BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-ecn", shared.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "manifests",
 	})
 	if err != nil {
@@ -730,9 +731,9 @@ func TestBuildOrchestrator_RetryReleaseActivation_Success(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	err := orch.RetryReleaseActivation(context.Background(), build, BuildCallbackRequest{
+	err := orch.RetryReleaseActivation(context.Background(), build, shared.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "manifests",
 	})
 	if err != nil {
@@ -752,11 +753,11 @@ func TestBuildOrchestrator_SubmitBuild_WithProjectEnsurer(t *testing.T) {
 		EventStore:   &fakeEventStoreContainer{},
 	})
 
-	resp, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	resp, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps:        []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 		CreatedBy:   "user@test.com",
 	})
 

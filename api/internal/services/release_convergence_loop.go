@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
@@ -63,8 +64,8 @@ type ReleaseConvergenceStore interface {
 type ReleaseConvergenceLoop struct {
 	releaseStore   ReleaseConvergenceStore
 	envTargetStore store.EnvironmentTargetStore
-	sync_          SyncClient
-	locker         EnvironmentLocker
+	sync_          shared.SyncClient
+	locker         shared.EnvironmentLocker
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -89,8 +90,8 @@ type ReleaseConvergenceLoop struct {
 func NewReleaseConvergenceLoop(
 	releaseStore ReleaseConvergenceStore,
 	envTargetStore store.EnvironmentTargetStore,
-	syncClient SyncClient,
-	locker EnvironmentLocker,
+	syncClient shared.SyncClient,
+	locker shared.EnvironmentLocker,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},

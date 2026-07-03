@@ -10,6 +10,7 @@ import (
 	"time"
 
 	dbstore "github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -75,14 +76,14 @@ func (f *previewFakeStore) RequestDeletion(ctx context.Context, tenantID, previe
 }
 
 type previewFakeBuilds struct {
-	submitFn func(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error)
+	submitFn func(ctx context.Context, req shared.SubmitBuildRequest) (*shared.SubmitBuildResponse, error)
 }
 
-func (f *previewFakeBuilds) SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error) {
+func (f *previewFakeBuilds) SubmitBuild(ctx context.Context, req shared.SubmitBuildRequest) (*shared.SubmitBuildResponse, error) {
 	if f.submitFn != nil {
 		return f.submitFn(ctx, req)
 	}
-	return &SubmitBuildResponse{BuildID: "build-fake"}, nil
+	return &shared.SubmitBuildResponse{BuildID: "build-fake"}, nil
 }
 
 type previewFakeCR struct {
@@ -168,7 +169,7 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 		}
 		return nil
 	}}
-	builds := &previewFakeBuilds{submitFn: func(_ context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error) {
+	builds := &previewFakeBuilds{submitFn: func(_ context.Context, req shared.SubmitBuildRequest) (*shared.SubmitBuildResponse, error) {
 		buildSubmitted = true
 		if req.TenantID != "tn-test-123" || req.ProjectID != "api" || req.CommitSHA != "abc1234" {
 			t.Errorf("build req wrong: %+v", req)
@@ -176,7 +177,7 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 		if req.Environment == "" {
 			t.Errorf("build env not set")
 		}
-		return &SubmitBuildResponse{BuildID: "build-fake"}, nil
+		return &shared.SubmitBuildResponse{BuildID: "build-fake"}, nil
 	}}
 
 	svc, err := NewPreviewService(PreviewServiceDeps{
@@ -247,7 +248,7 @@ func TestPreviewService_CreatePreview_BuildFailure_DoesNotFail(t *testing.T) {
 	// Build submission failure should not fail the preview create — the
 	// preview row exists and the user/operator can retry.
 	store := &previewFakeStore{}
-	builds := &previewFakeBuilds{submitFn: func(_ context.Context, _ SubmitBuildRequest) (*SubmitBuildResponse, error) {
+	builds := &previewFakeBuilds{submitFn: func(_ context.Context, _ shared.SubmitBuildRequest) (*shared.SubmitBuildResponse, error) {
 		return nil, errors.New("argo down")
 	}}
 	svc, _ := NewPreviewService(PreviewServiceDeps{Store: store, Builds: builds})

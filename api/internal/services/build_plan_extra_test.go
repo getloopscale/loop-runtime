@@ -5,6 +5,8 @@ package services
 
 import (
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // TestCreateBuildPlan_StaticDeliveryModel removed (simplify-deploy-loopzerokit-only
@@ -14,19 +16,19 @@ import (
 // covers the only remaining delivery model.
 
 func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
-	units := []AppUnit{
+	units := []shared.AppUnit{
 		{
 			Name:      "api",
 			Type:      "server",
 			Port:      3000,
 			Path:      "apps/api",
-			Runtime: "node",
+			Runtime:   "node",
 			Build:     "buildpack",
 			Rendering: "server",
 		},
 	}
 
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
+	plan := shared.CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
 	if len(plan.Apps) != 1 {
 		t.Fatalf("expected 1 app, got %d", len(plan.Apps))
@@ -42,19 +44,19 @@ func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 // path (single app → /workspace/Dockerfile) and the context is the whole
 // workspace — never the user subpath. This is the exact vector F-dom-1 flagged.
 func TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath(t *testing.T) {
-	units := []AppUnit{
+	units := []shared.AppUnit{
 		{
 			Name:       "api",
 			Type:       "server",
 			Port:       3000,
 			Path:       "services/api",
-			Runtime:  "node",
+			Runtime:    "node",
 			Build:      "dockerfile",
 			Dockerfile: "Dockerfile.prod",
 		},
 	}
 
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
+	plan := shared.CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
 	if plan.Apps[0].DockerfilePath != "/workspace/Dockerfile" {
 		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile (user Dockerfile/subpath must be ignored — D4)", plan.Apps[0].DockerfilePath)
@@ -65,12 +67,12 @@ func TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath(t *testing.T) {
 }
 
 func TestCreateBuildPlan_MultiApp_DockerfileNaming(t *testing.T) {
-	units := []AppUnit{
+	units := []shared.AppUnit{
 		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node", Build: "buildpack"},
 		{Name: "worker", Type: "worker", Path: ".", Runtime: "node", Build: "buildpack"},
 	}
 
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
+	plan := shared.CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
 	if len(plan.Apps) != 2 {
 		t.Fatalf("expected 2 apps, got %d", len(plan.Apps))
@@ -85,22 +87,22 @@ func TestCreateBuildPlan_MultiApp_DockerfileNaming(t *testing.T) {
 }
 
 func TestCreateBuildPlan_InvalidEnvKeySkipped(t *testing.T) {
-	units := []AppUnit{
+	units := []shared.AppUnit{
 		{
-			Name:      "api",
-			Type:      "server",
-			Port:      3000,
-			Path:      ".",
+			Name:    "api",
+			Type:    "server",
+			Port:    3000,
+			Path:    ".",
 			Runtime: "node",
-			Build:     "buildpack",
+			Build:   "buildpack",
 			Env: map[string]string{
-				"VALID_KEY":  "ok",
+				"VALID_KEY":   "ok",
 				"invalid-key": "should-be-skipped",
 			},
 		},
 	}
 
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
+	plan := shared.CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
 	if _, ok := plan.Apps[0].BuildArgs["VALID_KEY"]; !ok {
 		t.Error("expected VALID_KEY in build args")

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -64,7 +65,7 @@ func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) 
 	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	_, pushErr := o.gitops.Push(pushCtx, GitOpsPushOpts{
+	_, pushErr := o.gitops.Push(pushCtx, shared.GitOpsPushOpts{
 		TenantID:      release.TenantID,
 		ProjectID:     release.ProjectID,
 		Environment:   release.Environment,

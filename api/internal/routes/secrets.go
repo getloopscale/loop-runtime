@@ -34,7 +34,7 @@ type (
 // SecretEnvLocker is the narrow interface SecretHandler needs to wrap
 // mutations in `pg_advisory_xact_lock` (T1.1 of deep-review-2026-05-10-
 // remediation-plan). Defined locally per ISP — accepts any locker the
-// services layer exposes, including `services.EnvironmentLocker` and
+// services layer exposes, including `shared.EnvironmentLocker` and
 // `adapters.PoolEnvironmentLocker`.
 //
 // Nil-safe: when handler.locker is nil, Set/DeleteSecret fall back to

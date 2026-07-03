@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // Sprint B T1.1 (ADR D1) — three structural invariants that keep the
@@ -33,7 +35,7 @@ import (
 // author to reason about all implementers + every test fake.
 func TestSyncClientInterface_DeclaresAllMethods(t *testing.T) {
 	// reflect.TypeOf((*SyncClient)(nil)).Elem() yields the interface type.
-	ifaceType := reflect.TypeOf((*SyncClient)(nil)).Elem()
+	ifaceType := reflect.TypeOf((*shared.SyncClient)(nil)).Elem()
 	if ifaceType.Kind() != reflect.Interface {
 		t.Fatalf("expected SyncClient to be an interface, got kind=%v", ifaceType.Kind())
 	}
@@ -76,10 +78,10 @@ func TestSyncClientInterface_DeclaresAllMethods(t *testing.T) {
 // on `go build`; this test makes the contract visible to reviewers
 // reading the test suite and runs as part of the CI test gate.
 func TestCircuitBreakerSyncClient_SatisfiesSyncClient_AtCompileTime(t *testing.T) {
-	var _ SyncClient = (*CircuitBreakerSyncClient)(nil)
+	var _ shared.SyncClient = (*CircuitBreakerSyncClient)(nil)
 	// Also verify the runtime conversion does not panic.
 	var cb interface{} = (*CircuitBreakerSyncClient)(nil)
-	if _, ok := cb.(SyncClient); !ok {
+	if _, ok := cb.(shared.SyncClient); !ok {
 		t.Fatal("*CircuitBreakerSyncClient does not satisfy SyncClient at runtime")
 	}
 }
@@ -132,7 +134,7 @@ func (minimalSyncClient) TriggerSync(context.Context, string) error { return nil
 func (minimalSyncClient) WaitForSync(context.Context, string, time.Duration, []string) error {
 	return nil
 }
-func (minimalSyncClient) ForceReconcile(context.Context, string) error   { return nil }
+func (minimalSyncClient) ForceReconcile(context.Context, string) error { return nil }
 func (minimalSyncClient) GetSyncRevision(context.Context, string) (string, error) {
 	return "", nil
 }
@@ -144,4 +146,4 @@ func (minimalSyncClient) GetAppStatus(context.Context, string, []string) (bool, 
 // Compile-time assertion: the canonical minimal implementer satisfies
 // the interface. If a future method is added to SyncClient without
 // updating this stub, the package fails to compile.
-var _ SyncClient = minimalSyncClient{}
+var _ shared.SyncClient = minimalSyncClient{}

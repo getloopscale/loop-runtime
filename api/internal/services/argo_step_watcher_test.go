@@ -299,8 +299,8 @@ func TestArgoStepWatcher_HandleDelete_EmitsWorkflowDeleted(t *testing.T) {
 func TestArgoStepWatcher_BuildIDExtractedFromWorkflowName(t *testing.T) {
 	cases := map[string]string{
 		"loopzero-build-build-3c02294c80a43599-gxlg7": "build-3c02294c80a43599",
-		"unrelated-name":                          "",
-		"":                                        "",
+		"unrelated-name": "",
+		"":               "",
 	}
 	for input, want := range cases {
 		got := ExtractBuildIDForTest(input)

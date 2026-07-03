@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/services"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -359,5 +361,5 @@ func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T)
 
 func TestCircuitBreaker_ImplementsSyncClient(t *testing.T) {
 	// Compile-time check
-	var _ services.SyncClient = (*services.CircuitBreakerSyncClient)(nil)
+	var _ shared.SyncClient = (*services.CircuitBreakerSyncClient)(nil)
 }

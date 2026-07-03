@@ -14,7 +14,7 @@ import (
 // ErrCellAtCapacity (which the handler maps to HTTP 429).
 func TestBuildAdmission_CellCapacityReject(t *testing.T) {
 	gate := NewBuildAdmissionGate(BuildAdmissionConfig{
-		MaxConcurrentPerCell: 3,
+		MaxConcurrentPerCell:   3,
 		MaxConcurrentPerTenant: 2,
 	})
 

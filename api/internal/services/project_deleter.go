@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -36,8 +37,8 @@ type ProjectDeleterDeps struct {
 	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
 	ScalingStore      store.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
-	Locker            EnvironmentLocker
-	GitOps            GitOpsPusher
+	Locker            shared.EnvironmentLocker
+	GitOps            shared.GitOpsPusher
 	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
 	Sync              ArgoSyncer        // nil-safe: skips ArgoCD sync trigger if not set
 }
@@ -56,8 +57,8 @@ type ProjectDeleter struct {
 	releaseStore      db.ReleaseStore
 	projectStore      ProjectDeleteProjectStore
 	scalingStore      store.ScalingStore
-	locker            EnvironmentLocker
-	gitops            GitOpsPusher
+	locker            shared.EnvironmentLocker
+	gitops            shared.GitOpsPusher
 	workflowCanceller WorkflowCanceller
 	sync              ArgoSyncer
 }
@@ -140,7 +141,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req domain.ProjectDeleteInp
 			if gitopsID == "" {
 				gitopsID = req.ProjectID
 			}
-			_, gitErr := d.gitops.Remove(removeCtx, GitOpsRemoveOpts{
+			_, gitErr := d.gitops.Remove(removeCtx, shared.GitOpsRemoveOpts{
 				TenantID:      req.TenantID,
 				ProjectID:     gitopsID,
 				Environment:   "production",
@@ -273,7 +274,7 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req domain.Proje
 	if gitopsProjectID == "" {
 		gitopsProjectID = req.ProjectID // fallback if name not available
 	}
-	_, gitErr := d.gitops.Remove(removeCtx, GitOpsRemoveOpts{
+	_, gitErr := d.gitops.Remove(removeCtx, shared.GitOpsRemoveOpts{
 		TenantID:      req.TenantID,
 		ProjectID:     gitopsProjectID,
 		Environment:   env,

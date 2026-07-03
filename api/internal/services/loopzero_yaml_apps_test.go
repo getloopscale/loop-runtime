@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // TestConvertLoopZeroYamlApps_AllFields locks the canonical extraction
@@ -33,11 +35,11 @@ func TestConvertLoopZeroYamlApps_AllFields(t *testing.T) {
 			},
 		},
 	}
-	got := ConvertLoopZeroYamlApps(raw)
+	got := shared.ConvertLoopZeroYamlApps(raw)
 	if len(got) != 1 {
 		t.Fatalf("len=%d; want 1", len(got))
 	}
-	want := AppSpec{
+	want := shared.AppSpec{
 		Name:      "app",
 		Type:      "server",
 		Runtime:   "node",
@@ -47,7 +49,7 @@ func TestConvertLoopZeroYamlApps_AllFields(t *testing.T) {
 		Rendering: "ssr",
 		Start:     "npm start",
 		Replicas:  2,
-		Autoscaling: &AppAutoscalingSpec{
+		Autoscaling: &shared.AppAutoscalingSpec{
 			MinReplicas: 1,
 			MaxReplicas: 5,
 			TargetCPU:   80,
@@ -68,7 +70,7 @@ func TestConvertLoopZeroYamlApps_StartFieldPreserved(t *testing.T) {
 	raw := map[string]map[string]interface{}{
 		"app": {"start": "npm start"},
 	}
-	got := ConvertLoopZeroYamlApps(raw)
+	got := shared.ConvertLoopZeroYamlApps(raw)
 	if len(got) != 1 || got[0].Start != "npm start" {
 		t.Errorf("Start lost: got %+v", got)
 	}
@@ -81,7 +83,7 @@ func TestConvertLoopZeroYamlApps_DefaultTypeIsServer(t *testing.T) {
 	raw := map[string]map[string]interface{}{
 		"app": {"runtime": "node"}, // no type
 	}
-	got := ConvertLoopZeroYamlApps(raw)
+	got := shared.ConvertLoopZeroYamlApps(raw)
 	if len(got) != 1 || got[0].Type != "server" {
 		t.Errorf("default type wrong: got %+v", got)
 	}
@@ -96,7 +98,7 @@ func TestConvertLoopZeroYamlApps_FrontendInfersStaticRendering(t *testing.T) {
 	raw := map[string]map[string]interface{}{
 		"app": {"type": "frontend"},
 	}
-	got := ConvertLoopZeroYamlApps(raw)
+	got := shared.ConvertLoopZeroYamlApps(raw)
 	if len(got) != 1 || got[0].Rendering != "static" {
 		t.Errorf("frontend infer wrong: got %+v", got)
 	}
@@ -116,7 +118,7 @@ func TestConvertLoopZeroYamlApps_PortNumericVariants(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out := ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
+			out := shared.ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
 				"app": {"port": tc.raw},
 			})
 			if len(out) != 1 || out[0].Port != tc.want {
@@ -137,7 +139,7 @@ func TestConvertLoopZeroYamlApps_AutoscalingNumericVariants(t *testing.T) {
 			"targetCPU": float64(75),
 		}},
 	}
-	got := ConvertLoopZeroYamlApps(raw)
+	got := shared.ConvertLoopZeroYamlApps(raw)
 	if len(got) != 1 || got[0].Autoscaling == nil {
 		t.Fatalf("nil autoscaling: %+v", got)
 	}
@@ -155,7 +157,7 @@ func TestConvertLoopZeroYamlApps_MultipleAppsAllConverted(t *testing.T) {
 		"api":    {"runtime": "node", "start": "npm start", "port": 3000},
 		"worker": {"runtime": "python", "start": "python -m worker"},
 	}
-	got := ConvertLoopZeroYamlApps(raw)
+	got := shared.ConvertLoopZeroYamlApps(raw)
 	if len(got) != 2 {
 		t.Fatalf("len=%d; want 2", len(got))
 	}
@@ -171,11 +173,11 @@ func TestConvertLoopZeroYamlApps_MultipleAppsAllConverted(t *testing.T) {
 // with no apps block; nil-safe loopzero.yaml parse) and we MUST return
 // an empty slice, not nil, so range loops behave identically.
 func TestConvertLoopZeroYamlApps_EmptyInputReturnsEmptySlice(t *testing.T) {
-	got := ConvertLoopZeroYamlApps(nil)
+	got := shared.ConvertLoopZeroYamlApps(nil)
 	if got == nil || len(got) != 0 {
 		t.Errorf("got %+v; want empty slice", got)
 	}
-	got = ConvertLoopZeroYamlApps(map[string]map[string]interface{}{})
+	got = shared.ConvertLoopZeroYamlApps(map[string]map[string]interface{}{})
 	if got == nil || len(got) != 0 {
 		t.Errorf("got %+v; want empty slice", got)
 	}

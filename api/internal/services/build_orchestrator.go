@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -63,15 +64,15 @@ type BuildOrchestratorDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Workflow          WorkflowSubmitter
-	Sync              SyncClient
-	Locker            EnvironmentLocker
-	GitOps            GitOpsPusher
-	Delivery          DeliveryActivator   // MEET-009: polymorphic release activation
-	RegistryURL       string              // Container registry URL for BuildPlan image tag resolution
-	ArgocdSyncTimeout time.Duration       // 0 = default 120s
-	KVClient          StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
-	BaseDomain        string              // Base domain for app hostnames
+	Workflow          shared.WorkflowSubmitter
+	Sync              shared.SyncClient
+	Locker            shared.EnvironmentLocker
+	GitOps            shared.GitOpsPusher
+	Delivery          shared.DeliveryActivator // MEET-009: polymorphic release activation
+	RegistryURL       string                   // Container registry URL for BuildPlan image tag resolution
+	ArgocdSyncTimeout time.Duration            // 0 = default 120s
+	KVClient          StaticRoutingClient      // CF KV client for static frontend routing (nil = disabled)
+	BaseDomain        string                   // Base domain for app hostnames
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
@@ -127,12 +128,12 @@ type BuildOrchestrator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	workflow            WorkflowSubmitter
-	sync                SyncClient
-	locker              EnvironmentLocker
-	gitops              GitOpsPusher
-	delivery            DeliveryActivator // MEET-009: polymorphic release activation
-	registryURL         string            // Container registry URL for BuildPlan image tag resolution
+	workflow            shared.WorkflowSubmitter
+	sync                shared.SyncClient
+	locker              shared.EnvironmentLocker
+	gitops              shared.GitOpsPusher
+	delivery            shared.DeliveryActivator // MEET-009: polymorphic release activation
+	registryURL         string                   // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout   time.Duration
 	kvClient            StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain          string
@@ -211,8 +212,8 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 func (o *BuildOrchestrator) resolveScaling(
 	ctx context.Context,
 	tenantID, projectID, environment string,
-	apps []AppSpec,
-) ([]AppSpec, error) {
+	apps []shared.AppSpec,
+) ([]shared.AppSpec, error) {
 	if o.scalingResolver == nil {
 		return apps, nil
 	}

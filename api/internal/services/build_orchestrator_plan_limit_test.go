@@ -13,6 +13,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 )
@@ -61,11 +62,11 @@ func TestSubmitBuild_StarterPlan_ReplicasExceedCap_Returns422(t *testing.T) {
 		PlanCap:    checker,
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-starter",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 3},
 		},
 	})
@@ -107,14 +108,14 @@ func TestSubmitBuild_StarterPlan_AutoscalingMaxExceedsCap_Returns422(t *testing.
 		PlanCap:    checker,
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-starter",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{
 				Name: "api", Type: "server", Port: 3000, Runtime: "node",
-				Autoscaling: &AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
+				Autoscaling: &shared.AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
 			},
 		},
 	})
@@ -147,11 +148,11 @@ func TestSubmitBuild_StarterPlan_ReplicasAtCap_Succeeds(t *testing.T) {
 		PlanCap:    checker,
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-starter",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 2},
 		},
 	})
@@ -186,11 +187,11 @@ func TestSubmitBuild_ProPlan_ReplicasAtCap_Succeeds(t *testing.T) {
 		PlanCap:    checker,
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-pro",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 5},
 		},
 	})
@@ -217,11 +218,11 @@ func TestSubmitBuild_ProPlan_ReplicasOverCap_Returns422(t *testing.T) {
 		PlanCap:    checker,
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-pro",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 6},
 		},
 	})
@@ -248,15 +249,15 @@ func TestSubmitBuild_ReplicasAndAutoscalingSet_Returns422Ambiguous(t *testing.T)
 		PlanCap:    checker,
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-pro",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{
 				Name: "api", Type: "server", Port: 3000, Runtime: "node",
 				Replicas:    2,
-				Autoscaling: &AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70},
+				Autoscaling: &shared.AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70},
 			},
 		},
 	})
@@ -291,11 +292,11 @@ func TestSubmitBuild_NilPlanCapChecker_AllowsAll(t *testing.T) {
 		// PlanCap left nil — legacy callsite without enforcement configured.
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
 		TenantID:    "tn-any",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps: []AppSpec{
+		Apps: []shared.AppSpec{
 			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 99},
 		},
 	})

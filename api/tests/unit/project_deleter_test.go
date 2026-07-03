@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
@@ -149,7 +151,7 @@ func (f *fakeDeleteProjectStore) DeleteProject(_ context.Context, _, _ string) e
 	return nil
 }
 
-// fakeDeleteLocker implements services.EnvironmentLocker for delete tests.
+// fakeDeleteLocker implements shared.EnvironmentLocker for delete tests.
 // Executes fn immediately with nil tx (no real lock).
 type fakeDeleteLocker struct {
 	lockErr error
@@ -162,17 +164,17 @@ func (f *fakeDeleteLocker) WithLock(_ context.Context, _, _, _ string, fn func(t
 	return fn(nil)
 }
 
-// fakeDeleteGitOps implements services.GitOpsPusher for delete tests.
+// fakeDeleteGitOps implements shared.GitOpsPusher for delete tests.
 type fakeDeleteGitOps struct {
 	removeErr    error
-	removeCalled []services.GitOpsRemoveOpts
+	removeCalled []shared.GitOpsRemoveOpts
 }
 
-func (f *fakeDeleteGitOps) Push(_ context.Context, _ services.GitOpsPushOpts) (string, error) {
+func (f *fakeDeleteGitOps) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
 	return "fake-sha", nil
 }
 
-func (f *fakeDeleteGitOps) Remove(_ context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+func (f *fakeDeleteGitOps) Remove(_ context.Context, opts shared.GitOpsRemoveOpts) (string, error) {
 	f.removeCalled = append(f.removeCalled, opts)
 	if f.removeErr != nil {
 		return "", f.removeErr

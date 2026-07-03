@@ -28,8 +28,9 @@ import (
 // EXCEPTION because they will not have set the var.
 //
 // Usage:
-//   pruner := services.NewAuditLogPruner(pool, services.AuditLogPrunerOpts{})
-//   pruner.Start(ctx)  // runs nightly at 02:00 local time, no-op until then
+//
+//	pruner := services.NewAuditLogPruner(pool, services.AuditLogPrunerOpts{})
+//	pruner.Start(ctx)  // runs nightly at 02:00 local time, no-op until then
 type AuditLogPruner struct {
 	pool   *pgxpool.Pool
 	opts   AuditLogPrunerOpts

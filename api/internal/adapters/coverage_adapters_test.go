@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -48,12 +50,12 @@ func TestPgxRowsAdapter_Delegates(t *testing.T) {
 // via the real orchestrator path (line below), so the fake's interface methods
 // were never invoked and tripped deadcode.
 type fakeSubmitOrchestrator struct {
-	resp *services.SubmitBuildResponse
+	resp *shared.SubmitBuildResponse
 }
 
 func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 	orch := &fakeSubmitOrchestrator{
-		resp: &services.SubmitBuildResponse{
+		resp: &shared.SubmitBuildResponse{
 			BuildID:   "bld-001",
 			StreamURL: "/api/v1/builds/bld-001/stream",
 		},
@@ -106,7 +108,7 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 }
 
 func TestBuildOrchestratorAdapter_OnBuildCompleted_TranslatesApps(t *testing.T) {
-	// Verify the app translation from routes.BuildCallbackInput to services.BuildCallbackRequest.
+	// Verify the app translation from routes.BuildCallbackInput to shared.BuildCallbackRequest.
 	input := routes.BuildCallbackInput{
 		Status: "SUCCEEDED",
 		Apps: []routes.BuildCallbackApp{
@@ -117,9 +119,9 @@ func TestBuildOrchestratorAdapter_OnBuildCompleted_TranslatesApps(t *testing.T) 
 	}
 
 	// Verify translation logic
-	var apps []services.AppRelease
+	var apps []shared.AppRelease
 	for _, app := range input.Apps {
-		apps = append(apps, services.AppRelease{
+		apps = append(apps, shared.AppRelease{
 			Name:        app.Name,
 			ImageDigest: app.ImageDigest,
 			URL:         app.URL,

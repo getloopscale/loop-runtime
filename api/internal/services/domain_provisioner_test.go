@@ -12,6 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // validImageDigest is a 64-hex sha256 string used in DomainProvisioner
@@ -111,22 +112,22 @@ func (f *fakeLockerProvisioner) WithLock(_ context.Context, _, _, _ string, fn f
 }
 
 type fakeGitOpsProvisioner struct {
-	pushCalled    bool
-	pushErr       error
-	removeCalled  bool
+	pushCalled   bool
+	pushErr      error
+	removeCalled bool
 }
 
-func (f *fakeGitOpsProvisioner) Push(_ context.Context, _ GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsProvisioner) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
 	f.pushCalled = true
 	return "abc123", f.pushErr
 }
-func (f *fakeGitOpsProvisioner) Remove(_ context.Context, _ GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsProvisioner) Remove(_ context.Context, _ shared.GitOpsRemoveOpts) (string, error) {
 	f.removeCalled = true
 	return "def456", nil
 }
 
 type fakeCFZoneChecker struct {
-	statuses map[string]string
+	statuses  map[string]string
 	deleteErr error
 }
 

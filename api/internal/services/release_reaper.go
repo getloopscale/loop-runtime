@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -69,7 +70,7 @@ type ReleaseStaleChecker interface {
 type ReleaseReaper struct {
 	releaseStore db.ReleaseStore
 	checker      ReleaseStaleChecker
-	locker       EnvironmentLocker
+	locker       shared.EnvironmentLocker
 	eventStore   interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -81,7 +82,7 @@ type ReleaseReaper struct {
 func NewReleaseReaper(
 	releaseStore db.ReleaseStore,
 	checker ReleaseStaleChecker,
-	locker EnvironmentLocker,
+	locker shared.EnvironmentLocker,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},

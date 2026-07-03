@@ -23,7 +23,7 @@ import (
 
 // metav1Get/Update kept as small helpers so the test file's literal
 // metav1.GetOptions{}/UpdateOptions{} doesn't make every line noisy.
-func metav1Get() metav1.GetOptions    { return metav1.GetOptions{} }
+func metav1Get() metav1.GetOptions       { return metav1.GetOptions{} }
 func metav1Update() metav1.UpdateOptions { return metav1.UpdateOptions{} }
 
 // newFakeTenantClient builds a dynamic.Interface seeded with a Tenant CR

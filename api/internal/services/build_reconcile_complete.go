@@ -12,6 +12,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -24,7 +25,7 @@ import (
 // with the cryptographic digest + cosign signature reference. Missing
 // outputs are tolerated — workflows pre-this-change still produce valid
 // callbacks with empty signature fields.
-func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.Build, status *WorkflowStatus) {
+func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.Build, status *shared.WorkflowStatus) {
 	r.logger.Info("reconcile loop: workflow succeeded, processing build completion",
 		"build_id", build.ID, "workflow_id", build.WorkflowID)
 
@@ -33,7 +34,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	metrics.BuildQueueDepth.Dec()
 
 	// Compute image references from deterministic pattern
-	var buildApps []AppRelease
+	var buildApps []shared.AppRelease
 	var manifestApps []manifests.AppManifestInput
 
 	// Parse the apps from the build record (stored at submission time)
@@ -47,7 +48,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	// Build AppRelease list for the build callback (URL computation, etc.)
 	for _, app := range apps {
-		buildApps = append(buildApps, BuildAppRelease(
+		buildApps = append(buildApps, shared.BuildAppRelease(
 			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name,
 			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
 		))
@@ -75,7 +76,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 			digests[ar.Name] = ar.ImageDigestSHA256
 		}
 	}
-	manifestApps, err = BuildManifestApps(ctx, BuildManifestAppsInput{
+	manifestApps, err = shared.BuildManifestApps(ctx, shared.BuildManifestAppsInput{
 		RegistryURL: r.cfg.RegistryURL,
 		TenantID:    build.TenantID,
 		ProjectID:   build.ProjectID,
@@ -123,7 +124,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	r.ensureApplicationCRs(ctx, build, apps)
 
 	// Construct the completion result and delegate to the orchestrator
-	result := BuildCallbackRequest{
+	result := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Apps:      buildApps,
 		Manifests: renderedManifests,
@@ -225,7 +226,7 @@ func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db
 //     so absence of these outputs is normal and must not be treated as
 //     an error.
 //   - All fields stay at their zero value when outputs are missing.
-func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus) {
+func enrichAppReleasesWithAttestation(apps []shared.AppRelease, status *shared.WorkflowStatus) {
 	if status == nil || len(status.Outputs) == 0 {
 		return
 	}
@@ -307,7 +308,7 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 // duration histogram observation is skipped here entirely until
 // `*_duration_ms` outputs land — emitting `Observe(0)` would create
 // a misleading bucket-0 spike.
-func emitSigstoreObservations(status *WorkflowStatus, appName, rekorURL string) {
+func emitSigstoreObservations(status *shared.WorkflowStatus, appName, rekorURL string) {
 	if status == nil {
 		return
 	}

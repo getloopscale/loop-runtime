@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -27,7 +28,7 @@ import (
 // should always attempt to reach the cluster (GetStatus is used by the reconcile
 // loop and reaper, Cancel is best-effort).
 type CircuitBreakerWorkflowSubmitter struct {
-	inner          WorkflowSubmitter
+	inner          shared.WorkflowSubmitter
 	logger         *slog.Logger
 	openThreshold  int
 	closeThreshold int
@@ -44,7 +45,7 @@ type CircuitBreakerWorkflowSubmitter struct {
 // a WorkflowSubmitter. Uses the same CircuitBreakerConfig as the ArgoCD circuit
 // breaker for consistency.
 func NewCircuitBreakerWorkflowSubmitter(
-	inner WorkflowSubmitter,
+	inner shared.WorkflowSubmitter,
 	cfg CircuitBreakerConfig,
 	logger *slog.Logger,
 ) *CircuitBreakerWorkflowSubmitter {
@@ -60,7 +61,7 @@ func NewCircuitBreakerWorkflowSubmitter(
 
 // Submit delegates to the inner WorkflowSubmitter with circuit breaker protection.
 // Returns ErrPlatformDegraded immediately when the circuit is open.
-func (cb *CircuitBreakerWorkflowSubmitter) Submit(ctx context.Context, spec WorkflowSpec) (string, error) {
+func (cb *CircuitBreakerWorkflowSubmitter) Submit(ctx context.Context, spec shared.WorkflowSpec) (string, error) {
 	if err := cb.submitPreCheck(); err != nil {
 		return "", err
 	}
@@ -77,7 +78,7 @@ func (cb *CircuitBreakerWorkflowSubmitter) Cancel(ctx context.Context, namespace
 
 // GetStatus delegates directly — not circuit-breaker protected (read operation
 // used by reconcile loop and reaper).
-func (cb *CircuitBreakerWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*WorkflowStatus, error) {
+func (cb *CircuitBreakerWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*shared.WorkflowStatus, error) {
 	return cb.inner.GetStatus(ctx, namespace, workflowID)
 }
 

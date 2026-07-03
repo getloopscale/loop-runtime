@@ -14,10 +14,10 @@ import (
 // --- Test doubles for DomainCFReconciler ---
 
 type fakeCFReconcilerStore struct {
-	domains        []CFDomainInfo
-	updatedZones   map[string]string
-	findErr        error
-	updateErr      error
+	domains      []CFDomainInfo
+	updatedZones map[string]string
+	findErr      error
+	updateErr    error
 }
 
 func newFakeCFReconcilerStore() *fakeCFReconcilerStore {
@@ -165,9 +165,9 @@ func TestDomainCFReconciler_MultipleDomains_DriftOnSome(t *testing.T) {
 
 	cfReader := &fakeCFStatusReader{
 		statuses: map[string]string{
-			"z1": "active",   // no drift
-			"z2": "deleted",  // drift
-			"z3": "pending",  // no drift
+			"z1": "active",  // no drift
+			"z2": "deleted", // drift
+			"z3": "pending", // no drift
 		},
 	}
 

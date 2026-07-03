@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // T1.1 (plan simplify-deploy-loopzerokit-only v2.0) — canonical Dockerfile generator.
@@ -17,7 +17,7 @@ import (
 // generator runs at API time WITHOUT the extracted source, so package-manager
 // selection is deterministic build-time shell logic inside the Dockerfile.
 
-func mustDockerfile(t *testing.T, runtime string, app services.AppSpec) string {
+func mustDockerfile(t *testing.T, runtime string, app shared.AppSpec) string {
 	t.Helper()
 	df, err := canonicalDockerfile(runtime, app)
 	if err != nil {
@@ -27,7 +27,7 @@ func mustDockerfile(t *testing.T, runtime string, app services.AppSpec) string {
 }
 
 func TestCanonicalDockerfile_NodeServer(t *testing.T) {
-	df := mustDockerfile(t, "node", services.AppSpec{Name: "web", Type: "server", Port: 8080, Start: "node dist/main.js"})
+	df := mustDockerfile(t, "node", shared.AppSpec{Name: "web", Type: "server", Port: 8080, Start: "node dist/main.js"})
 	if !strings.HasPrefix(df, "# syntax=docker/dockerfile:1") {
 		t.Error("missing syntax directive")
 	}
@@ -55,7 +55,7 @@ func TestCanonicalDockerfile_NodeServer(t *testing.T) {
 func TestCanonicalDockerfile_NodeWorker_NoExpose(t *testing.T) {
 	// EC-7 — worker carries a port in the manifest (schema-required) but the
 	// Dockerfile must NOT EXPOSE it (workers receive no traffic).
-	df := mustDockerfile(t, "node", services.AppSpec{Name: "jobs", Type: "worker", Port: 8001, Start: "node dist/worker.js"})
+	df := mustDockerfile(t, "node", shared.AppSpec{Name: "jobs", Type: "worker", Port: 8001, Start: "node dist/worker.js"})
 	if strings.Contains(df, "EXPOSE") {
 		t.Errorf("worker Dockerfile must NOT contain EXPOSE; got:\n%s", df)
 	}
@@ -65,7 +65,7 @@ func TestCanonicalDockerfile_NodeWorker_NoExpose(t *testing.T) {
 }
 
 func TestCanonicalDockerfile_PythonServer(t *testing.T) {
-	df := mustDockerfile(t, "python", services.AppSpec{Name: "api", Type: "server", Port: 8000, Start: "python -m app"})
+	df := mustDockerfile(t, "python", shared.AppSpec{Name: "api", Type: "server", Port: 8000, Start: "python -m app"})
 	if !strings.Contains(df, "FROM "+imagePythonBase) {
 		t.Errorf("python Dockerfile must FROM the digest-pinned python base; got:\n%s", df)
 	}
@@ -82,7 +82,7 @@ func TestCanonicalDockerfile_PythonServer(t *testing.T) {
 }
 
 func TestCanonicalDockerfile_UnsupportedRuntime_E011(t *testing.T) {
-	_, err := canonicalDockerfile("go", services.AppSpec{Name: "x", Type: "server", Port: 8080, Start: "x"})
+	_, err := canonicalDockerfile("go", shared.AppSpec{Name: "x", Type: "server", Port: 8080, Start: "x"})
 	if err == nil {
 		t.Fatal("expected E-011 error for unsupported runtime, got nil")
 	}
@@ -93,7 +93,7 @@ func TestCanonicalDockerfile_UnsupportedRuntime_E011(t *testing.T) {
 
 func TestCanonicalDockerfile_MissingStart_Errors(t *testing.T) {
 	// No silent default CMD — a missing declared start is a typed error.
-	_, err := canonicalDockerfile("node", services.AppSpec{Name: "x", Type: "server", Port: 8080, Start: ""})
+	_, err := canonicalDockerfile("node", shared.AppSpec{Name: "x", Type: "server", Port: 8080, Start: ""})
 	if err == nil {
 		t.Fatal("expected error for missing start command, got nil")
 	}
@@ -101,7 +101,7 @@ func TestCanonicalDockerfile_MissingStart_Errors(t *testing.T) {
 
 func TestCanonicalBuild_InjectsServicesEnv(t *testing.T) {
 	// C6/EC-6 — build-time env surfaced as ENV lines (rendered in Go, not via shell).
-	df := mustDockerfile(t, "node", services.AppSpec{
+	df := mustDockerfile(t, "node", shared.AppSpec{
 		Name: "web", Type: "server", Port: 8080, Start: "node x.js",
 		Env: map[string]string{"API_BASE": "https://api.example.com"},
 	})
@@ -113,7 +113,7 @@ func TestCanonicalBuild_InjectsServicesEnv(t *testing.T) {
 func TestCanonicalBuild_EnvNotSecret(t *testing.T) {
 	// C6 — secret-shaped env keys are rejected before reaching build-args/ENV
 	// (build-args land in provenance + cache).
-	_, err := canonicalDockerfile("node", services.AppSpec{
+	_, err := canonicalDockerfile("node", shared.AppSpec{
 		Name: "web", Type: "server", Port: 8080, Start: "node x.js",
 		Env: map[string]string{"DATABASE_PASSWORD": "hunter2"},
 	})
@@ -123,7 +123,7 @@ func TestCanonicalBuild_EnvNotSecret(t *testing.T) {
 }
 
 func TestCanonicalDockerfile_Deterministic(t *testing.T) {
-	app := services.AppSpec{
+	app := shared.AppSpec{
 		Name: "web", Type: "server", Port: 8080, Start: "node x.js",
 		Env: map[string]string{"B": "2", "A": "1", "C": "3"},
 	}
@@ -140,7 +140,7 @@ func TestCanonicalDockerfileStep_OverwritesAndWarns(t *testing.T) {
 	// to the path BuildKit reads (dockerfilePathForApp), via a TRUNCATING redirect
 	// (`cat > path`) so any user Dockerfile extracted at the collision path is
 	// overwritten — fail-closed. It also WARNS when a user Dockerfile is present.
-	c, err := canonicalDockerfileStep("node", []services.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
+	c, err := canonicalDockerfileStep("node", []shared.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
 	if err != nil {
 		t.Fatalf("canonicalDockerfileStep: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestCanonicalDockerfileStep_OverwritesAndWarns(t *testing.T) {
 // subdirectories (monorepo apps) — not just the root. Given the generated step
 // script, When inspected, Then it finds all three name patterns at -maxdepth 3.
 func TestCanonicalDockerfileStep_WarnLoopCoversAllVectors(t *testing.T) {
-	c, err := canonicalDockerfileStep("node", []services.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
+	c, err := canonicalDockerfileStep("node", []shared.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
 	if err != nil {
 		t.Fatalf("canonicalDockerfileStep: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestCanonicalDockerfileStep_WarnLoopCoversAllVectors(t *testing.T) {
 // is left for BuildKit to read a user file. Given two apps, When the step is built,
 // Then both /workspace/Dockerfile.web and /workspace/Dockerfile.api are written.
 func TestCanonicalDockerfileStep_MultiApp_EachOverwritten(t *testing.T) {
-	apps := []services.AppSpec{
+	apps := []shared.AppSpec{
 		{Name: "web", Type: "server", Port: 8080, Start: "node web.js"},
 		{Name: "api", Type: "server", Port: 8081, Start: "node api.js"},
 	}

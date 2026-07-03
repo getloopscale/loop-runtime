@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/services"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -25,7 +27,7 @@ func TestWorkflowCircuitBreaker_ClosedState_DelegatesToInner(t *testing.T) {
 	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	// Act
-	id, err := cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-001"})
+	id, err := cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-001"})
 
 	// Assert
 	if err != nil {
@@ -50,11 +52,11 @@ func TestWorkflowCircuitBreaker_OpensAfterThresholdFailures(t *testing.T) {
 
 	// Act — 3 failures to open the circuit
 	for i := 0; i < 3; i++ {
-		_, _ = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: fmt.Sprintf("b-%03d", i)})
+		_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: fmt.Sprintf("b-%03d", i)})
 	}
 
 	// 4th attempt should be rejected immediately by circuit breaker
-	_, err := cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-003"})
+	_, err := cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-003"})
 
 	// Assert
 	if err == nil {
@@ -75,7 +77,7 @@ func TestWorkflowCircuitBreaker_CancelNotProtected(t *testing.T) {
 	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	// Open circuit
-	_, _ = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-001"})
+	_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-001"})
 
 	// Cancel should still go through
 	err := cb.Cancel(context.Background(), "build-acme", "wf-123")
@@ -94,7 +96,7 @@ func TestWorkflowCircuitBreaker_GetStatusNotProtected(t *testing.T) {
 	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	// Open circuit
-	_, _ = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-001"})
+	_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-001"})
 
 	// GetStatus should still go through
 	status, err := cb.GetStatus(context.Background(), "build-acme", "wf-123")
@@ -116,10 +118,10 @@ func TestWorkflowCircuitBreaker_RecoveryProbe(t *testing.T) {
 	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	// Open circuit
-	_, _ = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-001"})
+	_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-001"})
 
 	// Verify circuit is open
-	_, err := cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-002"})
+	_, err := cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-002"})
 	if err != loopzeroerrors.ErrPlatformDegraded {
 		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
 	}
@@ -128,19 +130,19 @@ func TestWorkflowCircuitBreaker_RecoveryProbe(t *testing.T) {
 
 	// Fix inner and send recovery probes
 	inner.err = nil
-	_, err = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-003"})
+	_, err = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-003"})
 	if err != nil {
 		t.Fatalf("expected recovery probe to succeed, got %v", err)
 	}
 
 	// Need 2 successes for closeThreshold=2
-	_, err = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-004"})
+	_, err = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-004"})
 	if err != nil {
 		t.Fatalf("expected second probe to succeed, got %v", err)
 	}
 
 	// Circuit should be closed now — next submit should work
-	_, err = cb.Submit(context.Background(), services.WorkflowSpec{BuildID: "b-005"})
+	_, err = cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-005"})
 	if err != nil {
 		t.Errorf("expected closed circuit to allow submit, got %v", err)
 	}

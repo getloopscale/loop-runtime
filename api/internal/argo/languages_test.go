@@ -6,9 +6,9 @@ package argo
 import (
 	"testing"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	forge "github.com/getloopscale/loopzero-forge"
 )
 
 // ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ func TestNodeStrategy_CacheDirs(t *testing.T) {
 
 func TestNodeStrategy_ValidateStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 3000}}
+	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 3000}}
 	c := s.ValidateStep(apps)
 
 	assertContainerShape(t, c, "validate-workspace", "node:20.11.1-alpine")
@@ -67,7 +67,7 @@ func TestNodeStrategy_ValidateStep_ReturnsContainerTemplate(t *testing.T) {
 
 func TestNodeStrategy_InstallStep_HasRetryStrategy(t *testing.T) {
 	s := &NodeStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 3000}}
+	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 3000}}
 	c := s.InstallStep(apps)
 
 	assertContainerShape(t, c, "install-deps", "node:20.11.1-alpine")
@@ -79,7 +79,7 @@ func TestNodeStrategy_InstallStep_HasRetryStrategy(t *testing.T) {
 
 func TestNodeStrategy_BuildStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 3000}}
+	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 3000}}
 	c := s.BuildStep(apps)
 
 	assertContainerShape(t, c, "build-apps", "node:20.11.1-alpine")
@@ -142,7 +142,7 @@ func TestPythonStrategy_CacheKey(t *testing.T) {
 
 func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	s := &PythonStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
+	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
 	c := s.ValidateStep(apps)
 
 	assertContainerShape(t, c, "validate-workspace", "python:3.12-alpine")
@@ -166,7 +166,7 @@ func TestAppPaths_EmptyApps_ReturnsDot(t *testing.T) {
 }
 
 func TestAppPaths_WithPaths(t *testing.T) {
-	apps := []services.AppSpec{
+	apps := []shared.AppSpec{
 		{Name: "api", Path: "services/api"},
 		{Name: "web", Path: ""},
 	}
@@ -180,7 +180,7 @@ func TestAppPaths_WithPaths(t *testing.T) {
 }
 
 func TestDefaultPort_UsesFirstNonZero(t *testing.T) {
-	apps := []services.AppSpec{
+	apps := []shared.AppSpec{
 		{Name: "worker", Port: 0},
 		{Name: "api", Port: 8080},
 	}
@@ -190,7 +190,7 @@ func TestDefaultPort_UsesFirstNonZero(t *testing.T) {
 }
 
 func TestDefaultPort_FallbackWhenAllZero(t *testing.T) {
-	apps := []services.AppSpec{{Name: "worker", Port: 0}}
+	apps := []shared.AppSpec{{Name: "worker", Port: 0}}
 	if p := defaultPort(apps, 3000); p != 3000 {
 		t.Errorf("defaultPort = %d, want 3000 (fallback)", p)
 	}

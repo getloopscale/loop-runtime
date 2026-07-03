@@ -10,6 +10,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -91,7 +93,7 @@ func (f *fakeLockerIdem) WithLock(_ context.Context, _, _, _ string, fn func(tx 
 
 type fakeWorkflowIdem struct{}
 
-func (f *fakeWorkflowIdem) Submit(_ context.Context, _ services.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowIdem) Submit(_ context.Context, _ shared.WorkflowSpec) (string, error) {
 	return "", nil
 }
 
@@ -99,8 +101,8 @@ func (f *fakeWorkflowIdem) Cancel(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (f *fakeWorkflowIdem) GetStatus(_ context.Context, _, _ string) (*services.WorkflowStatus, error) {
-	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
+func (f *fakeWorkflowIdem) GetStatus(_ context.Context, _, _ string) (*shared.WorkflowStatus, error) {
+	return &shared.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
 type fakeEventStoreIdem struct{}

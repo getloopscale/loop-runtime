@@ -7,7 +7,7 @@
 // at the build-plan layer. loopzero-dockerfile-lint blocks them inside
 // Dockerfiles; this layer blocks them in loopzero.yaml `env` blocks.
 
-package services
+package shared
 
 import "testing"
 

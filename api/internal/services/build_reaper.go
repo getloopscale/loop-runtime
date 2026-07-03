@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -74,8 +75,8 @@ type BuildReconcileChecker interface {
 type BuildReaper struct {
 	buildStore db.BuildStore
 	checker    BuildStaleChecker
-	locker     EnvironmentLocker
-	workflow   WorkflowSubmitter
+	locker     shared.EnvironmentLocker
+	workflow   shared.WorkflowSubmitter
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -85,7 +86,7 @@ type BuildReaper struct {
 }
 
 // NewBuildReaper creates a new BuildReaper.
-func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker EnvironmentLocker, workflow WorkflowSubmitter, eventStore interface {
+func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker shared.EnvironmentLocker, workflow shared.WorkflowSubmitter, eventStore interface {
 	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 }, logger *slog.Logger, cfg BuildReaperConfig, reconciler BuildReconcileChecker) *BuildReaper {
 	return &BuildReaper{

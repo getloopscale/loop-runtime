@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // T1.2 mitigation #3 of MEET-2026-05-12 launch readiness — per-sign
@@ -35,7 +36,7 @@ import (
 //
 // Best-effort: errors are logged at WARN; the function never returns an
 // error so it cannot be misused to block the build callback path.
-func emitCosignSignAudits(ctx context.Context, audit domain.AuditLogger, build *buildAuditContext, apps []AppRelease, correlationID string) {
+func emitCosignSignAudits(ctx context.Context, audit domain.AuditLogger, build *buildAuditContext, apps []shared.AppRelease, correlationID string) {
 	if audit == nil || build == nil {
 		return
 	}

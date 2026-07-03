@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package shared
+
+import (
+	"context"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
+)
+
+// CustomDomainQuerier queries active custom domains for manifest rendering.
+// MEET-2026-04-06-034 Block 0: both deploy and domain provisioner must include custom domains.
+type CustomDomainQuerier interface {
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error)
+}

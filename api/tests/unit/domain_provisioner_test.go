@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/services"
@@ -209,7 +211,7 @@ func TestProvisionDomain_GitopsPushSuccess_TransitionsToActive(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 
 	// Test BuildManifestApps directly (the shared function)
-	manifestApps, err := services.BuildManifestApps(context.Background(), services.BuildManifestAppsInput{
+	manifestApps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-acme",
 		ProjectID:   "webapp",
@@ -274,7 +276,7 @@ func TestRemoveDomain_BuildManifestApps_ExcludesDomain(t *testing.T) {
 	}
 
 	// BuildManifestApps with ExcludeDomain should filter out the removed domain
-	manifestApps, err := services.BuildManifestApps(context.Background(), services.BuildManifestAppsInput{
+	manifestApps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
 		RegistryURL:   "registry.example.com",
 		TenantID:      "tn-acme",
 		ProjectID:     "webapp",
@@ -319,7 +321,7 @@ func TestBuildManifestApps_IncludesCustomDomains(t *testing.T) {
 		{Domain: "api.mycompany.com", ID: "dom-1"},
 	}
 
-	manifestApps, err := services.BuildManifestApps(context.Background(), services.BuildManifestAppsInput{
+	manifestApps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-acme",
 		ProjectID:   "webapp",
@@ -345,7 +347,7 @@ func TestBuildManifestApps_CustomDomainQueryError_ReturnsError(t *testing.T) {
 	store := newFakeDomainStore()
 	store.listActiveErr = fmt.Errorf("database connection failed")
 
-	_, err := services.BuildManifestApps(context.Background(), services.BuildManifestAppsInput{
+	_, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-acme",
 		ProjectID:   "webapp",

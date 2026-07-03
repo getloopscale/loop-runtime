@@ -17,28 +17,28 @@ type ErrorClass string
 // Canonical error classes. Order matters in Classify (most specific
 // wins). Frontend mirrors this list in sse-events.ts.
 const (
-	ErrorClassOOM            ErrorClass = "OOM"
-	ErrorClassBuildTimeout   ErrorClass = "BUILD_TIMEOUT"
-	ErrorClassImagePullFail  ErrorClass = "IMAGE_PULL_FAILED"
-	ErrorClassCosignFailed   ErrorClass = "COSIGN_FAILED"
-	ErrorClassRegistryAuth   ErrorClass = "REGISTRY_AUTH"
-	ErrorClassDockerfileLint ErrorClass = "DOCKERFILE_LINT"
+	ErrorClassOOM             ErrorClass = "OOM"
+	ErrorClassBuildTimeout    ErrorClass = "BUILD_TIMEOUT"
+	ErrorClassImagePullFail   ErrorClass = "IMAGE_PULL_FAILED"
+	ErrorClassCosignFailed    ErrorClass = "COSIGN_FAILED"
+	ErrorClassRegistryAuth    ErrorClass = "REGISTRY_AUTH"
+	ErrorClassDockerfileLint  ErrorClass = "DOCKERFILE_LINT"
 	ErrorClassLoopZeroYAMLInvalid ErrorClass = "LOOPZERO_YAML_INVALID"
 	ErrorClassCancelledByUser ErrorClass = "CANCELLED_BY_USER"
 	ErrorClassWorkflowDeleted ErrorClass = "WORKFLOW_DELETED"
-	ErrorClassUnknown        ErrorClass = "UNKNOWN"
+	ErrorClassUnknown         ErrorClass = "UNKNOWN"
 )
 
 // suggestions maps an error class to a user-facing actionable hint. Rule 3:
 // no internal terms ("Argo", "Workflow", "K8s") — phrased for the app
 // developer who reads the dashboard.
 var suggestions = map[ErrorClass]string{
-	ErrorClassOOM:             "Container exceeded memory limit. Increase plan resources or optimize image.",
-	ErrorClassBuildTimeout:    "Build exceeded 30 minutes. Check for stuck dependencies or split large monorepos.",
-	ErrorClassImagePullFail:   "Could not pull base image. Verify Dockerfile FROM reference or registry access.",
-	ErrorClassCosignFailed:    "Image signing failed. Operator may need to rotate the signing key.",
-	ErrorClassRegistryAuth:    "Could not push to image registry. Verify pull secret and registry credentials.",
-	ErrorClassDockerfileLint:  "Dockerfile failed validation. See lint output for the specific violation.",
+	ErrorClassOOM:            "Container exceeded memory limit. Increase plan resources or optimize image.",
+	ErrorClassBuildTimeout:   "Build exceeded 30 minutes. Check for stuck dependencies or split large monorepos.",
+	ErrorClassImagePullFail:  "Could not pull base image. Verify Dockerfile FROM reference or registry access.",
+	ErrorClassCosignFailed:   "Image signing failed. Operator may need to rotate the signing key.",
+	ErrorClassRegistryAuth:   "Could not push to image registry. Verify pull secret and registry credentials.",
+	ErrorClassDockerfileLint: "Dockerfile failed validation. See lint output for the specific violation.",
 	// Red Team loopzero-cloud#123 — guide the customer to the canonical manifest
 	// (loopzerokit v2 emits `.loopzero/services.json`; the legacy `loopzero.yaml` has
 	// been retired). The class name stays `LOOPZERO_YAML_INVALID` for engine

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // T2.1 (plan simplify-deploy-loopzerokit-only v2.0) — collapse to node/python.
@@ -25,7 +25,7 @@ func TestResolveStrategy_NodePython_OK(t *testing.T) {
 }
 
 func TestResolveStrategy_UnsupportedRuntime_FailsClosed(t *testing.T) {
-	app := []services.AppSpec{{Name: "x", Type: "server", Port: 8080, Start: "x"}}
+	app := []shared.AppSpec{{Name: "x", Type: "server", Port: 8080, Start: "x"}}
 	for _, fw := range []string{"go", "ruby", "java", "php", "rust"} {
 		c := ResolveStrategy(fw).DockerfileStep(app, 1)
 		if c == nil {

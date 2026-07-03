@@ -430,7 +430,7 @@ func TestEnsureEnvironment_DifferentProjectSameEnvName_TriggersAddEnvironment(t 
 	// existing tuple (qa-redteam-dogfood, preview).
 	lister := &stubLister{
 		existsByTuple: map[string]bool{
-			"qa-redteam-dogfood|preview": true,
+			"qa-redteam-dogfood|preview":    true,
 			"qa-redteam-dogfood|production": true,
 		},
 	}

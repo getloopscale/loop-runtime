@@ -38,21 +38,21 @@ import (
 // because it's a user-facing concept in admin scope. "ArgoCD" /
 // "Argo Workflows" / "Kaniko" / etc. MUST NOT appear.
 type ReleaseInspection struct {
-	ReleaseID                string                       `json:"release_id"`
-	BuildID                  string                       `json:"build_id"`
-	TenantID                 string                       `json:"tenant_id"`
-	ProjectID                string                       `json:"project_id"`
-	Environment              string                       `json:"environment"`
-	Status                   string                       `json:"status"`
-	CorrelationID            string                       `json:"correlation_id"`
-	WorkflowID               *string                      `json:"workflow_id,omitempty"`
-	ImageDigest              *string                      `json:"image_digest,omitempty"`
-	ImageSignature           *string                      `json:"image_signature,omitempty"`
-	ImageSignedAt            *string                      `json:"image_signed_at,omitempty"`
-	ImageAttestationRekorURL *string                      `json:"image_attestation_rekor_url,omitempty"`
-	SigningPath              string                       `json:"signing_path"`     // "keyless" | "keyed" | "unsigned" | "unknown"
-	AttestationPath          string                       `json:"attestation_path"` // "present" | "absent" | "unknown"
-	AuditLogEntries          []ReleaseInspectionAuditRow  `json:"audit_log_entries"`
+	ReleaseID                string                      `json:"release_id"`
+	BuildID                  string                      `json:"build_id"`
+	TenantID                 string                      `json:"tenant_id"`
+	ProjectID                string                      `json:"project_id"`
+	Environment              string                      `json:"environment"`
+	Status                   string                      `json:"status"`
+	CorrelationID            string                      `json:"correlation_id"`
+	WorkflowID               *string                     `json:"workflow_id,omitempty"`
+	ImageDigest              *string                     `json:"image_digest,omitempty"`
+	ImageSignature           *string                     `json:"image_signature,omitempty"`
+	ImageSignedAt            *string                     `json:"image_signed_at,omitempty"`
+	ImageAttestationRekorURL *string                     `json:"image_attestation_rekor_url,omitempty"`
+	SigningPath              string                      `json:"signing_path"`     // "keyless" | "keyed" | "unsigned" | "unknown"
+	AttestationPath          string                      `json:"attestation_path"` // "present" | "absent" | "unknown"
+	AuditLogEntries          []ReleaseInspectionAuditRow `json:"audit_log_entries"`
 }
 
 // ReleaseInspectionAuditRow surfaces a single audit_log row relevant

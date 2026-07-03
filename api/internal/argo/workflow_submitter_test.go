@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	forge "github.com/getloopscale/loopzero-forge"
 
 	corev1 "k8s.io/api/core/v1"
@@ -17,8 +19,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // These tests run against real Argo Workflows in the build cluster.
@@ -132,10 +132,10 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	apps := []services.AppSpec{
+	apps := []shared.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 	}
-	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
+	workflowID, err := submitter.Submit(ctx, shared.WorkflowSpec{
 		BuildID:     "test-build-001",
 		TenantID:    "acme",
 		ProjectID:   "my-app",
@@ -173,10 +173,10 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
 	// frontends are CDN-static via Cloudflare Worker (ADR D5) and do not flow
 	// through Argo. Use a single server app for cancel testing.
-	apps := []services.AppSpec{
+	apps := []shared.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 	}
-	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
+	workflowID, err := submitter.Submit(ctx, shared.WorkflowSpec{
 		BuildID:     "test-cancel-001",
 		TenantID:    "acme",
 		ProjectID:   "my-app",
@@ -210,11 +210,11 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
 	// frontend apps removed (CDN-static path, ADR D5). Multi-app fixture now
 	// exercises server + worker only.
-	apps := []services.AppSpec{
+	apps := []shared.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 		{Name: "worker", Type: "worker", Port: 0},
 	}
-	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
+	workflowID, err := submitter.Submit(ctx, shared.WorkflowSpec{
 		BuildID:     "test-multi-001",
 		TenantID:    "acme",
 		ProjectID:   "monorepo",
@@ -468,7 +468,7 @@ func TestExtractStepOutputs_DefensiveAgainstMissingFields(t *testing.T) {
 // This test is a compile-time guard: if WorkflowStatus.Outputs is
 // removed or renamed, this won't build.
 func TestWorkflowStatus_OutputsField_CompileGuard(t *testing.T) {
-	var s services.WorkflowStatus
+	var s shared.WorkflowStatus
 	s.Outputs = map[string]map[string]string{
 		"sign-image-api": {"signature": "x"},
 	}

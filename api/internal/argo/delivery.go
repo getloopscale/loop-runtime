@@ -6,10 +6,10 @@ package argo
 import (
 	"fmt"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
-
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // uploadAssetsTemplate generates a container template that uploads static build
@@ -22,7 +22,7 @@ import (
 //
 // Uses aws cli for S3 operations. Credentials come from the existing
 // loopzero-minio-credentials Secret in the build namespace (envFrom in CWT).
-func (b *WorkflowBuilder) uploadAssetsTemplate(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Script {
+func (b *WorkflowBuilder) uploadAssetsTemplate(spec shared.WorkflowSpec, plan shared.AppBuildPlan) *forge.Script {
 	appPath := plan.AppPath
 	if appPath == "" || appPath == "." {
 		appPath = "."

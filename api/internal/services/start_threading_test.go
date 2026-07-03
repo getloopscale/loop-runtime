@@ -3,7 +3,11 @@
 
 package services
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+)
 
 // T0.2b (plan simplify-deploy-loopzerokit-only v2.0) — thread the declared start
 // command through the build-plan chain: AppSpec → AppUnit → AppBuildPlan, so
@@ -12,9 +16,9 @@ import "testing"
 
 func TestNormalizeApp_CarriesStart(t *testing.T) {
 	// Arrange — a server AppSpec with a declared start command
-	raw := AppSpec{Name: "api", Type: "server", Port: 8080, Runtime: "node", Start: "node dist/main.js"}
+	raw := shared.AppSpec{Name: "api", Type: "server", Port: 8080, Runtime: "node", Start: "node dist/main.js"}
 	// Act
-	unit, err := NormalizeApp("api", raw)
+	unit, err := shared.NormalizeApp("api", raw)
 	// Assert
 	if err != nil {
 		t.Fatalf("NormalizeApp: unexpected error: %v", err)
@@ -26,9 +30,9 @@ func TestNormalizeApp_CarriesStart(t *testing.T) {
 
 func TestCreateBuildPlan_CarriesStart(t *testing.T) {
 	// Arrange
-	units := []AppUnit{{Name: "api", Type: "server", Port: 8080, Runtime: "node", Start: "node dist/main.js"}}
+	units := []shared.AppUnit{{Name: "api", Type: "server", Port: 8080, Runtime: "node", Start: "node dist/main.js"}}
 	// Act
-	plan := CreateBuildPlan(units, "tn", "proj", "abc123", "registry.example.com")
+	plan := shared.CreateBuildPlan(units, "tn", "proj", "abc123", "registry.example.com")
 	// Assert
 	if len(plan.Apps) != 1 {
 		t.Fatalf("expected 1 app plan, got %d", len(plan.Apps))

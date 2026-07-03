@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // BuildCompletionHandler abstracts the methods that BuildReconcileLoop calls on
@@ -20,10 +20,10 @@ import (
 // loop independently and follows ISP (arch-cp-004).
 type BuildCompletionHandler interface {
 	// OnBuildCompleted handles a successful build workflow completion.
-	OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackRequest) error
+	OnBuildCompleted(ctx context.Context, buildID string, result shared.BuildCallbackRequest) error
 
 	// RetryReleaseActivation retries Phase 2 (release activation) for a RELEASING build.
-	RetryReleaseActivation(ctx context.Context, build *db.Build, result BuildCallbackRequest) error
+	RetryReleaseActivation(ctx context.Context, build *db.Build, result shared.BuildCallbackRequest) error
 
 	// FindReleaseForBuild returns the most recent release for a build, or nil if none exists.
 	FindReleaseForBuild(ctx context.Context, buildID string) (*db.Release, error)
@@ -91,12 +91,6 @@ type CellLister interface {
 //   - build_reconcile_complete.go: onWorkflowSucceeded(), completeBuild(), ensureApplicationCRs()
 //   - build_reconcile_retry.go: retryReleaseActivation(), failBuild()
 
-// CustomDomainQuerier queries active custom domains for manifest rendering.
-// MEET-2026-04-06-034 Block 0: both deploy and domain provisioner must include custom domains.
-type CustomDomainQuerier interface {
-	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error)
-}
-
 // ApplicationCREnsurer creates LoopZeroApplication CRs on the mgmt cluster.
 // CHG-2026-04-08-001: Wires ApplicationController to the deploy flow.
 type ApplicationCREnsurer interface {
@@ -127,12 +121,12 @@ type TenantPlanLookup interface {
 }
 
 type BuildReconcileLoop struct {
-	buildStore   db.BuildStore
-	workflow     WorkflowSubmitter
-	orch         BuildCompletionHandler
-	locker       EnvironmentLocker
-	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
-	appCRMgr     ApplicationCREnsurer
+	buildStore  db.BuildStore
+	workflow    shared.WorkflowSubmitter
+	orch        BuildCompletionHandler
+	locker      shared.EnvironmentLocker
+	domainStore shared.CustomDomainQuerier // MEET-034: custom domains in manifests
+	appCRMgr    ApplicationCREnsurer
 	// T6.2: optional plan lookup. Nil-safe — falls back to empty string
 	// which RenderInput defaults to "starter" (most conservative canary).
 	planLookup TenantPlanLookup
@@ -175,10 +169,10 @@ type BuildReconcileLoop struct {
 // NewBuildReconcileLoop creates a new BuildReconcileLoop.
 func NewBuildReconcileLoop(
 	buildStore db.BuildStore,
-	workflow WorkflowSubmitter,
+	workflow shared.WorkflowSubmitter,
 	orch BuildCompletionHandler,
-	locker EnvironmentLocker,
-	domainStore CustomDomainQuerier,
+	locker shared.EnvironmentLocker,
+	domainStore shared.CustomDomainQuerier,
 	appCRMgr ApplicationCREnsurer,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
@@ -201,8 +195,8 @@ func NewBuildReconcileLoop(
 		appCRMgr:    appCRMgr,
 		eventStore:  eventStore,
 		logger:      logger,
-		cfg:        cfg,
-		sem:        make(chan struct{}, cfg.MaxConcurrent),
+		cfg:         cfg,
+		sem:         make(chan struct{}, cfg.MaxConcurrent),
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	sigsyaml "sigs.k8s.io/yaml"
 
@@ -42,7 +43,7 @@ type PromotionEnvTargetStore interface {
 
 // PromotionGitOpsPusher abstracts manifest push to gitops repo (DIP).
 type PromotionGitOpsPusher interface {
-	Push(ctx context.Context, opts GitOpsPushOpts) (string, error)
+	Push(ctx context.Context, opts shared.GitOpsPushOpts) (string, error)
 }
 
 // PromotionGitOpsReader abstracts manifest retrieval from git (DIP).
@@ -62,7 +63,7 @@ type PromotionOrchestratorDeps struct {
 	GitReader  PromotionGitOpsReader
 	GitPusher  PromotionGitOpsPusher
 	Sync       PromotionSyncClient
-	Locker     EnvironmentLocker
+	Locker     shared.EnvironmentLocker
 	BaseDomain string
 	// PublicDomain is the canonical wildcard domain used to compose user-facing
 	// Live URLs (e.g., "prod-dev.loopzero.example"). When non-empty it takes
@@ -210,7 +211,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	}
 
 	// Push manifests to target environment path in gitops
-	commitSHA, err := o.deps.GitPusher.Push(ctx, GitOpsPushOpts{
+	commitSHA, err := o.deps.GitPusher.Push(ctx, shared.GitOpsPushOpts{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
 		Environment:   req.ToEnv,

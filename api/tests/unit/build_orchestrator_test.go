@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -438,15 +440,15 @@ func (f *fakeEventStoreOrch) eventsByType(eventType string) []sse.SSEEvent {
 	return result
 }
 
-// fakeWorkflowSubmitter implements services.WorkflowSubmitter.
+// fakeWorkflowSubmitter implements shared.WorkflowSubmitter.
 type fakeWorkflowSubmitter struct {
-	submitted  []services.WorkflowSpec
+	submitted  []shared.WorkflowSpec
 	workflowID string
 	err        error
 	onSubmit   func() // optional callback for ordering tests (REVIEW-BLOCKER-1)
 }
 
-func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec shared.WorkflowSpec) (string, error) {
 	if f.onSubmit != nil {
 		f.onSubmit()
 	}
@@ -464,20 +466,20 @@ func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowI
 	return nil
 }
 
-func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
-	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*shared.WorkflowStatus, error) {
+	return &shared.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
 // NOTE: fakeGitOpsPusher REMOVED — the workflow handles gitops-push (spec §10.1, step 13i).
 
-// fakeGitOpsPusher implements services.GitOpsPusher.
+// fakeGitOpsPusher implements shared.GitOpsPusher.
 type fakeGitOpsPusher struct {
 	pushErr   error
-	pushed    []services.GitOpsPushOpts
+	pushed    []shared.GitOpsPushOpts
 	commitSHA string
 }
 
-func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsPusher) Push(ctx context.Context, opts shared.GitOpsPushOpts) (string, error) {
 	f.pushed = append(f.pushed, opts)
 	if f.pushErr != nil {
 		return "", f.pushErr
@@ -488,14 +490,14 @@ func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpt
 	return "abc123def456abc123def456abc123def456abcd", nil
 }
 
-func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts shared.GitOpsRemoveOpts) (string, error) {
 	if f.commitSHA != "" {
 		return f.commitSHA, nil
 	}
 	return "abc123def456abc123def456abc123def456abcd", nil
 }
 
-// fakeSyncClient implements services.SyncClient.
+// fakeSyncClient implements shared.SyncClient.
 type fakeSyncClient struct {
 	synced     []string
 	triggerErr error
@@ -534,7 +536,7 @@ func (f *fakeSyncClient) GetAppStatus(ctx context.Context, appName string, deplo
 	return true, true, nil
 }
 
-// fakeEnvironmentLocker implements services.EnvironmentLocker.
+// fakeEnvironmentLocker implements shared.EnvironmentLocker.
 // It executes fn with a nil tx (unit tests don't need real transactions).
 type fakeEnvironmentLocker struct {
 	lockErr error
@@ -586,13 +588,13 @@ func (f *orchestratorFakes) buildOrchestrator() *services.BuildOrchestrator {
 	})
 }
 
-func defaultSubmitReq() services.SubmitBuildRequest {
-	return services.SubmitBuildRequest{
+func defaultSubmitReq() shared.SubmitBuildRequest {
+	return shared.SubmitBuildRequest{
 		TenantID:    "tenant-1",
 		ProjectID:   "proj-abc123",
 		Environment: "production",
 		CommitSHA:   "abc123def456",
-		Apps: []services.AppSpec{
+		Apps: []shared.AppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 		},
 		CreatedBy: "user-1",
@@ -603,11 +605,11 @@ func defaultSubmitReq() services.SubmitBuildRequest {
 const testManifests = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\n"
 
 // defaultSucceededCallback returns a standard succeeded callback with manifests.
-func defaultSucceededCallback() services.BuildCallbackRequest {
-	return services.BuildCallbackRequest{
+func defaultSucceededCallback() shared.BuildCallbackRequest {
+	return shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
 		},
 	}
@@ -733,10 +735,10 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 	}
 
 	// Act — build completed successfully
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
 		},
 	}
@@ -808,7 +810,7 @@ func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
 	}
 
 	// Act — build failed with error details
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status: "failed",
 		Error:  "build-image: Dockerfile not found",
 		Apps:   nil,
@@ -860,7 +862,7 @@ func TestBuildOrchestrator_OnBuildCompleted_BuildFailedNoError(t *testing.T) {
 	}
 
 	// Act — build failed without error details
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status: "failed",
 		Apps:   nil,
 	}
@@ -891,7 +893,7 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 	orch := fakes.buildOrchestrator()
 
 	req := defaultSubmitReq()
-	req.Apps = []services.AppSpec{
+	req.Apps = []shared.AppSpec{
 		{Name: "bg-worker", Type: "worker"},
 	}
 
@@ -901,10 +903,10 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 	}
 
 	// Act
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "bg-worker", ImageDigest: "sha256:abc123", URL: "", DurationMs: 30000},
 		},
 	}
@@ -942,10 +944,10 @@ func TestBuildOrchestrator_OnBuildCompleted_EnvironmentTargetsUpdated(t *testing
 	}
 
 	// Act
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
 		},
 	}
@@ -993,10 +995,10 @@ func TestBuildOrchestrator_OnBuildCompleted_CallbackWithBuildInQueued(t *testing
 	}
 
 	// Act — callback arrives while build is still QUEUED
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 5000},
 		},
 	}
@@ -1024,10 +1026,10 @@ func TestBuildOrchestrator_OnBuildCompleted_DuplicateCallback(t *testing.T) {
 	}
 
 	// First callback — succeeds
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
 		},
 	}
@@ -1065,10 +1067,10 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededWithEmptyApps(t *testing.T)
 	}
 
 	// Act
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps:      []services.AppRelease{}, // empty!
+		Apps:      []shared.AppRelease{}, // empty!
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
 
@@ -1110,10 +1112,10 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 		t.Fatalf("SubmitBuild failed: %v", err)
 	}
 
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:new", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 20000},
 		},
 	}
@@ -1146,10 +1148,10 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 		t.Fatalf("SubmitBuild failed: %v", err)
 	}
 
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
 		},
 	}
@@ -1189,10 +1191,10 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 		t.Fatalf("SubmitBuild failed: %v", err)
 	}
 
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: testManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", Type: "server", DurationMs: 45000},
 		},
 	}
@@ -1505,10 +1507,10 @@ func TestStep6_GitOpsPush_ReceivesManifestsFromCallback(t *testing.T) {
 
 	// Act
 	customManifests := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: custom-app\n"
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status:    "succeeded",
 		Manifests: customManifests,
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
 		},
 	}
@@ -1600,10 +1602,10 @@ func TestStep6_BuildDoesNotCallGitOpsPush_WhenFailed(t *testing.T) {
 	}
 
 	// Act — build failed
-	cbReq := services.BuildCallbackRequest{
+	cbReq := shared.BuildCallbackRequest{
 		Status: "failed",
 		Error:  "npm install failed",
-		Apps: []services.AppRelease{
+		Apps: []shared.AppRelease{
 			{Name: "api", ImageDigest: "sha256:abc123"},
 		},
 	}
@@ -1896,7 +1898,7 @@ func TestBuildOrchestrator_SubmitBuild_LockReleasedBeforeWorkflowSubmit(t *testi
 	}
 }
 
-// trackingLocker implements services.EnvironmentLocker with call-order tracking.
+// trackingLocker implements shared.EnvironmentLocker with call-order tracking.
 type trackingLocker struct {
 	onLockAcquired func()
 	onLockReleased func()

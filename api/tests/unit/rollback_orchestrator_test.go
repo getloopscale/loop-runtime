@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -93,7 +95,7 @@ func (f *fakeRollbackGitReader) GetManifestsAtCommit(_ context.Context, _, _, _,
 
 type fakeRollbackGitPusher struct{}
 
-func (f *fakeRollbackGitPusher) Push(_ context.Context, _ services.GitOpsPushOpts) (string, error) {
+func (f *fakeRollbackGitPusher) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
 	return "sha-abc123", nil
 }
 
