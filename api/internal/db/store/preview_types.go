@@ -94,6 +94,8 @@ func (p *PreviewRecord) ToDomain() *domain.Preview {
 // Write paths (Create, UpdateStatus, etc.) are used by PreviewService and
 // run inside transactions provided by withEnvironmentLock when serializing
 // against concurrent webhook events for the same PR.
+// Co-located with the adapter in db/store/ per ADR 2026-07-03-m9-db-store-
+// subpackage-topology D2 (negligible external port footprint; not a smell).
 type PreviewStore interface {
 	// API queries (reads).
 	ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error)

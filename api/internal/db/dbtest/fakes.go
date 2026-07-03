@@ -12,10 +12,12 @@
 // for moving the remaining entity adapters (whose tests share these fakes) into
 // db/store/ without duplicating the mock ecosystem. Behavior-preserving:
 // verbatim logic, exported names/fields.
-// FOLLOW-UP DEBT (MEET-2026-07-03-001): these exported test doubles live in the
-// production db package because Go forbids the db(in-package test) -> dbtest -> db
-// import cycle. The clean fix is a separate internal/db/dbtest package + converting
-// the root-db in-package tests that consume them to external `package db_test`.
+// M9 5c batch 4 (ADR 2026-07-03-m9-db-store-subpackage-topology D4): these
+// exported DBTX test doubles were extracted OUT of the production db package
+// (formerly internal/db/fakes.go) into this dedicated dbtest support package,
+// so the production db package no longer ships test doubles. Consumed by the
+// db/store adapter tests and the root-db external `package db_test` files
+// (cell_scoped_queries_test, stores_extra_test).
 // Contained to internal/, no runtime path.
 package dbtest
 

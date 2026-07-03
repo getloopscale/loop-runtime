@@ -50,6 +50,8 @@ type TenantDeletionCounts struct {
 // T1.4 after the 2 prod call sites (api/cmd/adapters.go +
 // api/internal/adapters/tenant_adapter.go) switched to
 // NewTenantStoreSqlc.
+// Co-located with the adapter in db/store/ per ADR 2026-07-03-m9-db-store-
+// subpackage-topology D2 (negligible external port footprint; not a smell).
 type AdminTenantStore interface {
 	// ListTenantIDsByPattern returns tenant IDs matching a SQL LIKE
 	// pattern (ESCAPE '\' applied; ORDER BY id ASC; LIMIT 10_000).

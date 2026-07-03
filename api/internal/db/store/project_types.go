@@ -16,6 +16,8 @@ import "github.com/getloopscale/loopzero/api/internal/db"
 // no limit configured; `cap > 0` = bounded). `allowed` reflects whether `current`
 // is under the cap. The create path calls it with `current=0` to resolve the cap
 // up-front, then enforces `count < cap` atomically under an advisory lock.
+// Co-located with the adapter in db/store/ per ADR 2026-07-03-m9-db-store-
+// subpackage-topology D2 (negligible external port footprint; not a smell).
 type ProjectCapChecker interface {
 	CheckProjectsValue(tenantID string, current int) (allowed bool, plan string, cap int)
 }
