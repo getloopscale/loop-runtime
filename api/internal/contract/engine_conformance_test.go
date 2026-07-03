@@ -44,7 +44,7 @@ const (
 //   r.Get("/api/v1/health", ...)
 //   r.With(mw...).Post("/api/v1/builds", ...)   (middleware-wrapped)
 // — i.e. any `.<Method>("<path>"` chain, not only the bare `r.<Method>(` form.
-var registeredRouteRE = regexp.MustCompile(`\.(Get|Post|Put|Delete|Patch)\("([^"]+)"`)
+var registeredRouteRE = regexp.MustCompile(`\.(Get|Post|Put|Delete|Patch)\(\s*"([^"]+)"`)
 
 func loadSpec(t *testing.T) *openapi3.T {
 	t.Helper()

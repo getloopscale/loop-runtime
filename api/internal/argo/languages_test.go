@@ -62,7 +62,7 @@ func TestNodeStrategy_ValidateStep_ReturnsContainerTemplate(t *testing.T) {
 	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 3000}}
 	c := s.ValidateStep(apps)
 
-	assertContainerShape(t, c, "validate-workspace", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "validate-workspace", "node:22.12.0")
 }
 
 func TestNodeStrategy_InstallStep_HasRetryStrategy(t *testing.T) {
@@ -70,7 +70,7 @@ func TestNodeStrategy_InstallStep_HasRetryStrategy(t *testing.T) {
 	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 3000}}
 	c := s.InstallStep(apps)
 
-	assertContainerShape(t, c, "install-deps", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "install-deps", "node:22.12.0")
 
 	if c.RetryStrategy == nil {
 		t.Error("InstallStep must have RetryStrategy")
@@ -82,14 +82,14 @@ func TestNodeStrategy_BuildStep_ReturnsContainerTemplate(t *testing.T) {
 	apps := []shared.AppSpec{{Name: "api", Type: "server", Port: 3000}}
 	c := s.BuildStep(apps)
 
-	assertContainerShape(t, c, "build-apps", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "build-apps", "node:22.12.0")
 }
 
 func TestNodeStrategy_ScanStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
 	c := s.ScanStep()
 
-	assertContainerShape(t, c, "security-scan", "node:20.11.1-alpine")
+	assertContainerShape(t, c, "security-scan", "node:22.12.0")
 }
 
 // ---------------------------------------------------------------------------
