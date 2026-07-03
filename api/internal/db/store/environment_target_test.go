@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
 )
 
 func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
-	fake := &db.FakeDBTX{ExecErr: fmt.Errorf("pg down")}
+	fake := &dbtest.FakeDBTX{ExecErr: fmt.Errorf("pg down")}
 	store := NewPostgresEnvironmentTargetStore(fake, fake)
 
 	err := store.SetDesired(context.Background(), fake, "t1", "p1", "prod", "rel-1", "u1", "c1")

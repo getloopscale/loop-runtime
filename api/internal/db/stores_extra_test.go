@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package db_test
 
 import (
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -17,7 +17,7 @@ import (
 // TestReleaseStore_GetPreviousRelease_Success, TestReleaseStore_GetByID
 // ForTenant_Success, TestReleaseStore_GetLatestByBuildID_Success,
 // TestReleaseStore_UpdateStatus_NilTxUsesPool, TestReleaseStore_SetGit
-// Commit_ExecError) ALL used `FakeDBTX` stub responses to verify that
+// Commit_ExecError) ALL used `dbtest.FakeDBTX` stub responses to verify that
 // PostgresReleaseStore returned what the stub fed it — a pure pass-
 // through pattern.
 //
@@ -65,7 +65,7 @@ import (
 // QueryError, UpdateStatus_QueuedToFailed, UpdateStatus_RunningToCancelling,
 // ListByProjectAndEnv_NoEnvFilter, ListByProjectAndEnv_QueryError,
 // ListByProjectAndEnv_NoEnvQueryError, ListByProject_QueryError) ALL used
-// FakeDBTX stub responses to verify PostgresBuildStore behaviors. With
+// dbtest.FakeDBTX stub responses to verify PostgresBuildStore behaviors. With
 // T1.2b deleting PostgresBuildStore and replacing it with BuildStoreSqlc
 // (sqlc-backed via SqlcBridge), the stub-based pattern is incompatible.
 //
@@ -101,7 +101,7 @@ import (
 // All Domain Store test sub-blocks across stores_test.go (lines
 // 294-473 + 812-876) and stores_extra_test.go (3 sections: Domain
 // Store additional + Background methods + CF Zone methods) used
-// FakeDBTX / RecordingDBTX / countingDBTX stubs to verify
+// dbtest.FakeDBTX / dbtest.RecordingDBTX / countingDBTX stubs to verify
 // PostgresDomainStore behaviors. With T2.1 #9 migrating the 3-file
 // legacy split (domain_store.go + domain_store_background.go +
 // domain_store_cfzone.go) to a single sqlc-backed wrapper via
@@ -136,7 +136,7 @@ import (
 // =============================================================================
 //
 // 2 sub-tests previously here (TestWriteAuditLog_Success +
-// _ExecError) used FakeDBTX stubs to verify legacy
+// _ExecError) used dbtest.FakeDBTX stubs to verify legacy
 // ExecQueryExecutor-based WriteAuditLog. With T1.5 widening the
 // signature to db.DBTX + dispatching through SqlcBridge to sqlc-
 // generated InsertAuditLog, the fake pattern is incompatible — the
@@ -166,7 +166,7 @@ import (
 //
 // 6 stub-class tests previously here (TestCellStore_CellTenantCounts_
 // Empty/WithData/QueryError, _CountByCell_Empty, _GetTenantCellID_
-// NotFound/Success) used FakeDBTX / RecordingDBTX stub responses to
+// NotFound/Success) used dbtest.FakeDBTX / dbtest.RecordingDBTX stub responses to
 // verify PostgresCellStore behaviors. With T2.2 #2 migrating to sqlc-
 // backed via SqlcBridge, the fake pattern is incompatible.
 //

@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
 )
 
 func TestIdempotencyStore_Get_QueryError(t *testing.T) {
-	fake := &db.FakeDBTX{QueryErr: fmt.Errorf("db down")}
+	fake := &dbtest.FakeDBTX{QueryErr: fmt.Errorf("db down")}
 	store := &PostgresIdempotencyStore{DB: fake}
 
 	_, err := store.Get(context.Background(), "key-1", "t1")
@@ -22,7 +22,7 @@ func TestIdempotencyStore_Get_QueryError(t *testing.T) {
 }
 
 func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
-	fake := &db.FakeDBTX{ExecErr: fmt.Errorf("db locked")}
+	fake := &dbtest.FakeDBTX{ExecErr: fmt.Errorf("db locked")}
 	store := &PostgresIdempotencyStore{DB: fake}
 
 	_, err := store.Cleanup(context.Background())

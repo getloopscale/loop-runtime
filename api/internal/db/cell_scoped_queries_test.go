@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package db_test
 
 import (
 	"os"
@@ -31,13 +31,13 @@ func osReadFile(relPath string) ([]byte, error) {
 // test (gated by LOOPZERO_TEST_DB_URL) covers the full round-trip including
 // EXPLAIN plan verification.
 
-// RecordingDBTX is a DBTX fake that captures queries without executing them.
+// dbtest.RecordingDBTX is a DBTX fake that captures queries without executing them.
 // Every Query call records the SQL + args and returns an empty result set so
 // the caller's scan loop exits cleanly.
 //
 // Canonical compile-time interface satisfaction (Go idiom): if DBTX evolves
 // (new method added), this assertion fails compilation rather than at runtime.
-// Also signals to deadcode tooling that RecordingDBTX's methods are called
+// Also signals to deadcode tooling that dbtest.RecordingDBTX's methods are called
 // via interface dispatch.
 
 // =============================================================================
@@ -45,7 +45,7 @@ func osReadFile(relPath string) ([]byte, error) {
 // =============================================================================
 
 // T1.2b (plan 2026-05-29-sqlc-migration v1.3): build-store cell-routing
-// invariant tests moved from RecordingDBTX runtime-SQL capture to
+// invariant tests moved from dbtest.RecordingDBTX runtime-SQL capture to
 // static-content assertions against queries/builds.sql SoT — same
 // pattern as releases (T1.1c2c). The wrapper passes cellID verbatim to
 // the sqlc query (build_wrapper.go FindActiveBuilds), and the empty-
@@ -97,7 +97,7 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 }
 
 // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): the 2 release-store
-// cell-scoping tests below moved from RecordingDBTX-based runtime-SQL
+// cell-scoping tests below moved from dbtest.RecordingDBTX-based runtime-SQL
 // assertions to static-content assertions against the canonical SQL SoT
 // `queries/releases.sql`. With sqlc, the SQL no longer lives in Go
 // strings concatenated at runtime — it's pre-rendered at codegen time
@@ -106,7 +106,7 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 // status filter MUST be present in the query SoT.
 //
 // Rationale: ReleaseStoreSqlc accepts db.DBTX but bridges to
-// generated.DBTX via SqlcBridge — RecordingDBTX (used here) intentionally
+// generated.DBTX via SqlcBridge — dbtest.RecordingDBTX (used here) intentionally
 // does NOT implement SqlcBridge, by design, so we cannot reuse it. The
 // static-content test is a STRONGER invariant: it catches drift in the
 // SQL SoT regardless of which wrapper consumes the generated code.
@@ -176,7 +176,7 @@ func mustExtractQueryBlock(t *testing.T, contents, queryName string) string {
 }
 
 // TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredicate —
-// reshaped from runtime-SQL capture (RecordingDBTX-based) to
+// reshaped from runtime-SQL capture (dbtest.RecordingDBTX-based) to
 // static-content assertion against queries/domains.sql, same pattern
 // as the release/build cell-routing reshapes (T1.1c2c / T1.2b).
 // SEC-005 verified by code generation: sqlc-emitted SQL is the
@@ -205,7 +205,7 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 // TestFindActiveBuilds_CrossCell_NoContamination — DELETED in T1.2b of
 // plan 2026-05-29-sqlc-migration v1.3.
 //
-// The original test used `RecordingDBTX{FilterByCellID: true, Dataset:
+// The original test used `dbtest.RecordingDBTX{FilterByCellID: true, Dataset:
 // ...}` — a fake DBTX that simulated Postgres cell_id filtering — to
 // prove that a cell-A query never returned cell-B rows. With T1.2b the
 // data-isolation invariant moves to TWO layers of guarantees:
@@ -222,8 +222,8 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 //
 // Per T0.6 matrix line 29 (cell_scoped_queries_test.go classified
 // KEEP-INVARIANT): the invariant survives via the 2-layer guarantee —
-// FakeDBTX-with-cellID-filter is no longer the canonical test fixture
-// because (a) RecordingDBTX doesn't satisfy SqlcBridge so the wrapper
+// dbtest.FakeDBTX-with-cellID-filter is no longer the canonical test fixture
+// because (a) dbtest.RecordingDBTX doesn't satisfy SqlcBridge so the wrapper
 // panics, and (b) the static-content test is a STRONGER guarantee that
 // catches drift in the SQL SoT regardless of which wrapper consumes it.
 
@@ -236,4 +236,4 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 
 // NOTE: Stale checkers (PostgresStaleBuildChecker, PostgresStaleReleaseChecker)
 // live in the services package — their SQL-shape tests are in
-// api/tests/unit/stale_checker_cell_scope_test.go (same RecordingDBTX pattern).
+// api/tests/unit/stale_checker_cell_scope_test.go (same dbtest.RecordingDBTX pattern).

@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
-	fake := &db.FakeDBTX{ExecResult: db.ExecResult{RowsAffected: 15}}
+	fake := &dbtest.FakeDBTX{ExecResult: db.ExecResult{RowsAffected: 15}}
 	store := &PostgresBuildGCStore{DB: fake}
 
 	count, err := store.DeleteOldBuilds(context.Background(), 30*24*time.Hour, 10)
@@ -26,7 +28,7 @@ func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
 }
 
 func TestBuildGCStore_DeleteOldBuilds_Error(t *testing.T) {
-	fake := &db.FakeDBTX{ExecErr: fmt.Errorf("table locked")}
+	fake := &dbtest.FakeDBTX{ExecErr: fmt.Errorf("table locked")}
 	store := &PostgresBuildGCStore{DB: fake}
 
 	_, err := store.DeleteOldBuilds(context.Background(), 30*24*time.Hour, 10)

@@ -17,31 +17,33 @@
 // import cycle. The clean fix is a separate internal/db/dbtest package + converting
 // the root-db in-package tests that consume them to external `package db_test`.
 // Contained to internal/, no runtime path.
-package db
+package dbtest
 
 import (
 	"context"
 	"strings"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 var (
-	_ DBTX = (*FakeDBTX)(nil)
-	_ DBTX = (*RecordingDBTX)(nil)
+	_ db.DBTX = (*FakeDBTX)(nil)
+	_ db.DBTX = (*RecordingDBTX)(nil)
 )
 
 // FakeDBTX implements DBTX with configurable responses per call.
 type FakeDBTX struct {
-	ExecResult     ExecResult
+	ExecResult     db.ExecResult
 	ExecErr        error
-	QueryRows      Rows
+	QueryRows      db.Rows
 	QueryErr       error
-	QueryRowResult Row
+	QueryRowResult db.Row
 	CapturedSQL    string
 	CapturedArgs   []any
 	ExecCalls      int
 }
 
-func (f *FakeDBTX) Query(_ context.Context, sql string, args ...any) (Rows, error) {
+func (f *FakeDBTX) Query(_ context.Context, sql string, args ...any) (db.Rows, error) {
 	f.CapturedSQL = sql
 	f.CapturedArgs = args
 	if f.QueryErr != nil {
@@ -53,14 +55,14 @@ func (f *FakeDBTX) Query(_ context.Context, sql string, args ...any) (Rows, erro
 	return &SliceRows{}, nil
 }
 
-func (f *FakeDBTX) Exec(_ context.Context, sql string, args ...any) (ExecResult, error) {
+func (f *FakeDBTX) Exec(_ context.Context, sql string, args ...any) (db.ExecResult, error) {
 	f.CapturedSQL = sql
 	f.CapturedArgs = args
 	f.ExecCalls++
 	return f.ExecResult, f.ExecErr
 }
 
-func (f *FakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
+func (f *FakeDBTX) QueryRow(_ context.Context, sql string, args ...any) db.Row {
 	f.CapturedSQL = sql
 	f.CapturedArgs = args
 	if f.QueryRowResult != nil {
@@ -73,12 +75,12 @@ func (f *FakeDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
 type RecordingDBTX struct {
 	LastSQL        string
 	LastArgs       []any
-	NextRows       Rows
+	NextRows       db.Rows
 	FilterByCellID bool
 	Dataset        []FakeRow
 }
 
-func (r *RecordingDBTX) Query(_ context.Context, sql string, args ...any) (Rows, error) {
+func (r *RecordingDBTX) Query(_ context.Context, sql string, args ...any) (db.Rows, error) {
 	r.LastSQL = sql
 	r.LastArgs = args
 	if r.FilterByCellID {
@@ -103,11 +105,11 @@ func (r *RecordingDBTX) Query(_ context.Context, sql string, args ...any) (Rows,
 	return &SliceRows{}, nil
 }
 
-func (r *RecordingDBTX) Exec(_ context.Context, _ string, _ ...any) (ExecResult, error) {
-	return ExecResult{}, nil
+func (r *RecordingDBTX) Exec(_ context.Context, _ string, _ ...any) (db.ExecResult, error) {
+	return db.ExecResult{}, nil
 }
 
-func (r *RecordingDBTX) QueryRow(_ context.Context, _ string, _ ...any) Row {
+func (r *RecordingDBTX) QueryRow(_ context.Context, _ string, _ ...any) db.Row {
 	return EmptyRow{}
 }
 
@@ -121,7 +123,7 @@ type FakeRow struct {
 // EmptyRow is a Row that always reports no rows.
 type EmptyRow struct{}
 
-func (EmptyRow) Scan(_ ...any) error { return ErrNoRows }
+func (EmptyRow) Scan(_ ...any) error { return db.ErrNoRows }
 
 // SliceRows returns a slice of pre-built fake rows through the Rows iterator.
 type SliceRows struct {
