@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package shared
+package deploycontracts
 
 // ConvertLoopZeroYamlApps maps the raw `apps` block parsed from a project's
 // loopzero.yaml into the canonical []AppSpec consumed by BuildOrchestrator.

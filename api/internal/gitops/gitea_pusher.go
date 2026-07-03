@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -34,7 +34,7 @@ type GiteaGitOpsPusherConfig struct {
 	OrgName string // e.g., "loopzero"
 }
 
-// GiteaGitOpsPusher implements shared.GitOpsPusher by committing manifests
+// GiteaGitOpsPusher implements deploycontracts.GitOpsPusher by committing manifests
 // to the tenant GitOps repo in Gitea.
 //
 // Repo naming: {tenantID}-gitops (matches TenantController convention)
@@ -68,7 +68,7 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 // Push commits manifests to the tenant GitOps repo and returns the commit SHA.
 // The operation is idempotent: pushing the same manifests twice is safe (git
 // will detect "nothing to commit" and we return the current HEAD SHA).
-func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts shared.GitOpsPushOpts) (string, error) {
+func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
 	// MEET-2026-04-09-042 P1: Manifest validation gate.
 	// Reject known-problematic resource types that can block ArgoCD sync.
 	// Certificate CRs caused a production incident (50+ min blocked sync).
@@ -199,7 +199,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts shared.GitOpsPushOpts
 // Remove deletes a project's manifests from the tenant GitOps repo.
 // The operation is idempotent: if the directory doesn't exist, returns success.
 // ArgoCD with prune: true will automatically remove the K8s resources.
-func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts shared.GitOpsRemoveOpts) (string, error) {
+func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts deploycontracts.GitOpsRemoveOpts) (string, error) {
 	// MEET-2026-03-31-023 T1-8: Measure GitOps remove duration.
 	removeStart := time.Now()
 	defer func() {

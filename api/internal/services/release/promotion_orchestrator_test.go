@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	pkgid "github.com/getloopscale/loopzero/pkg/id"
@@ -142,11 +142,11 @@ func (f *fakePromotionGitReader) GetManifestsAtCommit(_ context.Context, _, _, _
 
 type fakePromotionGitPusher struct {
 	pushed    bool
-	lastOpts  shared.GitOpsPushOpts
+	lastOpts  deploycontracts.GitOpsPushOpts
 	commitSHA string
 }
 
-func (f *fakePromotionGitPusher) Push(_ context.Context, opts shared.GitOpsPushOpts) (string, error) {
+func (f *fakePromotionGitPusher) Push(_ context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
 	f.pushed = true
 	f.lastOpts = opts
 	if f.commitSHA == "" {

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -170,7 +170,7 @@ type fakeWorkflowSubmitterOrch struct {
 	workflowID string
 }
 
-func (f *fakeWorkflowSubmitterOrch) Submit(_ context.Context, _ shared.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowSubmitterOrch) Submit(_ context.Context, _ deploycontracts.WorkflowSpec) (string, error) {
 	return f.workflowID, f.submitErr
 }
 
@@ -178,7 +178,7 @@ func (f *fakeWorkflowSubmitterOrch) Cancel(_ context.Context, _, _ string) error
 	return f.cancelErr
 }
 
-func (f *fakeWorkflowSubmitterOrch) GetStatus(_ context.Context, _, _ string) (*shared.WorkflowStatus, error) {
+func (f *fakeWorkflowSubmitterOrch) GetStatus(_ context.Context, _, _ string) (*deploycontracts.WorkflowStatus, error) {
 	return nil, nil
 }
 
@@ -203,11 +203,11 @@ func TestBuildOrchestrator_SubmitBuild_DeployInProgress(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps:        []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 
 	if err == nil {
@@ -228,11 +228,11 @@ func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps:        []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 
 	if err == nil {
@@ -280,9 +280,9 @@ func TestBuildOrchestrator_OnBuildCompleted_DuplicateCallback(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-dup", shared.BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-dup", deploycontracts.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps:   []shared.AppRelease{{Name: "api"}},
+		Apps:   []deploycontracts.AppRelease{{Name: "api"}},
 	})
 	if err != nil {
 		t.Fatalf("duplicate callback should be no-op, got: %v", err)
@@ -303,9 +303,9 @@ func TestBuildOrchestrator_OnBuildCompleted_SuccessNoApps_ReturnsError(t *testin
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-noapp", shared.BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-noapp", deploycontracts.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps:   []shared.AppRelease{},
+		Apps:   []deploycontracts.AppRelease{},
 	})
 	if err == nil {
 		t.Fatal("expected error for success callback with no apps")
@@ -326,7 +326,7 @@ func TestBuildOrchestrator_OnBuildCompleted_FailedBuild(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-fail", shared.BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-fail", deploycontracts.BuildCallbackRequest{
 		Status: "failed",
 		Error:  "OOMKilled",
 	})
@@ -371,7 +371,7 @@ func TestBuildOrchestrator_RetryReleaseActivation_WrongState(t *testing.T) {
 	})
 
 	build := &db.Build{ID: "bld-1", Status: "RUNNING"}
-	err := orch.RetryReleaseActivation(context.Background(), build, shared.BuildCallbackRequest{})
+	err := orch.RetryReleaseActivation(context.Background(), build, deploycontracts.BuildCallbackRequest{})
 	if err == nil {
 		t.Fatal("expected error for non-RELEASING build")
 	}
@@ -474,8 +474,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_NilKVClient(t *testing.T) {
 
 	// Should not panic when KVClient is nil
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := shared.BuildCallbackRequest{
-		Apps: []shared.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
+	result := deploycontracts.BuildCallbackRequest{
+		Apps: []deploycontracts.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
 	}
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
 }
@@ -510,8 +510,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_WritesKV(t *testing.T) {
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := shared.BuildCallbackRequest{
-		Apps: []shared.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
+	result := deploycontracts.BuildCallbackRequest{
+		Apps: []deploycontracts.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
 	}
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
 
@@ -533,8 +533,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_SkipsNonStatic(t *testing.T
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := shared.BuildCallbackRequest{
-		Apps: []shared.AppRelease{{Name: "api", Type: "server", Rendering: ""}},
+	result := deploycontracts.BuildCallbackRequest{
+		Apps: []deploycontracts.AppRelease{{Name: "api", Type: "server", Rendering: ""}},
 	}
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
 
@@ -556,8 +556,8 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_KVError_NonFatal(t *testing
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := shared.BuildCallbackRequest{
-		Apps: []shared.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
+	result := deploycontracts.BuildCallbackRequest{
+		Apps: []deploycontracts.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
 	}
 	// Should not panic
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
@@ -587,9 +587,9 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededBuild(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-ok", shared.BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-ok", deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "apiVersion: v1\nkind: Deployment",
 	})
 	if err != nil {
@@ -637,9 +637,9 @@ func TestBuildOrchestrator_OnBuildCompleted_QueuedBuild_ECNRace(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	err := orch.OnBuildCompleted(context.Background(), "bld-ecn", shared.BuildCallbackRequest{
+	err := orch.OnBuildCompleted(context.Background(), "bld-ecn", deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "manifests",
 	})
 	if err != nil {
@@ -676,9 +676,9 @@ func TestBuildOrchestrator_RetryReleaseActivation_Success(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	err := orch.RetryReleaseActivation(context.Background(), build, shared.BuildCallbackRequest{
+	err := orch.RetryReleaseActivation(context.Background(), build, deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "manifests",
 	})
 	if err != nil {
@@ -698,11 +698,11 @@ func TestBuildOrchestrator_SubmitBuild_WithProjectEnsurer(t *testing.T) {
 		EventStore:   &fakeEventStoreContainer{},
 	})
 
-	resp, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
+	resp, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps:        []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 		CreatedBy:   "user@test.com",
 	})
 

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -105,7 +105,7 @@ type fakeRollbackGitPusher struct {
 	pushed bool
 }
 
-func (f *fakeRollbackGitPusher) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
+func (f *fakeRollbackGitPusher) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
 	f.pushed = true
 	return "commit-sha-rollback", nil
 }
@@ -328,10 +328,10 @@ type fakeDeliveryActivator struct {
 	rollbackErr    error
 }
 
-func (f *fakeDeliveryActivator) Activate(_ context.Context, _ *db.Build, _ shared.BuildCallbackRequest) error {
+func (f *fakeDeliveryActivator) Activate(_ context.Context, _ *db.Build, _ deploycontracts.BuildCallbackRequest) error {
 	return nil
 }
-func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ shared.RollbackDeliveryRequest) error {
+func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ deploycontracts.RollbackDeliveryRequest) error {
 	f.rollbackCalled = true
 	return f.rollbackErr
 }

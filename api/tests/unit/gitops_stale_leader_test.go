@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // TestGitOpsPush_StaleLeaderOverwritten — roadmap 02 DoD.
@@ -171,6 +171,6 @@ func extractGen(content string) string {
 	return "?"
 }
 
-// Verify the test exercises the shared.GitOpsPushOpts type correctly.
-var _ = shared.GitOpsPushOpts{}
+// Verify the test exercises the deploycontracts.GitOpsPushOpts type correctly.
+var _ = deploycontracts.GitOpsPushOpts{}
 var _ = fmt.Sprintf // keep import

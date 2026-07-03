@@ -12,7 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // validImageDigest is a 64-hex sha256 string used in DomainProvisioner
@@ -117,11 +117,11 @@ type fakeGitOpsProvisioner struct {
 	removeCalled bool
 }
 
-func (f *fakeGitOpsProvisioner) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsProvisioner) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
 	f.pushCalled = true
 	return "abc123", f.pushErr
 }
-func (f *fakeGitOpsProvisioner) Remove(_ context.Context, _ shared.GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsProvisioner) Remove(_ context.Context, _ deploycontracts.GitOpsRemoveOpts) (string, error) {
 	f.removeCalled = true
 	return "def456", nil
 }

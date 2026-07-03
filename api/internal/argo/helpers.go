@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"sort"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 )
@@ -76,7 +76,7 @@ func withSuffix(c *forge.Container, suffix string) *forge.Container {
 // appsJSON serializes apps to JSON for passing as a workflow parameter.
 // Uses json.Marshal for correct escaping of special characters.
 // CODE-009 fix: log error instead of swallowing silently.
-func appsJSON(apps []shared.AppSpec) string {
+func appsJSON(apps []deploycontracts.AppSpec) string {
 	if len(apps) == 0 {
 		return "[]"
 	}

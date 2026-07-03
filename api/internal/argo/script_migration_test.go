@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"sigs.k8s.io/yaml"
 )
@@ -58,13 +58,13 @@ func marshalTemplate(t *testing.T, tpl interface{}) string {
 
 func TestScriptMigration_DeliverArtifact_EmitsScriptBlock(t *testing.T) {
 	b := NewWorkflowBuilder(testInfraParams())
-	spec := shared.WorkflowSpec{
+	spec := deploycontracts.WorkflowSpec{
 		TenantID:  "tn-1",
 		ProjectID: "proj-1",
 		BuildID:   "build-1",
 		CommitSHA: "abc1234",
 	}
-	plan := shared.AppBuildPlan{
+	plan := deploycontracts.AppBuildPlan{
 		AppName:  "api",
 		AppPath:  ".",
 		ImageTag: "registry.example.com/tn-1/api:abc1234",

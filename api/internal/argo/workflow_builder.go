@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
@@ -104,14 +104,14 @@ func NewWorkflowBuilder(params InfraParams) *WorkflowBuilder {
 // dockerfile steps with a language suffix (e.g., install-deps-node, install-deps-go).
 type languageGroup struct {
 	Strategy LanguageStrategy
-	Apps     []shared.AppSpec
+	Apps     []deploycontracts.AppSpec
 	Suffix   string // e.g., "-node", "-go", "-python", "" for single-language
 }
 
 // groupApps groups items by language strategy using a generic extraction function.
 // The extractor returns (strategyName, AppSpec) for each item. Single-language
 // projects get no suffix; multi-language get "-node", "-go", etc.
-func groupApps[T any](items []T, extract func(T) (string, shared.AppSpec)) []languageGroup {
+func groupApps[T any](items []T, extract func(T) (string, deploycontracts.AppSpec)) []languageGroup {
 	groups := make(map[string]*languageGroup)
 	var order []string
 
@@ -141,11 +141,11 @@ func groupApps[T any](items []T, extract func(T) (string, shared.AppSpec)) []lan
 //
 // T1.3 (CR-2 of MEET-2026-05-28-001): spec.Plan is REQUIRED. The legacy
 // spec.Apps fallback was deleted — production callers always construct a
-// BuildPlan via shared.CreateBuildPlan before submitting (see
+// BuildPlan via deploycontracts.CreateBuildPlan before submitting (see
 // build_orchestrator_submit.go). Accepting a nil Plan would silently re-enable
 // an unmaintained code path that bypasses appPlan.DeliveryModel branching
 // (static vs container), build args, and resolved image tags.
-func (b *WorkflowBuilder) Build(spec shared.WorkflowSpec) (*forge.Workflow, error) {
+func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workflow, error) {
 	if spec.Plan == nil || len(spec.Plan.Apps) == 0 {
 		return nil, fmt.Errorf("argo: WorkflowSpec.Plan must be non-nil with at least one app (legacy spec.Apps fallback deleted in T1.3 CR-2)")
 	}
@@ -154,8 +154,8 @@ func (b *WorkflowBuilder) Build(spec shared.WorkflowSpec) (*forge.Workflow, erro
 	// their own UserDockerfileStrategy group. Without this, mixed monorepos
 	// (1 node app + 1 app with user Dockerfile) would falsely group under
 	// node and run loopzero-packs on an app that should be lint-only.
-	groups := groupApps(spec.Plan.Apps, func(p shared.AppBuildPlan) (string, shared.AppSpec) {
-		app := shared.AppSpec{
+	groups := groupApps(spec.Plan.Apps, func(p deploycontracts.AppBuildPlan) (string, deploycontracts.AppSpec) {
+		app := deploycontracts.AppSpec{
 			Name: p.AppName, Type: p.AppType, Port: p.Port,
 			Path: p.AppPath, Runtime: p.Runtime,
 			Build: p.Build, Start: p.Start, Secrets: p.Secrets,
@@ -351,7 +351,7 @@ func (b *WorkflowBuilder) Build(spec shared.WorkflowSpec) (*forge.Workflow, erro
 // The dependency chain within each group is: clone → restore-cache-{lang} →
 // validate-{lang} → install-{lang} → build-{lang} → dockerfile-{lang} →
 // [per-app BuildKit tasks].
-func (b *WorkflowBuilder) buildMainDAG(spec shared.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
+func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
 	dag := &forge.DAG{Name: entrypointName}
 
 	// Step 1: clone (shared across all languages — one source bundle)
@@ -425,7 +425,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec shared.WorkflowSpec, groups []langua
 		// build-mode-dispatch-and-dockerfile-security-plan T1.5: route by
 		// the per-app Strategy (build:dockerfile → UserDockerfileStrategy)
 		// so suffix and dockerfile-step name match the actual emitted templates.
-		app := shared.AppSpec{
+		app := deploycontracts.AppSpec{
 			Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,
 			Path: appPlan.AppPath, Runtime: appPlan.Runtime,
 			Build: appPlan.Build, Start: appPlan.Start,
@@ -486,7 +486,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec shared.WorkflowSpec, groups []langua
 
 // buildOnExitDAG constructs the finalize DAG (always runs, even on failure).
 // REVIEW-AP-3: saves cache per-language (each language has different cache dirs).
-func (b *WorkflowBuilder) buildOnExitDAG(spec shared.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
+func (b *WorkflowBuilder) buildOnExitDAG(spec deploycontracts.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
 	dag := &forge.DAG{Name: onExitDAGName}
 
 	var tasks []*forge.Task

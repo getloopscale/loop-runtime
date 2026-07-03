@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 )
@@ -42,7 +42,7 @@ var secretEnvFragments = []string{"PASSWORD", "SECRET", "TOKEN", "PRIVATE", "CRE
 // canonicalDockerfile returns the platform-controlled multi-stage Dockerfile
 // for an app on the fixed stack. runtime is "node" | "python" (resolved from
 // the strategy). The returned text is byte-stable for a given input.
-func canonicalDockerfile(runtime string, app shared.AppSpec) (string, error) {
+func canonicalDockerfile(runtime string, app deploycontracts.AppSpec) (string, error) {
 	if app.Start == "" {
 		return "", fmt.Errorf("canonical Dockerfile: app %q has no declared start command (services.json `start` is required — no heuristic CMD)", app.Name)
 	}
@@ -99,7 +99,7 @@ func nodeBuild(appDir string) string {
 // renderDockerfile assembles the multi-stage Dockerfile. EC-1: install happens
 // at the workspace root (COPY . . copies the whole bundle); the build + runtime
 // WORKDIR target appDir for monorepos. EC-7: EXPOSE only for server.
-func renderDockerfile(base, install, build string, app shared.AppSpec, appDir string) string {
+func renderDockerfile(base, install, build string, app deploycontracts.AppSpec, appDir string) string {
 	runtimeWorkdir := "/app"
 	if appDir != "" {
 		runtimeWorkdir = "/app/" + appDir
@@ -166,7 +166,7 @@ func assertEnvNotSecret(env map[string]string) error {
 // NOT loopzero-packs. The step name is preserved for log-marker compatibility
 // (loopzero_log.go:112). Per D4, the canonical file is written AFTER the source is
 // in place, overwriting any user Dockerfile at the same path.
-func canonicalDockerfileStep(runtime string, apps []shared.AppSpec, totalApps int) (*forge.Container, error) {
+func canonicalDockerfileStep(runtime string, apps []deploycontracts.AppSpec, totalApps int) (*forge.Container, error) {
 	var script strings.Builder
 	script.WriteString("set -eu\n")
 	// T2.3/D4: any user-supplied Dockerfile in the bundle is IGNORED — the
@@ -199,7 +199,7 @@ func canonicalDockerfileStep(runtime string, apps []shared.AppSpec, totalApps in
 // container that exits non-zero at build time with a clear message, rather than
 // panicking at plan time or silently falling back. The step name is preserved
 // so the DAG wiring + log marker stay intact.
-func canonicalDockerfileStepOrFail(runtime string, apps []shared.AppSpec, totalApps int) *forge.Container {
+func canonicalDockerfileStepOrFail(runtime string, apps []deploycontracts.AppSpec, totalApps int) *forge.Container {
 	c, err := canonicalDockerfileStep(runtime, apps, totalApps)
 	if err != nil {
 		msg := "loopzero: canonical Dockerfile generation failed: " + err.Error()

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
@@ -52,8 +52,8 @@ func (f *fakeScalingStore) CountByTenant(ctx context.Context, tenantID string) (
 }
 
 // helper: build a minimal AppSpec with given name + replicas
-func makeAppSpec(name string, replicas int) shared.AppSpec {
-	return shared.AppSpec{
+func makeAppSpec(name string, replicas int) deploycontracts.AppSpec {
+	return deploycontracts.AppSpec{
 		Name:     name,
 		Type:     "server",
 		Port:     3000,
@@ -78,7 +78,7 @@ func TestResolve_DBRowOverridesYAML_FixedReplicas(t *testing.T) {
 	}
 	r := NewDBScalingResolver(store)
 
-	in := []shared.AppSpec{makeAppSpec("api", 1)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err != nil {
@@ -108,7 +108,7 @@ func TestResolve_DBRowOverridesYAML_HPA(t *testing.T) {
 	}
 	r := NewDBScalingResolver(store)
 
-	in := []shared.AppSpec{makeAppSpec("api", 1)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err != nil {
@@ -140,7 +140,7 @@ func TestResolve_DBRowOverridesYAML_KEDA(t *testing.T) {
 	}
 	r := NewDBScalingResolver(store)
 
-	in := []shared.AppSpec{makeAppSpec("api", 1)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err != nil {
@@ -168,7 +168,7 @@ func TestResolve_NoDBRow_PreservesYAML(t *testing.T) {
 	}
 	r := NewDBScalingResolver(store)
 
-	in := []shared.AppSpec{makeAppSpec("api", 2)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 2)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err != nil {
@@ -190,7 +190,7 @@ func TestResolve_MultipleApps_OnlyOverrideMatching(t *testing.T) {
 	}
 	r := NewDBScalingResolver(store)
 
-	in := []shared.AppSpec{makeAppSpec("api", 1), makeAppSpec("worker", 2)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 1), makeAppSpec("worker", 2)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err != nil {
@@ -216,7 +216,7 @@ func TestResolve_DBError_PropagatesErr(t *testing.T) {
 	}
 	r := NewDBScalingResolver(store)
 
-	in := []shared.AppSpec{makeAppSpec("api", 1)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	_, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err == nil {
@@ -230,7 +230,7 @@ func TestResolve_DBError_PropagatesErr(t *testing.T) {
 func TestResolve_NilStore_ReturnsYAML(t *testing.T) {
 	r := NewDBScalingResolver(nil)
 
-	in := []shared.AppSpec{makeAppSpec("api", 7)}
+	in := []deploycontracts.AppSpec{makeAppSpec("api", 7)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
 
 	if err != nil {

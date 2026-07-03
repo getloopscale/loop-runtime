@@ -21,7 +21,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -40,7 +40,7 @@ func (f *fakeRollbackGitReader) GetManifestsAtCommit(ctx context.Context, tenant
 
 type fakeRollbackGitPusher struct{}
 
-func (f *fakeRollbackGitPusher) Push(ctx context.Context, opts shared.GitOpsPushOpts) (string, error) {
+func (f *fakeRollbackGitPusher) Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
 	return "fake-rollback-commit", nil
 }
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -29,7 +29,7 @@ import (
 // SubmitBuild transitioned to RUNNING), transitions QUEUED->RUNNING first.
 //
 // Duplicate callbacks: If build is already in a terminal state, returns nil (no-op).
-func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result shared.BuildCallbackRequest) error {
+func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result deploycontracts.BuildCallbackRequest) error {
 	// Step 1: get build by ID (read-only, outside lock -- for lock coordinates)
 	build, err := o.buildStore.GetByID(ctx, buildID)
 	if err != nil {
@@ -167,7 +167,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		// BRC-002 fix: if the delivery activator already handled the failure
 		// (emitted SSE event, transitioned release state), skip our own emit
 		// to prevent duplicate deploy.sync_failed events in the CLI stream.
-		if !errors.Is(activationErr, shared.ErrActivationAlreadyHandled) {
+		if !errors.Is(activationErr, deploycontracts.ErrActivationAlreadyHandled) {
 			o.emitActivationFailure(ctx, buildID, activationErr)
 		}
 		// Build stays in RELEASING so the reconcile loop retries (MEET-2026-03-26-008).
@@ -200,7 +200,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 // writeStaticRoutingEntries writes CF KV entries for static apps in the build.
 // This enables the Cloudflare Worker to serve static assets from DO Spaces
 // without any cluster involvement (Sprint 10).
-func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build *db.Build, result shared.BuildCallbackRequest) {
+func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) {
 	if o.kvClient == nil {
 		return // CF KV not configured (local dev or not enabled)
 	}

@@ -11,7 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -40,7 +40,7 @@ import (
 //
 // Returns ErrDeployInProgress if another build is active.
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
-func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBuildRequest) (*shared.SubmitBuildResponse, error) {
+func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error) {
 	// MEET-2026-03-30-020: distributed tracing (C3 naming convention)
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.submit",
 		trace.WithAttributes(
@@ -168,9 +168,9 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBu
 	// Normalize AppSpecs into AppUnits and create a BuildPlan.
 	// The BuildPlan resolves all paths, image tags, and strategies before
 	// reaching the WorkflowBuilder -- no inference happens in the pipeline.
-	var units []shared.AppUnit
+	var units []deploycontracts.AppUnit
 	for _, a := range req.Apps {
-		unit, normErr := shared.NormalizeApp(a.Name, a)
+		unit, normErr := deploycontracts.NormalizeApp(a.Name, a)
 		if normErr != nil {
 			// BRC-001 fix: fail the QUEUED build immediately so the environment
 			// is unblocked. Previously, the build sat QUEUED until the reaper
@@ -180,9 +180,9 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBu
 		}
 		units = append(units, unit)
 	}
-	plan := shared.CreateBuildPlan(units, req.TenantID, req.ProjectID, req.CommitSHA, o.registryURL)
+	plan := deploycontracts.CreateBuildPlan(units, req.TenantID, req.ProjectID, req.CommitSHA, o.registryURL)
 
-	wfSpec := shared.WorkflowSpec{
+	wfSpec := deploycontracts.WorkflowSpec{
 		BuildID:       buildID,
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
@@ -263,7 +263,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBu
 	span.SetAttributes(attribute.String("loopzero.build_id", buildID))
 
 	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
-	return &shared.SubmitBuildResponse{
+	return &deploycontracts.SubmitBuildResponse{
 		BuildID:   buildID,
 		StreamURL: streamURL,
 	}, nil
@@ -276,7 +276,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBu
 // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059) Constraint 6: the check MUST
 // live in SubmitBuild so both CLI and GitHub App auto-deploy paths are covered.
 // A nil checker disables enforcement (dev / legacy callsites).
-func enforceScaling(apps []shared.AppSpec, checker PlanCapChecker, tenantID string, kedaEnabled bool) error {
+func enforceScaling(apps []deploycontracts.AppSpec, checker PlanCapChecker, tenantID string, kedaEnabled bool) error {
 	for _, a := range apps {
 		hasReplicas := a.Replicas > 0
 		hasAutoscaling := a.Autoscaling != nil

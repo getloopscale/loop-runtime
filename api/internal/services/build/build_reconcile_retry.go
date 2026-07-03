@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -108,9 +108,9 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		return
 	}
 
-	var buildApps []shared.AppRelease
+	var buildApps []deploycontracts.AppRelease
 	for _, app := range apps {
-		buildApps = append(buildApps, shared.BuildAppRelease(
+		buildApps = append(buildApps, deploycontracts.BuildAppRelease(
 			r.cfg.RegistryURL, build.TenantID, build.ProjectID, app.Name,
 			build.CommitSHA, build.Environment, r.cfg.BaseDomain, app.Type, app.Rendering,
 		))
@@ -134,7 +134,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	}
 
 	// F-010: shared manifest building (retry path)
-	manifestApps, err := shared.BuildManifestApps(ctx, shared.BuildManifestAppsInput{
+	manifestApps, err := deploycontracts.BuildManifestApps(ctx, deploycontracts.BuildManifestAppsInput{
 		RegistryURL: r.cfg.RegistryURL,
 		TenantID:    build.TenantID,
 		ProjectID:   build.ProjectID,
@@ -175,7 +175,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		return
 	}
 
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
 		Apps:      buildApps,
 		Manifests: renderedManifests,

@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // T1.2 (plan simplify-deploy-loopzerokit-only v2.0) — wire the canonical generator
 // into Node/PythonStrategy.DockerfileStep, replacing loopzeroPacksDockerfileStep.
 
 func TestNodeStrategy_DockerfileStep_UsesCanonical(t *testing.T) {
-	c := (&NodeStrategy{}).DockerfileStep([]shared.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
+	c := (&NodeStrategy{}).DockerfileStep([]deploycontracts.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
 	if c == nil {
 		t.Fatal("DockerfileStep returned nil")
 	}
@@ -31,7 +31,7 @@ func TestNodeStrategy_DockerfileStep_UsesCanonical(t *testing.T) {
 }
 
 func TestPythonStrategy_DockerfileStep_UsesCanonical(t *testing.T) {
-	c := (&PythonStrategy{}).DockerfileStep([]shared.AppSpec{{Name: "api", Type: "server", Port: 8000, Start: "python -m app"}}, 1)
+	c := (&PythonStrategy{}).DockerfileStep([]deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 8000, Start: "python -m app"}}, 1)
 	if c == nil {
 		t.Fatal("DockerfileStep returned nil")
 	}
@@ -47,7 +47,7 @@ func TestPythonStrategy_DockerfileStep_UsesCanonical(t *testing.T) {
 func TestNodeStrategy_DockerfileStep_FailsClosedOnError(t *testing.T) {
 	// Missing start → fail-closed: a failing container (exit 1), never loopzero-packs,
 	// never a panic. Step name preserved so the DAG wiring stays intact.
-	c := (&NodeStrategy{}).DockerfileStep([]shared.AppSpec{{Name: "x", Type: "server", Port: 8080}}, 1)
+	c := (&NodeStrategy{}).DockerfileStep([]deploycontracts.AppSpec{{Name: "x", Type: "server", Port: 8080}}, 1)
 	if c == nil {
 		t.Fatal("DockerfileStep returned nil")
 	}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -52,11 +52,11 @@ type fakeGitOpsContainer struct {
 	commitSHA string
 }
 
-func (f *fakeGitOpsContainer) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsContainer) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
 	return f.commitSHA, f.pushErr
 }
 
-func (f *fakeGitOpsContainer) Remove(_ context.Context, _ shared.GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsContainer) Remove(_ context.Context, _ deploycontracts.GitOpsRemoveOpts) (string, error) {
 	return "", nil
 }
 

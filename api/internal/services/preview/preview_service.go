@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -31,7 +31,7 @@ import (
 //  2. Tests can supply a stub that asserts on the request without setting
 //     up the full build pipeline.
 type PreviewBuildSubmitter interface {
-	SubmitBuild(ctx context.Context, req shared.SubmitBuildRequest) (*shared.SubmitBuildResponse, error)
+	SubmitBuild(ctx context.Context, req deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error)
 }
 
 // PreviewBuildAppsLookup resolves the AppSpec list to use when submitting
@@ -44,7 +44,7 @@ type PreviewBuildSubmitter interface {
 // PR webhook handler doesn't parse loopzero.yaml from the PR branch source
 // (only push webhooks do, via WebhookBuildRequest.LoopZeroYaml).
 type PreviewBuildAppsLookup interface {
-	LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]shared.AppSpec, error)
+	LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]deploycontracts.AppSpec, error)
 }
 
 // PreviewCRCreator is the optional contract for creating PreviewEnvironment
@@ -98,7 +98,7 @@ type PreviewServiceDeps struct {
 	// rapid double-webhook for the same PR cannot race into two preview
 	// rows. T1.2 of deep-review-2026-05-10-remediation-plan
 	// (find_conc_preview_no_lock HIGH).
-	Locker shared.EnvironmentLocker
+	Locker deploycontracts.EnvironmentLocker
 
 	// SlotStore is the single-slot SOT for preview deployments per tenant
 	// (D2/D3 of plan 2026-06-07-preview-as-category-single-slot-plan.md).
@@ -269,7 +269,7 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePre
 	// Step 4: trigger build. Best-effort, but log loudly because a missing
 	// build means the preview is stuck in 'creating'.
 	if s.deps.Builds != nil {
-		buildReq := shared.SubmitBuildRequest{
+		buildReq := deploycontracts.SubmitBuildRequest{
 			TenantID:    rec.TenantID,
 			ProjectID:   rec.ProjectID,
 			Environment: previewEnvName(rec.PRNumber),
@@ -497,6 +497,6 @@ var _ domain.PreviewService = (*PreviewService)(nil)
 // LIVE-caught 2026-06-18: this function had silently fallen out of sync
 // with autodeploy_adapters.go — losing the `start` field — breaking
 // preview builds with "no declared start command").
-func appsFromLoopZeroYaml(rawApps map[string]map[string]interface{}) []shared.AppSpec {
-	return shared.ConvertLoopZeroYamlApps(rawApps)
+func appsFromLoopZeroYaml(rawApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
+	return deploycontracts.ConvertLoopZeroYamlApps(rawApps)
 }

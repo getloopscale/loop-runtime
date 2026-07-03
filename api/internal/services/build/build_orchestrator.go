@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/scaling"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -67,11 +67,11 @@ type BuildOrchestratorDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Workflow          shared.WorkflowSubmitter
-	Sync              shared.SyncClient
-	Locker            shared.EnvironmentLocker
-	GitOps            shared.GitOpsPusher
-	Delivery          shared.DeliveryActivator // MEET-009: polymorphic release activation
+	Workflow          deploycontracts.WorkflowSubmitter
+	Sync              deploycontracts.SyncClient
+	Locker            deploycontracts.EnvironmentLocker
+	GitOps            deploycontracts.GitOpsPusher
+	Delivery          deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
 	RegistryURL       string                   // Container registry URL for BuildPlan image tag resolution
 	ArgocdSyncTimeout time.Duration            // 0 = default 120s
 	KVClient          StaticRoutingClient      // CF KV client for static frontend routing (nil = disabled)
@@ -131,11 +131,11 @@ type BuildOrchestrator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	workflow            shared.WorkflowSubmitter
-	sync                shared.SyncClient
-	locker              shared.EnvironmentLocker
-	gitops              shared.GitOpsPusher
-	delivery            shared.DeliveryActivator // MEET-009: polymorphic release activation
+	workflow            deploycontracts.WorkflowSubmitter
+	sync                deploycontracts.SyncClient
+	locker              deploycontracts.EnvironmentLocker
+	gitops              deploycontracts.GitOpsPusher
+	delivery            deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
 	registryURL         string                   // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout   time.Duration
 	kvClient            StaticRoutingClient // CF KV client for static frontend routing
@@ -215,8 +215,8 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 func (o *BuildOrchestrator) resolveScaling(
 	ctx context.Context,
 	tenantID, projectID, environment string,
-	apps []shared.AppSpec,
-) ([]shared.AppSpec, error) {
+	apps []deploycontracts.AppSpec,
+) ([]deploycontracts.AppSpec, error) {
 	if o.scalingResolver == nil {
 		return apps, nil
 	}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -21,7 +21,7 @@ import (
 // MEET-2026-03-26-008: This method does NOT check IsBuildTerminal because
 // RELEASING is explicitly non-terminal. It directly runs activateRelease and
 // transitions to SUCCEEDED on success or leaves in RELEASING for retry.
-func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *db.Build, result shared.BuildCallbackRequest) error {
+func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) error {
 	if build.Status != string(statemachine.BPhReleasing) {
 		return fmt.Errorf("retry release activation: build %s is in %s state, expected RELEASING", build.ID, build.Status)
 	}

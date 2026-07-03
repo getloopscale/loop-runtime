@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -20,18 +20,18 @@ type fakeWorkflowSubmitter struct {
 	submitErr error
 	cancelErr error
 	statusErr error
-	status    *shared.WorkflowStatus
+	status    *deploycontracts.WorkflowStatus
 	submitted int
 }
 
-func (f *fakeWorkflowSubmitter) Submit(_ context.Context, _ shared.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowSubmitter) Submit(_ context.Context, _ deploycontracts.WorkflowSpec) (string, error) {
 	f.submitted++
 	return "wf-123", f.submitErr
 }
 func (f *fakeWorkflowSubmitter) Cancel(_ context.Context, _, _ string) error {
 	return f.cancelErr
 }
-func (f *fakeWorkflowSubmitter) GetStatus(_ context.Context, _, _ string) (*shared.WorkflowStatus, error) {
+func (f *fakeWorkflowSubmitter) GetStatus(_ context.Context, _, _ string) (*deploycontracts.WorkflowStatus, error) {
 	return f.status, f.statusErr
 }
 
@@ -45,7 +45,7 @@ func TestWorkflowCircuitBreaker_Closed_PassesThrough(t *testing.T) {
 		RetryInterval:  time.Minute,
 	}, slog.Default())
 
-	id, err := cb.Submit(context.Background(), shared.WorkflowSpec{BuildID: "b-1"})
+	id, err := cb.Submit(context.Background(), deploycontracts.WorkflowSpec{BuildID: "b-1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -67,11 +67,11 @@ func TestWorkflowCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 
 	// 3 failures should open the circuit
 	for i := 0; i < 3; i++ {
-		_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{})
+		_, _ = cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 	}
 
 	// 4th call should be rejected immediately
-	_, err := cb.Submit(context.Background(), shared.WorkflowSpec{})
+	_, err := cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 	if err != loopzeroerrors.ErrPlatformDegraded {
 		t.Errorf("expected ErrPlatformDegraded, got %v", err)
 	}
@@ -89,7 +89,7 @@ func TestWorkflowCircuitBreaker_Cancel_NotProtected(t *testing.T) {
 	}, slog.Default())
 
 	// Open the circuit
-	_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{})
+	_, _ = cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 
 	// Cancel should still pass through (not circuit-breaker protected)
 	err := cb.Cancel(context.Background(), "ns", "wf-1")
@@ -101,7 +101,7 @@ func TestWorkflowCircuitBreaker_Cancel_NotProtected(t *testing.T) {
 func TestWorkflowCircuitBreaker_GetStatus_NotProtected(t *testing.T) {
 	inner := &fakeWorkflowSubmitter{
 		submitErr: fmt.Errorf("down"),
-		status:    &shared.WorkflowStatus{Phase: "Running"},
+		status:    &deploycontracts.WorkflowStatus{Phase: "Running"},
 	}
 	cb := NewCircuitBreakerWorkflowSubmitter(inner, CircuitBreakerConfig{
 		OpenThreshold:  1,
@@ -110,7 +110,7 @@ func TestWorkflowCircuitBreaker_GetStatus_NotProtected(t *testing.T) {
 	}, slog.Default())
 
 	// Open the circuit
-	_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{})
+	_, _ = cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 
 	// GetStatus should still pass through
 	status, err := cb.GetStatus(context.Background(), "ns", "wf-1")
@@ -131,7 +131,7 @@ func TestWorkflowCircuitBreaker_RecoveryAfterRetryInterval(t *testing.T) {
 	}, slog.Default())
 
 	// Open the circuit
-	_, _ = cb.Submit(context.Background(), shared.WorkflowSpec{})
+	_, _ = cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 
 	// Wait for retry interval
 	time.Sleep(5 * time.Millisecond)
@@ -140,13 +140,13 @@ func TestWorkflowCircuitBreaker_RecoveryAfterRetryInterval(t *testing.T) {
 	inner.submitErr = nil
 
 	// Should allow a recovery probe (half-open → closed)
-	_, err := cb.Submit(context.Background(), shared.WorkflowSpec{})
+	_, err := cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 	if err != nil {
 		t.Fatalf("expected successful recovery probe, got: %v", err)
 	}
 
 	// Circuit should now be closed, further calls should work
-	_, err = cb.Submit(context.Background(), shared.WorkflowSpec{})
+	_, err = cb.Submit(context.Background(), deploycontracts.WorkflowSpec{})
 	if err != nil {
 		t.Fatalf("expected success after circuit closed, got: %v", err)
 	}

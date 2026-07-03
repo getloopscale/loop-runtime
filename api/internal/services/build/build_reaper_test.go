@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -145,14 +145,14 @@ func (f *fakeEventStoreReaper) Append(_ context.Context, buildID, eventType stri
 }
 
 type fakeWorkflowReaper struct {
-	statuses map[string]*shared.WorkflowStatus
+	statuses map[string]*deploycontracts.WorkflowStatus
 }
 
-func (f *fakeWorkflowReaper) Submit(_ context.Context, _ shared.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowReaper) Submit(_ context.Context, _ deploycontracts.WorkflowSpec) (string, error) {
 	return "", nil
 }
 func (f *fakeWorkflowReaper) Cancel(_ context.Context, _, _ string) error { return nil }
-func (f *fakeWorkflowReaper) GetStatus(_ context.Context, _, id string) (*shared.WorkflowStatus, error) {
+func (f *fakeWorkflowReaper) GetStatus(_ context.Context, _, id string) (*deploycontracts.WorkflowStatus, error) {
 	if f.statuses == nil {
 		return nil, fmt.Errorf("not found")
 	}
@@ -260,7 +260,7 @@ func TestBuildReaper_SkipsActiveWorkflow(t *testing.T) {
 	}
 
 	wf := &fakeWorkflowReaper{
-		statuses: map[string]*shared.WorkflowStatus{
+		statuses: map[string]*deploycontracts.WorkflowStatus{
 			"wf-1": {Phase: "Running"},
 		},
 	}

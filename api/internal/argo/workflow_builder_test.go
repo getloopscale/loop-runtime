@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 )
@@ -26,11 +26,11 @@ func testInfraParams() InfraParams {
 // override spec.Apps continue to exercise the Plan-driven emission path
 // transparently. Tests that need a custom Plan should overwrite spec.Plan
 // AFTER calling testSpec(), and may also overwrite spec.Apps independently.
-func testSpec() shared.WorkflowSpec {
-	apps := []shared.AppSpec{
+func testSpec() deploycontracts.WorkflowSpec {
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 	}
-	return shared.WorkflowSpec{
+	return deploycontracts.WorkflowSpec{
 		BuildID:       "build-001",
 		TenantID:      "acme",
 		ProjectID:     "my-app",
@@ -42,26 +42,26 @@ func testSpec() shared.WorkflowSpec {
 	}
 }
 
-// planFromApps invokes the production shared.CreateBuildPlan pipeline on a
+// planFromApps invokes the production deploycontracts.CreateBuildPlan pipeline on a
 // list of AppSpecs so test inputs and production semantics stay aligned.
 // Defaults match testSpec(): tenant=acme, project=my-app, sha=abc123,
 // registry=k3d-loopzero-registry:5000 (testInfraParams). Use planFromAppsCustom
 // for non-default tenant/project/sha/registry combinations.
-func planFromApps(apps []shared.AppSpec) *shared.BuildPlan {
+func planFromApps(apps []deploycontracts.AppSpec) *deploycontracts.BuildPlan {
 	return planFromAppsCustom(apps, "acme", "my-app", "abc123", "k3d-loopzero-registry:5000")
 }
 
-func planFromAppsCustom(apps []shared.AppSpec, tenantID, projectID, commitSHA, registryURL string) *shared.BuildPlan {
-	units := make([]shared.AppUnit, 0, len(apps))
+func planFromAppsCustom(apps []deploycontracts.AppSpec, tenantID, projectID, commitSHA, registryURL string) *deploycontracts.BuildPlan {
+	units := make([]deploycontracts.AppUnit, 0, len(apps))
 	for _, a := range apps {
-		unit, err := shared.NormalizeApp(a.Name, a)
+		unit, err := deploycontracts.NormalizeApp(a.Name, a)
 		if err != nil {
 			// Tests pass valid specs; normalization should never fail here.
 			panic("planFromApps: NormalizeApp failed for " + a.Name + ": " + err.Error())
 		}
 		units = append(units, unit)
 	}
-	plan := shared.CreateBuildPlan(units, tenantID, projectID, commitSHA, registryURL)
+	plan := deploycontracts.CreateBuildPlan(units, tenantID, projectID, commitSHA, registryURL)
 	return &plan
 }
 
@@ -530,7 +530,7 @@ func TestWorkflowBuilder_Build_DAGDependencies(t *testing.T) {
 func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
-	spec.Apps = []shared.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
+	spec.Apps = []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
@@ -543,7 +543,7 @@ func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
-	spec.Apps = []shared.AppSpec{
+	spec.Apps = []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Runtime: "node"},
 		// T3.3: frontend removed — web is a node server (the LoopZeroKit shape).
 		{Name: "web", Type: "server", Port: 3001, Path: "apps/web", Runtime: "node"},
@@ -624,7 +624,7 @@ func TestAppsJSON_EmptyApps(t *testing.T) {
 }
 
 func TestAppsJSON_SingleApp(t *testing.T) {
-	apps := []shared.AppSpec{
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node"},
 	}
 	result := appsJSON(apps)
@@ -634,7 +634,7 @@ func TestAppsJSON_SingleApp(t *testing.T) {
 }
 
 func TestAppsJSON_WithSecrets(t *testing.T) {
-	apps := []shared.AppSpec{
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Secrets: []string{"DB_URL", "API_KEY"}},
 	}
 	result := appsJSON(apps)
@@ -942,7 +942,7 @@ func TestWorkflowBuilder_BuildKit_NoSocketVolume(t *testing.T) {
 func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
-	spec.Apps = []shared.AppSpec{
+	spec.Apps = []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 		{Name: "worker", Type: "worker", Port: 0, Runtime: "node"},
 	}
@@ -978,7 +978,7 @@ func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 	// frontends route to "deliver-artifact-{app}" (S3 upload), not
 	// "build-image-{app}". The assertion here is about per-app metadata file
 	// paths in build-image containers, so both apps must be container-delivered.
-	spec.Apps = []shared.AppSpec{
+	spec.Apps = []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 		{Name: "web", Type: "server", Port: 4000, Runtime: "node"},
 	}
@@ -1099,9 +1099,9 @@ func TestWorkflowBuilder_BuildKit_MainContainerHasRegistryCredentials(t *testing
 // BuildPlan integration — buildkitTemplateFromPlan
 // ---------------------------------------------------------------------------
 
-func testBuildPlan() *shared.BuildPlan {
-	return &shared.BuildPlan{
-		Apps: []shared.AppBuildPlan{
+func testBuildPlan() *deploycontracts.BuildPlan {
+	return &deploycontracts.BuildPlan{
+		Apps: []deploycontracts.AppBuildPlan{
 			{
 				AppName:          "api",
 				ImageTag:         "reg.io/acme/my-app/api:abc123",
@@ -1309,13 +1309,13 @@ func TestDockerfileName(t *testing.T) {
 // spec.Apps fallback. Fail fast at the contract boundary.
 func TestWorkflowBuilder_Build_RejectsNilPlan(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	spec := shared.WorkflowSpec{
+	spec := deploycontracts.WorkflowSpec{
 		BuildID:     "build-001",
 		TenantID:    "acme",
 		ProjectID:   "my-app",
 		Environment: "production",
 		CommitSHA:   "abc123",
-		Apps: []shared.AppSpec{
+		Apps: []deploycontracts.AppSpec{
 			{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 		},
 		Plan: nil, // legacy path — must be rejected
@@ -1333,13 +1333,13 @@ func TestWorkflowBuilder_Build_RejectsNilPlan(t *testing.T) {
 // EC-coverage: Plan present but Apps empty is also a contract violation.
 func TestWorkflowBuilder_Build_RejectsEmptyPlanApps(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
-	spec := shared.WorkflowSpec{
+	spec := deploycontracts.WorkflowSpec{
 		BuildID:     "build-001",
 		TenantID:    "acme",
 		ProjectID:   "my-app",
 		Environment: "production",
 		CommitSHA:   "abc123",
-		Plan:        &shared.BuildPlan{Apps: nil}, // Plan non-nil but no apps
+		Plan:        &deploycontracts.BuildPlan{Apps: nil}, // Plan non-nil but no apps
 	}
 
 	_, err := builder.Build(spec)

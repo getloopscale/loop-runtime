@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -28,7 +28,7 @@ import (
 type SyncCallbackActivator struct {
 	releaseStore   ReleaseConvergenceStore
 	envTargetStore store.EnvironmentTargetStore
-	locker         shared.EnvironmentLocker
+	locker         deploycontracts.EnvironmentLocker
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -106,7 +106,7 @@ func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName str
 func NewSyncCallbackActivator(
 	releaseStore ReleaseConvergenceStore,
 	envTargetStore store.EnvironmentTargetStore,
-	locker shared.EnvironmentLocker,
+	locker deploycontracts.EnvironmentLocker,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	},

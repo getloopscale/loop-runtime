@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
@@ -40,9 +40,9 @@ type ContainerDeliveryActivator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	sync              shared.SyncClient
-	locker            shared.EnvironmentLocker
-	gitops            shared.GitOpsPusher
+	sync              deploycontracts.SyncClient
+	locker            deploycontracts.EnvironmentLocker
+	gitops            deploycontracts.GitOpsPusher
 	gitReader         GitManifestReader
 	argocdSyncTimeout time.Duration
 	// Sprint 6 / T3.1: optional per-app attestation store. When set,
@@ -59,9 +59,9 @@ type ContainerDeliveryDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Sync              shared.SyncClient
-	Locker            shared.EnvironmentLocker
-	GitOps            shared.GitOpsPusher
+	Sync              deploycontracts.SyncClient
+	Locker            deploycontracts.EnvironmentLocker
+	GitOps            deploycontracts.GitOpsPusher
 	GitReader         GitManifestReader
 	ArgocdSyncTimeout time.Duration
 	// Sprint 6 / T3.1: per-app attestation store. May be nil during
@@ -91,7 +91,7 @@ func NewContainerDeliveryActivator(deps ContainerDeliveryDeps) *ContainerDeliver
 
 // Activate runs the 5-phase container release activation.
 // Phases A-E are semantically identical to the pre-refactoring activateRelease.
-func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Build, result shared.BuildCallbackRequest) error {
+func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) error {
 	// Phase A (Lock): Create release record (READY)
 	release, err := c.phaseACreateRelease(ctx, build, result)
 	if err != nil {
@@ -136,7 +136,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 			if finalizeErr := c.phaseEFinalize(ctx, build, release, result, true); finalizeErr != nil {
 				return finalizeErr
 			}
-			return fmt.Errorf("sync trigger failed: %w", shared.ErrActivationAlreadyHandled)
+			return fmt.Errorf("sync trigger failed: %w", deploycontracts.ErrActivationAlreadyHandled)
 		}
 	}
 
@@ -157,7 +157,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 // Rollback delivers a previous release's manifests to the runtime.
 // Fetches old manifests from Gitea git history, pushes them, and triggers ArgoCD sync.
 // State machine transitions are handled by the RollbackOrchestrator, not here.
-func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req shared.RollbackDeliveryRequest) error {
+func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) error {
 	if req.TargetRelease.GitCommit == "" {
 		return fmt.Errorf("container rollback: target release has no git commit")
 	}
@@ -169,7 +169,7 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req shared.Ro
 	}
 
 	// Push old manifests to gitops repo
-	_, err = c.gitops.Push(ctx, shared.GitOpsPushOpts{
+	_, err = c.gitops.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
 		Environment:   req.Environment,
@@ -206,7 +206,7 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req shared.Ro
 // Phase implementations (extracted from release_activator.go, same logic)
 // ---------------------------------------------------------------------------
 
-func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, build *db.Build, result shared.BuildCallbackRequest) (*db.Release, error) {
+func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) (*db.Release, error) {
 	var release *db.Release
 
 	err := c.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
@@ -370,11 +370,11 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 	return release, nil
 }
 
-func (c *ContainerDeliveryActivator) phaseBDeliver(ctx context.Context, build *db.Build, release *db.Release, result shared.BuildCallbackRequest) (string, error) {
+func (c *ContainerDeliveryActivator) phaseBDeliver(ctx context.Context, build *db.Build, release *db.Release, result deploycontracts.BuildCallbackRequest) (string, error) {
 	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	return c.gitops.Push(pushCtx, shared.GitOpsPushOpts{
+	return c.gitops.Push(pushCtx, deploycontracts.GitOpsPushOpts{
 		TenantID:      build.TenantID,
 		ProjectID:     build.ProjectID,
 		Environment:   build.Environment,
@@ -460,7 +460,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 // Replaced by async: ReleaseConvergenceLoop + SyncCallbackActivator.
 // Historical reference: git show f1bf264:api/internal/services/container_delivery.go
 
-func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.Build, release *db.Release, result shared.BuildCallbackRequest, verifyFailed bool) error {
+func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *db.Build, release *db.Release, result deploycontracts.BuildCallbackRequest, verifyFailed bool) error {
 	logger := slog.With("release_id", release.ID, "build_id", build.ID)
 	return c.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		if verifyFailed {

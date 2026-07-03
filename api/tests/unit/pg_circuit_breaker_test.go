@@ -13,7 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -362,5 +362,5 @@ func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T)
 
 func TestCircuitBreaker_ImplementsSyncClient(t *testing.T) {
 	// Compile-time check
-	var _ shared.SyncClient = (*platform.CircuitBreakerSyncClient)(nil)
+	var _ deploycontracts.SyncClient = (*platform.CircuitBreakerSyncClient)(nil)
 }

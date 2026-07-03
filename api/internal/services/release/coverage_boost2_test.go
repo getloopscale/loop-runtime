@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/processing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -241,7 +241,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsMismatchedRevision(t *testin
 }
 
 func TestSyncCallbackActivator_OnSyncCompleted_ActivatesMatchingRelease(t *testing.T) {
-	appsJSON, _ := json.Marshal([]shared.AppRelease{{Name: "api", URL: "https://api.dev.loopzero.example"}})
+	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{{Name: "api", URL: "https://api.dev.loopzero.example"}})
 	store := &fakeReleaseConvergenceStoreForCallback{
 		pendingReleases: []db.Release{
 			{
@@ -348,7 +348,7 @@ func TestReleaseAppsToActivationApps_EmptyApps(t *testing.T) {
 }
 
 func TestReleaseAppsToActivationApps_WithApps(t *testing.T) {
-	appsJSON, _ := json.Marshal([]shared.AppRelease{
+	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{
 		{Name: "api", URL: "https://api.dev.loopzero.example", Type: "server"},
 		{Name: "web", URL: "https://web.dev.loopzero.example", Type: "static"},
 	})
@@ -398,7 +398,7 @@ func TestReleaseAppsToActivationApps_NilApps(t *testing.T) {
 // `loopzero deploy` announced `.loopzero.local` while `loopzero status` returned
 // `.prod-dev.loopzero.example`. The mismatch is the bug.
 func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testing.T) {
-	appsJSON, _ := json.Marshal([]shared.AppRelease{
+	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{
 		{Name: "app", Type: "server"},
 	})
 	release := &db.Release{
@@ -426,7 +426,7 @@ func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testin
 // is the backward-compat guard: existing test fixtures + local-dev envs
 // without a public override must still get the baseDomain-based URL.
 func TestReleaseAppsToActivationApps_FallsBackToBaseDomainWhenPublicEmpty_M61(t *testing.T) {
-	appsJSON, _ := json.Marshal([]shared.AppRelease{
+	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{
 		{Name: "app", Type: "server"},
 	})
 	release := &db.Release{

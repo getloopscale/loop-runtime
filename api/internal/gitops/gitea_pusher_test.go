@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // These tests run against real Gitea.
@@ -74,7 +74,7 @@ func TestGiteaGitOpsPusher_PushManifests(t *testing.T) {
 	pusher := newTestPusher(t)
 	ctx := context.Background()
 
-	commitSHA, err := pusher.Push(ctx, shared.GitOpsPushOpts{
+	commitSHA, err := pusher.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "myapp",
 		Environment:   "production",
@@ -100,7 +100,7 @@ func TestGiteaGitOpsPusher_PushCreatesCorrectPath(t *testing.T) {
 	ctx := context.Background()
 	url, token := skipIfNoGitea(t)
 
-	_, err := pusher.Push(ctx, shared.GitOpsPushOpts{
+	_, err := pusher.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "pathtest",
 		Environment:   "staging",
@@ -137,7 +137,7 @@ func TestGiteaGitOpsPusher_PushHasGitTrailers(t *testing.T) {
 	ctx := context.Background()
 	url, token := skipIfNoGitea(t)
 
-	_, err := pusher.Push(ctx, shared.GitOpsPushOpts{
+	_, err := pusher.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "trailertest",
 		Environment:   "production",
@@ -173,7 +173,7 @@ func TestGiteaGitOpsPusher_PushIdempotent_SameContent(t *testing.T) {
 	pusher := newTestPusher(t)
 	ctx := context.Background()
 
-	opts := shared.GitOpsPushOpts{
+	opts := deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "idempotent",
 		Environment:   "production",
@@ -209,7 +209,7 @@ func TestGiteaGitOpsPusher_EmptyManifests(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	_, err := pusher.Push(ctx, shared.GitOpsPushOpts{
+	_, err := pusher.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:    "acme",
 		ProjectID:   "empty",
 		Environment: "production",
@@ -326,7 +326,7 @@ func TestGiteaGitOpsPusher_Push_ForbiddenManifest(t *testing.T) {
 	})
 
 	forbiddenManifest := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: evil\n"
-	_, err := pusher.Push(context.Background(), shared.GitOpsPushOpts{
+	_, err := pusher.Push(context.Background(), deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "app",
 		Environment:   "production",
@@ -348,7 +348,7 @@ func TestGiteaGitOpsPusher_UpdateExistingManifests(t *testing.T) {
 	ctx := context.Background()
 
 	// Push v1
-	sha1, err := pusher.Push(ctx, shared.GitOpsPushOpts{
+	sha1, err := pusher.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "updatetest",
 		Environment:   "production",
@@ -362,7 +362,7 @@ func TestGiteaGitOpsPusher_UpdateExistingManifests(t *testing.T) {
 	}
 
 	// Push v2 (updated manifests)
-	sha2, err := pusher.Push(ctx, shared.GitOpsPushOpts{
+	sha2, err := pusher.Push(ctx, deploycontracts.GitOpsPushOpts{
 		TenantID:      "acme",
 		ProjectID:     "updatetest",
 		Environment:   "production",

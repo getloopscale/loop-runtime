@@ -25,11 +25,11 @@ const buildImportsRelease = `package build
 
 import (
 	"github.com/getloopscale/loopzero/api/internal/services/release"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 var _ = release.X
-var _ = shared.Y
+var _ = deploycontracts.Y
 `
 
 // releaseImportsBuild is the forbidden reverse edge (would re-create the cycle).
@@ -40,16 +40,16 @@ import "github.com/getloopscale/loopzero/api/internal/services/build"
 var _ = build.Z
 `
 
-// sharedLeaf must import no sibling.
-const sharedLeaf = `package shared
+// deploycontractsLeaf must import no sibling.
+const deploycontractsLeaf = `package deploycontracts
 
 import "context"
 
 var _ = context.Background
 `
 
-// sharedImportsBuild breaks the leaf invariant.
-const sharedImportsBuild = `package shared
+// deploycontractsImportsBuild breaks the leaf invariant.
+const deploycontractsImportsBuild = `package deploycontracts
 
 import "github.com/getloopscale/loopzero/api/internal/services/build"
 
@@ -74,7 +74,7 @@ func TestCheck_LegalGraphPasses(t *testing.T) {
 	root := t.TempDir()
 	writeGo(t, root, "api/internal/services/build/b.go", buildImportsRelease)
 	writeGo(t, root, "api/internal/services/release/r.go", "package release\n\nvar X = 1\n")
-	writeGo(t, root, "api/internal/services/shared/s.go", sharedLeaf)
+	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
 	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -102,13 +102,13 @@ func TestCheck_ReverseEdgeFails(t *testing.T) {
 
 func TestCheck_SharedLeafInvariant(t *testing.T) {
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/shared/s.go", sharedImportsBuild)
+	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsImportsBuild)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if out.Pass {
-		t.Fatal("shared must import no sibling; shared → build must FAIL")
+		t.Fatal("deploycontracts must import no sibling; deploycontracts → build must FAIL")
 	}
 }
 
@@ -128,7 +128,7 @@ func TestCheck_UnknownContextFailsClosed(t *testing.T) {
 	root := t.TempDir()
 	// a subpackage not in the allow-list must fail-closed (forces registration).
 	writeGo(t, root, "api/internal/services/newthing/n.go", "package newthing\n\nfunc F() {}\n")
-	writeGo(t, root, "api/internal/services/shared/s.go", sharedLeaf)
+	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)

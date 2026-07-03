@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 )
@@ -274,15 +274,15 @@ func TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans(t *testing.T) {
 }
 
 func TestWorkflowBuilder_StaticAppHasNoSBOMStep(t *testing.T) {
-	spec := shared.WorkflowSpec{
+	spec := deploycontracts.WorkflowSpec{
 		BuildID:       "build-static",
 		TenantID:      "tn-1",
 		ProjectID:     "proj-1",
 		Environment:   "production",
 		CommitSHA:     "abc1234",
 		CorrelationID: "corr-static",
-		Plan: &shared.BuildPlan{
-			Apps: []shared.AppBuildPlan{
+		Plan: &deploycontracts.BuildPlan{
+			Apps: []deploycontracts.AppBuildPlan{
 				{
 					AppName:          "site",
 					AppType:          "static",

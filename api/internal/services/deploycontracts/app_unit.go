@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package shared is the leaf shared-kernel of the services contexts: cross-context DTOs, ports, pure utilities. M9 Step 6.
-package shared
+// Package deploycontracts is the leaf shared-kernel of the services contexts:
+// cross-context deploy DTOs and consumer-defined DIP ports. It is the pure sink
+// of the services acyclic DAG (every other context may import it; it imports no
+// sibling). M9 Step 6 created it as `shared`; renamed to `deploycontracts` per the
+// architecture re-audit §7 (MEET-2026-07-03-002) to name its real responsibility.
+package deploycontracts
 
 import "fmt"
 

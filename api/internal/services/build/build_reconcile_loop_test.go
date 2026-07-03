@@ -16,7 +16,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -192,11 +192,11 @@ func (f *fakeBuildStoreRL) CancelActiveBuilds(_ context.Context, _ db.DBTX, _, _
 
 // fakeWorkflowRL implements WorkflowSubmitter for reconcile loop tests.
 type fakeWorkflowRL struct {
-	statusResult *shared.WorkflowStatus
+	statusResult *deploycontracts.WorkflowStatus
 	statusErr    error
 }
 
-func (f *fakeWorkflowRL) Submit(_ context.Context, _ shared.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowRL) Submit(_ context.Context, _ deploycontracts.WorkflowSpec) (string, error) {
 	return "wf-test", nil
 }
 
@@ -204,7 +204,7 @@ func (f *fakeWorkflowRL) Cancel(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (f *fakeWorkflowRL) GetStatus(_ context.Context, _, _ string) (*shared.WorkflowStatus, error) {
+func (f *fakeWorkflowRL) GetStatus(_ context.Context, _, _ string) (*deploycontracts.WorkflowStatus, error) {
 	if f.statusErr != nil {
 		return nil, f.statusErr
 	}
@@ -222,14 +222,14 @@ type fakeCompletionHandlerRL struct {
 	findReleaseErr        error
 }
 
-func (f *fakeCompletionHandlerRL) OnBuildCompleted(_ context.Context, _ string, _ shared.BuildCallbackRequest) error {
+func (f *fakeCompletionHandlerRL) OnBuildCompleted(_ context.Context, _ string, _ deploycontracts.BuildCallbackRequest) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.onBuildCompletedCalls++
 	return f.onBuildCompletedErr
 }
 
-func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *db.Build, _ shared.BuildCallbackRequest) error {
+func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *db.Build, _ deploycontracts.BuildCallbackRequest) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.retryCalls++
@@ -384,7 +384,7 @@ func defaultBuild(id, status string) *db.Build {
 // reference images by digest, so reconcile tests MUST surface a digest in
 // the workflow outputs — otherwise BuildManifestApps fails-loud and
 // downstream calls (OnBuildCompleted/RetryReleaseActivation) never fire.
-func succeededStatusWithDigests(appNames ...string) *shared.WorkflowStatus {
+func succeededStatusWithDigests(appNames ...string) *deploycontracts.WorkflowStatus {
 	// 64 hex chars — each app gets a distinct digest by varying the
 	// leading byte. Keeps assertions deterministic without needing
 	// real cryptographic hashes.
@@ -399,7 +399,7 @@ func succeededStatusWithDigests(appNames ...string) *shared.WorkflowStatus {
 			"signature": "registry.example.com/sig/" + name + "@sha256:" + hex64,
 		}
 	}
-	return &shared.WorkflowStatus{
+	return &deploycontracts.WorkflowStatus{
 		Phase:      "Succeeded",
 		FinishedAt: time.Now().UTC().Format(time.RFC3339),
 		Outputs:    outputs,
@@ -566,7 +566,7 @@ func TestReconcileBuild_WorkflowFailed_FailsBuild(t *testing.T) {
 	fakes := newReconcileLoopFakes()
 	b := defaultBuild("bld-wf-failed", string(statemachine.BuildRunning))
 	fakes.buildStore.builds[b.ID] = b
-	fakes.workflow.statusResult = &shared.WorkflowStatus{
+	fakes.workflow.statusResult = &deploycontracts.WorkflowStatus{
 		Phase:      "Failed",
 		FinishedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -594,7 +594,7 @@ func TestReconcileBuild_WorkflowFailed_NotFinished_Skips(t *testing.T) {
 	fakes := newReconcileLoopFakes()
 	b := defaultBuild("bld-transient", string(statemachine.BuildRunning))
 	fakes.buildStore.builds[b.ID] = b
-	fakes.workflow.statusResult = &shared.WorkflowStatus{
+	fakes.workflow.statusResult = &deploycontracts.WorkflowStatus{
 		Phase:      "Failed",
 		FinishedAt: "", // not yet finished
 	}
@@ -621,7 +621,7 @@ func TestOnWorkflowSucceeded_GetBuildAppsFails_BuildFailed(t *testing.T) {
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 
 	// Act
-	loop.onWorkflowSucceeded(context.Background(), b, &shared.WorkflowStatus{Phase: "Succeeded"})
+	loop.onWorkflowSucceeded(context.Background(), b, &deploycontracts.WorkflowStatus{Phase: "Succeeded"})
 
 	// Assert: build should be FAILED (GetBuildApps failed)
 	current := fakes.buildStore.builds[b.ID]
@@ -1028,7 +1028,7 @@ func TestOnWorkflowSucceeded_CompletionFailsMaxAttempts_FailsBuild(t *testing.T)
 	loop.completionAttempts.Store(b.ID, maxActivationAttempts-1)
 
 	// Act: this is the Nth attempt that triggers failure
-	loop.onWorkflowSucceeded(context.Background(), b, &shared.WorkflowStatus{Phase: "Succeeded"})
+	loop.onWorkflowSucceeded(context.Background(), b, &deploycontracts.WorkflowStatus{Phase: "Succeeded"})
 
 	// Assert: build should be FAILED
 	current := fakes.buildStore.builds[b.ID]
@@ -1059,7 +1059,7 @@ func TestReconcile_SkipsDuplicateBuilds(t *testing.T) {
 	fakes := newReconcileLoopFakes()
 	b := defaultBuild("bld-dup", string(statemachine.BuildRunning))
 	fakes.buildStore.builds[b.ID] = b
-	fakes.workflow.statusResult = &shared.WorkflowStatus{Phase: "Succeeded", FinishedAt: time.Now().UTC().Format(time.RFC3339)}
+	fakes.workflow.statusResult = &deploycontracts.WorkflowStatus{Phase: "Succeeded", FinishedAt: time.Now().UTC().Format(time.RFC3339)}
 
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
 	// Pre-mark as active (simulates previous tick still processing)
@@ -1094,7 +1094,7 @@ func TestReconcile_PerTenantBackpressure(t *testing.T) {
 		fakes.buildStore.builds[b.ID] = b
 		fakes.buildStore.apps[b.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
 	}
-	fakes.workflow.statusResult = &shared.WorkflowStatus{Phase: "Running"}
+	fakes.workflow.statusResult = &deploycontracts.WorkflowStatus{Phase: "Running"}
 
 	loop := fakes.buildLoop(BuildReconcileLoopConfig{MaxBuildsPerTenant: 3})
 

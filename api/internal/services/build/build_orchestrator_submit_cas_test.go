@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -40,9 +40,9 @@ func TestSubmitBuild_RunningFlipUsesConditionalCAS(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	_, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
+	_, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
-		Apps: []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps: []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 	if err != nil {
 		t.Fatalf("SubmitBuild: unexpected error: %v", err)
@@ -79,9 +79,9 @@ func TestSubmitBuild_RunningFlipSupersededDoesNotFail(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	if _, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
+	if _, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
-		Apps: []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps: []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	}); err != nil {
 		t.Fatalf("a superseded RUNNING flip must not fail SubmitBuild; got %v", err)
 	}
@@ -101,9 +101,9 @@ func TestFailQueuedBuild_UsesConditionalCAS_NoLock(t *testing.T) {
 		EventStore: &fakeEventStoreContainer{},
 	})
 
-	if _, err := orch.SubmitBuild(context.Background(), shared.SubmitBuildRequest{
+	if _, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
-		Apps: []shared.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		Apps: []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	}); err == nil {
 		t.Fatal("expected error when workflow submit fails")
 	}

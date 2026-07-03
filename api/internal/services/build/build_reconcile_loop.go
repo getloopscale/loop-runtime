@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/processing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // BuildCompletionHandler abstracts the methods that BuildReconcileLoop calls on
@@ -22,10 +22,10 @@ import (
 // loop independently and follows ISP (arch-cp-004).
 type BuildCompletionHandler interface {
 	// OnBuildCompleted handles a successful build workflow completion.
-	OnBuildCompleted(ctx context.Context, buildID string, result shared.BuildCallbackRequest) error
+	OnBuildCompleted(ctx context.Context, buildID string, result deploycontracts.BuildCallbackRequest) error
 
 	// RetryReleaseActivation retries Phase 2 (release activation) for a RELEASING build.
-	RetryReleaseActivation(ctx context.Context, build *db.Build, result shared.BuildCallbackRequest) error
+	RetryReleaseActivation(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) error
 
 	// FindReleaseForBuild returns the most recent release for a build, or nil if none exists.
 	FindReleaseForBuild(ctx context.Context, buildID string) (*db.Release, error)
@@ -118,10 +118,10 @@ type TenantPlanLookup interface {
 
 type BuildReconcileLoop struct {
 	buildStore  db.BuildStore
-	workflow    shared.WorkflowSubmitter
+	workflow    deploycontracts.WorkflowSubmitter
 	orch        BuildCompletionHandler
-	locker      shared.EnvironmentLocker
-	domainStore shared.CustomDomainQuerier // MEET-034: custom domains in manifests
+	locker      deploycontracts.EnvironmentLocker
+	domainStore deploycontracts.CustomDomainQuerier // MEET-034: custom domains in manifests
 	appCRMgr    ApplicationCREnsurer
 	// T6.2: optional plan lookup. Nil-safe — falls back to empty string
 	// which RenderInput defaults to "starter" (most conservative canary).
@@ -149,7 +149,7 @@ type BuildReconcileLoop struct {
 
 	// cellLister returns all active cell IDs for multi-cell iteration.
 	// MEET-053 A-07: When set, reconcile processes builds from ALL cells.
-	cellLister shared.CellLister
+	cellLister deploycontracts.CellLister
 
 	// BRC-003 fix: tracks activation attempt counts per build ID.
 	// After maxActivationAttempts consecutive failures, the build is failed
@@ -165,10 +165,10 @@ type BuildReconcileLoop struct {
 // NewBuildReconcileLoop creates a new BuildReconcileLoop.
 func NewBuildReconcileLoop(
 	buildStore db.BuildStore,
-	workflow shared.WorkflowSubmitter,
+	workflow deploycontracts.WorkflowSubmitter,
 	orch BuildCompletionHandler,
-	locker shared.EnvironmentLocker,
-	domainStore shared.CustomDomainQuerier,
+	locker deploycontracts.EnvironmentLocker,
+	domainStore deploycontracts.CustomDomainQuerier,
 	appCRMgr ApplicationCREnsurer,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
@@ -214,7 +214,7 @@ func (r *BuildReconcileLoop) WithPGClaims(dedup *processing.PGClaimDedup) {
 // WithCellLister enables multi-cell iteration per tick.
 // MEET-053 A-07: When set, reconcile processes builds from ALL known cells
 // instead of only cfg.CellID. This ensures non-default cells are not abandoned.
-func (r *BuildReconcileLoop) WithCellLister(lister shared.CellLister) {
+func (r *BuildReconcileLoop) WithCellLister(lister deploycontracts.CellLister) {
 	r.cellLister = lister
 }
 

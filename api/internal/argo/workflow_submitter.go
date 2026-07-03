@@ -11,7 +11,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 
@@ -88,7 +88,7 @@ type WorkflowSubmitterConfig struct {
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
-// WorkflowSubmitter implements shared.WorkflowSubmitter using real Argo Workflows.
+// WorkflowSubmitter implements deploycontracts.WorkflowSubmitter using real Argo Workflows.
 // It uses the WorkflowBuilder to generate self-contained Workflow CRs with
 // ClusterWorkflowTemplate refs for reusable steps and inline templates for
 // language-specific steps.
@@ -139,7 +139,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
-func (s *WorkflowSubmitter) Submit(ctx context.Context, spec shared.WorkflowSpec) (string, error) {
+func (s *WorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.WorkflowSpec) (string, error) {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.workflow_submit",
 		trace.WithAttributes(
 			attribute.String("loopzero.workflow.namespace", spec.Namespace),
@@ -254,7 +254,7 @@ func (s *WorkflowSubmitter) Delete(ctx context.Context, namespace, workflowID st
 // To handle this, when the phase is "Failed", we check if all Pod-type nodes have
 // exitCode "0" on their outputs. If so, the build actually succeeded — the failure
 // is only from daemon sidecar termination.
-func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*shared.WorkflowStatus, error) {
+func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*deploycontracts.WorkflowStatus, error) {
 	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
 		// BRC-006 fix: distinguish NotFound (workflow deleted/expired) from transient
@@ -273,7 +273,7 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		return nil, fmt.Errorf("argo: parse workflow status %s/%s: %w", namespace, workflowID, err)
 	}
 	if status == nil {
-		return &shared.WorkflowStatus{}, nil
+		return &deploycontracts.WorkflowStatus{}, nil
 	}
 
 	phase := string(status.Phase)
@@ -288,7 +288,7 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		phase = "Succeeded"
 	}
 
-	return &shared.WorkflowStatus{
+	return &deploycontracts.WorkflowStatus{
 		Phase:      phase,
 		FinishedAt: status.FinishedAt,
 		Outputs:    extractStepOutputs(wf.Object),

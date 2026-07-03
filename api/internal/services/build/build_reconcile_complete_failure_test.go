@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // T2.3 (Test 2 + Test 7) of plan 2026-05-28-meet-001-engineering-closure-plan.md.
@@ -33,7 +33,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestEnrichAttestation_NilWorkflowStatus_NoOp(t *testing.T) {
-	apps := []shared.AppRelease{{Name: "api"}}
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
 	enrichAppReleasesWithAttestation(apps, nil)
 	if apps[0].ImageAttestationRekorURL != "" {
 		t.Errorf("nil status must leave URL empty, got %q", apps[0].ImageAttestationRekorURL)
@@ -41,8 +41,8 @@ func TestEnrichAttestation_NilWorkflowStatus_NoOp(t *testing.T) {
 }
 
 func TestEnrichAttestation_EmptyOutputs_NoOp(t *testing.T) {
-	apps := []shared.AppRelease{{Name: "api"}}
-	enrichAppReleasesWithAttestation(apps, &shared.WorkflowStatus{Phase: "Succeeded"})
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	enrichAppReleasesWithAttestation(apps, &deploycontracts.WorkflowStatus{Phase: "Succeeded"})
 	if apps[0].ImageAttestationRekorURL != "" {
 		t.Errorf("empty Outputs must leave URL empty, got %q", apps[0].ImageAttestationRekorURL)
 	}
@@ -51,8 +51,8 @@ func TestEnrichAttestation_EmptyOutputs_NoOp(t *testing.T) {
 func TestEnrichAttestation_AttestStepMissing_NoOp(t *testing.T) {
 	// The build succeeded but the attest step was not part of the DAG
 	// (CosignAttestEnabled=false). Enrichment must NOT fabricate a URL.
-	apps := []shared.AppRelease{{Name: "api"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			// Only sign step output — no attest output.
@@ -74,8 +74,8 @@ func TestEnrichAttestation_AttestStepWithEmptyURL_NoOp(t *testing.T) {
 	// found no Rekor index). The original 3-layer Rekor URL bug (LIVE
 	// 2026-05-28) shipped past this guard once because the step ran but
 	// the URL was silently dropped — make sure we don't regress.
-	apps := []shared.AppRelease{{Name: "api"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": ""},
@@ -90,8 +90,8 @@ func TestEnrichAttestation_AttestStepWithEmptyURL_NoOp(t *testing.T) {
 func TestEnrichAttestation_AttestStepUnknownSentinel_NoOp(t *testing.T) {
 	// cosign_attest.go's URL extractor uses the literal "unknown" string
 	// as a parse-failed sentinel; this MUST NOT be persisted as the URL.
-	apps := []shared.AppRelease{{Name: "api"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": "unknown"},
@@ -104,9 +104,9 @@ func TestEnrichAttestation_AttestStepUnknownSentinel_NoOp(t *testing.T) {
 }
 
 func TestEnrichAttestation_AttestStepValidURL_Propagates(t *testing.T) {
-	apps := []shared.AppRelease{{Name: "api"}}
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
 	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
-	status := &shared.WorkflowStatus{
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": url},
@@ -121,10 +121,10 @@ func TestEnrichAttestation_AttestStepValidURL_Propagates(t *testing.T) {
 func TestEnrichAttestation_MultiApp_PerAppIsolation(t *testing.T) {
 	// Two apps, two distinct attest step outputs. The enricher must
 	// scope each app's URL to its own step — no cross-app leak.
-	apps := []shared.AppRelease{{Name: "api"}, {Name: "worker"}}
+	apps := []deploycontracts.AppRelease{{Name: "api"}, {Name: "worker"}}
 	apiURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=1"
 	workerURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=2"
-	status := &shared.WorkflowStatus{
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api":    {"rekor-url": apiURL},
@@ -144,9 +144,9 @@ func TestEnrichAttestation_MultiApp_OnlyOneSucceeds(t *testing.T) {
 	// Mixed success: api's attest succeeded with a URL, worker's attest
 	// step is absent from Outputs entirely. Worker URL must stay empty
 	// and api URL must propagate — no shared-state leak.
-	apps := []shared.AppRelease{{Name: "api"}, {Name: "worker"}}
+	apps := []deploycontracts.AppRelease{{Name: "api"}, {Name: "worker"}}
 	apiURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=7"
-	status := &shared.WorkflowStatus{
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": apiURL},
@@ -167,9 +167,9 @@ func TestEnrichAttestation_DuplicateAttestStepName_LastWins(t *testing.T) {
 	// but if the workflow re-runs and emits duplicate node outputs, the
 	// last value-by-iteration is canonical. This test pins that behavior
 	// by asserting we still get a single URL, not concatenation.
-	apps := []shared.AppRelease{{Name: "api"}}
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
 	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=99"
-	status := &shared.WorkflowStatus{
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": url},
@@ -199,13 +199,13 @@ func TestEnrichAttestation_DuplicateAttestStepName_LastWins(t *testing.T) {
 func TestEnrichAttestation_ConcurrentSlices_NoDataRace(t *testing.T) {
 	apiURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=1"
 	workerURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=2"
-	statusA := &shared.WorkflowStatus{
+	statusA := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": apiURL},
 		},
 	}
-	statusB := &shared.WorkflowStatus{
+	statusB := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-worker": {"rekor-url": workerURL},
@@ -218,7 +218,7 @@ func TestEnrichAttestation_ConcurrentSlices_NoDataRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iters; i++ {
-			apps := []shared.AppRelease{{Name: "api"}}
+			apps := []deploycontracts.AppRelease{{Name: "api"}}
 			enrichAppReleasesWithAttestation(apps, statusA)
 			if apps[0].ImageAttestationRekorURL != apiURL {
 				t.Errorf("goroutine A drift at iter %d: %q", i, apps[0].ImageAttestationRekorURL)
@@ -229,7 +229,7 @@ func TestEnrichAttestation_ConcurrentSlices_NoDataRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iters; i++ {
-			apps := []shared.AppRelease{{Name: "worker"}}
+			apps := []deploycontracts.AppRelease{{Name: "worker"}}
 			enrichAppReleasesWithAttestation(apps, statusB)
 			if apps[0].ImageAttestationRekorURL != workerURL {
 				t.Errorf("goroutine B drift at iter %d: %q", i, apps[0].ImageAttestationRekorURL)
@@ -248,8 +248,8 @@ func TestEnrichAttestation_ConcurrentSlices_NoDataRace(t *testing.T) {
 
 func TestEnrichAttestation_EmitsSignTotal_SuccessOnSignature(t *testing.T) {
 	metrics.CosignSignTotal.Reset()
-	apps := []shared.AppRelease{{Name: "api"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api":   {"signature": "sig:abc"},
@@ -268,8 +268,8 @@ func TestEnrichAttestation_EmitsSignTotal_SuccessOnSignature(t *testing.T) {
 func TestEnrichAttestation_EmitsSignTotal_FailureWhenSignStepEmpty(t *testing.T) {
 	metrics.CosignSignTotal.Reset()
 	metrics.CosignSignErrors.Reset()
-	apps := []shared.AppRelease{{Name: "api"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api": {}, // ran but produced no signature
@@ -287,8 +287,8 @@ func TestEnrichAttestation_EmitsSignTotal_FailureWhenSignStepEmpty(t *testing.T)
 func TestEnrichAttestation_EmitsAttestTotal_FailureWhenURLEmpty(t *testing.T) {
 	metrics.CosignAttestTotal.Reset()
 	metrics.CosignAttestErrors.Reset()
-	apps := []shared.AppRelease{{Name: "api"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": "unknown"}, // sentinel → empty after enrichment
@@ -305,8 +305,8 @@ func TestEnrichAttestation_EmitsAttestTotal_FailureWhenURLEmpty(t *testing.T) {
 
 func TestEnrichAttestation_EmitsRekorURLNullCounter(t *testing.T) {
 	metrics.ReleaseAttestationRekorURLPersist.Reset()
-	apps := []shared.AppRelease{{Name: "api"}, {Name: "web"}}
-	status := &shared.WorkflowStatus{
+	apps := []deploycontracts.AppRelease{{Name: "api"}, {Name: "web"}}
+	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"attest-image-api": {"rekor-url": "https://rekor.loopzero.test/x"},
@@ -325,7 +325,7 @@ func TestEnrichAttestation_EmitsRekorURLNullCounter(t *testing.T) {
 func TestEnrichAttestation_NilStatus_NoMetricEmission(t *testing.T) {
 	metrics.CosignSignTotal.Reset()
 	metrics.ReleaseAttestationRekorURLPersist.Reset()
-	apps := []shared.AppRelease{{Name: "api"}}
+	apps := []deploycontracts.AppRelease{{Name: "api"}}
 	enrichAppReleasesWithAttestation(apps, nil)
 	if got := testutil.ToFloat64(metrics.CosignSignTotal.WithLabelValues("success")); got != 0 {
 		t.Errorf("sign_total{success} = %v, want 0 (nil status must not emit)", got)

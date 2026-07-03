@@ -18,7 +18,7 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // ScalingResolver merges yaml-supplied AppSpecs with persisted scaling
@@ -28,8 +28,8 @@ type ScalingResolver interface {
 	Resolve(
 		ctx context.Context,
 		tenantID, projectID, environment string,
-		fromYAML []shared.AppSpec,
-	) ([]shared.AppSpec, error)
+		fromYAML []deploycontracts.AppSpec,
+	) ([]deploycontracts.AppSpec, error)
 }
 
 // dbScalingResolver implements ScalingResolver via store.ScalingStore.
@@ -56,8 +56,8 @@ func NewDBScalingResolver(store store.ScalingStore) ScalingResolver {
 func (r *dbScalingResolver) Resolve(
 	ctx context.Context,
 	tenantID, projectID, environment string,
-	fromYAML []shared.AppSpec,
-) ([]shared.AppSpec, error) {
+	fromYAML []deploycontracts.AppSpec,
+) ([]deploycontracts.AppSpec, error) {
 	if r.store == nil {
 		slog.Warn("scaling resolver: store is nil, returning yaml unchanged",
 			"tenant", tenantID, "project", projectID, "environment", environment)
@@ -67,7 +67,7 @@ func (r *dbScalingResolver) Resolve(
 		return fromYAML, nil
 	}
 
-	resolved := make([]shared.AppSpec, len(fromYAML))
+	resolved := make([]deploycontracts.AppSpec, len(fromYAML))
 	for i, app := range fromYAML {
 		row, err := r.store.GetByApp(ctx, tenantID, projectID, environment, app.Name)
 		if err != nil {
@@ -85,12 +85,12 @@ func (r *dbScalingResolver) Resolve(
 
 // applyScalingRow returns a copy of app with scaling fields overridden by row.
 // Other fields (Type, Port, Secrets, etc.) are preserved verbatim.
-func applyScalingRow(app shared.AppSpec, row *store.ScalingConfig) shared.AppSpec {
+func applyScalingRow(app deploycontracts.AppSpec, row *store.ScalingConfig) deploycontracts.AppSpec {
 	switch {
 	case row.ScaleToZero:
 		// KEDA scale-to-zero (D4): Deployment.spec.replicas=0, ScaledObject manages.
 		app.Replicas = 0
-		app.Autoscaling = &shared.AppAutoscalingSpec{
+		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
 			MinReplicas: int(row.MinReplicas),
 			MaxReplicas: int(row.MaxReplicas),
 			TargetCPU:   resolveCPUTarget(row.TargetCPUPct),
@@ -102,7 +102,7 @@ func applyScalingRow(app shared.AppSpec, row *store.ScalingConfig) shared.AppSpe
 	default:
 		// HPA: Deployment.spec.replicas=Min as baseline, HPA scales to Max.
 		app.Replicas = int(row.MinReplicas)
-		app.Autoscaling = &shared.AppAutoscalingSpec{
+		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
 			MinReplicas: int(row.MinReplicas),
 			MaxReplicas: int(row.MaxReplicas),
 			TargetCPU:   resolveCPUTarget(row.TargetCPUPct),

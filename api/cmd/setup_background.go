@@ -14,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
@@ -252,7 +252,7 @@ func createCoreLoops(
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 		},
 	)
-	if lister, ok := cellRouter.(shared.CellLister); ok {
+	if lister, ok := cellRouter.(deploycontracts.CellLister); ok {
 		reconcileLoop.WithCellLister(lister)
 	}
 
@@ -329,7 +329,7 @@ func createCoreLoops(
 	}
 
 	// OrphanDetector (conditional on CellLister + OrphanedTenantQuerier)
-	if lister, ok := cellRouter.(shared.CellLister); ok {
+	if lister, ok := cellRouter.(deploycontracts.CellLister); ok {
 		if querier, ok2 := interface{}(stores.CellStore).(platform.OrphanedTenantQuerier); ok2 {
 			orphanDetector := platform.NewOrphanDetector(lister, querier, logger, 60*time.Second)
 			loops = append(loops, bgLoop{"orphan-detector", orphanDetector.Start})

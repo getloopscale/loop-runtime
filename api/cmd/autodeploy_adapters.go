@@ -12,7 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -65,9 +65,9 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 	// only to this path — preview path silently kept losing it, so PR
 	// previews failed at generate-dockerfile time while push deploys
 	// succeeded against the same loopzero.yaml. Single source of truth now
-	// lives in shared.ConvertLoopZeroYamlApps (with hermetic regression
+	// lives in deploycontracts.ConvertLoopZeroYamlApps (with hermetic regression
 	// locks for every extracted field).
-	apps := shared.ConvertLoopZeroYamlApps(req.LoopZeroYaml.Apps)
+	apps := deploycontracts.ConvertLoopZeroYamlApps(req.LoopZeroYaml.Apps)
 
 	a.logger.Info("auto-deploy: submitting build",
 		"project", req.ProjectName,
@@ -76,7 +76,7 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		"apps", len(apps),
 	)
 
-	_, err := a.orchestrator.SubmitBuild(ctx, shared.SubmitBuildRequest{
+	_, err := a.orchestrator.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectName,
 		Environment:   req.Environment,
@@ -105,7 +105,7 @@ type previewAppsLookupAdapter struct {
 	builds db.BuildStore
 }
 
-func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]shared.AppSpec, error) {
+func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]deploycontracts.AppSpec, error) {
 	// ListByProject newest first; iterate to find latest SUCCEEDED.
 	const lookbackLimit = 20
 	builds, err := a.builds.ListByProject(ctx, tenantID, projectID, lookbackLimit, 0)
@@ -126,9 +126,9 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 	if err != nil {
 		return nil, fmt.Errorf("preview apps lookup: get apps for %s: %w", sourceBuildID, err)
 	}
-	out := make([]shared.AppSpec, 0, len(dbApps))
+	out := make([]deploycontracts.AppSpec, 0, len(dbApps))
 	for _, da := range dbApps {
-		app := shared.AppSpec{
+		app := deploycontracts.AppSpec{
 			Name:      da.Name,
 			Type:      da.Type,
 			Rendering: da.Rendering,
@@ -137,7 +137,7 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 			Replicas:  da.Replicas,
 		}
 		if da.Autoscaling != nil {
-			app.Autoscaling = &shared.AppAutoscalingSpec{
+			app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
 				MinReplicas: da.Autoscaling.MinReplicas,
 				MaxReplicas: da.Autoscaling.MaxReplicas,
 				TargetCPU:   da.Autoscaling.TargetCPU,

@@ -6,7 +6,7 @@ package argo
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // build-mode-dispatch-and-dockerfile-security-plan T1.3 + T1.4 + T4.1.
@@ -26,7 +26,7 @@ func TestResolveStrategyForApp_RoutesByRuntime(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.runtime, func(t *testing.T) {
-			app := shared.AppSpec{Name: "api", Runtime: tc.runtime, Build: ""}
+			app := deploycontracts.AppSpec{Name: "api", Runtime: tc.runtime, Build: ""}
 			s := ResolveStrategyForApp(app)
 			if s.Name() != tc.want {
 				t.Errorf("runtime=%q → strategy=%q, want %q", tc.runtime, s.Name(), tc.want)
@@ -36,7 +36,7 @@ func TestResolveStrategyForApp_RoutesByRuntime(t *testing.T) {
 }
 
 func TestAllLanguageStrategiesImplementDockerfileStep(t *testing.T) {
-	apps := []shared.AppSpec{{Name: "api", Path: ".", Start: "x"}}
+	apps := []deploycontracts.AppSpec{{Name: "api", Path: ".", Start: "x"}}
 	strategies := []LanguageStrategy{
 		&NodeStrategy{},
 		&PythonStrategy{},
@@ -65,10 +65,10 @@ func TestWorkflowBuilder_NodeApp_EmitsPacksNotLint(t *testing.T) {
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
 	})
-	apps := []shared.AppSpec{
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Path: ".", Runtime: "node", Build: "", Type: "server", Port: 3000},
 	}
-	spec := shared.WorkflowSpec{
+	spec := deploycontracts.WorkflowSpec{
 		BuildID:   "build-test",
 		TenantID:  "acme",
 		ProjectID: "myproj",

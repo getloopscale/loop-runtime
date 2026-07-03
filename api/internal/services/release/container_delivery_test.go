@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -191,10 +191,10 @@ type fakeGitOpsContainer struct {
 	commitSHA string
 }
 
-func (f *fakeGitOpsContainer) Push(_ context.Context, _ shared.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsContainer) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
 	return f.commitSHA, f.pushErr
 }
-func (f *fakeGitOpsContainer) Remove(_ context.Context, _ shared.GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsContainer) Remove(_ context.Context, _ deploycontracts.GitOpsRemoveOpts) (string, error) {
 	return "", nil
 }
 
@@ -228,9 +228,9 @@ func TestContainerDelivery_Activate_HappyPath(t *testing.T) {
 		ID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api", Type: "server"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api", Type: "server"}},
 		Manifests: "apiVersion: v1\nkind: Deployment",
 	}
 
@@ -296,9 +296,9 @@ func TestContainerDelivery_Activate_GitOpsPushFails(t *testing.T) {
 		ID: "build-2", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api"}},
 		Manifests: "manifests-yaml",
 	}
 
@@ -335,7 +335,7 @@ func TestContainerDelivery_Rollback_HappyPath(t *testing.T) {
 		Locker:    &fakeLockerContainer{},
 	})
 
-	err := activator.Rollback(context.Background(), shared.RollbackDeliveryRequest{
+	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
@@ -358,7 +358,7 @@ func TestContainerDelivery_Rollback_NoGitCommit(t *testing.T) {
 		Locker: &fakeLockerContainer{},
 	})
 
-	err := activator.Rollback(context.Background(), shared.RollbackDeliveryRequest{
+	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
@@ -392,9 +392,9 @@ func TestContainerDelivery_Activate_SyncTriggerFails_NonRecoverable(t *testing.T
 		ID: "build-sync-fail", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api"}},
 		Manifests: "manifests",
 	}
 
@@ -429,9 +429,9 @@ func TestContainerDelivery_Activate_SyncTrigger404_StaysPending(t *testing.T) {
 		ID: "build-404", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status:    "succeeded",
-		Apps:      []shared.AppRelease{{Name: "api"}},
+		Apps:      []deploycontracts.AppRelease{{Name: "api"}},
 		Manifests: "manifests",
 	}
 
@@ -459,7 +459,7 @@ func TestContainerDelivery_Rollback_GitOpsPushFails(t *testing.T) {
 		Locker:    &fakeLockerContainer{},
 	})
 
-	err := activator.Rollback(context.Background(), shared.RollbackDeliveryRequest{
+	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
@@ -494,9 +494,9 @@ func TestPhaseACreateRelease_PersistsSignatureColumns(t *testing.T) {
 		ID: "build-sig", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps: []shared.AppRelease{
+		Apps: []deploycontracts.AppRelease{
 			{
 				Name:              "api",
 				Type:              "server",
@@ -547,9 +547,9 @@ func TestPhaseACreateRelease_LegacyAppRelease_NullColumns(t *testing.T) {
 		Environment: "production", CreatedBy: "user-1",
 	}
 	// AppRelease has legacy ImageDigest (the tag) but no signature fields.
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps: []shared.AppRelease{
+		Apps: []deploycontracts.AppRelease{
 			{Name: "api", Type: "server", ImageDigest: "registry/api:abc"},
 		},
 		Manifests: "apiVersion: v1",
@@ -593,9 +593,9 @@ func TestPhaseACreateRelease_DigestWithoutSignature_NoSignedAt(t *testing.T) {
 	}
 	// Digest is set, but Signature is NOT (cosign step missing/skipped).
 	// SignedAt is provided — but must be ignored because Signature is empty.
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps: []shared.AppRelease{
+		Apps: []deploycontracts.AppRelease{
 			{
 				Name:              "api",
 				ImageDigestSHA256: "sha256:abc",
@@ -642,9 +642,9 @@ func TestPhaseACreateRelease_MultiApp_PrimaryOnly(t *testing.T) {
 		ID: "build-multi", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
-	result := shared.BuildCallbackRequest{
+	result := deploycontracts.BuildCallbackRequest{
 		Status: "succeeded",
-		Apps: []shared.AppRelease{
+		Apps: []deploycontracts.AppRelease{
 			{
 				Name:              "api",
 				ImageDigestSHA256: "sha256:apidigest",

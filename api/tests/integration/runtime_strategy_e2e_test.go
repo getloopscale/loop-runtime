@@ -12,7 +12,7 @@ package integration
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/argo"
 )
@@ -29,11 +29,11 @@ func TestRuntimeStrategyEndToEnd(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 1. services.json app (runtime-declared) → normalize
-			raw := shared.AppSpec{
+			raw := deploycontracts.AppSpec{
 				Name: "api", Type: "server", Port: 8080,
 				Runtime: tc.runtime, Start: "run-me",
 			}
-			unit, err := shared.NormalizeApp(raw.Name, raw)
+			unit, err := deploycontracts.NormalizeApp(raw.Name, raw)
 			if err != nil {
 				t.Fatalf("NormalizeApp: %v", err)
 			}
@@ -42,7 +42,7 @@ func TestRuntimeStrategyEndToEnd(t *testing.T) {
 			}
 
 			// 2. real build-plan pipeline
-			plan := shared.CreateBuildPlan([]shared.AppUnit{unit}, "tn", "proj", "sha", "reg.io")
+			plan := deploycontracts.CreateBuildPlan([]deploycontracts.AppUnit{unit}, "tn", "proj", "sha", "reg.io")
 			if len(plan.Apps) != 1 {
 				t.Fatalf("expected 1 app plan, got %d", len(plan.Apps))
 			}
@@ -54,7 +54,7 @@ func TestRuntimeStrategyEndToEnd(t *testing.T) {
 			//    argo.WorkflowBuilder does (Runtime carried from the plan), then
 			//    the strategy is resolved by runtime — the F-dom-2 assertion.
 			p := plan.Apps[0]
-			wfApp := shared.AppSpec{
+			wfApp := deploycontracts.AppSpec{
 				Name: p.AppName, Type: p.AppType, Port: p.Port,
 				Path: p.AppPath, Runtime: p.Runtime,
 				Build: p.Build, Start: p.Start,
@@ -71,14 +71,14 @@ func TestRuntimeStrategyEndToEnd(t *testing.T) {
 // TestRuntimeStrategyEndToEnd_EmptyRuntimeFailsClosed: an app reaching the build
 // with no runtime fails closed (D4) — never a silent Node default.
 func TestRuntimeStrategyEndToEnd_EmptyRuntimeFailsClosed(t *testing.T) {
-	raw := shared.AppSpec{Name: "api", Type: "server", Port: 8080, Start: "run-me"} // no runtime
-	unit, err := shared.NormalizeApp(raw.Name, raw)
+	raw := deploycontracts.AppSpec{Name: "api", Type: "server", Port: 8080, Start: "run-me"} // no runtime
+	unit, err := deploycontracts.NormalizeApp(raw.Name, raw)
 	if err != nil {
 		t.Fatalf("NormalizeApp: %v", err)
 	}
-	plan := shared.CreateBuildPlan([]shared.AppUnit{unit}, "tn", "proj", "sha", "reg.io")
+	plan := deploycontracts.CreateBuildPlan([]deploycontracts.AppUnit{unit}, "tn", "proj", "sha", "reg.io")
 	p := plan.Apps[0]
-	wfApp := shared.AppSpec{Name: p.AppName, Type: p.AppType, Port: p.Port, Runtime: p.Runtime}
+	wfApp := deploycontracts.AppSpec{Name: p.AppName, Type: p.AppType, Port: p.Port, Runtime: p.Runtime}
 	if got := argo.ResolveStrategyForApp(wfApp).Name(); got != "unsupported" {
 		t.Errorf("empty-runtime strategy = %q, want unsupported (D4 — no Node default)", got)
 	}

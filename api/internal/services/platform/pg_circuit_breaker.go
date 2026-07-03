@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -45,7 +45,7 @@ const (
 //   - Circuit breaker state does not need to survive API restarts — starting
 //     CLOSED and detecting failure naturally is the correct behavior
 type CircuitBreakerSyncClient struct {
-	inner          shared.SyncClient
+	inner          deploycontracts.SyncClient
 	logger         *slog.Logger
 	openThreshold  int
 	closeThreshold int
@@ -65,10 +65,10 @@ type CircuitBreakerSyncClient struct {
 // (duck-typed assertions in release_convergence_loop.go that fail silently)
 // to build time. If a future refactor accidentally drops one of the 6 methods,
 // the package fails to compile here rather than silently no-op in production.
-var _ shared.SyncClient = (*CircuitBreakerSyncClient)(nil)
+var _ deploycontracts.SyncClient = (*CircuitBreakerSyncClient)(nil)
 
 // NewCircuitBreakerSyncClient creates an in-memory circuit breaker wrapping a SyncClient.
-func NewCircuitBreakerSyncClient(inner shared.SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
+func NewCircuitBreakerSyncClient(inner deploycontracts.SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
 	return &CircuitBreakerSyncClient{
 		inner:          inner,
 		logger:         logger,

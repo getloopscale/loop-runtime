@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -63,8 +63,8 @@ type DomainProvisioner struct {
 	store          DomainProvisionerStore
 	releaseStore   DomainReleaseReader
 	buildStore     DomainBuildReader
-	gitops         shared.GitOpsPusher
-	locker         shared.EnvironmentLocker
+	gitops         deploycontracts.GitOpsPusher
+	locker         deploycontracts.EnvironmentLocker
 	logger         *slog.Logger
 	baseDomain     string
 	registryURL    string
@@ -95,8 +95,8 @@ func NewDomainProvisioner(
 	store DomainProvisionerStore,
 	releaseStore DomainReleaseReader,
 	buildStore DomainBuildReader,
-	gitops shared.GitOpsPusher,
-	locker shared.EnvironmentLocker,
+	gitops deploycontracts.GitOpsPusher,
+	locker deploycontracts.EnvironmentLocker,
 	logger *slog.Logger,
 	cfg DomainProvisionerConfig,
 ) *DomainProvisioner {
@@ -297,7 +297,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.Custom
 
 	// Phase A: Lock → re-read release (HIGH-04: release may have been superseded) + render.
 	var rendered string
-	var pushOpts shared.GitOpsPushOpts
+	var pushOpts deploycontracts.GitOpsPushOpts
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
 		// HIGH-04 fix: re-read release inside lock to prevent using a superseded release
@@ -328,7 +328,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.Custom
 		}
 
 		// F-010: shared manifest building function
-		manifestApps, err := shared.BuildManifestApps(ctx, shared.BuildManifestAppsInput{
+		manifestApps, err := deploycontracts.BuildManifestApps(ctx, deploycontracts.BuildManifestAppsInput{
 			RegistryURL: p.registryURL,
 			TenantID:    d.TenantID,
 			ProjectID:   d.ProjectName,
@@ -362,7 +362,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.Custom
 		}
 		rendered = renderedYAML
 
-		pushOpts = shared.GitOpsPushOpts{
+		pushOpts = deploycontracts.GitOpsPushOpts{
 			TenantID:      d.TenantID,
 			ProjectID:     d.ProjectName,
 			Environment:   d.Environment,
@@ -451,7 +451,7 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDom
 	}
 
 	// Phase A: Lock → fetch + render manifests WITHOUT removed domain.
-	var pushOpts shared.GitOpsPushOpts
+	var pushOpts deploycontracts.GitOpsPushOpts
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
 		build, err := p.buildStore.GetByID(ctx, release.BuildID)
@@ -474,7 +474,7 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDom
 		}
 
 		// F-010: shared manifest building — excludes the domain being removed
-		manifestApps, err := shared.BuildManifestApps(ctx, shared.BuildManifestAppsInput{
+		manifestApps, err := deploycontracts.BuildManifestApps(ctx, deploycontracts.BuildManifestAppsInput{
 			RegistryURL:   p.registryURL,
 			TenantID:      d.TenantID,
 			ProjectID:     d.ProjectName,
@@ -507,7 +507,7 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDom
 			return fmt.Errorf("manifests.Render (domain remove): %w", renderErr)
 		}
 
-		pushOpts = shared.GitOpsPushOpts{
+		pushOpts = deploycontracts.GitOpsPushOpts{
 			TenantID:      d.TenantID,
 			ProjectID:     d.ProjectName,
 			Environment:   d.Environment,

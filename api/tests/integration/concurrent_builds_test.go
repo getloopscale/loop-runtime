@@ -30,7 +30,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -56,7 +56,7 @@ type buildOrchestratorAdapter struct {
 }
 
 func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
-	var apps []shared.AppSpec
+	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
 		if appType == "" {
@@ -66,14 +66,14 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		if appPort == 0 && appType == "server" {
 			appPort = 8080
 		}
-		apps = append(apps, shared.AppSpec{
+		apps = append(apps, deploycontracts.AppSpec{
 			Name: app.Name,
 			Type: appType,
 			Port: appPort,
 		})
 	}
 
-	resp, err := a.orch.SubmitBuild(ctx, shared.SubmitBuildRequest{
+	resp, err := a.orch.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
 		TenantID:    req.TenantID,
 		ProjectID:   req.ProjectID,
 		Environment: req.Environment,
@@ -107,16 +107,16 @@ func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 }
 
 func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
-	var apps []shared.AppRelease
+	var apps []deploycontracts.AppRelease
 	for _, app := range result.Apps {
-		apps = append(apps, shared.AppRelease{
+		apps = append(apps, deploycontracts.AppRelease{
 			Name:        app.Name,
 			ImageDigest: app.ImageDigest,
 			URL:         app.URL,
 			DurationMs:  app.DurationMs,
 		})
 	}
-	return a.orch.OnBuildCompleted(ctx, buildID, shared.BuildCallbackRequest{
+	return a.orch.OnBuildCompleted(ctx, buildID, deploycontracts.BuildCallbackRequest{
 		Status: result.Status,
 		Apps:   apps,
 	})
@@ -157,7 +157,7 @@ func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ str
 
 type fakeWorkflowSubmitter struct{}
 
-func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec shared.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.WorkflowSpec) (string, error) {
 	return "wf-" + spec.BuildID, nil
 }
 
@@ -165,17 +165,17 @@ func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowI
 	return nil
 }
 
-func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*shared.WorkflowStatus, error) {
-	return &shared.WorkflowStatus{Phase: "Succeeded"}, nil
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*deploycontracts.WorkflowStatus, error) {
+	return &deploycontracts.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
 type fakeGitOpsPusher struct{}
 
-func (f *fakeGitOpsPusher) Push(ctx context.Context, opts shared.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
 	return "fake-commit-sha", nil
 }
 
-func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts shared.GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts deploycontracts.GitOpsRemoveOpts) (string, error) {
 	return "fake-commit-sha", nil
 }
 

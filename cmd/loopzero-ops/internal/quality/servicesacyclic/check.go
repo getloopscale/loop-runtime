@@ -8,17 +8,17 @@
 // subpackages, the inter-context import graph MUST stay the acyclic DAG the split
 // produced — a deny-by-default import-linter with an explicit allow-list.
 //
-// The frozen topology (sink = shared):
+// The frozen topology (sink = deploycontracts):
 //
-//	build     → release, scaling, shared
-//	release   → shared
-//	scaling   → shared
-//	preview   → shared
-//	domain    → shared
-//	platform  → shared
+//	build     → release, scaling, deploycontracts
+//	release   → deploycontracts
+//	scaling   → deploycontracts
+//	preview   → deploycontracts
+//	domain    → deploycontracts
+//	platform  → deploycontracts
 //	placement → (pure leaf)
 //	billing   → (pure leaf)
-//	shared    → (pure leaf — imports NO other services subpackage)
+//	deploycontracts    → (pure leaf — imports NO other services subpackage)
 //
 // Any edge not in the allow-list FAILs: a new reverse edge (e.g. release → build)
 // would re-introduce a cycle; a new cross-leaf edge (placement → billing) would
@@ -77,15 +77,15 @@ const missingRootMarker = "<services-root-missing-or-empty>"
 // subpackages A is permitted to import. A subpackage absent from this map is
 // unknown → fail-closed. An empty set means "pure leaf" (imports no sibling).
 var allowed = map[string]map[string]bool{
-	"build":     {"release": true, "scaling": true, "shared": true},
-	"release":   {"shared": true},
-	"scaling":   {"shared": true},
-	"preview":   {"shared": true},
-	"domain":    {"shared": true},
-	"platform":  {"shared": true},
-	"placement": {},
-	"billing":   {},
-	"shared":    {},
+	"build":           {"release": true, "scaling": true, "deploycontracts": true},
+	"release":         {"deploycontracts": true},
+	"scaling":         {"deploycontracts": true},
+	"preview":         {"deploycontracts": true},
+	"domain":          {"deploycontracts": true},
+	"platform":        {"deploycontracts": true},
+	"placement":       {},
+	"billing":         {},
+	"deploycontracts": {},
 }
 
 // Check is the gate entry point.
@@ -215,7 +215,7 @@ func scanContext(dir, ctx string, allowedTargets map[string]bool) ([]Violation, 
 func ActionableFix() string {
 	return "An inter-context import edge violates the frozen acyclic DAG of " +
 		"api/internal/services (M9 Step 6). Either (a) the dependency belongs in " +
-		"the shared/ leaf — move the shared symbol there; or (b) the edge is a " +
+		"the deploycontracts/ leaf — move the shared symbol there; or (b) the edge is a " +
 		"genuine new dependency that must be reviewed and added to the allow-list " +
 		"in servicesacyclic/check.go with an ADR justifying why it does not create " +
 		"a cycle. Reverse edges (e.g. release importing build) are forbidden — " +
