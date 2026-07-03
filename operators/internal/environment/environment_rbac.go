@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package tenant
+package environment
 
 import (
 	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -18,35 +18,8 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 )
-
-// applySingleSARoleBinding is the canonical RoleBinding-create-or-update
-// pattern that binds a SINGLE ServiceAccount (saName in namespace) to a
-// single Role (roleName) via a RoleBinding (bindingName, namespace).
-// Phase 3 helper: collapses 2 inline 15-line copies across
-// environment_rbac.go (loopzero-deployer binding) and tenant_build.go
-// (argo-workflow-executor binding) in the same package.
-func applySingleSARoleBinding(ctx context.Context, c client.Client, namespace, bindingName, roleName, saName string) error {
-	rb := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: bindingName, Namespace: namespace},
-	}
-	_, err := controllerutil.CreateOrUpdate(ctx, c, rb, func() error {
-		rb.RoleRef = rbacv1.RoleRef{
-			APIGroup: rbacv1.GroupName,
-			Kind:     "Role",
-			Name:     roleName,
-		}
-		rb.Subjects = []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      saName,
-				Namespace: namespace,
-			},
-		}
-		return nil
-	})
-	return err
-}
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
 // fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
@@ -87,7 +60,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	}
 
 	// RoleBinding — bind loopzero-deployer SA to loopzero-deployer Role.
-	if err := applySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
+	if err := reconcilehelpers.ApplySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
 

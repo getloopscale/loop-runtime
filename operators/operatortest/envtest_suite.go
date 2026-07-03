@@ -21,7 +21,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/tenant"
+	"github.com/getloopscale/loopzero/operators/internal/environment"
 )
 
 // TestT is the minimal subset of testing.TB / Ginkgo's FullGinkgoTInterface
@@ -279,7 +279,7 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 			h.Stop()
 			t.Fatalf("SetupTenantController: %v", err)
 		}
-		if err := tenant.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil); err != nil {
+		if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil); err != nil {
 			h.Stop()
 			t.Fatalf("SetupEnvironmentControllerWithFactory: %v", err)
 		}
