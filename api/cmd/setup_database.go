@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"log/slog"
 	"os"
 	"time"
@@ -67,7 +68,7 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	projectStore := &db.PostgresProjectStore{DB: poolCfg}
 	deps := &DatabaseDeps{
 		DBAdapter:     poolCfg,
-		MemberStore:   &db.PostgresMembershipStore{DB: poolCfg},
+		MemberStore:   &store.PostgresMembershipStore{DB: poolCfg},
 		ProjectStore:  projectStore,
 		DBHealth:      poolCfg,
 		PoolCollector: poolCollector,

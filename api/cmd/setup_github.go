@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
@@ -57,7 +59,7 @@ func setupGitHub(
 ) *GitHubDeps {
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
-	repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
+	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
 	repoHandler := routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
@@ -236,9 +238,9 @@ func setupGitHub(
 	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
 	previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
 	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
-		Store:      previewStore,
-		Builds:     orch,
-		BuildApps:  &previewAppsLookupAdapter{builds: stores.BuildStore},
+		Store:     previewStore,
+		Builds:    orch,
+		BuildApps: &previewAppsLookupAdapter{builds: stores.BuildStore},
 		// LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface
 		// had no production wiring. Canonical manager lives in
 		// internal/k8s next to TenantCRManager, sharing the namespace
@@ -292,4 +294,3 @@ func setupGitHub(
 		IntegrationsHandler: integrationsHandler,
 	}
 }
-

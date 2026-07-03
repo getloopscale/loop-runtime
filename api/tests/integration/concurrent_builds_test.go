@@ -250,7 +250,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 
 	// Create real stores backed by the pool
 	adapter := &db.PgxAdapter{Pool: pool}
-	buildStore := db.NewBuildStoreSqlc(adapter) // T1.2b
+	buildStore := db.NewBuildStoreSqlc(adapter)                          // T1.2b
 	releaseStore := db.NewReleaseStoreSqlc(adapter, db.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	eventStore := sse.NewPostgresEventStore(adapter, adapter)

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
+
+import "github.com/getloopscale/loopzero/api/internal/db"
 
 // attestation_types.go — public struct + constructor for the
 // supply-chain attestation summary store that survives the T2.1
@@ -28,12 +30,12 @@ package db
 // dispatch through SqlcBridge to sqlc-generated queries that read
 // the same 3 supply-chain columns from `releases`.
 type PostgresAttestationStore struct {
-	db DBTX
+	db db.DBTX
 }
 
 // NewPostgresAttestationStore wires a concrete attestation store on
 // the shared pgx pool / DBTX abstraction. Preserved verbatim from
 // legacy.
-func NewPostgresAttestationStore(db DBTX) *PostgresAttestationStore {
+func NewPostgresAttestationStore(db db.DBTX) *PostgresAttestationStore {
 	return &PostgresAttestationStore{db: db}
 }

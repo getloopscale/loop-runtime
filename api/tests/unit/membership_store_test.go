@@ -6,6 +6,8 @@ package unit
 import (
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
@@ -13,7 +15,7 @@ import (
 func TestPostgresMembershipStoreImplementsInterface(t *testing.T) {
 	// Verify that PostgresMembershipStore implements middleware.MembershipStore.
 	// This is a compile-time check expressed as a test.
-	var _ middleware.MembershipStore = (*db.PostgresMembershipStore)(nil)
+	var _ middleware.MembershipStore = (*store.PostgresMembershipStore)(nil)
 }
 
 func TestQueryExecutorInterface(t *testing.T) {

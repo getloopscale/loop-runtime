@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // team_wrapper.go — sqlc-backed implementation of
 // PostgresTeamStore. T2.1 Batch A #5 of plan
@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
@@ -34,7 +36,7 @@ import (
 
 // ListMembers returns all members of a tenant with their roles.
 func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([]domain.TeamMemberInfo, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -61,7 +63,7 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 
 // AddMember adds a user to a tenant with the given role. Idempotent.
 func (s *PostgresTeamStore) AddMember(ctx context.Context, tenantID, userID, role string) error {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -79,7 +81,7 @@ func (s *PostgresTeamStore) AddMember(ctx context.Context, tenantID, userID, rol
 
 // RemoveMember removes a user from a tenant. Idempotent.
 func (s *PostgresTeamStore) RemoveMember(ctx context.Context, tenantID, userID string) error {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -97,7 +99,7 @@ func (s *PostgresTeamStore) RemoveMember(ctx context.Context, tenantID, userID s
 // UpdateMemberRole changes a member's role. Returns domain.
 // ErrMemberNotFound when the row doesn't exist.
 func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -119,7 +121,7 @@ func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, user
 
 // GetMember returns a single member's info. NoRows → (nil, nil).
 func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID string) (*domain.TeamMemberInfo, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -149,7 +151,7 @@ func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID stri
 // GetUsernameByID returns the display-friendly username for an
 // opaque user_id. Returns "" (no error) if user not found.
 func (s *PostgresTeamStore) GetUsernameByID(ctx context.Context, userID string) (string, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return "", fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -168,7 +170,7 @@ func (s *PostgresTeamStore) GetUsernameByID(ctx context.Context, userID string) 
 // GetUserByUsername finds a user by their username. NoRows → (nil,
 // nil).
 func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username string) (*domain.TeamUserInfo, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}

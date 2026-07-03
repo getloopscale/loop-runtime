@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 import (
 	"testing"
@@ -93,7 +93,6 @@ import (
 // isNilPointer helper deleted along with this test (unused after the
 // function deletion).
 
-
 // TestTenantDeletionStore_* (4 tests) — DELETED in T1.4 along with the
 // Tenant Deletion Store section block above. See tombstone block at
 // the top of this section for classification + Phase 2 reshape
@@ -129,7 +128,6 @@ import (
 // TestGenerateRepoID_HasPrefix + TestGenerateRepoID_IsUnique below
 // (lines 342 + 349 of the pre-T2.1#3 file) STILL PASS — they test
 // pure helper logic with no DBTX dependency.
-
 
 func TestGenerateRepoID_HasPrefix(t *testing.T) {
 	id := generateRepoID()

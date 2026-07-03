@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
@@ -27,9 +29,9 @@ func (a *buildLookupAdapter) GetCommitSHA(ctx context.Context, buildID string) (
 	return build.CommitSHA, nil
 }
 
-// repoLookupAdapter bridges db.PostgresRepositoryStore → github.RepositoryLookup.
+// repoLookupAdapter bridges store.PostgresRepositoryStore → github.RepositoryLookup.
 type repoLookupAdapter struct {
-	store *db.PostgresRepositoryStore
+	store *store.PostgresRepositoryStore
 }
 
 func (a *repoLookupAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (string, int64, error) {

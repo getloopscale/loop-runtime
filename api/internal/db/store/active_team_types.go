@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
+
+import "github.com/getloopscale/loopzero/api/internal/db"
 
 // active_team_types.go — public types for explicit user-driven
 // active-team selection (migration 000018, users.active_tenant_id
@@ -28,12 +30,12 @@ package db
 // preserved (db.DBTX — same as legacy); methods (active_team_wrapper.go)
 // dispatch through SqlcBridge to sqlc-generated queries.
 type PostgresActiveTeamStore struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // NewPostgresActiveTeamStore constructs a PostgresActiveTeamStore.
 // Preserved verbatim from the legacy file so the 1 prod call site
 // (api/cmd/setup_server.go:220) compiles unchanged.
-func NewPostgresActiveTeamStore(db DBTX) *PostgresActiveTeamStore {
+func NewPostgresActiveTeamStore(db db.DBTX) *PostgresActiveTeamStore {
 	return &PostgresActiveTeamStore{DB: db}
 }

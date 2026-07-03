@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // attestation_store_test.go — RESHAPED in T2.1 #8b of plan
 // 2026-05-29-sqlc-migration v1.3.

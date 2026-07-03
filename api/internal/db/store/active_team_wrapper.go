@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // active_team_wrapper.go — sqlc-backed implementation of
 // PostgresActiveTeamStore. T2.1 Batch A (2nd of 10 stores) of plan
@@ -22,6 +22,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
@@ -32,7 +34,7 @@ import (
 // GetActiveTenant returns the user's explicit active_tenant_id, or
 // empty string when NULL or user not found (legacy default).
 func (s *PostgresActiveTeamStore) GetActiveTenant(ctx context.Context, userID string) (string, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return "", fmt.Errorf("active team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -54,7 +56,7 @@ func (s *PostgresActiveTeamStore) GetActiveTenant(ctx context.Context, userID st
 // SetActiveTenant updates users.active_tenant_id. Caller validates
 // the user is a member of the tenant before invoking (handler-level).
 func (s *PostgresActiveTeamStore) SetActiveTenant(ctx context.Context, userID, tenantID string) error {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("active team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -72,7 +74,7 @@ func (s *PostgresActiveTeamStore) SetActiveTenant(ctx context.Context, userID, t
 // ClearActiveTenant nulls the user's active_tenant_id (EC-4 self-heal
 // when /me detects membership revocation).
 func (s *PostgresActiveTeamStore) ClearActiveTenant(ctx context.Context, userID string) error {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("active team store: DBTX %T does not implement SqlcBridge", s.DB)
 	}

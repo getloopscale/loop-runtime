@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 )
@@ -22,21 +23,21 @@ type PreviewLifecycleService interface {
 }
 
 // RepoLookup looks up a project repository by full GitHub name. Subset of
-// db.PostgresRepositoryStore — kept narrow for testability.
+// store.PostgresRepositoryStore — kept narrow for testability.
 type RepoLookup interface {
-	GetByRepo(ctx context.Context, repoFullName string) (*db.ProjectRepository, error)
+	GetByRepo(ctx context.Context, repoFullName string) (*store.ProjectRepository, error)
 }
 
 // PreviewDeployer handles GitHub `pull_request` webhook events.
 //
 // Mapping (per plan §T3.1):
 //
-//   action      | service call
-//   ------------+---------------------------------------------------------
-//   opened      | CreatePreview
-//   synchronize | CreatePreview (UPSERT — same row, new commit)
-//   reopened    | CreatePreview
-//   closed      | DeletePreviewByPR (regardless of merged=true/false)
+//	action      | service call
+//	------------+---------------------------------------------------------
+//	opened      | CreatePreview
+//	synchronize | CreatePreview (UPSERT — same row, new commit)
+//	reopened    | CreatePreview
+//	closed      | DeletePreviewByPR (regardless of merged=true/false)
 //
 // Other actions (labeled, assigned, edited, ...) are ignored.
 //
@@ -151,7 +152,7 @@ func (d *PreviewDeployer) HandlePR(event webhook.PullRequestEvent) error {
 func (d *PreviewDeployer) handleCreate(
 	ctx context.Context,
 	log *slog.Logger,
-	repo *db.ProjectRepository,
+	repo *store.ProjectRepository,
 	event webhook.PullRequestEvent,
 ) error {
 	branch := event.PullRequest.Head.Ref
@@ -218,7 +219,7 @@ func (d *PreviewDeployer) handleCreate(
 func (d *PreviewDeployer) handleClosed(
 	ctx context.Context,
 	log *slog.Logger,
-	repo *db.ProjectRepository,
+	repo *store.ProjectRepository,
 	event webhook.PullRequestEvent,
 ) error {
 	if event.Number <= 0 {

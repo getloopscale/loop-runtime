@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
+
+import "github.com/getloopscale/loopzero/api/internal/db"
 
 // membership_types.go — public struct for the user → tenant_members
 // membership lookup that survives the T2.1 (Batch A #8a) deletion
@@ -14,8 +16,8 @@ package db
 //
 // T2.1 Batch A #8a (plan 2026-05-29-sqlc-migration v1.3): DB field
 // type widened from QueryExecutor to db.DBTX so the sqlc dispatch
-// can bridge through SqlcBridge. The prod call site passes a pool
+// can bridge through db.SqlcBridge. The prod call site passes a pool
 // adapter that satisfies both.
 type PostgresMembershipStore struct {
-	DB DBTX
+	DB db.DBTX
 }

@@ -60,15 +60,15 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 
 	// ---- Build cluster (Argo) ----
 	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:          cfg.BuildKubeconfig,
-		Context:             cfg.BuildKubeContext,
-		RegistryURL:         cfg.RegistryURL,
-		RegistryInsecure:    cfg.RegistryInsecure,
-		BaseDomain:          cfg.BaseDomain,
-		CosignKeyless:       cfg.CosignKeyless,       // v1.1 EC-3 wire env var
-		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
-		CosignFulcioURL:     cfg.CosignFulcioURL,
-		CosignRekorURL:      cfg.CosignRekorURL,
+		Kubeconfig:            cfg.BuildKubeconfig,
+		Context:               cfg.BuildKubeContext,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		CosignKeyless:         cfg.CosignKeyless,       // v1.1 EC-3 wire env var
+		CosignAttestEnabled:   cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 	if err != nil {

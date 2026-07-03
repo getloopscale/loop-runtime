@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // repository_types.go — public types for the repositories domain
 // (project ↔ GitHub repo linkage + GitHub App installation
@@ -14,6 +14,8 @@ package db
 import (
 	"errors"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // ErrRepositoryNotLinked is returned by UnlinkRepository when no
@@ -62,5 +64,5 @@ type GitHubInstallation struct {
 // (repository_wrapper.go) dispatch through SqlcBridge to sqlc-
 // generated queries.
 type PostgresRepositoryStore struct {
-	DB DBTX
+	DB db.DBTX
 }

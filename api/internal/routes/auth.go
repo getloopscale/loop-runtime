@@ -16,7 +16,7 @@ import (
 
 // UsernameLookup is the narrow contract AuthHandler.Whoami needs to enrich
 // the response with a display-friendly username (AUDIT-10). Implemented by
-// db.PostgresTeamStore.GetUsernameByID. A nil lookup is legal — the handler
+// store.PostgresTeamStore.GetUsernameByID. A nil lookup is legal — the handler
 // simply omits the username field.
 type UsernameLookup interface {
 	GetUsernameByID(ctx context.Context, userID string) (string, error)
@@ -25,7 +25,7 @@ type UsernameLookup interface {
 // MembershipLookup is the narrow contract AuthHandler.Whoami needs to surface
 // ALL of a user's tenant memberships, not just the "active" one selected by
 // the middleware (plan T2.5 D8 — closes F-S2-02 silent team swap). Implemented
-// by db.PostgresMembershipStore.GetMemberships. A nil lookup is legal — the
+// by store.PostgresMembershipStore.GetMemberships. A nil lookup is legal — the
 // handler degrades gracefully to single-team output.
 type MembershipLookup interface {
 	GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error)

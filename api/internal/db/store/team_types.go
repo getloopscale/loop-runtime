@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
+
+import "github.com/getloopscale/loopzero/api/internal/db"
 
 // team_types.go — public struct for the team membership domain that
 // survives the T2.1 (Batch A #5) deletion of the legacy
@@ -16,5 +18,5 @@ package db
 // type preserved (db.DBTX); methods (team_wrapper.go) dispatch
 // through SqlcBridge to sqlc-generated queries.
 type PostgresTeamStore struct {
-	DB DBTX
+	DB db.DBTX
 }

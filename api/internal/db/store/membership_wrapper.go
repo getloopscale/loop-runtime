@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // membership_wrapper.go — sqlc-backed implementation of
 // PostgresMembershipStore.GetMemberships. T2.1 Batch A #8a of plan
@@ -20,6 +20,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
@@ -27,7 +28,7 @@ import (
 
 // GetMemberships returns all tenant memberships for a given user ID.
 func (s *PostgresMembershipStore) GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("membership store: DBTX %T does not implement SqlcBridge", s.DB)
 	}

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // attestation_wrapper.go — sqlc-backed implementation of
 // PostgresAttestationStore (GetBuildAttestation +
@@ -28,6 +28,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -43,7 +45,7 @@ func (s *PostgresAttestationStore) GetBuildAttestation(ctx context.Context, buil
 	if buildID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
-	bridge, ok := s.db.(SqlcBridge)
+	bridge, ok := s.db.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("attestation store: DBTX %T does not implement SqlcBridge", s.db)
 	}
@@ -67,7 +69,7 @@ func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Cont
 	if buildID == "" || tenantID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
-	bridge, ok := s.db.(SqlcBridge)
+	bridge, ok := s.db.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("attestation store: DBTX %T does not implement SqlcBridge", s.db)
 	}

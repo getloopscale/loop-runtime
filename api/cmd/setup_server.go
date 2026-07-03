@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -72,33 +74,33 @@ func buildServerConfig(
 	contextLogger := pkglogging.NewContextLogger(logger, nil)
 
 	sc := server.Config{
-		Port:                         cfg.Port,
-		MetricsPort:                  cfg.MetricsPort,
-		Logger:                       logger,
-		ContextLogger:                contextLogger,
-		HealthServices:               healthServices,
-		TokenValidator:               tokenValidator,
-		TenantCRMgr:                  k8sDeps.TenantCRMgr,
-		SecretK8sSync:                k8sDeps.SecretK8sSync,
+		Port:           cfg.Port,
+		MetricsPort:    cfg.MetricsPort,
+		Logger:         logger,
+		ContextLogger:  contextLogger,
+		HealthServices: healthServices,
+		TokenValidator: tokenValidator,
+		TenantCRMgr:    k8sDeps.TenantCRMgr,
+		SecretK8sSync:  k8sDeps.SecretK8sSync,
 		// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
 		// running without advisory lock). Reuses the same locker injected
 		// into build orchestrators, so secret writes serialize with deploys
 		// on the same (tenant, project, env) key. Lock-domain parity EC-2.
-		SecretEnvLocker:              stores.Locker,
+		SecretEnvLocker: stores.Locker,
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): inject
 		// the existing *db.PostgresProjectStore as the cross-tenant binding
 		// checker (EC-03 absorption — 404 byte-identical between cross-
 		// tenant attempts + nonexistent projects; CWE-204 defense). The
 		// PostgresProjectStore.GetByName signature already matches
 		// routes.SecretProjectChecker — no adapter needed.
-		SecretProjectChecker:         dbDeps.ProjectStore,
-		DomainHandler:                domainHandler,
-		BuildHandler:                 buildHandler,
+		SecretProjectChecker: dbDeps.ProjectStore,
+		DomainHandler:        domainHandler,
+		BuildHandler:         buildHandler,
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
 		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
 		// returns real data (was always 404 because the store was nil).
 		BuildAttestationHandler: routes.NewBuildAttestationHandler(
-			db.NewPostgresAttestationStore(dbAdapter), logger,
+			store.NewPostgresAttestationStore(dbAdapter), logger,
 		),
 		// Sprint 6 / T1.2: per-app SBOM endpoint. The store is the
 		// release_app_attestations sidecar (T0.1). The presigner is
@@ -136,7 +138,7 @@ func buildServerConfig(
 		IsProduction:                 cfg.IsProduction(),
 		UpgradeURL:                   os.Getenv("BILLING_UPGRADE_URL"),
 		PGCircuitBreakerThresholdPct: 90,
-		CORSAllowedOrigin:           cfg.CORSAllowedOrigin,
+		CORSAllowedOrigin:            cfg.CORSAllowedOrigin,
 	}
 
 	if dbDeps != nil {
@@ -283,12 +285,12 @@ func buildServerConfig(
 		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.
-		teamStore := &db.PostgresTeamStore{DB: dbAdapter}
+		teamStore := &store.PostgresTeamStore{DB: dbAdapter}
 		sc.TeamHandler = routes.NewTeamHandler(teamStore)
 		sc.AuthUserLookup = teamStore
 		// Plan T2.5 D8 full — persistent active-team selection backed by
 		// users.active_tenant_id column (migration 000018).
-		sc.ActiveTeamStore = db.NewPostgresActiveTeamStore(dbAdapter)
+		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
 		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
