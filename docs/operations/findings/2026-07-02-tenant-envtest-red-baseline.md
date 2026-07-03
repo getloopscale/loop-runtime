@@ -47,3 +47,21 @@ KUBEBUILDER_ASSETS="$ASSETS" go test ./internal/tenant/ -count=1 -p 1
 3. Re-run this repro to confirm GREEN, THEN resume M9 Step 2 with a trustworthy envtest oracle.
 
 This corrective work is its own `/to-plan` scope (operators test stabilization), NOT part of M9 Step 1/2.
+
+## Update (2026-07-02) — stabilized (deterministic) + one residual pre-existing flake
+
+- **Deterministic failures FIXED** (commit `986b60b4`): the ~50 stale M2 per-project
+  namespace assertions + 2 stale CRD-minItems specs + 1 EnvRef wording. The tenant
+  suite now passes green on clean isolated runs.
+- **Residual: `environment_controller_t31_test.go` "EC-3 63-char overflow"** is an
+  INTERMITTENT flake (~50% observed). Root cause (confirmed via reconcile
+  logs): under repeated reconciles the environment reconcile hits a state-machine
+  `invalid transition` error + optimistic-concurrency conflicts (`object has been
+  modified`) and errors out BEFORE reaching the `NameTooLong` status write, so the
+  condition the spec asserts is never set. This is NOT caused by the M9
+  Step 2 extraction (the environment reconcile code is byte-identical post-move —
+  only the package clause + a shared RBAC helper relocated). It predates all M9 work
+  (it was among the original 11 failures). Its 10s Eventually was aligned to the suite
+  standard 30s, which did not resolve the underlying race. Tracked for a separate
+  root-cause fix (make the reconciler robust to a not-yet-persisted spec, or gate the
+  spec on a "CR fully persisted" precondition). NOT in M9 Step 1/2 scope.
