@@ -532,8 +532,8 @@ WAVE 5 (cross-cutting validation)
 | J-02 Register | 🟡 funcional | polish pendente |
 | J-04 Recovery | ✅ | 2026-06-05 LIVE |
 | J-05 Device Success | ✅ | 2026-06-05 + 7 LIVE bugs |
-| J-06 Overview | 🔴 não iniciado | depende de J-01 LIVE |
-| J-07 Projects List | 🟡 lista existe; wizard pendente | J-09 disponível para wizard |
+| J-06 Overview | 🟢 eng entregue (PRs abertos; LIVE pendente) | 2026-07-03: KPI strip 4 KPIs reais (Projects/Deploys 7d/Active envs/Plan). Backend novo: engine `GET /api/v1/builds/stats` (deploys aggregate, tenant-scoped, dense zero-fill) + migration 000049 `subscriptions.{amount_minor,currency}`; loopzero-cloud webhook materializa Stripe price → `/v1/billing` emite `plan_price` honesto (label "Plan", NÃO "Spend"). T2 MEET-2026-07-03-003 + ADR read-model-boundaries. PRs loopzero#168 + loopzero-cloud#141. LIVE triplet commitado (`dev-public-overview-flow`), execução operator+sponsor-only. |
+| J-07 Projects List | 🟢 DoD cumprido + bulk delete; wizard aspiracional pendente | 2026-07-03: DoD (create→lista→detalhe EmptyState) já satisfeito (`onCreated`→`/projects/:name`). **D4 bulk delete entregue** (multi-select + type-to-confirm + best-effort partial-failure honesto), PR loopzero-cloud#140. Search+sort já existiam; #57 (search aria-label) fechado via patch-package committado. **Wizard colapsado name→connect→deploy DEFERIDO**: precisa DISCOVER (persistir estado do wizard no redirect OAuth do GitHub App) — não é fatia contida. |
 | J-08 Project Detail | 🟡 página existe; reduced scope | sub-rotas viraram J-17..J-24 |
 | **J-09 Connect Repo** | **✅ LIVE END-TO-END** | 2026-06-06 + 11 LIVE bugs. Push → release ACTIVE <90s |
 | **J-17 Deployments** | 🟡 página existe; ações pendentes | **P0 — deploy/cancel/rollback/redeploy** |
