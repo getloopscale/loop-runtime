@@ -372,6 +372,8 @@ type Subscription struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	StripeSubscriptionItemID *string            `json:"stripe_subscription_item_id"`
 	AccountID                string             `json:"account_id"`
+	AmountMinor              *int64             `json:"amount_minor"`
+	Currency                 *string            `json:"currency"`
 }
 
 type Tenant struct {
