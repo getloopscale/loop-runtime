@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // metering_store_test.go — PG-REAL tests for the compute-metering money-writer
 // (plan metering-compute-loop T2.3). Real Postgres via LOOPZERO_E2E_DATABASE_URL,
@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -1041,7 +1043,7 @@ func TestTenantStoreSqlc_DeleteTenantsFKOrdered_GCsMeteringCursor_SC5(t *testing
 		t.Fatalf("precondition: metering_cursor rows=%d, want 1", before)
 	}
 
-	store := NewTenantStoreSqlc(&PgxAdapter{Pool: pool})
+	store := NewTenantStoreSqlc(&db.PgxAdapter{Pool: pool})
 	counts, err := store.DeleteTenantsFKOrdered(ctx, []string{tenantID})
 	if err != nil {
 		t.Fatalf("DeleteTenantsFKOrdered: %v", err)

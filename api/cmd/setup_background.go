@@ -296,7 +296,7 @@ func createCoreLoops(
 	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
 	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
 	buildGC := services.NewBuildGC(
-		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
+		&store.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
 	)
 	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
 	// (1 year default). Was implemented but never wired, leaving audit_log to

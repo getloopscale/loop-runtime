@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // tenant_wrapper.go — thin Go wrappers around sqlc-generated Queries
 // for the tenant lifecycle domain. Covers BOTH legacy stores:
@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
@@ -38,25 +40,25 @@ import (
 // TenantStoreSqlc is the sqlc-backed admin tenant store.
 type TenantStoreSqlc struct {
 	q    *generated.Queries
-	pool DBTX
+	pool db.DBTX
 }
 
 // NewTenantStoreSqlc constructs a sqlc-backed admin tenant store.
 // `pool` MUST implement SqlcBridge (PgxAdapter does); test fakes that
 // don't will panic at query time — by design (T0.6 reshape matrix).
-func NewTenantStoreSqlc(pool DBTX) *TenantStoreSqlc {
+func NewTenantStoreSqlc(pool db.DBTX) *TenantStoreSqlc {
 	return &TenantStoreSqlc{
 		q:    generated.New(),
 		pool: pool,
 	}
 }
 
-func (s *TenantStoreSqlc) gen(tx DBTX) generated.DBTX {
+func (s *TenantStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		panic(fmt.Sprintf(
 			"tenant_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",

@@ -13,10 +13,11 @@ package metering
 import (
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 )
 
@@ -46,7 +47,7 @@ type LoopConfig struct {
 // system clock — fenced by the leader lease (SC-6). The pool's lifecycle is owned
 // by the caller (main.go closes it on shutdown).
 func NewWorkerLoop(pool *pgxpool.Pool, crClient client.Client, cellProvider CellClientProvider, cfg LoopConfig) *Loop {
-	store := db.NewMeteringStore(pool)
+	store := store.NewMeteringStore(pool)
 	metrics := NewPrometheusMetrics()
 	clock := SystemClock{}
 	worker := &Worker{

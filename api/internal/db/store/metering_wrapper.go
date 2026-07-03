@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // metering_wrapper.go — MeteringStore, the compute-metering money-writer
 // (plan metering-compute-loop T2.3). Each write runs the ADR-4 (same-period) or

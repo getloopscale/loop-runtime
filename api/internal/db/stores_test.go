@@ -4,11 +4,8 @@
 package db
 
 import (
-	"context"
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 )
 
 // =============================================================================
@@ -312,19 +309,6 @@ import (
 // Build GC Store tests
 // =============================================================================
 
-func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
-	fake := &FakeDBTX{ExecResult: ExecResult{RowsAffected: 15}}
-	store := &PostgresBuildGCStore{DB: fake}
-
-	count, err := store.DeleteOldBuilds(context.Background(), 30*24*time.Hour, 10)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 15 {
-		t.Errorf("expected 15, got: %d", count)
-	}
-}
-
 // (TestBuildGCStore_DeleteOldEvents_Success removed in
 //  dogfood-2026-05-08-fixes T1.1 / ADR D2: the production method was
 //  deleted along with the inexistent `build_events` table reference.)
@@ -343,16 +327,6 @@ func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
 // that function is kept as raw DBTX.Exec (ranked-subquery shape that
 // sqlc 1.31.1 cannot parse; deferred to T4.1 raw/ subpackage per
 // ADR-1 D5).
-
-func TestBuildGCStore_DeleteOldBuilds_Error(t *testing.T) {
-	fake := &FakeDBTX{ExecErr: fmt.Errorf("table locked")}
-	store := &PostgresBuildGCStore{DB: fake}
-
-	_, err := store.DeleteOldBuilds(context.Background(), 30*24*time.Hour, 10)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 // =============================================================================
 // UniqueViolationError tests

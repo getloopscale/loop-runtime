@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // tenant_types.go — public types for the tenant lifecycle domain that
 // survive the T1.4 deletion of the legacy hand-rolled `tenant_store.go`

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/services"
@@ -171,9 +173,9 @@ func TestBuildOrchestratorAdapter_GetBuildStatus_WithDuration(t *testing.T) {
 // =============================================================================
 
 func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
-	// Test that the mapping from db.TenantDeletionCounts to services.TenantDeletionCounts
+	// Test that the mapping from store.TenantDeletionCounts to services.TenantDeletionCounts
 	// covers all fields.
-	c := db.TenantDeletionCounts{
+	c := store.TenantDeletionCounts{
 		EnvironmentTargets: 10,
 		Releases:           20,
 		BuildApps:          30,

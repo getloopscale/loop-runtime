@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // build_gc_wrapper.go — hybrid wrapper for PostgresBuildGCStore.
 // T2.2 (Batch B #6) of plan
@@ -24,6 +24,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -49,7 +51,7 @@ import (
 // (DeleteOldWebhookDeliveries) and continue to use raw DBTX.Exec
 // for DeleteOldBuilds (T4.1 raw/ candidate).
 type PostgresBuildGCStore struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // DeleteOldBuilds removes builds older than maxAge, keeping at least
@@ -108,7 +110,7 @@ func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.
 func (s *PostgresBuildGCStore) DeleteOldWebhookDeliveries(ctx context.Context, maxAge time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return 0, fmt.Errorf("build gc: DBTX %T does not implement SqlcBridge", s.DB)
 	}

@@ -22,7 +22,7 @@ type runner interface {
 	RunOnce(ctx context.Context) error
 }
 
-// killSwitch is the narrow kill-switch read (satisfied by *db.MeteringStore).
+// killSwitch is the narrow kill-switch read (satisfied by *store.MeteringStore).
 type killSwitch interface {
 	IsMeteringEnabled(ctx context.Context) (enabled bool, found bool, err error)
 }

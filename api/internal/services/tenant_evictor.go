@@ -34,7 +34,7 @@ type TenantLister interface {
 	ListTenantIDsByPattern(ctx context.Context, pattern string) ([]string, error)
 }
 
-// TenantDeletionCounts mirrors db.TenantDeletionCounts but is declared here
+// TenantDeletionCounts mirrors store.TenantDeletionCounts but is declared here
 // to keep the services package independent of the db package's concrete type.
 // Fields are keyed the same way so JSON round-trips are lossless.
 type TenantDeletionCounts struct {

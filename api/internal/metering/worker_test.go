@@ -16,9 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 )
 
@@ -45,7 +46,7 @@ type fakeMeteringStore struct {
 	advanced        bool
 	delta           int64
 	meterErr        error
-	lastInput       db.MeterInput
+	lastInput       store.MeterInput
 }
 
 func (f *fakeMeteringStore) GetCellForTenant(ctx context.Context, tenantID string) (string, bool, error) {
@@ -72,14 +73,14 @@ func (f *fakeMeteringStore) GetPlanTierForTenant(ctx context.Context, tenantID s
 	defer f.mu.Unlock()
 	return f.tier, f.tierErr
 }
-func (f *fakeMeteringStore) MeterCompute(ctx context.Context, in db.MeterInput) (bool, int64, error) {
+func (f *fakeMeteringStore) MeterCompute(ctx context.Context, in store.MeterInput) (bool, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.computeCalls++
 	f.lastInput = in
 	return f.advanced, f.delta, f.meterErr
 }
-func (f *fakeMeteringStore) MeterComputeSplit(ctx context.Context, in db.MeterInput) (bool, int64, error) {
+func (f *fakeMeteringStore) MeterComputeSplit(ctx context.Context, in store.MeterInput) (bool, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.splitCalls++

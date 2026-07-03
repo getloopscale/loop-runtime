@@ -18,9 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero-contracts/plan"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 )
 
@@ -30,15 +31,15 @@ import (
 const defaultMeterConcurrency = 8
 
 // meteringStore is the narrow money-writer surface the worker depends on
-// (satisfied by *db.MeteringStore). Defined here, in the consumer, per DIP — the
+// (satisfied by *store.MeteringStore). Defined here, in the consumer, per DIP — the
 // worker owns the contract; db provides the concrete.
 type meteringStore interface {
 	GetCellForTenant(ctx context.Context, tenantID string) (cell string, found bool, err error)
 	SeedMeteringCursor(ctx context.Context, tenantID, metric, cellID string) error
 	GetMeteringCursor(ctx context.Context, tenantID, metric, cellID string) (cursor time.Time, found bool, err error)
 	GetPlanTierForTenant(ctx context.Context, tenantID string) (string, error)
-	MeterCompute(ctx context.Context, in db.MeterInput) (advanced bool, delta int64, err error)
-	MeterComputeSplit(ctx context.Context, in db.MeterInput) (advanced bool, delta int64, err error)
+	MeterCompute(ctx context.Context, in store.MeterInput) (advanced bool, delta int64, err error)
+	MeterComputeSplit(ctx context.Context, in store.MeterInput) (advanced bool, delta int64, err error)
 }
 
 // NamespaceLister resolves a tenant's (project, env) namespaces on its cell from
@@ -202,7 +203,7 @@ func (w *Worker) meterTenant(ctx context.Context, tenantID string) error {
 		return fmt.Errorf("metering: plan tier for tenant %s: %w", tenantID, err)
 	}
 
-	in := db.MeterInput{
+	in := store.MeterInput{
 		TenantID:     tenantID,
 		Metric:       metric,
 		CellID:       cell,

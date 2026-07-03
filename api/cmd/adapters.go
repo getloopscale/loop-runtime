@@ -7,14 +7,16 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/admission"
 	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
 // buildStoreAdmissionQuerier bridges the db.BuildStore interface to the
@@ -80,7 +82,7 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.Tenan
 	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
 	// eviction cascade preserved verbatim; all queries are
 	// tenantpredicate:exempt per the admin path (LOOPZERO_ADMIN_API gate).
-	store := db.NewTenantStoreSqlc(dbAdapter)
+	store := store.NewTenantStoreSqlc(dbAdapter)
 	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
 
 	k8sEv, err := k8s.NewTenantK8sEvictor(
