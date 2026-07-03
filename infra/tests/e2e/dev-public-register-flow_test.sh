@@ -13,7 +13,7 @@
 #   B  the served dashboard build ships the RegisterCompletingScreen — the
 #      register entry bundle carries the "Setting up your workspace" literal, so
 #      a new tenant sees the provisioning wait, not a blank redirect.
-#   C  pre-flight health (cloud-dev + app-dev reachable).
+#   C  pre-flight health (app-dev reachable).
 #
 # Read-only: this test never creates an identity or a tenant — it asserts the
 # provisioning CONTRACT against the seeded session. Full new-tenant registration
@@ -24,8 +24,12 @@
 
 set -euo pipefail
 
-CLOUD="${LOOPZERO_CLOUD_URL:-https://cloud-dev.loopzero.example}"
 APP="${DASHBOARD:-https://app-dev.loopzero.example}"
+# The BFF /v1/* routes (incl. /v1/auth/me) are served under app-dev in
+# dev-public (Caddyfile `handle /v1/*` → localhost:13002). The separate
+# cloud-dev host 301-redirects, which would drop POST bodies — the #154/#127
+# trap. So default the BFF base to app-dev; LOOPZERO_CLOUD_URL still overrides.
+CLOUD="${LOOPZERO_CLOUD_URL:-$APP}"
 JWT_FILE="${LOOPZERO_JWT_FILE:-$HOME/.loopzero/local-dogfood-token.txt}"
 
 JSON_MODE=0
@@ -61,13 +65,8 @@ record_result() {
 want() { [[ -z "$SINGLE_SCENARIO" || "$SINGLE_SCENARIO" == "$1" ]]; }
 
 preflight() {
-  log "pre-flight: $CLOUD + $APP reachable"
+  log "pre-flight: $APP reachable"
   local code
-  code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "$CLOUD/health/deep" 2>/dev/null || echo 000)
-  if [[ "$code" != "200" ]]; then
-    warn "cloud-dev /health/deep -> $code (infra not ready)"
-    return 1
-  fi
   code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "$APP/register" 2>/dev/null || echo 000)
   if [[ "$code" -lt 200 || "$code" -ge 400 ]]; then
     warn "app-dev /register -> $code"
