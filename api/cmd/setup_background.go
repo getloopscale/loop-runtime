@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loopzero/api/internal/cfkv"
@@ -289,7 +291,7 @@ func createCoreLoops(
 	)
 
 	idempotencyCleaner := services.NewIdempotencyCleaner(
-		&db.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
+		&store.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
 	)
 	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
 	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)

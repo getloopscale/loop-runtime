@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/argo"
 	"github.com/getloopscale/loopzero/api/internal/argocd"
@@ -226,7 +228,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 
 	// ---- Idempotency cleaner ----
 	idempotencyCleaner := services.NewIdempotencyCleaner(
-		&db.PostgresIdempotencyStore{DB: dbAdapter},
+		&store.PostgresIdempotencyStore{DB: dbAdapter},
 		logger,
 		1*time.Hour,
 	)

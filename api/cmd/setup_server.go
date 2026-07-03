@@ -238,7 +238,7 @@ func buildServerConfig(
 	}
 
 	if dbAdapter != nil {
-		sc.IdempotencyStore = &db.PostgresIdempotencyStore{DB: dbAdapter}
+		sc.IdempotencyStore = &store.PostgresIdempotencyStore{DB: dbAdapter}
 		// T1.6 of deep-review-remediation: wire BillingHandler so
 		// GET /api/v1/billing returns plan + usage instead of 404.
 		// T1.9 production: also wire the cost cap CostStore so the
