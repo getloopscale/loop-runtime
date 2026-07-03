@@ -219,3 +219,17 @@ FROM builds
 WHERE tenant_id = $1 AND project_id = $2
 GROUP BY environment
 ORDER BY MAX(created_at) DESC;
+
+-- name: BuildStatsByDay :many
+-- J-06 / MEET-2026-07-03-003 D2: tenant-wide per-day build (deploy) counts for
+-- the Overview deploys-by-day sparkline. Tenant isolation (#106/#111) — the
+-- WHERE tenant_id = $1 predicate is the ONLY barrier under the BYPASSRLS engine
+-- pool; NOT tenantpredicate:exempt so the CI gate enforces it. $2 is the window
+-- lower bound (now() - window), computed in Go from the enumerated {7d,30d,90d}.
+-- Day bucketing is server-side in UTC; the handler zero-fills missing days.
+SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS count
+FROM builds
+WHERE tenant_id = $1
+  AND created_at >= $2
+GROUP BY day
+ORDER BY day;
