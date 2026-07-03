@@ -92,12 +92,14 @@ USAGE:
   loopzero-ops quality <gate> [flags]
 
 INTROSPECTION:
-  --list          Print the gate inventory as NAME<TAB>WIRED<TAB>SUMMARY, sorted
-                  and byte-stable (the M9 gate-set oracle). WIRED = the gate is
-                  invoked by the quality:gates task.
+  --list          Print the gate inventory as NAME<TAB>TASKS<TAB>SUMMARY, sorted
+                  and byte-stable (the M9 gate-set oracle). TASKS = the comma-
+                  joined sorted taskfiles/quality.yml task(s) invoking the gate
+                  (e.g. "gates", "diff", "diff,gates"), or "-" if none. Per-task
+                  attribution: a silent un-wire from quality:gates flips the cell.
                   Flags:
                     --names         names only, one per line (for a per-gate loop)
-                    --json          JSON array of {name, wired, summary}
+                    --json          JSON array of {name, tasks, summary}
                     --taskfile PATH taskfile scanned for the wired bit
                                     (default: "taskfiles/quality.yml")
 
