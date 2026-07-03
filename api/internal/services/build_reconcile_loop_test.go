@@ -111,6 +111,10 @@ func (f *fakeBuildStoreRL) UpdateStatus(_ context.Context, _ db.DBTX, id string,
 	return &cp, nil
 }
 
+func (f *fakeBuildStoreRL) UpdateStatusIfCurrent(_ context.Context, _, _ string, _ statemachine.BuildPhase, _ string) (*db.Build, error) {
+	return nil, nil
+}
+
 func safeTransitionRL(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (statemachine.State, error) {
 	defer func() {
 		_ = recover() // absorb panics from state machine
@@ -208,13 +212,13 @@ func (f *fakeWorkflowRL) GetStatus(_ context.Context, _, _ string) (*WorkflowSta
 
 // fakeCompletionHandlerRL implements BuildCompletionHandler.
 type fakeCompletionHandlerRL struct {
-	mu                   sync.Mutex
-	onBuildCompletedErr  error
+	mu                    sync.Mutex
+	onBuildCompletedErr   error
 	onBuildCompletedCalls int
-	retryErr             error
-	retryCalls           int
-	findReleaseResult    *db.Release
-	findReleaseErr       error
+	retryErr              error
+	retryCalls            int
+	findReleaseResult     *db.Release
+	findReleaseErr        error
 }
 
 func (f *fakeCompletionHandlerRL) OnBuildCompleted(_ context.Context, _ string, _ BuildCallbackRequest) error {
@@ -258,9 +262,9 @@ func (f *fakeDomainQuerier) ListActiveByApp(_ context.Context, _, _, _, _ string
 
 // fakeAppCRMgr implements ApplicationCREnsurer.
 type fakeAppCRMgr struct {
-	mu       sync.Mutex
-	err      error
-	calls    []ApplicationCRInput
+	mu    sync.Mutex
+	err   error
+	calls []ApplicationCRInput
 }
 
 func (f *fakeAppCRMgr) EnsureLoopZeroApplication(_ context.Context, input ApplicationCRInput) error {
@@ -308,13 +312,13 @@ func (f *fakeEventStoreRL) eventsByType(eventType string) []fakeEvent {
 // ---------------------------------------------------------------------------
 
 type reconcileLoopFakes struct {
-	buildStore   *fakeBuildStoreRL
-	workflow     *fakeWorkflowRL
-	orch         *fakeCompletionHandlerRL
-	locker       *fakeLockerRL
-	domainStore  *fakeDomainQuerier
-	appCRMgr     *fakeAppCRMgr
-	eventStore   *fakeEventStoreRL
+	buildStore  *fakeBuildStoreRL
+	workflow    *fakeWorkflowRL
+	orch        *fakeCompletionHandlerRL
+	locker      *fakeLockerRL
+	domainStore *fakeDomainQuerier
+	appCRMgr    *fakeAppCRMgr
+	eventStore  *fakeEventStoreRL
 }
 
 func newReconcileLoopFakes() *reconcileLoopFakes {

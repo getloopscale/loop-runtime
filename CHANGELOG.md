@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Build status transitions that run outside `withEnvironmentLock` (submit RUNNING flip + submit-fail FAILED) now use a lock-free single-statement CAS (`UpdateStatusIfCurrent`) instead of a nil-tx read-modify-write; the read-modify-write `UpdateStatus` now rejects a nil tx (M9 5b atomicity; ADR 2026-07-03-m9-5b-nil-tx-status-atomicity).
 - `loopzero-ops quality db-generated-boundary` — MA-7 Gate A: fails when `api/internal/{services,routes,server}` imports `api/internal/db/generated` (M9 db-split boundary enforcement; ADR 2026-07-03-m9-db-store-subpackage-topology).
 
 ### Fixed

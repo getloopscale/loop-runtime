@@ -282,6 +282,13 @@ func (s *ReleaseStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, relea
 // Returns loopzeroerrors.InvalidTransition if the event is not valid from
 // the current state.
 func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, releaseID, event string) (*Release, error) {
+	// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): this read-modify-write
+	// (fetch → SafeTransition → UPDATE into the partial-unique-index) MUST run in
+	// the caller's transaction under withEnvironmentLock. All 25 release callers +
+	// the reaper already pass a real tx; a nil tx is a wiring bug, not a fallback.
+	if tx == nil {
+		return nil, ErrNilTxStatusMutation
+	}
 	// 1. Fetch current release (cross-tenant fetch; we need its tenant_id
 	// to scope the UPDATE — matches legacy behavior that UPDATE-ed by id
 	// without enforcing tenant predicate, but we ADD the predicate for

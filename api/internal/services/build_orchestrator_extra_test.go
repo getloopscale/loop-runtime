@@ -16,6 +16,13 @@ import (
 
 // --- Test doubles for BuildOrchestrator ---
 
+type ifCurrentCall struct {
+	buildID  string
+	tenantID string
+	from     statemachine.BuildPhase
+	event    string
+}
+
 type fakeBuildStoreOrch struct {
 	builds    map[string]*db.Build
 	hasActive bool
@@ -25,6 +32,12 @@ type fakeBuildStoreOrch struct {
 	errorMessages map[string]string
 	workflowIDs   map[string]string
 	appsSpec      map[string][]db.BuildAppSpec
+	// ifCurrentCalls records every UpdateStatusIfCurrent invocation so caller
+	// tests (M9 5b T-C/T-D) can assert the lock-free CAS path is used with the
+	// expected `from` phase. ifCurrentSupersede[buildID]=true makes the fake
+	// return (nil, nil) to simulate a superseded no-op.
+	ifCurrentCalls     []ifCurrentCall
+	ifCurrentSupersede map[string]bool
 }
 
 func newFakeBuildStoreOrch() *fakeBuildStoreOrch {
@@ -91,6 +104,25 @@ func (f *fakeBuildStoreOrch) UpdateStatus(_ context.Context, _ db.DBTX, id, even
 		return b, nil
 	}
 	return &db.Build{ID: id, Status: "RUNNING"}, nil
+}
+
+func (f *fakeBuildStoreOrch) UpdateStatusIfCurrent(_ context.Context, buildID, tenantID string, from statemachine.BuildPhase, event string) (*db.Build, error) {
+	f.ifCurrentCalls = append(f.ifCurrentCalls, ifCurrentCall{buildID: buildID, tenantID: tenantID, from: from, event: event})
+	if f.ifCurrentSupersede[buildID] {
+		return nil, nil // superseded no-op
+	}
+	f.lastStatus[buildID] = event
+	b := f.builds[buildID]
+	if b != nil {
+		switch statemachine.BuildPhaseEvent(event) {
+		case statemachine.BPEventStarted:
+			b.Status = string(statemachine.BPhRunning)
+		case statemachine.BPEventFailed:
+			b.Status = string(statemachine.BPhFailed)
+		}
+		return b, nil
+	}
+	return &db.Build{ID: buildID, Status: string(from)}, nil
 }
 
 func (f *fakeBuildStoreOrch) SetErrorMessage(_ context.Context, _ db.DBTX, id, msg string) error {

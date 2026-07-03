@@ -163,6 +163,13 @@ func (s *BuildStoreSqlc) HasActiveBuild(ctx context.Context, tx DBTX, tenantID, 
 // Returns ErrBuildNotFound when the build doesn't exist.
 // Returns loopzeroerrors.InvalidTransition on invalid transitions.
 func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, buildID, event string) (*Build, error) {
+	// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): this read-modify-write
+	// MUST run in the caller's transaction under withEnvironmentLock. A nil tx
+	// would split GetByIDTx + UPDATE across two pooled connections. Lock-free
+	// callers use UpdateStatusIfCurrent (single-statement CAS) instead.
+	if tx == nil {
+		return nil, ErrNilTxStatusMutation
+	}
 	current, err := s.getBuildByIDViaTx(ctx, tx, buildID)
 	if err != nil {
 		return nil, err
@@ -199,6 +206,52 @@ func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, buildID, eve
 	}
 	if err != nil {
 		return nil, fmt.Errorf("sqlc: update build status: %w", err)
+	}
+	return generatedBuildRowToBuild(row), nil
+}
+
+// UpdateStatusIfCurrent is the lock-free, single-statement CAS variant of
+// UpdateStatus (M9 5b, ADR 2026-07-03-m9-5b-nil-tx-status-atomicity). It is for
+// the two callers that legitimately run OUTSIDE withEnvironmentLock
+// (build_orchestrator_submit.go: QUEUED→RUNNING after workflow submit, and
+// failQueuedBuild QUEUED→FAILED on submit failure). Unlike UpdateStatus it does
+// NO fetch: the caller supplies the expected `from` phase, SafeTransition
+// computes the target in Go (MA-7 — the transition table stays out of SQL), and
+// a single conditional UPDATE (WHERE id AND tenant_id AND status=from) applies
+// the write atomically iff the row is still in `from`. 0 rows → (nil, nil): the
+// build already left `from` (a concurrent lock-holder won) → a correct no-op.
+func (s *BuildStoreSqlc) UpdateStatusIfCurrent(ctx context.Context, buildID, tenantID string, from statemachine.BuildPhase, event string) (*Build, error) {
+	newPhase, err := buildMachine.SafeTransition(from, statemachine.BuildPhaseEvent(event))
+	if err != nil {
+		return nil, loopzeroerrors.NewInvalidTransition(string(from), event)
+	}
+
+	var row generated.Build
+	switch newPhase {
+	case statemachine.BPhRunning:
+		row, err = s.q.UpdateBuildStatusToRunningIfCurrent(ctx, s.gen(nil), generated.UpdateBuildStatusToRunningIfCurrentParams{
+			Status:   string(newPhase),
+			ID:       buildID,
+			TenantID: tenantID,
+			Status_2: string(from),
+		})
+	case statemachine.BPhSucceeded, statemachine.BPhFailed, statemachine.BPhCancelled:
+		row, err = s.q.UpdateBuildStatusToTerminalIfCurrent(ctx, s.gen(nil), generated.UpdateBuildStatusToTerminalIfCurrentParams{
+			Status:   string(newPhase),
+			ID:       buildID,
+			TenantID: tenantID,
+			Status_2: string(from),
+		})
+	default:
+		// RELEASING / CANCELLING are not lock-free CAS callers — guard misuse
+		// loudly rather than silently falling through to a wrong query.
+		return nil, fmt.Errorf("build_wrapper: UpdateStatusIfCurrent supports only RUNNING/terminal targets, got %q (from=%q event=%q)", newPhase, from, event)
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // superseded: row already left `from` — correct no-op
+		}
+		return nil, fmt.Errorf("sqlc: update build status if current: %w", err)
 	}
 	return generatedBuildRowToBuild(row), nil
 }

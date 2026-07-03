@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
@@ -52,6 +53,10 @@ func (f *fakeDeleteBuildStore) HasActiveBuild(context.Context, db.DBTX, string, 
 	return false, nil
 }
 func (f *fakeDeleteBuildStore) UpdateStatus(context.Context, db.DBTX, string, string) (*db.Build, error) {
+	return nil, nil
+}
+
+func (f *fakeDeleteBuildStore) UpdateStatusIfCurrent(_ context.Context, _, _ string, _ statemachine.BuildPhase, _ string) (*db.Build, error) {
 	return nil, nil
 }
 func (f *fakeDeleteBuildStore) SetErrorMessage(context.Context, db.DBTX, string, string) error {

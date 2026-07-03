@@ -102,6 +102,23 @@ func (f *fakeBuildStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id st
 	return &copy, nil
 }
 
+func (f *fakeBuildStoreOrch) UpdateStatusIfCurrent(ctx context.Context, buildID, _ string, from statemachine.BuildPhase, event string) (*db.Build, error) {
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	b, ok := f.builds[buildID]
+	if !ok || statemachine.State(b.Status) != statemachine.State(from) {
+		return nil, nil // superseded / not-in-from → no-op
+	}
+	newState, err := safeFakeTransition(buildMachine, statemachine.State(from), statemachine.Event(event))
+	if err != nil {
+		return nil, err
+	}
+	b.Status = string(newState)
+	cp := *b
+	return &cp, nil
+}
+
 func (f *fakeBuildStoreOrch) SetWorkflowID(_ context.Context, _ db.DBTX, id string, wfID string) error {
 	if b, ok := f.builds[id]; ok {
 		b.WorkflowID = wfID

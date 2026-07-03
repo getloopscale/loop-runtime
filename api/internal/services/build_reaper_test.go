@@ -18,9 +18,9 @@ import (
 // --- Test doubles for BuildReaper ---
 
 type fakeBuildStoreReaper struct {
-	builds       map[string]*db.Build
-	lastStatus   map[string]string
-	lastError    map[string]string
+	builds     map[string]*db.Build
+	lastStatus map[string]string
+	lastError  map[string]string
 }
 
 func newFakeBuildStoreReaper() *fakeBuildStoreReaper {
@@ -64,6 +64,10 @@ func (f *fakeBuildStoreReaper) UpdateStatus(_ context.Context, _ db.DBTX, id, ev
 		b.Status = "FAILED"
 	}
 	return f.builds[id], nil
+}
+
+func (f *fakeBuildStoreReaper) UpdateStatusIfCurrent(_ context.Context, _, _ string, _ statemachine.BuildPhase, _ string) (*db.Build, error) {
+	return nil, nil
 }
 func (f *fakeBuildStoreReaper) SetErrorMessage(_ context.Context, _ db.DBTX, id, msg string) error {
 	f.lastError[id] = msg

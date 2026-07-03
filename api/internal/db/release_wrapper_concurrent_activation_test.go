@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // TestIsReleasesActiveUniqueViolation_OnlyIdxReleasesActiveUnique:
@@ -125,9 +126,21 @@ func requireActiveUniqueIndexAndReleaseStore(t *testing.T, pool *pgxpool.Pool) {
 // SAME (tn, proj, env). The partial unique index rejects; wrapper
 // detects + returns NewConcurrentActivation.
 //
-// Direct SQL UPDATE is used (not the state-machine transition path)
-// because the state machine has its own guards; this test validates
-// the DB-layer wire specifically.
+// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity, pre-condition #1):
+// this test now calls the REAL ReleaseStoreSqlc.UpdateStatus end-to-end
+// (previously it did a raw pool.Exec UPDATE + SYNTHESIZED the typed error,
+// so the 23505→CONCURRENT_ACTIVATION→409 wire could be severed and the test
+// would stay green). The real call exercises the full chain: GetByIDTx →
+// SafeTransition(PENDING, SyncCompleted)=ACTIVE → UpdateReleaseStatus →
+// partial-unique-index 23505 → isReleasesActiveUniqueViolation →
+// NewConcurrentActivation.
+//
+// Operator HARD STOP: the behavioral assertion needs live PG with migration
+// 000022 (no hermetic PG tier). concurrentActivationPool honest-skips at
+// pool-create BEFORE the store call, so the real-call path (constructing the
+// store, calling UpdateStatus, the typed assertion) is compiled + link-checked
+// every hermetic run while the 409 wire is proven on the operator live-PG tier
+// (per .claude/rules/cleanroom-up-live-test-mandate.md).
 func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 	pool := concurrentActivationPool(t)
 	requireActiveUniqueIndexAndReleaseStore(t, pool)
@@ -173,24 +186,22 @@ func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 		}
 	}
 
-	// Direct UPDATE to ACTIVE on R2 — the partial unique index rejects.
-	// (We're testing the DB-side detection wire, not the state machine.)
-	_, err := pool.Exec(ctx,
-		`UPDATE releases SET status='ACTIVE' WHERE id = $1`, releaseID2)
+	// Call the REAL store end-to-end. PgxAdapter is the SqlcBridge gen() needs;
+	// the adapter is passed as a non-nil tx (satisfies the M9 5b reject-nil
+	// guard — this IS the withEnvironmentLock-scoped path in production).
+	// SyncCompleted is the real PENDING→ACTIVE event, so SafeTransition passes
+	// and UpdateReleaseStatus fires into the partial unique index.
+	adapter := &PgxAdapter{Pool: pool}
+	store := NewReleaseStoreSqlc(adapter, NoopEventStore{})
+
+	_, err := store.UpdateStatus(ctx, adapter, releaseID2, string(statemachine.ReleaseSyncCompleted))
 	if err == nil {
-		t.Fatal("expected partial-unique-index rejection, got nil")
+		t.Fatal("expected CONCURRENT_ACTIVATION from the partial-unique-index, got nil")
 	}
-
-	// Confirm classifier identifies it.
-	if !isReleasesActiveUniqueViolation(err) {
-		t.Errorf("classifier MUST identify the violation; got error: %v", err)
-	}
-
-	// Confirm production wire would map to CONCURRENT_ACTIVATION.
-	// (Direct UPDATE doesn't go through UpdateStatus; we synthesize the
-	// equivalent typed-error return that UpdateStatus would produce.)
-	typed := loopzeroerrors.NewConcurrentActivation(tenantID, projectID, env)
-	if typed.Code != "CONCURRENT_ACTIVATION" {
-		t.Errorf("typed error Code must be CONCURRENT_ACTIVATION; got %q", typed.Code)
+	// Assert the REAL typed wire (not a synthesized value): the store must
+	// return a *LoopZeroError with Code CONCURRENT_ACTIVATION.
+	var te *loopzeroerrors.LoopZeroError
+	if !errors.As(err, &te) || te.Code != "CONCURRENT_ACTIVATION" {
+		t.Errorf("real UpdateStatus must return typed CONCURRENT_ACTIVATION; got %v", err)
 	}
 }

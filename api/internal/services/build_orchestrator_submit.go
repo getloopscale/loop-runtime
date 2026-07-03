@@ -173,7 +173,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			// BRC-001 fix: fail the QUEUED build immediately so the environment
 			// is unblocked. Previously, the build sat QUEUED until the reaper
 			// fired (5min timeout), blocking all deploys to this environment.
-			o.failQueuedBuild(ctx, buildID, fmt.Sprintf("app normalization failed: %v", normErr))
+			o.failQueuedBuild(ctx, buildID, req.TenantID, fmt.Sprintf("app normalization failed: %v", normErr))
 			return nil, wrapSubmitBuildError(StageNormalizeApp, fmt.Errorf("normalize app %q: %w", a.Name, normErr))
 		}
 		units = append(units, unit)
@@ -197,7 +197,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// Workflow submit failed -- immediately fail the build so the environment
 		// is unblocked. The build reaper is a safety net (5min QUEUED timeout)
 		// but immediate failure gives better UX.
-		o.failQueuedBuild(ctx, buildID, fmt.Sprintf("Workflow submission failed: %v", submitErr))
+		o.failQueuedBuild(ctx, buildID, req.TenantID, fmt.Sprintf("Workflow submission failed: %v", submitErr))
 		return nil, wrapSubmitBuildError(StageSubmitWorkflow, submitErr)
 	}
 
@@ -209,11 +209,20 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 		// The build will still work, just cancel won't correlate by workflow ID.
 	}
 
-	// Transition QUEUED -> RUNNING
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BPEventStarted)); err != nil {
+	// Transition QUEUED -> RUNNING. Runs OUTSIDE the advisory lock, so use the
+	// lock-free CAS variant (M9 5b, ADR 2026-07-03-m9-5b-nil-tx-status-atomicity):
+	// a single conditional UPDATE (WHERE status=QUEUED) instead of a nil-tx
+	// read-modify-write that could split fetch+update across two pooled
+	// connections and clobber a concurrent lock-holder's terminal write.
+	if b, err := o.buildStore.UpdateStatusIfCurrent(ctx, buildID, req.TenantID, statemachine.BPhQueued, string(statemachine.BPEventStarted)); err != nil {
 		slog.Error("submit build: failed to transition to RUNNING",
 			"build_id", buildID, "error", err)
 		// Non-fatal: reconcile loop handles EC-N (QUEUED build with completed workflow).
+	} else if b == nil {
+		// Superseded: a concurrent lock-holder (reaper / reconcile / callback)
+		// already advanced the build past QUEUED. The reconcile backstop owns it.
+		slog.Debug("submit build: build advanced past QUEUED before RUNNING flip — reconcile backstop owns it",
+			"build_id", buildID)
 	}
 
 	// Emit SSE build.started -- include app names for CLI per-app rendering (F-01)
@@ -320,10 +329,15 @@ func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string, ked
 }
 
 // failQueuedBuild transitions a QUEUED build to FAILED when workflow submission
-// fails. This runs OUTSIDE the advisory lock using the connection pool directly.
-// REVIEW-BLOCKER-1: ensures the environment is immediately unblocked on submit failure.
-func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string, reason string) {
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BPEventFailed)); err != nil {
+// fails. This runs OUTSIDE the advisory lock — DELIBERATELY (REVIEW-BLOCKER-1:
+// immediately unblock the environment on submit failure). It uses the lock-free
+// CAS variant (M9 5b, ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): a single
+// conditional UPDATE (WHERE status=QUEUED) that is atomic without a tx and is a
+// correct no-op if a concurrent lock-holder (e.g. the reaper) already terminated
+// the build. tenantID is threaded from the caller (SubmitBuild's req.TenantID)
+// to preserve the defense-in-depth tenant predicate.
+func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID, tenantID, reason string) {
+	if _, err := o.buildStore.UpdateStatusIfCurrent(ctx, buildID, tenantID, statemachine.BPhQueued, string(statemachine.BPEventFailed)); err != nil {
 		slog.Error("submit build: failed to mark QUEUED build as FAILED",
 			"build_id", buildID, "error", err)
 		return

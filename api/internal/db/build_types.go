@@ -129,6 +129,17 @@ type BuildStore interface {
 	GetByIDForTenant(ctx context.Context, tenantID, id string) (*Build, error)
 	HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
+	// UpdateStatusIfCurrent is the lock-free, single-statement CAS variant of
+	// UpdateStatus for callers that legitimately run OUTSIDE withEnvironmentLock
+	// (M9 5b, ADR 2026-07-03-m9-5b-nil-tx-status-atomicity). The target phase is
+	// computed in Go via buildMachine.SafeTransition(from, event) — MA-7: the
+	// transition table never leaks into SQL — and the UPDATE applies ONLY if the
+	// row is still in `from` (WHERE ... AND status = from), closing the
+	// read-then-write window without a tx or advisory lock. A superseded row
+	// (a concurrent lock-holder already advanced it) returns (nil, nil): a
+	// correct no-op, not an error. Only RUNNING and terminal
+	// (SUCCEEDED/FAILED/CANCELLED) targets are supported (the lock-free callers).
+	UpdateStatusIfCurrent(ctx context.Context, buildID, tenantID string, from statemachine.BuildPhase, event string) (*Build, error)
 	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
 	SetWorkflowID(ctx context.Context, tx DBTX, id string, workflowID string) error
 	SetAppsSpec(ctx context.Context, tx DBTX, id string, apps []BuildAppSpec) error
