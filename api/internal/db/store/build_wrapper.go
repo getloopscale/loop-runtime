@@ -32,11 +32,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -533,4 +535,15 @@ func generatedBuildRowToBuild(row generated.Build) *db.Build {
 		b.BundleDigest = *row.BundleDigest
 	}
 	return b
+}
+
+// BuildStatsByDay returns the tenant-scoped per-UTC-day build counts since the
+// given lower bound (J-06 D2 / MEET-2026-07-03-003). Read-only path → pool via
+// gen(nil). The sqlc query's WHERE tenant_id predicate is the only isolation
+// barrier under the BYPASSRLS engine pool (#106/#111).
+func (s *BuildStoreSqlc) BuildStatsByDay(ctx context.Context, tenantID string, since time.Time) ([]generated.BuildStatsByDayRow, error) {
+	return s.q.BuildStatsByDay(ctx, s.gen(nil), generated.BuildStatsByDayParams{
+		TenantID:  tenantID,
+		CreatedAt: pgtype.Timestamptz{Time: since, Valid: true},
+	})
 }

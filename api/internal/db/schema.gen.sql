@@ -676,6 +676,8 @@ CREATE TABLE public.subscriptions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     stripe_subscription_item_id text,
     account_id text NOT NULL,
+    amount_minor bigint,
+    currency text,
     CONSTRAINT subscriptions_plan_check CHECK ((plan = ANY (ARRAY['starter'::text, 'pro'::text, 'team'::text, 'enterprise'::text]))),
     CONSTRAINT subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'incomplete'::text, 'trialing'::text, 'unpaid'::text])))
 );

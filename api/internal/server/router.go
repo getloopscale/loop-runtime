@@ -465,6 +465,11 @@ func registerProtectedRoutes(
 		// NewBuildListHandlerWithGate (setup_orchestrator.go).
 		r.Get("/api/v1/projects/{name}/build-envs", cfg.BuildListHandler.BuildEnvs)
 	}
+	if cfg.BuildStatsHandler != nil {
+		// J-06 D2: tenant-scoped deploys aggregate for the Overview sparkline.
+		// Static /builds/stats — chi matches it before /projects/{name}/builds.
+		r.Get("/api/v1/builds/stats", cfg.BuildStatsHandler.Stats)
+	}
 	if cfg.RollbackHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
 	}
