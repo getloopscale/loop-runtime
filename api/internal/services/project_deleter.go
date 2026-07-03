@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -33,7 +35,7 @@ type ProjectDeleterDeps struct {
 	EnvTargetStore    db.EnvironmentTargetStore
 	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
-	ScalingStore      db.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
+	ScalingStore      store.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
 	Locker            EnvironmentLocker
 	GitOps            GitOpsPusher
 	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
@@ -53,7 +55,7 @@ type ProjectDeleter struct {
 	envTargetStore    db.EnvironmentTargetStore
 	releaseStore      db.ReleaseStore
 	projectStore      ProjectDeleteProjectStore
-	scalingStore      db.ScalingStore
+	scalingStore      store.ScalingStore
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
 	workflowCanceller WorkflowCanceller

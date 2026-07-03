@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -45,14 +47,14 @@ type ContainerDeliveryActivator struct {
 	// phaseACreateRelease persists per-app signature + SBOM metadata to
 	// release_app_attestations. Nil-safe: if absent, the activator falls
 	// back to the legacy releases.image_* columns only.
-	appAttestationStore db.AppAttestationStore
+	appAttestationStore store.AppAttestationStore
 }
 
 // ContainerDeliveryDeps holds dependencies for ContainerDeliveryActivator.
 type ContainerDeliveryDeps struct {
-	ReleaseStore      db.ReleaseStore
-	EnvTargetStore    db.EnvironmentTargetStore
-	EventStore        interface {
+	ReleaseStore   db.ReleaseStore
+	EnvTargetStore db.EnvironmentTargetStore
+	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	Sync              SyncClient
@@ -63,7 +65,7 @@ type ContainerDeliveryDeps struct {
 	// Sprint 6 / T3.1: per-app attestation store. May be nil during
 	// migration windows; phaseACreateRelease will skip per-app persistence
 	// and rely on the legacy releases.image_* columns.
-	AppAttestationStore db.AppAttestationStore
+	AppAttestationStore store.AppAttestationStore
 }
 
 // NewContainerDeliveryActivator creates a new ContainerDeliveryActivator.
@@ -73,14 +75,14 @@ func NewContainerDeliveryActivator(deps ContainerDeliveryDeps) *ContainerDeliver
 		syncTimeout = 600 * time.Second
 	}
 	return &ContainerDeliveryActivator{
-		releaseStore:      deps.ReleaseStore,
-		envTargetStore:    deps.EnvTargetStore,
-		eventStore:        deps.EventStore,
-		sync:              deps.Sync,
-		locker:            deps.Locker,
-		gitops:            deps.GitOps,
-		gitReader:         deps.GitReader,
-		argocdSyncTimeout: syncTimeout,
+		releaseStore:        deps.ReleaseStore,
+		envTargetStore:      deps.EnvTargetStore,
+		eventStore:          deps.EventStore,
+		sync:                deps.Sync,
+		locker:              deps.Locker,
+		gitops:              deps.GitOps,
+		gitReader:           deps.GitReader,
+		argocdSyncTimeout:   syncTimeout,
 		appAttestationStore: deps.AppAttestationStore,
 	}
 }
@@ -273,13 +275,13 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 		// the admission policy needs (D5: "ALL images signed"). The store
 		// is optional during migration windows; absence is non-fatal.
 		if c.appAttestationStore != nil && len(result.Apps) > 0 {
-			atts := make([]db.AppAttestation, 0, len(result.Apps))
+			atts := make([]store.AppAttestation, 0, len(result.Apps))
 			sbomCount := 0
 			for _, app := range result.Apps {
 				if app.Name == "" || app.ImageDigestSHA256 == "" {
 					continue // skip apps without a real digest
 				}
-				att := db.AppAttestation{
+				att := store.AppAttestation{
 					AppName:     app.Name,
 					ImageDigest: app.ImageDigestSHA256,
 				}

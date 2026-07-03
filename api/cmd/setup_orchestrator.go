@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -60,18 +62,18 @@ func wireProjectCap(store *db.PostgresProjectStore, checker db.ProjectCapChecker
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
-	Orchestrator      *services.BuildOrchestrator
-	BuildOrchestrator routes.BuildOrchestratorService
+	Orchestrator        *services.BuildOrchestrator
+	BuildOrchestrator   routes.BuildOrchestratorService
 	LogsHandler         *routes.LogsHandler
 	LogStreamHandler    *routes.LogStreamHandler
-	RollbackHandler   *routes.RollbackHandler
-	PromoteHandler    *routes.PromoteHandler
+	RollbackHandler     *routes.RollbackHandler
+	PromoteHandler      *routes.PromoteHandler
 	StatusHandler       *routes.StatusHandler
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *routes.ScaleHandler
-	BuildListHandler  *routes.BuildListHandler
-	ProjectDeleter    routes.ProjectDeleter
+	BuildListHandler    *routes.BuildListHandler
+	ProjectDeleter      routes.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 }
 
@@ -109,7 +111,7 @@ func setupOrchestrator(
 	// because the orchestrator depends on it via Deps.ScalingResolver. The
 	// `scaleApply` closure below reuses the same scalingStore (single source
 	// of truth for app_scaling_config IO).
-	scalingStore := db.NewPostgresScalingStore(dbAdapter)
+	scalingStore := store.NewPostgresScalingStore(dbAdapter)
 	scalingResolver := services.NewDBScalingResolver(scalingStore)
 
 	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
@@ -130,10 +132,10 @@ func setupOrchestrator(
 		ScalingResolver:   scalingResolver, // B40
 		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
 		// T1.3b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
-		// satisfies db.AppAttestationStore 1:1 — preserves ALL-signed
+		// satisfies store.AppAttestationStore 1:1 — preserves ALL-signed
 		// atomicity invariant + F-S2-01 FK race closure (SaveAppAttestations
 		// Tx requires non-nil tx for atomic release+attestation commit).
-		AppAttestationStore: db.NewAppAttestationStoreSqlc(dbAdapter),
+		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
 		AuditLogger: &db.AuditLogger{DB: dbAdapter},
@@ -230,7 +232,7 @@ func setupOrchestrator(
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
-	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
+	// The closure adapts routes.ScaleConfigInput ↔ store.ScalingConfig (avoids circular import).
 	// scalingStore declared above (before BuildOrchestrator) — single instance
 	// shared by scaleApply (write path) and ScalingResolver (read path).
 	// T7.1 of deep-review-remediation-plan (closes find_data_003 HIGH).
@@ -243,7 +245,7 @@ func setupOrchestrator(
 	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
-			c := &db.ScalingConfig{
+			c := &store.ScalingConfig{
 				TenantID:     in.TenantID,
 				ProjectID:    in.ProjectID,
 				Environment:  in.Environment,

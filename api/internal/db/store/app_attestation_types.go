@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // app_attestation_types.go — public types for the per-app attestation
 // domain that survive the T1.3b deletion of the legacy hand-rolled
@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // SBOM format constants — must match CHECK constraint in migration
@@ -89,7 +91,7 @@ type AppAttestationStore interface {
 	// rows can be committed atomically. Plan T2.4 D7 — eliminates the
 	// FK violation race where attestation insert raced ahead of
 	// release commit (F-S2-01).
-	SaveAppAttestationsTx(ctx context.Context, tx DBTX, releaseID, tenantID string, atts []AppAttestation) error
+	SaveAppAttestationsTx(ctx context.Context, tx db.DBTX, releaseID, tenantID string, atts []AppAttestation) error
 
 	// GetBuildAppAttestations returns all per-app attestations for the
 	// most recent release of a build. Empty slice if no release exists

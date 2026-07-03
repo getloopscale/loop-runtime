@@ -7,13 +7,15 @@ import (
 	"encoding/hex"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
-	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
@@ -29,16 +31,16 @@ type StoreDeps struct {
 	BuildStore       db.BuildStore
 	ReleaseStore     db.ReleaseStore
 	EnvTargetStore   *db.PostgresEnvironmentTargetStore
-	PreviewSlotStore *db.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
+	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
-	PgEventStore   *sse.PostgresEventStore
-	SecretStore    routes.SecretStore
-	BootstrapStore routes.BootstrapStore
-	DomainStore    *db.PostgresDomainStore
-	CellStore      *db.PostgresCellStore
-	SourceStore    source.SourceStore
-	ObjUploader    routes.ObjectUploader
-	Locker         *adapters.PoolEnvironmentLocker
+	PgEventStore     *sse.PostgresEventStore
+	SecretStore      routes.SecretStore
+	BootstrapStore   routes.BootstrapStore
+	DomainStore      *db.PostgresDomainStore
+	CellStore        *db.PostgresCellStore
+	SourceStore      source.SourceStore
+	ObjUploader      routes.ObjectUploader
+	Locker           *adapters.PoolEnvironmentLocker
 
 	// SSE adapter
 	BuildStoreReader sse.BuildStoreReader
@@ -73,7 +75,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	// 2026-06-07 D2 — single-slot preview store (Netlify-style).
 	// Phase 1 of plan 2026-06-07-preview-as-category-single-slot-plan.md.
-	previewSlotStore := db.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
+	previewSlotStore := store.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
 
 	// Secret store — SEC-001: encryption at rest when key is configured.
 	// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):

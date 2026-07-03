@@ -11,7 +11,7 @@ import (
 )
 
 // IdempotencyStore defines the cleanup contract for expired idempotency keys.
-// Implemented by db.PostgresIdempotencyStore.
+// Implemented by store.PostgresIdempotencyStore.
 type IdempotencyStore interface {
 	Cleanup(ctx context.Context) (int64, error)
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // app_attestation_wrapper.go — thin Go wrapper around sqlc-generated
 // Queries for the `release_app_attestations` table.
@@ -35,8 +35,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -53,7 +55,7 @@ var _ AppAttestationStore = (*AppAttestationStoreSqlc)(nil)
 // per-app attestation sidecar table.
 type AppAttestationStoreSqlc struct {
 	q    *generated.Queries
-	pool DBTX
+	pool db.DBTX
 }
 
 // NewAppAttestationStoreSqlc constructs a sqlc-backed per-app
@@ -61,7 +63,7 @@ type AppAttestationStoreSqlc struct {
 // (SaveAppAttestations + GetBuildAppAttestations + UpdateAppSBOM); the
 // tx variant requires the caller to pass a non-nil pgx.Tx-adapted
 // db.DBTX (per F-S2-01 closure).
-func NewAppAttestationStoreSqlc(pool DBTX) *AppAttestationStoreSqlc {
+func NewAppAttestationStoreSqlc(pool db.DBTX) *AppAttestationStoreSqlc {
 	return &AppAttestationStoreSqlc{
 		q:    generated.New(),
 		pool: pool,
@@ -72,12 +74,12 @@ func NewAppAttestationStoreSqlc(pool DBTX) *AppAttestationStoreSqlc {
 // concrete type does not implement SqlcBridge — by design (fail-fast
 // when test fixtures don't hold a real pgx connection; see T0.6 reshape
 // matrix).
-func (s *AppAttestationStoreSqlc) gen(tx DBTX) generated.DBTX {
+func (s *AppAttestationStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		panic(fmt.Sprintf(
 			"app_attestation_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
@@ -101,7 +103,7 @@ func (s *AppAttestationStoreSqlc) SaveAppAttestations(
 // letting the caller commit the release row + all attestation rows
 // atomically.
 func (s *AppAttestationStoreSqlc) SaveAppAttestationsTx(
-	ctx context.Context, tx DBTX, releaseID, tenantID string, atts []AppAttestation,
+	ctx context.Context, tx db.DBTX, releaseID, tenantID string, atts []AppAttestation,
 ) error {
 	if tx == nil {
 		return fmt.Errorf("app_attestation_store: SaveAppAttestationsTx requires non-nil tx")
@@ -113,7 +115,7 @@ func (s *AppAttestationStoreSqlc) SaveAppAttestationsTx(
 // any INSERT so we surface bad input as application errors before
 // touching the DB (partial writes would leak the ALL-signed contract).
 func (s *AppAttestationStoreSqlc) saveOn(
-	ctx context.Context, tx DBTX, releaseID, tenantID string, atts []AppAttestation,
+	ctx context.Context, tx db.DBTX, releaseID, tenantID string, atts []AppAttestation,
 ) error {
 	if releaseID == "" || tenantID == "" {
 		// Audit gap M02 #13 fix: typed LoopZeroError so the validation

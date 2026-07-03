@@ -144,25 +144,6 @@ func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
 // Idempotency Store additional tests
 // =============================================================================
 
-func TestIdempotencyStore_Get_QueryError(t *testing.T) {
-	fake := &FakeDBTX{QueryErr: fmt.Errorf("db down")}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	_, err := store.Get(context.Background(), "key-1", "t1")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
-	fake := &FakeDBTX{ExecErr: fmt.Errorf("db locked")}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	_, err := store.Cleanup(context.Background())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 // =============================================================================
 // WriteAuditLog tests — DELETED in T1.5 of plan

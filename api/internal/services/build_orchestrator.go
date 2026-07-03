@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 )
@@ -68,18 +70,18 @@ type AppAutoscalingSpec struct {
 // This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 type AppSpec struct {
 	Name        string              `json:"name"`
-	Type        string              `json:"type"`                        // "server", "worker", "frontend"
+	Type        string              `json:"type"` // "server", "worker", "frontend"
 	Port        int                 `json:"port"`
 	Path        string              `json:"path,omitempty"`
-	Runtime     string              `json:"runtime,omitempty"`            // services.json runtime: "python" | "node" — the build-strategy key (F-dom-2)
-	Build       string              `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
-	Start       string              `json:"start,omitempty"`              // T0.2: declared services.json start command (canonical Dockerfile CMD)
-	Dockerfile  string              `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
-	Rendering   string              `json:"rendering,omitempty"`          // v2: "static" or "server" (MEET-009)
-	Env         map[string]string   `json:"env,omitempty"`                // v2: build-time environment variables
-	Secrets     []string            `json:"secrets,omitempty"`            // declared secret names from loopzero.yaml
-	Replicas    int                 `json:"replicas,omitempty"`           // desired replica count (default: 1)
-	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"`        // HPA configuration
+	Runtime     string              `json:"runtime,omitempty"`     // services.json runtime: "python" | "node" — the build-strategy key (F-dom-2)
+	Build       string              `json:"build,omitempty"`       // v2: "dockerfile", "buildpack", "custom"
+	Start       string              `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
+	Dockerfile  string              `json:"dockerfile,omitempty"`  // v2: Dockerfile path relative to app path
+	Rendering   string              `json:"rendering,omitempty"`   // v2: "static" or "server" (MEET-009)
+	Env         map[string]string   `json:"env,omitempty"`         // v2: build-time environment variables
+	Secrets     []string            `json:"secrets,omitempty"`     // declared secret names from loopzero.yaml
+	Replicas    int                 `json:"replicas,omitempty"`    // desired replica count (default: 1)
+	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"` // HPA configuration
 }
 
 // GitOpsPusher abstracts the commit-and-push of manifests to the tenant GitOps
@@ -251,15 +253,15 @@ type BuildOrchestratorDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Workflow           WorkflowSubmitter
-	Sync               SyncClient
-	Locker             EnvironmentLocker
-	GitOps             GitOpsPusher
-	Delivery           DeliveryActivator // MEET-009: polymorphic release activation
-	RegistryURL        string        // Container registry URL for BuildPlan image tag resolution
-	ArgocdSyncTimeout  time.Duration // 0 = default 120s
-	KVClient           StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
-	BaseDomain         string              // Base domain for app hostnames
+	Workflow          WorkflowSubmitter
+	Sync              SyncClient
+	Locker            EnvironmentLocker
+	GitOps            GitOpsPusher
+	Delivery          DeliveryActivator   // MEET-009: polymorphic release activation
+	RegistryURL       string              // Container registry URL for BuildPlan image tag resolution
+	ArgocdSyncTimeout time.Duration       // 0 = default 120s
+	KVClient          StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
+	BaseDomain        string              // Base domain for app hostnames
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
@@ -273,7 +275,7 @@ type BuildOrchestratorDeps struct {
 	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
 	// container delivery activator persists per-app signature + SBOM
 	// metadata to release_app_attestations.
-	AppAttestationStore db.AppAttestationStore
+	AppAttestationStore store.AppAttestationStore
 	// AuditLogger persists supply-chain audit events. When non-nil and
 	// the build callback reports SUCCEEDED, the orchestrator emits one
 	// `image.signed` audit entry per app with a cosign signature
@@ -315,19 +317,19 @@ type BuildOrchestrator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	workflow          WorkflowSubmitter
-	sync              SyncClient
-	locker            EnvironmentLocker
-	gitops            GitOpsPusher
-	delivery          DeliveryActivator // MEET-009: polymorphic release activation
-	registryURL       string // Container registry URL for BuildPlan image tag resolution
-	argocdSyncTimeout time.Duration
-	kvClient          StaticRoutingClient // CF KV client for static frontend routing
-	baseDomain        string
-	planCap           PlanCapChecker  // B15: nil = enforcement disabled
-	kedaEnabled       bool            // gates scale-to-zero (min=0)
-	scalingResolver   ScalingResolver // B40: nil = yaml-only (backward-compat)
-	auditLogger       domain.AuditLogger // T1.2 mitigation #3: per-sign cosign audit
+	workflow            WorkflowSubmitter
+	sync                SyncClient
+	locker              EnvironmentLocker
+	gitops              GitOpsPusher
+	delivery            DeliveryActivator // MEET-009: polymorphic release activation
+	registryURL         string            // Container registry URL for BuildPlan image tag resolution
+	argocdSyncTimeout   time.Duration
+	kvClient            StaticRoutingClient // CF KV client for static frontend routing
+	baseDomain          string
+	planCap             PlanCapChecker        // B15: nil = enforcement disabled
+	kedaEnabled         bool                  // gates scale-to-zero (min=0)
+	scalingResolver     ScalingResolver       // B40: nil = yaml-only (backward-compat)
+	auditLogger         domain.AuditLogger    // T1.2 mitigation #3: per-sign cosign audit
 	deployTimelineSpawn DeployTimelineSpawner // plan T5.1 — nil-safe
 }
 
@@ -364,24 +366,24 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	}
 
 	return &BuildOrchestrator{
-		buildStore:        deps.BuildStore,
-		releaseStore:      deps.ReleaseStore,
-		envTargetStore:    deps.EnvTargetStore,
-		projectStore:      deps.ProjectStore,
-		eventStore:        deps.EventStore,
-		workflow:          deps.Workflow,
-		sync:              deps.Sync,
-		locker:            deps.Locker,
-		gitops:            deps.GitOps,
-		delivery:          delivery,
-		registryURL:       registryURL,
-		argocdSyncTimeout: syncTimeout,
-		kvClient:          deps.KVClient,
-		baseDomain:        deps.BaseDomain,
-		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
-		kedaEnabled:       deps.KEDAEnabled,
-		scalingResolver:   deps.ScalingResolver, // B40: nil-safe (resolveScaling handles)
-		auditLogger:       deps.AuditLogger,     // T1.2 mitigation #3: nil = no-op
+		buildStore:          deps.BuildStore,
+		releaseStore:        deps.ReleaseStore,
+		envTargetStore:      deps.EnvTargetStore,
+		projectStore:        deps.ProjectStore,
+		eventStore:          deps.EventStore,
+		workflow:            deps.Workflow,
+		sync:                deps.Sync,
+		locker:              deps.Locker,
+		gitops:              deps.GitOps,
+		delivery:            delivery,
+		registryURL:         registryURL,
+		argocdSyncTimeout:   syncTimeout,
+		kvClient:            deps.KVClient,
+		baseDomain:          deps.BaseDomain,
+		planCap:             deps.PlanCap, // B15: optional plan-cap enforcement
+		kedaEnabled:         deps.KEDAEnabled,
+		scalingResolver:     deps.ScalingResolver,     // B40: nil-safe (resolveScaling handles)
+		auditLogger:         deps.AuditLogger,         // T1.2 mitigation #3: nil = no-op
 		deployTimelineSpawn: deps.DeployTimelineSpawn, // plan T5.1: nil = no-op
 	}
 }

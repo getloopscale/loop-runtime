@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -538,7 +540,7 @@ func TestEntryAppFromLoopZeroYaml(t *testing.T) {
 // D2/D3/D6 — single-slot preview model (plan 2026-06-07-preview-as-category)
 // =============================================================================
 
-// fakePreviewSlotStore is the minimal db.PreviewSlotStore implementation
+// fakePreviewSlotStore is the minimal store.PreviewSlotStore implementation
 // for tests. Records every method invocation so D3 substitute behavior +
 // D6 cleanup chain can be asserted with method-by-method granularity.
 type fakePreviewSlotStore struct {
@@ -560,10 +562,10 @@ type fakePreviewSlotStore struct {
 	clearErr  error
 }
 
-func (f *fakePreviewSlotStore) Get(_ context.Context, _, _ string) (*db.PreviewSlot, error) {
+func (f *fakePreviewSlotStore) Get(_ context.Context, _, _ string) (*store.PreviewSlot, error) {
 	return nil, nil
 }
-func (f *fakePreviewSlotStore) ListByTenant(_ context.Context, _ string) ([]db.PreviewSlot, error) {
+func (f *fakePreviewSlotStore) ListByTenant(_ context.Context, _ string) ([]store.PreviewSlot, error) {
 	return nil, nil
 }
 func (f *fakePreviewSlotStore) Upsert(_ context.Context, _ db.DBTX, tenantID, projectID string, prNumber int32, branch, releaseID, url string) error {

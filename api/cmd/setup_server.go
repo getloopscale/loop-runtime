@@ -395,14 +395,14 @@ func buildServerConfig(
 // Sprint 6 / T1.2.
 // T1.3b (plan 2026-05-29-sqlc-migration v1.3): adapter inner type
 // widened from concrete *PostgresAppAttestationStore to
-// db.AppAttestationStore interface so AppAttestationStoreSqlc drops in
+// store.AppAttestationStore interface so AppAttestationStoreSqlc drops in
 // without churn.
 type appSBOMStoreAdapter struct {
-	inner db.AppAttestationStore
+	inner store.AppAttestationStore
 }
 
 func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
-	return &appSBOMStoreAdapter{inner: db.NewAppAttestationStoreSqlc(d)}
+	return &appSBOMStoreAdapter{inner: store.NewAppAttestationStoreSqlc(d)}
 }
 
 func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
@@ -645,13 +645,13 @@ func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID strin
 }
 
 // previewSlotLookupAdapter implements routes.PreviewSlotLookup using
-// the db.PreviewSlotStore.
+// the store.PreviewSlotStore.
 //
 // 2026-06-07 per-project model (migration 000028): ListPreviewSlots
 // returns ALL slots for the tenant — one per project. Empty slice
 // when the tenant has no previews; never nil.
 type previewSlotLookupAdapter struct {
-	store *db.PostgresPreviewSlotStore
+	store *store.PostgresPreviewSlotStore
 }
 
 func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]routes.PreviewSlotInfo, error) {

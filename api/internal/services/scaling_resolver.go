@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 // ScalingResolver merges yaml-supplied AppSpecs with persisted scaling
@@ -30,16 +30,16 @@ type ScalingResolver interface {
 	) ([]AppSpec, error)
 }
 
-// dbScalingResolver implements ScalingResolver via db.ScalingStore.
+// dbScalingResolver implements ScalingResolver via store.ScalingStore.
 // Nil-safe: a nil store falls back to returning the yaml unchanged
 // (defensive — preserves current behavior if wiring missing).
 type dbScalingResolver struct {
-	store db.ScalingStore
+	store store.ScalingStore
 }
 
 // NewDBScalingResolver constructs a resolver backed by the given store.
 // Passing nil produces a resolver that always returns yaml unchanged.
-func NewDBScalingResolver(store db.ScalingStore) ScalingResolver {
+func NewDBScalingResolver(store store.ScalingStore) ScalingResolver {
 	return &dbScalingResolver{store: store}
 }
 
@@ -69,7 +69,7 @@ func (r *dbScalingResolver) Resolve(
 	for i, app := range fromYAML {
 		row, err := r.store.GetByApp(ctx, tenantID, projectID, environment, app.Name)
 		if err != nil {
-			if errors.Is(err, db.ErrScalingConfigNotFound) {
+			if errors.Is(err, store.ErrScalingConfigNotFound) {
 				// No DB override — preserve yaml.
 				resolved[i] = app
 				continue
@@ -83,7 +83,7 @@ func (r *dbScalingResolver) Resolve(
 
 // applyScalingRow returns a copy of app with scaling fields overridden by row.
 // Other fields (Type, Port, Secrets, etc.) are preserved verbatim.
-func applyScalingRow(app AppSpec, row *db.ScalingConfig) AppSpec {
+func applyScalingRow(app AppSpec, row *store.ScalingConfig) AppSpec {
 	switch {
 	case row.ScaleToZero:
 		// KEDA scale-to-zero (D4): Deployment.spec.replicas=0, ScaledObject manages.

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -22,10 +24,10 @@ import (
 // BuildOrchestrator for triggering a build for a preview environment.
 //
 // Defined narrowly so that:
-//   1. PreviewService does not depend on the full BuildOrchestrator surface
-//      (ISP).
-//   2. Tests can supply a stub that asserts on the request without setting
-//      up the full build pipeline.
+//  1. PreviewService does not depend on the full BuildOrchestrator surface
+//     (ISP).
+//  2. Tests can supply a stub that asserts on the request without setting
+//     up the full build pipeline.
 type PreviewBuildSubmitter interface {
 	SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error)
 }
@@ -74,27 +76,27 @@ type PreviewCRSpec struct {
 //     external CRs).
 //   - Logger: defaults to slog.Default().
 type PreviewServiceDeps struct {
-	Store          db.PreviewStore
-	Builds         PreviewBuildSubmitter
+	Store  db.PreviewStore
+	Builds PreviewBuildSubmitter
 	// BuildApps is optional. When set, the preview service uses it to
 	// populate SubmitBuildRequest.Apps from the most recent SUCCEEDED
 	// build of the project. LIVE catch 2026-06-07 — without this the
 	// build orchestrator rejects with "WorkflowSpec.Plan must be non-nil".
-	BuildApps      PreviewBuildAppsLookup
-	CRCreator      PreviewCRCreator
-	BaseDomain     string
+	BuildApps  PreviewBuildAppsLookup
+	CRCreator  PreviewCRCreator
+	BaseDomain string
 	// PreviewPublicDomain is the wildcard root (Caddy/CF) for public
 	// preview URLs. Empty falls back to BaseDomain — see config.go
 	// PreviewPublicDomain doc for the canonical URL convention.
 	PreviewPublicDomain string
-	DefaultTTL     time.Duration
-	Logger         *slog.Logger
+	DefaultTTL          time.Duration
+	Logger              *slog.Logger
 	// Locker is optional — when set, CreatePreview wraps the Store/CR
 	// write path in `pg_advisory_xact_lock(tenant, project, branch)` so a
 	// rapid double-webhook for the same PR cannot race into two preview
 	// rows. T1.2 of deep-review-2026-05-10-remediation-plan
 	// (find_conc_preview_no_lock HIGH).
-	Locker         EnvironmentLocker
+	Locker EnvironmentLocker
 
 	// SlotStore is the single-slot SOT for preview deployments per tenant
 	// (D2/D3 of plan 2026-06-07-preview-as-category-single-slot-plan.md).
@@ -105,7 +107,7 @@ type PreviewServiceDeps struct {
 	// Optional — when nil, preview lifecycle still works via PreviewStore
 	// + CR; the single-slot SOT is skipped (legacy fallback, used in
 	// tests that don't exercise the substitute behavior).
-	SlotStore db.PreviewSlotStore
+	SlotStore store.PreviewSlotStore
 	// EnvTargets is the canonical env_targets store. When set,
 	// OnBuildCompleted (status=succeeded) writes a kind='preview' row
 	// for (tenant, project, preview-pr-N) so GitOps can render the
@@ -142,13 +144,13 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 // CreatePreview implements domain.PreviewService.CreatePreview.
 //
 // Steps (per ADR D3 / D4):
-//   1. Validate request fields.
-//   2. UPSERT the DB row (db.PreviewStore.Create). This makes the preview
-//      visible to API queries before any K8s/CR work.
-//   3. Best-effort: ensure the PreviewEnvironment CR. The controller
-//      reconciles namespace + workload from there.
-//   4. If a build submitter is wired, trigger a build for the preview's
-//      branch/commit. The build callback drives status transitions.
+//  1. Validate request fields.
+//  2. UPSERT the DB row (db.PreviewStore.Create). This makes the preview
+//     visible to API queries before any K8s/CR work.
+//  3. Best-effort: ensure the PreviewEnvironment CR. The controller
+//     reconciles namespace + workload from there.
+//  4. If a build submitter is wired, trigger a build for the preview's
+//     branch/commit. The build callback drives status transitions.
 //
 // Errors from steps 3 and 4 are logged but do NOT fail the create — the
 // preview row is the source of truth for the API and the controller will

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // preview_slot_wrapper.go — sqlc-backed implementation of
 // PostgresPreviewSlotStore. Created 2026-06-07 by plan
@@ -22,6 +22,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
@@ -31,14 +33,14 @@ import (
 
 // resolveSqlcDBTX selects the right DBTX (caller tx → fallback Exec)
 // and bridges to generated.DBTX.
-func (s *PostgresPreviewSlotStore) resolveSqlcDBTX(tx DBTX) (generated.DBTX, error) {
-	var target DBTX
+func (s *PostgresPreviewSlotStore) resolveSqlcDBTX(tx db.DBTX) (generated.DBTX, error) {
+	var target db.DBTX
 	if tx != nil {
 		target = tx
 	} else {
 		target = s.Exec
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("preview slot store: DBTX %T does not implement SqlcBridge", target)
 	}
@@ -46,7 +48,7 @@ func (s *PostgresPreviewSlotStore) resolveSqlcDBTX(tx DBTX) (generated.DBTX, err
 }
 
 func (s *PostgresPreviewSlotStore) queryBridge() (generated.DBTX, error) {
-	bridge, ok := s.Query.(SqlcBridge)
+	bridge, ok := s.Query.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("preview slot store: Query %T does not implement SqlcBridge", s.Query)
 	}
@@ -114,7 +116,7 @@ func generatedPreviewSlotToSlot(row generated.PreviewSlot) *PreviewSlot {
 // Upsert atomically inserts or replaces the slot. D3 substitute
 // behavior: ON CONFLICT (tenant_id) DO UPDATE replaces the previous
 // active PR with the new one.
-func (s *PostgresPreviewSlotStore) Upsert(ctx context.Context, tx DBTX, tenantID, projectID string, activePRNumber int32, activeBranch, activeReleaseID, url string) error {
+func (s *PostgresPreviewSlotStore) Upsert(ctx context.Context, tx db.DBTX, tenantID, projectID string, activePRNumber int32, activeBranch, activeReleaseID, url string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err
@@ -136,7 +138,7 @@ func (s *PostgresPreviewSlotStore) Upsert(ctx context.Context, tx DBTX, tenantID
 
 // Clear NULLs the active_* fields of a (tenant, project) slot.
 // Idempotent.
-func (s *PostgresPreviewSlotStore) Clear(ctx context.Context, tx DBTX, tenantID, projectID string) error {
+func (s *PostgresPreviewSlotStore) Clear(ctx context.Context, tx db.DBTX, tenantID, projectID string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err
@@ -153,7 +155,7 @@ func (s *PostgresPreviewSlotStore) Clear(ctx context.Context, tx DBTX, tenantID,
 
 // EnsureEmpty inserts an empty slot if absent, else clears active_*.
 // Used by tenant provision (D1 — preview category always present).
-func (s *PostgresPreviewSlotStore) EnsureEmpty(ctx context.Context, tx DBTX, tenantID, projectID string) error {
+func (s *PostgresPreviewSlotStore) EnsureEmpty(ctx context.Context, tx db.DBTX, tenantID, projectID string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err

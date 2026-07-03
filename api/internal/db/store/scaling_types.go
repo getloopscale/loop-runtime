@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // scaling_types.go — public types for the app_scaling_config
 // domain (per-app HPA / scale-to-zero configuration) that survive
@@ -15,6 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -126,7 +128,7 @@ type ScalingStore interface {
 	// change was made. If the incoming config has an unchanged
 	// ConfigHash relative to the stored row, Upsert returns
 	// (existing, false, nil) without DB write.
-	Upsert(ctx context.Context, tx DBTX, config *ScalingConfig) (final *ScalingConfig, changed bool, err error)
+	Upsert(ctx context.Context, tx db.DBTX, config *ScalingConfig) (final *ScalingConfig, changed bool, err error)
 
 	// ListByEnv returns all scaling configs for a (tenant, project,
 	// env).
@@ -134,14 +136,14 @@ type ScalingStore interface {
 
 	// Delete removes a scaling config row. Idempotent — returns nil
 	// if absent.
-	Delete(ctx context.Context, tx DBTX, tenantID, projectID, environment, appName string) error
+	Delete(ctx context.Context, tx db.DBTX, tenantID, projectID, environment, appName string) error
 
 	// DeleteByProject removes ALL scaling config rows for the given
 	// project. Used by ProjectDeleter to cascade so a future project
 	// of the same name does not inherit replicas / HPA state from
 	// its predecessor (which would surface as REPLICAS_EXCEED_PLAN
 	// on a clean redeploy). Idempotent.
-	DeleteByProject(ctx context.Context, tx DBTX, tenantID, projectID string) error
+	DeleteByProject(ctx context.Context, tx db.DBTX, tenantID, projectID string) error
 
 	// CountByTenant returns total scaling rows for a tenant. Used
 	// for plan-cap enforcement at API layer (e.g., free-tier limit).
@@ -155,12 +157,12 @@ type ScalingStore interface {
 // type preserved (db.DBTX); methods (scaling_wrapper.go) dispatch
 // through SqlcBridge to sqlc-generated queries.
 type PostgresScalingStore struct {
-	db DBTX
+	db db.DBTX
 }
 
 // NewPostgresScalingStore returns a Postgres-backed ScalingStore.
 // Preserved verbatim from legacy.
-func NewPostgresScalingStore(db DBTX) *PostgresScalingStore {
+func NewPostgresScalingStore(db db.DBTX) *PostgresScalingStore {
 	return &PostgresScalingStore{db: db}
 }
 

@@ -12,27 +12,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
-// fakeScalingStore is a stub implementing db.ScalingStore for tests.
+// fakeScalingStore is a stub implementing store.ScalingStore for tests.
 // Each test sets the desired GetByApp behavior via the get callback.
 type fakeScalingStore struct {
-	get func(ctx context.Context, tenantID, projectID, env, app string) (*db.ScalingConfig, error)
+	get func(ctx context.Context, tenantID, projectID, env, app string) (*store.ScalingConfig, error)
 }
 
-func (f *fakeScalingStore) GetByApp(ctx context.Context, tenantID, projectID, env, app string) (*db.ScalingConfig, error) {
+func (f *fakeScalingStore) GetByApp(ctx context.Context, tenantID, projectID, env, app string) (*store.ScalingConfig, error) {
 	if f.get == nil {
-		return nil, db.ErrScalingConfigNotFound
+		return nil, store.ErrScalingConfigNotFound
 	}
 	return f.get(ctx, tenantID, projectID, env, app)
 }
 
-func (f *fakeScalingStore) Upsert(ctx context.Context, tx db.DBTX, c *db.ScalingConfig) (*db.ScalingConfig, bool, error) {
+func (f *fakeScalingStore) Upsert(ctx context.Context, tx db.DBTX, c *store.ScalingConfig) (*store.ScalingConfig, bool, error) {
 	return c, false, nil
 }
 
-func (f *fakeScalingStore) ListByEnv(ctx context.Context, tenantID, projectID, env string) ([]db.ScalingConfig, error) {
+func (f *fakeScalingStore) ListByEnv(ctx context.Context, tenantID, projectID, env string) ([]store.ScalingConfig, error) {
 	return nil, nil
 }
 
@@ -62,11 +64,11 @@ func i32ptr(v int32) *int32 { return &v }
 
 func TestResolve_DBRowOverridesYAML_FixedReplicas(t *testing.T) {
 	store := &fakeScalingStore{
-		get: func(_ context.Context, _, _, _, app string) (*db.ScalingConfig, error) {
+		get: func(_ context.Context, _, _, _, app string) (*store.ScalingConfig, error) {
 			if app != "api" {
-				return nil, db.ErrScalingConfigNotFound
+				return nil, store.ErrScalingConfigNotFound
 			}
-			return &db.ScalingConfig{
+			return &store.ScalingConfig{
 				MinReplicas: 3,
 				MaxReplicas: 3,
 				ScaleToZero: false,
@@ -94,8 +96,8 @@ func TestResolve_DBRowOverridesYAML_FixedReplicas(t *testing.T) {
 
 func TestResolve_DBRowOverridesYAML_HPA(t *testing.T) {
 	store := &fakeScalingStore{
-		get: func(_ context.Context, _, _, _, _ string) (*db.ScalingConfig, error) {
-			return &db.ScalingConfig{
+		get: func(_ context.Context, _, _, _, _ string) (*store.ScalingConfig, error) {
+			return &store.ScalingConfig{
 				MinReplicas:  2,
 				MaxReplicas:  5,
 				TargetCPUPct: i32ptr(80),
@@ -127,8 +129,8 @@ func TestResolve_DBRowOverridesYAML_HPA(t *testing.T) {
 
 func TestResolve_DBRowOverridesYAML_KEDA(t *testing.T) {
 	store := &fakeScalingStore{
-		get: func(_ context.Context, _, _, _, _ string) (*db.ScalingConfig, error) {
-			return &db.ScalingConfig{
+		get: func(_ context.Context, _, _, _, _ string) (*store.ScalingConfig, error) {
+			return &store.ScalingConfig{
 				MinReplicas: 0,
 				MaxReplicas: 5,
 				ScaleToZero: true,
@@ -159,8 +161,8 @@ func TestResolve_DBRowOverridesYAML_KEDA(t *testing.T) {
 
 func TestResolve_NoDBRow_PreservesYAML(t *testing.T) {
 	store := &fakeScalingStore{
-		get: func(_ context.Context, _, _, _, _ string) (*db.ScalingConfig, error) {
-			return nil, db.ErrScalingConfigNotFound
+		get: func(_ context.Context, _, _, _, _ string) (*store.ScalingConfig, error) {
+			return nil, store.ErrScalingConfigNotFound
 		},
 	}
 	r := NewDBScalingResolver(store)
@@ -178,11 +180,11 @@ func TestResolve_NoDBRow_PreservesYAML(t *testing.T) {
 
 func TestResolve_MultipleApps_OnlyOverrideMatching(t *testing.T) {
 	store := &fakeScalingStore{
-		get: func(_ context.Context, _, _, _, app string) (*db.ScalingConfig, error) {
+		get: func(_ context.Context, _, _, _, app string) (*store.ScalingConfig, error) {
 			if app == "api" {
-				return &db.ScalingConfig{MinReplicas: 4, MaxReplicas: 4}, nil
+				return &store.ScalingConfig{MinReplicas: 4, MaxReplicas: 4}, nil
 			}
-			return nil, db.ErrScalingConfigNotFound
+			return nil, store.ErrScalingConfigNotFound
 		},
 	}
 	r := NewDBScalingResolver(store)
@@ -207,7 +209,7 @@ func TestResolve_MultipleApps_OnlyOverrideMatching(t *testing.T) {
 func TestResolve_DBError_PropagatesErr(t *testing.T) {
 	wantErr := errors.New("connection refused")
 	store := &fakeScalingStore{
-		get: func(_ context.Context, _, _, _, _ string) (*db.ScalingConfig, error) {
+		get: func(_ context.Context, _, _, _, _ string) (*store.ScalingConfig, error) {
 			return nil, wantErr
 		},
 	}

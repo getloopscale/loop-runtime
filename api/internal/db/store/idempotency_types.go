@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
+
+import "github.com/getloopscale/loopzero/api/internal/db"
 
 // idempotency_types.go — public types for the idempotency_keys
 // domain that survive the T2.1 (Batch A) deletion of the legacy
@@ -21,13 +23,5 @@ package db
 // SqlcBridge. All 3 prod call sites pass *PgxAdapter which satisfies
 // db.DBTX.
 type PostgresIdempotencyStore struct {
-	DB DBTX
+	DB db.DBTX
 }
-
-// timeToTimestamptz is a local conversion helper used by the
-// idempotency wrapper for the non-nullable expires_at column. Distinct
-// from timePtrToTimestamptz (which handles *time.Time → NULL) because
-// expires_at is always populated by the wrapper at insert time.
-//
-// Valid is set unconditionally because expires_at is supplied by
-// time.Now().Add(idempotencyTTL) — never a zero time.

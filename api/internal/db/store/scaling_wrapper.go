@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // scaling_wrapper.go — sqlc-backed implementation of
 // PostgresScalingStore. T2.1 Batch A #7 of plan
@@ -32,6 +32,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -53,7 +55,7 @@ func pgtypeUUIDToString(u pgtype.UUID) string {
 
 // GetByApp implements ScalingStore.
 func (s *PostgresScalingStore) GetByApp(ctx context.Context, tenantID, projectID, environment, appName string) (*ScalingConfig, error) {
-	bridge, ok := s.db.(SqlcBridge)
+	bridge, ok := s.db.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("scaling_store: DBTX %T does not implement SqlcBridge", s.db)
 	}
@@ -76,7 +78,7 @@ func (s *PostgresScalingStore) GetByApp(ctx context.Context, tenantID, projectID
 
 // Upsert implements ScalingStore. Returns (final, changed, err).
 // Idempotent short-circuit when ConfigHash matches existing.
-func (s *PostgresScalingStore) Upsert(ctx context.Context, tx DBTX, incoming *ScalingConfig) (*ScalingConfig, bool, error) {
+func (s *PostgresScalingStore) Upsert(ctx context.Context, tx db.DBTX, incoming *ScalingConfig) (*ScalingConfig, bool, error) {
 	if err := incoming.Validate(); err != nil {
 		return nil, false, err
 	}
@@ -91,7 +93,7 @@ func (s *PostgresScalingStore) Upsert(ctx context.Context, tx DBTX, incoming *Sc
 		return existing, false, nil
 	}
 
-	bridge, ok := tx.(SqlcBridge)
+	bridge, ok := tx.(db.SqlcBridge)
 	if !ok {
 		return nil, false, fmt.Errorf("scaling_store: Upsert tx %T does not implement SqlcBridge", tx)
 	}
@@ -121,7 +123,7 @@ func (s *PostgresScalingStore) Upsert(ctx context.Context, tx DBTX, incoming *Sc
 
 // ListByEnv implements ScalingStore.
 func (s *PostgresScalingStore) ListByEnv(ctx context.Context, tenantID, projectID, environment string) ([]ScalingConfig, error) {
-	bridge, ok := s.db.(SqlcBridge)
+	bridge, ok := s.db.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("scaling_store: DBTX %T does not implement SqlcBridge", s.db)
 	}
@@ -143,8 +145,8 @@ func (s *PostgresScalingStore) ListByEnv(ctx context.Context, tenantID, projectI
 }
 
 // Delete implements ScalingStore. Idempotent.
-func (s *PostgresScalingStore) Delete(ctx context.Context, tx DBTX, tenantID, projectID, environment, appName string) error {
-	bridge, ok := tx.(SqlcBridge)
+func (s *PostgresScalingStore) Delete(ctx context.Context, tx db.DBTX, tenantID, projectID, environment, appName string) error {
+	bridge, ok := tx.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("scaling_store: Delete tx %T does not implement SqlcBridge", tx)
 	}
@@ -164,12 +166,12 @@ func (s *PostgresScalingStore) Delete(ctx context.Context, tx DBTX, tenantID, pr
 // DeleteByProject implements ScalingStore. Cascade for project
 // deletion. Nil-tx fallback to s.db preserved (ProjectDeleter
 // pattern).
-func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx DBTX, tenantID, projectID string) error {
+func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx db.DBTX, tenantID, projectID string) error {
 	target := tx
 	if target == nil {
 		target = s.db
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("scaling_store: DeleteByProject target %T does not implement SqlcBridge", target)
 	}
@@ -187,7 +189,7 @@ func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx DBTX, ten
 // CountByTenant implements ScalingStore. Cast int64 → int (legacy
 // signature).
 func (s *PostgresScalingStore) CountByTenant(ctx context.Context, tenantID string) (int, error) {
-	bridge, ok := s.db.(SqlcBridge)
+	bridge, ok := s.db.(db.SqlcBridge)
 	if !ok {
 		return 0, fmt.Errorf("scaling_store: DBTX %T does not implement SqlcBridge", s.db)
 	}

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // preview_slot_types.go — public types for the preview_slot domain.
 // Created 2026-06-07 by plan 2026-06-07-preview-as-category-single-
@@ -19,6 +19,8 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // PreviewSlot represents the current preview deployment state for a
@@ -69,32 +71,32 @@ type PreviewSlotStore interface {
 	// CONFLICT (tenant_id, project_id) DO UPDATE replaces only the
 	// slot of the SAME project. PR in project B never touches
 	// project A's slot.
-	Upsert(ctx context.Context, tx DBTX, tenantID, projectID string, activePRNumber int32, activeBranch, activeReleaseID, url string) error
+	Upsert(ctx context.Context, tx db.DBTX, tenantID, projectID string, activePRNumber int32, activeBranch, activeReleaseID, url string) error
 
 	// Clear NULLs the active_* fields of the (tenant, project) slot,
 	// preserving the row for audit. Idempotent.
-	Clear(ctx context.Context, tx DBTX, tenantID, projectID string) error
+	Clear(ctx context.Context, tx db.DBTX, tenantID, projectID string) error
 
 	// EnsureEmpty inserts an empty slot row if absent for the
 	// (tenant, project), else clears active_* fields. Used by
 	// project provisioning to guarantee every project has a
 	// preview slot row (D1 consequence: preview category is always
 	// present).
-	EnsureEmpty(ctx context.Context, tx DBTX, tenantID, projectID string) error
+	EnsureEmpty(ctx context.Context, tx db.DBTX, tenantID, projectID string) error
 }
 
 // PostgresPreviewSlotStore implements PreviewSlotStore using
 // PostgreSQL via sqlc. Same dual-field design as the env_target
 // store: Exec for mutating methods (inside lock tx), Query for reads.
 type PostgresPreviewSlotStore struct {
-	Exec  DBTX
-	Query DBTX
+	Exec  db.DBTX
+	Query db.DBTX
 }
 
 // NewPostgresPreviewSlotStore creates a new PostgresPreviewSlotStore.
 // Both args MUST implement SqlcBridge; the prod call site passes the
 // same *PgxAdapter for both.
-func NewPostgresPreviewSlotStore(exec DBTX, query DBTX) *PostgresPreviewSlotStore {
+func NewPostgresPreviewSlotStore(exec db.DBTX, query db.DBTX) *PostgresPreviewSlotStore {
 	return &PostgresPreviewSlotStore{
 		Exec:  exec,
 		Query: query,

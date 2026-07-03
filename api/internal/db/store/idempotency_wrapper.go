@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // idempotency_wrapper.go — sqlc-backed implementation of
 // PostgresIdempotencyStore. T2.1 Batch A of plan
@@ -25,8 +25,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -39,7 +41,7 @@ const idempotencyTTL = 24 * time.Hour
 // Get retrieves an idempotency record by key, scoped to a tenant.
 // Returns nil (not error) when the key is not found or has expired.
 func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*middleware.IdempotencyRecord, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
 	}
@@ -69,7 +71,7 @@ func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID
 
 // Store persists an idempotency record with a 24-hour TTL.
 func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *middleware.IdempotencyRecord) error {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
 	}
@@ -93,7 +95,7 @@ func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *middleware.Id
 // Cleanup removes expired idempotency records and returns the number
 // removed. Background-job path; cross-tenant by design.
 func (s *PostgresIdempotencyStore) Cleanup(ctx context.Context) (int64, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return 0, fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
 	}

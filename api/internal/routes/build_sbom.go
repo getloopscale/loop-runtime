@@ -35,7 +35,7 @@ type BuildSBOMResponse struct {
 	Apps    []AppSBOMSummary `json:"apps"`
 }
 
-// AppSBOMInfo mirrors db.AppAttestationInfo without coupling routes to db.
+// AppSBOMInfo mirrors store.AppAttestationInfo without coupling routes to db.
 type AppSBOMInfo struct {
 	AppName            string
 	SBOMS3Key          string
