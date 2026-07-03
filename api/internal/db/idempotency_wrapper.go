@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -82,7 +83,7 @@ func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *middleware.Id
 		RequestHash:    rec.RequestHash,
 		ResponseStatus: int32(rec.ResponseStatus),
 		ResponseBody:   rec.ResponseBody,
-		ExpiresAt:      timeToTimestamptz(expiresAt),
+		ExpiresAt:      dbconv.TimeToTimestamptz(expiresAt),
 	}); err != nil {
 		return fmt.Errorf("idempotency store: insert failed: %w", err)
 	}

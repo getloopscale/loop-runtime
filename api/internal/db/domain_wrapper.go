@@ -37,6 +37,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -92,7 +93,7 @@ func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *domain.Cu
 		VerificationToken:  d.VerificationToken,
 		TlsStatus:          d.TLSStatus,
 		CfZoneID:           d.CFZoneID,
-		CfZoneStatus:       stringEmptyToNilPtr(d.CFZoneStatus),
+		CfZoneStatus:       dbconv.StringEmptyToNilPtr(d.CFZoneStatus),
 		CfNameservers:      d.CFNameservers,
 		DnsRecordsImported: d.DNSRecordsImported,
 	}); err != nil {
@@ -231,8 +232,8 @@ func (s *PostgresDomainStore) UpdateTLS(ctx context.Context, dom, tlsStatus stri
 	}
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainTLS(ctx, bridge, generated.UpdateCustomDomainTLSParams{
-		TlsStatus:    stringEmptyToNilPtr(tlsStatus),
-		TlsExpiresAt: timePtrToTimestamptz(expiresAt),
+		TlsStatus:    dbconv.StringEmptyToNilPtr(tlsStatus),
+		TlsExpiresAt: dbconv.TimePtrToTimestamptz(expiresAt),
 		Domain:       dom,
 	})
 	if err != nil {
@@ -252,7 +253,7 @@ func (s *PostgresDomainStore) UpdateFailure(ctx context.Context, dom, status, re
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainFailure(ctx, bridge, generated.UpdateCustomDomainFailureParams{
 		Status:        status,
-		FailureReason: stringEmptyToNilPtr(reason),
+		FailureReason: dbconv.StringEmptyToNilPtr(reason),
 		Domain:        dom,
 	})
 	if err != nil {
@@ -485,7 +486,7 @@ func (s *PostgresDomainStore) UpdateCFZoneStatus(ctx context.Context, dom, cfZon
 	}
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainCFZoneStatus(ctx, bridge, generated.UpdateCustomDomainCFZoneStatusParams{
-		CfZoneStatus: stringEmptyToNilPtr(cfZoneStatus),
+		CfZoneStatus: dbconv.StringEmptyToNilPtr(cfZoneStatus),
 		Domain:       dom,
 	})
 	if err != nil {

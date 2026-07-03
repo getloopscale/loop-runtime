@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -60,7 +61,7 @@ func (s *PostgresActiveTeamStore) SetActiveTenant(ctx context.Context, userID, t
 	q := generated.New()
 
 	if err := q.SetActiveTenantForUser(ctx, bridge.GeneratedDB(), generated.SetActiveTenantForUserParams{
-		ActiveTenantID: stringEmptyToNilPtr(tenantID),
+		ActiveTenantID: dbconv.StringEmptyToNilPtr(tenantID),
 		ID:             userID,
 	}); err != nil {
 		return fmt.Errorf("active team store: set: %w", err)

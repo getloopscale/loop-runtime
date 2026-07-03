@@ -45,6 +45,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -159,7 +160,7 @@ func WriteAuditLog(ctx context.Context, db DBTX, entry AuditEntry) error {
 		Actor:         entry.Actor,
 		ResourceType:  entry.ResourceType,
 		ResourceID:    entry.ResourceID,
-		CorrelationID: stringEmptyToNilPtr(entry.CorrelationID),
+		CorrelationID: dbconv.StringEmptyToNilPtr(entry.CorrelationID),
 		Metadata:      metadataJSON,
 	}); err != nil {
 		return fmt.Errorf("audit: insert: %w", err)

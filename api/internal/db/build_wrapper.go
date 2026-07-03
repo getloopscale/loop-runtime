@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -99,7 +100,7 @@ func (s *BuildStoreSqlc) Create(ctx context.Context, tx DBTX, build *Build) erro
 		Status:        build.Status,
 		CorrelationID: build.CorrelationID,
 		CreatedBy:     build.CreatedBy,
-		CommitSha:     stringEmptyToNilPtr(build.CommitSHA),
+		CommitSha:     dbconv.StringEmptyToNilPtr(build.CommitSHA),
 	})
 	if err != nil {
 		if isPGUniqueViolation(err) {
@@ -210,7 +211,7 @@ func (s *BuildStoreSqlc) SetErrorMessage(ctx context.Context, tx DBTX, buildID, 
 		return err
 	}
 	rows, err := s.q.SetBuildErrorMessage(ctx, s.gen(tx), generated.SetBuildErrorMessageParams{
-		ErrorMessage: stringEmptyToNilPtr(errorMessage),
+		ErrorMessage: dbconv.StringEmptyToNilPtr(errorMessage),
 		ID:           buildID,
 		TenantID:     current.TenantID,
 	})
@@ -231,7 +232,7 @@ func (s *BuildStoreSqlc) SetWorkflowID(ctx context.Context, tx DBTX, buildID, wo
 		return err
 	}
 	rows, err := s.q.SetBuildWorkflowID(ctx, s.gen(tx), generated.SetBuildWorkflowIDParams{
-		WorkflowID: stringEmptyToNilPtr(workflowID),
+		WorkflowID: dbconv.StringEmptyToNilPtr(workflowID),
 		ID:         buildID,
 		TenantID:   current.TenantID,
 	})

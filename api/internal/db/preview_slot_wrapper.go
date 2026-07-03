@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -124,9 +125,9 @@ func (s *PostgresPreviewSlotStore) Upsert(ctx context.Context, tx DBTX, tenantID
 		TenantID:        tenantID,
 		ProjectID:       projectID,
 		ActivePrNumber:  &prNum,
-		ActiveBranch:    stringEmptyToNilPtr(activeBranch),
-		ActiveReleaseID: stringEmptyToNilPtr(activeReleaseID),
-		Url:             stringEmptyToNilPtr(url),
+		ActiveBranch:    dbconv.StringEmptyToNilPtr(activeBranch),
+		ActiveReleaseID: dbconv.StringEmptyToNilPtr(activeReleaseID),
+		Url:             dbconv.StringEmptyToNilPtr(url),
 	}); err != nil {
 		return fmt.Errorf("preview slot store: upsert failed: %w", err)
 	}

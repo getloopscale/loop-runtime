@@ -36,6 +36,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -103,7 +104,7 @@ func (s *PostgresEnvironmentTargetStore) SetActive(ctx context.Context, tx DBTX,
 	}
 	q := generated.New()
 	if err := q.UpdateEnvironmentTargetActive(ctx, dbtx, generated.UpdateEnvironmentTargetActiveParams{
-		ActiveReleaseID: stringEmptyToNilPtr(releaseID),
+		ActiveReleaseID: dbconv.StringEmptyToNilPtr(releaseID),
 		TenantID:        tenantID,
 		ProjectID:       projectID,
 		Environment:     env,

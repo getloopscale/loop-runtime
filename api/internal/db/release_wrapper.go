@@ -37,6 +37,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"log/slog"
 	"time"
 
@@ -194,25 +195,25 @@ func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) erro
 		status = "READY"
 	}
 	params := generated.InsertReleaseParams{
-		ID:                       r.ID,
-		BuildID:                  r.BuildID,
-		TenantID:                 r.TenantID,
-		ProjectID:                r.ProjectID,
-		Environment:              r.Environment,
-		Status:                   status,
-		CorrelationID:            r.CorrelationID,
-		CreatedBy:                r.CreatedBy,
-		CreatedAt:                pgtype.Timestamptz{Time: createdAt, Valid: true},
+		ID:            r.ID,
+		BuildID:       r.BuildID,
+		TenantID:      r.TenantID,
+		ProjectID:     r.ProjectID,
+		Environment:   r.Environment,
+		Status:        status,
+		CorrelationID: r.CorrelationID,
+		CreatedBy:     r.CreatedBy,
+		CreatedAt:     pgtype.Timestamptz{Time: createdAt, Valid: true},
 		// Status defaulted above.
 
-		GitCommit:                stringEmptyToNilPtr(r.GitCommit),
+		GitCommit:                dbconv.StringEmptyToNilPtr(r.GitCommit),
 		GitMirrorStatus:          r.GitMirrorStatus,
 		Apps:                     r.Apps,
 		Artifacts:                r.Artifacts,
 		SideEffects:              r.SideEffects,
 		ImageDigest:              r.ImageDigest,
 		ImageSignature:           r.ImageSignature,
-		ImageSignedAt:            timePtrToTimestamptz(r.ImageSignedAt),
+		ImageSignedAt:            dbconv.TimePtrToTimestamptz(r.ImageSignedAt),
 		ImageAttestationRekorUrl: r.ImageAttestationRekorURL,
 	}
 
@@ -417,7 +418,7 @@ func (s *ReleaseStoreSqlc) SetGitCommit(ctx context.Context, tx DBTX, releaseID,
 		return err
 	}
 	_, err = s.q.SetReleaseGitCommit(ctx, s.gen(tx), generated.SetReleaseGitCommitParams{
-		GitCommit: stringEmptyToNilPtr(commitSHA),
+		GitCommit: dbconv.StringEmptyToNilPtr(commitSHA),
 		ID:        releaseID,
 		TenantID:  current.TenantID,
 	})
@@ -581,22 +582,4 @@ func generatedRowToRelease(row generated.Release) *Release {
 		r.ImageAttestationRekorURL = row.ImageAttestationRekorUrl
 	}
 	return r
-}
-
-// stringEmptyToNilPtr converts an empty string to a nil *string for sqlc
-// nullable columns. Non-empty strings get a heap-allocated pointer.
-func stringEmptyToNilPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-// timePtrToTimestamptz converts a *time.Time to a pgtype.Timestamptz. nil
-// → Valid=false.
-func timePtrToTimestamptz(p *time.Time) pgtype.Timestamptz {
-	if p == nil {
-		return pgtype.Timestamptz{}
-	}
-	return pgtype.Timestamptz{Time: *p, Valid: true}
 }

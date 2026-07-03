@@ -35,6 +35,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -151,7 +152,7 @@ func (s *AppAttestationStoreSqlc) saveOn(
 			AppName:            att.AppName,
 			ImageDigest:        att.ImageDigest,
 			ImageSignature:     att.ImageSignature,
-			SignedAt:           timePtrToTimestamptz(att.SignedAt),
+			SignedAt:           dbconv.TimePtrToTimestamptz(att.SignedAt),
 			SbomS3Key:          att.SBOMS3Key,
 			SbomFormat:         att.SBOMFormat,
 			SbomComponentCount: intPtrToInt32Ptr(att.SBOMComponentCount),
@@ -235,8 +236,8 @@ func (s *AppAttestationStoreSqlc) UpdateAppSBOM(
 	}
 
 	rows, err := s.q.UpdateAppSBOM(ctx, s.gen(nil), generated.UpdateAppSBOMParams{
-		SbomS3Key:          stringEmptyToNilPtr(s3Key),
-		SbomFormat:         stringEmptyToNilPtr(format),
+		SbomS3Key:          dbconv.StringEmptyToNilPtr(s3Key),
+		SbomFormat:         dbconv.StringEmptyToNilPtr(format),
 		SbomComponentCount: intToInt32Ptr(componentCount),
 		ReleaseID:          releaseID,
 		AppName:            appName,

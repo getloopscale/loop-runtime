@@ -10,12 +10,6 @@ package db
 // dbAdapter}` shape; only the methods (now in
 // idempotency_wrapper.go) switch to sqlc-generated calls.
 
-import (
-	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
-)
-
 // PostgresIdempotencyStore implements middleware.IdempotencyStore
 // backed by PostgreSQL via sqlc. Uses the idempotency_keys table
 // from migration 000001. TTL is 24 hours per spec §4.3.
@@ -37,6 +31,3 @@ type PostgresIdempotencyStore struct {
 //
 // Valid is set unconditionally because expires_at is supplied by
 // time.Now().Add(idempotencyTTL) — never a zero time.
-func timeToTimestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, Valid: true}
-}
