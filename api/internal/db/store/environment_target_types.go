@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // environment_target_types.go — public types for the
 // environment_targets domain that survive the T2.1 (Batch A #6)
@@ -11,6 +11,8 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // Environment target kinds (D2 of plan 2026-06-07-preview-as-category).
@@ -47,17 +49,17 @@ type EnvironmentTarget struct {
 // inside an existing transaction from withEnvironmentLock — they
 // NEVER start their own.
 type EnvironmentTargetStore interface {
-	SetDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error
-	SetActive(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID string) error
+	SetDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error
+	SetActive(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID string) error
 	Get(ctx context.Context, tenantID, projectID, env string) (*EnvironmentTarget, error)
 	ListByProject(ctx context.Context, tenantID, projectID string) ([]EnvironmentTarget, error)
-	DeleteTarget(ctx context.Context, tx DBTX, tenantID, projectID, env string) error
+	DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error
 
 	// D2: SetPreviewDesired upserts an env_target row with
 	// kind='preview'. Distinct from SetDesired (defaults
 	// kind='permanent') because once set, kind is immutable
 	// post-create (D2 consequence).
-	SetPreviewDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error
+	SetPreviewDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error
 
 	// D5 (Bug A fix): CountPermanent returns the number of distinct
 	// PERMANENT environments for a tenant across all projects. Used
@@ -78,7 +80,7 @@ type EnvironmentTargetStore interface {
 	// (DELETE matches 0 or 1 row). Used by
 	// PreviewService.DeletePreviewByPR to remove preview env_target
 	// rows on PR close.
-	DeleteByKind(ctx context.Context, tx DBTX, tenantID, projectID, env, kind string) error
+	DeleteByKind(ctx context.Context, tx db.DBTX, tenantID, projectID, env, kind string) error
 }
 
 // PostgresEnvironmentTargetStore implements EnvironmentTargetStore
@@ -93,14 +95,14 @@ type EnvironmentTargetStore interface {
 // the same *PgxAdapter; the dual-field design is preserved for
 // symmetric API.
 type PostgresEnvironmentTargetStore struct {
-	Exec  DBTX
-	Query DBTX
+	Exec  db.DBTX
+	Query db.DBTX
 }
 
 // NewPostgresEnvironmentTargetStore creates a new
 // PostgresEnvironmentTargetStore. Preserved verbatim from legacy so
 // the 2 prod call sites compile unchanged.
-func NewPostgresEnvironmentTargetStore(exec DBTX, query DBTX) *PostgresEnvironmentTargetStore {
+func NewPostgresEnvironmentTargetStore(exec db.DBTX, query db.DBTX) *PostgresEnvironmentTargetStore {
 	return &PostgresEnvironmentTargetStore{
 		Exec:  exec,
 		Query: query,

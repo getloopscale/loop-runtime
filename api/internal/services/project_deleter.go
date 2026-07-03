@@ -32,7 +32,7 @@ type ArgoSyncer interface {
 // ProjectDeleterDeps holds all dependencies for ProjectDeleter.
 type ProjectDeleterDeps struct {
 	BuildStore        db.BuildStore
-	EnvTargetStore    db.EnvironmentTargetStore
+	EnvTargetStore    store.EnvironmentTargetStore
 	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
 	ScalingStore      store.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
@@ -52,7 +52,7 @@ type ProjectDeleteProjectStore interface {
 // ProjectDeleter orchestrates project deletion across all layers.
 type ProjectDeleter struct {
 	buildStore        db.BuildStore
-	envTargetStore    db.EnvironmentTargetStore
+	envTargetStore    store.EnvironmentTargetStore
 	releaseStore      db.ReleaseStore
 	projectStore      ProjectDeleteProjectStore
 	scalingStore      store.ScalingStore

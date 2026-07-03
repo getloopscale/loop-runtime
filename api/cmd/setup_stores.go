@@ -30,14 +30,14 @@ import (
 type StoreDeps struct {
 	BuildStore       db.BuildStore
 	ReleaseStore     db.ReleaseStore
-	EnvTargetStore   *db.PostgresEnvironmentTargetStore
+	EnvTargetStore   *store.PostgresEnvironmentTargetStore
 	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
 	PgEventStore     *sse.PostgresEventStore
 	SecretStore      routes.SecretStore
 	BootstrapStore   routes.BootstrapStore
 	DomainStore      *db.PostgresDomainStore
-	CellStore        *db.PostgresCellStore
+	CellStore        *store.PostgresCellStore
 	SourceStore      source.SourceStore
 	ObjUploader      routes.ObjectUploader
 	Locker           *adapters.PoolEnvironmentLocker
@@ -72,7 +72,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1 absorption);
 	// panics on nil to surface mis-wired startups loud + fast.
 	releaseStore := db.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
-	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
+	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	// 2026-06-07 D2 — single-slot preview store (Netlify-style).
 	// Phase 1 of plan 2026-06-07-preview-as-category-single-slot-plan.md.
 	previewSlotStore := store.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
@@ -114,7 +114,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		SecretStore:      secretStore,
 		BootstrapStore:   &db.PostgresBootstrapStore{DB: dbAdapter},
 		DomainStore:      &db.PostgresDomainStore{DB: dbAdapter},
-		CellStore:        &db.PostgresCellStore{DB: dbAdapter},
+		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,
 		ObjUploader:      objUploader,
 		Locker:           &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool},

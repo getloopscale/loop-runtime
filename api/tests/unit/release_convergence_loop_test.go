@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -19,11 +21,11 @@ import (
 // --- Fakes for ReleaseConvergenceLoop ---
 
 type fakeConvergenceReleaseStore struct {
-	mu            sync.Mutex
-	pending       []db.Release
-	activeList    []db.Release          // releases returned by FindActiveReleases
-	statuses      map[string]string     // releaseID → current status (guarded by mu)
-	active        map[string]*db.Release // key: tenant:project:env → active release
+	mu         sync.Mutex
+	pending    []db.Release
+	activeList []db.Release           // releases returned by FindActiveReleases
+	statuses   map[string]string      // releaseID → current status (guarded by mu)
+	active     map[string]*db.Release // key: tenant:project:env → active release
 }
 
 func newFakeConvergenceReleaseStore() *fakeConvergenceReleaseStore {
@@ -109,7 +111,7 @@ func (f *fakeConvergenceEnvTargetStore) getActiveCalls() int {
 	defer f.mu.Unlock()
 	return f.activeCalls
 }
-func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeConvergenceEnvTargetStore) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -138,7 +140,7 @@ func (f *fakeConvergenceEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, 
 	f.activeCalls++
 	return nil
 }
-func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 
@@ -654,10 +656,10 @@ func TestHealthCheckActiveReleases_DetectsDivergence(t *testing.T) {
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
 		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
-			Interval:      1 * time.Second,     // slow PENDING ticker
+			Interval:       1 * time.Second,        // slow PENDING ticker
 			HealthInterval: 100 * time.Millisecond, // fast health ticker for test
-			SyncTimeout:   5 * time.Minute,
-			MaxConcurrent: 2,
+			SyncTimeout:    5 * time.Minute,
+			MaxConcurrent:  2,
 		},
 	)
 
@@ -693,10 +695,10 @@ func TestHealthCheckActiveReleases_ClearsDivergenceWhenHealthy(t *testing.T) {
 	loop := services.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
 		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
-			Interval:      1 * time.Second,
+			Interval:       1 * time.Second,
 			HealthInterval: 100 * time.Millisecond,
-			SyncTimeout:   5 * time.Minute,
-			MaxConcurrent: 2,
+			SyncTimeout:    5 * time.Minute,
+			MaxConcurrent:  2,
 		},
 	)
 

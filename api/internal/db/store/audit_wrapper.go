@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // audit_wrapper.go — sqlc-backed implementation of WriteAuditLog +
 // PostgresAuditStore.ListAuditEntries.
@@ -45,8 +45,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -66,7 +69,7 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 		return nil, 0, nil
 	}
 
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, 0, fmt.Errorf("audit: ListAuditEntries: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", s.DB)
 	}
@@ -75,8 +78,8 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 
 	// Nullable args via sqlc.narg form: nil/Valid=false → predicate
 	// short-circuits to TRUE (no filter applied).
-	actionArg := nullableString(filter.Action)
-	resourceTypeArg := nullableString(filter.ResourceType)
+	actionArg := dbconv.StringEmptyToNilPtr(filter.Action)
+	resourceTypeArg := dbconv.StringEmptyToNilPtr(filter.ResourceType)
 	sinceArg := optionalTimestamptz(filter.Since)
 
 	total, err := q.CountAuditLogForTenant(ctx, dbtx, generated.CountAuditLogForTenantParams{
@@ -138,7 +141,7 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 // shape (table columns, parameter order, INSERT semantic) is
 // identical to the legacy raw INSERT — verified by sqlc-emitting
 // the same VALUES tuple from queries/audit.sql InsertAuditLog.
-func WriteAuditLog(ctx context.Context, db DBTX, entry AuditEntry) error {
+func WriteAuditLog(ctx context.Context, dbtx db.DBTX, entry AuditEntry) error {
 	var metadataJSON []byte
 	if entry.Metadata != nil {
 		var err error
@@ -148,9 +151,9 @@ func WriteAuditLog(ctx context.Context, db DBTX, entry AuditEntry) error {
 		}
 	}
 
-	bridge, ok := db.(SqlcBridge)
+	bridge, ok := dbtx.(db.SqlcBridge)
 	if !ok {
-		return fmt.Errorf("audit: WriteAuditLog: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", db)
+		return fmt.Errorf("audit: WriteAuditLog: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", dbtx)
 	}
 
 	q := generated.New()
@@ -172,16 +175,6 @@ func WriteAuditLog(ctx context.Context, db DBTX, entry AuditEntry) error {
 // Conversion helpers (audit-specific; shared with other wrappers via
 // release_wrapper.go for stringEmptyToNilPtr + timePtrToTimestamptz)
 // =========================================================================
-
-// nullableString maps an empty string to nil (NULL semantics for the
-// nullable sqlc.narg('action')::text + sqlc.narg('resource_type')::text
-// predicates).
-func nullableString(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
 
 // optionalTimestamptz maps a zero time.Time to Valid=false (NULL
 // semantics for the nullable sqlc.narg('since')::timestamptz predicate).

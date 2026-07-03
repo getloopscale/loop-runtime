@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -37,11 +39,11 @@ func (f *fakeEnvTargetStoreStatic) SetActive(_ context.Context, _ db.DBTX, tenan
 	return nil
 }
 
-func (f *fakeEnvTargetStoreStatic) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreStatic) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 
-func (f *fakeEnvTargetStoreStatic) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreStatic) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 

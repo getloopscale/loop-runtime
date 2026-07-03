@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -105,15 +107,16 @@ func (f *fakeEnvTargetStoreContainer) SetDesired(_ context.Context, _ db.DBTX, t
 func (f *fakeEnvTargetStoreContainer) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
 	return nil
 }
-func (f *fakeEnvTargetStoreContainer) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreContainer) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
-func (f *fakeEnvTargetStoreContainer) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreContainer) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeEnvTargetStoreContainer) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
 	return nil
 }
+
 // 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
 func (f *fakeEnvTargetStoreContainer) SetPreviewDesired(_ context.Context, _ db.DBTX, t, p, e, rel, _, _ string) error {
 	// Same map as SetDesired; tests assert on key shape, not kind.

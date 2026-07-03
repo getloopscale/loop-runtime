@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -60,7 +62,7 @@ type ReleaseConvergenceStore interface {
 // active map to prevent duplicates, ticker-based polling.
 type ReleaseConvergenceLoop struct {
 	releaseStore   ReleaseConvergenceStore
-	envTargetStore db.EnvironmentTargetStore
+	envTargetStore store.EnvironmentTargetStore
 	sync_          SyncClient
 	locker         EnvironmentLocker
 	eventStore     interface {
@@ -86,7 +88,7 @@ type ReleaseConvergenceLoop struct {
 // NewReleaseConvergenceLoop creates the convergence loop.
 func NewReleaseConvergenceLoop(
 	releaseStore ReleaseConvergenceStore,
-	envTargetStore db.EnvironmentTargetStore,
+	envTargetStore store.EnvironmentTargetStore,
 	syncClient SyncClient,
 	locker EnvironmentLocker,
 	eventStore interface {

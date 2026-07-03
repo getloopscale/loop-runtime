@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -97,10 +99,10 @@ func (f *fakeConvergenceEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, 
 	f.active[t+"-"+p+"-"+e] = rel
 	return nil
 }
-func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeConvergenceEnvTargetStore) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
-func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeConvergenceEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeConvergenceEnvTargetStore) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -393,9 +395,9 @@ func TestReleaseConvergenceLoop_HealthCheck_ActiveUnhealthy_EmitsMetric(t *testi
 // returns a configurable error from TriggerSync. Mirrors fake pattern
 // used in the rest of this file (no testify, no mockery).
 type l21SyncClient struct {
-	triggerCount    int
-	terminateCount  int
-	triggerErr      error
+	triggerCount   int
+	terminateCount int
+	triggerErr     error
 }
 
 func (c *l21SyncClient) TriggerSync(_ context.Context, _ string) error {

@@ -4,10 +4,6 @@
 package db
 
 import (
-	"context"
-	"fmt"
-	"testing"
-
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -97,16 +93,6 @@ import (
 
 // Refactored into TestEnvironmentTargetStore_Mutators in stores_test.go.
 
-func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
-	fake := &FakeDBTX{ExecErr: fmt.Errorf("pg down")}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.SetDesired(context.Background(), fake, "t1", "p1", "prod", "rel-1", "u1", "c1")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 // =============================================================================
 // Domain Store tests — DELETED in T2.1 #9 of plan
 // 2026-05-29-sqlc-migration v1.3
@@ -143,7 +129,6 @@ func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
 // =============================================================================
 // Idempotency Store additional tests
 // =============================================================================
-
 
 // =============================================================================
 // WriteAuditLog tests — DELETED in T1.5 of plan

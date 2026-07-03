@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 )
@@ -72,7 +74,7 @@ func (f *fakeBuildStoreDeleter) CancelActiveBuilds(_ context.Context, _ db.DBTX,
 }
 
 type fakeEnvTargetStoreDeleter struct {
-	targets       []db.EnvironmentTarget
+	targets       []store.EnvironmentTarget
 	deletedTarget bool
 }
 
@@ -82,10 +84,10 @@ func (f *fakeEnvTargetStoreDeleter) SetDesired(_ context.Context, _ db.DBTX, _, 
 func (f *fakeEnvTargetStoreDeleter) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
 	return nil
 }
-func (f *fakeEnvTargetStoreDeleter) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreDeleter) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
-func (f *fakeEnvTargetStoreDeleter) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreDeleter) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return f.targets, nil
 }
 func (f *fakeEnvTargetStoreDeleter) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -271,7 +273,7 @@ func TestProjectDeleter_SingleEnv_FullCascade(t *testing.T) {
 
 func TestProjectDeleter_AllEnvs_DeletesProjectRecord(t *testing.T) {
 	ets := &fakeEnvTargetStoreDeleter{
-		targets: []db.EnvironmentTarget{
+		targets: []store.EnvironmentTarget{
 			{TenantID: "tn-1", ProjectID: "my-app", Environment: "production"},
 			{TenantID: "tn-1", ProjectID: "my-app", Environment: "staging"},
 		},
@@ -374,7 +376,7 @@ func TestProjectDeleter_NilWorkflowCanceller_DoesNotPanic(t *testing.T) {
 		Locker:            &fakeLockerDeleter{},
 		GitOps:            &fakeGitOpsDeleter{},
 		WorkflowCanceller: nil, // nil-safe
-		Sync:              nil,  // nil-safe
+		Sync:              nil, // nil-safe
 	})
 
 	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
@@ -424,7 +426,7 @@ func TestProjectDeleter_UsesProjectNameForGitOps(t *testing.T) {
 func TestProjectDeleter_CascadesReleaseCancel(t *testing.T) {
 	rs := &fakeReleaseStoreDeleter{cancelledCount: 3}
 	ets := &fakeEnvTargetStoreDeleter{
-		targets: []db.EnvironmentTarget{
+		targets: []store.EnvironmentTarget{
 			{TenantID: "tn-1", ProjectID: "my-app", Environment: "production"},
 			{TenantID: "tn-1", ProjectID: "my-app", Environment: "staging"},
 		},
@@ -478,7 +480,6 @@ func TestProjectDeleter_NilReleaseStore_NoPanic(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
 
 // AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
 func (f *fakeReleaseStoreDeleter) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {

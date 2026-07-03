@@ -54,7 +54,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
 	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1).
 	releaseStore := db.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
-	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
+	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	domainStore := &db.PostgresDomainStore{DB: dbAdapter}
 
 	// Environment locker (pg_advisory_xact_lock, roadmap Rule 6).

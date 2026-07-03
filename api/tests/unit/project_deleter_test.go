@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/services"
@@ -18,9 +20,9 @@ import (
 
 // fakeDeleteBuildStore implements db.BuildStore (only CancelActiveBuilds is used by ProjectDeleter).
 type fakeDeleteBuildStore struct {
-	cancelledByEnv    map[string]int      // key: "tenant:project:env" -> count
-	workflowsByEnv    map[string][]string // key: "tenant:project:env" -> workflow IDs
-	cancelErr         error
+	cancelledByEnv map[string]int      // key: "tenant:project:env" -> count
+	workflowsByEnv map[string][]string // key: "tenant:project:env" -> workflow IDs
+	cancelErr      error
 }
 
 func newFakeDeleteBuildStore() *fakeDeleteBuildStore {
@@ -41,8 +43,8 @@ func (f *fakeDeleteBuildStore) CancelActiveBuilds(_ context.Context, _ db.DBTX, 
 }
 
 // Unused methods — satisfy the interface.
-func (f *fakeDeleteBuildStore) Create(context.Context, db.DBTX, *db.Build) error        { return nil }
-func (f *fakeDeleteBuildStore) GetByID(context.Context, string) (*db.Build, error)       { return nil, nil }
+func (f *fakeDeleteBuildStore) Create(context.Context, db.DBTX, *db.Build) error   { return nil }
+func (f *fakeDeleteBuildStore) GetByID(context.Context, string) (*db.Build, error) { return nil, nil }
 func (f *fakeDeleteBuildStore) GetByIDForTenant(context.Context, string, string) (*db.Build, error) {
 	return nil, nil
 }
@@ -77,9 +79,9 @@ func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context, string) ([]db.B
 	return nil, nil
 }
 
-// fakeDeleteEnvTargetStore implements db.EnvironmentTargetStore for delete tests.
+// fakeDeleteEnvTargetStore implements store.EnvironmentTargetStore for delete tests.
 type fakeDeleteEnvTargetStore struct {
-	targets   []db.EnvironmentTarget
+	targets   []store.EnvironmentTarget
 	listErr   error
 	deleteErr error
 	deleted   []string // track deleted environments
@@ -89,7 +91,7 @@ func newFakeDeleteEnvTargetStore() *fakeDeleteEnvTargetStore {
 	return &fakeDeleteEnvTargetStore{}
 }
 
-func (f *fakeDeleteEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeDeleteEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -110,7 +112,7 @@ func (f *fakeDeleteEnvTargetStore) SetDesired(context.Context, db.DBTX, string, 
 func (f *fakeDeleteEnvTargetStore) SetActive(context.Context, db.DBTX, string, string, string, string) error {
 	return nil
 }
-func (f *fakeDeleteEnvTargetStore) Get(context.Context, string, string, string) (*db.EnvironmentTarget, error) {
+func (f *fakeDeleteEnvTargetStore) Get(context.Context, string, string, string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 
@@ -258,7 +260,7 @@ func TestProjectDeleterDeleteAllEnvironments(t *testing.T) {
 	buildStore.cancelledByEnv["tenant-1:my-saas:staging"] = 3
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
-	envTargetStore.targets = []db.EnvironmentTarget{
+	envTargetStore.targets = []store.EnvironmentTarget{
 		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "production"},
 		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "staging"},
 	}
@@ -463,7 +465,7 @@ func TestProjectDeleterDeleteAllEnvsProjectDeleteFails(t *testing.T) {
 	// This is non-fatal (logged as warning).
 	buildStore := newFakeDeleteBuildStore()
 	envTargetStore := newFakeDeleteEnvTargetStore()
-	envTargetStore.targets = []db.EnvironmentTarget{
+	envTargetStore.targets = []store.EnvironmentTarget{
 		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "production"},
 	}
 
@@ -576,7 +578,7 @@ func TestProjectDeleterDeleteAllEnvsNoEnvironments(t *testing.T) {
 	// Arrange — project has no environments (already cleaned or never deployed)
 	buildStore := newFakeDeleteBuildStore()
 	envTargetStore := newFakeDeleteEnvTargetStore()
-	envTargetStore.targets = []db.EnvironmentTarget{} // empty
+	envTargetStore.targets = []store.EnvironmentTarget{} // empty
 
 	projectStore := &fakeDeleteProjectStore{}
 	locker := &fakeDeleteLocker{}

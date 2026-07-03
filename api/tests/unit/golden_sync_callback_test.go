@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -131,7 +133,7 @@ type fakeSyncEnvTargetStore struct {
 	activeCalls int
 }
 
-func (f *fakeSyncEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeSyncEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeSyncEnvTargetStore) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -144,7 +146,7 @@ func (f *fakeSyncEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, _, _, _
 	f.activeCalls++
 	return nil
 }
-func (f *fakeSyncEnvTargetStore) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeSyncEnvTargetStore) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 

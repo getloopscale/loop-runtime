@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -97,7 +99,7 @@ func ActivateReleaseKernel(
 	tx db.DBTX,
 	release *db.Release,
 	releaseStore ReleaseActivationStore,
-	envTargetStore db.EnvironmentTargetStore,
+	envTargetStore store.EnvironmentTargetStore,
 	eventStore ReleaseActivationEventStore,
 	apps []ActivationAppInfo,
 	durationSecs int,

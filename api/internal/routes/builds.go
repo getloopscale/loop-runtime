@@ -49,15 +49,15 @@ type AppAutoscalingInput struct {
 
 // AppInput describes a single app from the CLI request.
 type AppInput struct {
-	Name      string               `json:"name"`
-	Type      string               `json:"type,omitempty"`       // "server", "worker", "frontend"
-	Port      int                  `json:"port,omitempty"`
-	Path      string               `json:"path,omitempty"`
-	Runtime   string               `json:"runtime,omitempty"`     // services.json runtime: "python" | "node" — the build-strategy key (T1, F-dom-2)
-	Build     string               `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
-	Start     string               `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
-	Rendering string               `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
-	Secrets   []string             `json:"secrets,omitempty"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type,omitempty"` // "server", "worker", "frontend"
+	Port      int      `json:"port,omitempty"`
+	Path      string   `json:"path,omitempty"`
+	Runtime   string   `json:"runtime,omitempty"`   // services.json runtime: "python" | "node" — the build-strategy key (T1, F-dom-2)
+	Build     string   `json:"build,omitempty"`     // "dockerfile", "buildpack", "custom"
+	Start     string   `json:"start,omitempty"`     // T0.2: declared services.json start command (canonical Dockerfile CMD)
+	Rendering string   `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Secrets   []string `json:"secrets,omitempty"`
 	// B15: scaling config — either Replicas OR Autoscaling (never both).
 	// Orchestrator enforces plan caps and mutual exclusion.
 	Replicas    int                  `json:"replicas,omitempty"`
@@ -168,7 +168,7 @@ type AdmissionChecker interface {
 
 // CellResolver resolves the cell_id for a given tenant.
 // MEET-053 A-06: Replaces hardcoded DefaultCellID in admission checks.
-// Implemented by db.PostgresCellStore.GetTenantCellID.
+// Implemented by store.PostgresCellStore.GetTenantCellID.
 type CellResolver interface {
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
@@ -179,12 +179,12 @@ type CellResolver interface {
 // detected by the BuildReconcileLoop which polls Argo Workflow CRDs from the
 // control plane. The build cluster no longer calls the API.
 type BuildHandler struct {
-	orch          BuildOrchestratorService
-	logger        *slog.Logger
-	admission     AdmissionChecker     // nil = disabled, no-op
-	cellResolver  CellResolver         // MEET-053: resolves tenant → cell_id per-request
-	envEnsurer    EnvironmentEnsurer   // Plan T2.2 D5: auto-create env on first deploy --env <novo>
-	secretResync  SecretResyncer       // V9 L20: resync PG secrets to workload K8s post-envEnsurer
+	orch         BuildOrchestratorService
+	logger       *slog.Logger
+	admission    AdmissionChecker   // nil = disabled, no-op
+	cellResolver CellResolver       // MEET-053: resolves tenant → cell_id per-request
+	envEnsurer   EnvironmentEnsurer // Plan T2.2 D5: auto-create env on first deploy --env <novo>
+	secretResync SecretResyncer     // V9 L20: resync PG secrets to workload K8s post-envEnsurer
 }
 
 // NewBuildHandler creates a new BuildHandler.
@@ -625,4 +625,3 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// errors that genuinely came from outside BuildOrchestrator.SubmitBuild.
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 }
-

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	pkgid "github.com/getloopscale/loopzero/pkg/id"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -105,18 +107,18 @@ func (f *fakePromotionReleaseStore) GetByIDForTenant(_ context.Context, _, relea
 }
 
 type fakePromotionEnvTargetStore struct {
-	targets map[string]*db.EnvironmentTarget
+	targets map[string]*store.EnvironmentTarget
 	desired map[string]string
 }
 
 func newFakePromotionEnvTargetStore() *fakePromotionEnvTargetStore {
 	return &fakePromotionEnvTargetStore{
-		targets: make(map[string]*db.EnvironmentTarget),
+		targets: make(map[string]*store.EnvironmentTarget),
 		desired: make(map[string]string),
 	}
 }
 
-func (f *fakePromotionEnvTargetStore) Get(_ context.Context, tenant, project, env string) (*db.EnvironmentTarget, error) {
+func (f *fakePromotionEnvTargetStore) Get(_ context.Context, tenant, project, env string) (*store.EnvironmentTarget, error) {
 	return f.targets[tenant+"-"+project+"-"+env], nil
 }
 
@@ -153,8 +155,8 @@ func (f *fakePromotionGitPusher) Push(_ context.Context, opts GitOpsPushOpts) (s
 }
 
 type fakePromotionSyncClient struct {
-	synced   bool
-	syncErr  error
+	synced  bool
+	syncErr error
 }
 
 func (f *fakePromotionSyncClient) TriggerSync(_ context.Context, _ string) error {
@@ -287,10 +289,10 @@ func TestPromote_SameEnvironment(t *testing.T) {
 
 	// Act
 	_, err := orch.Promote(context.Background(), PromotionRequest{
-		TenantID:    "tn-1",
-		ProjectID:   "proj-1",
-		FromEnv:     "staging",
-		ToEnv:       "staging",
+		TenantID:  "tn-1",
+		ProjectID: "proj-1",
+		FromEnv:   "staging",
+		ToEnv:     "staging",
 	})
 
 	// Assert
@@ -319,10 +321,10 @@ func TestPromote_NoSourceRelease(t *testing.T) {
 
 	// Act
 	_, err := orch.Promote(context.Background(), PromotionRequest{
-		TenantID:    "tn-1",
-		ProjectID:   "proj-1",
-		FromEnv:     "staging",
-		ToEnv:       "production",
+		TenantID:  "tn-1",
+		ProjectID: "proj-1",
+		FromEnv:   "staging",
+		ToEnv:     "production",
 	})
 
 	// Assert
@@ -359,10 +361,10 @@ func TestPromote_NoGitCommit(t *testing.T) {
 
 	// Act
 	_, err := orch.Promote(context.Background(), PromotionRequest{
-		TenantID:    "tn-1",
-		ProjectID:   "proj-1",
-		FromEnv:     "staging",
-		ToEnv:       "production",
+		TenantID:  "tn-1",
+		ProjectID: "proj-1",
+		FromEnv:   "staging",
+		ToEnv:     "production",
 	})
 
 	// Assert
@@ -651,7 +653,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		BaseDomain:   "loopzero.local",          // internal cluster domain (#61 leaker)
+		BaseDomain:   "loopzero.local",           // internal cluster domain (#61 leaker)
 		PublicDomain: "prod-dev.loopzero.example", // canonical public — should win
 		Logger:       slog.Default(),
 	})

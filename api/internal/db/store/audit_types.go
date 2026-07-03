@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // audit_types.go — public types for the audit_log domain that survive
 // the T1.5 deletion of the legacy hand-rolled `audit.go` +
@@ -23,6 +23,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // AuditEntry represents a single audit log entry.
@@ -46,7 +48,7 @@ type AuditEntry struct {
 // sqlc-generated InsertAuditLog. The 1 prod call site
 // (setup_orchestrator.go) passes *PgxAdapter which satisfies both.
 type AuditLogger struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // LogAudit implements domain.AuditLogger.
@@ -83,5 +85,5 @@ func (a *AuditLogger) LogAudit(ctx context.Context, tenantID, action, actor, res
 // internals are reused via a sqlc-backed ListAuditEntries that the
 // legacy method shape forwards to.
 type PostgresAuditStore struct {
-	DB DBTX
+	DB db.DBTX
 }

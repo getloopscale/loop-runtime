@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // cell_wrapper.go — sqlc-backed implementation of PostgresCellStore.
 // T2.2 (Batch B #2) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
@@ -32,6 +32,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 
@@ -82,12 +84,12 @@ func (s *PostgresCellStore) GetTenantCellID(ctx context.Context, tenantID string
 
 // PinTenantToCell implements services.CellPinnerStore. Atomic
 // 4-step sequence:
-//   1. validate tenant exists → ErrCellPinnerTenantNotFound
-//   2. validate cell exists + status='active' → ErrCellPinnerCellNotFound/
-//      ErrCellPinnerNotPinnable
-//   3. capacity check (NULL = unlimited; current excludes moving tenant)
-//      → ErrCellPinnerAtCapacity
-//   4. UPDATE tenants.cell_id, RETURNING previous cell_id
+//  1. validate tenant exists → ErrCellPinnerTenantNotFound
+//  2. validate cell exists + status='active' → ErrCellPinnerCellNotFound/
+//     ErrCellPinnerNotPinnable
+//  3. capacity check (NULL = unlimited; current excludes moving tenant)
+//     → ErrCellPinnerAtCapacity
+//  4. UPDATE tenants.cell_id, RETURNING previous cell_id
 //
 // CHG-2026-04-30-DELETE-SINGLE-CELL: wires admin tenant-pin endpoint
 // previously dormant in router.go.
@@ -95,10 +97,10 @@ func (s *PostgresCellStore) GetTenantCellID(ctx context.Context, tenantID string
 // Implementation notes: DBTX is the abstraction loopzero-api uses across
 // pool/tx, so this method runs without an explicit SERIALIZABLE wrapper.
 // Correctness relies on:
-//   1. Pre-flight existence checks for tenant + cell (deterministic errors)
-//   2. status='active' check before capacity (cheap rejects fast)
-//   3. capacity check excludes the moving tenant (re-pin-to-same-cell is OK)
-//   4. UPDATE is atomic at the row level
+//  1. Pre-flight existence checks for tenant + cell (deterministic errors)
+//  2. status='active' check before capacity (cheap rejects fast)
+//  3. capacity check excludes the moving tenant (re-pin-to-same-cell is OK)
+//  4. UPDATE is atomic at the row level
 //
 // Concurrent admin pin races for the same tenant are rare (operator-driven),
 // and the application-level placement lock used during tenant creation is
@@ -155,7 +157,7 @@ func (s *PostgresCellStore) bridge() (generated.DBTX, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("cell store: nil DB")
 	}
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("cell store: DBTX %T does not implement SqlcBridge", s.DB)
 	}

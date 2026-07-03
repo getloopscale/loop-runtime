@@ -117,7 +117,7 @@ type PreviewServiceDeps struct {
 	//
 	// Optional — when nil, the env_target write is skipped (legacy
 	// fallback path used by tests).
-	EnvTargets db.EnvironmentTargetStore
+	EnvTargets store.EnvironmentTargetStore
 }
 
 // PreviewService implements domain.PreviewService and, additionally,
@@ -350,7 +350,7 @@ func (s *PreviewService) DeletePreviewByPR(ctx context.Context, tenantID, projec
 		}
 	}
 	if s.deps.EnvTargets != nil {
-		if err := s.deps.EnvTargets.DeleteByKind(ctx, nil, tenantID, projectID, envName, db.EnvironmentTargetKindPreview); err != nil {
+		if err := s.deps.EnvTargets.DeleteByKind(ctx, nil, tenantID, projectID, envName, store.EnvironmentTargetKindPreview); err != nil {
 			s.deps.Logger.Error("preview service: env_target preview delete failed",
 				"preview", preview.ID, "env", envName, "error", err)
 		}

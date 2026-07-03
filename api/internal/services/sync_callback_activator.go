@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -24,7 +26,7 @@ import (
 // publicDomain is added per release-blockers-2026-06-25-set v1.1 #61.
 type SyncCallbackActivator struct {
 	releaseStore   ReleaseConvergenceStore
-	envTargetStore db.EnvironmentTargetStore
+	envTargetStore store.EnvironmentTargetStore
 	locker         EnvironmentLocker
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
@@ -102,7 +104,7 @@ func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName str
 // + envs without a public wildcard preserve pre-#61 behavior.
 func NewSyncCallbackActivator(
 	releaseStore ReleaseConvergenceStore,
-	envTargetStore db.EnvironmentTargetStore,
+	envTargetStore store.EnvironmentTargetStore,
 	locker EnvironmentLocker,
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)

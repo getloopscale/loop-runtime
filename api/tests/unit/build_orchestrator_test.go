@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -176,10 +178,10 @@ func safeFakeTransition(m *statemachine.Machine, current statemachine.State, eve
 
 // fakeReleaseStoreOrch implements db.ReleaseStore.
 type fakeReleaseStoreOrch struct {
-	releases     map[string]*db.Release
-	activeByEnv  map[string]*db.Release // key: tenant:project:env
-	createErr    error
-	updateErr    error
+	releases    map[string]*db.Release
+	activeByEnv map[string]*db.Release // key: tenant:project:env
+	createErr   error
+	updateErr   error
 }
 
 var releaseMachine = statemachine.NewReleaseMachine()
@@ -315,7 +317,7 @@ func (f *fakeReleaseStoreOrch) AppendSideEffect(_ context.Context, _ db.DBTX, _ 
 	return nil
 }
 
-// fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.
+// fakeEnvTargetStoreOrch implements store.EnvironmentTargetStore.
 type fakeEnvTargetStoreOrch struct {
 	desired map[string]string // key: tenant:project:env -> releaseID
 	active  map[string]string
@@ -347,12 +349,12 @@ func (f *fakeEnvTargetStoreOrch) SetActive(ctx context.Context, tx db.DBTX, tena
 	return nil
 }
 
-func (f *fakeEnvTargetStoreOrch) Get(ctx context.Context, tenantID, projectID, env string) (*db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStoreOrch) Get(ctx context.Context, tenantID, projectID, env string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 
-func (f *fakeEnvTargetStoreOrch) ListByProject(ctx context.Context, tenantID, projectID string) ([]db.EnvironmentTarget, error) {
-	return []db.EnvironmentTarget{}, nil
+func (f *fakeEnvTargetStoreOrch) ListByProject(ctx context.Context, tenantID, projectID string) ([]store.EnvironmentTarget, error) {
+	return []store.EnvironmentTarget{}, nil
 }
 
 func (f *fakeEnvTargetStoreOrch) DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error {
@@ -478,9 +480,9 @@ func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemov
 
 // fakeSyncClient implements services.SyncClient.
 type fakeSyncClient struct {
-	synced    []string
+	synced     []string
 	triggerErr error
-	waitErr   error
+	waitErr    error
 }
 
 func (f *fakeSyncClient) TriggerSync(ctx context.Context, appName string) error {
@@ -531,14 +533,14 @@ func (f *fakeEnvironmentLocker) WithLock(ctx context.Context, tenant, project, e
 // --- Helper to build orchestrator with all fakes ---
 
 type orchestratorFakes struct {
-	buildStore    *fakeBuildStoreOrch
-	releaseStore  *fakeReleaseStoreOrch
+	buildStore     *fakeBuildStoreOrch
+	releaseStore   *fakeReleaseStoreOrch
 	envTargetStore *fakeEnvTargetStoreOrch
-	eventStore    *fakeEventStoreOrch
-	workflow      *fakeWorkflowSubmitter
-	sync          *fakeSyncClient
-	locker        *fakeEnvironmentLocker
-	gitops        *fakeGitOpsPusher
+	eventStore     *fakeEventStoreOrch
+	workflow       *fakeWorkflowSubmitter
+	sync           *fakeSyncClient
+	locker         *fakeEnvironmentLocker
+	gitops         *fakeGitOpsPusher
 }
 
 func newOrchestratorFakes() *orchestratorFakes {
@@ -1074,13 +1076,13 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 
 	// Set up a previous active release
 	prevRelease := &db.Release{
-		ID:          "rel-previous",
-		BuildID:     "build-old",
-		TenantID:    "tenant-1",
-		ProjectID:   "proj-abc123",
-		Environment: "production",
-		Status:      string(statemachine.RPhActive),
-		CreatedAt:   time.Now().UTC(),
+		ID:              "rel-previous",
+		BuildID:         "build-old",
+		TenantID:        "tenant-1",
+		ProjectID:       "proj-abc123",
+		Environment:     "production",
+		Status:          string(statemachine.RPhActive),
+		CreatedAt:       time.Now().UTC(),
 		GitMirrorStatus: "pending",
 	}
 	fakes.releaseStore.setActiveByEnv("tenant-1", "proj-abc123", "production", prevRelease)
@@ -1897,4 +1899,3 @@ func (tl *trackingLocker) WithLock(ctx context.Context, tenant, project, env str
 	}
 	return err
 }
-

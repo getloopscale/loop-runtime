@@ -248,7 +248,7 @@ type PlanCapChecker interface {
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore
-	EnvTargetStore db.EnvironmentTargetStore
+	EnvTargetStore store.EnvironmentTargetStore
 	ProjectStore   ProjectEnsurer // nil = project ensure disabled (local dev without projects table)
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
@@ -312,7 +312,7 @@ type DeployTimelineSpawner func(ctx context.Context, deployID string)
 type BuildOrchestrator struct {
 	buildStore     db.BuildStore
 	releaseStore   db.ReleaseStore
-	envTargetStore db.EnvironmentTargetStore
+	envTargetStore store.EnvironmentTargetStore
 	projectStore   ProjectEnsurer
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)

@@ -56,7 +56,7 @@ func buildServerConfig(
 	ghDeps *GitHubDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	cellStore *db.PostgresCellStore,
+	cellStore *store.PostgresCellStore,
 	domainHandler *routes.DomainHandler,
 	buildHandler *routes.BuildHandler,
 	healthServices []routes.ServiceHealthChecker,
@@ -291,7 +291,7 @@ func buildServerConfig(
 		// Plan T2.5 D8 full — persistent active-team selection backed by
 		// users.active_tenant_id column (migration 000018).
 		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
-		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
+		sc.AuditHandler = routes.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
 		// /api/v1/admin/tenants/pin endpoint registered in router.go can
@@ -301,7 +301,7 @@ func buildServerConfig(
 		// tenant.
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
 		// so operator reconcile re-emits ArgoCD destination with new cell.
-		sc.AdminPinner = services.NewCellPinner(&db.PostgresCellStore{DB: dbAdapter}).
+		sc.AdminPinner = services.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
 			WithKubeClient(buildMgmtDynamicClient(logger), "loopzero-system")
 		// T4.4 of plan 2026-05-28-meet-001-engineering-closure: wire the
 		// ReleaseInspector so GET /api/v1/admin/releases/{id}/inspect can
@@ -319,16 +319,16 @@ func buildServerConfig(
 		// satisfy the non-nil contract without touching sse_events table.
 		sc.ReleaseInspector = services.NewReleaseInspector(
 			db.NewReleaseStoreSqlc(dbAdapter, db.NoopEventStore{}),
-			&db.PostgresAuditStore{DB: dbAdapter},
+			&store.PostgresAuditStore{DB: dbAdapter},
 			nil,
 		)
 		sc.AuditWriter = func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
-			entry := db.AuditEntry{
+			entry := store.AuditEntry{
 				TenantID: tenantID, Action: action, Actor: actor,
 				ResourceType: resourceType, ResourceID: resourceID,
 				CorrelationID: correlationID, Metadata: metadata,
 			}
-			if err := db.WriteAuditLog(context.Background(), dbAdapter, entry); err != nil {
+			if err := store.WriteAuditLog(context.Background(), dbAdapter, entry); err != nil {
 				logger.Warn("audit write failed", "error", err)
 			}
 		}

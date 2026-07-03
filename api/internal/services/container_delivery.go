@@ -34,7 +34,7 @@ type GitManifestReader interface {
 // are identical to the pre-refactoring code — zero behavior change.
 type ContainerDeliveryActivator struct {
 	releaseStore   db.ReleaseStore
-	envTargetStore db.EnvironmentTargetStore
+	envTargetStore store.EnvironmentTargetStore
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -53,7 +53,7 @@ type ContainerDeliveryActivator struct {
 // ContainerDeliveryDeps holds dependencies for ContainerDeliveryActivator.
 type ContainerDeliveryDeps struct {
 	ReleaseStore   db.ReleaseStore
-	EnvTargetStore db.EnvironmentTargetStore
+	EnvTargetStore store.EnvironmentTargetStore
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}

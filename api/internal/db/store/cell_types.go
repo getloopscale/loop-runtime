@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+)
 
 // cell_types.go — public struct + sentinel errors for the cell-
 // aware placement primitives. T2.2 (Batch B #2) of plan
@@ -19,7 +23,7 @@ import "errors"
 // DB field type preserved (db.DBTX); methods (cell_wrapper.go)
 // dispatch through SqlcBridge to sqlc-generated queries.
 type PostgresCellStore struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // Sentinel errors mirroring services.* so the cell_store doesn't import

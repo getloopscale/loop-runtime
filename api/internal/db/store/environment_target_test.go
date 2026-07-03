@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package store
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+)
+
+func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
+	fake := &db.FakeDBTX{ExecErr: fmt.Errorf("pg down")}
+	store := NewPostgresEnvironmentTargetStore(fake, fake)
+
+	err := store.SetDesired(context.Background(), fake, "t1", "p1", "prod", "rel-1", "u1", "c1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

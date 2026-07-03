@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // =============================================================================
@@ -314,21 +312,6 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // =============================================================================
 // Audit Store tests
 // =============================================================================
-
-func TestAuditStore_ListAuditEntries_NilDB(t *testing.T) {
-	store := &PostgresAuditStore{DB: nil}
-
-	entries, total, err := store.ListAuditEntries(context.Background(), "t1", domain.AuditFilter{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if total != 0 {
-		t.Errorf("expected 0 total, got: %d", total)
-	}
-	if entries != nil {
-		t.Error("expected nil entries for nil DB")
-	}
-}
 
 // TestAuditStore_ListAuditEntries_EmptyResult — DELETED in T1.5 of
 // plan 2026-05-29-sqlc-migration v1.3.

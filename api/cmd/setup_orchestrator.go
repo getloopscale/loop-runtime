@@ -138,7 +138,7 @@ func setupOrchestrator(
 		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
-		AuditLogger: &db.AuditLogger{DB: dbAdapter},
+		AuditLogger: &store.AuditLogger{DB: dbAdapter},
 		// Plan deploy-timeline-canonical-5-phases T5.1 — per-deploy
 		// 5-phase aggregator spawn hook. Wired to a release_db-only
 		// minimal source set as the canonical v1 — the other 4 source

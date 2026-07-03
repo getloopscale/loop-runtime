@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // environment_target_wrapper.go — sqlc-backed implementation of
 // PostgresEnvironmentTargetStore. T2.1 Batch A #6 of plan
@@ -36,6 +36,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
@@ -48,8 +50,8 @@ import (
 // pattern (`if tx != nil { executor = tx } else { executor = s.Exec
 // }`) is preserved exactly — the wrapper only changes the dispatch
 // target, not the selection logic.
-func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx DBTX) (generated.DBTX, error) {
-	var target DBTX
+func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx db.DBTX) (generated.DBTX, error) {
+	var target db.DBTX
 	if tx != nil {
 		target = tx
 	} else {
@@ -59,7 +61,7 @@ func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx DBTX) (generated.DBT
 		// *PgxAdapter which satisfies both.
 		target = s.Exec
 	}
-	bridge, ok := target.(SqlcBridge)
+	bridge, ok := target.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("environment target store: DBTX %T does not implement SqlcBridge", target)
 	}
@@ -67,7 +69,7 @@ func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx DBTX) (generated.DBT
 }
 
 func (s *PostgresEnvironmentTargetStore) queryBridge() (generated.DBTX, error) {
-	bridge, ok := s.Query.(SqlcBridge)
+	bridge, ok := s.Query.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("environment target store: Query %T does not implement SqlcBridge", s.Query)
 	}
@@ -76,7 +78,7 @@ func (s *PostgresEnvironmentTargetStore) queryBridge() (generated.DBTX, error) {
 
 // SetDesired upserts environment_targets.desired_release_id. Runs
 // inside the env-lock transaction (Rule 6).
-func (s *PostgresEnvironmentTargetStore) SetDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
+func (s *PostgresEnvironmentTargetStore) SetDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err
@@ -97,7 +99,7 @@ func (s *PostgresEnvironmentTargetStore) SetDesired(ctx context.Context, tx DBTX
 
 // SetActive updates environment_targets.active_release_id after
 // ArgoCD confirms sync.
-func (s *PostgresEnvironmentTargetStore) SetActive(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID string) error {
+func (s *PostgresEnvironmentTargetStore) SetActive(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err
@@ -160,7 +162,7 @@ func (s *PostgresEnvironmentTargetStore) ListByProject(ctx context.Context, tena
 
 // DeleteTarget removes an environment target within a transaction.
 // Idempotent — missing target → no-op.
-func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx DBTX, tenantID, projectID, env string) error {
+func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err
@@ -182,7 +184,7 @@ func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx DB
 // release. The kind column is immutable post-create — repeat inserts
 // for the same (tenant, project, environment) update release tracking
 // but keep kind='preview'.
-func (s *PostgresEnvironmentTargetStore) SetPreviewDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
+func (s *PostgresEnvironmentTargetStore) SetPreviewDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err
@@ -241,7 +243,7 @@ func (s *PostgresEnvironmentTargetStore) ListPermanent(ctx context.Context, tena
 // DeleteByKind removes a single (tenant, project, environment) row
 // when its kind column matches. D6 cleanup chain: used by
 // PreviewService.DeletePreviewByPR. Idempotent.
-func (s *PostgresEnvironmentTargetStore) DeleteByKind(ctx context.Context, tx DBTX, tenantID, projectID, env, kind string) error {
+func (s *PostgresEnvironmentTargetStore) DeleteByKind(ctx context.Context, tx db.DBTX, tenantID, projectID, env, kind string) error {
 	dbtx, err := s.resolveSqlcDBTX(tx)
 	if err != nil {
 		return err

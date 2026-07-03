@@ -37,8 +37,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -135,9 +136,9 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 	if limit <= 0 {
 		limit = 50
 	}
-	projectArg := nullableString(filter.Project)
-	appArg := nullableString(filter.App)
-	envArg := nullableString(filter.Environment)
+	projectArg := dbconv.StringEmptyToNilPtr(filter.Project)
+	appArg := dbconv.StringEmptyToNilPtr(filter.App)
+	envArg := dbconv.StringEmptyToNilPtr(filter.Environment)
 
 	total, err := q.CountCustomDomainsByTenant(ctx, bridge, generated.CountCustomDomainsByTenantParams{
 		TenantID:    tenantID,

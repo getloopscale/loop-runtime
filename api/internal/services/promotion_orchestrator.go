@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -34,7 +36,7 @@ type PromotionReleaseStore interface {
 
 // PromotionEnvTargetStore abstracts environment target operations for promotion (DIP).
 type PromotionEnvTargetStore interface {
-	Get(ctx context.Context, tenantID, projectID, env string) (*db.EnvironmentTarget, error)
+	Get(ctx context.Context, tenantID, projectID, env string) (*store.EnvironmentTarget, error)
 	SetDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error
 }
 
@@ -87,12 +89,12 @@ type PromotionRequest struct {
 
 // PromotionResult contains the outcome of a promotion operation.
 type PromotionResult struct {
-	PromotionID    string
-	SourceRelease  *db.Release
-	NewRelease     *db.Release
-	FromEnv        string
-	ToEnv          string
-	URL            string
+	PromotionID   string
+	SourceRelease *db.Release
+	NewRelease    *db.Release
+	FromEnv       string
+	ToEnv         string
+	URL           string
 }
 
 // PromotionOrchestrator coordinates the release promotion workflow.
@@ -499,7 +501,9 @@ func rewriteString(s string, oldNs []string, newNs, oldHostSuffix, newHostSuffix
 
 // rewriteHostInMatch handles the IngressRoute Match expression where the
 // hostname is embedded in a Traefik rule string like:
-//   Host(`tn-foo-app-staging.loopzero.local`)
+//
+//	Host(`tn-foo-app-staging.loopzero.local`)
+//
 // rewriteString cannot match this directly because the hostname is wrapped.
 // We do a substring replace ONLY on -{fromEnv}.{baseDomain} suffix occurrences
 // inside Match strings to keep the blast radius minimal.

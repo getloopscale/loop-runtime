@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	dbstore "github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -605,10 +606,10 @@ func (f *fakeEnvTargetStorePreview) SetDesired(_ context.Context, _ db.DBTX, _, 
 func (f *fakeEnvTargetStorePreview) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
 	return nil
 }
-func (f *fakeEnvTargetStorePreview) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStorePreview) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
-func (f *fakeEnvTargetStorePreview) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStorePreview) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeEnvTargetStorePreview) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -817,7 +818,7 @@ func TestPreviewService_DeletePreviewByPR_D6_CleanupChain(t *testing.T) {
 	if envTargets.lastDelete.env != "preview-pr-42" {
 		t.Errorf("env name = %q, want preview-pr-42", envTargets.lastDelete.env)
 	}
-	if envTargets.lastDelete.kind != db.EnvironmentTargetKindPreview {
+	if envTargets.lastDelete.kind != dbstore.EnvironmentTargetKindPreview {
 		t.Errorf("kind = %q, want preview", envTargets.lastDelete.kind)
 	}
 }

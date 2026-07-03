@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	"github.com/getloopscale/loopzero/pkg/logging"
 
@@ -189,12 +191,12 @@ func main() {
 	// a nil router and must handle it.
 	var bgWg sync.WaitGroup
 	var cellRouter placement.Router
-	var cellStore *db.PostgresCellStore
+	var cellStore *store.PostgresCellStore
 	var domainHandler *routes.DomainHandler
 
 	if dbAdapter != nil && stores != nil && workflows != nil {
 		cellRouter = setupCellRouter(cfg, shutdownCtx, &bgWg, logger)
-		cellStore = &db.PostgresCellStore{DB: dbAdapter}
+		cellStore = &store.PostgresCellStore{DB: dbAdapter}
 
 		dh, domainProvisioner, domainHealthChecker, cfZoneClient := setupDomains(stores, workflows, cfg, logger)
 		domainHandler = dh
@@ -396,7 +398,7 @@ func main() {
 		// rather than exposing it as a field. AuditLogger is a thin DB
 		// wrapper, so this is single-source-of-truth even when constructed
 		// twice (both writes go to the same audit_log table via WriteAuditLog).
-		auditLogger := &db.AuditLogger{DB: dbAdapter}
+		auditLogger := &store.AuditLogger{DB: dbAdapter}
 		fetchDeps := setupSecretFetchDeps(dbAdapter.Pool, transit, cellStore, auditLogger)
 		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
 		if fetchDeps != nil && brokerToken != "" {
@@ -435,7 +437,7 @@ func silenceKlog() {
 }
 
 func setupBuildHandler(
-	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *db.PostgresCellStore,
+	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
 	cfg config.Config, shutdownCtx context.Context, logger *slog.Logger,
 ) *routes.BuildHandler {
 	if orchDeps == nil {
