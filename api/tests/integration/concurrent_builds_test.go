@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
@@ -254,7 +256,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	releaseStore := db.NewReleaseStoreSqlc(adapter, db.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	eventStore := sse.NewPostgresEventStore(adapter, adapter)
-	idempotencyStore := &db.PostgresIdempotencyStore{DB: adapter}
+	idempotencyStore := &store.PostgresIdempotencyStore{DB: adapter}
 
 	// Create real locker backed by the pool (reusing adapters package — no duplication)
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
