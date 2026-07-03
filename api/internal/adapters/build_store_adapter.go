@@ -6,8 +6,10 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
@@ -205,4 +207,30 @@ func decodeAppsSpecForListing(raw json.RawMessage) []routes.BuildAppInfo {
 // gate via ProjectStore.GetByName BEFORE invoking this method.
 func (a *BuildListStoreAdapter) ListEnvsForProject(ctx context.Context, tenantID, projectName string) ([]string, error) {
 	return a.Store.ListEnvsForProject(ctx, tenantID, projectName)
+}
+
+// buildStatsSource is the narrow store dependency for the deploys-aggregate
+// adapter (ISP) — only the sqlc BuildStatsByDay method, nothing else.
+type buildStatsSource interface {
+	BuildStatsByDay(ctx context.Context, tenantID string, since time.Time) ([]generated.BuildStatsByDayRow, error)
+}
+
+// BuildStatsStoreAdapter adapts the sqlc BuildStatsByDay rows (pgtype.Date /
+// int64) to the route-level []routes.BuildDayCount for the Overview deploys
+// sparkline (J-06 D2 / MEET-2026-07-03-003). The handler zero-fills gaps; this
+// adapter only converts the sparse tenant-scoped rows.
+type BuildStatsStoreAdapter struct {
+	Store buildStatsSource
+}
+
+func (a *BuildStatsStoreAdapter) BuildStatsByDay(ctx context.Context, tenantID string, since time.Time) ([]routes.BuildDayCount, error) {
+	rows, err := a.Store.BuildStatsByDay(ctx, tenantID, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]routes.BuildDayCount, len(rows))
+	for i, r := range rows {
+		out[i] = routes.BuildDayCount{Day: r.Day.Time, Count: int(r.Count)}
+	}
+	return out, nil
 }
