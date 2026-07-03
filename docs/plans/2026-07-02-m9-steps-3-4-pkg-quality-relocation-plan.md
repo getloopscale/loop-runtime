@@ -31,8 +31,8 @@ Move the `pkg/quality` CI-gate suite (77 subpackages, 14 639 non-test LOC ≈ **
 ### Import graph (measured)
 
 - **Sole external consumer of `pkg/quality`:** `cmd/loopzero-ops` (`quality_subcmd.go`, `chaos_subcmd.go`, `drill_subcmd.go`). No `api/`, `operators/`, `cloud/`, or other `pkg/` package imports it (grep-verified).
-- **`pkg/quality` imports the `pkg` runtime base:** `pkg/enforcement` (2×), `pkg/statemachine` (1×). Neither is in the contracts base (jwt/serviceauth/plan) — the contracts base imports NOTHING (umbrella ADR).
-- **Destination `cmd/loopzero-ops/internal/quality`** is DOWNSTREAM of everything: `loopzero-ops` already depends on `pkg`; the relocated gates keep importing `pkg/enforcement` + `pkg/statemachine` as a **cross-module downstream edge** (loopzero-ops → pkg), which is legal and acyclic. `pkg` never imports `cmd/loopzero-ops`.
+- **`pkg/quality` imports the `pkg` runtime base:** the real compiled edges (`go list -deps`) are `pkg/errors` + `pkg/shellrun` only. (`enforcement` / `statemachine` appear in the suite ONLY as string-literal DATA — the frozen pkg-inventory list in `baseline/baseline.go` and an `acyclicgraph` test fixture — NOT as Go imports; corrected post-review from the initial grep that conflated string matches with imports.) None of these is in the contracts base (jwt/serviceauth/plan) — the contracts base imports NOTHING (umbrella ADR).
+- **Destination `cmd/loopzero-ops/internal/quality`** is DOWNSTREAM of everything: `loopzero-ops` already depends on `pkg`; the relocated gates keep importing `pkg/errors` + `pkg/shellrun` as a **cross-module downstream edge** (loopzero-ops → pkg), which is legal and acyclic. `pkg` never imports `cmd/loopzero-ops`.
 
 ### Glossary
 
