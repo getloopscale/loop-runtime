@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // domain_types.go — public struct for the custom_domains lifecycle
 // store that survives the T2.1 (Batch A #9) deletion of the legacy
@@ -21,7 +21,11 @@ package db
 // available below for any caller that still composes runtime SQL
 // (e.g., custom report queries). They're not used by the wrapper.
 
-import "regexp"
+import (
+	"regexp"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+)
 
 // PostgresDomainStore implements domain.DomainStore using PostgreSQL
 // via sqlc.
@@ -30,7 +34,7 @@ import "regexp"
 // type preserved (db.DBTX); 22+ methods (domain_wrapper.go)
 // dispatch through SqlcBridge to sqlc-generated queries.
 type PostgresDomainStore struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // isParameterizedCondition validates that a SQL WHERE condition

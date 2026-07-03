@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
+
+import "github.com/getloopscale/loopzero/api/internal/db"
 
 // project_types.go — public struct for the projects domain that
 // survives the T2.1 (Batch A #4) deletion of the legacy
@@ -28,7 +30,7 @@ type ProjectCapChecker interface {
 // M4: capChecker (optional, set via SetProjectCapChecker) enables per-Account
 // project-cap enforcement at creation. Nil checker = no enforcement (dev/tests).
 type PostgresProjectStore struct {
-	DB         DBTX
+	DB         db.DBTX
 	capChecker ProjectCapChecker
 }
 

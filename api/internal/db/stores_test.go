@@ -166,28 +166,6 @@ import (
 // real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
 // is wired.
 
-func TestGenerateProjectID_Format(t *testing.T) {
-	id := GenerateProjectID()
-	if !strings.HasPrefix(id, "proj-") {
-		t.Errorf("expected prefix 'proj-', got: %s", id)
-	}
-	// proj- + 8 hex chars = 13 chars
-	if len(id) != 13 {
-		t.Errorf("expected length 13, got: %d", len(id))
-	}
-}
-
-func TestGenerateProjectID_Unique(t *testing.T) {
-	ids := make(map[string]bool, 100)
-	for i := 0; i < 100; i++ {
-		id := GenerateProjectID()
-		if ids[id] {
-			t.Fatalf("duplicate ID generated: %s", id)
-		}
-		ids[id] = true
-	}
-}
-
 // =============================================================================
 // Tenant Store tests — DELETED in T1.4 of plan
 // 2026-05-29-sqlc-migration v1.3

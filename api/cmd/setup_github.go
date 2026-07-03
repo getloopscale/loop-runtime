@@ -236,7 +236,7 @@ func setupGitHub(
 	// COMP-008 stub (ErrPreviewNotImplemented). The deployer dispatches
 	// by event.Action: opened/synchronize/reopened → CreatePreview;
 	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
-	previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+	previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
 	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
 		Store:     previewStore,
 		Builds:    orch,

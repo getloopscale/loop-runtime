@@ -15,12 +15,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost
@@ -366,7 +366,7 @@ func registerProtectedRoutes(
 		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
 		// the cross-tenant binding check (EC-03 absorption / CWE-204
-		// defense). Production injects *db.PostgresProjectStore directly.
+		// defense). Production injects *store.PostgresProjectStore directly.
 		if cfg.SecretProjectChecker != nil {
 			secrets.SetProjectChecker(cfg.SecretProjectChecker)
 		}

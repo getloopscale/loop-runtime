@@ -76,7 +76,7 @@ type PreviewCRSpec struct {
 //     external CRs).
 //   - Logger: defaults to slog.Default().
 type PreviewServiceDeps struct {
-	Store  db.PreviewStore
+	Store  store.PreviewStore
 	Builds PreviewBuildSubmitter
 	// BuildApps is optional. When set, the preview service uses it to
 	// populate SubmitBuildRequest.Apps from the most recent SUCCEEDED
@@ -145,7 +145,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 //
 // Steps (per ADR D3 / D4):
 //  1. Validate request fields.
-//  2. UPSERT the DB row (db.PreviewStore.Create). This makes the preview
+//  2. UPSERT the DB row (store.PreviewStore.Create). This makes the preview
 //     visible to API queries before any K8s/CR work.
 //  3. Best-effort: ensure the PreviewEnvironment CR. The controller
 //     reconciles namespace + workload from there.
@@ -168,13 +168,13 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePre
 	}
 	expiresAt := now.Add(ttl)
 
-	rec := &db.PreviewRecord{
+	rec := &store.PreviewRecord{
 		TenantID:  req.TenantID(),
 		ProjectID: req.ProjectID,
 		PRNumber:  req.PRNumber,
 		Branch:    req.Branch,
 		CommitSHA: req.CommitSHA,
-		Status:    db.PreviewStatusCreating,
+		Status:    store.PreviewStatusCreating,
 		ExpiresAt: expiresAt,
 	}
 	if req.RepoFullName != "" {
@@ -373,9 +373,9 @@ func (s *PreviewService) OnBuildCompleted(ctx context.Context, previewID, buildI
 	var newStatus string
 	switch strings.ToLower(status) {
 	case "succeeded":
-		newStatus = db.PreviewStatusActive
+		newStatus = store.PreviewStatusActive
 	case "failed":
-		newStatus = db.PreviewStatusFailed
+		newStatus = store.PreviewStatusFailed
 	default:
 		return fmt.Errorf("preview service: unsupported build callback status %q", status)
 	}

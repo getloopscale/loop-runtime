@@ -36,7 +36,7 @@ func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested in
 }
 
 // CheckProjectsValue resolves the per-Account project cap (M4). Mirrors
-// CheckReplicasValue; satisfies db.ProjectCapChecker so the project-creation
+// CheckReplicasValue; satisfies store.ProjectCapChecker so the project-creation
 // store can enforce the cap atomically. Returns (allowed, plan, cap) where
 // cap < 0 = unlimited.
 func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
@@ -53,7 +53,7 @@ func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int)
 // MUST go through here so they can never diverge again: the divergence (one store
 // capped, one not) was the exact root cause of #106. A nil checker leaves the
 // store unenforced (dev without a pool).
-func wireProjectCap(store *db.PostgresProjectStore, checker db.ProjectCapChecker) {
+func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapChecker) {
 	if store == nil || checker == nil {
 		return
 	}
@@ -100,7 +100,7 @@ func setupOrchestrator(
 	// through, so they can never diverge again — that divergence was the #106 root
 	// cause). The adapter doubles as the scaling PlanCap. nil limiter (dev without
 	// pool) leaves the store unenforced — no behavior change.
-	buildProjectStore := &db.PostgresProjectStore{DB: dbAdapter}
+	buildProjectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	if planLimiter != nil {
 		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
 		planCap = capAdapter
@@ -184,7 +184,7 @@ func setupOrchestrator(
 		Logger:            logger,
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
-	projectStore := &db.PostgresProjectStore{DB: dbAdapter}
+	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
 		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
@@ -293,7 +293,7 @@ func setupOrchestrator(
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
 		ReleaseStore:      stores.ReleaseStore,
-		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ProjectStore:      &store.PostgresProjectStore{DB: dbAdapter},
 		ScalingStore:      scalingStore,
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,

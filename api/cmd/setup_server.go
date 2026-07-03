@@ -88,7 +88,7 @@ func buildServerConfig(
 		// on the same (tenant, project, env) key. Lock-domain parity EC-2.
 		SecretEnvLocker: stores.Locker,
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): inject
-		// the existing *db.PostgresProjectStore as the cross-tenant binding
+		// the existing *store.PostgresProjectStore as the cross-tenant binding
 		// checker (EC-03 absorption — 404 byte-identical between cross-
 		// tenant attempts + nonexistent projects; CWE-204 defense). The
 		// PostgresProjectStore.GetByName signature already matches
@@ -341,7 +341,7 @@ func buildServerConfig(
 		// service drives the dual-write (CR + DB) per ADR D7. When the
 		// BuildOrchestrator is available (always, post-Sprint-2), the
 		// service can submit builds for previews (best-effort).
-		previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+		previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
 		var previewService *services.PreviewService
 		if orchDeps != nil && orchDeps.Orchestrator != nil {
 			ps, perr := services.NewPreviewService(services.PreviewServiceDeps{
@@ -369,12 +369,12 @@ func buildServerConfig(
 		// Red Team loopzero-cloud#92 absorption (2026-06-27): wire the
 		// ProjectChecker so /previews handlers reject non-existent
 		// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty
-		// list. Existing *db.PostgresProjectStore matches the narrow
+		// list. Existing *store.PostgresProjectStore matches the narrow
 		// interface signature — no adapter needed.
 		sc.PreviewHandler = routes.
 			NewPreviewHandler(previewStore, previewService, logger).
 			WithPhaseLookup(k8sDeps.PreviewCRMgr).
-			WithProjectChecker(&db.PostgresProjectStore{DB: dbAdapter})
+			WithProjectChecker(&store.PostgresProjectStore{DB: dbAdapter})
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))

@@ -15,10 +15,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
-// stubCapChecker is a fake db.ProjectCapChecker with a fixed bounded cap.
+// stubCapChecker is a fake store.ProjectCapChecker with a fixed bounded cap.
 type stubCapChecker struct{ cap int }
 
 func (s stubCapChecker) CheckProjectsValue(_ string, _ int) (bool, string, int) {
@@ -36,7 +38,7 @@ func (nonPgxDBTX) Exec(context.Context, string, ...any) (db.ExecResult, error) {
 func (nonPgxDBTX) QueryRow(context.Context, string, ...any) db.Row { return nil }
 
 func TestWireProjectCap_WiresCheckerWhenPresent(t *testing.T) {
-	store := &db.PostgresProjectStore{DB: nonPgxDBTX{}}
+	store := &store.PostgresProjectStore{DB: nonPgxDBTX{}}
 	wireProjectCap(store, stubCapChecker{cap: 1}) // bounded → enforcement intended
 
 	// With the checker wired and a bounded cap, a deploy on a non-pgx handle (no
@@ -50,7 +52,7 @@ func TestWireProjectCap_WiresCheckerWhenPresent(t *testing.T) {
 }
 
 func TestWireProjectCap_NilCheckerLeavesStoreUnenforced(t *testing.T) {
-	store := &db.PostgresProjectStore{DB: nonPgxDBTX{}}
+	store := &store.PostgresProjectStore{DB: nonPgxDBTX{}}
 	wireProjectCap(store, nil) // no checker → no enforcement
 
 	// With no checker, EnsureProject takes the original (unenforced) insert path,

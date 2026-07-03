@@ -55,7 +55,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1).
 	releaseStore := store.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
-	domainStore := &db.PostgresDomainStore{DB: dbAdapter}
+	domainStore := &store.PostgresDomainStore{DB: dbAdapter}
 
 	// Environment locker (pg_advisory_xact_lock, roadmap Rule 6).
 	locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
@@ -138,7 +138,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		BuildStore:        buildStore,
 		ReleaseStore:      releaseStore,
 		EnvTargetStore:    envTargetStore,
-		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ProjectStore:      &store.PostgresProjectStore{DB: dbAdapter},
 		EventStore:        pgEventStore,
 		Workflow:          workflowSubmitter,
 		Sync:              syncClient,

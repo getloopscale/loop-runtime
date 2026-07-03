@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
 	dbstore "github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -22,7 +21,7 @@ import (
 // =============================================================================
 
 type previewFakeStore struct {
-	createFn          func(ctx context.Context, tx db.DBTX, rec *db.PreviewRecord) error
+	createFn          func(ctx context.Context, tx db.DBTX, rec *dbstore.PreviewRecord) error
 	updateStatusFn    func(ctx context.Context, tx db.DBTX, previewID, status string) error
 	updateBuildFn     func(ctx context.Context, tx db.DBTX, previewID, buildID, commitSHA string) error
 	getByPRFn         func(ctx context.Context, tenantID, projectID string, prNumber int) (*domain.Preview, error)
@@ -44,7 +43,7 @@ func (f *previewFakeStore) GetByPR(ctx context.Context, tenantID, projectID stri
 	}
 	return nil, loopzeroerrors.ErrPreviewNotFound
 }
-func (f *previewFakeStore) Create(ctx context.Context, tx db.DBTX, rec *db.PreviewRecord) error {
+func (f *previewFakeStore) Create(ctx context.Context, tx db.DBTX, rec *dbstore.PreviewRecord) error {
 	if f.createFn != nil {
 		return f.createFn(ctx, tx, rec)
 	}
@@ -145,7 +144,7 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 	buildSubmitted := false
 
 	store := &previewFakeStore{
-		createFn: func(_ context.Context, _ db.DBTX, rec *db.PreviewRecord) error {
+		createFn: func(_ context.Context, _ db.DBTX, rec *dbstore.PreviewRecord) error {
 			storeCreated = true
 			if rec.ID == "" {
 				rec.ID = "prev-z"
@@ -234,7 +233,7 @@ func TestPreviewService_CreatePreview_ValidationFailures(t *testing.T) {
 
 func TestPreviewService_CreatePreview_StoreFailure_Returns(t *testing.T) {
 	store := &previewFakeStore{
-		createFn: func(_ context.Context, _ db.DBTX, _ *db.PreviewRecord) error {
+		createFn: func(_ context.Context, _ db.DBTX, _ *dbstore.PreviewRecord) error {
 			return errors.New("db down")
 		},
 	}
@@ -284,9 +283,9 @@ func TestPreviewService_CreatePreview_NoBuildSubmitter_PreviewStillCreated(t *te
 }
 
 func TestPreviewService_CreatePreview_TTLOverride(t *testing.T) {
-	var captured *db.PreviewRecord
+	var captured *dbstore.PreviewRecord
 	store := &previewFakeStore{
-		createFn: func(_ context.Context, _ db.DBTX, rec *db.PreviewRecord) error {
+		createFn: func(_ context.Context, _ db.DBTX, rec *dbstore.PreviewRecord) error {
 			captured = rec
 			return nil
 		},
@@ -368,8 +367,8 @@ func TestPreviewService_OnBuildCompleted_Succeeded_TransitionsActive(t *testing.
 	if err := svc.OnBuildCompleted(context.Background(), "prev-x", "build-1", "succeeded"); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
-	if capturedStatus != db.PreviewStatusActive {
-		t.Errorf("status = %q, want %q", capturedStatus, db.PreviewStatusActive)
+	if capturedStatus != dbstore.PreviewStatusActive {
+		t.Errorf("status = %q, want %q", capturedStatus, dbstore.PreviewStatusActive)
 	}
 }
 
@@ -385,8 +384,8 @@ func TestPreviewService_OnBuildCompleted_Failed_TransitionsFailed(t *testing.T) 
 	if err := svc.OnBuildCompleted(context.Background(), "prev-x", "build-1", "failed"); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
-	if capturedStatus != db.PreviewStatusFailed {
-		t.Errorf("status = %q, want %q", capturedStatus, db.PreviewStatusFailed)
+	if capturedStatus != dbstore.PreviewStatusFailed {
+		t.Errorf("status = %q, want %q", capturedStatus, dbstore.PreviewStatusFailed)
 	}
 }
 
@@ -541,7 +540,7 @@ func TestEntryAppFromLoopZeroYaml(t *testing.T) {
 // D2/D3/D6 — single-slot preview model (plan 2026-06-07-preview-as-category)
 // =============================================================================
 
-// fakePreviewSlotStore is the minimal store.PreviewSlotStore implementation
+// fakePreviewSlotStore is the minimal dbstore.PreviewSlotStore implementation
 // for tests. Records every method invocation so D3 substitute behavior +
 // D6 cleanup chain can be asserted with method-by-method granularity.
 type fakePreviewSlotStore struct {
@@ -563,10 +562,10 @@ type fakePreviewSlotStore struct {
 	clearErr  error
 }
 
-func (f *fakePreviewSlotStore) Get(_ context.Context, _, _ string) (*store.PreviewSlot, error) {
+func (f *fakePreviewSlotStore) Get(_ context.Context, _, _ string) (*dbstore.PreviewSlot, error) {
 	return nil, nil
 }
-func (f *fakePreviewSlotStore) ListByTenant(_ context.Context, _ string) ([]store.PreviewSlot, error) {
+func (f *fakePreviewSlotStore) ListByTenant(_ context.Context, _ string) ([]dbstore.PreviewSlot, error) {
 	return nil, nil
 }
 func (f *fakePreviewSlotStore) Upsert(_ context.Context, _ db.DBTX, tenantID, projectID string, prNumber int32, branch, releaseID, url string) error {
@@ -606,10 +605,10 @@ func (f *fakeEnvTargetStorePreview) SetDesired(_ context.Context, _ db.DBTX, _, 
 func (f *fakeEnvTargetStorePreview) SetActive(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
 	return nil
 }
-func (f *fakeEnvTargetStorePreview) Get(_ context.Context, _, _, _ string) (*store.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStorePreview) Get(_ context.Context, _, _, _ string) (*dbstore.EnvironmentTarget, error) {
 	return nil, nil
 }
-func (f *fakeEnvTargetStorePreview) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
+func (f *fakeEnvTargetStorePreview) ListByProject(_ context.Context, _, _ string) ([]dbstore.EnvironmentTarget, error) {
 	return nil, nil
 }
 func (f *fakeEnvTargetStorePreview) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
@@ -704,7 +703,7 @@ func TestPreviewService_CreatePreview_D3_UpsertSlotAtomically(t *testing.T) {
 // working without wiring a slot.
 func TestPreviewService_CreatePreview_NilSlotStore_NoOp(t *testing.T) {
 	storeCalled := false
-	store := &previewFakeStore{createFn: func(_ context.Context, _ db.DBTX, _ *db.PreviewRecord) error {
+	store := &previewFakeStore{createFn: func(_ context.Context, _ db.DBTX, _ *dbstore.PreviewRecord) error {
 		storeCalled = true
 		return nil
 	}}

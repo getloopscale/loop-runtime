@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // project_wrapper_m5_test.go — M5 (hermetic project-cap, #106) unit coverage for
 // the per-Account cap gate shared by createProjectCapped (API) and EnsureProject
@@ -19,6 +19,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -63,7 +64,7 @@ func (f m5CapChecker) CheckProjectsValue(_ string, _ int) (bool, string, int) {
 
 func TestEnforceProjectCapTx_BlocksWhenAtCap(t *testing.T) {
 	// Arrange: the account already has 1 project; cap is 1 → one more would exceed.
-	fake := &FakeDBTX{QueryRowResult: m5ValRow{vals: []any{1}}} // count(*) = 1
+	fake := &db.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{1}}} // count(*) = 1
 	before := testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", "starter"))
 
 	// Act
@@ -81,7 +82,7 @@ func TestEnforceProjectCapTx_BlocksWhenAtCap(t *testing.T) {
 }
 
 func TestEnforceProjectCapTx_AllowsUnderCap(t *testing.T) {
-	fake := &FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}} // count(*) = 0
+	fake := &db.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}} // count(*) = 0
 	before := testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", "pro"))
 
 	err := enforceProjectCapTx(context.Background(), fake, "acct-2", "pro", 3)
@@ -97,7 +98,7 @@ func TestEnforceProjectCapTx_AllowsUnderCap(t *testing.T) {
 
 func TestEnforceProjectCapTx_CapZeroFailsClosed(t *testing.T) {
 	// cap == 0 (misconfigured) → count(0) >= 0 → reject (never insert unbounded).
-	fake := &FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}}
+	fake := &db.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}}
 
 	err := enforceProjectCapTx(context.Background(), fake, "acct-3", "starter", 0)
 
@@ -109,7 +110,7 @@ func TestEnforceProjectCapTx_CapZeroFailsClosed(t *testing.T) {
 
 func TestEnforceProjectCapTx_CountErrorPropagates(t *testing.T) {
 	// A DB error on the count must propagate (never silently allow).
-	fake := &FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("boom")}}
+	fake := &db.FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("boom")}}
 
 	err := enforceProjectCapTx(context.Background(), fake, "acct-4", "starter", 1)
 
@@ -121,7 +122,7 @@ func TestEnforceProjectCapTx_CountErrorPropagates(t *testing.T) {
 // --- resolveAccountAndLock (resolve + advisory lock, shared) ---
 
 func TestResolveAccountAndLock_TakesAdvisoryLockForAccount(t *testing.T) {
-	fake := &FakeDBTX{QueryRowResult: m5ValRow{vals: []any{"acct-9"}}} // account_id
+	fake := &db.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{"acct-9"}}} // account_id
 
 	accountID, err := resolveAccountAndLock(context.Background(), fake, "tenant-9")
 
@@ -140,7 +141,7 @@ func TestResolveAccountAndLock_TakesAdvisoryLockForAccount(t *testing.T) {
 }
 
 func TestResolveAccountAndLock_AccountResolveErrorPropagates(t *testing.T) {
-	fake := &FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("no tenant")}}
+	fake := &db.FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("no tenant")}}
 
 	_, err := resolveAccountAndLock(context.Background(), fake, "tenant-x")
 
@@ -154,7 +155,7 @@ func TestResolveAccountAndLock_AccountResolveErrorPropagates(t *testing.T) {
 func TestEnsureProject_FailsClosedWhenBoundedCapNeedsPgxPoolButNoneAvailable(t *testing.T) {
 	// capChecker present + bounded plan, tx == nil, and s.DB is NOT a pgx pool →
 	// atomic enforcement is impossible → fail closed (error), never insert.
-	store := &PostgresProjectStore{DB: &FakeDBTX{}}
+	store := &PostgresProjectStore{DB: &db.FakeDBTX{}}
 	store.SetProjectCapChecker(m5CapChecker{allowed: false, plan: "starter", cap: 1})
 
 	err := store.EnsureProject(context.Background(), nil, "tenant-1", "newproj", "user-1")

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // preview_wrapper.go — sqlc-backed implementation of
 // PostgresPreviewStore. T2.2 Batch B #1 of plan
@@ -33,6 +33,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -56,7 +58,7 @@ import (
 // Mutates rec.ID + rec.Status + rec.CreatedAt + rec.UpdatedAt +
 // rec.ExpiresAt to reflect the post-upsert values, matching the
 // legacy contract callers rely on.
-func (s *PostgresPreviewStore) Create(ctx context.Context, tx DBTX, rec *PreviewRecord) error {
+func (s *PostgresPreviewStore) Create(ctx context.Context, tx db.DBTX, rec *PreviewRecord) error {
 	if rec.ID == "" {
 		rec.ID = id.GeneratePreviewID()
 	}
@@ -108,7 +110,7 @@ func (s *PostgresPreviewStore) Create(ctx context.Context, tx DBTX, rec *Preview
 // UpdateStatus sets status. Caller is responsible for state-machine
 // validity (this is a thin DB-level setter). 0 rows-affected →
 // ErrPreviewNotFound.
-func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx DBTX, previewID, status string) error {
+func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx db.DBTX, previewID, status string) error {
 	bridge, err := s.txBridge(tx)
 	if err != nil {
 		return err
@@ -130,7 +132,7 @@ func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx DBTX, previe
 // UpdateBuild associates a build (and optionally a refreshed commit_sha).
 // Empty commitSHA preserves the existing value via COALESCE(NULLIF($2,
 // ”), commit_sha) in the SQL query.
-func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx DBTX, previewID, buildID, commitSHA string) error {
+func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx db.DBTX, previewID, buildID, commitSHA string) error {
 	bridge, err := s.txBridge(tx)
 	if err != nil {
 		return err
@@ -160,7 +162,7 @@ func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx DBTX, preview
 }
 
 // UpdateURL sets the public URL exposed to the user.
-func (s *PostgresPreviewStore) UpdateURL(ctx context.Context, tx DBTX, previewID, url string) error {
+func (s *PostgresPreviewStore) UpdateURL(ctx context.Context, tx db.DBTX, previewID, url string) error {
 	bridge, err := s.txBridge(tx)
 	if err != nil {
 		return err
@@ -306,7 +308,7 @@ func (s *PostgresPreviewStore) bridge() (generated.DBTX, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("preview store: nil DB")
 	}
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("preview store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
@@ -315,9 +317,9 @@ func (s *PostgresPreviewStore) bridge() (generated.DBTX, error) {
 
 // txBridge prefers the explicit transaction when provided, otherwise
 // falls back to s.DB.
-func (s *PostgresPreviewStore) txBridge(tx DBTX) (generated.DBTX, error) {
+func (s *PostgresPreviewStore) txBridge(tx db.DBTX) (generated.DBTX, error) {
 	if tx != nil {
-		bridge, ok := tx.(SqlcBridge)
+		bridge, ok := tx.(db.SqlcBridge)
 		if !ok {
 			return nil, fmt.Errorf("preview store: tx DBTX %T does not implement SqlcBridge", tx)
 		}

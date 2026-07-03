@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 import (
 	"context"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
 )
@@ -100,10 +102,10 @@ type PreviewStore interface {
 	GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*domain.Preview, error)
 
 	// PreviewService writes.
-	Create(ctx context.Context, tx DBTX, rec *PreviewRecord) error
-	UpdateStatus(ctx context.Context, tx DBTX, previewID, status string) error
-	UpdateBuild(ctx context.Context, tx DBTX, previewID, buildID, commitSHA string) error
-	UpdateURL(ctx context.Context, tx DBTX, previewID, url string) error
+	Create(ctx context.Context, tx db.DBTX, rec *PreviewRecord) error
+	UpdateStatus(ctx context.Context, tx db.DBTX, previewID, status string) error
+	UpdateBuild(ctx context.Context, tx db.DBTX, previewID, buildID, commitSHA string) error
+	UpdateURL(ctx context.Context, tx db.DBTX, previewID, url string) error
 	RequestDeletion(ctx context.Context, tenantID, previewID string) error
 }
 
@@ -117,21 +119,21 @@ type PreviewStore interface {
 // signature widened to accept any combination of executors (kept for
 // call-site compat) but both are stored as a single DBTX.
 type PostgresPreviewStore struct {
-	DB DBTX
+	DB db.DBTX
 }
 
 // NewPostgresPreviewStore preserves the 2-arg call-site signature
 // used by api/cmd/setup_github.go:184 + api/cmd/setup_server.go:267.
 // Both `exec` and `query` come from the same dbAdapter in practice,
 // so we accept the second and ignore it for the DBTX field.
-func NewPostgresPreviewStore(exec ExecQueryExecutor, query QueryExecutor) *PostgresPreviewStore {
-	if dbtx, ok := exec.(DBTX); ok {
+func NewPostgresPreviewStore(exec db.ExecQueryExecutor, query db.QueryExecutor) *PostgresPreviewStore {
+	if dbtx, ok := exec.(db.DBTX); ok {
 		return &PostgresPreviewStore{DB: dbtx}
 	}
 	// Fall back to query if it's a DBTX (some call sites swap the
 	// args). If neither implements DBTX the wrapper bridge() will
 	// surface a typed error at runtime per fail-fast.
-	if dbtx, ok := query.(DBTX); ok {
+	if dbtx, ok := query.(db.DBTX); ok {
 		return &PostgresPreviewStore{DB: dbtx}
 	}
 	return &PostgresPreviewStore{}

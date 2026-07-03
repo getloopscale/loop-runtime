@@ -36,7 +36,7 @@ type StoreDeps struct {
 	PgEventStore     *sse.PostgresEventStore
 	SecretStore      routes.SecretStore
 	BootstrapStore   routes.BootstrapStore
-	DomainStore      *db.PostgresDomainStore
+	DomainStore      *store.PostgresDomainStore
 	CellStore        *store.PostgresCellStore
 	SourceStore      source.SourceStore
 	ObjUploader      routes.ObjectUploader
@@ -113,7 +113,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
 		BootstrapStore:   &store.PostgresBootstrapStore{DB: dbAdapter},
-		DomainStore:      &db.PostgresDomainStore{DB: dbAdapter},
+		DomainStore:      &store.PostgresDomainStore{DB: dbAdapter},
 		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,
 		ObjUploader:      objUploader,

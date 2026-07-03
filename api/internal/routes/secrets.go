@@ -72,8 +72,8 @@ type SecretTransit interface {
 // 404 response byte-identical across both. This is the defense against
 // observable response discrepancy (CWE-204 / existence-leak).
 //
-// Production wires the existing *db.PostgresProjectStore via the same
-// `&db.PostgresProjectStore{DB:...}` shape (per project_types.go
+// Production wires the existing *store.PostgresProjectStore via the same
+// `&store.PostgresProjectStore{DB:...}` shape (per project_types.go
 // constructor convention) — a project-checker adapter is NOT needed
 // because PostgresProjectStore.GetByName already matches this signature.
 type SecretProjectChecker interface {
@@ -176,7 +176,7 @@ func (h *SecretHandler) SetTransitClient(client SecretTransit) {
 // discrepancy / existence-leak.
 //
 // Nil-safe: when projectChecker is nil, Bulk skips the check (legacy/test
-// path). Production wiring MUST inject the real *db.PostgresProjectStore so
+// path). Production wiring MUST inject the real *store.PostgresProjectStore so
 // the cross-tenant guard fires before transit encryption ever begins.
 func (h *SecretHandler) SetProjectChecker(checker SecretProjectChecker) {
 	h.projectChecker = checker
@@ -441,13 +441,13 @@ type bulkEnvAggregates struct {
 
 // bulkProcessEntry handles one batch entry (one secret key, N envs).
 // Encapsulates the per-entry pipeline:
-//   1. Validate the key name; INVALID_KEY short-circuits without touching
-//      the store.
-//   2. Run the per-env transit-encrypt → store.Set → k8sSync triad
-//      (continue-best-effort per EC-01).
-//   3. Aggregate per-env outcomes into the entry's Status/SyncStatus
-//      following the union-state contract (EC-02).
-//   4. Emit one SECRET_CREATED audit row per successful entry.
+//  1. Validate the key name; INVALID_KEY short-circuits without touching
+//     the store.
+//  2. Run the per-env transit-encrypt → store.Set → k8sSync triad
+//     (continue-best-effort per EC-01).
+//  3. Aggregate per-env outcomes into the entry's Status/SyncStatus
+//     following the union-state contract (EC-02).
+//  4. Emit one SECRET_CREATED audit row per successful entry.
 //
 // Returns a fully-populated secretBulkResult ready to append.
 func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) secretBulkResult {

@@ -4,7 +4,7 @@
 // T2.6 of deep-review-remediation-plan (closes find_sec_005 / SEC-005 MEDIUM).
 // Unit tests for the runtime SQL parameterization guard.
 
-package db
+package store
 
 import "testing"
 

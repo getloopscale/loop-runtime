@@ -135,7 +135,7 @@ type Config struct {
 	// AND for nonexistent projects — byte-identical response (EC-03
 	// existence-leak prevention / CWE-204 defense). nil-safe: when nil,
 	// Bulk skips the check (legacy/test path). Production wires the
-	// existing *db.PostgresProjectStore directly (signature matches).
+	// existing *store.PostgresProjectStore directly (signature matches).
 	SecretProjectChecker routes.SecretProjectChecker
 	// SecretTransit injects the OpenBao transit encrypt path into the Bulk
 	// handler (T2.3+T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync

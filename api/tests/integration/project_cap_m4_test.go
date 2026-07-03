@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -35,7 +37,7 @@ func violationCount(plan string) float64 {
 //
 //	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapM4 -race -v
 
-// realProjectCapChecker adapts a real PlanLimiter to db.ProjectCapChecker.
+// realProjectCapChecker adapts a real PlanLimiter to store.ProjectCapChecker.
 type realProjectCapChecker struct{ l *enforcement.PlanLimiter }
 
 func (c realProjectCapChecker) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
@@ -43,7 +45,7 @@ func (c realProjectCapChecker) CheckProjectsValue(tenantID string, current int) 
 	return r.Allowed, r.Plan, r.Limit
 }
 
-func m4Store(t *testing.T) (*db.PostgresProjectStore, *sql.DB) {
+func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	t.Helper()
 	pool := testPool(t) // skips if pg unreachable
 	stdDB, err := sql.Open("pgx", dbURL())
@@ -52,7 +54,7 @@ func m4Store(t *testing.T) (*db.PostgresProjectStore, *sql.DB) {
 	}
 	t.Cleanup(func() { _ = stdDB.Close() })
 	limiter := enforcement.NewPlanLimiter(stdDB, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	store := &db.PostgresProjectStore{DB: &db.PgxAdapter{Pool: pool}}
+	store := &store.PostgresProjectStore{DB: &db.PgxAdapter{Pool: pool}}
 	store.SetProjectCapChecker(realProjectCapChecker{l: limiter})
 	return store, stdDB
 }
@@ -90,7 +92,7 @@ func m4Seed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan string) {
 	exec(`INSERT INTO subscriptions (id,tenant_id,account_id,plan,status) VALUES ($1,$2,$3,$4,'active') ON CONFLICT (account_id) DO NOTHING`, "sub-"+acct, tn1, acct, plan)
 }
 
-func mustCreate(t *testing.T, store *db.PostgresProjectStore, tenant, name, owner string) error {
+func mustCreate(t *testing.T, store *store.PostgresProjectStore, tenant, name, owner string) error {
 	t.Helper()
 	_, err := store.CreateProject(context.Background(), domain.CreateProjectInput{TenantID: tenant, Name: name, CreatedBy: owner})
 	return err

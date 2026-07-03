@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package store
 
 // domain_wrapper.go — sqlc-backed implementation of
 // PostgresDomainStore. T2.1 Batch A #9 of plan
@@ -39,6 +39,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
+
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
@@ -69,7 +71,7 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *domain.CustomDomain
 		VerificationToken: d.VerificationToken,
 		TlsStatus:         d.TLSStatus,
 	}); err != nil {
-		if IsPGUniqueViolation(err) {
+		if db.IsPGUniqueViolation(err) {
 			return domain.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create: %w", err)
@@ -98,7 +100,7 @@ func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *domain.Cu
 		CfNameservers:      d.CFNameservers,
 		DnsRecordsImported: d.DNSRecordsImported,
 	}); err != nil {
-		if IsPGUniqueViolation(err) {
+		if db.IsPGUniqueViolation(err) {
 			return domain.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create with cf zone: %w", err)
@@ -329,7 +331,7 @@ func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toS
 
 func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]domain.CustomDomain, error) {
 	if cellID == "" {
-		cellID = CellDefault
+		cellID = db.CellDefault
 	}
 	bridge, err := s.bridge()
 	if err != nil {
@@ -512,7 +514,7 @@ func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]domain.Custom
 // =========================================================================
 
 func (s *PostgresDomainStore) bridge() (generated.DBTX, error) {
-	bridge, ok := s.DB.(SqlcBridge)
+	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("domain store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
