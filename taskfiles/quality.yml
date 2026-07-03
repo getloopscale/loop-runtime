@@ -153,6 +153,7 @@ tasks:
       - bash infra/tests/check-dev-public-status-url-probe-syntax_test.sh          # T5.1 ORPHAN companion 4/4
       - bash infra/tests/check-dev-public-register-flow-syntax_test.sh             # M0 J-02 register LIVE-flow hermetic guard (21 assertions)
       - bash infra/tests/check-dev-public-verification-flow-syntax_test.sh         # M0 J-03 verification LIVE-flow hermetic guard (20 assertions)
+      - bash infra/tests/check-dev-public-overview-flow-syntax_test.sh             # M1 J-06 overview LIVE-flow hermetic guard (28 assertions)
       - bash infra/tests/check-patch-kratos-check-only-readonly_test.sh            # M0 J-01 T5.3 EC-9: patch-kratos --check-only read-only guard (6 assertions)
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
       # shell-lint advisory — invokes infra/scripts/local/shellcheck-advisory.sh.

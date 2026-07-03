@@ -876,6 +876,15 @@ tasks:
     cmds:
       - bash archive/canonical-tests-v1/scripts/local/dogfood-verification.sh {{.CLI_ARGS}}
 
+  test:dogfood:overview:
+    desc: |
+      M1 J-06 Overview — aggregate dogfood wrapper.
+      Suites: hermetic syntax + dashboard vitest (useOverviewKPIs + OverviewKPIStrip
+      + overview page) + engine build_stats handler tests + LIVE bash (dev-public,
+      OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
+    cmds:
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-overview.sh {{.CLI_ARGS}}
+
   test:dogfood:domains:
     desc: |
       T5.2 of plan 2026-06-06-dashboard-journey-j11-domains v1.1 SHIPPABLE
