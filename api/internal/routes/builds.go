@@ -13,11 +13,12 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -564,7 +565,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 // mapBuildError maps orchestrator errors to HTTP responses.
 //
 // Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
-// extends the ladder with services.AsSubmitBuildError dispatch BEFORE the
+// extends the ladder with build.AsSubmitBuildError dispatch BEFORE the
 // fallback so wrap-site discriminated errors from BuildOrchestrator.SubmitBuild
 // (workflow / project ensure / DB write / app normalize / unknown) surface
 // with reason-specific messages composed with the verbatim cause — instead
@@ -595,7 +596,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// BEFORE the generic catchall. The reason label is the wire form
 	// (Stringer output); the verbatim cause is composed into the user-
 	// facing message via pkg/errors.NewBuildSubmitFailedFromReason.
-	if se, ok := services.AsSubmitBuildError(err); ok {
+	if se, ok := build.AsSubmitBuildError(err); ok {
 		slog.Error("build trigger failed (typed)",
 			"reason", se.Reason.String(),
 			"stage", string(se.Stage),

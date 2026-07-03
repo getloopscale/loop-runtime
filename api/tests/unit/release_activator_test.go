@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	releasesvc "github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // --- TestActivateReleaseKernel_HappyPath ---
@@ -37,12 +38,12 @@ func TestActivateReleaseKernel_HappyPath(t *testing.T) {
 		Status: "PENDING", CreatedAt: time.Now(),
 	}
 
-	apps := []services.ActivationAppInfo{
+	apps := []releasesvc.ActivationAppInfo{
 		{Name: "web", Status: "deployed", URL: "https://acme-my-app-web-production.test.local"},
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
 		apps, 42, testLogger,
@@ -108,7 +109,7 @@ func TestActivateReleaseKernel_SupersedesPreviousRelease(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
 		nil, 10, testLogger,
@@ -151,7 +152,7 @@ func TestActivateReleaseKernel_NoPreviousRelease(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
 		nil, 5, testLogger,
@@ -195,10 +196,10 @@ func TestActivateReleaseKernel_AlreadyActive_NoSideEffects(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
-		[]services.ActivationAppInfo{{Name: "web", Status: "deployed"}},
+		[]releasesvc.ActivationAppInfo{{Name: "web", Status: "deployed"}},
 		10, testLogger,
 	)
 
@@ -238,7 +239,7 @@ func TestDeriveDeployID_Format_ViaCompletedEvent(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
 		nil, 5, testLogger,
@@ -292,13 +293,13 @@ func TestReleaseAppsToActivationApps_ViaCompletedEvent(t *testing.T) {
 		Status: "PENDING", CreatedAt: time.Now(),
 	}
 
-	apps := []services.ActivationAppInfo{
+	apps := []releasesvc.ActivationAppInfo{
 		{Name: "api", Status: "deployed", URL: "https://acme-my-app-api-staging.test.local"},
 		{Name: "worker", Status: "deployed"}, // no URL for worker
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
 		apps, 15, testLogger,

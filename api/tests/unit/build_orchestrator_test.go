@@ -12,12 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
@@ -575,8 +576,8 @@ func newOrchestratorFakes() *orchestratorFakes {
 	}
 }
 
-func (f *orchestratorFakes) buildOrchestrator() *services.BuildOrchestrator {
-	return services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+func (f *orchestratorFakes) buildOrchestrator() *build.BuildOrchestrator {
+	return build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:     f.buildStore,
 		ReleaseStore:   f.releaseStore,
 		EnvTargetStore: f.envTargetStore,
@@ -1853,7 +1854,7 @@ func TestBuildOrchestrator_SubmitBuild_LockReleasedBeforeWorkflowSubmit(t *testi
 
 	fakes := newOrchestratorFakes()
 	// Build orchestrator directly with tracking deps
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:     fakes.buildStore,
 		ReleaseStore:   fakes.releaseStore,
 		EnvTargetStore: fakes.envTargetStore,

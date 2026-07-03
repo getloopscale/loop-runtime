@@ -9,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // Roadmap 03 — the reapers must scope their Find* queries to a single cell.
@@ -41,10 +44,10 @@ func (c *capturingDBTX) QueryRow(_ context.Context, _ string, _ ...any) db.Row {
 
 type emptyDBRows struct{}
 
-func (emptyDBRows) Next() bool             { return false }
-func (emptyDBRows) Scan(_ ...any) error    { return nil }
-func (emptyDBRows) Err() error             { return nil }
-func (emptyDBRows) Close()                 {}
+func (emptyDBRows) Next() bool          { return false }
+func (emptyDBRows) Scan(_ ...any) error { return nil }
+func (emptyDBRows) Err() error          { return nil }
+func (emptyDBRows) Close()              {}
 
 type emptyDBRow struct{}
 
@@ -52,7 +55,7 @@ func (emptyDBRow) Scan(_ ...any) error { return db.ErrNoRows }
 
 func TestPostgresStaleBuildChecker_FindStaleBuilds_ScopedByCellID(t *testing.T) {
 	cap := &capturingDBTX{}
-	checker := &services.PostgresStaleBuildChecker{DB: cap}
+	checker := &build.PostgresStaleBuildChecker{DB: cap}
 
 	_, err := checker.FindStaleBuilds(
 		context.Background(),
@@ -81,7 +84,7 @@ func TestPostgresStaleBuildChecker_FindStaleBuilds_ScopedByCellID(t *testing.T) 
 
 func TestPostgresStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
 	cap := &capturingDBTX{}
-	checker := &services.PostgresStaleBuildChecker{DB: cap}
+	checker := &build.PostgresStaleBuildChecker{DB: cap}
 
 	_, _ = checker.FindStaleBuilds(context.Background(), "", time.Minute, time.Minute, time.Minute, time.Minute)
 	if cap.lastArgs[4] != db.CellDefault {
@@ -91,7 +94,7 @@ func TestPostgresStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T
 
 func TestPostgresStaleReleaseChecker_FindStaleReleases_ScopedByCellID(t *testing.T) {
 	cap := &capturingDBTX{}
-	checker := &services.PostgresStaleReleaseChecker{DB: cap}
+	checker := &release.PostgresStaleReleaseChecker{DB: cap}
 
 	_, err := checker.FindStaleReleases(
 		context.Background(),

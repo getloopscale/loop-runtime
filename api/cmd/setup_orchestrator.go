@@ -9,6 +9,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
 	"github.com/getloopscale/loopzero/api/internal/services/scaling"
@@ -20,12 +24,11 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/loki"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // planLimiterCapAdapter bridges *enforcement.PlanLimiter to the
-// services.PlanCapChecker interface required by BuildOrchestrator (B15).
+// build.PlanCapChecker interface required by BuildOrchestrator (B15).
 // Keeps the orchestrator package free of pkg/enforcement imports (DIP).
 type planLimiterCapAdapter struct {
 	limiter *enforcement.PlanLimiter
@@ -66,7 +69,7 @@ func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapC
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
-	Orchestrator        *services.BuildOrchestrator
+	Orchestrator        *build.BuildOrchestrator
 	BuildOrchestrator   routes.BuildOrchestratorService
 	LogsHandler         *routes.LogsHandler
 	LogStreamHandler    *routes.LogStreamHandler
@@ -95,7 +98,7 @@ func setupOrchestrator(
 	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): wire plan-cap enforcement.
 	// A nil limiter is legal — means the DB was unavailable (dev without pool)
 	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
-	var planCap services.PlanCapChecker
+	var planCap build.PlanCapChecker
 	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
 	// store, which historically had NO cap checker — so the deploy-time
 	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
@@ -118,7 +121,7 @@ func setupOrchestrator(
 	scalingStore := store.NewPostgresScalingStore(dbAdapter)
 	scalingResolver := scaling.NewDBScalingResolver(scalingStore)
 
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
 		EnvTargetStore:    stores.EnvTargetStore,
@@ -177,7 +180,7 @@ func setupOrchestrator(
 	// release-state flip happens ONLY after sync confirmation, never on
 	// trigger-and-hope. Default 120s suffices for single-app loopzerokit;
 	// production-grade monorepo deploys inherit cfg.ArgocdSyncTimeout.
-	rollbackOrch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+	rollbackOrch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:          stores.ReleaseStore,
 		EnvTargets:        stores.EnvTargetStore,
 		GitReader:         workflows.GitOpsPusher,
@@ -193,7 +196,7 @@ func setupOrchestrator(
 		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
-	promotionOrch := services.NewPromotionOrchestrator(services.PromotionOrchestratorDeps{
+	promotionOrch := release.NewPromotionOrchestrator(release.PromotionOrchestratorDeps{
 		Releases:   stores.ReleaseStore,
 		EnvTargets: stores.EnvTargetStore,
 		GitReader:  workflows.GitOpsPusher,
@@ -312,7 +315,7 @@ func setupOrchestrator(
 	// status.go uses — so deploy.completed SSE URL matches `loopzero status`.
 	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
 	// behavior for envs without a public override).
-	syncCallbackActivator := services.NewSyncCallbackActivator(
+	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	)
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
@@ -326,7 +329,7 @@ func setupOrchestrator(
 	// re-render with the new label.
 	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
-			services.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+			release.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)
 		logger.Info("sync callback activator: label-based lookup wired (code-005 closure)")
 	} else {

@@ -19,13 +19,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -176,7 +177,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
 	// Create rollback orchestrator with fake external services
-	orch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: envTargetStore,
 		GitReader:  &fakeRollbackGitReader{},
@@ -188,7 +189,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 
 	// Act
 	ctx := context.Background()
-	result, err := orch.Rollback(ctx, services.RollbackRequest{
+	result, err := orch.Rollback(ctx, release.RollbackRequest{
 		TenantID:      "tenant-test",
 		ProjectID:     "proj-test1234",
 		ProjectName:   "test-project",
@@ -290,7 +291,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 
 	// Launch concurrent rollbacks
 	type rollbackResult struct {
-		result *services.RollbackResult
+		result *release.RollbackResult
 		err    error
 	}
 
@@ -304,7 +305,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 			defer wg.Done()
 
 			// Each goroutine gets its own orchestrator (stateless, just holds deps)
-			orch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+			orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 				Releases:   releaseStore,
 				EnvTargets: envTargetStore,
 				GitReader:  &fakeRollbackGitReader{},
@@ -316,7 +317,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 
 			<-ready // Wait for barrier
 
-			res, err := orch.Rollback(ctx, services.RollbackRequest{
+			res, err := orch.Rollback(ctx, release.RollbackRequest{
 				TenantID:      "tenant-test",
 				ProjectID:     "proj-test1234",
 				ProjectName:   "test-project",

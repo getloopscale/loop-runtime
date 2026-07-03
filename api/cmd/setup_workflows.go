@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
 	"k8s.io/client-go/kubernetes"
@@ -21,7 +23,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // WorkflowDeps holds workflow submitter, sync client, gitops pusher, and KV client.
@@ -30,7 +31,7 @@ type WorkflowDeps struct {
 	WorkflowSubmitter *platform.CircuitBreakerWorkflowSubmitter
 	SyncClient        *platform.CircuitBreakerSyncClient
 	GitOpsPusher      *gitops.GiteaGitOpsPusher
-	KVClient          services.StaticRoutingClient
+	KVClient          build.StaticRoutingClient
 }
 
 // setupWorkflows creates the Argo workflow submitter (with circuit breaker),
@@ -139,7 +140,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	// IMPORTANT: Assign to the interface type directly to avoid the Go nil interface trap.
 	// A typed nil *cfkv.Client assigned to a StaticRoutingClient interface is NOT nil,
 	// which causes panics when methods are called on it.
-	var kvClient services.StaticRoutingClient
+	var kvClient build.StaticRoutingClient
 	if c := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken); c != nil {
 		kvClient = c
 		slog.Info("cloudflare KV client configured for static frontend routing")

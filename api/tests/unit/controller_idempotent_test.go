@@ -10,10 +10,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -39,7 +40,7 @@ func TestController_IdempotentTransitions(t *testing.T) {
 	}
 
 	checker := &fakeStaleChecker{
-		builds: []services.StaleBuild{
+		builds: []build.StaleBuild{
 			{
 				ID:    "build-idem-1",
 				State: statemachine.BPhQueued,
@@ -48,14 +49,14 @@ func TestController_IdempotentTransitions(t *testing.T) {
 		},
 	}
 
-	reaper := services.NewBuildReaper(
+	reaper := build.NewBuildReaper(
 		buildStore,
 		checker,
 		&fakeLockerIdem{},
 		&fakeWorkflowIdem{},
 		&fakeEventStoreIdem{},
 		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-		services.DefaultBuildReaperConfig(),
+		build.DefaultBuildReaperConfig(),
 		nil, // reconcile checker
 	)
 

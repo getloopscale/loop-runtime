@@ -66,7 +66,7 @@ type ScaleConfigInput struct {
 // inside withEnvironmentLock (EC-5 lock semantics).
 type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed bool, err error)
 
-// ScaleReplicasChecker mirrors services.PlanCapChecker (cross-package
+// ScaleReplicasChecker mirrors build.PlanCapChecker (cross-package
 // to avoid importing services here). Returns (allowed, planName, cap)
 // for the given tenant + requested replica count.
 //

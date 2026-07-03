@@ -11,6 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
 
 	"github.com/getloopscale/loopzero/api/internal/services/billing"
@@ -32,7 +36,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
@@ -323,7 +326,7 @@ func buildServerConfig(
 		// ReleaseInspector is read-only path so AppendSideEffect emit
 		// never fires; pass a no-op eventStore that returns 0/nil to
 		// satisfy the non-nil contract without touching sse_events table.
-		sc.ReleaseInspector = services.NewReleaseInspector(
+		sc.ReleaseInspector = release.NewReleaseInspector(
 			store.NewReleaseStoreSqlc(dbAdapter, store.NoopEventStore{}),
 			&store.PostgresAuditStore{DB: dbAdapter},
 			nil,
@@ -591,12 +594,12 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 	// orchestrator (workflow_submitter.go); the pre-Sprint-8 comment about
 	// per-tenant namespaces was incorrect — workflows have ALWAYS lived in
 	// argo, only the build PODS run per-tenant. KISS + least privilege.
-	source := services.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
+	source := build.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
 	// terminalIDs is nil — first-tick startup may emit duplicate step events
 	// for already-running workflows; the watcher's internal lastPhase dedup
 	// catches duplicates from tick 2 onwards. A future enhancement can wire
 	// a BuildStore-backed TerminalBuildIDStore for cleaner cold start.
-	watcher := services.NewArgoStepWatcher(source, eventStore, nil, logger)
+	watcher := build.NewArgoStepWatcher(source, eventStore, nil, logger)
 	source.WithWatchErrorHandler(watcher.ReportWatchError)
 
 	go func() {

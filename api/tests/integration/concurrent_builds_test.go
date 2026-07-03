@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -39,18 +41,17 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
-// --- Route-level adapter: bridges services.BuildOrchestrator to routes.BuildOrchestratorService ---
+// --- Route-level adapter: bridges build.BuildOrchestrator to routes.BuildOrchestratorService ---
 
-// buildOrchestratorAdapter adapts the real services.BuildOrchestrator to the
+// buildOrchestratorAdapter adapts the real build.BuildOrchestrator to the
 // routes.BuildOrchestratorService interface used by the HTTP handler.
 type buildOrchestratorAdapter struct {
-	orch       *services.BuildOrchestrator
+	orch       *build.BuildOrchestrator
 	buildStore db.BuildStore
 }
 
@@ -264,7 +265,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
 	// Create real orchestrator with fake external services
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:     buildStore,
 		ReleaseStore:   releaseStore,
 		EnvTargetStore: envTargetStore,

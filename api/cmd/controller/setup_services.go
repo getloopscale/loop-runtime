@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -22,17 +26,16 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // controllerDeps holds all services and stores wired during setup. Passed to
 // startBackgroundLoops so the main function stays lean.
 type controllerDeps struct {
-	reconcileLoop          *services.BuildReconcileLoop
-	buildReaper            *services.BuildReaper
-	releaseReaper          *services.ReleaseReaper
-	releaseConvergenceLoop *services.ReleaseConvergenceLoop
+	reconcileLoop          *build.BuildReconcileLoop
+	buildReaper            *build.BuildReaper
+	releaseReaper          *release.ReleaseReaper
+	releaseConvergenceLoop *release.ReleaseConvergenceLoop
 	idempotencyCleaner     *platform.IdempotencyCleaner
 	eventPruner            *sse.EventPruner
 }
@@ -136,7 +139,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// cap is wired on the API server's orchestrator (cmd/setup_orchestrator.go),
 	// which owns every project-creating path. If the controller is ever changed
 	// to submit/re-submit builds, wire SetProjectCapChecker here too.
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:        buildStore,
 		ReleaseStore:      releaseStore,
 		EnvTargetStore:    envTargetStore,
@@ -152,7 +155,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	})
 
 	// ---- Build reconcile loop ----
-	reconcileLoop := services.NewBuildReconcileLoop(
+	reconcileLoop := build.NewBuildReconcileLoop(
 		buildStore,
 		workflowSubmitter,
 		orch,
@@ -161,7 +164,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		appCRMgr,
 		pgEventStore,
 		logger,
-		services.BuildReconcileLoopConfig{
+		build.BuildReconcileLoopConfig{
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
@@ -174,14 +177,14 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Build reaper ----
-	buildReaper := services.NewBuildReaper(
+	buildReaper := build.NewBuildReaper(
 		buildStore,
-		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		&build.PostgresStaleBuildChecker{DB: dbAdapter},
 		locker,
 		workflowSubmitter,
 		pgEventStore,
 		logger,
-		services.BuildReaperConfig{
+		build.BuildReaperConfig{
 			QueueTimeout:     cfg.BuildQueueTimeout,
 			RunningTimeout:   cfg.BuildRunningTimeout,
 			ReleasingTimeout: cfg.BuildReleasingTimeout,
@@ -193,13 +196,13 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Release reaper ----
-	releaseReaper := services.NewReleaseReaper(
+	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		&release.PostgresStaleReleaseChecker{DB: dbAdapter},
 		locker,
 		pgEventStore,
 		logger,
-		services.ReleaseReaperConfig{
+		release.ReleaseReaperConfig{
 			ReadyTimeout:   cfg.ReleaseReadyTimeout,
 			PendingTimeout: cfg.ReleasePendingTimeout,
 			Interval:       cfg.ReleaseReaperInterval,
@@ -211,7 +214,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain (canonical
 	// LOOPZERO_PUBLIC_DOMAIN) preferred over BaseDomain for deploy.completed
 	// URL so it matches `loopzero status`.
-	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+	releaseConvergenceLoop := release.NewReleaseConvergenceLoop(
 		releaseStore,
 		envTargetStore,
 		syncClient,
@@ -220,7 +223,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		cfg.BaseDomain,
 		cfg.PublicDomain,
 		logger,
-		services.ReleaseConvergenceLoopConfig{
+		release.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,
 			SyncTimeout:   300 * time.Second,
 			MaxConcurrent: 10,

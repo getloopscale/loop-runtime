@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
 
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
@@ -17,7 +19,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // buildLookupAdapter bridges db.BuildStore → github.BuildLookup.
@@ -46,9 +47,9 @@ func (a *repoLookupAdapter) GetByProject(ctx context.Context, tenantID, projectN
 	return r.RepoFullName, r.InstallationID, nil
 }
 
-// buildSubmitterAdapter bridges github.BuildSubmitter → services.BuildOrchestrator.
+// buildSubmitterAdapter bridges github.BuildSubmitter → build.BuildOrchestrator.
 type buildSubmitterAdapter struct {
-	orchestrator *services.BuildOrchestrator
+	orchestrator *build.BuildOrchestrator
 	logger       *slog.Logger
 }
 

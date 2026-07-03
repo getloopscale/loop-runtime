@@ -29,10 +29,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -234,7 +235,7 @@ func TestParseArgoAppName_LastHyphenSplit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			tenant, env, ok := services.ParseArgoAppName(tt.input)
+			tenant, env, ok := release.ParseArgoAppName(tt.input)
 			if ok != tt.wantOK {
 				t.Fatalf("ParseArgoAppName(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
 			}
@@ -270,7 +271,7 @@ func TestParseArgoAppName_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, ok := services.ParseArgoAppName(tt.input)
+			_, _, ok := release.ParseArgoAppName(tt.input)
 			if ok {
 				t.Errorf("ParseArgoAppName(%q) should return false for invalid input", tt.input)
 			}
@@ -283,7 +284,7 @@ func TestParseArgoAppName_EdgeCases(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type syncCallbackFixture struct {
-	activator      *services.SyncCallbackActivator
+	activator      *release.SyncCallbackActivator
 	releaseStore   *fakeSyncReleaseStore
 	envTargetStore *fakeSyncEnvTargetStore
 	eventStore     *fakeSyncEventStore
@@ -297,7 +298,7 @@ func newSyncCallbackFixture() *syncCallbackFixture {
 	logger := slog.Default()
 
 	return &syncCallbackFixture{
-		activator:      services.NewSyncCallbackActivator(rs, et, locker, es, "test.local", "", logger),
+		activator:      release.NewSyncCallbackActivator(rs, et, locker, es, "test.local", "", logger),
 		releaseStore:   rs,
 		envTargetStore: et,
 		eventStore:     es,

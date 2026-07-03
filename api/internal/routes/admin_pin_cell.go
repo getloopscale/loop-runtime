@@ -30,9 +30,9 @@ import (
 	"regexp"
 	"strings"
 
-	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
@@ -135,7 +135,7 @@ func AdminPinCellHandler(pinner CellPinner) http.HandlerFunc {
 			case errors.Is(err, placementsvc.ErrCellNotPinnable):
 				status = http.StatusConflict
 				code = "cell_not_pinnable"
-			case errors.Is(err, services.ErrCellAtCapacity):
+			case errors.Is(err, build.ErrCellAtCapacity):
 				status = http.StatusConflict
 				code = "cell_at_capacity"
 			}

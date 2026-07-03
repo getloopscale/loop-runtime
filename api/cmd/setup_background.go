@@ -10,6 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
@@ -28,7 +32,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -231,7 +234,7 @@ func createCoreLoops(
 	envTargetStore := stores.EnvTargetStore
 	pgEventStore := stores.PgEventStore
 
-	reconcileLoop := services.NewBuildReconcileLoop(
+	reconcileLoop := build.NewBuildReconcileLoop(
 		buildStore,
 		workflows.WorkflowSubmitter,
 		orchDeps.Orchestrator,
@@ -240,7 +243,7 @@ func createCoreLoops(
 		k8sDeps.AppCRMgr,
 		pgEventStore,
 		logger,
-		services.BuildReconcileLoopConfig{
+		build.BuildReconcileLoopConfig{
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
@@ -253,14 +256,14 @@ func createCoreLoops(
 		reconcileLoop.WithCellLister(lister)
 	}
 
-	reaper := services.NewBuildReaper(
+	reaper := build.NewBuildReaper(
 		buildStore,
-		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		&build.PostgresStaleBuildChecker{DB: dbAdapter},
 		stores.Locker,
 		workflows.WorkflowSubmitter,
 		stores.EventStore,
 		logger,
-		services.BuildReaperConfig{
+		build.BuildReaperConfig{
 			QueueTimeout:     cfg.BuildQueueTimeout,
 			RunningTimeout:   cfg.BuildRunningTimeout,
 			ReleasingTimeout: cfg.BuildReleasingTimeout,
@@ -270,13 +273,13 @@ func createCoreLoops(
 		reconcileLoop,
 	)
 
-	releaseReaper := services.NewReleaseReaper(
+	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		&release.PostgresStaleReleaseChecker{DB: dbAdapter},
 		stores.Locker,
 		pgEventStore,
 		logger,
-		services.ReleaseReaperConfig{
+		release.ReleaseReaperConfig{
 			ReadyTimeout:   cfg.ReleaseReadyTimeout,
 			PendingTimeout: cfg.ReleasePendingTimeout,
 			Interval:       cfg.ReleaseReaperInterval,
@@ -286,10 +289,10 @@ func createCoreLoops(
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain (canonical
 	// LOOPZERO_PUBLIC_DOMAIN) preferred over BaseDomain for deploy.completed
 	// URL so it matches `loopzero status`.
-	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+	releaseConvergenceLoop := release.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, workflows.SyncClient, stores.Locker,
 		stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
-		services.ReleaseConvergenceLoopConfig{
+		release.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,
 			SyncTimeout:   300 * time.Second,
 			MaxConcurrent: 10,
@@ -301,7 +304,7 @@ func createCoreLoops(
 	)
 	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
 	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
-	buildGC := services.NewBuildGC(
+	buildGC := build.NewBuildGC(
 		&store.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
 	)
 	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention

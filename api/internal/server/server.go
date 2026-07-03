@@ -13,9 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -182,7 +183,7 @@ type Config struct {
 	// read-only endpoint for on-call. Nil-safe — when unset, the route
 	// is not mounted and the handler answers 404 like the other admin
 	// routes. Wired by api/cmd/setup_server.go.
-	ReleaseInspector services.ReleaseInspector
+	ReleaseInspector release.ReleaseInspector
 	PlanLimiter      *enforcement.PlanLimiter
 	// CostEnforcer gates quantity-style metrics (egress bytes, registry pulls,
 	// build minutes) against per-plan caps from cost_counters (migration 000017).

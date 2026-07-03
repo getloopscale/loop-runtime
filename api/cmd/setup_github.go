@@ -12,6 +12,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -21,7 +25,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // ErrPreviewNotImplemented is returned by the GitHub PR webhook handler
@@ -53,7 +56,7 @@ type GitHubDeps struct {
 func setupGitHub(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
-	orch *services.BuildOrchestrator,
+	orch *build.BuildOrchestrator,
 	k8sDeps *K8sDeps,
 	cfg config.Config,
 	shutdownCtx context.Context,
@@ -96,8 +99,8 @@ func setupGitHub(
 	if ghAppClient != nil {
 		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
-			services.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
-			services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
+			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
+			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
 		integrationsHandler = routes.NewIntegrationsGitHubHandler(

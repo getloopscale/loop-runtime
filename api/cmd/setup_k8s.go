@@ -7,17 +7,18 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.
 type K8sDeps struct {
 	TenantCRMgr   *k8s.TenantCRManager
 	PreviewCRMgr  *k8s.PreviewCRManager
-	AppCRMgr      services.ApplicationCREnsurer
+	AppCRMgr      build.ApplicationCREnsurer
 	SecretK8sSync routes.SecretK8sSync
 }
 

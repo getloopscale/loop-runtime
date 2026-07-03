@@ -7,16 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 func TestParseArgoAppName(t *testing.T) {
 	tests := []struct {
-		input    string
-		tenant   string
-		env      string
-		ok       bool
+		input  string
+		tenant string
+		env    string
+		ok     bool
 	}{
 		{"tn-loopzero-production", "tn-loopzero", "production", true},
 		{"acme-staging", "acme", "staging", true},
@@ -28,7 +29,7 @@ func TestParseArgoAppName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			tenant, env, ok := services.ParseArgoAppName(tt.input)
+			tenant, env, ok := release.ParseArgoAppName(tt.input)
 			if ok != tt.ok {
 				t.Fatalf("ParseArgoAppName(%q) ok=%v, want %v", tt.input, ok, tt.ok)
 			}
@@ -57,7 +58,7 @@ func TestSyncCallbackActivator_ActivatesPendingRelease(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	eventStore := &fakeConvergenceEventStore{}
 
-	activator := services.NewSyncCallbackActivator(
+	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
 	)
 
@@ -89,7 +90,7 @@ func TestSyncCallbackActivator_SkipsMismatchedRevision(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	eventStore := &fakeConvergenceEventStore{}
 
-	activator := services.NewSyncCallbackActivator(
+	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
 	)
 
@@ -118,7 +119,7 @@ func TestSyncCallbackActivator_IgnoresOtherTenants(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	eventStore := &fakeConvergenceEventStore{}
 
-	activator := services.NewSyncCallbackActivator(
+	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
 	)
 
@@ -151,7 +152,7 @@ func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	eventStore := &fakeConvergenceEventStore{}
 
-	activator := services.NewSyncCallbackActivator(
+	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
 	)
 
@@ -174,7 +175,7 @@ func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
 
 func TestParseArgoAppName_TenantWithMultipleHyphens(t *testing.T) {
 	// "my-org-e2e-test-staging" → tenant="my-org-e2e-test", env="staging"
-	tenant, env, ok := services.ParseArgoAppName("my-org-e2e-test-staging")
+	tenant, env, ok := release.ParseArgoAppName("my-org-e2e-test-staging")
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -188,7 +189,7 @@ func TestParseArgoAppName_TenantWithMultipleHyphens(t *testing.T) {
 
 func TestParseArgoAppName_TrailingHyphen(t *testing.T) {
 	// "tenant-" → invalid (env would be empty)
-	_, _, ok := services.ParseArgoAppName("tenant-")
+	_, _, ok := release.ParseArgoAppName("tenant-")
 	if ok {
 		t.Error("expected ok=false for trailing hyphen")
 	}
@@ -196,7 +197,7 @@ func TestParseArgoAppName_TrailingHyphen(t *testing.T) {
 
 func TestParseArgoAppName_SingleChar(t *testing.T) {
 	// "x" → no hyphen → invalid
-	_, _, ok := services.ParseArgoAppName("x")
+	_, _, ok := release.ParseArgoAppName("x")
 	if ok {
 		t.Error("expected ok=false for single char without hyphen")
 	}

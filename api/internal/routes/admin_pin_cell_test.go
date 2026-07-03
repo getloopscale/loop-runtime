@@ -16,7 +16,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
@@ -186,7 +187,7 @@ func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: services.ErrCellAtCapacity}
+	pinner := &fakePinner{err: build.ErrCellAtCapacity}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -342,7 +343,7 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 		},
 		{
 			name:       "wrapped ErrCellAtCapacity returns 409",
-			err:        fmt.Errorf("pin failed: %w", services.ErrCellAtCapacity),
+			err:        fmt.Errorf("pin failed: %w", build.ErrCellAtCapacity),
 			wantStatus: http.StatusConflict,
 			wantCode:   "cell_at_capacity",
 		},

@@ -7,6 +7,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -17,7 +19,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
@@ -48,12 +49,12 @@ func (q *buildStoreAdmissionQuerier) ActiveBuilds(ctx context.Context, cellID st
 	}, nil
 }
 
-// appCRAdapter bridges k8s.ApplicationCRManager to services.ApplicationCREnsurer.
+// appCRAdapter bridges k8s.ApplicationCRManager to build.ApplicationCREnsurer.
 type appCRAdapter struct {
 	mgr *k8s.ApplicationCRManager
 }
 
-func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input services.ApplicationCRInput) error {
+func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input build.ApplicationCRInput) error {
 	// Audit gap M08 #10 / §6.C.1: propagate the originating correlation_id
 	// from ctx into the CR annotation so the operator reconcile can attach
 	// it back into audit_log rows + structured logs.
