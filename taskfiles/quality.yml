@@ -30,7 +30,7 @@ tasks:
       - 'echo "registered=$(/tmp/loopzero-ops quality --list --names | wc -l) wired=$(/tmp/loopzero-ops quality --list | grep -cP ''\twired\t'') unwired=$(/tmp/loopzero-ops quality --list | grep -cP ''\tunwired\t'')"'
 
   hermetic:
-    desc: Run pkg/quality hermetic Go tests + verify both modules build
+    desc: Run quality-gate hermetic Go tests + verify both modules build
     cmds:
       - cd pkg && go test ./quality/...
       - cd cmd/loopzero-ops && go build ./...
@@ -77,7 +77,7 @@ tasks:
       - /tmp/loopzero-ops quality sqlc-tx-prop        # T0.4: pool-bound vs tx-bound inside withEnvironmentLock
       - /tmp/loopzero-ops quality tenant-predicate    # T0.5: multi-tenant isolation predicate (security veto-backed)
       # Bash security/governance gates re-homed 2026-05-24 (were unwired since
-      # GitHub Actions removal). TODO: migrate these to pkg/quality Go gates
+      # GitHub Actions removal). TODO: migrate these to loopzero-ops quality Go gates
       # (strategic home) and drop the bash. Until then they run here = enforced.
       - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
       - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)

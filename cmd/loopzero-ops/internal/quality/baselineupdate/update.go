@@ -23,8 +23,8 @@ import (
 	"time"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/quality/baseline"
-	"github.com/getloopscale/loopzero/pkg/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseline"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
 )
 
 const schemaVersion = "1.0"

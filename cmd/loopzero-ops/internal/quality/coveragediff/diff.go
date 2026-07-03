@@ -29,7 +29,7 @@ import (
 	"strings"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
 )
 
 // DefaultThreshold (matches bash 80%).

@@ -59,12 +59,12 @@ const ForbiddenLiteral = "anonymous-auth=true"
 //     scenario fixtures applied via `docker exec k3d-loopzero-build-server-0`;
 //     functionally LOCAL but organized under pulumi-platform/ for proximity to
 //     the Fulcio chart they fix. Allowlisted by explicit path, not by content.
-//   - pkg/quality/anonymousauth/ — the gate's own source which defines the
+//   - cmd/loopzero-ops/internal/quality/anonymousauth/ — the gate's own source which defines the
 //     constant. Exempting by path keeps the const inline and inspectable.
 var allowedPrefixes = []string{
 	"infra/k3d" + string(filepath.Separator),
 	"infra/pulumi-platform/values-fulcio-oidc-overrides" + string(filepath.Separator),
-	"pkg/quality/anonymousauth" + string(filepath.Separator),
+	"cmd/loopzero-ops/internal/quality/anonymousauth" + string(filepath.Separator),
 }
 
 // Check walks the repo from cfg.RepoRoot and returns Outcome.Pass=false if

@@ -74,7 +74,7 @@ tasks:
     desc: Golden test for the matrix-audit logic (catches audit regressions)
     cmds:
       # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
-      - go test ./pkg/quality/regressionmatrix/...
+      - go test ./cmd/loopzero-ops/internal/quality/regressionmatrix/...
 
   parity:k3d-virgin:
     desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)

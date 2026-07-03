@@ -28,7 +28,7 @@ import (
 	"io"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/quality/baseline"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseline"
 )
 
 // Config holds the gate inputs.

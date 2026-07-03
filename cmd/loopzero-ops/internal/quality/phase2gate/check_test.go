@@ -6,17 +6,18 @@ package phase2gate
 import (
 	"bufio"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
 
-const (
-	taskfilePath  = "../../../taskfiles/infra.yml"
-	kratosValues  = "../../../infra/helm/ory-kratos/values.yaml.gotmpl"
-	hydraValues   = "../../../infra/helm/ory-hydra/values.yaml.gotmpl"
-	mgmtHelmfile  = "../../../infra/helmfile/mgmt.helmfile.yaml.gotmpl"
-	mappingDoc    = "../../../docs/scripts-audit/2026-05-22-helmfile-mapping.md"
+var (
+	taskfilePath = filepath.Join(repoRoot, "taskfiles/infra.yml")
+	kratosValues = filepath.Join(repoRoot, "infra/helm/ory-kratos/values.yaml.gotmpl")
+	hydraValues  = filepath.Join(repoRoot, "infra/helm/ory-hydra/values.yaml.gotmpl")
+	mgmtHelmfile = filepath.Join(repoRoot, "infra/helmfile/mgmt.helmfile.yaml.gotmpl")
+	mappingDoc   = filepath.Join(repoRoot, "docs/scripts-audit/2026-05-22-helmfile-mapping.md")
 )
 
 // readNonCommentLines returns the lines of a file with comment-only and

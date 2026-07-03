@@ -86,7 +86,7 @@ func TestCheck_AllowsAnonymousAuthFalse(t *testing.T) {
 // are *_test.go, excluded from the scan by mirror of advisorylock convention).
 func TestCheck_IgnoresGoTestFiles(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "pkg/quality/something/check_test.go", "const sample = `--kube-apiserver-arg=anonymous-auth=true`\n")
+	write(t, root, "cmd/loopzero-ops/internal/quality/something/check_test.go", "const sample = `--kube-apiserver-arg=anonymous-auth=true`\n")
 	out, _ := Check(Config{RepoRoot: root})
 	if !out.Pass {
 		t.Fatalf("_test.go must be excluded: %+v", out)
@@ -118,11 +118,11 @@ func TestCheck_AllowsFulcioOIDCOverrides(t *testing.T) {
 // EC: the gate's own source defines the constant and must not self-trip.
 func TestCheck_AllowsOwnSource(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "pkg/quality/anonymousauth/check.go",
+	write(t, root, "cmd/loopzero-ops/internal/quality/anonymousauth/check.go",
 		"const forbiddenLiteral = \"anonymous-auth=true\"\n")
 	out, _ := Check(Config{RepoRoot: root})
 	if !out.Pass {
-		t.Fatalf("pkg/quality/anonymousauth/ must PASS: %+v", out)
+		t.Fatalf("cmd/loopzero-ops/internal/quality/anonymousauth/ must PASS: %+v", out)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestCheck_SkipsWorktreesDir(t *testing.T) {
 	root := t.TempDir()
 	// Simulate a git-worktree layout: .claude/worktrees/<name>/
 	// containing both the gate source AND a hypothetical Helm violation.
-	write(t, root, ".claude/worktrees/some-branch/pkg/quality/anonymousauth/check.go",
+	write(t, root, ".claude/worktrees/some-branch/cmd/loopzero-ops/internal/quality/anonymousauth/check.go",
 		"const ForbiddenLiteral = \"anonymous-auth=true\"\n")
 	write(t, root, ".claude/worktrees/some-branch/infra/helm/x/values.yaml",
 		"extraArgs:\n  - --kube-apiserver-arg=anonymous-auth=true\n")

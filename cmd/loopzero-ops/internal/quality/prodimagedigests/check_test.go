@@ -147,7 +147,7 @@ func TestCheck_LiveChartsRepo_PassesInWarnMode(t *testing.T) {
 	// Smoke test against the actual repo — warn-mode must pass
 	// regardless of how many violations exist today. Catches the
 	// case where someone accidentally flips EnforceMode default.
-	out, err := Check(Config{Root: "../../..", EnforceMode: false})
+	out, err := Check(Config{Root: repoRoot, EnforceMode: false})
 	if err != nil {
 		t.Fatalf("Check on real repo: %v", err)
 	}

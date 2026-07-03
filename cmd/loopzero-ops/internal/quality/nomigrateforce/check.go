@@ -39,8 +39,8 @@ var DefaultExcludeDirs = []string{
 // bash self-exclusion of its own script + test file.
 var DefaultSkipSuffixes = []string{
 	"infra/tests/load/CORRECTIONS.txt",
-	"pkg/quality/nomigrateforce/check.go",
-	"pkg/quality/nomigrateforce/check_test.go",
+	"cmd/loopzero-ops/internal/quality/nomigrateforce/check.go",
+	"cmd/loopzero-ops/internal/quality/nomigrateforce/check_test.go",
 }
 
 // Config drives the gate.

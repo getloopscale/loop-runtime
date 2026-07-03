@@ -5,15 +5,16 @@ package phase3gate
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-const (
-	taskfileRoot    = "../../../Taskfile.yml"
-	devLoopDoc      = "../../../docs/operations/dev-loop.md"
-	readmePath      = "../../../README.md"
-	claudeMdPath    = "../../../CLAUDE.md"
+var (
+	taskfileRoot = filepath.Join(repoRoot, "Taskfile.yml")
+	devLoopDoc   = filepath.Join(repoRoot, "docs/operations/dev-loop.md")
+	readmePath   = filepath.Join(repoRoot, "README.md")
+	claudeMdPath = filepath.Join(repoRoot, "CLAUDE.md")
 )
 
 // TestT3_1_DevLoopDocExists — operator runbook present

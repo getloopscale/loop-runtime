@@ -13,9 +13,9 @@ import (
 // TestOpenCostChart_StructureExists — wrapper chart files present
 func TestOpenCostChart_StructureExists(t *testing.T) {
 	required := []string{
-		"../../../infra/helm/opencost/Chart.yaml",
-		"../../../infra/helm/opencost/values.yaml",
-		"../../../infra/helm/opencost/values.schema.json",
+		filepath.Join(repoRoot, "infra/helm/opencost/Chart.yaml"),
+		filepath.Join(repoRoot, "infra/helm/opencost/values.yaml"),
+		filepath.Join(repoRoot, "infra/helm/opencost/values.schema.json"),
 	}
 	for _, p := range required {
 		abs, _ := filepath.Abs(p)
@@ -27,7 +27,7 @@ func TestOpenCostChart_StructureExists(t *testing.T) {
 
 // TestOpenCostChart_DeclaresUpstreamDependency — Chart.yaml uses upstream chart
 func TestOpenCostChart_DeclaresUpstreamDependency(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helm/opencost/Chart.yaml")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helm/opencost/Chart.yaml"))
 	if err != nil {
 		t.Fatalf("read Chart.yaml: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestOpenCostChart_DeclaresUpstreamDependency(t *testing.T) {
 
 // TestOpenCostValues_NonRoot — security context per LoopZero platform standard
 func TestOpenCostValues_NonRoot(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helm/opencost/values.yaml")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helm/opencost/values.yaml"))
 	if err != nil {
 		t.Fatalf("read values.yaml: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestOpenCostValues_NonRoot(t *testing.T) {
 // TestOpenCostValues_ExternalPrometheus — uses LoopZero's existing Prometheus
 // (NOT internal — that would duplicate scrape + waste resources)
 func TestOpenCostValues_ExternalPrometheus(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helm/opencost/values.yaml")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helm/opencost/values.yaml"))
 	if err != nil {
 		t.Fatalf("read values.yaml: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestOpenCostValues_ExternalPrometheus(t *testing.T) {
 
 // TestHelmfile_OpenCostReleasePresent — mgmt helmfile declares opencost release
 func TestHelmfile_OpenCostReleasePresent(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helmfile/mgmt.helmfile.yaml.gotmpl"))
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestHelmfile_OpenCostReleasePresent(t *testing.T) {
 // TestHelmfile_OpenCostNeedsPrometheus — explicit needs: declaration
 // (EC-01 of plan: race conditions in cleanroom resolved via needs:)
 func TestHelmfile_OpenCostNeedsPrometheus(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helmfile/mgmt.helmfile.yaml.gotmpl"))
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestHelmfile_OpenCostNeedsPrometheus(t *testing.T) {
 
 // TestServiceMonitor_OpenCostExists — Prometheus scrape config
 func TestServiceMonitor_OpenCostExists(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helm/monitoring/manifests/servicemonitor-opencost.yaml")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helm/monitoring/manifests/servicemonitor-opencost.yaml"))
 	if err != nil {
 		t.Fatalf("ServiceMonitor missing: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestServiceMonitor_OpenCostExists(t *testing.T) {
 
 // TestValuesSchema_Valid — values.schema.json is valid JSON
 func TestValuesSchema_Valid(t *testing.T) {
-	data, err := os.ReadFile("../../../infra/helm/opencost/values.schema.json")
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helm/opencost/values.schema.json"))
 	if err != nil {
 		t.Fatalf("read schema: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestValuesSchema_Valid(t *testing.T) {
 func TestEnvStubs_AllEnvsHaveOpenCostFile(t *testing.T) {
 	envs := []string{"dev", "drill", "prod", "standalone", "standalone-multi"}
 	for _, env := range envs {
-		p := "../../../infra/helmfile/values/" + env + "/opencost.yaml.gotmpl"
+		p := filepath.Join(repoRoot, "infra/helmfile/values", env, "opencost.yaml.gotmpl")
 		abs, _ := filepath.Abs(p)
 		if _, err := os.Stat(abs); os.IsNotExist(err) {
 			t.Errorf("env stub missing for %s: %s", env, p)

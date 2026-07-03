@@ -62,7 +62,7 @@ var DefaultScanExts = []string{".sh", ".yml", ".yaml", ".go", ".ts", ".tsx", ".j
 
 // selfPkgFragment is the gate's own package path — skipped because check.go
 // contains every pattern as a string literal (would self-match).
-const selfPkgFragment = "pkg/quality/drilloutputs/"
+const selfPkgFragment = "cmd/loopzero-ops/internal/quality/drilloutputs/"
 
 // Config drives the gate.
 type Config struct {
