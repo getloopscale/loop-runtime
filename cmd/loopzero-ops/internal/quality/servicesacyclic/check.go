@@ -68,6 +68,11 @@ const servicesRoot = "api/internal/services"
 // servicesImportPrefix is the canonical import path of the decomposed package.
 const servicesImportPrefix = "github.com/getloopscale/loopzero/api/internal/services/"
 
+// missingRootMarker is the Unknown[] sentinel emitted when the services root is
+// renamed away or empty — a fail-closed signal distinct from a per-context name.
+// It cannot collide with a real subpackage (dir names never contain '<').
+const missingRootMarker = "<services-root-missing-or-empty>"
+
 // allowed is the deny-by-default adjacency allow-list. allowed[A] is the set of
 // subpackages A is permitted to import. A subpackage absent from this map is
 // unknown → fail-closed. An empty set means "pure leaf" (imports no sibling).
@@ -89,9 +94,29 @@ func Check(cfg Config) (Outcome, error) {
 		cfg.RepoRoot = "."
 	}
 	root := filepath.Join(cfg.RepoRoot, servicesRoot)
-	if _, err := os.Stat(root); err != nil {
-		// services/ absent (partial checkout) — trivially passes.
-		return Outcome{Pass: true}, nil
+	info, err := os.Stat(root)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			// Permission or other stat error — surface it, never silently pass.
+			return Outcome{}, fmt.Errorf("stat %s: %w", root, err)
+		}
+		// services/ is absent. Distinguish a genuine partial checkout (the parent
+		// api/internal/ is also absent → nothing to enforce → skip) from a
+		// renamed-away services root (parent present, services/ gone → a real
+		// regression this gate exists to catch → fail-closed). Pre-M9 §7-step-1
+		// this branch returned Pass:true unconditionally — a false green that let
+		// a destroyed decomposition ship past CI.
+		parent := filepath.Join(cfg.RepoRoot, filepath.Dir(servicesRoot))
+		if _, perr := os.Stat(parent); perr != nil {
+			if os.IsNotExist(perr) {
+				return Outcome{Pass: true}, nil // partial checkout — trivially skip.
+			}
+			return Outcome{}, fmt.Errorf("stat %s: %w", parent, perr)
+		}
+		return Outcome{Pass: false, Unknown: []string{missingRootMarker}}, nil
+	}
+	if !info.IsDir() {
+		return Outcome{}, fmt.Errorf("%s is not a directory", root)
 	}
 
 	entries, err := os.ReadDir(root)
@@ -102,6 +127,7 @@ func Check(cfg Config) (Outcome, error) {
 	var violations []Violation
 	var unknown []string
 	scanned := 0
+	knownContexts := 0
 
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -113,6 +139,7 @@ func Check(cfg Config) (Outcome, error) {
 			unknown = append(unknown, ctx)
 			continue
 		}
+		knownContexts++
 		dir := filepath.Join(root, ctx)
 		v, n, err := scanContext(dir, ctx, allowedTargets)
 		if err != nil {
@@ -120,6 +147,13 @@ func Check(cfg Config) (Outcome, error) {
 		}
 		violations = append(violations, v...)
 		scanned += n
+	}
+
+	// An existing-but-empty services root (zero known contexts, nothing unknown to
+	// explain it) means the whole decomposition vanished — fail-closed with a
+	// self-documenting sentinel rather than passing on an empty graph.
+	if knownContexts == 0 && len(unknown) == 0 {
+		unknown = append(unknown, missingRootMarker)
 	}
 
 	sort.Strings(unknown)

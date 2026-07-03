@@ -192,6 +192,57 @@ func TestCheck_NoServicesDirTriviallyPasses(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 	if !out.Pass {
-		t.Error("absent services/ must trivially pass")
+		t.Error("absent services/ AND absent api/internal/ (partial checkout) must trivially pass")
+	}
+}
+
+// §7 Step 1 (report finding — false-green nit): the services root being *renamed
+// away* while its parent api/internal/ still exists is a real regression the gate
+// exists to catch — it MUST fail-closed, not silently pass like a partial
+// checkout. Pre-fix, os.Stat(root) error → Pass:true unconditionally (false green).
+func TestCheck_ServicesRootRenamedAwayFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	// api/internal/ exists (a sibling dir proves it), but services/ is gone.
+	writeGo(t, root, "api/internal/other/x.go", "package other\n\nfunc F() {}\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("services/ renamed away with api/internal/ present must FAIL (false-green regression)")
+	}
+}
+
+// §7 Step 1: an *empty* services root (dir exists, zero context subpackages) means
+// the whole decomposition vanished — also a regression, also fail-closed.
+func TestCheck_EmptyServicesRootFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, servicesRoot), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("empty services/ (all contexts gone) must FAIL, not silently pass")
+	}
+}
+
+// §7 Step 1 (permission-error case): if the services path is not a directory
+// (e.g. clobbered by a file), the gate MUST surface an error — never silently
+// pass and never crash.
+func TestCheck_ServicesPathNotADirErrors(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "api/internal"), 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Clobber the services path with a regular file.
+	if err := os.WriteFile(filepath.Join(root, servicesRoot), []byte("not a dir"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	out, err := Check(Config{RepoRoot: root})
+	if err == nil {
+		t.Fatalf("services path being a file must return an error, got Pass=%v", out.Pass)
 	}
 }
