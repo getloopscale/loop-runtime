@@ -154,6 +154,21 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// MEET-2026-07-02-002 MA-1/MA-8: single-status-writer merge-patch base.
+	// Environment `.status` has exactly ONE writer (this controller); the
+	// Tenant controller writes only Environment spec/metadata. Capturing a
+	// DeepCopy here — after EnsureFinalizer's metadata write, before any status
+	// mutation — lets every status write below use
+	// `r.Status().Patch(ctx, &env, client.MergeFrom(base))`. A merge patch
+	// carries no resourceVersion (no optimistic-concurrency 409) and sends only
+	// the changed status fields, so a concurrent spec/metadata write by the
+	// Tenant controller can never clobber this status write. This replaces the
+	// former refetch-then-restore `Status().Update` dance, which lost updates on
+	// conflict and silently dropped the condition (the t31 flake). If a SECOND
+	// status writer is ever introduced this invariant must be revisited — see
+	// `.claude/rules/loopzero-design.md` § single-status-writer.
+	base := env.DeepCopy()
+
 	// Transition from empty to Pending via state machine (Rule 8).
 	if env.Status.Phase == "" {
 		env.Status.Phase = loopzerov1.EnvironmentPhase(
@@ -191,16 +206,15 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				tenantName, env.Spec.Project, env.Spec.Environment, refErr)
 			conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
 				metav1.ConditionFalse, "InvalidEnvRef", msg, env.Generation)
-			savedStatus := env.Status
-			if refetchErr := r.Get(ctx, req.NamespacedName, &env); refetchErr != nil {
-				logger.Error(refetchErr, "failed to re-fetch environment for InvalidEnvRef status")
-				return ctrl.Result{}, nil
-			}
-			env.Status = savedStatus
-			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
+			// MA-4: report the observed generation even on the error branch.
+			env.Status.ObservedGeneration = env.Generation
+			// MA-1/MA-2: merge-patch (no 409); requeue on write failure.
+			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
 				logger.Error(statusErr, "failed to persist InvalidEnvRef condition")
-				return ctrl.Result{}, nil
+				return ctrl.Result{}, statusErr
 			}
+			// Structurally invalid until the user fixes the EnvRef; re-reconcile
+			// only on CR update (watches handle that automatically) — no requeue.
 			return ctrl.Result{}, nil
 		}
 		canonical, nsErr := ref.Namespace()
@@ -209,18 +223,17 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				tenantName, env.Spec.Project, env.Spec.Environment, nsErr)
 			conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
 				metav1.ConditionFalse, "NameTooLong", msg, env.Generation)
-			savedStatus := env.Status
-			if refetchErr := r.Get(ctx, req.NamespacedName, &env); refetchErr != nil {
-				logger.Error(refetchErr, "failed to re-fetch environment for NameTooLong status")
-				return ctrl.Result{}, nil
-			}
-			env.Status = savedStatus
-			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
+			// MA-4: report the observed generation even on the error branch.
+			env.Status.ObservedGeneration = env.Generation
+			// MA-1/MA-2: merge-patch (no 409); requeue on write failure so the
+			// condition converges instead of being silently dropped (t31 flake).
+			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
 				logger.Error(statusErr, "failed to update NameTooLong status")
+				return ctrl.Result{}, statusErr
 			}
-			// EC-3: do not requeue — name is structurally invalid until the
-			// user shortens Project or Environment. Re-reconcile only on CR
-			// update (controller-runtime watches handle that automatically).
+			// EC-3: do not requeue on success — name is structurally invalid
+			// until the user shortens Project or Environment. Re-reconcile only
+			// on CR update (controller-runtime watches handle that automatically).
 			return ctrl.Result{}, nil
 		}
 		nsName = canonical
@@ -251,13 +264,9 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := step.fn(); err != nil {
 			conditions.SetCondition(&env.Status.Conditions, step.condType,
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
-			savedStatus := env.Status
-			if refetchErr := r.Get(ctx, req.NamespacedName, &env); refetchErr != nil {
-				logger.Error(refetchErr, "failed to re-fetch environment for status update")
-				return ctrl.Result{}, err
-			}
-			env.Status = savedStatus
-			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
+			// MA-1: merge-patch (no 409). The step error already drives the
+			// requeue below; a status-write failure is logged, not swallowed.
+			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
 				logger.Error(statusErr, "failed to update environment status")
 			}
 			return ctrl.Result{}, err
@@ -278,14 +287,10 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	env.Status.Namespace = nsName
 	env.Status.ObservedGeneration = env.Generation
 
-	// Re-fetch to get latest resourceVersion before final status update.
-	savedStatus := env.Status
-	if err := r.Get(ctx, req.NamespacedName, &env); err != nil {
-		return ctrl.Result{}, err
-	}
-	env.Status = savedStatus
-
-	if err := r.Status().Update(ctx, &env); err != nil {
+	// MA-1: merge-patch the accumulated status (phase + conditions + namespace +
+	// observedGeneration) off the base snapshot. No refetch, no resourceVersion,
+	// no 409 against a concurrent Tenant-controller spec/metadata write.
+	if err := r.Status().Patch(ctx, &env, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 

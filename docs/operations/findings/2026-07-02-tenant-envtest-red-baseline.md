@@ -1,5 +1,6 @@
 # FINDING — tenant operator envtest suite is RED on branch `melhorias` (pre-existing)
 
+- **Status:** ✅ **RESOLVED 2026-07-02** — deterministic failures fixed (`986b60b4`); the residual t31 status-write concurrency flake fixed under MEET-2026-07-02-002 (see § Resolution below).
 - **Date:** 2026-07-02
 - **Discovered during:** M9 Step 2 (extract environment) baseline capture — `docs/meetings/records/MEET-2026-07-02-001.md` MA-9.
 - **Severity:** HIGH (blocks any operators refactor that needs envtest as a behavior oracle — e.g. M9 Step 2).
@@ -65,3 +66,41 @@ This corrective work is its own `/to-plan` scope (operators test stabilization),
   standard 30s, which did not resolve the underlying race. Tracked for a separate
   root-cause fix (make the reconciler robust to a not-yet-persisted spec, or gate the
   spec on a "CR fully persisted" precondition). NOT in M9 Step 1/2 scope.
+
+## Resolution (2026-07-02) — t31 flake fixed under MEET-2026-07-02-002
+
+Root cause (confirmed by all 3 reviewers, reconcile logs + code): the environment
+reconcile persisted `.status` via a refetch-then-restore `Status().Update` that
+`return ctrl.Result{}, nil` on an optimistic-concurrency conflict — silently
+dropping the `NameTooLong` condition AND leaving the phase unpersisted; the phase
+never reaching `Pending` then made a later delete hit an absent
+`Empty→Deleting` state-machine edge. The second writer is the Tenant controller
+(`Owns(&Environment{})` + parent-generation annotation bump on the shared
+resourceVersion).
+
+**Fix (T2, ratified MEET-2026-07-02-002):**
+
+- **MA-1/MA-2:** all four status-write sites converted to
+  `r.Status().Patch(ctx, &env, client.MergeFrom(base))` (single-status-writer
+  merge patch — no resourceVersion, no 409, cannot clobber); requeue on write
+  failure instead of silent `nil`.
+- **MA-3:** additive SM edge `Environment: Empty --DeleteRequested--> Deleting`
+  (`pkg/statemachine/environment.go`); `Deleting` stays the sole terminal.
+- **MA-4:** `ObservedGeneration` set on the NameTooLong/InvalidEnvRef branches.
+- **MA-8:** single-status-writer invariant documented in `.claude/rules/loopzero-design.md`.
+
+**Evidence:**
+
+- Deterministic proof (RED→GREEN): `operators/internal/environment/environment_controller_conflict_test.go`
+  — fake-client conflict injection (`interceptor.Funcs`) asserts requeue-on-conflict
+  (MA-2), ObservedGeneration (MA-4), and delete-from-Empty finalizer removal (MA-3).
+  RED against the pre-fix code (`ObservedGeneration=0`; conflict `→ nil`), GREEN after.
+- Stress corroboration: **18/18 clean** on the previously ~50%-flaky spec — 3× full
+  `go test ./operators/internal/tenant/ -count=1 -p 1` (fresh process each) + 15×
+  focused `-ginkgo.focus="63-char overflow"`. Zero `invalid state transition` /
+  `object has been modified` / timeout.
+- No-regression: `pkg/statemachine`, `operators/internal/environment`,
+  `operators/internal/tenant` all `-count=1` GREEN.
+
+The quarantine comment was removed from `environment_controller_t31_test.go`; the
+spec is now end-to-end corroboration, no longer a known flake.
