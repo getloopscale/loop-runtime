@@ -19,7 +19,7 @@
 //   - Gitea repo deletion (user data — requires separate consent step)
 //   - Harbor image deletion (optional; retained per retention policy)
 
-package services
+package placementsvc
 
 import (
 	"context"

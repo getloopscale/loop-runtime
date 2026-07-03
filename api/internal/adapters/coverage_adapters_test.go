@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -175,7 +177,7 @@ func TestBuildOrchestratorAdapter_GetBuildStatus_WithDuration(t *testing.T) {
 // =============================================================================
 
 func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
-	// Test that the mapping from store.TenantDeletionCounts to services.TenantDeletionCounts
+	// Test that the mapping from store.TenantDeletionCounts to placementsvc.TenantDeletionCounts
 	// covers all fields.
 	c := store.TenantDeletionCounts{
 		EnvironmentTargets: 10,
@@ -187,7 +189,7 @@ func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
 		TenantMembers:      3,
 		Tenants:            1,
 	}
-	result := services.TenantDeletionCounts{
+	result := placementsvc.TenantDeletionCounts{
 		EnvironmentTargets: c.EnvironmentTargets,
 		Releases:           c.Releases,
 		BuildApps:          c.BuildApps,
@@ -208,7 +210,7 @@ func TestTenantDBDeleterAdapter_VerifyFields(t *testing.T) {
 
 func TestTenantK8sEvictorAdapter_VerifyFieldMapping(t *testing.T) {
 	// Test that the K8sEvictionCounts mapping covers all fields.
-	result := services.K8sEvictionCounts{
+	result := placementsvc.K8sEvictionCounts{
 		ArgoWorkflowsDeleted: 5,
 		MgmtCRsDeleted:       10,
 		FinalizersCleared:    3,

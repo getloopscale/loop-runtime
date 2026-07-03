@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5"
@@ -301,7 +303,7 @@ func buildServerConfig(
 		// tenant.
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
 		// so operator reconcile re-emits ArgoCD destination with new cell.
-		sc.AdminPinner = services.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
+		sc.AdminPinner = placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
 			WithKubeClient(buildMgmtDynamicClient(logger), "loopzero-system")
 		// T4.4 of plan 2026-05-28-meet-001-engineering-closure: wire the
 		// ReleaseInspector so GET /api/v1/admin/releases/{id}/inspect can

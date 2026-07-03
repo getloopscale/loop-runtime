@@ -6,7 +6,7 @@
 // db/cell_pinner_store_test.go (sibling of services tests, ships when
 // the store implementation lands; this file covers the orchestration).
 
-package services
+package placementsvc
 
 import (
 	"context"

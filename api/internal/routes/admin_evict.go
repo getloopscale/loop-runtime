@@ -9,7 +9,7 @@
 // capability.
 //
 // The endpoint is intentionally minimal: it enqueues eviction work and
-// returns a job ID. Actual eviction is done by services.TenantEvictor
+// returns a job ID. Actual eviction is done by placement.TenantEvictor
 // (separate file) which handles FK ordering + finalizer removal.
 
 package routes

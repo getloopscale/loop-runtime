@@ -82,7 +82,7 @@ func (s *PostgresCellStore) GetTenantCellID(ctx context.Context, tenantID string
 	return cellID, nil
 }
 
-// PinTenantToCell implements services.CellPinnerStore. Atomic
+// PinTenantToCell implements placement.CellPinnerStore. Atomic
 // 4-step sequence:
 //  1. validate tenant exists → ErrCellPinnerTenantNotFound
 //  2. validate cell exists + status='active' → ErrCellPinnerCellNotFound/

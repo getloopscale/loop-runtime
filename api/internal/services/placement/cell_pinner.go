@@ -13,7 +13,7 @@
 //
 // Returns previous cell_id so callers can rollback (`pin tenant cell-prev`).
 
-package services
+package placementsvc
 
 import (
 	"context"

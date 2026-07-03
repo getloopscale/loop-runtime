@@ -15,7 +15,7 @@ import (
 //
 // The 4 prod call sites (api/cmd/main.go:175,
 // api/cmd/setup_stores.go:92, api/cmd/setup_server.go:231,
-// services.NewCellPinner consumer) all use struct-literal
+// placement.NewCellPinner consumer) all use struct-literal
 // `&db.PostgresCellStore{DB: dbAdapter}` — preserved here.
 
 // PostgresCellStore exposes cell-aware queries (PlacementEngine
