@@ -857,6 +857,25 @@ tasks:
     cmds:
       - bash archive/canonical-tests-v1/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
 
+  test:dogfood:register:
+    desc: |
+      M0 J-02 Register — aggregate dogfood wrapper.
+      Suites: hermetic syntax + loopzero-cloud go test ./internal/routes -run TestMe_
+      (provisioning snapshot T1.2 + lazy starter provision T1.3) + dashboard
+      vitest (register + completing-screen + provisioning hook) + LIVE bash
+      (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
+    cmds:
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-register.sh {{.CLI_ARGS}}
+
+  test:dogfood:verification:
+    desc: |
+      M0 J-03 Verification — aggregate dogfood wrapper.
+      Suites: hermetic syntax + dashboard vitest (verification + ResendCooldownButton)
+      + LIVE bash (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only
+      --live-only --json.
+    cmds:
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-verification.sh {{.CLI_ARGS}}
+
   test:dogfood:domains:
     desc: |
       T5.2 of plan 2026-06-06-dashboard-journey-j11-domains v1.1 SHIPPABLE
