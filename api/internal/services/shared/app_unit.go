@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package shared is the leaf shared-kernel of the services contexts: cross-context DTOs, ports, pure utilities. M9 Step 6.
 package shared
 
 import "fmt"

@@ -159,7 +159,7 @@ type WorkflowSubmitter interface {
 	GetStatus(ctx context.Context, namespace, workflowID string) (*WorkflowStatus, error)
 }
 
-// Every implementer MUST satisfy these 6 methods:
+// SyncClient is the ArgoCD sync port. Every implementer MUST satisfy these 6 methods:
 //   - *argocd.SyncClient (production, api/internal/argocd/sync_client.go)
 //   - *CircuitBreakerSyncClient (production wrapper, pg_circuit_breaker.go)
 //   - test fakes in *_test.go

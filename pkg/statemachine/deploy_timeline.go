@@ -108,13 +108,14 @@ func (s *DeployTimelineState) Transition(target DeployTimelinePhase, status Depl
 	// Cross-phase transition rules: target must be either the current
 	// phase (substate change) or the immediate successor (after current
 	// reached a terminal status).
-	if targetIdx == currentIdx {
+	switch targetIdx {
+	case currentIdx:
 		// Substate transition within current phase.
 		if !validStatusTransition(s.status, status, target) {
 			panic(fmt.Sprintf("deploy_timeline: invalid status transition %s/%s → %s",
 				s.phase, s.status, status))
 		}
-	} else if targetIdx == currentIdx+1 {
+	case currentIdx + 1:
 		// Advance to next phase — current must have completed.
 		if s.status != DTStatusCompleted {
 			panic(fmt.Sprintf("deploy_timeline: cannot advance %s → %s while current status=%s",
@@ -124,7 +125,7 @@ func (s *DeployTimelineState) Transition(target DeployTimelinePhase, status Depl
 			panic(fmt.Sprintf("deploy_timeline: phase %s must enter as ready/in_progress, not %s",
 				target, status))
 		}
-	} else {
+	default:
 		// Out-of-order phase jump — invalid.
 		panic(fmt.Sprintf("deploy_timeline: out-of-order phase jump %s → %s",
 			s.phase, target))

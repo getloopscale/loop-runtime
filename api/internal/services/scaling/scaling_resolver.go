@@ -8,6 +8,7 @@
 // that row OVERRIDES the value from loopzero.yaml. Otherwise loopzero.yaml is preserved
 // (backward-compat).
 
+// Package scaling is the scaling bounded context (replica/HPA resolution, plan-cap enforcement). M9 Step 6.
 package scaling
 
 import (

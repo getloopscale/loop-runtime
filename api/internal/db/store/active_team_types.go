@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package store holds the sqlc-backed status-mutation Store adapters (the only sanctioned build/release status path — MA-7). M9 Step 5.
 package store
 
 import "github.com/getloopscale/loopzero/api/internal/db"

@@ -236,5 +236,5 @@ type environmentEnsurerContract interface {
 	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
 
-// Sentinel error for tests + callers that want explicit detection.
+// ErrEnvAlreadyExists is a sentinel error for tests + callers that want explicit detection.
 var ErrEnvAlreadyExists = errors.New("environment already exists")

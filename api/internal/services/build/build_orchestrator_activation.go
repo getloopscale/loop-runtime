@@ -36,7 +36,7 @@ func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID s
 	}
 }
 
-// This is the "retry without rebuild" mechanism (Step 6): the API reads the
+// RetryRelease is the "retry without rebuild" mechanism (Step 6): the API reads the
 // manifests stored in release.Artifacts and re-pushes them to the GitOps repo.
 // No new build is triggered.
 func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) error {

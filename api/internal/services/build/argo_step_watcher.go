@@ -241,7 +241,7 @@ func (w *ArgoStepWatcher) handleEvent(ctx context.Context, ev ArgoNodeEvent) {
 		if dur < 0 {
 			dur = 0
 		}
-		errClass := ClassifyFromErr(nil, ev.Message)
+		var errClass ErrorClass
 		// EC-7 fast path: workflow terminate annotation = cancel.
 		if ev.Message == "" {
 			errClass = ErrorClassUnknown

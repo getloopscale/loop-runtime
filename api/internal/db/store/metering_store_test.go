@@ -1327,7 +1327,7 @@ func TestMeteringStore_MeterCompute_ClampsLongGap(t *testing.T) {
 	if delta != clamped {
 		t.Errorf("delta=%d, want %d (clamped to max_delta 30s)", delta, clamped)
 	}
-	if gapExceedsMaxDelta && !(clamped < raw) {
+	if gapExceedsMaxDelta && clamped >= raw {
 		t.Errorf("clamp did not reduce the charge: clamped=%d raw=%d (ADR-8 clamp inert)", clamped, raw)
 	}
 	if !gapExceedsMaxDelta {

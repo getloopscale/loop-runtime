@@ -308,7 +308,7 @@ func TestNewPostgresSecretStoreWithVault_ValidConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if s == nil {
-		t.Error("expected store, got nil")
+		t.Fatal("expected store, got nil")
 	}
 	if s.vault != mv {
 		t.Error("expected vault field set")

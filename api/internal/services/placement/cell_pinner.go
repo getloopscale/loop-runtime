@@ -13,6 +13,7 @@
 //
 // Returns previous cell_id so callers can rollback (`pin tenant cell-prev`).
 
+// Package placementsvc is the cell-placement bounded context. Name avoids collision with internal/placement. M9 Step 6.
 package placementsvc
 
 import (

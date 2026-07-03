@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// fakes.go holds the shared DBTX test fakes used by the db-store adapter
+// Package dbtest holds the shared DBTX test fakes used by the db-store adapter
 // tests.
 //
 // M9 Step 5 (slice 5a.5): these fakes (FakeDBTX, RecordingDBTX, and the row
@@ -19,6 +19,7 @@
 // db/store adapter tests and the root-db external `package db_test` files
 // (cell_scoped_queries_test, stores_extra_test).
 // Contained to internal/, no runtime path.
+// Package dbtest provides in-memory DBTX test doubles shared by db-adapter unit tests. M9 Step 5.
 package dbtest
 
 import (

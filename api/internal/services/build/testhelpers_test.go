@@ -6,8 +6,6 @@ package build
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -18,10 +16,6 @@ import (
 
 // testLogger returns a discarding slog.Logger for tests. M9 Step 6: the shared
 // services-level test helper (the placement context kept its own copy in
-// cross_cell_aggregator_test.go when it moved).
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
 
 // fakeLockerContainer is a no-op EnvironmentLocker for build-context tests. M9
 // Step 6: the build context kept its own copy when container_delivery (and its

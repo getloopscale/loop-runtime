@@ -22,6 +22,7 @@
 // Returns &stripe.BillingPortalSession{URL: "https://billing.stripe.com/p/session/..."}
 // with TTL = 30 minutes (one-time-use, Stripe-managed).
 
+// Package billing is the billing/plan bounded context. M9 Step 6.
 package billing
 
 import (

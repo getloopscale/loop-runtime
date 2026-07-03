@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package services implements business logic orchestration.
+// Package platform is the platform-bootstrap bounded context. M9 Step 6.
 package platform
 
 import (

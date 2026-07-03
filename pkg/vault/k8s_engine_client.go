@@ -74,7 +74,7 @@ func (c *CachingK8sEngineClient) GenerateSAToken(ctx context.Context, role, name
 	defer c.mu.Unlock()
 
 	if tok, ok := c.cache[key]; ok {
-		remaining := tok.IssuedAt.Add(tok.LeaseDur).Sub(time.Now())
+		remaining := time.Until(tok.IssuedAt.Add(tok.LeaseDur))
 		if remaining > c.refreshWin {
 			return tok, nil
 		}

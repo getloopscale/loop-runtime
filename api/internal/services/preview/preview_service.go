@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package preview is the preview-environment bounded context. M9 Step 6.
 package preview
 
 import (

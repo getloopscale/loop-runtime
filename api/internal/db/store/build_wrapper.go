@@ -425,9 +425,7 @@ func (s *BuildStoreSqlc) ListEnvsForProject(ctx context.Context, tenantID, proje
 		return nil, fmt.Errorf("build store: list envs for project: %w", err)
 	}
 	out := make([]string, 0, len(rows))
-	for _, env := range rows {
-		out = append(out, env)
-	}
+	out = append(out, rows...)
 	return out, nil
 }
 
