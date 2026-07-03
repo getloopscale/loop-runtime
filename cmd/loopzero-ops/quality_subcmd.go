@@ -2841,6 +2841,9 @@ func runDbGeneratedBoundary(args []string) int {
 		fmt.Fprintf(os.Stderr, "\nFix: %s\n", dbgeneratedboundary.ActionableFix())
 		return 1
 	}
+	for _, d := range outcome.MissingDirs {
+		fmt.Fprintf(os.Stderr, "db-generated-boundary: WARN \u2014 fenced dir %q absent from tree (a rename may have silently dropped a fence)\n", d)
+	}
 	fmt.Printf("db-generated-boundary: PASS \u2014 %d .go files scanned; no outer-layer imports of db/generated (MA-7 Gate A)\n", outcome.Scanned)
 	return 0
 }

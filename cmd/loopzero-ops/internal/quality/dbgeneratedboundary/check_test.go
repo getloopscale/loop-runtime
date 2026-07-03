@@ -74,8 +74,81 @@ func TestCheck_ServiceImportingGeneratedFails(t *testing.T) {
 	if got := out.Violations[0].Import; got != generatedImportPath {
 		t.Errorf("Violation.Import = %q, want %q", got, generatedImportPath)
 	}
-	if !filepath.IsAbs(out.Violations[0].File) && out.Violations[0].File == "" {
+	if out.Violations[0].File == "" {
 		t.Error("Violation.File must be populated")
+	}
+}
+
+const dotImportServiceFile = `package services
+
+import (
+	"context"
+
+	. "github.com/getloopscale/loopzero/api/internal/db/generated"
+)
+
+func Do(ctx context.Context) { _ = Queries{} }
+`
+
+// A dot-import of the generated package (path unchanged, Name==".") must still
+// be flagged — the AST matches on imp.Path.Value, so the alias/dot form cannot
+// evade the fence. Locks the robustness the reviewer verified by reasoning.
+func TestCheck_DotImportStillFlagged(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", dotImportServiceFile)
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("a dot-import of db/generated must FAIL Gate A")
+	}
+}
+
+// The aliased-import form (`gen "…/generated"`) is exercised by
+// violatingServiceFile itself (it uses `gen`). Assert it explicitly so a future
+// "simplify to grep" cannot silently regress the alias case.
+func TestCheck_AliasedImportStillFlagged(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", violatingServiceFile) // uses `gen` alias
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("an aliased import of db/generated must FAIL Gate A")
+	}
+}
+
+// The api/cmd composition root is fenced too (the highest-leverage bypass site).
+func TestCheck_CmdCompositionRootFenced(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/cmd/setup_stores.go", violatingServiceFile)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("api/cmd importing db/generated must FAIL Gate A (composition root)")
+	}
+}
+
+// A forbidden dir absent from the tree is recorded in MissingDirs so a silent
+// fence-drop (dir rename) is never invisible.
+func TestCheck_MissingDirsRecorded(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", cleanServiceFile) // only services present
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("clean single-dir tree must PASS, got: %+v", out.Violations)
+	}
+	// routes, server, cmd are absent → recorded.
+	if len(out.MissingDirs) != 3 {
+		t.Errorf("MissingDirs = %v, want 3 absent (routes, server, cmd)", out.MissingDirs)
 	}
 }
 

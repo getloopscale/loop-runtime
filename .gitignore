@@ -231,3 +231,11 @@ cross-validation-output/*.db
 .metering-pg.env
 halt-loop-prompts/
 knowledge-base/implementations/.progress-*.json
+
+# loop-codebase-architect regenerable output (never track — 128KB SQLite + report)
+architect-output/
+cross-validation-output/
+
+# user WIP simulator (commit deliberately, not via git add -A)
+docs/operations/loopzero-capsim*.mjs
+docs/operations/loopzero-capsim-mcp/
