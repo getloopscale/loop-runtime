@@ -72,7 +72,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "loopzero-tn-t31-teste-production",
 				}, &ns)).To(Succeed())
-			}, "10s", "200ms").Should(Succeed())
+			}, timeout, interval).Should(Succeed())
 		})
 
 		AfterAll(func() {
@@ -111,7 +111,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 				g.Expect(found).To(BeTrue(),
 					"expected NamespaceReady=False Reason=NameTooLong; got conditions: %+v",
 					fetched.Status.Conditions)
-			}, "10s", "200ms").Should(Succeed())
+			}, timeout, interval).Should(Succeed())
 
 			// Sanity: no namespace was actually created at the M2 or any other form.
 			var ns corev1.Namespace

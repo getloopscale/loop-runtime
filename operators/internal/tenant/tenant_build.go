@@ -289,7 +289,7 @@ func (r *TenantReconciler) ensureBuildExecutorRBAC(ctx context.Context, buildNs 
 		return fmt.Errorf("role: %w", err)
 	}
 
-	if err := applySingleSARoleBinding(ctx, r.BuildClient, buildNs, k.RoleBindingArgoExecutor, k.RoleArgoExecutor, k.SABuildWorkflow); err != nil {
+	if err := reconcilehelpers.ApplySingleSARoleBinding(ctx, r.BuildClient, buildNs, k.RoleBindingArgoExecutor, k.RoleArgoExecutor, k.SABuildWorkflow); err != nil {
 		return fmt.Errorf("rolebinding: %w", err)
 	}
 	return nil
