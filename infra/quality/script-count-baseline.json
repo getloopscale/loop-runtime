@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 509,
+  "canonical_sh": 516,
   "_changelog": [
+    {
+      "date": "2026-07-03",
+      "from": 509,
+      "to": 516,
+      "reason": "M0 (Authentication & Onboarding) delivered-journey-bar canonical scripts \u2014 +7 net. J-02 Register LIVE-test triplet: infra/tests/e2e/dev-public-register-flow_test.sh (3-scenario read-only LIVE \u2014 /v1/auth/me provisioning-enum contract + completing-screen bundle literal + preflight) + infra/tests/check-dev-public-register-flow-syntax_test.sh (21-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-register.sh (S1 hermetic + S2 Go TestMe_ provisioning + S3 vitest + S4 LIVE aggregator). J-03 Verification LIVE-test triplet: infra/tests/e2e/dev-public-verification-flow_test.sh (3-scenario read-only LIVE \u2014 /verification served + resend-cooldown literal + persisted-cooldown key) + infra/tests/check-dev-public-verification-flow-syntax_test.sh (20-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-verification.sh (aggregator). J-01 patch-kratos read-only gate: infra/tests/check-patch-kratos-check-only-readonly_test.sh (EC-9 \u2014 --check-only MUST be an alias for --dry-run --skip-restart so the dogfood-login Suite-0 Cleanroom-survival pre-flight never mutates the Kratos config it validates; 6 assertions). All 7 in shell-scripts-allowlist.md per the delivered-journey-bar convention. Per INQUEBR\u00c1VEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25 + cleanroom-up-live-test-mandate."
+    },
     {
       "date": "2026-07-01",
       "from": 506,
