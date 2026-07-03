@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package shared
 
 import (
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 func TestCreateBuildPlan_SingleApp(t *testing.T) {
-	units := []shared.AppUnit{
+	units := []AppUnit{
 		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
-	plan := shared.CreateBuildPlan(units, "acme", "my-app", "abc123", "registry.do.com")
+	plan := CreateBuildPlan(units, "acme", "my-app", "abc123", "registry.do.com")
 
 	if len(plan.Apps) != 1 {
 		t.Fatalf("expected 1 app plan, got %d", len(plan.Apps))
@@ -44,11 +42,11 @@ func TestCreateBuildPlan_SingleApp(t *testing.T) {
 }
 
 func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
-	units := []shared.AppUnit{
+	units := []AppUnit{
 		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 		{Name: "worker", Type: "worker", Path: "apps/worker", Runtime: "node", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
-	plan := shared.CreateBuildPlan(units, "acme", "monorepo", "def456", "reg.io")
+	plan := CreateBuildPlan(units, "acme", "monorepo", "def456", "reg.io")
 
 	if len(plan.Apps) != 2 {
 		t.Fatalf("expected 2 app plans, got %d", len(plan.Apps))
@@ -80,10 +78,10 @@ func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 // Dockerfile, When the plan is created, Then the Dockerfile path is the flat
 // canonical /workspace/Dockerfile and the context is the whole workspace.
 func TestCreateBuildPlan_UserDockerfileIgnored_D4(t *testing.T) {
-	units := []shared.AppUnit{
+	units := []AppUnit{
 		{Name: "web", Type: "server", Path: "apps/web", Runtime: "node", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Env: map[string]string{}, Secrets: []string{}},
 	}
-	plan := shared.CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
+	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
 
 	app := plan.Apps[0]
 	// D4: user path/dockerfile IGNORED — canonical flat path for a single app.
@@ -97,11 +95,11 @@ func TestCreateBuildPlan_UserDockerfileIgnored_D4(t *testing.T) {
 }
 
 func TestCreateBuildPlan_WithEnv(t *testing.T) {
-	units := []shared.AppUnit{
+	units := []AppUnit{
 		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack",
 			Env: map[string]string{"NODE_ENV": "production", "LOG_LEVEL": "info"}, Secrets: []string{}},
 	}
-	plan := shared.CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
+	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
 
 	args := plan.Apps[0].BuildArgs
 	if args["NODE_ENV"] != "production" {
@@ -120,10 +118,10 @@ func TestCreateBuildPlan_WithEnv(t *testing.T) {
 // stack (simplify-deploy-loopzerokit-runtime-wiring T2.1 / F-dom-2).
 
 func TestCreateBuildPlan_PythonRuntime(t *testing.T) {
-	units := []shared.AppUnit{
+	units := []AppUnit{
 		{Name: "api", Type: "server", Path: ".", Runtime: "python", Port: 8000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
-	plan := shared.CreateBuildPlan(units, "t", "p", "sha", "r")
+	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
 
 	if plan.Apps[0].LanguageStrategy != "python" {
 		t.Errorf("LanguageStrategy = %q, want python", plan.Apps[0].LanguageStrategy)
@@ -138,11 +136,11 @@ func TestCreateBuildPlan_PythonRuntime(t *testing.T) {
 // TestCreateBuildPlan_MixedRuntimes: a monorepo mixing the two supported
 // runtimes (node + python) resolves each app's strategy by its declared runtime.
 func TestCreateBuildPlan_MixedRuntimes(t *testing.T) {
-	units := []shared.AppUnit{
+	units := []AppUnit{
 		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 		{Name: "ml", Type: "worker", Path: "apps/ml", Runtime: "python", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
-	plan := shared.CreateBuildPlan(units, "acme", "mono", "sha", "reg.io")
+	plan := CreateBuildPlan(units, "acme", "mono", "sha", "reg.io")
 
 	strategies := make(map[string]string)
 	for _, app := range plan.Apps {

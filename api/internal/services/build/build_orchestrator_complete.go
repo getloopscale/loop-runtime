@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"context"
@@ -95,7 +95,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			if result.Error != "" {
 				failedPayload["error"] = result.Error
 			}
-			eventData := safeJSONMarshal(failedPayload)
+			eventData := shared.SafeJSONMarshal(failedPayload)
 			if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
 				return fmt.Errorf("on build completed: emit build.failed: %w", err)
 			}
@@ -109,7 +109,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		}
 
 		// Emit SSE build.succeeded
-		eventData := safeJSONMarshal(map[string]string{
+		eventData := shared.SafeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "succeeded",
 		})

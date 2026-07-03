@@ -15,7 +15,7 @@
 // collected (typically >90d), the inspector MUST return 200 with the
 // workflow fields null AND signing_path="unknown" — NOT 500.
 
-package services
+package release
 
 import (
 	"context"

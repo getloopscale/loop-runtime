@@ -43,7 +43,7 @@ import (
 // which exercises the same SQL with the gate-protected boundary.
 // See raw/README.md for the scope + sensitive-tables exclusion.
 
-// PostgresBuildGCStore implements services.BuildGCStore for garbage
+// PostgresBuildGCStore implements build.BuildGCStore for garbage
 // collection.
 //
 // T2.2 Batch B #6: DB field type preserved (db.DBTX); methods

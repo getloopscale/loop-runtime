@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
@@ -80,7 +82,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 			r.logger.Warn("reconcile loop: release in failed state, failing build",
 				"build_id", build.ID, "release_id", existingRelease.ID,
 				"release_status", existingRelease.Status)
-			r.failBuild(ctx, build, FormatBuildFailureReason(existingRelease))
+			r.failBuild(ctx, build, release.FormatBuildFailureReason(existingRelease))
 			return
 		default:
 			// Release in transient state (READY, PENDING) — wait for it to resolve
@@ -238,7 +240,7 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 	}
 
 	// Emit SSE build.failed event so the CLI gets notified
-	eventData := safeJSONMarshal(map[string]string{
+	eventData := shared.SafeJSONMarshal(map[string]string{
 		"build_id": build.ID,
 		"status":   "failed",
 		"error":    reason,
@@ -251,19 +253,9 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 	r.logger.Warn("reconcile loop: build failed",
 		"build_id", build.ID, "reason", reason)
 
-	if onBuildFailed != nil {
-		// T6.4 of deep-review-remediation-plan (closes find_code_004 / CODE-004 MEDIUM).
-		// Use context.WithoutCancel(ctx) instead of context.Background():
-		// preserves request-scoped values (correlation ID, OTel trace span)
-		// across the goroutine boundary, but does NOT propagate cancellation
-		// from the inbound request (the callback must survive request close).
-		// Then add a 30s timeout cap. Pre-fix: trace context lost, OTel span
-		// for the callback was orphaned.
-		parentCtx := context.WithoutCancel(ctx)
-		go func() {
-			cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
-			defer cancel()
-			onBuildFailed(cbCtx, build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
-		}()
-	}
+	// M9 Step 6: release owns the build-failed callback + its async delivery
+	// (find_code_004 / CODE-004 WithoutCancel+30s timeout contract lives in
+	// release.NotifyBuildFailed). Build asks release to notify; it no longer
+	// peeks at the private callback var.
+	release.NotifyBuildFailed(ctx, build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"github.com/prometheus/client_golang/prometheus/testutil"

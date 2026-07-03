@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package shared
 
 import (
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 // TestNormalizeApp_CopiesRuntime locks the T0.1 (F-dom-2) wiring: NormalizeApp
@@ -15,7 +13,7 @@ import (
 // runtime "python", When normalized, Then AppUnit.Runtime == "python".
 func TestNormalizeApp_CopiesRuntime(t *testing.T) {
 	for _, rt := range []string{"python", "node"} {
-		unit, err := shared.NormalizeApp("api", shared.AppSpec{Path: ".", Runtime: rt, Port: 8080})
+		unit, err := NormalizeApp("api", AppSpec{Path: ".", Runtime: rt, Port: 8080})
 		if err != nil {
 			t.Fatalf("runtime %q: unexpected error: %v", rt, err)
 		}
@@ -26,7 +24,7 @@ func TestNormalizeApp_CopiesRuntime(t *testing.T) {
 }
 
 func TestNormalizeApp_ServerExpress(t *testing.T) {
-	unit, err := shared.NormalizeApp("api", shared.AppSpec{
+	unit, err := NormalizeApp("api", AppSpec{
 		Path: "apps/api", Runtime: "node", Port: 3000,
 	})
 	if err != nil {
@@ -47,7 +45,7 @@ func TestNormalizeApp_ServerExpress(t *testing.T) {
 }
 
 func TestNormalizeApp_NextjsWithoutExplicitType_DefaultsServer(t *testing.T) {
-	unit, err := shared.NormalizeApp("web", shared.AppSpec{
+	unit, err := NormalizeApp("web", AppSpec{
 		Path: "apps/web", Port: 3000,
 	})
 	if err != nil {
@@ -60,7 +58,7 @@ func TestNormalizeApp_NextjsWithoutExplicitType_DefaultsServer(t *testing.T) {
 
 func TestNormalizeApp_RemixIsServer(t *testing.T) {
 	// MEET-2026-03-29-016: Remix is SSR-first, classified as server
-	unit, err := shared.NormalizeApp("web", shared.AppSpec{
+	unit, err := NormalizeApp("web", AppSpec{
 		Path: "apps/web", Port: 3000,
 	})
 	if err != nil {
@@ -72,7 +70,7 @@ func TestNormalizeApp_RemixIsServer(t *testing.T) {
 }
 
 func TestNormalizeApp_WorkerExplicit(t *testing.T) {
-	unit, err := shared.NormalizeApp("worker", shared.AppSpec{
+	unit, err := NormalizeApp("worker", AppSpec{
 		Path: "apps/worker", Type: "worker", Port: 3000,
 	})
 	if err != nil {
@@ -93,7 +91,7 @@ func TestNormalizeApp_WorkerExplicit(t *testing.T) {
 // raw app declaring a custom Dockerfile, When normalized, Then build is
 // "buildpack" and dockerfile is empty.
 func TestNormalizeApp_UserDockerfileIgnored_D4(t *testing.T) {
-	unit, err := shared.NormalizeApp("api", shared.AppSpec{
+	unit, err := NormalizeApp("api", AppSpec{
 		Path: ".", Build: "dockerfile", Dockerfile: "Dockerfile.prod",
 	})
 	if err != nil {
@@ -108,7 +106,7 @@ func TestNormalizeApp_UserDockerfileIgnored_D4(t *testing.T) {
 }
 
 func TestNormalizeApp_DefaultsWhenEmpty(t *testing.T) {
-	unit, err := shared.NormalizeApp("api", shared.AppSpec{})
+	unit, err := NormalizeApp("api", AppSpec{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,7 +134,7 @@ func TestNormalizeApp_DefaultsWhenEmpty(t *testing.T) {
 }
 
 func TestNormalizeApp_WithEnvAndSecrets(t *testing.T) {
-	unit, err := shared.NormalizeApp("api", shared.AppSpec{
+	unit, err := NormalizeApp("api", AppSpec{
 		Runtime: "node",
 		Port:    3000,
 		Env:     map[string]string{"NODE_ENV": "production"},
@@ -157,7 +155,7 @@ func TestNormalizeApp_WithEnvAndSecrets(t *testing.T) {
 // (F-dom-2). NormalizeApp Type/Build defaults are covered by the tests above.
 
 func TestNormalizeApp_InvalidType(t *testing.T) {
-	_, err := shared.NormalizeApp("api", shared.AppSpec{Type: "invalid"})
+	_, err := NormalizeApp("api", AppSpec{Type: "invalid"})
 	if err == nil {
 		t.Error("expected error for invalid type")
 	}

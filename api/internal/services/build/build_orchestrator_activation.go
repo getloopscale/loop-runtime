@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 // fails after a successful build. This ensures the CLI gets notified instead of
 // waiting for a timeout.
 func (o *BuildOrchestrator) emitActivationFailure(ctx context.Context, buildID string, activationErr error) {
-	failedData := safeJSONMarshal(map[string]interface{}{
+	failedData := shared.SafeJSONMarshal(map[string]interface{}{
 		"status": "sync_failed",
 		"reason": "ACTIVATION_FAILED",
 		"error":  activationErr.Error(),

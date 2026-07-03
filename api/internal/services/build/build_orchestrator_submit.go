@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"context"
@@ -231,7 +231,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req shared.SubmitBu
 	for i, a := range req.Apps {
 		appNames[i] = a.Name
 	}
-	eventData := safeJSONMarshal(map[string]interface{}{
+	eventData := shared.SafeJSONMarshal(map[string]interface{}{
 		"build_id": buildID,
 		"status":   "running",
 		"apps":     appNames,
@@ -349,7 +349,7 @@ func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID, tenant
 	}
 
 	// Emit SSE build.failed so CLI gets notified
-	eventData := safeJSONMarshal(map[string]string{
+	eventData := shared.SafeJSONMarshal(map[string]string{
 		"build_id": buildID,
 		"status":   "failed",
 		"error":    reason,

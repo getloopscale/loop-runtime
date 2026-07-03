@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package release
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
+	"github.com/getloopscale/loopzero/api/internal/processing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
@@ -80,39 +80,39 @@ func (f *fakeLockerStatic) WithLock(_ context.Context, _, _, _ string, fn func(t
 // =============================================================================
 
 func TestPGClaimDedup_Disabled_TryClaimAlwaysTrue(t *testing.T) {
-	d := platform.NewPGClaimDedup(nil, false, "pod-1")
+	d := processing.NewPGClaimDedup(nil, false, "pod-1")
 	if !d.TryClaim(context.Background(), "builds", "bld-001") {
 		t.Error("disabled TryClaim should always return true")
 	}
 }
 
 func TestPGClaimDedup_Disabled_ReleaseIsNoop(t *testing.T) {
-	d := platform.NewPGClaimDedup(nil, false, "pod-1")
+	d := processing.NewPGClaimDedup(nil, false, "pod-1")
 	// Should not panic
 	d.Release(context.Background(), "builds", "bld-001")
 }
 
 func TestPGClaimDedup_Disabled_IsProcessingPGReturnsFalse(t *testing.T) {
-	d := platform.NewPGClaimDedup(nil, false, "pod-1")
+	d := processing.NewPGClaimDedup(nil, false, "pod-1")
 	if d.IsProcessingPG(context.Background(), "builds", "bld-001") {
 		t.Error("disabled IsProcessingPG should return false")
 	}
 }
 
 func TestPGClaimDedup_NilStore_TryClaimTrue(t *testing.T) {
-	d := platform.NewPGClaimDedup(nil, true, "pod-1")
+	d := processing.NewPGClaimDedup(nil, true, "pod-1")
 	if !d.TryClaim(context.Background(), "builds", "bld-001") {
 		t.Error("nil store TryClaim should return true")
 	}
 }
 
 func TestPGClaimDedup_NilStore_ReleaseIsNoop(t *testing.T) {
-	d := platform.NewPGClaimDedup(nil, true, "pod-1")
+	d := processing.NewPGClaimDedup(nil, true, "pod-1")
 	d.Release(context.Background(), "builds", "bld-001")
 }
 
 func TestPGClaimDedup_NilStore_IsProcessingPGFalse(t *testing.T) {
-	d := platform.NewPGClaimDedup(nil, true, "pod-1")
+	d := processing.NewPGClaimDedup(nil, true, "pod-1")
 	if d.IsProcessingPG(context.Background(), "builds", "bld-001") {
 		t.Error("nil store IsProcessingPG should return false")
 	}
@@ -447,14 +447,14 @@ func TestReleaseAppsToActivationApps_FallsBackToBaseDomainWhenPublicEmpty_M61(t 
 // =============================================================================
 
 func TestSafeJSONMarshal_NilInput(t *testing.T) {
-	data := safeJSONMarshal(nil)
+	data := shared.SafeJSONMarshal(nil)
 	if data == nil {
 		t.Error("expected non-nil result for nil input")
 	}
 }
 
 func TestSafeJSONMarshal_MapWithNestedValues(t *testing.T) {
-	data := safeJSONMarshal(map[string]interface{}{
+	data := shared.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id": "d-abc123",
 		"status":    "success",
 		"duration":  45,

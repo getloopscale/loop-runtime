@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -73,7 +75,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		}
 
 		// Step 8: emit SSE build.cancelled
-		eventData := safeJSONMarshal(map[string]string{
+		eventData := shared.SafeJSONMarshal(map[string]string{
 			"build_id": buildID,
 			"status":   "cancelled",
 		})

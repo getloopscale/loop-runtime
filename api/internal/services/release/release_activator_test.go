@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package release
 
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 )
 
 func TestDeriveDeployID_NormalReleaseID(t *testing.T) {
@@ -37,7 +39,7 @@ func TestDeriveDeployID_NoPrefix(t *testing.T) {
 }
 
 func TestSafeJSONMarshal_ValidInput(t *testing.T) {
-	data := safeJSONMarshal(map[string]string{"key": "value"})
+	data := shared.SafeJSONMarshal(map[string]string{"key": "value"})
 	if data == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -52,7 +54,7 @@ func TestSafeJSONMarshal_ValidInput(t *testing.T) {
 
 func TestSafeJSONMarshal_UnmarshalableInput(t *testing.T) {
 	// Channels cannot be marshaled to JSON
-	data := safeJSONMarshal(make(chan int))
+	data := shared.SafeJSONMarshal(make(chan int))
 	if data == nil {
 		t.Fatal("expected non-nil fallback result")
 	}

@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package platform
+package processing
 
 import (
 	"context"
 	"errors"
-
-	"github.com/getloopscale/loopzero/api/internal/processing"
 )
 
 // PGClaimDedup provides a ClaimStore-backed deduplication layer that
@@ -23,14 +21,14 @@ import (
 //
 // Phase 0.2 of docs/plans/scale-50k-plan.md.
 type PGClaimDedup struct {
-	store   *processing.ClaimStore
+	store   *ClaimStore
 	enabled bool
 	holder  string // pod name — identifies this replica
 }
 
 // NewPGClaimDedup creates a PG-backed dedup layer. When enabled=false,
 // all operations are no-ops (the loop's sync.Map remains authoritative).
-func NewPGClaimDedup(store *processing.ClaimStore, enabled bool, holder string) *PGClaimDedup {
+func NewPGClaimDedup(store *ClaimStore, enabled bool, holder string) *PGClaimDedup {
 	return &PGClaimDedup{
 		store:   store,
 		enabled: enabled,
@@ -38,11 +36,11 @@ func NewPGClaimDedup(store *processing.ClaimStore, enabled bool, holder string) 
 	}
 }
 
-// TryClaim attempts to claim a build/release for processing. Returns
+// TryClaim attempts to claim a build/release for  Returns
 // true if this replica now owns the work, false if another replica
 // already claimed it. When PG claims are disabled, always returns true
 // (the sync.Map in the caller handles dedup locally).
-func (d *PGClaimDedup) TryClaim(ctx context.Context, kind processing.Kind, id string) bool {
+func (d *PGClaimDedup) TryClaim(ctx context.Context, kind Kind, id string) bool {
 	if !d.enabled || d.store == nil {
 		return true
 	}
@@ -53,7 +51,7 @@ func (d *PGClaimDedup) TryClaim(ctx context.Context, kind processing.Kind, id st
 // Release drops the claim for a completed/failed build/release. When
 // PG claims are disabled, this is a no-op (the sync.Map in the caller
 // handles cleanup via active.Delete).
-func (d *PGClaimDedup) Release(ctx context.Context, kind processing.Kind, id string) {
+func (d *PGClaimDedup) Release(ctx context.Context, kind Kind, id string) {
 	if !d.enabled || d.store == nil {
 		return
 	}
@@ -64,7 +62,7 @@ func (d *PGClaimDedup) Release(ctx context.Context, kind processing.Kind, id str
 // the reaper to avoid competing with an active reconciliation). Returns
 // false when PG claims are disabled — the reaper falls back to the
 // sync.Map-based IsProcessing on the loop struct.
-func (d *PGClaimDedup) IsProcessingPG(ctx context.Context, kind processing.Kind, id string) bool {
+func (d *PGClaimDedup) IsProcessingPG(ctx context.Context, kind Kind, id string) bool {
 	if !d.enabled || d.store == nil {
 		return false
 	}
@@ -78,5 +76,5 @@ func (d *PGClaimDedup) IsProcessingPG(ctx context.Context, kind processing.Kind,
 		return false
 	}
 	// ErrClaimHeld means another replica has it.
-	return errors.Is(err, processing.ErrClaimHeld)
+	return errors.Is(err, ErrClaimHeld)
 }

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package shared
 
 import (
 	"context"
 	"fmt"
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domain"
@@ -40,7 +38,7 @@ func digestFor(app string) string {
 }
 
 func TestBuildManifestApps_NoDomainStore(t *testing.T) {
-	apps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-1",
 		ProjectID:   "my-app",
@@ -77,7 +75,7 @@ func TestBuildManifestApps_WithCustomDomains(t *testing.T) {
 		},
 	}
 
-	apps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-1",
 		ProjectID:   "my-app",
@@ -108,7 +106,7 @@ func TestBuildManifestApps_ExcludesDomain(t *testing.T) {
 		},
 	}
 
-	apps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 		RegistryURL:   "registry.example.com",
 		TenantID:      "tn-1",
 		ProjectID:     "my-app",
@@ -136,7 +134,7 @@ func TestBuildManifestApps_DomainQueryError_ReturnsFatalError(t *testing.T) {
 		err: fmt.Errorf("database connection refused"),
 	}
 
-	_, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
+	_, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-1",
 		ProjectID:   "my-app",
@@ -153,7 +151,7 @@ func TestBuildManifestApps_DomainQueryError_ReturnsFatalError(t *testing.T) {
 }
 
 func TestBuildManifestApps_MultipleApps(t *testing.T) {
-	apps, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 		RegistryURL: "registry.example.com",
 		TenantID:    "tn-1",
 		ProjectID:   "my-app",
@@ -199,7 +197,7 @@ func TestBuildManifestApps_MissingDigest_FailsLoud(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := shared.BuildManifestApps(context.Background(), shared.BuildManifestAppsInput{
+			_, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
 				RegistryURL: "registry.example.com",
 				TenantID:    "tn-1",
 				ProjectID:   "my-app",
@@ -219,7 +217,7 @@ func TestBuildManifestApps_MissingDigest_FailsLoud(t *testing.T) {
 // --- BuildAppRelease tests ---
 
 func TestBuildAppRelease_ServerApp(t *testing.T) {
-	rel := shared.BuildAppRelease("registry.example.com", "tn-1", "my-app", "api", "sha123", "production", "dev.loopzero.example", "server", "container")
+	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "api", "sha123", "production", "dev.loopzero.example", "server", "container")
 	if rel.Name != "api" {
 		t.Errorf("expected name 'api', got %q", rel.Name)
 	}
@@ -232,7 +230,7 @@ func TestBuildAppRelease_ServerApp(t *testing.T) {
 }
 
 func TestBuildAppRelease_WorkerApp_NoURL(t *testing.T) {
-	rel := shared.BuildAppRelease("registry.example.com", "tn-1", "my-app", "worker", "sha123", "production", "dev.loopzero.example", "worker", "container")
+	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "worker", "sha123", "production", "dev.loopzero.example", "worker", "container")
 	if rel.URL != "" {
 		t.Errorf("expected empty URL for worker app, got %q", rel.URL)
 	}

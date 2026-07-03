@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package services implements business logic orchestration.
-package services
+package release
 
 import (
 	"context"
@@ -220,7 +220,7 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 				sseEventType = "deploy.failed"
 			}
 
-			eventData := safeJSONMarshal(map[string]string{
+			eventData := shared.SafeJSONMarshal(map[string]string{
 				"deploy_id":  deriveDeployIDFromRelease(s.ID),
 				"release_id": s.ID,
 				"status":     "failed",

@@ -9,6 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
@@ -17,7 +21,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // =============================================================================
@@ -63,7 +66,7 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 		},
 	}
 	adapter := &BuildOrchestratorAdapter{
-		Orch:       &services.BuildOrchestrator{},
+		Orch:       &build.BuildOrchestrator{},
 		BuildStore: &fakeBuildStore{},
 	}
 
@@ -226,7 +229,7 @@ func TestTenantK8sEvictorAdapter_VerifyFieldMapping(t *testing.T) {
 // =============================================================================
 
 func TestRollbackServiceAdapter_TypeTranslation(t *testing.T) {
-	// Verify the routes.RollbackInput to services.RollbackRequest mapping.
+	// Verify the routes.RollbackInput to release.RollbackRequest mapping.
 	input := routes.RollbackInput{
 		TenantID:      "tn-acme",
 		ProjectID:     "proj-123",
@@ -238,7 +241,7 @@ func TestRollbackServiceAdapter_TypeTranslation(t *testing.T) {
 		BaseDomain:    "dev.loopzero.example",
 	}
 
-	req := services.RollbackRequest{
+	req := release.RollbackRequest{
 		TenantID:      input.TenantID,
 		ProjectID:     input.ProjectID,
 		ProjectName:   input.ProjectName,

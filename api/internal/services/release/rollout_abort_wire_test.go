@@ -9,7 +9,7 @@
 // Rollout-backed releases, (b) static-only releases skip the canary event,
 // (c) the reason classifier maps free-text to the documented enum.
 
-package services
+package release
 
 import (
 	"encoding/json"

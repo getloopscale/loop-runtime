@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package services
+package build
 
 import (
 	"context"
@@ -405,24 +405,13 @@ func TestNewBuildOrchestrator_DefaultsSyncTimeout(t *testing.T) {
 }
 
 func TestSafeJSONMarshal_MapInput(t *testing.T) {
-	data := safeJSONMarshal(map[string]string{"key": "value"})
+	data := shared.SafeJSONMarshal(map[string]string{"key": "value"})
 	var parsed map[string]string
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
 	if parsed["key"] != "value" {
 		t.Errorf("expected 'value', got %q", parsed["key"])
-	}
-}
-
-func TestDeriveDeployID_DeterministicFromReleaseID(t *testing.T) {
-	id1 := deriveDeployID("rel-abc-123")
-	id2 := deriveDeployID("rel-abc-123")
-	if id1 != id2 {
-		t.Errorf("expected deterministic deploy ID, got %q and %q", id1, id2)
-	}
-	if id1 == "" {
-		t.Error("expected non-empty deploy ID")
 	}
 }
 
@@ -584,38 +573,6 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_KVError_NonFatal(t *testing
 	}
 	// Should not panic
 	orch.writeStaticRoutingEntries(context.Background(), build, result)
-}
-
-func TestRegisterReleaseActivatedCallback(t *testing.T) {
-	called := false
-	RegisterReleaseActivatedCallback(func(ctx context.Context, _, _, _, _ string) {
-		called = true
-	})
-	if onReleaseActivated == nil {
-		t.Error("expected callback to be registered")
-	}
-	onReleaseActivated(context.Background(), "t", "p", "b", "e")
-	if !called {
-		t.Error("expected callback to be called")
-	}
-	// Clean up
-	RegisterReleaseActivatedCallback(nil)
-}
-
-func TestRegisterBuildFailedCallback(t *testing.T) {
-	called := false
-	RegisterBuildFailedCallback(func(ctx context.Context, _, _, _, _ string) {
-		called = true
-	})
-	if onBuildFailed == nil {
-		t.Error("expected callback to be registered")
-	}
-	onBuildFailed(context.Background(), "t", "p", "sha", "b")
-	if !called {
-		t.Error("expected callback to be called")
-	}
-	// Clean up
-	RegisterBuildFailedCallback(nil)
 }
 
 func TestBuildOrchestrator_OnBuildCompleted_SucceededBuild(t *testing.T) {

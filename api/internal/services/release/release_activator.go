@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package services implements business logic orchestration.
-package services
+package release
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -45,6 +47,28 @@ var onBuildFailed func(ctx context.Context, tenantID, projectName, commitSHA, bu
 func RegisterBuildFailedCallback(fn func(ctx context.Context, tenantID, projectName, commitSHA, buildID string)) {
 	onBuildFailed = fn
 }
+
+// NotifyBuildFailed asynchronously invokes the registered build-failed callback,
+// if one is set. Release owns the callback's delivery semantics: the callback
+// runs in a goroutine under a context that preserves request-scoped values
+// (correlation ID, OTel span) via context.WithoutCancel but is decoupled from
+// the inbound request's cancellation, capped at 30s. When no callback is
+// registered this is a no-op. M9 Step 6: the build context calls this instead of
+// peeking at the private onBuildFailed var, keeping the callback encapsulated in
+// the release context that owns it (find_code_004 / CODE-004 delivery contract
+// preserved byte-for-byte).
+func NotifyBuildFailed(ctx context.Context, tenantID, projectName, commitSHA, buildID string) {
+	if onBuildFailed == nil {
+		return
+	}
+	parentCtx := context.WithoutCancel(ctx)
+	go func() {
+		cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
+		defer cancel()
+		onBuildFailed(cbCtx, tenantID, projectName, commitSHA, buildID)
+	}()
+}
+
 
 // ReleaseActivationStore defines the minimal store interface needed by the
 // release activation kernel. Both db.ReleaseStore and ReleaseConvergenceStore
@@ -175,7 +199,7 @@ func ActivateReleaseKernel(
 	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
 
 	// Step 4: Emit deploy.live SSE event.
-	liveData := safeJSONMarshal(map[string]interface{}{
+	liveData := shared.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "live",
 	})
@@ -201,7 +225,7 @@ func ActivateReleaseKernel(
 		}
 		appResults = append(appResults, entry)
 	}
-	completedData := safeJSONMarshal(map[string]interface{}{
+	completedData := shared.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id":        deployID,
 		"status":           "success",
 		"duration_seconds": durationSecs,
@@ -283,17 +307,6 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain s
 		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed", URL: url})
 	}
 	return apps
-}
-
-// safeJSONMarshal marshals v to JSON. If marshalling fails, it logs the error
-// and returns a fallback empty JSON object so SSE events are still emitted.
-func safeJSONMarshal(v interface{}) json.RawMessage {
-	data, err := json.Marshal(v)
-	if err != nil {
-		slog.Error("json.Marshal failed for SSE event payload", "error", err)
-		return json.RawMessage("{}")
-	}
-	return data
 }
 
 // deriveDeployID creates a deploy_id in the format d-{8hex} from a release ID.

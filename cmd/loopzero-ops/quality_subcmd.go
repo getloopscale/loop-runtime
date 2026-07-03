@@ -49,6 +49,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdrift"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmoverlapparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/servicesacyclic"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/migrationtestcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/mockbudget"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
@@ -410,6 +411,8 @@ func runQuality(args []string) int {
 		return runDbGeneratedBoundary(args[1:])
 	case "ma7-status-locality":
 		return runMa7StatusLocality(args[1:])
+	case "services-acyclic":
+		return runServicesAcyclic(args[1:])
 	case "tenant-predicate":
 		return runTenantPredicate(args[1:])
 	case "corrections-txt-closed":
@@ -2877,6 +2880,38 @@ func runMa7StatusLocality(args []string) int {
 		return 1
 	}
 	fmt.Printf("ma7-status-locality: PASS \u2014 %d .go files scanned; status machinery confined to db/store/ (MA-7 Gates B+C)\n", outcome.Scanned)
+	return 0
+}
+
+// runServicesAcyclic enforces the M9 Step 6 bounded-context acyclic import DAG of
+// api/internal/services (deny-by-default allow-list). ADR
+// 2026-07-03-m9-db-store-subpackage-topology; MEET-2026-07-03-001.
+func runServicesAcyclic(args []string) int {
+	fs := flag.NewFlagSet("services-acyclic", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := servicesacyclic.Check(servicesacyclic.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "services-acyclic: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "services-acyclic: FAIL \u2014 %d forbidden edge(s), %d unknown context(s) (scanned %d .go files):\n", len(outcome.Violations), len(outcome.Unknown), outcome.Scanned)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s:%d edge %s \u2192 %s not in allow-list\n", v.File, v.Line, v.From, v.To)
+		}
+		for _, u := range outcome.Unknown {
+			fmt.Fprintf(os.Stderr, "  unregistered subpackage: services/%s\n", u)
+		}
+		fmt.Fprintf(os.Stderr, "\nFix: %s\n", servicesacyclic.ActionableFix())
+		return 1
+	}
+	fmt.Printf("services-acyclic: PASS \u2014 %d .go files scanned; services bounded-context import graph is the frozen acyclic DAG (M9 Step 6)\n", outcome.Scanned)
 	return 0
 }
 

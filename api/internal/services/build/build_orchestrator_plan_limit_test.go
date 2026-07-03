@@ -6,7 +6,7 @@
 // that covers BOTH the CLI deploy path and the GitHub App auto-deploy path —
 // any bypass is a security incident.
 
-package services
+package build
 
 import (
 	"context"

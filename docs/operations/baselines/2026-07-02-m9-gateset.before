@@ -60,6 +60,7 @@ script-count	gates	Tracks the total shell-script count against the reduction tar
 scripts-audit	-	Audits shell scripts against the allowlist ledger.
 security-context	-	Enforces pod securityContext (non-root, limits, probes).
 service-auth-rotation	-	Enforces the Ed25519 service-auth key rotation cadence.
+services-acyclic	gates	M9 Step 6: services bounded-context imports form the frozen acyclic DAG.
 shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
 skip-link	-	Verifies accessibility skip-link presence in the dashboard.
 spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.

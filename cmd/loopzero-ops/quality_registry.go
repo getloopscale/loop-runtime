@@ -93,6 +93,7 @@ var gateRegistry = []gateSpec{
 	{"sqlc-tx-prop", "Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock."},
 	{"db-generated-boundary", "MA-7 Gate A: no services/routes/server imports internal/db/generated."},
 	{"ma7-status-locality", "MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/."},
+	{"services-acyclic", "M9 Step 6: services bounded-context imports form the frozen acyclic DAG."},
 	{"stack-coverage", "Verifies the tool-inventory stack-coverage claims via grep."},
 	{"taskfile-interface", "Validates the Taskfile public-interface contract."},
 	{"template-compliance", "Checks documents comply with their canonical templates."},

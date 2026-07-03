@@ -7,20 +7,21 @@ import (
 	"context"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // BuildOrchestratorAdapter implements routes.BuildOrchestratorService by
-// delegating to the real services.BuildOrchestrator. It translates between
+// delegating to the real build.BuildOrchestrator. It translates between
 // route-level types and service-level types.
 type BuildOrchestratorAdapter struct {
-	Orch       *services.BuildOrchestrator
+	Orch       *build.BuildOrchestrator
 	BuildStore db.BuildStore
 }
 

@@ -2,12 +2,14 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package services implements business logic orchestration.
-package services
+package build
 
 import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/services/scaling"
 
@@ -166,7 +168,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	// This ensures backward compatibility -- existing call sites don't need to change.
 	delivery := deps.Delivery
 	if delivery == nil {
-		delivery = NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		delivery = release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
 			ReleaseStore:        deps.ReleaseStore,
 			EnvTargetStore:      deps.EnvTargetStore,
 			EventStore:          deps.EventStore,

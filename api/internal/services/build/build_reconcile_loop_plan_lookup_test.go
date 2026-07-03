@@ -3,7 +3,7 @@
 
 // T6.2 of deep-review-remediation-plan (closes find_code_006 / CODE-006 MEDIUM).
 
-package services
+package build
 
 import (
 	"context"

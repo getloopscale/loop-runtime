@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package services implements business logic orchestration.
-package services
+package build
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
+	"github.com/getloopscale/loopzero/api/internal/processing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/services/shared"
@@ -145,7 +145,7 @@ type BuildReconcileLoop struct {
 	// scale-50k-plan). When non-nil and enabled, claim/release go
 	// through PG for cross-replica dedup visibility. The sync.Map
 	// above remains as the fast-path local check.
-	pgDedup *platform.PGClaimDedup
+	pgDedup *processing.PGClaimDedup
 
 	// cellLister returns all active cell IDs for multi-cell iteration.
 	// MEET-053 A-07: When set, reconcile processes builds from ALL cells.
@@ -207,7 +207,7 @@ func NewBuildReconcileLoop(
 //	loop := NewBuildReconcileLoop(...)
 //	loop.WithPGClaims(pgDedup)
 //	loop.Start(ctx)
-func (r *BuildReconcileLoop) WithPGClaims(dedup *platform.PGClaimDedup) {
+func (r *BuildReconcileLoop) WithPGClaims(dedup *processing.PGClaimDedup) {
 	r.pgDedup = dedup
 }
 
