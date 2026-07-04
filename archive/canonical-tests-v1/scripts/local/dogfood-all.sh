@@ -123,6 +123,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-c13-valid-destructive-config.sh"                 # c13 chaos — valid-but-destructive config fail-loud (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-repository-route-canonical.sh" # Red Team #102 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-status-no-retry-4xx.sh"       # Red Team #96 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-overview-recent-deploys-status-env-badges.sh" # Red Team #97 (2026-06-30)
