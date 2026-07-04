@@ -367,6 +367,36 @@ CREATE TABLE public.custom_domains (
     CONSTRAINT custom_domains_tls_status_check CHECK ((tls_status = ANY (ARRAY['pending'::text, 'issuing'::text, 'issued'::text, 'failed'::text])))
 );
 
+-- Name: deploy_events; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.deploy_events (
+    id bigint NOT NULL,
+    transition_id text NOT NULL,
+    event_type text NOT NULL,
+    tenant_id text NOT NULL,
+    project_id text NOT NULL,
+    deploy_id text NOT NULL,
+    correlation_id text,
+    payload jsonb NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    drained_at timestamp with time zone,
+    CONSTRAINT deploy_events_event_type_check CHECK ((event_type = ANY (ARRAY['deploy.succeeded'::text, 'deploy.failed'::text]))),
+    CONSTRAINT deploy_events_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text))
+);
+
+-- Name: deploy_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+
+CREATE SEQUENCE public.deploy_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+-- Name: deploy_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+
+ALTER SEQUENCE public.deploy_events_id_seq OWNED BY public.deploy_events.id;
+
 -- Name: environment_targets; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.environment_targets (
@@ -676,6 +706,8 @@ CREATE TABLE public.subscriptions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     stripe_subscription_item_id text,
     account_id text NOT NULL,
+    amount_minor bigint,
+    currency text,
     CONSTRAINT subscriptions_plan_check CHECK ((plan = ANY (ARRAY['starter'::text, 'pro'::text, 'team'::text, 'enterprise'::text]))),
     CONSTRAINT subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'incomplete'::text, 'trialing'::text, 'unpaid'::text])))
 );
@@ -829,9 +861,52 @@ CREATE SEQUENCE public.work_queue_id_seq
 
 ALTER SEQUENCE public.work_queue_id_seq OWNED BY public.work_queue.id;
 
+-- Name: workspace_webhook_deliveries; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.workspace_webhook_deliveries (
+    id text NOT NULL,
+    webhook_id text NOT NULL,
+    transition_id text NOT NULL,
+    tenant_id text NOT NULL,
+    event_type text NOT NULL,
+    payload jsonb NOT NULL,
+    status text NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone,
+    claimed_at timestamp with time zone,
+    claimed_by text,
+    last_response_status integer,
+    last_response_body text,
+    last_error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT workspace_webhook_deliveries_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'delivering'::text, 'delivered'::text, 'failed'::text, 'dead_letter'::text])))
+);
+
+-- Name: workspace_webhooks; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.workspace_webhooks (
+    id text NOT NULL,
+    subject text NOT NULL,
+    tenant_id text NOT NULL,
+    url text NOT NULL,
+    label text NOT NULL,
+    events jsonb NOT NULL,
+    secret text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    CONSTRAINT workspace_webhooks_events_check CHECK ((jsonb_typeof(events) = 'array'::text)),
+    CONSTRAINT workspace_webhooks_label_check CHECK (((length(label) >= 1) AND (length(label) <= 64))),
+    CONSTRAINT workspace_webhooks_url_check CHECK ((url ~* '^https?://'::text))
+);
+
 -- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.audit_log ALTER COLUMN id SET DEFAULT nextval('public.audit_log_id_seq'::regclass);
+
+-- Name: deploy_events id; Type: DEFAULT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events ALTER COLUMN id SET DEFAULT nextval('public.deploy_events_id_seq'::regclass);
 
 -- Name: sse_events id; Type: DEFAULT; Schema: public; Owner: -
 
@@ -900,6 +975,16 @@ ALTER TABLE ONLY public.cost_counters
 
 ALTER TABLE ONLY public.custom_domains
     ADD CONSTRAINT custom_domains_pkey PRIMARY KEY (id);
+
+-- Name: deploy_events deploy_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events
+    ADD CONSTRAINT deploy_events_pkey PRIMARY KEY (id);
+
+-- Name: deploy_events deploy_events_transition_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events
+    ADD CONSTRAINT deploy_events_transition_id_key UNIQUE (transition_id);
 
 -- Name: environment_targets environment_targets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1081,6 +1166,21 @@ ALTER TABLE ONLY public.webhook_events
 ALTER TABLE ONLY public.work_queue
     ADD CONSTRAINT work_queue_pkey PRIMARY KEY (id);
 
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhook_deliveries
+    ADD CONSTRAINT workspace_webhook_deliveries_pkey PRIMARY KEY (id);
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_webhook_id_transition_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhook_deliveries
+    ADD CONSTRAINT workspace_webhook_deliveries_webhook_id_transition_id_key UNIQUE (webhook_id, transition_id);
+
+-- Name: workspace_webhooks workspace_webhooks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhooks
+    ADD CONSTRAINT workspace_webhooks_pkey PRIMARY KEY (id);
+
 -- Name: idx_accounts_owner_id; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_accounts_owner_id ON public.accounts USING btree (owner_id);
@@ -1136,6 +1236,10 @@ CREATE INDEX idx_custom_domains_status ON public.custom_domains USING btree (sta
 -- Name: idx_custom_domains_tenant_project_app_env; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_custom_domains_tenant_project_app_env ON public.custom_domains USING btree (tenant_id, project_name, app_name, environment);
+
+-- Name: idx_deploy_events_undrained; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_deploy_events_undrained ON public.deploy_events USING btree (id) WHERE (drained_at IS NULL);
 
 -- Name: idx_env_targets_last_replicas_ready_at; Type: INDEX; Schema: public; Owner: -
 
@@ -1357,6 +1461,22 @@ CREATE INDEX idx_work_queue_dequeue ON public.work_queue USING btree (queue, sta
 
 CREATE INDEX idx_work_queue_stale ON public.work_queue USING btree (status, claimed_at) WHERE (status = 'processing'::text);
 
+-- Name: idx_workspace_webhook_deliveries_due; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhook_deliveries_due ON public.workspace_webhook_deliveries USING btree (next_attempt_at) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]));
+
+-- Name: idx_workspace_webhook_deliveries_lease; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhook_deliveries_lease ON public.workspace_webhook_deliveries USING btree (claimed_at) WHERE (status = 'delivering'::text);
+
+-- Name: idx_workspace_webhook_deliveries_webhook; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhook_deliveries_webhook ON public.workspace_webhook_deliveries USING btree (webhook_id, created_at DESC);
+
+-- Name: idx_workspace_webhooks_owner; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhooks_owner ON public.workspace_webhooks USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
+
 -- Name: uniq_preview_active_per_pr; Type: INDEX; Schema: public; Owner: -
 
 CREATE UNIQUE INDEX uniq_preview_active_per_pr ON public.preview_environments USING btree (tenant_id, project_id, pr_number) WHERE (deleted_at IS NULL);
@@ -1432,6 +1552,11 @@ ALTER TABLE ONLY public.cost_counters
 
 ALTER TABLE ONLY public.custom_domains
     ADD CONSTRAINT custom_domains_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE RESTRICT;
+
+-- Name: deploy_events deploy_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events
+    ADD CONSTRAINT deploy_events_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: environment_targets environment_targets_active_release_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -1577,6 +1702,16 @@ ALTER TABLE ONLY public.user_identity_map
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_active_tenant_id_fkey FOREIGN KEY (active_tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_webhook_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhook_deliveries
+    ADD CONSTRAINT workspace_webhook_deliveries_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES public.workspace_webhooks(id) ON DELETE CASCADE;
+
+-- Name: workspace_webhooks workspace_webhooks_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhooks
+    ADD CONSTRAINT workspace_webhooks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 

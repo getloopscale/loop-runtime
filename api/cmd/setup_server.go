@@ -237,6 +237,7 @@ func buildServerConfig(
 		sc.StatusSSEHandler = orchDeps.StatusSSEHandler
 		sc.ScaleHandler = orchDeps.ScaleHandler
 		sc.BuildListHandler = orchDeps.BuildListHandler
+		sc.BuildStatsHandler = orchDeps.BuildStatsHandler
 		sc.ProjectDeleter = orchDeps.ProjectDeleter
 	}
 

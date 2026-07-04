@@ -134,6 +134,19 @@ type CustomDomain struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DeployEvent struct {
+	ID            int64              `json:"id"`
+	TransitionID  string             `json:"transition_id"`
+	EventType     string             `json:"event_type"`
+	TenantID      string             `json:"tenant_id"`
+	ProjectID     string             `json:"project_id"`
+	DeployID      string             `json:"deploy_id"`
+	CorrelationID *string            `json:"correlation_id"`
+	Payload       []byte             `json:"payload"`
+	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
+	DrainedAt     pgtype.Timestamptz `json:"drained_at"`
+}
+
 type EnvironmentTarget struct {
 	TenantID               string             `json:"tenant_id"`
 	ProjectID              string             `json:"project_id"`
@@ -372,6 +385,8 @@ type Subscription struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	StripeSubscriptionItemID *string            `json:"stripe_subscription_item_id"`
 	AccountID                string             `json:"account_id"`
+	AmountMinor              *int64             `json:"amount_minor"`
+	Currency                 *string            `json:"currency"`
 }
 
 type Tenant struct {
@@ -485,4 +500,35 @@ type WorkQueue struct {
 	Error       *string            `json:"error"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkspaceWebhook struct {
+	ID        string             `json:"id"`
+	Subject   string             `json:"subject"`
+	TenantID  string             `json:"tenant_id"`
+	Url       string             `json:"url"`
+	Label     string             `json:"label"`
+	Events    []byte             `json:"events"`
+	Secret    string             `json:"secret"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+}
+
+type WorkspaceWebhookDelivery struct {
+	ID                 string             `json:"id"`
+	WebhookID          string             `json:"webhook_id"`
+	TransitionID       string             `json:"transition_id"`
+	TenantID           string             `json:"tenant_id"`
+	EventType          string             `json:"event_type"`
+	Payload            []byte             `json:"payload"`
+	Status             string             `json:"status"`
+	AttemptCount       int32              `json:"attempt_count"`
+	NextAttemptAt      pgtype.Timestamptz `json:"next_attempt_at"`
+	ClaimedAt          pgtype.Timestamptz `json:"claimed_at"`
+	ClaimedBy          *string            `json:"claimed_by"`
+	LastResponseStatus *int32             `json:"last_response_status"`
+	LastResponseBody   *string            `json:"last_response_body"`
+	LastErrorMessage   *string            `json:"last_error_message"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 }

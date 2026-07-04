@@ -80,6 +80,7 @@ type OrchestratorDeps struct {
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *routes.ScaleHandler
 	BuildListHandler    *routes.BuildListHandler
+	BuildStatsHandler   *routes.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      routes.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 }
@@ -153,6 +154,9 @@ func setupOrchestrator(
 		// status_url_probe) are documented as the v1.1 production
 		// follow-up per the plan's Open Questions section. Nil-safe.
 		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore, stores.ReleaseStore),
+		// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
+		// build-completed FAILED path.
+		DeployEventStore: store.NewDeployEventStoreSqlc(),
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{
@@ -222,13 +226,17 @@ func setupOrchestrator(
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
-	// T1.2 J-18 — Prometheus query_range proxy for Status page histogram
-	// rendering. Production adapter wiring deferred to follow-up (HTTP
-	// client targeting cfg.PrometheusAddress); for now ship with nil
-	// promClient so handler returns 503 prometheus_not_configured honestly
-	// (per plan v1.1 ADR D2 — degraded UI is the canonical disabled state).
-	// Hermetic Go tests use httptest-backed fakePrometheusQueryClient.
-	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, nil)
+	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
+	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
+	// concrete HTTP client (mirrors the loki.NewClient wiring above); otherwise
+	// ship nil so the handler returns 503 prometheus_not_configured honestly
+	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
+	// Go tests inject httptest-backed fakes.
+	var promClient routes.PrometheusQueryClient
+	if cfg.PrometheusAddress != "" {
+		promClient = routes.NewPrometheusClient(cfg.PrometheusAddress, nil)
+	}
+	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, promClient)
 
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
 	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
@@ -294,6 +302,13 @@ func setupOrchestrator(
 		projectStore,
 	)
 
+	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
+	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
+	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
+	buildStatsHandler := routes.NewBuildStatsHandler(
+		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
+	)
+
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
 	projectDeleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
@@ -317,7 +332,7 @@ func setupOrchestrator(
 	// behavior for envs without a public override).
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
-	)
+	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
 	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
 	// of LastIndex-parsing the app name (which is structurally ambiguous when
@@ -349,6 +364,7 @@ func setupOrchestrator(
 		StatusSSEHandler:    statusSSEHandler,
 		ScaleHandler:        scaleHandler,
 		BuildListHandler:    buildListHandler,
+		BuildStatsHandler:   buildStatsHandler,
 		ProjectDeleter:      projectDeleter,
 		ArgoCallbackHandler: argoCallbackHandler,
 	}

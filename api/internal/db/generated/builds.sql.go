@@ -7,7 +7,54 @@ package generated
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const buildStatsByDay = `-- name: BuildStatsByDay :many
+SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS count
+FROM builds
+WHERE tenant_id = $1
+  AND created_at >= $2
+GROUP BY day
+ORDER BY day
+`
+
+type BuildStatsByDayParams struct {
+	TenantID  string             `json:"tenant_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type BuildStatsByDayRow struct {
+	Day   pgtype.Date `json:"day"`
+	Count int64       `json:"count"`
+}
+
+// J-06 / MEET-2026-07-03-003 D2: tenant-wide per-day build (deploy) counts for
+// the Overview deploys-by-day sparkline. Tenant isolation (#106/#111) — the
+// WHERE tenant_id = $1 predicate is the ONLY barrier under the BYPASSRLS engine
+// pool; NOT tenantpredicate:exempt so the CI gate enforces it. $2 is the window
+// lower bound (now() - window), computed in Go from the enumerated {7d,30d,90d}.
+// Day bucketing is server-side in UTC; the handler zero-fills missing days.
+func (q *Queries) BuildStatsByDay(ctx context.Context, db DBTX, arg BuildStatsByDayParams) ([]BuildStatsByDayRow, error) {
+	rows, err := db.Query(ctx, buildStatsByDay, arg.TenantID, arg.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BuildStatsByDayRow
+	for rows.Next() {
+		var i BuildStatsByDayRow
+		if err := rows.Scan(&i.Day, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const cancelActiveBuildsByEnv = `-- name: CancelActiveBuildsByEnv :many
 UPDATE builds

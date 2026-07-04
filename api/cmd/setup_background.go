@@ -255,6 +255,9 @@ func createCoreLoops(
 	if lister, ok := cellRouter.(deploycontracts.CellLister); ok {
 		reconcileLoop.WithCellLister(lister)
 	}
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
+	// reconcile-retry FAILED path.
+	reconcileLoop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
 	reaper := build.NewBuildReaper(
 		buildStore,
@@ -272,6 +275,9 @@ func createCoreLoops(
 		},
 		reconcileLoop,
 	)
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
+	// reaper FAILED path (cancel-timeout → CANCELLED does NOT emit).
+	reaper.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
 	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
@@ -298,6 +304,9 @@ func createCoreLoops(
 			MaxConcurrent: 10,
 		},
 	)
+	// J-16 slice 3 — wire the deploy.succeeded transactional-outbox writer so
+	// the convergence-loop activation path stages deploy_events on the tx.
+	releaseConvergenceLoop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
 	idempotencyCleaner := platform.NewIdempotencyCleaner(
 		&store.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,

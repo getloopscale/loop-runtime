@@ -77,6 +77,13 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 				return fmt.Errorf("on build completed: transition to FAILED: %w", err)
 			}
 
+			// J-16 slice 3 (MEET-2026-07-04-001): stage deploy.failed on the
+			// outbox on the SAME tx as the FAILED transition — atomic with the
+			// deploy, no silently-lost failure event.
+			if err := stageDeployFailed(ctx, tx, o.deployEventStore, build); err != nil {
+				return fmt.Errorf("on build completed: stage deploy.failed: %w", err)
+			}
+
 			// Persist error message (F-04: builds must have error_message when FAILED)
 			if result.Error != "" {
 				if err := o.buildStore.SetErrorMessage(ctx, tx, buildID, result.Error); err != nil {
