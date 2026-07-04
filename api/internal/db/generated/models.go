@@ -196,6 +196,24 @@ type LeaderGeneration struct {
 	HeartbeatAt  pgtype.Timestamptz `json:"heartbeat_at"`
 }
 
+type LensAlertRule struct {
+	ID                      string             `json:"id"`
+	Subject                 string             `json:"subject"`
+	TenantID                string             `json:"tenant_id"`
+	Name                    string             `json:"name"`
+	Metric                  string             `json:"metric"`
+	Comparator              string             `json:"comparator"`
+	Threshold               float64            `json:"threshold"`
+	WindowSeconds           int32              `json:"window_seconds"`
+	WebhookID               string             `json:"webhook_id"`
+	Enabled                 bool               `json:"enabled"`
+	Status                  string             `json:"status"`
+	LastEvaluatedAt         pgtype.Timestamptz `json:"last_evaluated_at"`
+	LastTriggeredAt         pgtype.Timestamptz `json:"last_triggered_at"`
+	RenotifyIntervalSeconds *int32             `json:"renotify_interval_seconds"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
 type LensSavedView struct {
 	ID          string             `json:"id"`
 	Subject     string             `json:"subject"`

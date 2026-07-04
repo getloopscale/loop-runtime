@@ -457,6 +457,32 @@ CREATE TABLE public.leader_generations (
     heartbeat_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+-- Name: lens_alert_rules; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.lens_alert_rules (
+    id text NOT NULL,
+    subject text NOT NULL,
+    tenant_id text NOT NULL,
+    name text NOT NULL,
+    metric text NOT NULL,
+    comparator text NOT NULL,
+    threshold double precision NOT NULL,
+    window_seconds integer NOT NULL,
+    webhook_id text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    status text DEFAULT 'OK'::text NOT NULL,
+    last_evaluated_at timestamp with time zone,
+    last_triggered_at timestamp with time zone,
+    renotify_interval_seconds integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lens_alert_rules_comparator_check CHECK ((comparator = ANY (ARRAY['gt'::text, 'gte'::text, 'lt'::text, 'lte'::text]))),
+    CONSTRAINT lens_alert_rules_metric_check CHECK ((metric = ANY (ARRAY['error_rate'::text, 'cost'::text, 'p95_latency'::text]))),
+    CONSTRAINT lens_alert_rules_name_check CHECK (((length(name) >= 1) AND (length(name) <= 64))),
+    CONSTRAINT lens_alert_rules_renotify_interval_seconds_check CHECK (((renotify_interval_seconds IS NULL) OR (renotify_interval_seconds > 0))),
+    CONSTRAINT lens_alert_rules_status_check CHECK ((status = ANY (ARRAY['OK'::text, 'TRIGGERED'::text]))),
+    CONSTRAINT lens_alert_rules_window_seconds_check CHECK ((window_seconds > 0))
+);
+
 -- Name: lens_saved_views; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.lens_saved_views (
@@ -1024,6 +1050,11 @@ ALTER TABLE ONLY public.idempotency_keys
 ALTER TABLE ONLY public.leader_generations
     ADD CONSTRAINT leader_generations_pkey PRIMARY KEY (name, cell_id);
 
+-- Name: lens_alert_rules lens_alert_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_alert_rules
+    ADD CONSTRAINT lens_alert_rules_pkey PRIMARY KEY (id);
+
 -- Name: lens_saved_views lens_saved_views_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.lens_saved_views
@@ -1274,6 +1305,14 @@ CREATE INDEX idx_idempotency_expires ON public.idempotency_keys USING btree (exp
 -- Name: idx_leader_generations_heartbeat; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_leader_generations_heartbeat ON public.leader_generations USING btree (heartbeat_at);
+
+-- Name: idx_lens_alert_rules_enabled; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_alert_rules_enabled ON public.lens_alert_rules USING btree (tenant_id) WHERE enabled;
+
+-- Name: idx_lens_alert_rules_owner; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_alert_rules_owner ON public.lens_alert_rules USING btree (tenant_id, subject);
 
 -- Name: idx_lens_saved_views_owner; Type: INDEX; Schema: public; Owner: -
 
@@ -1594,6 +1633,16 @@ ALTER TABLE ONLY public.environment_targets
 
 ALTER TABLE ONLY public.github_installations
     ADD CONSTRAINT github_installations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
+
+-- Name: lens_alert_rules lens_alert_rules_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_alert_rules
+    ADD CONSTRAINT lens_alert_rules_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+-- Name: lens_alert_rules lens_alert_rules_webhook_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_alert_rules
+    ADD CONSTRAINT lens_alert_rules_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES public.workspace_webhooks(id) ON DELETE CASCADE;
 
 -- Name: lens_saved_views lens_saved_views_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
