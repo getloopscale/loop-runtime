@@ -105,6 +105,9 @@ type BuildOrchestratorDeps struct {
 	// Nil-safe: when nil, no aggregator spawns and SubmitBuild returns
 	// identically (backwards-compat).
 	DeployTimelineSpawn DeployTimelineSpawner
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox writer for the
+	// build-completed FAILED path. May be nil (emit skipped).
+	DeployEventStore store.DeployEventStore
 }
 
 // DeployTimelineSpawner is the canonical callback the orchestrator
@@ -145,6 +148,9 @@ type BuildOrchestrator struct {
 	scalingResolver     scaling.ScalingResolver // B40: nil = yaml-only (backward-compat)
 	auditLogger         domain.AuditLogger      // T1.2 mitigation #3: per-sign cosign audit
 	deployTimelineSpawn DeployTimelineSpawner   // plan T5.1 — nil-safe
+	// J-16 slice 3 (MEET-2026-07-04-001): stages deploy.failed on the outbox
+	// when the build workflow reports FAILED. Nil-safe (emit skipped).
+	deployEventStore store.DeployEventStore
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -200,6 +206,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		scalingResolver:     deps.ScalingResolver,     // B40: nil-safe (resolveScaling handles)
 		auditLogger:         deps.AuditLogger,         // T1.2 mitigation #3: nil = no-op
 		deployTimelineSpawn: deps.DeployTimelineSpawn, // plan T5.1: nil = no-op
+		deployEventStore:    deps.DeployEventStore,    // J-16 slice 3: nil = no emit
 	}
 }
 

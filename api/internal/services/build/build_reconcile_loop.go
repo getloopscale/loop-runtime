@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/processing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
@@ -131,6 +132,9 @@ type BuildReconcileLoop struct {
 	}
 	logger *slog.Logger
 	cfg    BuildReconcileLoopConfig
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox writer
+	// (set via WithDeployEventStore). Nil-safe: emit skipped.
+	deployEventStore store.DeployEventStore
 
 	// sem bounds concurrent build reconciliations. Initialized once in constructor.
 	// REVIEW-MOD-2: moved from per-reconcile allocation to struct field so
@@ -194,6 +198,14 @@ func NewBuildReconcileLoop(
 		cfg:         cfg,
 		sem:         make(chan struct{}, cfg.MaxConcurrent),
 	}
+}
+
+// WithDeployEventStore wires the deploy.failed outbox writer (J-16 slice 3,
+// MEET-2026-07-04-001). Fluent setter so existing call sites/tests are
+// unaffected; the composition root sets it in production. Nil = emit skipped.
+func (r *BuildReconcileLoop) WithDeployEventStore(s store.DeployEventStore) *BuildReconcileLoop {
+	r.deployEventStore = s
+	return r
 }
 
 // WithPGClaims attaches a PG-backed dedup layer to the reconcile loop.

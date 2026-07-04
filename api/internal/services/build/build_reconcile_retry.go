@@ -231,6 +231,12 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 			return fmt.Errorf("set error message: %w", err)
 		}
 
+		// J-16 slice 3 (MEET-2026-07-04-001): stage deploy.failed on the outbox
+		// on the SAME tx as the FAILED transition above — atomic, at-least-once.
+		if err := stageDeployFailed(ctx, tx, r.deployEventStore, build); err != nil {
+			return fmt.Errorf("stage deploy.failed: %w", err)
+		}
+
 		return nil
 	})
 
