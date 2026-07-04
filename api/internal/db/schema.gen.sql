@@ -861,6 +861,28 @@ CREATE SEQUENCE public.work_queue_id_seq
 
 ALTER SEQUENCE public.work_queue_id_seq OWNED BY public.work_queue.id;
 
+-- Name: workspace_webhook_deliveries; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.workspace_webhook_deliveries (
+    id text NOT NULL,
+    webhook_id text NOT NULL,
+    transition_id text NOT NULL,
+    tenant_id text NOT NULL,
+    event_type text NOT NULL,
+    payload jsonb NOT NULL,
+    status text NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone,
+    claimed_at timestamp with time zone,
+    claimed_by text,
+    last_response_status integer,
+    last_response_body text,
+    last_error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT workspace_webhook_deliveries_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'delivering'::text, 'delivered'::text, 'failed'::text, 'dead_letter'::text])))
+);
+
 -- Name: workspace_webhooks; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.workspace_webhooks (
@@ -1143,6 +1165,16 @@ ALTER TABLE ONLY public.webhook_events
 
 ALTER TABLE ONLY public.work_queue
     ADD CONSTRAINT work_queue_pkey PRIMARY KEY (id);
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhook_deliveries
+    ADD CONSTRAINT workspace_webhook_deliveries_pkey PRIMARY KEY (id);
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_webhook_id_transition_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhook_deliveries
+    ADD CONSTRAINT workspace_webhook_deliveries_webhook_id_transition_id_key UNIQUE (webhook_id, transition_id);
 
 -- Name: workspace_webhooks workspace_webhooks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1429,6 +1461,18 @@ CREATE INDEX idx_work_queue_dequeue ON public.work_queue USING btree (queue, sta
 
 CREATE INDEX idx_work_queue_stale ON public.work_queue USING btree (status, claimed_at) WHERE (status = 'processing'::text);
 
+-- Name: idx_workspace_webhook_deliveries_due; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhook_deliveries_due ON public.workspace_webhook_deliveries USING btree (next_attempt_at) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]));
+
+-- Name: idx_workspace_webhook_deliveries_lease; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhook_deliveries_lease ON public.workspace_webhook_deliveries USING btree (claimed_at) WHERE (status = 'delivering'::text);
+
+-- Name: idx_workspace_webhook_deliveries_webhook; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhook_deliveries_webhook ON public.workspace_webhook_deliveries USING btree (webhook_id, created_at DESC);
+
 -- Name: idx_workspace_webhooks_owner; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_workspace_webhooks_owner ON public.workspace_webhooks USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
@@ -1658,6 +1702,11 @@ ALTER TABLE ONLY public.user_identity_map
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_active_tenant_id_fkey FOREIGN KEY (active_tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_webhook_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhook_deliveries
+    ADD CONSTRAINT workspace_webhook_deliveries_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES public.workspace_webhooks(id) ON DELETE CASCADE;
 
 -- Name: workspace_webhooks workspace_webhooks_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
