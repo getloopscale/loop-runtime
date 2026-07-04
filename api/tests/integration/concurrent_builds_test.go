@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -321,20 +322,29 @@ func migrationsDir() string {
 	return filepath.Join(apiDir, "internal", "db", "migrations")
 }
 
-// runMigrations applies all SQL migration files to the test database.
+// runMigrations applies every `*.up.sql` file in the shared migrations dir to
+// the test database in numeric-prefix order. Discovers files via a glob so the
+// helper stays in-sync as new migrations land (the old hardcoded 000001..000003
+// list drifted stale by 2026-04 — closes #184). Errors from IF NOT EXISTS /
+// duplicate-object statements are logged, not fatal, so the helper is safe
+// against an already-migrated DB (the operator harness runs `migrate up`
+// before invoking the tests).
 func runMigrations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	ctx := context.Background()
 	dir := migrationsDir()
 
-	migrations := []string{
-		filepath.Join(dir, "000001_initial_schema.up.sql"),
-		filepath.Join(dir, "000002_auth_tenants.up.sql"),
-		filepath.Join(dir, "000003_deploy_support.up.sql"),
+	paths, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil {
+		t.Fatalf("failed to glob migrations in %s: %v", dir, err)
 	}
+	if len(paths) == 0 {
+		t.Fatalf("no *.up.sql migrations found in %s", dir)
+	}
+	sort.Strings(paths) // numeric prefix (000001, 000002, …) sorts lexicographically
 
-	for _, path := range migrations {
+	for _, path := range paths {
 		sql, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("failed to read migration %s: %v", path, err)
@@ -355,10 +365,11 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 	// Clean up any existing test data (idempotent)
 	cleanupTestData(t, pool)
 
-	// Create test user
+	// Create test user (username NOT NULL + UNIQUE per migration 000034 —
+	// user-test is stable so the ON CONFLICT still catches re-seeds).
 	_, err := pool.Exec(ctx,
-		`INSERT INTO users (id, email, github_id, display_name)
-		 VALUES ('user-test', 'test@example.com', 12345, 'Test User')
+		`INSERT INTO users (id, email, github_id, display_name, username)
+		 VALUES ('user-test', 'test@example.com', 12345, 'Test User', 'user-test')
 		 ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)
