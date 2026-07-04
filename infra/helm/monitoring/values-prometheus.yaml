@@ -82,6 +82,16 @@ serverFiles:
 # velero-backup-dr-plan v1.0 / T3.2 — Scrape Velero metrics so
 # prometheusrule-velero.yaml alerts have a data source. Velero exposes
 # /metrics on :8085 (in-cluster Service `velero.velero-system.svc`).
+#
+# red-team-77-107-closure plan (2026-06-29) — Step 5 Chaos closure: the
+# canonical chaos manifests under infra/tests/chaos/manifests/ assert
+# `probe_success{job="loopzero-api-health"} == 1` (e.g., pod-kill-api-leader.yaml).
+# Without this scrape config the assertion returns an empty vector and the
+# chaos test fails even when failover itself succeeded. The Probe CRDs at
+# infra/helm/monitoring/manifests/probe-targets.yaml require the operator
+# pattern (kube-prometheus-stack); the community `prometheus` chart deployed
+# here honors only static scrape configs, so we wire blackbox-exporter via
+# the canonical relabel chain instead.
 extraScrapeConfigs: |
   - job_name: velero
     static_configs:
@@ -89,3 +99,53 @@ extraScrapeConfigs: |
           - velero.velero-system.svc:8085
     metrics_path: /metrics
     scrape_interval: 30s
+  - job_name: loopzero-api-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://loopzero-api.loopzero-system.svc:3001/api/v1/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter-prometheus-blackbox-exporter.monitoring.svc:9115
+    scrape_interval: 15s
+    scrape_timeout: 10s
+  # Direct scrape of loopzero-api /metrics on port 9090 — emits loopzero_api_*
+  # metrics consumed by chaos SLO queries (loopzero_api_leader_status,
+  # loopzero_api_requests_total, etc., post-decomposition canonical names per
+  # the 2026-06-24 audit). The loopzero-api Service does not carry the
+  # prometheus.io/scrape annotation; static-config is the canonical wire
+  # without coupling Service metadata to scrape selection.
+  - job_name: loopzero-api-metrics
+    static_configs:
+      - targets:
+          - loopzero-api.loopzero-system.svc:9090
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+  # Cross-cluster scrape of the workload cluster's kube-state-metrics —
+  # T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
+  # Native Prometheus feature (scrape_configs, parsimony rung 3).
+  # Without this the mgmt Prometheus has NO visibility into tenant
+  # workload Deployments, so `kube_deployment_status_replicas_ready`
+  # returns an empty vector and the DataPlanePoller writes zero rows
+  # to env_targets. Address `k3d-loopzero-workload-server-0:30030` is the
+  # NodePort exposed by the workload monitoring chart; resolves via
+  # the CoreDNS NodeHosts patch shipped by
+  # `infra/scripts/local/networking-cross-cluster-coredns.sh`.
+  # Same cross-cluster mechanism the Loki scrape uses (memory
+  # `j17-aprendizado-coredns-cross-cluster-build-lb`).
+  - job_name: workload-cluster-kube-state-metrics
+    static_configs:
+      - targets:
+          - k3d-loopzero-workload-server-0:30030
+        labels:
+          cluster: workload
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s

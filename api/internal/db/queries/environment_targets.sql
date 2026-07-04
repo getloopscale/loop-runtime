@@ -37,7 +37,8 @@ WHERE tenant_id = $2 AND project_id = $3 AND environment = $4;
 -- generated.EnvironmentTarget (sqlc inlines when select-list ==
 -- table). Includes `kind` for D5 enforcement + D7 API merge.
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at, kind
+       active_release_id, updated_by, correlation_id, updated_at, kind,
+       last_replicas_ready_value, last_replicas_ready_at
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3;
 
@@ -46,7 +47,8 @@ WHERE tenant_id = $1 AND project_id = $2 AND environment = $3;
 -- nil) per legacy contract. SELECT includes `kind` (see
 -- GetEnvironmentTarget rationale).
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at, kind
+       active_release_id, updated_by, correlation_id, updated_at, kind,
+       last_replicas_ready_value, last_replicas_ready_at
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2;
 

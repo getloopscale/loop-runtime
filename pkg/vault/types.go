@@ -88,14 +88,14 @@ func validateConfig(cfg *Config) error {
 		return errors.Join(ErrInvalidConfig, errors.New("nil config"))
 	}
 	if cfg.Address == "" {
-		return errors.Join(ErrInvalidConfig, errors.New("Address required"))
+		return errors.Join(ErrInvalidConfig, errors.New("address required"))
 	}
 	if cfg.K8sRole == "" {
 		return errors.Join(ErrInvalidConfig, errors.New("K8sRole required"))
 	}
 	if len(cfg.Address) < 7 ||
 		(cfg.Address[:7] != "http://" && (len(cfg.Address) < 8 || cfg.Address[:8] != "https://")) {
-		return errors.Join(ErrInvalidConfig, errors.New("Address must be http:// or https:// URL"))
+		return errors.Join(ErrInvalidConfig, errors.New("address must be http:// or https:// URL"))
 	}
 	return nil
 }

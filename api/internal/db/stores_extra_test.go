@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package db_test
 
 import (
-	"context"
-	"fmt"
-	"testing"
-
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -21,7 +17,7 @@ import (
 // TestReleaseStore_GetPreviousRelease_Success, TestReleaseStore_GetByID
 // ForTenant_Success, TestReleaseStore_GetLatestByBuildID_Success,
 // TestReleaseStore_UpdateStatus_NilTxUsesPool, TestReleaseStore_SetGit
-// Commit_ExecError) ALL used `fakeDBTX` stub responses to verify that
+// Commit_ExecError) ALL used `dbtest.FakeDBTX` stub responses to verify that
 // PostgresReleaseStore returned what the stub fed it — a pure pass-
 // through pattern.
 //
@@ -69,7 +65,7 @@ import (
 // QueryError, UpdateStatus_QueuedToFailed, UpdateStatus_RunningToCancelling,
 // ListByProjectAndEnv_NoEnvFilter, ListByProjectAndEnv_QueryError,
 // ListByProjectAndEnv_NoEnvQueryError, ListByProject_QueryError) ALL used
-// fakeDBTX stub responses to verify PostgresBuildStore behaviors. With
+// dbtest.FakeDBTX stub responses to verify PostgresBuildStore behaviors. With
 // T1.2b deleting PostgresBuildStore and replacing it with BuildStoreSqlc
 // (sqlc-backed via SqlcBridge), the stub-based pattern is incompatible.
 //
@@ -91,22 +87,11 @@ import (
 // real-PG-gated unit tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
 // is wired.
 
-
 // =============================================================================
 // Environment Target Store additional tests
 // =============================================================================
 
 // Refactored into TestEnvironmentTargetStore_Mutators in stores_test.go.
-
-func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("pg down")}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.SetDesired(context.Background(), fake, "t1", "p1", "prod", "rel-1", "u1", "c1")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 // =============================================================================
 // Domain Store tests — DELETED in T2.1 #9 of plan
@@ -116,7 +101,7 @@ func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
 // All Domain Store test sub-blocks across stores_test.go (lines
 // 294-473 + 812-876) and stores_extra_test.go (3 sections: Domain
 // Store additional + Background methods + CF Zone methods) used
-// fakeDBTX / recordingDBTX / countingDBTX stubs to verify
+// dbtest.FakeDBTX / dbtest.RecordingDBTX / countingDBTX stubs to verify
 // PostgresDomainStore behaviors. With T2.1 #9 migrating the 3-file
 // legacy split (domain_store.go + domain_store_background.go +
 // domain_store_cfzone.go) to a single sqlc-backed wrapper via
@@ -136,36 +121,14 @@ func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
 // real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
 // is wired.
 
-
 // =============================================================================
 // Team Store additional tests — DELETED in T2.1 #5 along with the
 // Team Store section in stores_test.go (same tombstone block applies)
 // =============================================================================
 
-
 // =============================================================================
 // Idempotency Store additional tests
 // =============================================================================
-
-func TestIdempotencyStore_Get_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("db down")}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	_, err := store.Get(context.Background(), "key-1", "t1")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("db locked")}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	_, err := store.Cleanup(context.Background())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 // =============================================================================
 // WriteAuditLog tests — DELETED in T1.5 of plan
@@ -173,7 +136,7 @@ func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
 // =============================================================================
 //
 // 2 sub-tests previously here (TestWriteAuditLog_Success +
-// _ExecError) used fakeDBTX stubs to verify legacy
+// _ExecError) used dbtest.FakeDBTX stubs to verify legacy
 // ExecQueryExecutor-based WriteAuditLog. With T1.5 widening the
 // signature to db.DBTX + dispatching through SqlcBridge to sqlc-
 // generated InsertAuditLog, the fake pattern is incompatible — the
@@ -203,7 +166,7 @@ func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
 //
 // 6 stub-class tests previously here (TestCellStore_CellTenantCounts_
 // Empty/WithData/QueryError, _CountByCell_Empty, _GetTenantCellID_
-// NotFound/Success) used fakeDBTX / recordingDBTX stub responses to
+// NotFound/Success) used dbtest.FakeDBTX / dbtest.RecordingDBTX stub responses to
 // verify PostgresCellStore behaviors. With T2.2 #2 migrating to sqlc-
 // backed via SqlcBridge, the fake pattern is incompatible.
 //

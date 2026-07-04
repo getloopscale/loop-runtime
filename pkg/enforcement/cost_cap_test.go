@@ -112,6 +112,25 @@ func TestCapFor_UnknownMetric_FailsOpen(t *testing.T) {
 	}
 }
 
+// TestEnforcement_ComputeMetricAliasesResolve — T1.1 of plan metering-compute-loop.
+// pkg/enforcement re-exports the new compute metrics (strangler alias of
+// plan.Metric*), and they ship observe-only (Unlimited cap on every tier).
+func TestEnforcement_ComputeMetricAliasesResolve(t *testing.T) {
+	if MetricCPUCoreSeconds != "cpu_core_seconds" {
+		t.Errorf("MetricCPUCoreSeconds = %q, want cpu_core_seconds", MetricCPUCoreSeconds)
+	}
+	if MetricMemGBSeconds != "mem_gb_seconds" {
+		t.Errorf("MetricMemGBSeconds = %q, want mem_gb_seconds", MetricMemGBSeconds)
+	}
+	for _, p := range []Plan{PlanStarter, PlanPro, PlanTeam, PlanEnterprise} {
+		for _, m := range []CostMetric{MetricCPUCoreSeconds, MetricMemGBSeconds} {
+			if got := CapFor(p, m); got != Unlimited {
+				t.Errorf("CapFor(%s, %s) = %d, want Unlimited — compute is observe-only", p, m, got)
+			}
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // CapChecker.Check — pkg/enforcement/cost_cap_test.go:TestCostCap_EgressExceeded_HTTP402
 // -----------------------------------------------------------------------------

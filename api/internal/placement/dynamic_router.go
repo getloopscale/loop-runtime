@@ -122,8 +122,9 @@ func (r *DynamicRouter) refresh(ctx context.Context) error {
 // MEET-INFRA-NORMALIZE-T3-multi-cell C19 + ADR D6.
 //
 // Decisions:
-//   "assigned" — cell found, returned normally
-//   "error"    — cell_id empty OR unknown; caller gets a typed error
+//
+//	"assigned" — cell found, returned normally
+//	"error"    — cell_id empty OR unknown; caller gets a typed error
 //
 // "fallback" decision is reserved for a future enhancement (graceful
 // degradation to default-cell when primary unavailable). Today the
@@ -183,7 +184,7 @@ func (r *DynamicRouter) DiscoveredCellCount() int {
 func (r *DynamicRouter) IsDynamic() bool { return true }
 
 // ListCellIDs returns all known cell IDs (no connection details).
-// MEET-053 A-07: Implements services.CellLister for BuildReconcileLoop.
+// MEET-053 A-07: Implements shared.CellLister for BuildReconcileLoop.
 func (r *DynamicRouter) ListCellIDs(_ context.Context) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

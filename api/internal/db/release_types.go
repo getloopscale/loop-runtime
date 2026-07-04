@@ -20,8 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"time"
-
-	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // releaseMachine is the release state machine singleton. Used to validate
@@ -39,7 +37,6 @@ import (
 // constant (verified by TestReleaseTypedMachine_WireFormatCompatibility),
 // so DB rows persisted under the untyped path read back identically.
 // No migration of `releases.status` column needed.
-var releaseMachine = statemachine.NewReleaseTypedMachine()
 
 // Release represents a release record in the database.
 type Release struct {

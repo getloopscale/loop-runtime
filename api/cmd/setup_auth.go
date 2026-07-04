@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -37,7 +39,7 @@ func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
 		return
 	}
 	writer := func(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error {
-		return db.WriteAuditLog(ctx, dbAdapter, db.AuditEntry{
+		return store.WriteAuditLog(ctx, dbAdapter, store.AuditEntry{
 			TenantID:      tenantID,
 			Action:        action,
 			Actor:         actor,

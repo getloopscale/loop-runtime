@@ -1,0 +1,199 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package dbgeneratedboundary
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// writeGo writes a .go file at repoRoot/rel, creating parent dirs.
+func writeGo(t *testing.T, repoRoot, rel, body string) {
+	t.Helper()
+	full := filepath.Join(repoRoot, rel)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(full), err)
+	}
+	if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", full, err)
+	}
+}
+
+const cleanServiceFile = `package services
+
+import "context"
+
+func Do(ctx context.Context) {}
+`
+
+const violatingServiceFile = `package services
+
+import (
+	"context"
+
+	gen "github.com/getloopscale/loopzero/api/internal/db/generated"
+)
+
+func Do(ctx context.Context) { _ = gen.Queries{} }
+`
+
+func TestCheck_CleanBoundaryPasses(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", cleanServiceFile)
+	writeGo(t, root, "api/internal/routes/route.go", cleanServiceFile)
+	writeGo(t, root, "api/internal/server/srv.go", cleanServiceFile)
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Errorf("clean boundary must PASS, got violations: %+v", out.Violations)
+	}
+	if out.Scanned != 3 {
+		t.Errorf("Scanned = %d, want 3", out.Scanned)
+	}
+}
+
+func TestCheck_ServiceImportingGeneratedFails(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", violatingServiceFile)
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("a service importing db/generated must FAIL Gate A")
+	}
+	if len(out.Violations) != 1 {
+		t.Fatalf("want exactly 1 violation, got %d: %+v", len(out.Violations), out.Violations)
+	}
+	if got := out.Violations[0].Import; got != generatedImportPath {
+		t.Errorf("Violation.Import = %q, want %q", got, generatedImportPath)
+	}
+	if out.Violations[0].File == "" {
+		t.Error("Violation.File must be populated")
+	}
+}
+
+const dotImportServiceFile = `package services
+
+import (
+	"context"
+
+	. "github.com/getloopscale/loopzero/api/internal/db/generated"
+)
+
+func Do(ctx context.Context) { _ = Queries{} }
+`
+
+// A dot-import of the generated package (path unchanged, Name==".") must still
+// be flagged — the AST matches on imp.Path.Value, so the alias/dot form cannot
+// evade the fence. Locks the robustness the reviewer verified by reasoning.
+func TestCheck_DotImportStillFlagged(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", dotImportServiceFile)
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("a dot-import of db/generated must FAIL Gate A")
+	}
+}
+
+// The aliased-import form (`gen "…/generated"`) is exercised by
+// violatingServiceFile itself (it uses `gen`). Assert it explicitly so a future
+// "simplify to grep" cannot silently regress the alias case.
+func TestCheck_AliasedImportStillFlagged(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", violatingServiceFile) // uses `gen` alias
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("an aliased import of db/generated must FAIL Gate A")
+	}
+}
+
+// The api/cmd composition root is fenced too (the highest-leverage bypass site).
+func TestCheck_CmdCompositionRootFenced(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/cmd/setup_stores.go", violatingServiceFile)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("api/cmd importing db/generated must FAIL Gate A (composition root)")
+	}
+}
+
+// A forbidden dir absent from the tree is recorded in MissingDirs so a silent
+// fence-drop (dir rename) is never invisible.
+func TestCheck_MissingDirsRecorded(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/svc.go", cleanServiceFile) // only services present
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("clean single-dir tree must PASS, got: %+v", out.Violations)
+	}
+	// routes, server, cmd are absent → recorded.
+	if len(out.MissingDirs) != 3 {
+		t.Errorf("MissingDirs = %v, want 3 absent (routes, server, cmd)", out.MissingDirs)
+	}
+}
+
+func TestCheck_TestFileIncludedInScan(t *testing.T) {
+	// A *_test.go under an outer layer that imports generated is still a breach.
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/routes/route_test.go", violatingServiceFile)
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("a *_test.go in an outer layer importing db/generated must FAIL Gate A")
+	}
+}
+
+func TestCheck_AbsentDirsTolerated(t *testing.T) {
+	// Empty repo root: none of the forbidden dirs exist → trivially passes.
+	root := t.TempDir()
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Errorf("absent dirs must PASS, got: %+v", out.Violations)
+	}
+	if out.Scanned != 0 {
+		t.Errorf("Scanned = %d, want 0", out.Scanned)
+	}
+}
+
+func TestCheck_StoreLayerNotForbidden(t *testing.T) {
+	// The db/store/ adapter package IS allowed to import generated — it is the
+	// ONLY sanctioned importer. Gate A must not flag it (it is outside the
+	// forbidden dir set).
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/db/store/release_wrapper.go", violatingServiceFile)
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Errorf("db/store importing generated is sanctioned; Gate A must not flag it, got: %+v", out.Violations)
+	}
+}

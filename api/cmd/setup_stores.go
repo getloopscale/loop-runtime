@@ -7,13 +7,15 @@ import (
 	"encoding/hex"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
-	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
@@ -28,17 +30,17 @@ import (
 type StoreDeps struct {
 	BuildStore       db.BuildStore
 	ReleaseStore     db.ReleaseStore
-	EnvTargetStore   *db.PostgresEnvironmentTargetStore
-	PreviewSlotStore *db.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
+	EnvTargetStore   *store.PostgresEnvironmentTargetStore
+	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
-	PgEventStore   *sse.PostgresEventStore
-	SecretStore    routes.SecretStore
-	BootstrapStore routes.BootstrapStore
-	DomainStore    *db.PostgresDomainStore
-	CellStore      *db.PostgresCellStore
-	SourceStore    source.SourceStore
-	ObjUploader    routes.ObjectUploader
-	Locker         *adapters.PoolEnvironmentLocker
+	PgEventStore     *sse.PostgresEventStore
+	SecretStore      routes.SecretStore
+	BootstrapStore   routes.BootstrapStore
+	DomainStore      *store.PostgresDomainStore
+	CellStore        *store.PostgresCellStore
+	SourceStore      source.SourceStore
+	ObjUploader      routes.ObjectUploader
+	Locker           *adapters.PoolEnvironmentLocker
 
 	// SSE adapter
 	BuildStoreReader sse.BuildStoreReader
@@ -59,7 +61,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// Satisfies db.BuildStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition + concurrent-deploy
 	// rejection (Rule 6 + ARCH-002) preserved at store layer (D4).
-	buildStore := db.NewBuildStoreSqlc(dbAdapter)
+	buildStore := store.NewBuildStoreSqlc(dbAdapter)
 	// T1.3.b of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
 	// EventStore must be constructed BEFORE releaseStore so AppendSideEffect
 	// can emit signal.changed events via canonical SSE infrastructure.
@@ -69,11 +71,11 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
 	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1 absorption);
 	// panics on nil to surface mis-wired startups loud + fast.
-	releaseStore := db.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
-	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
+	releaseStore := store.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
+	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	// 2026-06-07 D2 — single-slot preview store (Netlify-style).
 	// Phase 1 of plan 2026-06-07-preview-as-category-single-slot-plan.md.
-	previewSlotStore := db.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
+	previewSlotStore := store.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
 
 	// Secret store — SEC-001: encryption at rest when key is configured.
 	// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
@@ -110,9 +112,9 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		EventStore:       pgEventStore,
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
-		BootstrapStore:   &db.PostgresBootstrapStore{DB: dbAdapter},
-		DomainStore:      &db.PostgresDomainStore{DB: dbAdapter},
-		CellStore:        &db.PostgresCellStore{DB: dbAdapter},
+		BootstrapStore:   &store.PostgresBootstrapStore{DB: dbAdapter},
+		DomainStore:      &store.PostgresDomainStore{DB: dbAdapter},
+		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,
 		ObjUploader:      objUploader,
 		Locker:           &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool},
@@ -147,7 +149,7 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 	}
 	if transit != nil {
 		adapter := adapters.NewVaultTransitAdapter(transit)
-		store, err := db.NewPostgresSecretStoreWithVault(dbAdapter, adapter, encKey)
+		store, err := store.NewPostgresSecretStoreWithVault(dbAdapter, adapter, encKey)
 		if err != nil {
 			return nil, err
 		}
@@ -155,5 +157,5 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 			"legacy_aes_key_present", len(encKey) > 0)
 		return store, nil
 	}
-	return db.NewPostgresSecretStore(dbAdapter, encKey)
+	return store.NewPostgresSecretStore(dbAdapter, encKey)
 }

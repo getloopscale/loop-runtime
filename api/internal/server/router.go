@@ -15,12 +15,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost
@@ -366,7 +366,7 @@ func registerProtectedRoutes(
 		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
 		// the cross-tenant binding check (EC-03 absorption / CWE-204
-		// defense). Production injects *db.PostgresProjectStore directly.
+		// defense). Production injects *store.PostgresProjectStore directly.
 		if cfg.SecretProjectChecker != nil {
 			secrets.SetProjectChecker(cfg.SecretProjectChecker)
 		}
@@ -464,6 +464,11 @@ func registerProtectedRoutes(
 		// enforces the cross-tenant gate via the ProjectStore wired in
 		// NewBuildListHandlerWithGate (setup_orchestrator.go).
 		r.Get("/api/v1/projects/{name}/build-envs", cfg.BuildListHandler.BuildEnvs)
+	}
+	if cfg.BuildStatsHandler != nil {
+		// J-06 D2: tenant-scoped deploys aggregate for the Overview sparkline.
+		// Static /builds/stats — chi matches it before /projects/{name}/builds.
+		r.Get("/api/v1/builds/stats", cfg.BuildStatsHandler.Stats)
 	}
 	if cfg.RollbackHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)

@@ -41,7 +41,7 @@ prometheus:
           - targets:
               # Workload cluster LB IP on k3d-loopzero-workload network.
               # Updated by: bash infra/scripts/local/update-cross-cluster-ips.sh
-              - "172.18.0.12:30091"
+              - "172.18.0.13:30091"
             labels:
               cluster: workload
               component: traefik

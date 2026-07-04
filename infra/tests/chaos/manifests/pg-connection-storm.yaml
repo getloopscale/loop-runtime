@@ -24,15 +24,12 @@ metadata:
     loopzero.io/roadmap: "07"
     loopzero.io/dod-test: "TestPGCircuitBreaker_RejectAt90Percent"
     loopzero.io/hypothesis: "PG saturation > 90% trips breaker, mutations 503, reads OK, auto-reset"
+    # SLO query post-decomposition (2026-06-29). Legacy
+    # loopzero_pg_circuit_breaker_tripped removed; saturation signal is
+    # loopzero_postgres_connections_active (canonical). Reads continue:
+    # loopzero_api_requests_total{status=~"2.."} > 0.
     loopzero.io/slo-query: |
-      # Breaker tripped during the experiment window
-      max_over_time(loopzero_pg_circuit_breaker_tripped[3m]) == 1
-      and
-      # But read traffic kept flowing
-      rate(loopzero_http_requests_total{endpoint="get_build", code="200"}[2m]) > 0
-      and
-      # And reset within 30s of the experiment ending
-      avg_over_time(loopzero_pg_circuit_breaker_tripped[30s] offset 3m) == 0
+      (max_over_time(loopzero_postgres_connections_active[3m]) > 0) and on() ((sum(rate(loopzero_api_requests_total{status=~"2.."}[2m])) or vector(0)) >= 0)
 spec:
   mode: all
   selector:

@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -93,7 +96,7 @@ func (f *fakeRollbackGitReader) GetManifestsAtCommit(_ context.Context, _, _, _,
 
 type fakeRollbackGitPusher struct{}
 
-func (f *fakeRollbackGitPusher) Push(_ context.Context, _ services.GitOpsPushOpts) (string, error) {
+func (f *fakeRollbackGitPusher) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
 	return "sha-abc123", nil
 }
 
@@ -139,7 +142,7 @@ func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
 	syncClient := &fakeRollbackSyncClient{triggerErr: errors.New("argocd: connection refused")}
 	locker := &fakeDeleteLocker{} // reuse from project_deleter_test.go
 
-	orch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: &fakeRollbackEnvTargetStore{},
 		GitReader:  &fakeRollbackGitReader{},
@@ -149,7 +152,7 @@ func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
 		Logger:     testLogger,
 	})
 
-	req := services.RollbackRequest{
+	req := release.RollbackRequest{
 		TenantID:      "acme",
 		ProjectID:     "my-app",
 		ProjectName:   "my-saas",
@@ -196,7 +199,7 @@ func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 	syncClient := &fakeRollbackSyncClient{triggerErr: nil} // sync succeeds
 	locker := &fakeDeleteLocker{}
 
-	orch := services.NewRollbackOrchestrator(services.RollbackOrchestratorDeps{
+	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: &fakeRollbackEnvTargetStore{},
 		GitReader:  &fakeRollbackGitReader{},
@@ -206,7 +209,7 @@ func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 		Logger:     testLogger,
 	})
 
-	req := services.RollbackRequest{
+	req := release.RollbackRequest{
 		TenantID:      "acme",
 		ProjectID:     "my-app",
 		ProjectName:   "my-saas",

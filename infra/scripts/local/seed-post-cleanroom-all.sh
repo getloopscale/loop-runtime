@@ -215,6 +215,17 @@ fi
 # requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
 run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
 
+# Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
+# canonical identity. The seed-admin script is generic over EMAIL +
+# DISPLAY_NAME + USERNAME + TENANT_SLUG + SESSION_FILE env overrides,
+# so we re-invoke it to provision paulohenrique.java@gmail.com (the
+# QA operator's working inbox, accessible at gmail /u/2). Without
+# this step, every Cleanroom obliterates the QA's identity and
+# recovery returns the anti-enumeration mute for their address.
+# Session is persisted to a separate file (~/.loopzero/redteam-qa-*) so
+# the admin session at the canonical path is not overwritten.
+run_step "3b-seed-redteam-qa-identity" "EMAIL=paulohenrique.java@gmail.com DISPLAY_NAME='Red Team QA' USERNAME=redteam-qa TENANT_SLUG=redteam-qa SESSION_FILE=\$HOME/.loopzero/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopzero/redteam-qa-session-jwt.txt bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
+
 # Step 5
 run_step "5-seed-github-app-dev" "bash $SCRIPT_DIR/seed-github-app-dev.sh $VERIFY_FLAG"
 
@@ -287,6 +298,39 @@ run_step "15-seed-stripe-secret-canonical" "bash $SCRIPT_DIR/seed-stripe-secret-
 # loopzero-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;
 # separate rotation cadence: webhook secret vs API key per Stripe runbook).
 run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-keys-canonical.sh $VERIFY_FLAG"
+
+# Step 15c (NEW 2026-07-01 — Red Team loopzero-cloud#156) — Stripe test-mode
+# webhook endpoint provisioning + real whsec capture. Without this the
+# canonical fulfillment flow (payment → checkout.session.completed →
+# plan promotion) is dead because Stripe has no endpoint to POST to, and
+# the placeholder `whsec_dev_*` in dev-credentials.json would fail
+# signature validation even if events arrived. Idempotent: skips when
+# endpoint already exists AND whsec canonical. SKIP graceful when
+# stripe.api_key placeholder/missing (standalone-multi tier).
+run_step "15c-seed-stripe-webhook-endpoint-canonical" "bash $SCRIPT_DIR/seed-stripe-webhook-endpoint-canonical.sh $VERIFY_FLAG"
+
+# Step 16 (NEW 2026-07-01 — plan dashboard-badge-data-plane-poller T6.1) —
+# data-plane poller first-tick warm-up. EC-2 absorption: without this,
+# the first /projects render post `task setup` is a wall of `Unknown`
+# badges (up to POLLER_INTERVAL seconds until the first natural poller
+# tick populates env_targets.last_replicas_ready_*). Rather than add a
+# bespoke --first-tick-sync CLI flag (parsimony rung 5), we simply wait
+# one canonical interval + a small buffer for the poller's ticker to
+# fire naturally.
+#
+# Gate reads the CHART-INJECTED ConfigMap value (not shell env) so
+# whether the poller is enabled is decided by helmfile overlay per env
+# (dev-public: enabled=true; standalone-multi: not declared → treated
+# as disabled). Legacy shell-env override kept for local dev workflows.
+POLLER_ENABLED_CFG="$(kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" \
+  -n loopzero-system get configmap loopzero-app-operator \
+  -o jsonpath='{.data.LOOPZERO_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
+if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then
+  POLLER_WARMUP_S="${LOOPZERO_DATA_PLANE_POLLER_WARMUP_S:-45}"
+  run_step "16-data-plane-poller-first-tick" "sleep $POLLER_WARMUP_S && log '   data-plane poller warmed up (${POLLER_WARMUP_S}s wait)' && true"
+else
+  skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-app-operator ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
+fi
 
 # Summary
 log ""

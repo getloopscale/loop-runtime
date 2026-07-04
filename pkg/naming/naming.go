@@ -116,17 +116,32 @@ func Namespace(tenantSlug, projectSlug, envName string) (string, error) {
 	return name, nil
 }
 
-// IsPreviewEnv reports whether an env name follows the canonical
-// preview-pr-N pattern. Used by the build complete path to decide
-// between SetDesired (kind='permanent') and SetPreviewDesired
-// (kind='preview') when persisting env_targets. D2 of plan
+// IsPreviewEnv reports whether an env name is a preview-flavor environment.
+// Used by the build complete path to decide between SetDesired
+// (kind='permanent') and SetPreviewDesired (kind='preview') when
+// persisting env_targets. D2 of plan
 // 2026-06-07-preview-as-category-single-slot-plan.md.
 //
 // Lives here (not preview_service.go) so non-service callers
 // (container_delivery, promotion, rollback) can detect previews
 // without importing services.
+//
+// Red Team loopzero-cloud#41 absorption (2026-06-27): the original predicate
+// only matched the canonical `preview-pr-N` namespace pattern emitted by
+// the PreviewService. PRODUCTION data (`loopzerokit-example` / `preview`)
+// has env_targets with the literal "preview" environment name from the
+// CLI legacy path — those rows were mis-labeled `kind='permanent'` and
+// counted as production envs by `production_env_count`, surfacing the
+// dashboard's "Live envs: 1 + URL PENDING" pair. Broaden the predicate
+// to also match the literal "preview" base name AND the
+// `preview-{anything}` prefix the legacy CLI used. Stays consistent
+// with the canonical CLI exit-code contract — "production", "staging"
+// and other named envs are explicitly NOT preview.
 func IsPreviewEnv(envName string) bool {
-	return strings.HasPrefix(envName, "preview-pr-")
+	if envName == "preview" {
+		return true
+	}
+	return strings.HasPrefix(envName, "preview-")
 }
 
 // EnvironmentNamespace is DEPRECATED — kept only for callers that

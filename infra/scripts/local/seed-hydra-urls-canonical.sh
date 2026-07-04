@@ -74,14 +74,29 @@ data = re.sub(r'issuer: http://ory-hydra-public[^\s]*', f'issuer: https://{auth}
 data = re.sub(r'public: http://ory-hydra-public[^\s]*', f'public: https://{auth}/', data)
 
 # Layer 2: urls.device.{verification,success}
-data = re.sub(r'verification: http://localhost:4455/device-verify', f'verification: https://{app}/device-verify', data)
-data = re.sub(r'success: http://localhost:4455/device-success', f'success: https://{app}/device-success', data)
+# Match any http://localhost:PORT prefix (was hardcoded 4455 — chart defaults
+# drifted to 3000/auth/* in some releases; anchor on key + localhost only).
+data = re.sub(r'verification: http://localhost:\d+/[\w-]*device-verify', f'verification: https://{app}/device-verify', data)
+data = re.sub(r'success: http://localhost:\d+/[\w-]*device-success', f'success: https://{app}/device-success', data)
 
 # Layer 3: urls.{login,consent,logout,error}
-data = re.sub(r'login: http://localhost:4455/login', f'login: https://{app}/login', data)
-data = re.sub(r'consent: http://localhost:4455/consent', f'consent: https://{app}/consent', data)
-data = re.sub(r'logout: http://localhost:4455/logout', f'logout: https://{app}/logout', data)
-data = re.sub(r'error: http://localhost:4455/error', f'error: https://{app}/error', data)
+# Canonical dev-public URL is /auth/{login,consent,error} (loopzero-cloud BFF
+# handler group) and /logout (top-level dashboard route). Was hardcoded
+# localhost:4455/login regex which silent-missed the chart default
+# localhost:3000/auth/login shape — reproduced Red Team loopzero-cloud#112
+# class of login-URL drift bug post-Cleanroom.
+data = re.sub(r'login: http://localhost:\d+/[\w/-]*login', f'login: https://{app}/auth/login', data)
+data = re.sub(r'consent: http://localhost:\d+/[\w/-]*consent', f'consent: https://{app}/auth/consent', data)
+data = re.sub(r'logout: http://localhost:\d+/[\w/-]*logout', f'logout: https://{app}/logout', data)
+data = re.sub(r'error: http://localhost:\d+/[\w/-]*error', f'error: https://{app}/auth/error', data)
+
+# NOTE: CSRF cookie config (serve.cookies.{domain,same_site_mode,secure}) is
+# declared in the canonical helmfile overlay:
+#   infra/helmfile/values/dev-public/ory-hydra.yaml.gotmpl (v3.1 2026-07-02).
+# That overlay survives Cleanroom rebuilds via helmfile sync; this script only
+# rewrites runtime-injected localhost URL drift left by the chart defaults.
+# Combined defense — overlay for declarative state, this script for post-
+# Cleanroom URL sanity check.
 
 sys.stdout.write(data)
 ")

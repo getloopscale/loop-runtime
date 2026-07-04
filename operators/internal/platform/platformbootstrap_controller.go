@@ -28,7 +28,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -77,16 +77,16 @@ var platformBootstrapDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for PlatformBootstrap resources.
 func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := shared.StartReconcileSpan(ctx, "bootstrap", req.Name, req.Namespace)
+	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "bootstrap", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			shared.RecordError(span, retErr)
+			reconcilehelpers.RecordError(span, retErr)
 		} else {
-			shared.SetSuccess(span)
+			reconcilehelpers.SetSuccess(span)
 		}
-		shared.ReconcileOutcome("bootstrap", start, retErr)
+		reconcilehelpers.ReconcileOutcome("bootstrap", start, retErr)
 	}()
 
 	var pb loopzerov1.PlatformBootstrap
@@ -102,7 +102,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	ctx = correlation.WithID(ctx, pb.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.PlatformBootstrap { return &loopzerov1.PlatformBootstrap{} },
 		func(x *loopzerov1.PlatformBootstrap) *[]metav1.Condition { return &x.Status.Conditions },
 		platformBootstrapDetailTypes)()
@@ -320,7 +320,7 @@ func (r *PlatformBootstrapReconciler) updateSecretData(ctx context.Context, secr
 // SetupPlatformBootstrapController registers the PlatformBootstrapController with the manager.
 func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.PlatformBootstrap{}, shared.ForOption()).
+		For(&loopzerov1.PlatformBootstrap{}, reconcilehelpers.ForOption()).
 		Named("platformbootstrap").
 		Complete(&PlatformBootstrapReconciler{
 			Client:     mgr.GetClient(),

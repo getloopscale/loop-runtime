@@ -11,12 +11,15 @@ import (
 	"log/slog"
 	"time"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
+	forge "github.com/getloopscale/loopzero-forge"
+	forgemodel "github.com/getloopscale/loopzero-forge/model"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -24,13 +27,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 const (
-	submitMaxRetries    = 3
-	submitBaseDelay     = 1 * time.Second
+	submitMaxRetries = 3
+	submitBaseDelay  = 1 * time.Second
 )
 
 // WorkflowGVR is the GroupVersionResource for Argo Workflows v1alpha1.
@@ -88,7 +89,7 @@ type WorkflowSubmitterConfig struct {
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
-// WorkflowSubmitter implements services.WorkflowSubmitter using real Argo Workflows.
+// WorkflowSubmitter implements deploycontracts.WorkflowSubmitter using real Argo Workflows.
 // It uses the WorkflowBuilder to generate self-contained Workflow CRs with
 // ClusterWorkflowTemplate refs for reusable steps and inline templates for
 // language-specific steps.
@@ -119,10 +120,10 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	}
 
 	builder := NewWorkflowBuilder(InfraParams{
-		RegistryURL:         cfg.RegistryURL,
-		RegistryInsecure:    cfg.RegistryInsecure,
-		BaseDomain:          cfg.BaseDomain,
-		HarborRegistryURL:   cfg.HarborRegistryURL,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		HarborRegistryURL:     cfg.HarborRegistryURL,
 		CosignKeyless:         cfg.CosignKeyless,
 		CosignFulcioURL:       cfg.CosignFulcioURL,
 		CosignRekorURL:        cfg.CosignRekorURL,
@@ -139,7 +140,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
-func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+func (s *WorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.WorkflowSpec) (string, error) {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.workflow_submit",
 		trace.WithAttributes(
 			attribute.String("loopzero.workflow.namespace", spec.Namespace),
@@ -210,7 +211,7 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 // The patch document includes apiVersion + kind explicitly so K8s server-side
 // patching (and the fake dynamic client used in tests) accept the merge.
 // Without these, fake-server validation rejects the patch with
-// "patch: Invalid value: ...apiVersion:'',kind:''...".
+// "patch: Invalid value: ...apiVersion:”,kind:”...".
 func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
 	shutdownPatch := map[string]any{
 		"apiVersion": "argoproj.io/v1alpha1",
@@ -254,7 +255,7 @@ func (s *WorkflowSubmitter) Delete(ctx context.Context, namespace, workflowID st
 // To handle this, when the phase is "Failed", we check if all Pod-type nodes have
 // exitCode "0" on their outputs. If so, the build actually succeeded — the failure
 // is only from daemon sidecar termination.
-func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
+func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*deploycontracts.WorkflowStatus, error) {
 	wf, err := s.client.Resource(workflowGVR).Namespace(namespace).Get(ctx, workflowID, metav1.GetOptions{})
 	if err != nil {
 		// BRC-006 fix: distinguish NotFound (workflow deleted/expired) from transient
@@ -273,7 +274,7 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		return nil, fmt.Errorf("argo: parse workflow status %s/%s: %w", namespace, workflowID, err)
 	}
 	if status == nil {
-		return &services.WorkflowStatus{}, nil
+		return &deploycontracts.WorkflowStatus{}, nil
 	}
 
 	phase := string(status.Phase)
@@ -288,11 +289,63 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		phase = "Succeeded"
 	}
 
-	return &services.WorkflowStatus{
-		Phase:      phase,
-		FinishedAt: status.FinishedAt,
-		Outputs:    extractStepOutputs(wf.Object),
+	return &deploycontracts.WorkflowStatus{
+		Phase:          phase,
+		FinishedAt:     status.FinishedAt,
+		Outputs:        extractStepOutputs(wf.Object),
+		StuckPodReason: extractStuckPodReason(status),
 	}, nil
+}
+
+// extractStuckPodReason walks the workflow's per-node status looking for pod
+// nodes wedged in image-pull failure states. Red Team loopzero-cloud#133.
+//
+// Argo mirrors pod-level container-status reasons into `wf.status.nodes[*].message`
+// verbatim. The three kubelet reasons that produce a permanently-stuck workflow
+// (workflow.Phase stays "Running" while the pod cannot start) are:
+//   - ImagePullBackOff       (kubelet gave up retrying)
+//   - ErrImagePull           (initial pull failure — precedes ImagePullBackOff)
+//   - CreateContainerError   (image pulled but container config invalid)
+//
+// Returns the offending node's Message (empty when no pod node is stuck).
+// Only Pod-typed nodes are considered — StepGroup / DAG parent nodes echo
+// the same failure message and would produce redundant reasons.
+func extractStuckPodReason(status *forgemodel.WorkflowStatusDetail) string {
+	if status == nil {
+		return ""
+	}
+	for _, node := range status.Nodes {
+		if node.Type != "Pod" {
+			continue
+		}
+		if node.Message == "" {
+			continue
+		}
+		if containsStuckSignal(node.Message) {
+			return node.Message
+		}
+	}
+	return ""
+}
+
+// stuckSignals are the substrings that identify a pod stuck at image-pull.
+// Sourced from kubelet's canonical reason strings (kubernetes/pkg/kubelet/images).
+var stuckSignals = []string{
+	"ImagePullBackOff",
+	"ErrImagePull",
+	"CreateContainerError",
+	"Back-off pulling image",
+}
+
+func containsStuckSignal(msg string) bool {
+	for _, sig := range stuckSignals {
+		for i := 0; i+len(sig) <= len(msg); i++ {
+			if msg[i:i+len(sig)] == sig {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // extractStepOutputs walks `status.nodes[*]` on a workflow CR and

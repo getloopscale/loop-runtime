@@ -20,6 +20,11 @@ func TestEnvironmentMachine_ValidTransitions(t *testing.T) {
 		{"pending to active", EnvironmentPending, EnvironmentProvisioned, EnvironmentActive},
 		{"pending to deleting", EnvironmentPending, EnvironmentDeleteRequested, EnvironmentDeleting},
 		{"active to deleting", EnvironmentActive, EnvironmentDeleteRequested, EnvironmentDeleting},
+		// MEET-2026-07-02-002 MA-3: delete must be reachable from every
+		// non-terminal state (a delete can arrive before the first successful
+		// reconcile, when the phase is still Empty). Additive edge; Deleting
+		// stays the sole terminal.
+		{"empty to deleting", EnvironmentEmpty, EnvironmentDeleteRequested, EnvironmentDeleting},
 	}
 
 	for _, tt := range tests {
@@ -59,7 +64,6 @@ func TestEnvironmentMachine_InvalidTransitionPanics(t *testing.T) {
 		{"deleting is terminal", EnvironmentDeleting, EnvironmentCreate},
 		{"empty cannot be provisioned", EnvironmentEmpty, EnvironmentProvisioned},
 		{"active cannot be provisioned again", EnvironmentActive, EnvironmentProvisioned},
-		{"empty cannot be deleted", EnvironmentEmpty, EnvironmentDeleteRequested},
 	}
 
 	for _, tt := range tests {

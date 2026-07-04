@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- pgxRowAdapter: Scan maps pgx.ErrNoRows to db.ErrNoRows ---
@@ -101,11 +102,14 @@ func (f *fakeBuildStore) GetBuildApps(_ context.Context, _ string) ([]db.BuildAp
 }
 
 // Stubs for interface satisfaction (not used in these tests).
-func (f *fakeBuildStore) Create(_ context.Context, _ db.DBTX, _ *db.Build) error      { return nil }
+func (f *fakeBuildStore) Create(_ context.Context, _ db.DBTX, _ *db.Build) error { return nil }
 func (f *fakeBuildStore) HasActiveBuild(_ context.Context, _ db.DBTX, _, _, _ string) (bool, error) {
 	return false, nil
 }
 func (f *fakeBuildStore) UpdateStatus(_ context.Context, _ db.DBTX, _ string, _ string) (*db.Build, error) {
+	return nil, nil
+}
+func (f *fakeBuildStore) UpdateStatusIfCurrent(_ context.Context, _, _ string, _ statemachine.BuildPhase, _ string) (*db.Build, error) {
 	return nil, nil
 }
 func (f *fakeBuildStore) SetErrorMessage(_ context.Context, _ db.DBTX, _, _ string) error { return nil }

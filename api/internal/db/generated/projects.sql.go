@@ -112,7 +112,7 @@ type InsertProjectParams struct {
 // T2.1 (Batch A #4) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
 // v1.3. Multi-tenant — every query carries `tenant_id` predicate
 // (projects is in TenantOwnedTables). ProjectStore is consumed by 5
-// prod call sites via struct-literal `&db.PostgresProjectStore{DB:
+// prod call sites via struct-literal `&store.PostgresProjectStore{DB:
 // dbAdapter}` — preserved in T2.1 #4.
 //
 // Schema: projects table has UNIQUE constraint on (tenant_id, name)
@@ -183,13 +183,48 @@ SELECT
   p.created_by,
   p.created_at,
   COALESCE(env_count.cnt, 0)::bigint AS environment_count,
+  -- Red Team loopzero-cloud#41 absorption (2026-06-27): the legacy
+  -- ` + "`" + `environment_count` + "`" + ` collapses preview + production envs into one
+  -- count. The dashboard's "Live envs" label was misleading — a project
+  -- with preview-only deploys still rendered ` + "`" + `Live envs: 1` + "`" + ` AND
+  -- ` + "`" + `URL PENDING` + "`" + ` side by side. Splitting the count surfaces the
+  -- canonical truth: how many PRODUCTION environments are wired vs
+  -- how many PREVIEW environments exist as separate fields.
   COALESCE(prod_env_count.cnt, 0)::bigint AS production_env_count,
+  -- Red Team loopzero-cloud#134 absorption (2026-07-02): the dashboard
+  -- "LIVE ENVS" counter must reflect the number of envs CURRENTLY
+  -- SERVING (a live URL). The legacy ` + "`" + `production_env_count` + "`" + ` counts
+  -- ALL kind='permanent' envs regardless of release state; it says 0
+  -- for preview-only projects — which is the RIGHT answer for the
+  -- ` + "`" + `isPreviewOnly` + "`" + ` heuristic, but the WRONG answer for "how many
+  -- live envs does this project have right now?".
+  --
+  -- ` + "`" + `active_env_count` + "`" + ` counts every env_target (preview OR permanent)
+  -- that has a corresponding release row with status='ACTIVE' for the
+  -- (tenant, project, environment) tuple. Matches the truth the dashboard
+  -- surfaces on the SAME PAGE (Live URL hero + Visit button when a
+  -- preview env is serving). Red Team caught a preview deploy ACTIVE
+  -- with Live URL 200 rendering ` + "`" + `LIVE ENVS: 0` + "`" + ` — counter contradicted
+  -- the Live URL exposed next to it.
+  COALESCE(active_env_count.cnt, 0)::bigint AS active_env_count,
   COALESCE(latest_build.status, '')::text AS last_deploy_status_raw,
   latest_build.created_at AS last_deploy_at,
   COALESCE(jsonb_array_length(latest_build.apps_spec), 0)::bigint AS apps_count,
   COALESCE(latest_build.apps_spec->0->>'type', '')::text AS latest_framework_raw,
   COALESCE(latest_build.environment, '')::text AS latest_build_environment,
-  COALESCE(active_release.status, '')::text AS active_release_status_raw
+  COALESCE(active_release.status, '')::text AS active_release_status_raw,
+  -- T3.1 of plan dashboard-badge-data-plane-poller — closes Red Team
+  -- loopzero-cloud#128. Surfaces the most recent data-plane readiness
+  -- snapshot persisted by the DataPlanePoller (Runnable in
+  -- loopzero-app-operator) into the dashboard /projects list so the badge
+  -- can distinguish control-plane ACTIVE + data-plane-serving from
+  -- control-plane ACTIVE + data-plane-down. Prefers ` + "`" + `kind='permanent'` + "`" + `
+  -- env_targets (production-flavor) because the badge on the list is
+  -- a per-project verdict, not per-env. Rows without a snapshot yet
+  -- (Cleanroom warm-up window before the first poller tick) surface
+  -- as NULL — the dashboard maps NULL to the honest "Unknown" state.
+  replicas_snap.last_replicas_ready_value AS last_replicas_ready_value,
+  replicas_snap.last_replicas_ready_at AS last_replicas_ready_at
 FROM projects p
 LEFT JOIN LATERAL (
   SELECT COUNT(*) AS cnt
@@ -197,12 +232,40 @@ LEFT JOIN LATERAL (
   WHERE et.tenant_id = p.tenant_id AND et.project_id = p.name
 ) env_count ON true
 LEFT JOIN LATERAL (
+  -- Red Team loopzero-cloud#41 absorption (2026-06-27): production-only
+  -- env count. A ` + "`" + `kind = 'permanent'` + "`" + ` env_target is a production-like
+  -- (non-preview) env; a project with zero permanent envs is by
+  -- definition preview-only at the env_targets layer. Combined with
+  -- the latest_build_environment + active_release_status signals in
+  -- enforcement.MapProjectStatus, this is the canonical disambiguator
+  -- the dashboard's "Live envs" / "URL hero" pair was missing.
   SELECT COUNT(*) AS cnt
   FROM environment_targets et
   WHERE et.tenant_id = p.tenant_id
     AND et.project_id = p.name
     AND et.kind = 'permanent'
 ) prod_env_count ON true
+LEFT JOIN LATERAL (
+  -- Red Team loopzero-cloud#134 absorption (2026-07-02): count env_targets
+  -- with a currently-serving ACTIVE release. The releases table is
+  -- the SoT for "is env X currently live?" — matches the SAME predicate
+  -- the aggregate status mapper uses (r.status='ACTIVE' is the live band).
+  -- Preview envs qualify: an env_target with kind='preview' + an ACTIVE
+  -- release row means the preview is serving on a Live URL (loopzerokit
+  -- preview canonical shape). Excludes ROLLING_BACK / FAILED to match
+  -- what "LIVE" means to the user (fully-serving, not in-flight-failure).
+  SELECT COUNT(*) AS cnt
+  FROM environment_targets et
+  WHERE et.tenant_id = p.tenant_id
+    AND et.project_id = p.name
+    AND EXISTS (
+      SELECT 1 FROM releases r
+      WHERE r.tenant_id = et.tenant_id
+        AND r.project_id = et.project_id
+        AND r.environment = et.environment
+        AND r.status = 'ACTIVE'
+    )
+) active_env_count ON true
 LEFT JOIN LATERAL (
   SELECT b.status, b.created_at, b.apps_spec, b.environment
   FROM builds b
@@ -225,6 +288,21 @@ LEFT JOIN LATERAL (
   ORDER BY r.created_at DESC, r.id DESC
   LIMIT 1
 ) active_release ON true
+LEFT JOIN LATERAL (
+  -- T3.1 data-plane snapshot LATERAL — companion to migration 000045.
+  -- Picks the most recently scraped snapshot for a permanent env; the
+  -- partial index ` + "`" + `idx_environment_targets_last_replicas_ready_at` + "`" + `
+  -- (WHERE NOT NULL) keeps this ordered scan cheap even during
+  -- Cleanroom warm-up when most rows are still NULL.
+  SELECT et.last_replicas_ready_value, et.last_replicas_ready_at
+  FROM environment_targets et
+  WHERE et.tenant_id = p.tenant_id
+    AND et.project_id = p.name
+    AND et.kind = 'permanent'
+    AND et.last_replicas_ready_at IS NOT NULL
+  ORDER BY et.last_replicas_ready_at DESC
+  LIMIT 1
+) replicas_snap ON true
 WHERE p.tenant_id = $1
 ORDER BY p.name
 `
@@ -237,12 +315,15 @@ type ListProjectsWithSummaryByTenantRow struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	EnvironmentCount       int64              `json:"environment_count"`
 	ProductionEnvCount     int64              `json:"production_env_count"`
+	ActiveEnvCount         int64              `json:"active_env_count"`
 	LastDeployStatusRaw    string             `json:"last_deploy_status_raw"`
 	LastDeployAt           pgtype.Timestamptz `json:"last_deploy_at"`
 	AppsCount              int64              `json:"apps_count"`
 	LatestFrameworkRaw     string             `json:"latest_framework_raw"`
 	LatestBuildEnvironment string             `json:"latest_build_environment"`
 	ActiveReleaseStatusRaw string             `json:"active_release_status_raw"`
+	LastReplicasReadyValue *int32             `json:"last_replicas_ready_value"`
+	LastReplicasReadyAt    pgtype.Timestamptz `json:"last_replicas_ready_at"`
 }
 
 // Returns all projects for a tenant with per-project summary fields:
@@ -299,12 +380,15 @@ func (q *Queries) ListProjectsWithSummaryByTenant(ctx context.Context, db DBTX, 
 			&i.CreatedAt,
 			&i.EnvironmentCount,
 			&i.ProductionEnvCount,
+			&i.ActiveEnvCount,
 			&i.LastDeployStatusRaw,
 			&i.LastDeployAt,
 			&i.AppsCount,
 			&i.LatestFrameworkRaw,
 			&i.LatestBuildEnvironment,
 			&i.ActiveReleaseStatusRaw,
+			&i.LastReplicasReadyValue,
+			&i.LastReplicasReadyAt,
 		); err != nil {
 			return nil, err
 		}

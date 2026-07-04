@@ -21,16 +21,16 @@ metadata:
   annotations:
     loopzero.io/roadmap: "08"
     loopzero.io/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
+    # SLO: loopzero-api scrape still alive post-outage AND release backlog
+    # under control. Canonical metric names per 2026-06-24 audit
+    # (post-decomposition rename): loopzero_api_requests_total (was
+    # loopzero_http_requests_total), loopzero_releases_pending (was
+    # loopzero_releases_ready_over_timeout — reaper now emits queue depth
+    # directly). Steady-state: ≥ 1 loopzero_api_requests_total series AND
+    # release queue ≤ 5. `and on()` joins heterogeneous vectors;
+    # `or vector(...)` defaults when metrics scrape lag.
     loopzero.io/slo-query: |
-      # SLO: loopzero-api scrape still alive post-outage AND release backlog under control.
-      # Canonical metric names per 2026-06-24 audit (post-decomposition rename):
-      #   - loopzero_api_requests_total (was loopzero_http_requests_total pre-decomposition)
-      #   - loopzero_releases_pending (was loopzero_releases_ready_over_timeout — release reaper
-      #     now emits the queue-depth gauge directly; over-timeout was a derived view).
-      # Steady-state: at least one loopzero_api_requests_total series scraped at probe time
-      # (proves Prometheus + loopzero-api liveness AFTER the chaos window) AND release queue
-      # ≤ 5 (proves the reaper kept up — no stuck-in-PENDING runaway).
-      (count(loopzero_api_requests_total) > 0) and (sum(loopzero_releases_pending) <= 5)
+      ((count(loopzero_api_requests_total) or vector(0)) > 0) and on() ((sum(loopzero_releases_pending) or vector(0)) <= 5)
 spec:
   action: partition
   mode: all

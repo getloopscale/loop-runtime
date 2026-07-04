@@ -36,6 +36,7 @@ require (
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
+	k8s.io/component-helpers v0.35.2 // indirect
 )
 
 require (
@@ -121,4 +122,3 @@ require (
 replace github.com/getloopscale/loopzero/pkg => ../pkg
 
 replace github.com/getloopscale/loopzero/operators/api => ../operators/api
-

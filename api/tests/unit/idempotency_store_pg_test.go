@@ -6,7 +6,8 @@ package unit
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
@@ -48,5 +49,5 @@ import (
 // guard that PostgresIdempotencyStore satisfies the middleware
 // contract. Survives T2.1 because no runtime DB calls are needed.
 func TestPostgresIdempotencyStoreImplementsInterface(t *testing.T) {
-	var _ middleware.IdempotencyStore = (*db.PostgresIdempotencyStore)(nil)
+	var _ middleware.IdempotencyStore = (*store.PostgresIdempotencyStore)(nil)
 }

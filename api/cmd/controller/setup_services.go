@@ -11,6 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/argo"
 	"github.com/getloopscale/loopzero/api/internal/argocd"
@@ -18,18 +26,17 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // controllerDeps holds all services and stores wired during setup. Passed to
 // startBackgroundLoops so the main function stays lean.
 type controllerDeps struct {
-	reconcileLoop          *services.BuildReconcileLoop
-	buildReaper            *services.BuildReaper
-	releaseReaper          *services.ReleaseReaper
-	releaseConvergenceLoop *services.ReleaseConvergenceLoop
-	idempotencyCleaner     *services.IdempotencyCleaner
+	reconcileLoop          *build.BuildReconcileLoop
+	buildReaper            *build.BuildReaper
+	releaseReaper          *release.ReleaseReaper
+	releaseConvergenceLoop *release.ReleaseConvergenceLoop
+	idempotencyCleaner     *platform.IdempotencyCleaner
 	eventPruner            *sse.EventPruner
 }
 
@@ -42,7 +49,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// Satisfies db.BuildStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition + concurrent-deploy
 	// rejection preserved at store layer (D4).
-	buildStore := db.NewBuildStoreSqlc(dbAdapter)
+	buildStore := store.NewBuildStoreSqlc(dbAdapter)
 	// T1.3.b of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
 	// EventStore must be constructed BEFORE releaseStore so AppendSideEffect
 	// can emit signal.changed events via canonical SSE infrastructure.
@@ -51,33 +58,33 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
 	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1).
-	releaseStore := db.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
-	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
-	domainStore := &db.PostgresDomainStore{DB: dbAdapter}
+	releaseStore := store.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
+	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
+	domainStore := &store.PostgresDomainStore{DB: dbAdapter}
 
 	// Environment locker (pg_advisory_xact_lock, roadmap Rule 6).
 	locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
 
 	// ---- Build cluster (Argo) ----
 	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:          cfg.BuildKubeconfig,
-		Context:             cfg.BuildKubeContext,
-		RegistryURL:         cfg.RegistryURL,
-		RegistryInsecure:    cfg.RegistryInsecure,
-		BaseDomain:          cfg.BaseDomain,
-		CosignKeyless:       cfg.CosignKeyless,       // v1.1 EC-3 wire env var
-		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
-		CosignFulcioURL:     cfg.CosignFulcioURL,
-		CosignRekorURL:      cfg.CosignRekorURL,
+		Kubeconfig:            cfg.BuildKubeconfig,
+		Context:               cfg.BuildKubeContext,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		CosignKeyless:         cfg.CosignKeyless,       // v1.1 EC-3 wire env var
+		CosignAttestEnabled:   cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 	if err != nil {
 		logger.Error("failed to create workflow submitter", "error", err)
 		panic("fatal: workflow submitter creation failed") // unreachable after os.Exit
 	}
-	workflowSubmitter := services.NewCircuitBreakerWorkflowSubmitter(
+	workflowSubmitter := platform.NewCircuitBreakerWorkflowSubmitter(
 		rawWorkflowSubmitter,
-		services.CircuitBreakerConfig{
+		platform.CircuitBreakerConfig{
 			OpenThreshold:  cfg.CBOpenThreshold,
 			CloseThreshold: cfg.CBCloseThreshold,
 			RetryInterval:  cfg.CBRetryInterval,
@@ -102,7 +109,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		Insecure:   cfg.ArgocdInsecure,
 		HTTPClient: argocdHTTPClient,
 	})
-	syncClient := services.NewCircuitBreakerSyncClient(rawSyncClient, services.CircuitBreakerConfig{
+	syncClient := platform.NewCircuitBreakerSyncClient(rawSyncClient, platform.CircuitBreakerConfig{
 		OpenThreshold:  cfg.CBOpenThreshold,
 		CloseThreshold: cfg.CBCloseThreshold,
 		RetryInterval:  cfg.CBRetryInterval,
@@ -132,11 +139,11 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// cap is wired on the API server's orchestrator (cmd/setup_orchestrator.go),
 	// which owns every project-creating path. If the controller is ever changed
 	// to submit/re-submit builds, wire SetProjectCapChecker here too.
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:        buildStore,
 		ReleaseStore:      releaseStore,
 		EnvTargetStore:    envTargetStore,
-		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ProjectStore:      &store.PostgresProjectStore{DB: dbAdapter},
 		EventStore:        pgEventStore,
 		Workflow:          workflowSubmitter,
 		Sync:              syncClient,
@@ -148,7 +155,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	})
 
 	// ---- Build reconcile loop ----
-	reconcileLoop := services.NewBuildReconcileLoop(
+	reconcileLoop := build.NewBuildReconcileLoop(
 		buildStore,
 		workflowSubmitter,
 		orch,
@@ -157,7 +164,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		appCRMgr,
 		pgEventStore,
 		logger,
-		services.BuildReconcileLoopConfig{
+		build.BuildReconcileLoopConfig{
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
@@ -170,14 +177,14 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Build reaper ----
-	buildReaper := services.NewBuildReaper(
+	buildReaper := build.NewBuildReaper(
 		buildStore,
-		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		&build.PostgresStaleBuildChecker{DB: dbAdapter},
 		locker,
 		workflowSubmitter,
 		pgEventStore,
 		logger,
-		services.BuildReaperConfig{
+		build.BuildReaperConfig{
 			QueueTimeout:     cfg.BuildQueueTimeout,
 			RunningTimeout:   cfg.BuildRunningTimeout,
 			ReleasingTimeout: cfg.BuildReleasingTimeout,
@@ -189,13 +196,13 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Release reaper ----
-	releaseReaper := services.NewReleaseReaper(
+	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		&release.PostgresStaleReleaseChecker{DB: dbAdapter},
 		locker,
 		pgEventStore,
 		logger,
-		services.ReleaseReaperConfig{
+		release.ReleaseReaperConfig{
 			ReadyTimeout:   cfg.ReleaseReadyTimeout,
 			PendingTimeout: cfg.ReleasePendingTimeout,
 			Interval:       cfg.ReleaseReaperInterval,
@@ -207,7 +214,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain (canonical
 	// LOOPZERO_PUBLIC_DOMAIN) preferred over BaseDomain for deploy.completed
 	// URL so it matches `loopzero status`.
-	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+	releaseConvergenceLoop := release.NewReleaseConvergenceLoop(
 		releaseStore,
 		envTargetStore,
 		syncClient,
@@ -216,7 +223,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		cfg.BaseDomain,
 		cfg.PublicDomain,
 		logger,
-		services.ReleaseConvergenceLoopConfig{
+		release.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,
 			SyncTimeout:   300 * time.Second,
 			MaxConcurrent: 10,
@@ -225,8 +232,8 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	)
 
 	// ---- Idempotency cleaner ----
-	idempotencyCleaner := services.NewIdempotencyCleaner(
-		&db.PostgresIdempotencyStore{DB: dbAdapter},
+	idempotencyCleaner := platform.NewIdempotencyCleaner(
+		&store.PostgresIdempotencyStore{DB: dbAdapter},
 		logger,
 		1*time.Hour,
 	)

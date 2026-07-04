@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 func TestScriptInstallNode_PathWithSpaces_UsesQuoting(t *testing.T) {
-	apps := []services.AppSpec{{Name: "api", Path: "my app"}}
+	apps := []deploycontracts.AppSpec{{Name: "api", Path: "my app"}}
 	script := scriptInstallNode(apps)
 
 	// ShellQuote produces single-quoted path
@@ -21,7 +21,7 @@ func TestScriptInstallNode_PathWithSpaces_UsesQuoting(t *testing.T) {
 }
 
 func TestScriptInstallNode_PathInjection_Prevented(t *testing.T) {
-	apps := []services.AppSpec{{Name: "api", Path: "$(whoami)"}}
+	apps := []deploycontracts.AppSpec{{Name: "api", Path: "$(whoami)"}}
 	script := scriptInstallNode(apps)
 
 	// ShellQuote wraps in single quotes — $() is literal inside single quotes
@@ -31,7 +31,7 @@ func TestScriptInstallNode_PathInjection_Prevented(t *testing.T) {
 }
 
 func TestScriptValidateNode_ContainsFileCheck(t *testing.T) {
-	apps := []services.AppSpec{{Name: "api", Path: "apps/web"}}
+	apps := []deploycontracts.AppSpec{{Name: "api", Path: "apps/web"}}
 	script := scriptValidateNode(apps)
 
 	if !strings.Contains(script, "package.json") {
@@ -43,7 +43,7 @@ func TestScriptValidateNode_ContainsFileCheck(t *testing.T) {
 }
 
 func TestScriptValidatePython_ChecksDepsFiles(t *testing.T) {
-	apps := []services.AppSpec{{Name: "ml", Path: "services/ml"}}
+	apps := []deploycontracts.AppSpec{{Name: "ml", Path: "services/ml"}}
 	script := scriptValidatePython(apps)
 
 	if !strings.Contains(script, "requirements.txt") {
@@ -55,7 +55,7 @@ func TestScriptValidatePython_ChecksDepsFiles(t *testing.T) {
 }
 
 func TestScriptInstallPython_SetsPIPCACHE(t *testing.T) {
-	apps := []services.AppSpec{{Name: "ml", Path: "."}}
+	apps := []deploycontracts.AppSpec{{Name: "ml", Path: "."}}
 	script := scriptInstallPython(apps)
 
 	if !strings.Contains(script, "PIP_CACHE_DIR") {

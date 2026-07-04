@@ -48,6 +48,33 @@ hydra:
   dev: false
 
   config:
+    # v3.1 addition (2026-07-02) — CSRF cookie canonical config for dev-public
+    # cross-subdomain OAuth2 flows. Without these, the device flow surfaces
+    # "request_forbidden — CSRF value from token does not match CSRF value
+    # from data store" mid-flow because default cookie domain is the exact
+    # host, blocking cross-subdomain state propagation between /oauth2/*
+    # (auth-dev) and the login/consent handlers (app-dev).
+    #
+    # LIVE-caught 2026-07-02 when Red Team tester ran loopzero login --device-flow
+    # and got CSRF forbidden on the verification page. Fixed inline; overlay
+    # updated so future Cleanrooms preserve the config.
+    serve:
+      cookies:
+        # loopzero.example covers auth-dev + app-dev + cloud-dev subdomains.
+        domain: "loopzero.example"
+        # Lax allows OAuth2 top-level GET/POST redirects while blocking
+        # cross-site iframes; canonical for the device flow chain.
+        same_site_mode: "Lax"
+        # dev-public is HTTPS-only via Caddy — SameSite=Lax over HTTPS
+        # requires Secure per RFC 6265bis-12 §5.4.7.
+        secure: true
+      public:
+        cors:
+          allowed_origins:
+            - "https://app-dev.loopzero.example"
+            - "https://auth-dev.loopzero.example"
+            - "https://cloud-dev.loopzero.example"
+
     urls:
       self:
         issuer: "https://auth-dev.loopzero.example/"
@@ -64,9 +91,14 @@ hydra:
         success: "https://app-dev.loopzero.example/device-success"
 
       # OAuth2 consent + login redirect URLs.
-      # Per Plan J-05 iter 4 amendment: cloud-dev (NOT app-dev) handles
-      # login_challenge/consent_challenge → Hydra admin AcceptLogin/AcceptConsent.
-      login: "https://cloud-dev.loopzero.example/auth/login"
-      consent: "https://cloud-dev.loopzero.example/auth/consent"
+      # Per qa-dogfood-cleanup-2026-06-21 refactor: canonical surface is
+      # app-dev.loopzero.example (cloud-dev.loopzero.example is 301-redirected to
+      # app-dev at the Caddy edge, so bypassing the redirect avoids the
+      # CSRF cookie loss during 301 follow). loopzero-cloud BFF handlers live
+      # under /auth/* on the app-dev host post-#162 Caddyfile narrowing.
+      # Overrides prior J-05 iter 4 amendment (cloud-dev.loopzero.example/auth/*)
+      # which pre-dated the 2026-06-22 Caddy canonical-surface refactor.
+      login: "https://app-dev.loopzero.example/auth/login"
+      consent: "https://app-dev.loopzero.example/auth/consent"
       logout: "https://app-dev.loopzero.example/logout"
       error: "https://app-dev.loopzero.example/auth/error"

@@ -9,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
 	forge "github.com/getloopscale/loopzero-forge"
+	forgemodel "github.com/getloopscale/loopzero-forge/model"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -17,8 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // These tests run against real Argo Workflows in the build cluster.
@@ -132,10 +133,10 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	apps := []services.AppSpec{
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 	}
-	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
+	workflowID, err := submitter.Submit(ctx, deploycontracts.WorkflowSpec{
 		BuildID:     "test-build-001",
 		TenantID:    "acme",
 		ProjectID:   "my-app",
@@ -173,10 +174,10 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
 	// frontends are CDN-static via Cloudflare Worker (ADR D5) and do not flow
 	// through Argo. Use a single server app for cancel testing.
-	apps := []services.AppSpec{
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 	}
-	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
+	workflowID, err := submitter.Submit(ctx, deploycontracts.WorkflowSpec{
 		BuildID:     "test-cancel-001",
 		TenantID:    "acme",
 		ProjectID:   "my-app",
@@ -210,11 +211,11 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
 	// frontend apps removed (CDN-static path, ADR D5). Multi-app fixture now
 	// exercises server + worker only.
-	apps := []services.AppSpec{
+	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 		{Name: "worker", Type: "worker", Port: 0},
 	}
-	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
+	workflowID, err := submitter.Submit(ctx, deploycontracts.WorkflowSpec{
 		BuildID:     "test-multi-001",
 		TenantID:    "acme",
 		ProjectID:   "monorepo",
@@ -468,11 +469,114 @@ func TestExtractStepOutputs_DefensiveAgainstMissingFields(t *testing.T) {
 // This test is a compile-time guard: if WorkflowStatus.Outputs is
 // removed or renamed, this won't build.
 func TestWorkflowStatus_OutputsField_CompileGuard(t *testing.T) {
-	var s services.WorkflowStatus
+	var s deploycontracts.WorkflowStatus
 	s.Outputs = map[string]map[string]string{
 		"sign-image-api": {"signature": "x"},
 	}
 	if s.Outputs["sign-image-api"]["signature"] != "x" {
 		t.Fatal("compile guard inconsistent")
+	}
+}
+
+// TestExtractStuckPodReason — Red Team loopzero-cloud#133 unit coverage.
+// Locks the truth table of the pod-stuck detector so a future refactor
+// cannot silently regress the ImagePullBackOff / ErrImagePull / CreateContainerError
+// signals that gate the reaper's M-03 override.
+func TestExtractStuckPodReason(t *testing.T) {
+	tests := []struct {
+		name   string
+		status *forgemodel.WorkflowStatusDetail
+		want   string
+	}{
+		{
+			name:   "nil status returns empty",
+			status: nil,
+			want:   "",
+		},
+		{
+			name: "no nodes returns empty",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+			},
+			want: "",
+		},
+		{
+			name: "pod node with ImagePullBackOff message returns the message",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "Pod", Message: "ImagePullBackOff: Back-off pulling image \"registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0\""},
+				},
+			},
+			want: "ImagePullBackOff: Back-off pulling image \"registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0\"",
+		},
+		{
+			name: "pod node with ErrImagePull returns the message",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "Pod", Message: "ErrImagePull: rpc error 401"},
+				},
+			},
+			want: "ErrImagePull: rpc error 401",
+		},
+		{
+			name: "pod node with CreateContainerError returns the message",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "Pod", Message: "CreateContainerError: invalid image config"},
+				},
+			},
+			want: "CreateContainerError: invalid image config",
+		},
+		{
+			name: "non-Pod node with stuck signal is IGNORED (avoids duplicate reasons from parent StepGroup / DAG nodes)",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "StepGroup", Message: "ImagePullBackOff: mirror"},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "pod node with a benign progress message returns empty (not a stuck signal)",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "Pod", Message: "Waiting for pod to be scheduled"},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "pod node with empty message returns empty",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "Pod", Message: ""},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Back-off pulling image (kubelet canonical) is a stuck signal",
+			status: &forgemodel.WorkflowStatusDetail{
+				Phase: "Running",
+				Nodes: map[string]forgemodel.NodeStatus{
+					"n1": {Type: "Pod", Message: "Back-off pulling image \"ghcr.io/foo:bar\""},
+				},
+			},
+			want: "Back-off pulling image \"ghcr.io/foo:bar\"",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractStuckPodReason(tt.status)
+			if got != tt.want {
+				t.Errorf("extractStuckPodReason() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -16,10 +16,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/shellgen"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -42,12 +43,12 @@ type buildkitParams struct {
 // that derived imageTag/cacheRef/dockerfile from spec.Apps inline. Deleted in
 // T1.3 (CR-2 of MEET-2026-05-28-001) along with all spec.Apps fallback paths
 // in WorkflowBuilder. The only emission path now is buildkitTemplateFromPlan,
-// which consumes resolved AppBuildPlan fields produced by services.CreateBuildPlan.
+// which consumes resolved AppBuildPlan fields produced by deploycontracts.CreateBuildPlan.
 
 // buildkitTemplateFromPlan generates a single-container BuildKit template using resolved
 // fields from AppBuildPlan. Same architecture as buildkitTemplateForApp (MEET-2026-03-26-007)
 // but all paths, tags, and args come from the pre-resolved plan.
-func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
+func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec deploycontracts.WorkflowSpec, plan deploycontracts.AppBuildPlan) *forge.Container {
 	return b.buildkitContainer(buildkitParams{
 		AppName:        plan.AppName,
 		ImageTag:       plan.ImageTag,

@@ -234,14 +234,24 @@ app-dev.loopzero.example {
   }
 
   # Red Team loopzero-cloud#112 closure (2026-06-28) — Hydra consent / device-flow
-  # routes wired in loopzero-cloud cmd/main.go:508-511 (consent.Login + Consent +
-  # DeviceVerify + LoginComplete). The CLI device-flow lands the operator at
+  # routes wired in loopzero-cloud cmd/main.go:542-545 (consent.Login + LoginComplete +
+  # Consent + DeviceVerify). The CLI device-flow lands the operator at
   # https://app-dev.loopzero.example/auth/login?login_challenge=<id>; without this
   # handle the request fell through to the SPA file_server catch-all and React
   # Router rendered "Page not found" — BLOCKER for `loopzero login --device-flow`,
   # which was preventing the deploy chain end-to-end (P0 mandate 2026-06-28).
   # Mirror the /v1/* shape (same Host rewrite + same upstream).
-  handle /auth/* {
+  #
+  # Red Team loopzero/loopzero#162 (2026-07-01): the previous `handle /auth/*` captured
+  # EVERY path under /auth/*, but the BFF only registers the 4 OAuth-flow routes
+  # below. Post-signup redirects to /auth/check-email (register_proxy.go:98) +
+  # email verify link at /auth/verify hit the BFF and returned 404 Caddy raw
+  # ("page not found") — signup funnel broken. Fix: named matcher @auth_bff
+  # restricts the proxy to the 4 real BFF routes; everything else under /auth/*
+  # (check-email, verify, …) falls through to the SPA catch-all so React Router
+  # can render the SPA route.
+  @auth_bff path /auth/login /auth/login/complete /auth/consent /auth/device
+  handle @auth_bff {
     reverse_proxy localhost:13002 {
       header_up Host cloud-dev.loopzero.example
     }
@@ -460,10 +470,24 @@ auth-dev.loopzero.example {
   # (Kratos public) so this prefix wins via Caddy's first-match-wins
   # semantic. Edge rate_limit register_throttle (T1.2) still applies
   # because it's evaluated at the host level before any handle.
-  @bff_register_paths {
-    path /self-service/registration/methods/password /self-service/registration
+  #
+  # Split into two explicit handles (was a single `@bff_register_paths`
+  # named matcher). Functional behavior is identical (both paths still
+  # reverse-proxy to the loopzero-cloud BFF at localhost:13002 with the
+  # canonical `Host: cloud-dev.loopzero.example` header); the explicit shape
+  # is required by the `caddyfile-csp` gate's canonical detection
+  # (`handle /self-service/registration/methods/password { ... }` +
+  # `handle /self-service/registration { ... }` — assertions
+  # `assert_register_route_proxied_to_cloud` per Red Team #43 T3.2/T3.3).
+  # KISS wins over DRY here: the two-line duplication is worth
+  # gate-detectability (each block is 5 lines; sum 10 vs 7 with matcher
+  # + 2 blocks — the matcher form is not fundamentally shorter).
+  handle /self-service/registration/methods/password {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
   }
-  handle @bff_register_paths {
+  handle /self-service/registration {
     reverse_proxy localhost:13002 {
       header_up Host cloud-dev.loopzero.example
     }
@@ -534,12 +558,25 @@ auth-dev.loopzero.example {
 #   bash infra/scripts/local/caddy-build-with-cloudflare.sh
 # once per host; idempotent. `caddy list-modules | grep dns.providers`
 # must show `dns.providers.cloudflare` for this block to issue certs.
+#
+# Red Team loopzero-cloud#127 root cause (2026-06-30 → 2026-07-01):
+# the upstream was previously `https://172.18.0.10:443` — a hardcoded
+# Docker network IP. Docker network 172.18.0.0/16 assigns container IPs
+# via DHCP; k3d cluster containers get a new IP on every `docker restart`
+# / `k3d cluster create`. The IP `172.18.0.10` drifted from
+# k3d-loopzero-workload-serverlb to k3d-loopzero-vault-serverlb after a restart
+# and every customer-app request silently routed to VAULT → 502
+# sustentado for the ENTIRE Red Team dev-public probe surface. The
+# canonical stable form is `https://127.0.0.1:8443` — k3d declares the
+# workload serverlb host-port mapping (443 → 8443) which does NOT drift
+# across restarts. Regression-protector:
+# infra/tests/check-caddyfile-no-docker-network-ip_test.sh (hermetic).
 *.preview-dev.loopzero.example {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     resolvers 1.1.1.1
   }
-  reverse_proxy https://172.18.0.10:443 {
+  reverse_proxy https://127.0.0.1:8443 {
     header_up Host {http.request.host.labels.3}.loopzero.local
     transport http {
       tls_insecure_skip_verify
@@ -569,12 +606,21 @@ auth-dev.loopzero.example {
 #
 # TLS via Cloudflare DNS-01 challenge (LE prod). CF_API_TOKEN env var
 # canonical (same as preview block above).
+#
+# Red Team loopzero-cloud#127 root cause (2026-06-30 → 2026-07-01): same
+# as the *.preview-dev.loopzero.example block above — the previous
+# `https://172.18.0.10:443` hardcoded Docker network IP drifted from
+# k3d-loopzero-workload-serverlb to k3d-loopzero-vault-serverlb after a docker
+# restart and every customer-app request routed to VAULT → 502
+# sustentado. Canonical stable form: `https://127.0.0.1:8443`.
+# Regression-protector:
+# infra/tests/check-caddyfile-no-docker-network-ip_test.sh (hermetic).
 *.prod-dev.loopzero.example {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     resolvers 1.1.1.1
   }
-  reverse_proxy https://172.18.0.10:443 {
+  reverse_proxy https://127.0.0.1:8443 {
     header_up Host {http.request.host.labels.3}.loopzero.local
     transport http {
       tls_insecure_skip_verify

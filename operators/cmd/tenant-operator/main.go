@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/dynamic"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,15 +26,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/tenant"
+	"github.com/getloopscale/loopzero/operators/internal/environment"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/tenant"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
@@ -91,8 +91,8 @@ func main() {
 	// registry no one read. ContextLogger via NewContextLogger is the
 	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
-	if shared.PprofEnabled() {
-		shared.StartPprofServer()
+	if reconcilehelpers.PprofEnabled() {
+		reconcilehelpers.StartPprofServer()
 	}
 
 	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16 +
@@ -165,7 +165,7 @@ func main() {
 		setupLog.Error(nil, "BUILD_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	buildClient, err := shared.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
+	buildClient, err := reconcilehelpers.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
 	if err != nil {
 		setupLog.Error(err, "failed to create build cluster client")
 		os.Exit(1)
@@ -176,7 +176,7 @@ func main() {
 		setupLog.Error(nil, "RUNTIME_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
 	if err != nil {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)
@@ -275,9 +275,9 @@ func main() {
 
 	// fix-all-platform-issues-plan T1.1: cell-aware Environment reconciler.
 	// Routes namespace/RBAC/NetworkPolicy/Quota writes per tenant.spec.cellID.
-	envFactory := shared.NewCellAwareRuntimeClientFactory(
+	envFactory := reconcilehelpers.NewCellAwareRuntimeClientFactory(
 		mgr.GetClient(), runtimeClient, "loopzero-system")
-	if err := tenant.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, envFactory); err != nil {
+	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, envFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")
 		os.Exit(1)
 	}

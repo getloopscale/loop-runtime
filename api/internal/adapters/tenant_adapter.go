@@ -6,31 +6,33 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
-// TenantDBDeleterAdapter implements services.TenantDBDeleter by translating
-// db.TenantDeletionCounts (infrastructure shape) to services.TenantDeletionCounts
+// TenantDBDeleterAdapter implements placementsvc.TenantDBDeleter by translating
+// store.TenantDeletionCounts (infrastructure shape) to placementsvc.TenantDeletionCounts
 // (domain shape). Fields are identical; separate types exist to prevent a
 // cyclic import between services and db.
 //
 // T1.4 (plan 2026-05-29-sqlc-migration v1.3): Store field widened from
-// concrete *db.PostgresTenantStore to db.AdminTenantStore interface so
+// concrete *db.PostgresTenantStore to store.AdminTenantStore interface so
 // the sqlc-backed TenantStoreSqlc drops in without churn. Only
 // DeleteTenantsFKOrdered is consumed at this seam — interface stays
 // minimal.
 type TenantDBDeleterAdapter struct {
-	Store db.AdminTenantStore
+	Store store.AdminTenantStore
 }
 
-func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs []string) (services.TenantDeletionCounts, error) {
+func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs []string) (placementsvc.TenantDeletionCounts, error) {
 	c, err := a.Store.DeleteTenantsFKOrdered(ctx, tenantIDs)
 	if err != nil {
-		return services.TenantDeletionCounts{}, err
+		return placementsvc.TenantDeletionCounts{}, err
 	}
-	return services.TenantDeletionCounts{
+	return placementsvc.TenantDeletionCounts{
 		EnvironmentTargets: c.EnvironmentTargets,
 		Releases:           c.Releases,
 		BuildApps:          c.BuildApps,
@@ -42,19 +44,19 @@ func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, ten
 	}, nil
 }
 
-// TenantK8sEvictorAdapter implements services.TenantK8sEvictor by wrapping
+// TenantK8sEvictorAdapter implements placementsvc.TenantK8sEvictor by wrapping
 // k8s.TenantK8sEvictor and translating K8sEvictionCounts across the package
 // boundary. Mirrors the TenantDBDeleterAdapter pattern.
 type TenantK8sEvictorAdapter struct {
 	Evictor *k8s.TenantK8sEvictor
 }
 
-func (a *TenantK8sEvictorAdapter) EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (services.K8sEvictionCounts, error) {
+func (a *TenantK8sEvictorAdapter) EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (placementsvc.K8sEvictionCounts, error) {
 	c, err := a.Evictor.EvictTenantsFromClusters(ctx, tenantIDs)
 	if err != nil {
-		return services.K8sEvictionCounts{}, err
+		return placementsvc.K8sEvictionCounts{}, err
 	}
-	return services.K8sEvictionCounts{
+	return placementsvc.K8sEvictionCounts{
 		ArgoWorkflowsDeleted: c.ArgoWorkflowsDeleted,
 		MgmtCRsDeleted:       c.MgmtCRsDeleted,
 		FinalizersCleared:    c.FinalizersCleared,

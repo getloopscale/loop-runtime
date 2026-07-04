@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package db
+package db_test
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -32,115 +31,21 @@ func osReadFile(relPath string) ([]byte, error) {
 // test (gated by LOOPZERO_TEST_DB_URL) covers the full round-trip including
 // EXPLAIN plan verification.
 
-// recordingDBTX is a DBTX fake that captures queries without executing them.
+// dbtest.RecordingDBTX is a DBTX fake that captures queries without executing them.
 // Every Query call records the SQL + args and returns an empty result set so
 // the caller's scan loop exits cleanly.
 //
 // Canonical compile-time interface satisfaction (Go idiom): if DBTX evolves
 // (new method added), this assertion fails compilation rather than at runtime.
-// Also signals to deadcode tooling that recordingDBTX's methods are called
+// Also signals to deadcode tooling that dbtest.RecordingDBTX's methods are called
 // via interface dispatch.
-var _ DBTX = (*recordingDBTX)(nil)
-
-type recordingDBTX struct {
-	lastSQL  string
-	lastArgs []any
-	// rows returned by the next Query call, for tests that need to fake data.
-	nextRows Rows
-	// filterByCellID: when set, simulates PG cell_id filtering. The recorded
-	// rows are filtered so only those whose `cellID` field matches the query's
-	// cell_id parameter are returned. This lets us prove isolation at the
-	// Go/SQL boundary without a real database.
-	filterByCellID bool
-	dataset        []fakeRow
-}
-
-type fakeRow struct {
-	cellID string
-	values []any
-}
-
-func (r *recordingDBTX) Query(_ context.Context, sql string, args ...any) (Rows, error) {
-	r.lastSQL = sql
-	r.lastArgs = args
-	if r.filterByCellID {
-		// The cell_id argument is the first positional parameter for our
-		// reconciliation queries: WHERE cell_id = $1 ... (builds/releases).
-		// For the stale checkers it is the last parameter. We handle both by
-		// scanning all args for a cellID string.
-		var wanted string
-		for _, a := range args {
-			if s, ok := a.(string); ok && (s == "cell-default" || strings.HasPrefix(s, "cell-")) {
-				wanted = s
-				break
-			}
-		}
-		var matched []fakeRow
-		for _, row := range r.dataset {
-			if row.cellID == wanted {
-				matched = append(matched, row)
-			}
-		}
-		return &sliceRows{rows: matched}, nil
-	}
-	if r.nextRows != nil {
-		return r.nextRows, nil
-	}
-	return &sliceRows{}, nil
-}
-
-func (r *recordingDBTX) Exec(_ context.Context, _ string, _ ...any) (ExecResult, error) {
-	return ExecResult{}, nil
-}
-
-func (r *recordingDBTX) QueryRow(_ context.Context, _ string, _ ...any) Row {
-	return emptyRow{}
-}
-
-type emptyRow struct{}
-
-func (emptyRow) Scan(_ ...any) error { return ErrNoRows }
-
-// sliceRows returns a slice of pre-built fake rows through the Rows iterator.
-type sliceRows struct {
-	rows []fakeRow
-	idx  int
-}
-
-func (s *sliceRows) Next() bool {
-	if s.idx >= len(s.rows) {
-		return false
-	}
-	s.idx++
-	return true
-}
-
-func (s *sliceRows) Scan(dest ...any) error {
-	row := s.rows[s.idx-1]
-	for i, d := range dest {
-		if i >= len(row.values) {
-			return nil
-		}
-		// Use reflection-free type assertion for the pointer types we emit.
-		switch target := d.(type) {
-		case *string:
-			if v, ok := row.values[i].(string); ok {
-				*target = v
-			}
-		}
-	}
-	return nil
-}
-
-func (s *sliceRows) Err() error { return nil }
-func (s *sliceRows) Close()     {}
 
 // =============================================================================
 // Signature / SQL-shape tests
 // =============================================================================
 
 // T1.2b (plan 2026-05-29-sqlc-migration v1.3): build-store cell-routing
-// invariant tests moved from recordingDBTX runtime-SQL capture to
+// invariant tests moved from dbtest.RecordingDBTX runtime-SQL capture to
 // static-content assertions against queries/builds.sql SoT — same
 // pattern as releases (T1.1c2c). The wrapper passes cellID verbatim to
 // the sqlc query (build_wrapper.go FindActiveBuilds), and the empty-
@@ -173,16 +78,16 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 	// by BuildStoreSqlc.FindActiveBuilds: `if cellID == "" { cellID =
 	// CellDefault }`. We assert it via static-grep of the wrapper source
 	// to avoid the SqlcBridge panic that fake DBTX paths trigger.
-	src, err := osReadFile("build_wrapper.go")
+	src, err := osReadFile("store/build_wrapper.go")
 	if err != nil {
-		t.Fatalf("read build_wrapper.go: %v", err)
+		t.Fatalf("read store/build_wrapper.go: %v", err)
 	}
 	contents := string(src)
 	// The fallback block must be present in the FindActiveBuilds method.
 	// We anchor on the variable name + assignment, not the surrounding
 	// boilerplate, so the test survives cosmetic refactors.
-	if !strings.Contains(contents, `cellID = CellDefault`) {
-		t.Error("BuildStoreSqlc.FindActiveBuilds must contain `cellID = CellDefault` fallback for empty input")
+	if !strings.Contains(contents, `cellID = db.CellDefault`) {
+		t.Error("BuildStoreSqlc.FindActiveBuilds must contain `cellID = db.CellDefault` fallback for empty input")
 	}
 	// And the method must call the sqlc query — without this, the
 	// fallback above is in the wrong scope.
@@ -192,7 +97,7 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 }
 
 // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): the 2 release-store
-// cell-scoping tests below moved from recordingDBTX-based runtime-SQL
+// cell-scoping tests below moved from dbtest.RecordingDBTX-based runtime-SQL
 // assertions to static-content assertions against the canonical SQL SoT
 // `queries/releases.sql`. With sqlc, the SQL no longer lives in Go
 // strings concatenated at runtime — it's pre-rendered at codegen time
@@ -201,7 +106,7 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 // status filter MUST be present in the query SoT.
 //
 // Rationale: ReleaseStoreSqlc accepts db.DBTX but bridges to
-// generated.DBTX via SqlcBridge — recordingDBTX (used here) intentionally
+// generated.DBTX via SqlcBridge — dbtest.RecordingDBTX (used here) intentionally
 // does NOT implement SqlcBridge, by design, so we cannot reuse it. The
 // static-content test is a STRONGER invariant: it catches drift in the
 // SQL SoT regardless of which wrapper consumes the generated code.
@@ -271,7 +176,7 @@ func mustExtractQueryBlock(t *testing.T, contents, queryName string) string {
 }
 
 // TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredicate —
-// reshaped from runtime-SQL capture (recordingDBTX-based) to
+// reshaped from runtime-SQL capture (dbtest.RecordingDBTX-based) to
 // static-content assertion against queries/domains.sql, same pattern
 // as the release/build cell-routing reshapes (T1.1c2c / T1.2b).
 // SEC-005 verified by code generation: sqlc-emitted SQL is the
@@ -300,7 +205,7 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 // TestFindActiveBuilds_CrossCell_NoContamination — DELETED in T1.2b of
 // plan 2026-05-29-sqlc-migration v1.3.
 //
-// The original test used `recordingDBTX{filterByCellID: true, dataset:
+// The original test used `dbtest.RecordingDBTX{FilterByCellID: true, Dataset:
 // ...}` — a fake DBTX that simulated Postgres cell_id filtering — to
 // prove that a cell-A query never returned cell-B rows. With T1.2b the
 // data-isolation invariant moves to TWO layers of guarantees:
@@ -317,8 +222,8 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 //
 // Per T0.6 matrix line 29 (cell_scoped_queries_test.go classified
 // KEEP-INVARIANT): the invariant survives via the 2-layer guarantee —
-// fakeDBTX-with-cellID-filter is no longer the canonical test fixture
-// because (a) recordingDBTX doesn't satisfy SqlcBridge so the wrapper
+// dbtest.FakeDBTX-with-cellID-filter is no longer the canonical test fixture
+// because (a) dbtest.RecordingDBTX doesn't satisfy SqlcBridge so the wrapper
 // panics, and (b) the static-content test is a STRONGER guarantee that
 // catches drift in the SQL SoT regardless of which wrapper consumes it.
 
@@ -331,4 +236,4 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 
 // NOTE: Stale checkers (PostgresStaleBuildChecker, PostgresStaleReleaseChecker)
 // live in the services package — their SQL-shape tests are in
-// api/tests/unit/stale_checker_cell_scope_test.go (same recordingDBTX pattern).
+// api/tests/unit/stale_checker_cell_scope_test.go (same dbtest.RecordingDBTX pattern).

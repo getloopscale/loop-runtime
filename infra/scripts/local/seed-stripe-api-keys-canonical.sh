@@ -64,6 +64,15 @@ if [[ -z "$API_KEY" || "$API_KEY" == "REDACTED_SECRET_050" || "$API_KEY" == "RED
   exit 0
 fi
 
+# Red Team loopzero/loopzero#155 closure (2026-07-01): extract per-plan Stripe
+# price IDs so `internal/billing/plans.go::PriceIDForPlan` can resolve
+# them via os.Getenv("STRIPE_PRICE_<PLAN>"). Sponsor populates
+# dev-credentials.json under stripe.price_{starter,pro,team}; SKIP-graceful
+# when absent (billing endpoints still return typed 503 per handler ladder).
+PRICE_STARTER=$(python3 -c "import json; d=json.load(open('$CREDS_FILE')); print(d.get('stripe',{}).get('price_starter',''))" 2>/dev/null || echo "")
+PRICE_PRO=$(python3     -c "import json; d=json.load(open('$CREDS_FILE')); print(d.get('stripe',{}).get('price_pro',''))"     2>/dev/null || echo "")
+PRICE_TEAM=$(python3    -c "import json; d=json.load(open('$CREDS_FILE')); print(d.get('stripe',{}).get('price_team',''))"    2>/dev/null || echo "")
+
 # EC-2 absorption (edge-case review 2026-06-24): api_key prefix guard.
 # Stripe secret keys start with rk_test_/sk_test_/rk_live_/sk_live_; publishable
 # keys start with pk_*. Operators commonly paste publishable_key into api_key
@@ -82,8 +91,13 @@ fi
 
 # Materialize Secret via dry-run | apply (idempotent — kubectl 3-way merge
 # removes stale keys on the canonical migration path).
+# #155: STRIPE_PRICE_{STARTER,PRO,TEAM} bundled into the same Secret so
+# loopzero-cloud's envFrom picks them up in ONE restart.
 kubectl --context "$MGMT_CONTEXT" -n loopzero-system create secret generic loopzero-stripe-api-keys \
   --from-literal=STRIPE_API_KEY="$API_KEY" \
+  --from-literal=STRIPE_PRICE_STARTER="$PRICE_STARTER" \
+  --from-literal=STRIPE_PRICE_PRO="$PRICE_PRO" \
+  --from-literal=STRIPE_PRICE_TEAM="$PRICE_TEAM" \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CONTEXT" apply -f -
 
 if [[ "$VERIFY" == "1" ]]; then
@@ -95,3 +109,13 @@ if [[ "$VERIFY" == "1" ]]; then
     exit 1
   fi
 fi
+
+# Red Team loopzero/loopzero#154 closure (2026-07-01): roll out loopzero-cloud so the
+# pod's `envFrom.secretRef.loopzero-stripe-api-keys` re-reads STRIPE_API_KEY.
+# Without this, boot-order matters: pod started BEFORE this seed runs
+# sees cfg.StripeAPIKey empty → `billingHandler == nil` → /v1/billing*
+# routes never wired → 404 from chi router → upgrade Starter→Pro dead.
+# Mirrors the canonical pattern in seed-broker-canonical.sh Layer 4.
+kubectl --context "$MGMT_CONTEXT" -n loopzero-system rollout restart deployment/loopzero-cloud >/dev/null
+kubectl --context "$MGMT_CONTEXT" -n loopzero-system rollout status deployment/loopzero-cloud --timeout=120s >/dev/null
+log "Layer 4: loopzero-cloud restarted (env STRIPE_API_KEY now wired via envFrom)"

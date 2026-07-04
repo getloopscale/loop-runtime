@@ -8,7 +8,7 @@
 //
 // Gated behind LOOPZERO_ADMIN_API=true. Requires X-Service-Auth header
 // matching LOOPZERO_SERVICE_AUTH_SECRET (constant-time compare). Returns
-// the diagnostic payload assembled by services.ReleaseInspector.
+// the diagnostic payload assembled by release.ReleaseInspector.
 //
 // Exit-code-equivalent HTTP status mapping (CLI Rule 4):
 //   - 200 success
@@ -26,15 +26,15 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/go-chi/chi/v5"
 )
 
 // AdminReleaseInspectHandler returns an http.HandlerFunc bound to the
 // supplied inspector. The handler is intentionally thin — all logic
-// lives in services.ReleaseInspector (DIP).
-func AdminReleaseInspectHandler(inspector services.ReleaseInspector) http.HandlerFunc {
+// lives in release.ReleaseInspector (DIP).
+func AdminReleaseInspectHandler(inspector release.ReleaseInspector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
 			jsonError(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
@@ -57,7 +57,7 @@ func AdminReleaseInspectHandler(inspector services.ReleaseInspector) http.Handle
 
 		inspection, err := inspector.Inspect(r.Context(), releaseID)
 		if err != nil {
-			var nfe services.ErrReleaseInspectionNotFound
+			var nfe release.ErrReleaseInspectionNotFound
 			if errors.As(err, &nfe) {
 				jsonError(w, http.StatusNotFound, "RELEASE_NOT_FOUND", "Release does not exist.")
 				return

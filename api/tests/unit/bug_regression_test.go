@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
+	releasesvc "github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -21,7 +22,6 @@ import (
 // The ActivateReleaseKernel idempotency guard re-fetches release status
 // inside the lock. If SetGitCommit fails, the release must NOT reach PENDING.
 // This prevents wrong-version activation via SyncCallbackActivator.
-
 
 // TestBUG03_SetGitCommitFailureBlocksActivation verifies that when
 // SetGitCommit fails, the release stays in READY state (doesn't transition
@@ -56,7 +56,7 @@ func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	eventStore := &fakeConvergenceEventStore{}
 
-	activator := services.NewSyncCallbackActivator(
+	activator := releasesvc.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
 	)
 
@@ -95,9 +95,9 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 50 * time.Millisecond, SyncTimeout: 5 * time.Minute, MaxConcurrent: 2,
 		},
 	)
@@ -158,9 +158,9 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 	locker := &fakeConvergenceLocker{}
 	envTargetStore := &fakeConvergenceEnvTargetStore{}
 
-	loop := services.NewReleaseConvergenceLoop(
+	loop := releasesvc.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, syncClient, locker, eventStore,
-		"test.local", "", testLogger, services.ReleaseConvergenceLoopConfig{
+		"test.local", "", testLogger, releasesvc.ReleaseConvergenceLoopConfig{
 			Interval: 50 * time.Millisecond, SyncTimeout: 1 * time.Second, MaxConcurrent: 2,
 		},
 	)

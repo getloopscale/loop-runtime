@@ -74,7 +74,7 @@ tasks:
     desc: Golden test for the matrix-audit logic (catches audit regressions)
     cmds:
       # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
-      - go test ./pkg/quality/regressionmatrix/...
+      - go test ./cmd/loopzero-ops/internal/quality/regressionmatrix/...
 
   parity:k3d-virgin:
     desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
@@ -856,6 +856,34 @@ tasks:
       Flags: --hermetic-only --live-only --skip-playwright --json.
     cmds:
       - bash archive/canonical-tests-v1/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
+
+  test:dogfood:register:
+    desc: |
+      M0 J-02 Register — aggregate dogfood wrapper.
+      Suites: hermetic syntax + loopzero-cloud go test ./internal/routes -run TestMe_
+      (provisioning snapshot T1.2 + lazy starter provision T1.3) + dashboard
+      vitest (register + completing-screen + provisioning hook) + LIVE bash
+      (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
+    cmds:
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-register.sh {{.CLI_ARGS}}
+
+  test:dogfood:verification:
+    desc: |
+      M0 J-03 Verification — aggregate dogfood wrapper.
+      Suites: hermetic syntax + dashboard vitest (verification + ResendCooldownButton)
+      + LIVE bash (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only
+      --live-only --json.
+    cmds:
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-verification.sh {{.CLI_ARGS}}
+
+  test:dogfood:overview:
+    desc: |
+      M1 J-06 Overview — aggregate dogfood wrapper.
+      Suites: hermetic syntax + dashboard vitest (useOverviewKPIs + OverviewKPIStrip
+      + overview page) + engine build_stats handler tests + LIVE bash (dev-public,
+      OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
+    cmds:
+      - bash archive/canonical-tests-v1/scripts/local/dogfood-overview.sh {{.CLI_ARGS}}
 
   test:dogfood:domains:
     desc: |

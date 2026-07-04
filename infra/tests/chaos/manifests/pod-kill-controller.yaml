@@ -26,12 +26,16 @@ metadata:
     loopzero.io/roadmap: "02"
     loopzero.io/dod-test: "TestController_CrashRecovery"
     loopzero.io/hypothesis: "Controller kill does not lose in-flight builds; new leader resumes within 30s"
+    # SLO query post-decomposition (2026-06-29). Legacy
+    # loopzero_leader_status{name="loopzero-controller"} +
+    # loopzero_builds_total{reason="controller_crash"} were monolith-only;
+    # post-split we use kube-state-metrics restart signal + loopzero_api
+    # leader health proxy. `and on()` joins heterogeneous vectors;
+    # `or vector(0)` defaults the LHS when restart series is briefly
+    # empty post-cleanup; `max_over_time` absorbs Service-DNS scrape
+    # rotation across the 2 loopzero-api pods.
     loopzero.io/slo-query: |
-      # Alert fires if the leader status metric stays 0 for more than 60s
-      # OR if builds transition backwards (RUNNING → FAILED during kill window).
-      max_over_time(loopzero_leader_status{name="loopzero-controller"}[2m]) > 0
-      and
-      increase(loopzero_builds_total{status="failed",reason="controller_crash"}[2m]) == 0
+      ((sum(increase(kube_pod_container_status_restarts_total{pod=~"loopzero-tenant-operator-.*"}[2m])) or vector(0)) == 0) and on() (max_over_time(loopzero_api_leader_status[2m]) == 1)
 spec:
   action: pod-kill
   mode: one

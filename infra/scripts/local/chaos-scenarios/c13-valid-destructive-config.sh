@@ -38,7 +38,7 @@
 #   bash infra/scripts/local/chaos-scenarios/c13-valid-destructive-config.sh --scenario=A
 set -euo pipefail
 
-LOOPZERO_CLOUD_URL="${LOOPZERO_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+LOOPZERO_CLOUD_URL="${LOOPZERO_CLOUD_URL:-https://app-dev.loopzero.example}"
 JWT_FILE="${LOOPZERO_JWT_FILE:-$HOME/.loopzero/local-dogfood-token.txt}"
 PROJECT="${C13_PROJECT:-c13-destructive-$(date +%s 2>/dev/null || echo probe)}"
 MAX_DURATION_SECONDS="${MAX_DURATION_SECONDS:-300}"   # > 180s SyncTimeout + margin

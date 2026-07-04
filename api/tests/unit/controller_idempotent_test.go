@@ -10,8 +10,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -37,7 +40,7 @@ func TestController_IdempotentTransitions(t *testing.T) {
 	}
 
 	checker := &fakeStaleChecker{
-		builds: []services.StaleBuild{
+		builds: []build.StaleBuild{
 			{
 				ID:    "build-idem-1",
 				State: statemachine.BPhQueued,
@@ -46,14 +49,14 @@ func TestController_IdempotentTransitions(t *testing.T) {
 		},
 	}
 
-	reaper := services.NewBuildReaper(
+	reaper := build.NewBuildReaper(
 		buildStore,
 		checker,
 		&fakeLockerIdem{},
 		&fakeWorkflowIdem{},
 		&fakeEventStoreIdem{},
 		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-		services.DefaultBuildReaperConfig(),
+		build.DefaultBuildReaperConfig(),
 		nil, // reconcile checker
 	)
 
@@ -91,7 +94,7 @@ func (f *fakeLockerIdem) WithLock(_ context.Context, _, _, _ string, fn func(tx 
 
 type fakeWorkflowIdem struct{}
 
-func (f *fakeWorkflowIdem) Submit(_ context.Context, _ services.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowIdem) Submit(_ context.Context, _ deploycontracts.WorkflowSpec) (string, error) {
 	return "", nil
 }
 
@@ -99,8 +102,8 @@ func (f *fakeWorkflowIdem) Cancel(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (f *fakeWorkflowIdem) GetStatus(_ context.Context, _, _ string) (*services.WorkflowStatus, error) {
-	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
+func (f *fakeWorkflowIdem) GetStatus(_ context.Context, _, _ string) (*deploycontracts.WorkflowStatus, error) {
+	return &deploycontracts.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
 type fakeEventStoreIdem struct{}

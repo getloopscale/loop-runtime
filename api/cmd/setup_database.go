@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver for sql.Open("pgx", ...)
 
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -64,10 +66,10 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 
 	// Concrete project store kept in a typed var so M4 can wire the per-Account
 	// project-cap checker onto it once the PlanLimiter is built below.
-	projectStore := &db.PostgresProjectStore{DB: poolCfg}
+	projectStore := &store.PostgresProjectStore{DB: poolCfg}
 	deps := &DatabaseDeps{
 		DBAdapter:     poolCfg,
-		MemberStore:   &db.PostgresMembershipStore{DB: poolCfg},
+		MemberStore:   &store.PostgresMembershipStore{DB: poolCfg},
 		ProjectStore:  projectStore,
 		DBHealth:      poolCfg,
 		PoolCollector: poolCollector,

@@ -39,7 +39,7 @@ const (
 )
 
 // AuthAuditWriter persists an audit-log entry. Caller injects this (typically
-// wraps db.WriteAuditLog). Decoupled to avoid import cycle.
+// wraps store.WriteAuditLog). Decoupled to avoid import cycle.
 // Returns error if write fails — caller logs (per EC-NEW-12 fail-open).
 type AuthAuditWriter func(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error
 

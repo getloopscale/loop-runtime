@@ -54,7 +54,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				for _, env := range []string{"production", "staging"} {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-						Name: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
+						Name: fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env),
 					}, &ns)).To(Succeed())
 					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
 					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", env))
@@ -62,7 +62,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 					var quota corev1.ResourceQuota
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name:      "tenant-quota",
-						Namespace: fmt.Sprintf("loopzero-%s-%s", tenantName, env),
+						Namespace: fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env),
 					}, &quota)).To(Succeed())
 					cpuVal := quota.Spec.Hard[corev1.ResourceRequestsCPU]
 					g.Expect(cpuVal.String()).To(Equal("8"))
@@ -70,11 +70,11 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: "loopzero-" + tenantName + "-production",
+					Name: "loopzero-deployer", Namespace: "loopzero-" + tenantName + "-default-project-production",
 				}, &sa)).To(Succeed())
 
 				var policies networkingv1.NetworkPolicyList
-				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
+				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-default-project-production"))).To(Succeed())
 				g.Expect(len(policies.Items)).To(BeNumerically(">=", 3))
 			}, timeout, interval).Should(Succeed())
 
@@ -134,8 +134,8 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				}
 			}
 			for _, nsName := range []string{
-				"loopzero-" + tenantName + "-production",
-				"loopzero-" + tenantName + "-staging",
+				"loopzero-" + tenantName + "-default-project-production",
+				"loopzero-" + tenantName + "-default-project-staging",
 				"build-" + tenantName,
 			} {
 				ns := &corev1.Namespace{}
@@ -200,10 +200,10 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				})).To(Succeed())
 
 				var policies networkingv1.NetworkPolicyList
-				Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
+				Expect(k8sClient.List(ctx, &policies, client.InNamespace("loopzero-"+tenantName+"-default-project-production"))).To(Succeed())
 
 				var quotas corev1.ResourceQuotaList
-				Expect(k8sClient.List(ctx, &quotas, client.InNamespace("loopzero-"+tenantName+"-production"))).To(Succeed())
+				Expect(k8sClient.List(ctx, &quotas, client.InNamespace("loopzero-"+tenantName+"-default-project-production"))).To(Succeed())
 
 				return len(nsList.Items), len(policies.Items), len(quotas.Items)
 			}
@@ -279,7 +279,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			}, "10s", "500ms").Should(Succeed())
 
 			// Verify Role now includes secrets
-			expectDeployerRoleHasResource("loopzero-"+tenantName+"-production", "secrets")
+			expectDeployerRoleHasResource("loopzero-"+tenantName+"-default-project-production", "secrets")
 		})
 
 		AfterAll(func() {

@@ -25,7 +25,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -78,16 +78,16 @@ var exposureDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for ExposedRoute resources.
 func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := shared.StartReconcileSpan(ctx, "exposure", req.Name, req.Namespace)
+	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "exposure", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			shared.RecordError(span, retErr)
+			reconcilehelpers.RecordError(span, retErr)
 		} else {
-			shared.SetSuccess(span)
+			reconcilehelpers.SetSuccess(span)
 		}
-		shared.ReconcileOutcome("exposure", start, retErr)
+		reconcilehelpers.ReconcileOutcome("exposure", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -130,7 +130,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	}
 
 	// Add finalizer if not present
-	if err := shared.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
+	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -184,11 +184,11 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	// Step 3: Perform reachability probe
 	probeURL := r.resolveProbeURL(&route)
-	probeCtx, probeSpan := shared.StartChildSpan(ctx, "exposure.probe",
+	probeCtx, probeSpan := reconcilehelpers.StartChildSpan(ctx, "exposure.probe",
 		attribute.String("probe.url", probeURL))
 	probeResult, probeErr := r.performProbe(probeCtx, probeURL)
 	if probeErr != nil {
-		shared.RecordError(probeSpan, probeErr)
+		reconcilehelpers.RecordError(probeSpan, probeErr)
 	}
 	probeSpan.End()
 
@@ -361,7 +361,7 @@ func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig)
 		cfg = cfgs[0]
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ExposedRoute{}, shared.ForOption()).
+		For(&loopzerov1.ExposedRoute{}, reconcilehelpers.ForOption()).
 		Named("exposure").
 		Complete(&ExposureReconciler{
 			Client:                mgr.GetClient(),

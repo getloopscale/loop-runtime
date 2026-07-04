@@ -12,12 +12,19 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/services/preview"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // ErrPreviewNotImplemented is returned by the GitHub PR webhook handler
@@ -49,7 +56,7 @@ type GitHubDeps struct {
 func setupGitHub(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
-	orch *services.BuildOrchestrator,
+	orch *build.BuildOrchestrator,
 	k8sDeps *K8sDeps,
 	cfg config.Config,
 	shutdownCtx context.Context,
@@ -57,7 +64,7 @@ func setupGitHub(
 ) *GitHubDeps {
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
-	repoStore := &db.PostgresRepositoryStore{DB: dbAdapter}
+	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
 	repoHandler := routes.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
@@ -92,8 +99,8 @@ func setupGitHub(
 	if ghAppClient != nil {
 		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
-			services.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
-			services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
+			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
+			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
 		integrationsHandler = routes.NewIntegrationsGitHubHandler(
@@ -234,11 +241,11 @@ func setupGitHub(
 	// COMP-008 stub (ErrPreviewNotImplemented). The deployer dispatches
 	// by event.Action: opened/synchronize/reopened → CreatePreview;
 	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
-	previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
-		Store:      previewStore,
-		Builds:     orch,
-		BuildApps:  &previewAppsLookupAdapter{builds: stores.BuildStore},
+	previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+	previewSvc, psErr := preview.NewPreviewService(preview.PreviewServiceDeps{
+		Store:     previewStore,
+		Builds:    orch,
+		BuildApps: &previewAppsLookupAdapter{builds: stores.BuildStore},
 		// LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface
 		// had no production wiring. Canonical manager lives in
 		// internal/k8s next to TenantCRManager, sharing the namespace
@@ -292,4 +299,3 @@ func setupGitHub(
 		IntegrationsHandler: integrationsHandler,
 	}
 }
-

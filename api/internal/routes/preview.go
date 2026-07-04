@@ -21,7 +21,7 @@ import (
 
 // PreviewStore is the persistence interface used by the preview HTTP handler.
 //
-// Mirrors db.PreviewStore (read-only subset). The handler does not write —
+// Mirrors store.PreviewStore (read-only subset). The handler does not write —
 // creation/updates flow through PreviewService (Sprint 5 / T1.1).
 type PreviewStore interface {
 	ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error)
@@ -56,7 +56,7 @@ type PreviewCRPhaseLookup interface {
 // preview handler proceeds. Optional dependency: when nil, the existence
 // check is skipped (legacy/test path). Wire via `WithProjectChecker`
 // from setup_server.go for production (the existing
-// *db.PostgresProjectStore already matches this signature — no adapter
+// *store.PostgresProjectStore already matches this signature — no adapter
 // needed, same shape used by `SecretProjectChecker`).
 //
 // Red Team loopzero-cloud#92 absorption (2026-06-27): without this gate,
