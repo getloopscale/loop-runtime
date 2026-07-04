@@ -226,13 +226,17 @@ func setupOrchestrator(
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
-	// T1.2 J-18 — Prometheus query_range proxy for Status page histogram
-	// rendering. Production adapter wiring deferred to follow-up (HTTP
-	// client targeting cfg.PrometheusAddress); for now ship with nil
-	// promClient so handler returns 503 prometheus_not_configured honestly
-	// (per plan v1.1 ADR D2 — degraded UI is the canonical disabled state).
-	// Hermetic Go tests use httptest-backed fakePrometheusQueryClient.
-	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, nil)
+	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
+	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
+	// concrete HTTP client (mirrors the loki.NewClient wiring above); otherwise
+	// ship nil so the handler returns 503 prometheus_not_configured honestly
+	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
+	// Go tests inject httptest-backed fakes.
+	var promClient routes.PrometheusQueryClient
+	if cfg.PrometheusAddress != "" {
+		promClient = routes.NewPrometheusClient(cfg.PrometheusAddress, nil)
+	}
+	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, promClient)
 
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
 	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
