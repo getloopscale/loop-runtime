@@ -372,6 +372,8 @@ type Subscription struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	StripeSubscriptionItemID *string            `json:"stripe_subscription_item_id"`
 	AccountID                string             `json:"account_id"`
+	AmountMinor              *int64             `json:"amount_minor"`
+	Currency                 *string            `json:"currency"`
 }
 
 type Tenant struct {
@@ -485,4 +487,16 @@ type WorkQueue struct {
 	Error       *string            `json:"error"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkspaceWebhook struct {
+	ID        string             `json:"id"`
+	Subject   string             `json:"subject"`
+	TenantID  string             `json:"tenant_id"`
+	Url       string             `json:"url"`
+	Label     string             `json:"label"`
+	Events    []byte             `json:"events"`
+	Secret    string             `json:"secret"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }

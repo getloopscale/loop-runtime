@@ -104,6 +104,7 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
   "archive/canonical-tests-v1/scripts/local/dogfood-register.sh"          # J-02 (M0 — provisioning snapshot + completing screen)
   "archive/canonical-tests-v1/scripts/local/dogfood-verification.sh"      # J-03 (M0 — resend cooldown + PinInput)
+  "archive/canonical-tests-v1/scripts/local/dogfood-overview.sh"          # J-06 (M1 — KPI strip: plan_price + deploys aggregate)
   "archive/canonical-tests-v1/scripts/local/dogfood-seed-post-cleanroom-tenant-cr.sh"  # Red Team #118 (2026-06-29)
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh"                  # Red Team #120 P0 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh"  # Red Team #121 (2026-06-30)

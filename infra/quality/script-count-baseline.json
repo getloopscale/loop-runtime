@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 516,
+  "canonical_sh": 519,
   "_changelog": [
+    {
+      "date": "2026-07-03",
+      "from": 516,
+      "to": 519,
+      "reason": "M1 J-06 Overview delivered-journey-bar canonical triplet \u2014 +3 net. infra/tests/e2e/dev-public-overview-flow_test.sh (LIVE, 3 read-only scenarios: /v1/billing plan_price honest value object + /engine/api/v1/builds/stats dense 7-day UTC aggregate + dashboard bundle ships OverviewKPIStrip labels) + infra/tests/check-dev-public-overview-flow-syntax_test.sh (hermetic ~26-assertion guard) + archive/canonical-tests-v1/scripts/local/dogfood-overview.sh (S1 syntax + S2 vitest + S3 engine build_stats + S4 LIVE aggregator). Per MEET-2026-07-03-003 + cleanroom-up-live-test-mandate."
+    },
     {
       "date": "2026-07-03",
       "from": 509,

@@ -80,6 +80,7 @@ type OrchestratorDeps struct {
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *routes.ScaleHandler
 	BuildListHandler    *routes.BuildListHandler
+	BuildStatsHandler   *routes.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      routes.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 }
@@ -298,6 +299,13 @@ func setupOrchestrator(
 		projectStore,
 	)
 
+	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
+	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
+	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
+	buildStatsHandler := routes.NewBuildStatsHandler(
+		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
+	)
+
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
 	projectDeleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
@@ -353,6 +361,7 @@ func setupOrchestrator(
 		StatusSSEHandler:    statusSSEHandler,
 		ScaleHandler:        scaleHandler,
 		BuildListHandler:    buildListHandler,
+		BuildStatsHandler:   buildStatsHandler,
 		ProjectDeleter:      projectDeleter,
 		ArgoCallbackHandler: argoCallbackHandler,
 	}
