@@ -488,3 +488,15 @@ type WorkQueue struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
+
+type WorkspaceWebhook struct {
+	ID        string             `json:"id"`
+	Subject   string             `json:"subject"`
+	TenantID  string             `json:"tenant_id"`
+	Url       string             `json:"url"`
+	Label     string             `json:"label"`
+	Events    []byte             `json:"events"`
+	Secret    string             `json:"secret"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+}

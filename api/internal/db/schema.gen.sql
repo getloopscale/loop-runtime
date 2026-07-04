@@ -831,6 +831,23 @@ CREATE SEQUENCE public.work_queue_id_seq
 
 ALTER SEQUENCE public.work_queue_id_seq OWNED BY public.work_queue.id;
 
+-- Name: workspace_webhooks; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.workspace_webhooks (
+    id text NOT NULL,
+    subject text NOT NULL,
+    tenant_id text NOT NULL,
+    url text NOT NULL,
+    label text NOT NULL,
+    events jsonb NOT NULL,
+    secret text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    CONSTRAINT workspace_webhooks_events_check CHECK ((jsonb_typeof(events) = 'array'::text)),
+    CONSTRAINT workspace_webhooks_label_check CHECK (((length(label) >= 1) AND (length(label) <= 64))),
+    CONSTRAINT workspace_webhooks_url_check CHECK ((url ~* '^https?://'::text))
+);
+
 -- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.audit_log ALTER COLUMN id SET DEFAULT nextval('public.audit_log_id_seq'::regclass);
@@ -1082,6 +1099,11 @@ ALTER TABLE ONLY public.webhook_events
 
 ALTER TABLE ONLY public.work_queue
     ADD CONSTRAINT work_queue_pkey PRIMARY KEY (id);
+
+-- Name: workspace_webhooks workspace_webhooks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhooks
+    ADD CONSTRAINT workspace_webhooks_pkey PRIMARY KEY (id);
 
 -- Name: idx_accounts_owner_id; Type: INDEX; Schema: public; Owner: -
 
@@ -1359,6 +1381,10 @@ CREATE INDEX idx_work_queue_dequeue ON public.work_queue USING btree (queue, sta
 
 CREATE INDEX idx_work_queue_stale ON public.work_queue USING btree (status, claimed_at) WHERE (status = 'processing'::text);
 
+-- Name: idx_workspace_webhooks_owner; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_workspace_webhooks_owner ON public.workspace_webhooks USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
+
 -- Name: uniq_preview_active_per_pr; Type: INDEX; Schema: public; Owner: -
 
 CREATE UNIQUE INDEX uniq_preview_active_per_pr ON public.preview_environments USING btree (tenant_id, project_id, pr_number) WHERE (deleted_at IS NULL);
@@ -1579,6 +1605,11 @@ ALTER TABLE ONLY public.user_identity_map
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_active_tenant_id_fkey FOREIGN KEY (active_tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
+
+-- Name: workspace_webhooks workspace_webhooks_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.workspace_webhooks
+    ADD CONSTRAINT workspace_webhooks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 
