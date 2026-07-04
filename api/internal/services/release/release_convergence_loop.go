@@ -72,7 +72,10 @@ type ReleaseConvergenceLoop struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	baseDomain   string
+	// J-16 slice 3: transactional-outbox writer (set via WithDeployEventStore).
+	// Nil-safe: ActivateReleaseKernel skips the deploy.succeeded emit when nil.
+	deployEventStore store.DeployEventStore
+	baseDomain       string
 	publicDomain string // release-blockers-2026-06-25-set v1.1 #61 — canonical wildcard for deploy.completed URL (mirrors SyncCallbackActivator.publicDomain).
 	logger       *slog.Logger
 	cfg          ReleaseConvergenceLoopConfig
@@ -130,6 +133,14 @@ func NewReleaseConvergenceLoop(
 
 // Quality-Gate Phase 2: WithPGClaims removed — fluent setter was never
 // invoked; PG dedup is wired via constructor when needed.
+
+// WithDeployEventStore wires the transactional-outbox writer (J-16 slice 3).
+// Fluent setter (not a constructor param) so existing call sites/tests are
+// unaffected; the composition root sets it in production. Nil = outbox skipped.
+func (r *ReleaseConvergenceLoop) WithDeployEventStore(s store.DeployEventStore) *ReleaseConvergenceLoop {
+	r.deployEventStore = s
+	return r
+}
 
 // Start runs the convergence loop until context is cancelled.
 func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
@@ -373,7 +384,7 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
 		apps := releaseAppsToActivationApps(release, r.baseDomain, r.publicDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
-		return ActivateReleaseKernel(ctx, tx, release, r.releaseStore, r.envTargetStore, r.eventStore, apps, duration, r.logger)
+		return ActivateReleaseKernel(ctx, tx, release, r.releaseStore, r.envTargetStore, r.eventStore, r.deployEventStore, apps, duration, r.logger)
 	})
 	if err != nil {
 		r.logger.Error("release convergence: activate failed",

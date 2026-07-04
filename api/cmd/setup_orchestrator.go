@@ -154,6 +154,9 @@ func setupOrchestrator(
 		// status_url_probe) are documented as the v1.1 production
 		// follow-up per the plan's Open Questions section. Nil-safe.
 		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore, stores.ReleaseStore),
+		// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
+		// build-completed FAILED path.
+		DeployEventStore: store.NewDeployEventStoreSqlc(),
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{
@@ -329,7 +332,7 @@ func setupOrchestrator(
 	// behavior for envs without a public override).
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
-	)
+	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
 	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
 	// of LastIndex-parsing the app name (which is structurally ambiguous when

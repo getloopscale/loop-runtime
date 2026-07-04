@@ -338,6 +338,15 @@ func enforceScaling(apps []deploycontracts.AppSpec, checker PlanCapChecker, tena
 // correct no-op if a concurrent lock-holder (e.g. the reaper) already terminated
 // the build. tenantID is threaded from the caller (SubmitBuild's req.TenantID)
 // to preserve the defense-in-depth tenant predicate.
+//
+// J-16 slice 3 (MEET-2026-07-04-001): this path deliberately does NOT stage a
+// deploy.failed outbox event. A workflow-SUBMISSION failure is a platform
+// infrastructure error (the build never ran) — a distinct class from
+// deploy.failed (the build ran and failed), which the three build-EXECUTION-
+// failure paths (complete / reconcile-retry / reaper) emit. The lock-free CAS
+// here is intentional (ADR 2026-07-03-m9-5b); a transactional outbox emit would
+// require a tx, reversing that ADR. Do NOT "fix" this into an emit — the
+// exclusion is the ratified design, not a gap.
 func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID, tenantID, reason string) {
 	if _, err := o.buildStore.UpdateStatusIfCurrent(ctx, buildID, tenantID, statemachine.BPhQueued, string(statemachine.BPEventFailed)); err != nil {
 		slog.Error("submit build: failed to mark QUEUED build as FAILED",
