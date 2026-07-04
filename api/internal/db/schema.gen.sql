@@ -457,6 +457,19 @@ CREATE TABLE public.leader_generations (
     heartbeat_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+-- Name: lens_saved_views; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.lens_saved_views (
+    id text NOT NULL,
+    subject text NOT NULL,
+    tenant_id text NOT NULL,
+    name text NOT NULL,
+    query_string text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lens_saved_views_name_check CHECK (((length(name) >= 1) AND (length(name) <= 64))),
+    CONSTRAINT lens_saved_views_query_string_check CHECK (((length(query_string) >= 1) AND (length(query_string) <= 4096)))
+);
+
 -- Name: memory_exports; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.memory_exports (
@@ -1011,6 +1024,11 @@ ALTER TABLE ONLY public.idempotency_keys
 ALTER TABLE ONLY public.leader_generations
     ADD CONSTRAINT leader_generations_pkey PRIMARY KEY (name, cell_id);
 
+-- Name: lens_saved_views lens_saved_views_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_saved_views
+    ADD CONSTRAINT lens_saved_views_pkey PRIMARY KEY (id);
+
 -- Name: memory_exports memory_exports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.memory_exports
@@ -1256,6 +1274,10 @@ CREATE INDEX idx_idempotency_expires ON public.idempotency_keys USING btree (exp
 -- Name: idx_leader_generations_heartbeat; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_leader_generations_heartbeat ON public.leader_generations USING btree (heartbeat_at);
+
+-- Name: idx_lens_saved_views_owner; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_saved_views_owner ON public.lens_saved_views USING btree (tenant_id, subject);
 
 -- Name: idx_memory_exports_owner_active; Type: INDEX; Schema: public; Owner: -
 
@@ -1572,6 +1594,11 @@ ALTER TABLE ONLY public.environment_targets
 
 ALTER TABLE ONLY public.github_installations
     ADD CONSTRAINT github_installations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
+
+-- Name: lens_saved_views lens_saved_views_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_saved_views
+    ADD CONSTRAINT lens_saved_views_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: memory_exports memory_exports_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 

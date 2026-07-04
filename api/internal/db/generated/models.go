@@ -196,6 +196,15 @@ type LeaderGeneration struct {
 	HeartbeatAt  pgtype.Timestamptz `json:"heartbeat_at"`
 }
 
+type LensSavedView struct {
+	ID          string             `json:"id"`
+	Subject     string             `json:"subject"`
+	TenantID    string             `json:"tenant_id"`
+	Name        string             `json:"name"`
+	QueryString string             `json:"query_string"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type MemoryExport struct {
 	ID           string             `json:"id"`
 	Subject      string             `json:"subject"`
