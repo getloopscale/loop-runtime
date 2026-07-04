@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -83,6 +84,9 @@ type BuildReaper struct {
 	logger     *slog.Logger
 	cfg        BuildReaperConfig
 	reconciler BuildReconcileChecker // MOD-6: coordinate with reconcile loop
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox writer
+	// (set via WithDeployEventStore). Nil-safe: emit skipped.
+	deployEventStore store.DeployEventStore
 }
 
 // NewBuildReaper creates a new BuildReaper.
@@ -99,6 +103,14 @@ func NewBuildReaper(buildStore db.BuildStore, checker BuildStaleChecker, locker 
 		cfg:        cfg,
 		reconciler: reconciler,
 	}
+}
+
+// WithDeployEventStore wires the deploy.failed outbox writer (J-16 slice 3,
+// MEET-2026-07-04-001). Fluent setter so existing call sites/tests are
+// unaffected; the composition root sets it in production. Nil = emit skipped.
+func (r *BuildReaper) WithDeployEventStore(s store.DeployEventStore) *BuildReaper {
+	r.deployEventStore = s
+	return r
 }
 
 // Start runs the reaper loop until the context is cancelled.
@@ -248,7 +260,19 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			}
 
 			// Set descriptive error message (F-04: reaped builds must explain why)
-			return r.buildStore.SetErrorMessage(ctx, tx, s.ID, reason)
+			if err := r.buildStore.SetErrorMessage(ctx, tx, s.ID, reason); err != nil {
+				return err
+			}
+
+			// J-16 slice 3 (MEET-2026-07-04-001): stage deploy.failed on the same
+			// tx — but ONLY for failure reaps. A cancel-timeout reaps to CANCELLED,
+			// which is NOT a deploy.failed (the customer cancelled).
+			if s.Event != statemachine.BPEventCancelTimeout {
+				if err := stageDeployFailed(ctx, tx, r.deployEventStore, build); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 
 		if err != nil {
