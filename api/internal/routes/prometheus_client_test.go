@@ -62,6 +62,57 @@ func TestPrometheusClient_QueryRange_ParsesMatrix(t *testing.T) {
 	}
 }
 
+// loopzero#180: Prometheus encodes NaN/Inf samples as the strings "NaN"/"+Inf",
+// and strconv.ParseFloat parses them WITHOUT error (returning NaN/Inf) — so the
+// client must skip non-finite samples explicitly, else error_rate (0/0 for an
+// idle-but-has-history tenant) surfaces a NaN data point that the handler's
+// len==0 "collecting" check misses → the dashboard renders "NaN%".
+func TestPrometheusClient_QueryRange_SkipsNonFiniteSamples(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"status": "success",
+			"data": {
+				"resultType": "matrix",
+				"result": [
+					{ "metric": {}, "values": [ [1751365200, "NaN"], [1751365260, "0.5"], [1751365320, "+Inf"], [1751365380, "-Inf"] ] }
+				]
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := NewPrometheusClient(srv.URL, nil)
+	pts, err := c.QueryRange(context.Background(), `error_rate`, 1751365200, 1751365380, 60)
+	if err != nil {
+		t.Fatalf("QueryRange error: %v", err)
+	}
+	// Only the finite 0.5 survives — NaN/+Inf/-Inf are dropped.
+	if len(pts) != 1 {
+		t.Fatalf("got %d points, want 1 (non-finite dropped): %+v", len(pts), pts)
+	}
+	if pts[0].Value != 0.5 {
+		t.Errorf("surviving point = %v, want 0.5", pts[0].Value)
+	}
+}
+
+// An ALL-non-finite series (idle tenant: 0/0 → NaN everywhere) must reduce to an
+// empty slice so the handler maps it to "collecting", never a NaN "ok".
+func TestPrometheusClient_QueryRange_AllNaNBecomesEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1,"NaN"],[2,"NaN"]]}]}}`))
+	}))
+	defer srv.Close()
+	pts, err := NewPrometheusClient(srv.URL, nil).QueryRange(context.Background(), `error_rate`, 1, 2, 1)
+	if err != nil {
+		t.Fatalf("QueryRange error: %v", err)
+	}
+	if len(pts) != 0 {
+		t.Errorf("all-NaN series → %d points, want 0 (→ collecting)", len(pts))
+	}
+}
+
 // Empty matrix (project < 24h old, no series yet) is NOT an error — the handler
 // maps an empty slice to `{ status: "collecting" }`.
 func TestPrometheusClient_QueryRange_EmptyIsNotError(t *testing.T) {
