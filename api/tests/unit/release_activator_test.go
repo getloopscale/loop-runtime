@@ -12,7 +12,20 @@ import (
 	releasesvc "github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
+
+// fakeDeployEventStore is a no-op AppendDeployEvent stub. The kernel calls it
+// on the SAME tx as the state transition (J-16 outbox — MEET-2026-07-03-005
+// Option C). These tests exercise state-transition semantics; the outbox emit
+// is covered by dedicated tests in the outbox package. Returning nil keeps the
+// kernel's transactional emit path exercised without pulling PG into unit
+// tests.
+type fakeDeployEventStore struct{}
+
+func (fakeDeployEventStore) AppendDeployEvent(_ context.Context, _ db.DBTX, _ store.DeployEvent) error {
+	return nil
+}
 
 // --- TestActivateReleaseKernel_HappyPath ---
 // Full 7-step activation sequence: re-fetch confirms PENDING, gets previous
@@ -46,6 +59,7 @@ func TestActivateReleaseKernel_HappyPath(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		apps, 42, testLogger,
 	)
 
@@ -112,6 +126,7 @@ func TestActivateReleaseKernel_SupersedesPreviousRelease(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 10, testLogger,
 	)
 
@@ -155,6 +170,7 @@ func TestActivateReleaseKernel_NoPreviousRelease(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 5, testLogger,
 	)
 
@@ -199,6 +215,7 @@ func TestActivateReleaseKernel_AlreadyActive_NoSideEffects(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		[]releasesvc.ActivationAppInfo{{Name: "web", Status: "deployed"}},
 		10, testLogger,
 	)
@@ -242,6 +259,7 @@ func TestDeriveDeployID_Format_ViaCompletedEvent(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 5, testLogger,
 	)
 
@@ -302,6 +320,7 @@ func TestReleaseAppsToActivationApps_ViaCompletedEvent(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		apps, 15, testLogger,
 	)
 

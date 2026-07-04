@@ -506,6 +506,7 @@ func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, staleRelease,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 10, testLogger,
 	)
 
@@ -544,6 +545,7 @@ func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
 	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 5, testLogger,
 	)
 
