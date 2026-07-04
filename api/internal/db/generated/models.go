@@ -134,6 +134,19 @@ type CustomDomain struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DeployEvent struct {
+	ID            int64              `json:"id"`
+	TransitionID  string             `json:"transition_id"`
+	EventType     string             `json:"event_type"`
+	TenantID      string             `json:"tenant_id"`
+	ProjectID     string             `json:"project_id"`
+	DeployID      string             `json:"deploy_id"`
+	CorrelationID *string            `json:"correlation_id"`
+	Payload       []byte             `json:"payload"`
+	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
+	DrainedAt     pgtype.Timestamptz `json:"drained_at"`
+}
+
 type EnvironmentTarget struct {
 	TenantID               string             `json:"tenant_id"`
 	ProjectID              string             `json:"project_id"`

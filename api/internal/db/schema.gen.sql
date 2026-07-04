@@ -367,6 +367,36 @@ CREATE TABLE public.custom_domains (
     CONSTRAINT custom_domains_tls_status_check CHECK ((tls_status = ANY (ARRAY['pending'::text, 'issuing'::text, 'issued'::text, 'failed'::text])))
 );
 
+-- Name: deploy_events; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.deploy_events (
+    id bigint NOT NULL,
+    transition_id text NOT NULL,
+    event_type text NOT NULL,
+    tenant_id text NOT NULL,
+    project_id text NOT NULL,
+    deploy_id text NOT NULL,
+    correlation_id text,
+    payload jsonb NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    drained_at timestamp with time zone,
+    CONSTRAINT deploy_events_event_type_check CHECK ((event_type = ANY (ARRAY['deploy.succeeded'::text, 'deploy.failed'::text]))),
+    CONSTRAINT deploy_events_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text))
+);
+
+-- Name: deploy_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+
+CREATE SEQUENCE public.deploy_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+-- Name: deploy_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+
+ALTER SEQUENCE public.deploy_events_id_seq OWNED BY public.deploy_events.id;
+
 -- Name: environment_targets; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.environment_targets (
@@ -852,6 +882,10 @@ CREATE TABLE public.workspace_webhooks (
 
 ALTER TABLE ONLY public.audit_log ALTER COLUMN id SET DEFAULT nextval('public.audit_log_id_seq'::regclass);
 
+-- Name: deploy_events id; Type: DEFAULT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events ALTER COLUMN id SET DEFAULT nextval('public.deploy_events_id_seq'::regclass);
+
 -- Name: sse_events id; Type: DEFAULT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.sse_events ALTER COLUMN id SET DEFAULT nextval('public.sse_events_id_seq'::regclass);
@@ -919,6 +953,16 @@ ALTER TABLE ONLY public.cost_counters
 
 ALTER TABLE ONLY public.custom_domains
     ADD CONSTRAINT custom_domains_pkey PRIMARY KEY (id);
+
+-- Name: deploy_events deploy_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events
+    ADD CONSTRAINT deploy_events_pkey PRIMARY KEY (id);
+
+-- Name: deploy_events deploy_events_transition_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events
+    ADD CONSTRAINT deploy_events_transition_id_key UNIQUE (transition_id);
 
 -- Name: environment_targets environment_targets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1160,6 +1204,10 @@ CREATE INDEX idx_custom_domains_status ON public.custom_domains USING btree (sta
 -- Name: idx_custom_domains_tenant_project_app_env; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_custom_domains_tenant_project_app_env ON public.custom_domains USING btree (tenant_id, project_name, app_name, environment);
+
+-- Name: idx_deploy_events_undrained; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_deploy_events_undrained ON public.deploy_events USING btree (id) WHERE (drained_at IS NULL);
 
 -- Name: idx_env_targets_last_replicas_ready_at; Type: INDEX; Schema: public; Owner: -
 
@@ -1460,6 +1508,11 @@ ALTER TABLE ONLY public.cost_counters
 
 ALTER TABLE ONLY public.custom_domains
     ADD CONSTRAINT custom_domains_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE RESTRICT;
+
+-- Name: deploy_events deploy_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.deploy_events
+    ADD CONSTRAINT deploy_events_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: environment_targets environment_targets_active_release_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
