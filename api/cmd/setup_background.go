@@ -298,6 +298,9 @@ func createCoreLoops(
 			MaxConcurrent: 10,
 		},
 	)
+	// J-16 slice 3 — wire the deploy.succeeded transactional-outbox writer so
+	// the convergence-loop activation path stages deploy_events on the tx.
+	releaseConvergenceLoop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
 	idempotencyCleaner := platform.NewIdempotencyCleaner(
 		&store.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,

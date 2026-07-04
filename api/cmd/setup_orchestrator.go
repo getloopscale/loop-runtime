@@ -325,7 +325,7 @@ func setupOrchestrator(
 	// behavior for envs without a public override).
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
-	)
+	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
 	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
 	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
 	// of LastIndex-parsing the app name (which is structurally ambiguous when

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -109,6 +111,7 @@ func ActivateReleaseKernel(
 	releaseStore ReleaseActivationStore,
 	envTargetStore store.EnvironmentTargetStore,
 	eventStore ReleaseActivationEventStore,
+	deployEventStore store.DeployEventStore,
 	apps []ActivationAppInfo,
 	durationSecs int,
 	logger *slog.Logger,
@@ -208,6 +211,40 @@ func ActivateReleaseKernel(
 	// Step 5: Update environment target pointer.
 	if err := envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
 		return fmt.Errorf("activate release: set active: %w", err)
+	}
+
+	// Step 5.5: Transactional outbox — stage the deploy.succeeded event on the
+	// SAME tx (Option C, MEET-2026-07-03-005). loopzero-cloud drains deploy_events
+	// and fans out to the customer's workspace_webhooks; the engine never
+	// references the webhook tables (decoupling invariant). FATAL by design: if
+	// the event cannot be staged, the whole activation rolls back and the
+	// convergence loop retries — this is what makes delivery at-least-once (no
+	// silently-lost deploy events). deployEventStore is an optional dependency
+	// (nil in unit paths that don't exercise the outbox), mirroring the
+	// onReleaseActivated callback convention below. transition_id is a fresh
+	// UUID per ENTRY into ACTIVE (NOT release.ID — a Release re-enters ACTIVE
+	// after rollback recovery, and each entry is a distinct deploy.succeeded).
+	// Payload carries customer-safe fields only (Rule 3).
+	if deployEventStore != nil {
+		deployID := deriveDeployID(release.ID)
+		if err := deployEventStore.AppendDeployEvent(ctx, tx, store.DeployEvent{
+			TransitionID:  "dpx-" + uuid.NewString(),
+			EventType:     "deploy.succeeded",
+			TenantID:      release.TenantID,
+			ProjectID:     release.ProjectID,
+			DeployID:      deployID,
+			CorrelationID: release.CorrelationID,
+			Payload: map[string]any{
+				"event":       "deploy.succeeded",
+				"deploy_id":   deployID,
+				"project":     release.ProjectID,
+				"environment": release.Environment,
+				"status":      "success",
+				"occurred_at": time.Now().UTC().Format(time.RFC3339),
+			},
+		}); err != nil {
+			return fmt.Errorf("activate release: stage deploy event: %w", err)
+		}
 	}
 
 	// Step 6: Emit deploy.completed SSE event — CLI waits for this to exit.
