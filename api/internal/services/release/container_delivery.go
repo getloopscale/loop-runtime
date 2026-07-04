@@ -50,6 +50,9 @@ type ContainerDeliveryActivator struct {
 	// release_app_attestations. Nil-safe: if absent, the activator falls
 	// back to the legacy releases.image_* columns only.
 	appAttestationStore store.AppAttestationStore
+	// J-16 slice 3: transactional-outbox writer. When set, ActivateReleaseKernel
+	// stages a deploy.succeeded event on the activation tx. Nil-safe (skipped).
+	deployEventStore store.DeployEventStore
 }
 
 // ContainerDeliveryDeps holds dependencies for ContainerDeliveryActivator.
@@ -68,6 +71,9 @@ type ContainerDeliveryDeps struct {
 	// migration windows; phaseACreateRelease will skip per-app persistence
 	// and rely on the legacy releases.image_* columns.
 	AppAttestationStore store.AppAttestationStore
+	// J-16 slice 3: transactional-outbox writer for deploy.succeeded events.
+	// May be nil (outbox emit skipped).
+	DeployEventStore store.DeployEventStore
 }
 
 // NewContainerDeliveryActivator creates a new ContainerDeliveryActivator.
@@ -86,6 +92,7 @@ func NewContainerDeliveryActivator(deps ContainerDeliveryDeps) *ContainerDeliver
 		gitReader:           deps.GitReader,
 		argocdSyncTimeout:   syncTimeout,
 		appAttestationStore: deps.AppAttestationStore,
+		deployEventStore:    deps.DeployEventStore,
 	}
 }
 
@@ -492,7 +499,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 		}
 		durationSecs := int(time.Since(build.CreatedAt).Seconds())
 
-		return ActivateReleaseKernel(ctx, tx, release, c.releaseStore, c.envTargetStore, c.eventStore, apps, durationSecs, logger)
+		return ActivateReleaseKernel(ctx, tx, release, c.releaseStore, c.envTargetStore, c.eventStore, c.deployEventStore, apps, durationSecs, logger)
 	})
 }
 

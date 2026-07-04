@@ -175,7 +175,8 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 			Locker:              deps.Locker,
 			GitOps:              deps.GitOps,
 			ArgocdSyncTimeout:   syncTimeout,
-			AppAttestationStore: deps.AppAttestationStore, // Sprint 6 / T3.1
+			AppAttestationStore: deps.AppAttestationStore,      // Sprint 6 / T3.1
+			DeployEventStore:    store.NewDeployEventStoreSqlc(), // J-16 slice 3 — deploy.succeeded outbox
 		})
 	}
 

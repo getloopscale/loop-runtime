@@ -32,7 +32,10 @@ type SyncCallbackActivator struct {
 	eventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	baseDomain string
+	// J-16 slice 3: transactional-outbox writer (set via WithDeployEventStore).
+	// Nil-safe: ActivateReleaseKernel skips the deploy.succeeded emit when nil.
+	deployEventStore store.DeployEventStore
+	baseDomain       string
 	// publicDomain is the operator-configured wildcard root mirrored from
 	// LOOPZERO_PUBLIC_DOMAIN (e.g. `prod-dev.loopzero.example`). When set, the
 	// deploy.completed SSE event URL uses this domain instead of the legacy
@@ -122,6 +125,14 @@ func NewSyncCallbackActivator(
 		publicDomain:   publicDomain,
 		logger:         logger,
 	}
+}
+
+// WithDeployEventStore wires the transactional-outbox writer (J-16 slice 3).
+// Fluent setter so existing call sites/tests are unaffected; the composition
+// root sets it in production. Nil = deploy.succeeded outbox emit skipped.
+func (a *SyncCallbackActivator) WithDeployEventStore(s store.DeployEventStore) *SyncCallbackActivator {
+	a.deployEventStore = s
+	return a
 }
 
 // PendingReleaseByTenantEnvFinder is an optional interface for efficient tenant+env lookup.
@@ -236,7 +247,7 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 	return a.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
 		apps := releaseAppsToActivationApps(release, a.baseDomain, a.publicDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
-		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, apps, duration, a.logger)
+		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, a.deployEventStore, apps, duration, a.logger)
 	})
 }
 
