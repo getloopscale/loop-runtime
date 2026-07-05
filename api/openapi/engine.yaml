@@ -554,6 +554,57 @@ paths:
       responses:
         "200": { description: updated }
 
+  # M10 T2.1 (EC-1) — dashboard-consumed engine routes previously absent from the
+  # spec (all registered in api/internal/server/router.go). Added so the
+  # dashboard↔engine consumer contract (dashboard_consumer_test.go) is GREEN
+  # without trimming the manifest. See plan m10-test-foundation-gap.
+  /api/v1/deploys/{deployID}/timeline:
+    parameters:
+      - { name: deployID, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [deploys]
+      summary: Deploy timeline event stream (SSE)
+      responses:
+        "200":
+          description: server-sent event stream of deploy timeline phases
+          content:
+            text/event-stream:
+              schema: { type: string }
+  /api/v1/integrations/github/installations/{id}/repositories:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [integrations]
+      summary: List repositories for a GitHub App installation
+      responses:
+        "200":
+          description: repository list for the installation
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /api/v1/projects/{name}/signals/stream:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    get:
+      tags: [projects]
+      summary: Project runtime signals stream (SSE)
+      responses:
+        "200":
+          description: server-sent event stream of runtime status signals
+          content:
+            text/event-stream:
+              schema: { type: string }
+  /api/v1/projects/{name}/builds/stream:
+    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    get:
+      tags: [projects]
+      summary: Project builds stream (SSE)
+      responses:
+        "200":
+          description: server-sent event stream of build updates
+          content:
+            text/event-stream:
+              schema: { type: string }
+
 components:
   parameters:
     ProjectName:
