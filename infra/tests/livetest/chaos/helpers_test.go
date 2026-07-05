@@ -5,13 +5,15 @@ package chaos
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
 
 // T3.3 helper-level hermetic tests. Validates type contracts + AssertSpanCoverage
-// stub behavior. LIVE chaos injection lives in chaos_live_test.go gated por
+// delegation behavior. LIVE chaos injection lives in chaos_live_test.go gated por
 // build tag `live`.
 
 func TestManifest_TypeFields(t *testing.T) {
@@ -44,19 +46,37 @@ func TestChaosResult_VerdictValues(t *testing.T) {
 	}
 }
 
-func TestAssertSpanCoverage_StubReturnsNotYetWired(t *testing.T) {
-	count, err := AssertSpanCoverage(context.Background(), TempoTraceQuery{
-		Service:   "loopzero-api",
-		Operation: "deploy",
-		Window:    1 * time.Minute,
-	}, 5)
+// M10 T4.1: AssertSpanCoverage is no longer a stub — it delegates to the real
+// Tempo HTTP client. Hermetic proof via an httptest Tempo backend (no LIVE
+// cluster). The LIVE query fires only when a real TempoURL (DefaultTempoURL) is
+// set; here the query points at the httptest server.
+func TestAssertSpanCoverage_DelegatesToRealClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"traces":[
+		  {"traceID":"a","rootSpan":"deploy","spans":[{"name":"deploy","durationNanos":1}]},
+		  {"traceID":"b","rootSpan":"deploy","spans":[{"name":"deploy","durationNanos":2}]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loopzero-api", Operation: "deploy", Window: time.Minute}
+
+	// Above threshold -> real trace count, no error (proves delegation).
+	count, err := AssertSpanCoverage(context.Background(), q, 2)
+	if err != nil {
+		t.Fatalf("delegated call errored: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("count = %d, want 2 (delegated real count)", count)
+	}
+
+	// Below threshold -> real threshold error, NOT the retired 'not yet wired' stub.
+	_, err = AssertSpanCoverage(context.Background(), q, 5)
 	if err == nil {
-		t.Fatal("expected stub error from AssertSpanCoverage")
+		t.Fatal("expected below-threshold error from the delegated real client")
 	}
-	if !strings.Contains(err.Error(), "Tempo client not yet wired") {
-		t.Errorf("error message changed: %v", err)
-	}
-	if count != -1 {
-		t.Errorf("count = %d, want -1 (sentinel)", count)
+	if strings.Contains(err.Error(), "not yet wired") {
+		t.Errorf("still returning the stub error — de-skeleton incomplete: %v", err)
 	}
 }

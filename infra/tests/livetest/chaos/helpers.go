@@ -18,7 +18,6 @@ package chaos
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -128,13 +127,15 @@ type TempoTraceQuery struct {
 // the service/operation arrived during the chaos window. Per blueprint P3,
 // this is the trace-as-evidence pattern alongside Prometheus SLO query.
 //
-// Stub for Phase 3 — actual Tempo query implementation in follow-up commit.
 // Returns (count, error). count=-1 indicates the helper could not reach Tempo
 // (NOT a chaos failure — operator should verify Tempo deployment).
+//
+// M10 T4.1: de-skeletoned — delegates to the real Tempo HTTP client
+// (AssertSpanCoverageReal in tempo_client.go), which is hermetically tested via
+// httptest (tempo_client_test.go: parse / pass / fail / network-error). The
+// query's TempoURL selects the endpoint (DefaultTempoURL in a LIVE cluster; an
+// httptest server in hermetic tests), so this helper carries no LIVE dependency
+// of its own — the LIVE Tempo query is exercised only when a real TempoURL is set.
 func AssertSpanCoverage(ctx context.Context, q TempoTraceQuery, minCount int) (int, error) {
-	// Implementation note: Tempo HTTP API at /api/search supports
-	// JSON-formatted tags. Skeleton returns -1 + nil to indicate "not yet
-	// wired"; full Tempo client wiring lives in T3.3 follow-up.
-	_ = json.RawMessage{}
-	return -1, fmt.Errorf("AssertSpanCoverage: Tempo client not yet wired (T3.3 follow-up)")
+	return AssertSpanCoverageReal(ctx, q, minCount)
 }
