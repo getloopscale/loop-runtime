@@ -100,7 +100,7 @@ metadata:
   namespace: ${LOOPZERO_SYSTEM_NS}
 spec:
   action: partition
-  mode: all-targeted
+  mode: all
   selector:
     # EC-6 absorption — scoped blast radius (NOT mode: all)
     namespaces:
@@ -110,7 +110,7 @@ spec:
       app: loopzero-api
   direction: both
   target:
-    mode: all-targeted
+    mode: all
     selector:
       namespaces:
         - ${ARGO_SYSTEM_NS}
