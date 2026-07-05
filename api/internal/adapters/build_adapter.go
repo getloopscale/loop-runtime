@@ -187,9 +187,12 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 			Name:      s.Name,
 			Type:      s.Type,
 			Port:      s.Port,
-			Path:      s.Path,  // T0.2: now persisted → redeploy preserves monorepo path
-			Build:     s.Build, // T0.2: now persisted → redeploy preserves build mode
-			Start:     s.Start, // T0.2: now persisted → redeploy preserves start command
+			Path:      s.Path,    // T0.2: now persisted → redeploy preserves monorepo path
+			Build:     s.Build,   // T0.2: now persisted → redeploy preserves build mode
+			Start:     s.Start,   // T0.2: now persisted → redeploy preserves start command
+			Runtime:   s.Runtime, // loopzero#185: redeploy MUST preserve services.json runtime (F-dom-2) —
+			//                       adapter was silently dropping it → empty runtime → unsupportedStrategy
+			//                       → "Failed to build manifests with custom domains" → SYNC_FAILED.
 			Rendering: s.Rendering,
 			Secrets:   s.Secrets,
 			Replicas:  s.Replicas,

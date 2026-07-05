@@ -60,12 +60,22 @@ func (a *PromV1Adapter) Query(ctx context.Context, q string, t time.Time) (model
 	return vec, nil
 }
 
-// PollQuery joins replicas_ready with kube_deployment_labels to
-// extract loopzero.io/{tenant,project,environment} from the vector without
-// namespace parsing. Canonical Prometheus label-join semantics
-// (kube-state-metrics convention). Namespace filter narrows scan to
-// loopzero-* only, keeping the query cheap.
-const PollQuery = `kube_deployment_status_replicas_ready{namespace=~"loopzero-.*"} * on(namespace, deployment) group_left(label_loopzero_io_tenant, label_loopzero_io_project, label_loopzero_io_environment) kube_deployment_labels{namespace=~"loopzero-.*"}`
+// PollQuery joins replicas_ready with kube_replicaset_labels to extract
+// loopzero.io/{tenant,project,environment} from the vector without namespace
+// parsing.
+//
+// LIVE-caught 2026-07-04: tenant workloads run as Argo Rollouts (not raw
+// K8s Deployments), so `kube_deployment_labels{namespace=~"loopzero-tn-.*"}`
+// returns an empty vector even when kube-state-metrics has the
+// deployments allowlist enabled. Argo Rollouts DOES create backing
+// ReplicaSets (Rollout owns RS the same way Deployment does), and those
+// RSes DO carry the canonical loopzero.io labels — so join on ReplicaSet
+// instead. The `max(...) by (namespace, label_...)` collapses inactive
+// RSes (rollout keeps prior generations at 0 ready) so the sum of
+// replicas_ready lands under the correct (tenant,project,env) tuple.
+// Namespace filter narrows the scan to loopzero-tn-* (production/preview
+// tenant namespaces) to skip mgmt-side deployments.
+const PollQuery = `sum by (namespace, label_loopzero_io_tenant, label_loopzero_io_project, label_loopzero_io_environment) (kube_replicaset_status_ready_replicas{namespace=~"loopzero-tn-.*"} * on(namespace, replicaset) group_left(label_loopzero_io_tenant, label_loopzero_io_project, label_loopzero_io_environment) kube_replicaset_labels{namespace=~"loopzero-tn-.*"})`
 
 // PrometheusInstantClient abstracts Prometheus instant query for testing (DIP).
 // Production uses github.com/prometheus/client_golang/api/prometheus/v1;
