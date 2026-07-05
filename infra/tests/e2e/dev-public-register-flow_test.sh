@@ -112,15 +112,25 @@ scenario_a_me_provisioning_contract() {
 
 scenario_b_completing_screen_shipped() {
   want B || return 0
-  # The register entry bundle must carry the RegisterCompletingScreen literal.
-  local html js_url found=0
-  html=$(curl -fsS --max-time 20 "$APP/register" 2>/dev/null || echo '')
-  # Follow the entry chunk(s) referenced by the SPA shell; grep each for the literal.
-  for js_url in $(printf '%s' "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | sort -u); do
-    if curl -fsS --max-time 20 "$APP$js_url" 2>/dev/null | grep -qF 'Setting up your workspace'; then
-      found=1; break
-    fi
-  done
+  # The register PAGE CHUNK (register-*.js — dynamically imported at route
+  # entry, NOT referenced from /register HTML) must carry the
+  # RegisterCompletingScreen literal. Canonical two-step probe:
+  # 1) mine SPA index for the register-*.js code-split chunk reference
+  # 2) probe that chunk directly for the literal
+  # Cleanroom 2026-07-04 fix: original loop over `/register` HTML assets
+  # only saw bootstrap chunks (vendor/react/router/index), which never
+  # contained the literal by design.
+  local html entry_js entry_body chunk found=0
+  html=$(curl -fsS --max-time 20 "$APP/" 2>/dev/null || echo '')
+  entry_js=$(printf '%s' "$html" | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+  if [[ -n "$entry_js" ]]; then
+    entry_body=$(curl -fsS --max-time 20 "$APP$entry_js" 2>/dev/null || echo '')
+    for chunk in $(printf '%s' "$entry_body" | grep -oE '[/"]register-[A-Za-z0-9_-]+\.js' | sed 's|^[/"]||' | sort -u); do
+      if curl -fsS --max-time 20 "$APP/assets/$chunk" 2>/dev/null | grep -qF 'Setting up your workspace'; then
+        found=1; break
+      fi
+    done
+  fi
   if [[ "$found" == "1" ]]; then
     record_result "B:completing-screen-shipped" PASS "'Setting up your workspace' in served bundle"
   else

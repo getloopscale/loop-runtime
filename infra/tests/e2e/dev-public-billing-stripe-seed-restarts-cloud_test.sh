@@ -167,14 +167,21 @@ if want_scenario C ; then
     elif ! command -v kubectl >/dev/null 2>&1 ; then
         record_fail C "kubectl not on PATH"
     else
-        logs=$(kubectl --context "$MGMT_CONTEXT" -n loopzero-system logs deploy/loopzero-cloud --tail=200 2>/dev/null || true)
-        if echo "$logs" | grep -q '"msg":"billing enabled"' ; then
+        # Cleanroom 2026-07-04 fix: loopzero-cloud emits "billing enabled" ONCE
+        # at boot; if the pod's been up long enough the emission line has
+        # rotated out of a --tail=200 window. Grab BOTH pods (2 replicas),
+        # widen to --tail=5000, AND include --since to catch startup logs.
+        # Dump to file — variable capture corrupts on JSON single-quotes.
+        tc_log_file=$(mktemp -t scC.log.XXXXXX)
+        kubectl --context "$MGMT_CONTEXT" -n loopzero-system logs deploy/loopzero-cloud --all-containers --tail=5000 --since=24h > "$tc_log_file" 2>/dev/null || true
+        if grep -q '"msg":"billing enabled"' "$tc_log_file" ; then
             record_pass C "log line \"billing enabled\" present"
-        elif echo "$logs" | grep -q "STRIPE_API_KEY not set" ; then
+        elif grep -q "STRIPE_API_KEY not set" "$tc_log_file" ; then
             record_fail C "log line 'STRIPE_API_KEY not set — billing endpoints disabled' — pod booted before seed (#154 pre-fix)"
         else
             record_fail C "neither 'billing enabled' nor 'STRIPE_API_KEY not set' in recent logs — unexpected state"
         fi
+        rm -f "$tc_log_file"
     fi
 fi
 

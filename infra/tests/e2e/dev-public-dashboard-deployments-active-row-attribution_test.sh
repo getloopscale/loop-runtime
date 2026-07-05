@@ -47,11 +47,11 @@ SLUG="dashboard-deployments-active-row-attribution"
 SCRIPT_NAME="$(basename "$0")"
 
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
-PROJECT_NAME="${PROJECT_NAME:-loopzerokit-example}"
+PROJECT_NAME="${PROJECT_NAME:-teste}"
 
 JWT_CANDIDATES=(
-  "${HOME}/.loopzero/redteam-qa-session-jwt.txt"
   "${HOME}/.loopzero/local-dogfood-session-jwt.txt"
+  "${HOME}/.loopzero/redteam-qa-session-jwt.txt"
   "${HOME}/.loopzero/admin-loopzero-dev-session-jwt.txt"
 )
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"

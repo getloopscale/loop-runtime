@@ -68,7 +68,7 @@ fi
 
 # S3 — LIVE bash (OPERATOR HARD STOP)
 if [ "$HERMETIC_ONLY" -eq 0 ]; then
-    run_suite "S3-live-promote-no-op" "PROJECT_NAME=\${PROJECT_NAME:-loopzerokit-example} bash infra/tests/e2e/dev-public-promote-no-op_test.sh"
+    run_suite "S3-live-promote-no-op" "PROJECT_NAME=\${PROJECT_NAME:-teste} bash infra/tests/e2e/dev-public-promote-no-op_test.sh"
 fi
 
 fail_count=0

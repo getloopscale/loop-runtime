@@ -150,15 +150,23 @@ print("ok" if ok else "bad:%s" % json.dumps({"window_days": d.get("window_days")
 
 scenario_c_kpi_strip_shipped() {
   want C || return 0
-  local html js_url found_deploys=0 found_plan=0
+  # Canonical two-step probe (Cleanroom 2026-07-04): mine SPA index for the
+  # overview-*.js code-split chunk reference, then probe that chunk. The
+  # SPA root HTML alone only references bootstrap chunks (vendor/router/
+  # radix/loopzero-ui/index); the overview-*.js chunk is dynamically imported
+  # at route entry and carries the KPI strip literals.
+  local html entry_js entry_body chunk chunk_body found_deploys=0 found_plan=0
   html=$(curl -fsS --max-time 20 "$APP/" 2>/dev/null || echo '')
-  for js_url in $(printf '%s' "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | sort -u); do
-    local chunk
-    chunk=$(curl -fsS --max-time 20 "$APP$js_url" 2>/dev/null || echo '')
-    printf '%s' "$chunk" | grep -qF 'Deploys (7d)' && found_deploys=1
-    printf '%s' "$chunk" | grep -qF 'Active envs' && found_plan=1
-    [[ "$found_deploys" == 1 && "$found_plan" == 1 ]] && break
-  done
+  entry_js=$(printf '%s' "$html" | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+  if [[ -n "$entry_js" ]]; then
+    entry_body=$(curl -fsS --max-time 20 "$APP$entry_js" 2>/dev/null || echo '')
+    for chunk in $(printf '%s' "$entry_body" | grep -oE '[/"]overview-[A-Za-z0-9_-]+\.js' | sed 's|^[/"]||' | sort -u); do
+      chunk_body=$(curl -fsS --max-time 20 "$APP/assets/$chunk" 2>/dev/null || echo '')
+      printf '%s' "$chunk_body" | grep -qF 'Deploys (7d)' && found_deploys=1
+      printf '%s' "$chunk_body" | grep -qF 'Active envs' && found_plan=1
+      [[ "$found_deploys" == 1 && "$found_plan" == 1 ]] && break
+    done
+  fi
   if [[ "$found_deploys" == 1 && "$found_plan" == 1 ]]; then
     record_result "C:kpi-strip-shipped" PASS "'Deploys (7d)' + 'Active envs' in served bundle"
   else

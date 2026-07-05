@@ -38,7 +38,7 @@ PLAN_SLUG="loopzero-promote-no-op-fail-loud-p0"
 SCRIPT_NAME="$(basename "$0")"
 
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
-PROJECT_NAME="${PROJECT_NAME:-loopzerokit-example}"
+PROJECT_NAME="${PROJECT_NAME:-teste}"
 FROM_ENV="${FROM_ENV:-preview}"
 TO_ENV="${TO_ENV:-production}"
 EXPECTED_PUBLIC_DOMAIN_SUBSTRING="${EXPECTED_PUBLIC_DOMAIN_SUBSTRING:-prod-dev.loopzero.example}"
@@ -49,8 +49,8 @@ ACTIVATION_WINDOW_SECONDS="${ACTIVATION_WINDOW_SECONDS:-90}"
 # Session JWT — try canonical paths in order
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"
 JWT_CANDIDATES=(
-  "${HOME}/.loopzero/redteam-qa-session-jwt.txt"
   "${HOME}/.loopzero/local-dogfood-session-jwt.txt"
+  "${HOME}/.loopzero/redteam-qa-session-jwt.txt"
   "${HOME}/.loopzero/admin-loopzero-dev-session-jwt.txt"
 )
 

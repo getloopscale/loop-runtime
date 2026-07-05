@@ -51,7 +51,7 @@ set -euo pipefail
 PLAN_SLUG="dashboard-badge-data-plane-poller"
 ISSUE_REF="loopzero-cloud#128"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
-PROJECT_NAME="${PROJECT_NAME:-loopzerokit-example}"
+PROJECT_NAME="${PROJECT_NAME:-teste}"
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"
 SCALE_DEPLOYMENT="${SCALE_DEPLOYMENT:-}"
 SCALE_NAMESPACE="${SCALE_NAMESPACE:-}"
@@ -230,8 +230,14 @@ if want_scenario C ; then
         record_fail C "kubectl not on PATH"
     else
         JWT="$(cat "$SESSION_JWT_FILE")"
-        log "  scaling $SCALE_NAMESPACE/deploy/$SCALE_DEPLOYMENT to 0"
-        if ! kubectl -n "$SCALE_NAMESPACE" scale deploy "$SCALE_DEPLOYMENT" --replicas=0 --timeout=30s >/dev/null 2>&1 ; then
+        # Canonical (Cleanroom 2026-07-04): tenant workloads live in the
+        # workload cluster as Argo Rollouts, not raw Deployments. Auto-detect
+        # kind + context per SCALE_KIND (default rollout) + KUBE_CONTEXT
+        # (default k3d-loopzero-workload). Legacy `deploy` still supported.
+        SCALE_KIND="${SCALE_KIND:-rollout}"
+        KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-workload}"
+        log "  scaling $KUBE_CONTEXT/$SCALE_NAMESPACE/$SCALE_KIND/$SCALE_DEPLOYMENT to 0"
+        if ! kubectl --context "$KUBE_CONTEXT" -n "$SCALE_NAMESPACE" scale "$SCALE_KIND" "$SCALE_DEPLOYMENT" --replicas=0 --timeout=30s >/dev/null 2>&1 ; then
             record_fail C "kubectl scale --replicas=0 failed"
         else
             log "  waiting ${POLLER_TICK_WAIT_S}s for poller tick to persist"
@@ -260,8 +266,8 @@ print("row_not_found")
                 record_fail C "$PROJECT_NAME row last_replicas_ready_value='$target_val' post-scale — expected 0 (poller-persist chain broken OR wait budget too short)"
             fi
             # Restore replicas so the test is idempotent for re-runs.
-            log "  restoring $SCALE_NAMESPACE/deploy/$SCALE_DEPLOYMENT to 1"
-            kubectl -n "$SCALE_NAMESPACE" scale deploy "$SCALE_DEPLOYMENT" --replicas=1 --timeout=30s >/dev/null 2>&1 || true
+            log "  restoring $KUBE_CONTEXT/$SCALE_NAMESPACE/$SCALE_KIND/$SCALE_DEPLOYMENT to 1"
+            kubectl --context "$KUBE_CONTEXT" -n "$SCALE_NAMESPACE" scale "$SCALE_KIND" "$SCALE_DEPLOYMENT" --replicas=1 --timeout=30s >/dev/null 2>&1 || true
         fi
     fi
 fi

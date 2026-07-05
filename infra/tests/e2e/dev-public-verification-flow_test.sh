@@ -66,15 +66,23 @@ scenario_a_verification_served() {
 
 scenario_b_resend_cooldown_shipped() {
   want B || return 0
-  local html js_url found_resend=0 found_key=0
-  html=$(curl -fsS --max-time 20 "$APP/verification" 2>/dev/null || echo '')
-  for js_url in $(printf '%s' "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | sort -u); do
-    local chunk
-    chunk=$(curl -fsS --max-time 20 "$APP$js_url" 2>/dev/null || echo '')
-    printf '%s' "$chunk" | grep -qF "Didn't receive the email? Resend" && found_resend=1
-    printf '%s' "$chunk" | grep -qF 'loopzero-verify-resend-until' && found_key=1
-    [[ "$found_resend" == "1" && "$found_key" == "1" ]] && break
-  done
+  # Canonical two-step probe (Cleanroom 2026-07-04): mine SPA index for the
+  # verification-*.js code-split chunk reference, then probe that chunk. The
+  # /verification HTML alone doesn't reference verification-*.js — it's
+  # dynamically imported at route entry, so the original loop over the
+  # /verification asset refs only saw bootstrap chunks.
+  local html entry_js entry_body chunk chunk_body found_resend=0 found_key=0
+  html=$(curl -fsS --max-time 20 "$APP/" 2>/dev/null || echo '')
+  entry_js=$(printf '%s' "$html" | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+  if [[ -n "$entry_js" ]]; then
+    entry_body=$(curl -fsS --max-time 20 "$APP$entry_js" 2>/dev/null || echo '')
+    for chunk in $(printf '%s' "$entry_body" | grep -oE '[/"]verification-[A-Za-z0-9_-]+\.js' | sed 's|^[/"]||' | sort -u); do
+      chunk_body=$(curl -fsS --max-time 20 "$APP/assets/$chunk" 2>/dev/null || echo '')
+      printf '%s' "$chunk_body" | grep -qF "Didn't receive the email? Resend" && found_resend=1
+      printf '%s' "$chunk_body" | grep -qF 'loopzero-verify-resend-until' && found_key=1
+      [[ "$found_resend" == "1" && "$found_key" == "1" ]] && break
+    done
+  fi
   if [[ "$found_resend" == "1" && "$found_key" == "1" ]]; then
     record_result "B:resend-cooldown-shipped" PASS "resend literal + persisted-cooldown key in bundle"
   else

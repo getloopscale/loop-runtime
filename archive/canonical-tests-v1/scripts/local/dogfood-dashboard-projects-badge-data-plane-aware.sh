@@ -85,7 +85,14 @@ if [ "$MODE" != "live" ] ; then
 fi
 
 if [ "$MODE" != "hermetic" ] ; then
-    # S3 — LIVE bash 3-scenario (operator)
+    # S3 — LIVE bash 3-scenario (operator).
+    # Canonical (Cleanroom 2026-07-04): pre-populate the SCALE_* env vars
+    # so scenario C targets the canonical seed project's Rollout.
+    # Overridable — operator can point at any project by exporting
+    # PROJECT_NAME/SCALE_DEPLOYMENT/SCALE_NAMESPACE before invoking.
+    export PROJECT_NAME="${PROJECT_NAME:-teste}"
+    export SCALE_DEPLOYMENT="${SCALE_DEPLOYMENT:-teste-app}"
+    export SCALE_NAMESPACE="${SCALE_NAMESPACE:-loopzero-tn-243c747b30c41e51-teste-production}"
     if bash "$REPO_ROOT/infra/tests/e2e/dev-public-dashboard-projects-badge-data-plane-aware_test.sh" ; then
         record "S3 LIVE bash 3/3" PASS
     else

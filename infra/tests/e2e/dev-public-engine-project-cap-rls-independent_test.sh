@@ -41,7 +41,7 @@ set -euo pipefail
 # silently drift.
 #
 # Scenarios:
-#   A — source-level grep on `api/internal/db/project_wrapper.go` for
+#   A — source-level grep on `api/internal/db/store/project_wrapper.go` for
 #       the canonical cross-tenant count query (the SQL whose
 #       correctness depends on the BYPASSRLS assumption).
 #   B — source-level grep on `api/tests/integration/project_cap_
@@ -58,7 +58,7 @@ set -euo pipefail
 # Slug:           engine-project-cap-rls-independent
 # Issue:          loopzero-cloud#111
 # Family:         #106 (per-Account cap bypass — this is the latent re-open)
-# Closed by:      (assumption invariance) `api/internal/db/project_wrapper.go:115-176`
+# Closed by:      (assumption invariance) `api/internal/db/store/project_wrapper.go:115-176`
 #                 + `api/tests/integration/project_cap_hermetic_m5_test.go:257`
 # Allowlist:      .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (#111)
 # Companion (CI): infra/tests/check-dev-public-engine-project-cap-rls-independent-syntax_test.sh
@@ -79,7 +79,7 @@ context-invariance assumption).
 
 Environment:
   ENGINE_DIR    default ../../.. relative to this script (the engine
-                repo root — contains api/internal/db/project_wrapper.go
+                repo root — contains api/internal/db/store/project_wrapper.go
                 and api/tests/integration/project_cap_hermetic_m5_test.go)
 
 This script is Go-side hermetic — does NOT require Cleanroom + dev-public.
@@ -145,7 +145,7 @@ fi
 # ---------------------------------------------------------------------------
 if want_scenario A ; then
     log "Scenario A — project_wrapper.go has the canonical cross-tenant count query"
-    SRC="$ENGINE_DIR/api/internal/db/project_wrapper.go"
+    SRC="$ENGINE_DIR/api/internal/db/store/project_wrapper.go"
     if [ ! -f "$SRC" ] ; then
         record_fail A "source missing: $SRC"
     else

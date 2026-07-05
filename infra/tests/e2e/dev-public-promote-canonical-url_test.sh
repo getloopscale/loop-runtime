@@ -6,7 +6,7 @@
 # Issue:          loopzero-cloud#159
 # Family:         J-25 status.url canonical (2026-06-12 sponsor walkthrough) —
 #                 THIS closes the same divergence on the PROMOTE path
-# Closed by:      api/internal/services/promotion_orchestrator.go +
+# Closed by:      api/internal/services/release/promotion_orchestrator.go +
 #                 pkg/naming/entry_app.go (NEW SoT)
 # Allowlist:      .claude/rules/shell-scripts-allowlist.md § Post-baseline (#159)
 #
@@ -133,7 +133,7 @@ if want_scenario B ; then
     if [ $SKIP_LIVE -eq 1 ] ; then
         record_pass B "skip-live mode — hermetic"
     else
-        FILE="$REPO_ROOT/api/internal/services/promotion_orchestrator.go"
+        FILE="$REPO_ROOT/api/internal/services/release/promotion_orchestrator.go"
         USES_CANONICAL=0
         USES_LEGACY=0
         if fgrep -q 'naming.AppURL' "$FILE" 2>/dev/null ; then
