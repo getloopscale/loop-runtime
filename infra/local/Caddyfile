@@ -276,6 +276,21 @@ app-dev.loopzero.example {
     }
   }
 
+  # GitHub webhook direct-to-loopzero-api (mirrors cloud-dev bloc handling for
+  # /api/v1/webhooks/github). GitHub App webhook_url is registered against
+  # app-dev.loopzero.example (canonical surface post-2026-06-22). Without this
+  # explicit handle the POST falls through to the SPA file_server which
+  # only advertises GET/HEAD → GitHub delivery attempts 405 forever.
+  # HMAC-SHA256 in webhook body is validated by loopzero-api directly
+  # (api/internal/github/webhook/handler.go); Caddy is the single edge
+  # boundary here per the same defense-in-layers rationale as the
+  # cloud-dev.loopzero.example bloc below.
+  handle /api/v1/webhooks/github {
+    reverse_proxy localhost:13001 {
+      header_up Host loopzero-api.loopzero-system.svc.cluster.local
+    }
+  }
+
   # Red Team loopzero-cloud#100 absorption (2026-06-27) — silent MIME outage
   # on stale chunk requests. Browser tabs already-open before a deploy
   # have an HTML page that references chunk filenames (e.g.,
