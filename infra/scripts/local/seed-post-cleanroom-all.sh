@@ -19,6 +19,7 @@
 # 3. seed-admin-loopzero-dev.sh     — Kratos identity + tenant + session JWT
 # 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
 # 5. seed-github-app-dev.sh        — GitHub App PEM + webhook secret
+# 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
 # 6. seed-gitea-token-canonical.sh — Gitea API token mint + 3-way sync
 # 7. seed-broker-canonical.sh      — loopzero-broker token + CSS + envFrom
 # 8. seed-loki-cross-cluster.sh    — Loki NodePort + Promtail URL +
@@ -228,6 +229,22 @@ run_step "3b-seed-redteam-qa-identity" "EMAIL=paulohenrique.java@gmail.com DISPL
 
 # Step 5
 run_step "5-seed-github-app-dev" "bash $SCRIPT_DIR/seed-github-app-dev.sh $VERIFY_FLAG"
+
+# Step 5b (NEW 2026-07-04) — canonical GitHub webhook on the fixture
+# repo. Without this, `loopzero push` on getloopscale/loopzerokit-example silently
+# no-ops: GitHub never POSTs to /api/v1/webhooks/github, autodeploy
+# never runs, dogfood-webhook-chain + chaos c11 chain link 9 FAIL. This
+# is the seam that step 5 (the App PEM + webhook secret) does NOT
+# cover — the REPO webhook is per-repo config on the GitHub side.
+# Env-gated to dev-public (the only env whose Caddy edge handles
+# /api/v1/webhooks/github → loopzero-api directly per Caddyfile app-dev
+# block). SKIP-graceful when gh unauthenticated or dev-credentials.json
+# absent (standalone-multi tier).
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  run_step "5b-seed-github-webhook-fixture-canonical" "bash $SCRIPT_DIR/seed-github-webhook-fixture-canonical.sh $VERIFY_FLAG"
+else
+  skip_step "5b-seed-github-webhook-fixture-canonical" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
 
 # Step 6
 run_step "6-seed-gitea-token-canonical" "bash $SCRIPT_DIR/seed-gitea-token-canonical.sh $VERIFY_FLAG"
