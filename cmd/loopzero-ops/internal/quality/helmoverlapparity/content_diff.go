@@ -26,9 +26,14 @@ import (
 
 // contentTargetFields are the dotted paths in values.yaml that MUST match
 // across both chart copies.
+//
+// NOTE: securityContext.* is intentionally NOT here — on the real loopzero charts it
+// is hardcoded in templates/deployment.yaml, ABSENT from values.yaml, so a
+// values.yaml diff would be a permanent silent no-op (review finding). The
+// securityContext invariant is enforced on RENDERED output instead
+// (rendered_diff.go / diffRenderedSecurityContext). This list is the fields that
+// genuinely live in values.yaml.
 var contentTargetFields = []string{
-	"securityContext.runAsUser",
-	"securityContext.runAsNonRoot",
 	"resources.requests.cpu",
 	"resources.requests.memory",
 	"resources.limits.cpu",
