@@ -85,3 +85,13 @@ func TestDispatcher_AtomicCounterInvariant(t *testing.T) {
 		t.Errorf("buffered(%v) + dropped(%v) = %v, want %d (no lost update)", buffered, dropped, buffered+dropped, n)
 	}
 }
+
+// TestDispatcher_CollectorExposesCounter exercises the dormant wiring seam
+// (Collector) so a real registration path can register the drop counter with
+// the api's Prometheus registry when the logger leaves dormant status (D3).
+func TestDispatcher_CollectorExposesCounter(t *testing.T) {
+	d := New(Config{QueueSize: 1})
+	if d.Collector() == nil {
+		t.Fatal("Collector() returned nil — the drop-counter registration seam must be exposed")
+	}
+}

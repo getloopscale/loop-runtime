@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/s3"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -81,4 +82,10 @@ func TestS3Adapter_UploadPropagatesError(t *testing.T) {
 // satisfies ObjectStore.
 func TestNewS3ObjectStore_ImplementsInterface(t *testing.T) {
 	var _ ObjectStore = s3Adapter{}
+
+	// Exercise the exported composition-root constructor with a real *s3.Uploader.
+	store := NewS3ObjectStore(s3.New("http://localhost:9000", "ak", "sk"))
+	if store == nil {
+		t.Fatal("NewS3ObjectStore returned nil ObjectStore")
+	}
 }
