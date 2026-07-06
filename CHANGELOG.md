@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Roadmap amended: added M14 KServe Cross-Validation Gaps Closure (`/roadmap-feature kserve-cross-validation-gaps`) — 6 gaps da cross-validation vs KServe (relatório `cross-validation-output/final_report.md`, score 3.89/5.0), cada entrega do DoD citando o arquivo de referência do kserve; kserve/kserve (Apache-2.0) adicionado à tabela de referências do roadmap
 
 ### Changed
 
