@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package dev_public
+package devpublic
 
 // Phase 3 — deploy/build/promote family — 13 scripts migrated
 // (2 M11_FASE_B_webhook_chain_LIVE scripts DEFERRED per ADR D4 + Q2 inventory):

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package dev_public
+package devpublic
 
 // Phase 2 — billing family — migrated from:
 //   - dev-public-billing-portal_test.sh                       -> TestDevPublic_Billing_Portal

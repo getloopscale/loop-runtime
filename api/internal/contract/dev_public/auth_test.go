@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package dev_public
+package devpublic
 
 // Phase 1 — auth family — migrated from the following dev-public-*.sh scripts
 // per plan m11-fase-a-migrate-de-api-scripts-to-go v1.1 T1.1..T1.5:

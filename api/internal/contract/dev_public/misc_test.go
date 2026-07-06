@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package dev_public
+package devpublic
 
 // Phase 6 — misc family — remaining scripts (Q3 potential M13-reclassification pending):
 //

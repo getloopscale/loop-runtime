@@ -13,7 +13,7 @@
 //   - per-subtest httptest.NewServer per ADR D3 (no shared global state)
 //   - see .claude/knowledge-base/m11-migration-inventory-2026-07-06.json for
 //     the authoritative script-to-family bucket mapping per ADR D5.
-package dev_public
+package devpublic
 
 import (
 	"context"
@@ -275,5 +275,20 @@ func TestDevPublic_Helpers_SmokeCompile(t *testing.T) {
 	require.NotNil(t, testSigningKey)
 	require.NotEmpty(t, mintTestJWT(t, "tn-smoke"))
 	require.NotNil(t, getSpec(t))
+}
+
+// TestDevPublic_Helpers_AssertConformsToSpec_HealthReturns200Body exercises
+// assertConformsToSpec against /api/v1/health, an engine-registered route in
+// engine.yaml (per M11 v1.0 100%-coverage spec). Proves ADR D2 helper is wired
+// end-to-end + gives EC-4/EC-5 branches a real caller. Migrated tests in Phase
+// 1-6 target BFF surface (/self-service/*, /v1/*) NOT in engine.yaml, so they
+// do NOT call assertConformsToSpec directly — this smoke test is the canonical
+// harness demonstration for the engine surface subset per D2 caveat.
+func TestDevPublic_Helpers_AssertConformsToSpec_HealthReturns200Body(t *testing.T) {
+	// Canonical engine.yaml /api/v1/health response shape: {"status": "ok"}
+	healthBody := []byte(`{"status":"ok"}`)
+	assertConformsToSpec(t, http.MethodGet, "/api/v1/health", http.StatusOK, healthBody)
+	// EC-5 canonical: empty body of a declared status skips JSON parse.
+	assertConformsToSpec(t, http.MethodGet, "/api/v1/health", http.StatusOK, nil)
 }
 
