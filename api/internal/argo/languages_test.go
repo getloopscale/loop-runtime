@@ -251,3 +251,42 @@ func truncate(s string, max int) string {
 	}
 	return s[:max] + "..."
 }
+
+// ---------------------------------------------------------------------------
+// M14 gap #1 — runtime registry is data-driven (not a compiled switch).
+// Blueprint Q1 (kserve ServingRuntime registry) + plan ADR D2 (operator-only
+// config, fail-closed default). These tests assert the registry MECHANISM,
+// complementing the behavior tests above.
+// ---------------------------------------------------------------------------
+
+// TestRuntimeRegistry_IsDataDriven asserts ResolveStrategy resolves via the
+// runtimeRegistry map, not a hardcoded switch: python + node are registered
+// descriptors and nothing else is (fail-closed default preserved).
+func TestRuntimeRegistry_IsDataDriven(t *testing.T) {
+	if len(runtimeRegistry) != 2 {
+		t.Fatalf("runtimeRegistry has %d entries, want exactly 2 (python, node) — operator-only, no tenant-supplied runtimes (D2)", len(runtimeRegistry))
+	}
+	for _, name := range []string{"python", "node"} {
+		d, ok := runtimeRegistry[name]
+		if !ok {
+			t.Errorf("runtimeRegistry missing %q", name)
+			continue
+		}
+		if d.Strategy.Name() != name {
+			t.Errorf("runtimeRegistry[%q].Strategy.Name() = %q, want %q", name, d.Strategy.Name(), name)
+		}
+	}
+}
+
+// TestResolveStrategy_ExactMatchParityWithLegacy (EC-3): the registry lookup
+// preserves the switch's byte-for-byte input semantics — case-sensitive, no
+// trim. "Python", "python " (trailing space), "" all fail closed exactly like
+// the legacy default branch. NOT normalizing is deliberate: normalizing would
+// CHANGE behavior for callers that relied on the old exact-match.
+func TestResolveStrategy_ExactMatchParityWithLegacy(t *testing.T) {
+	for _, in := range []string{"Python", "python ", " node", "NODE", "", "rust"} {
+		if got := ResolveStrategy(in).Name(); got != "unsupported" {
+			t.Errorf("ResolveStrategy(%q) = %q, want unsupported (exact-match parity with legacy switch — EC-3)", in, got)
+		}
+	}
+}

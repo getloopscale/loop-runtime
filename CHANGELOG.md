@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **M14 gap #1 — runtime registry data-driven.** `api/internal/argo/languages.go` `ResolveStrategy` deixou de ser um switch hardcoded e passou a resolver via `runtimeRegistry map[string]RuntimeDescriptor` (operator-only, python+node) — adicionar um runtime é uma entrada de config, não um branch de código (padrão portado do KServe `ServingRuntime`, blueprint Q1). Fail-closed preservado: runtime desconhecido → `unsupportedStrategy` (D4). EC-3: lookup exact-match preserva a semântica byte-a-byte do switch legacy (`"Python"`, `"python "`, `""` → unsupported). Tests: `TestRuntimeRegistry_IsDataDriven` + `TestResolveStrategy_ExactMatchParityWithLegacy`. (plan `m14-kserve-gaps-closure`)
 - Roadmap amended: added M14 KServe Cross-Validation Gaps Closure (`/roadmap-feature kserve-cross-validation-gaps`) — 6 gaps da cross-validation vs KServe (relatório `cross-validation-output/final_report.md`, score 3.89/5.0), cada entrega do DoD citando o arquivo de referência do kserve; kserve/kserve (Apache-2.0) adicionado à tabela de referências do roadmap
 
 ### Changed
