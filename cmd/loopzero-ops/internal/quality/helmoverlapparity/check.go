@@ -133,6 +133,14 @@ func Check(cfg Config) (*Outcome, error) {
 				Reason:           "drift: bootstrap chart leads published",
 			})
 		}
+
+		// M14 gap #3 — content diff of the security-critical fields that MUST be
+		// identical across both chart copies (version parity alone does not prove
+		// content parity). Reasons are absolute paths so the printed diff names
+		// the file; the caller (quality_gates_helm.go) already renders Violations.
+		bootstrapValues := filepath.Join(cfg.RepoRoot, "infra/helm", pair.BootstrapDir, "values.yaml")
+		publishedValues := filepath.Join(cfg.RepoRoot, "charts", pair.PublishedDir, "values.yaml")
+		out.Violations = append(out.Violations, diffChartContent(bootstrapValues, publishedValues, pair.BootstrapDir)...)
 	}
 	out.Pass = len(out.Violations) == 0
 	return out, nil
