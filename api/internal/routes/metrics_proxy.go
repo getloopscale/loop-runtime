@@ -189,7 +189,11 @@ func buildPromQL(signal, tenantID, projectName string) string {
 	case "p95_latency":
 		return fmt.Sprintf("histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{%s}[5m]))", labels)
 	case "error_rate":
-		return fmt.Sprintf(`rate(http_requests_total{status=~"5..",%s}[5m])`, labels)
+		// loopzero#170: error_rate is displayed as a PERCENTAGE by the dashboard
+		// (SignalGrid fmtPercent). It must be the ratio of 5xx to total requests
+		// ×100, NOT a raw 5xx req/s rate. Division by zero (no traffic) yields an
+		// empty/NaN series → the handler maps that to "collecting".
+		return fmt.Sprintf(`sum(rate(http_requests_total{status=~"5..",%s}[5m])) / sum(rate(http_requests_total{%s}[5m])) * 100`, labels, labels)
 	case "rps":
 		return fmt.Sprintf("rate(http_requests_total{%s}[1m])", labels)
 	case "status_terminal":

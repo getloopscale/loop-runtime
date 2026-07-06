@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- pgxRowAdapter: Scan maps pgx.ErrNoRows to db.ErrNoRows ---
@@ -101,11 +102,14 @@ func (f *fakeBuildStore) GetBuildApps(_ context.Context, _ string) ([]db.BuildAp
 }
 
 // Stubs for interface satisfaction (not used in these tests).
-func (f *fakeBuildStore) Create(_ context.Context, _ db.DBTX, _ *db.Build) error      { return nil }
+func (f *fakeBuildStore) Create(_ context.Context, _ db.DBTX, _ *db.Build) error { return nil }
 func (f *fakeBuildStore) HasActiveBuild(_ context.Context, _ db.DBTX, _, _, _ string) (bool, error) {
 	return false, nil
 }
 func (f *fakeBuildStore) UpdateStatus(_ context.Context, _ db.DBTX, _ string, _ string) (*db.Build, error) {
+	return nil, nil
+}
+func (f *fakeBuildStore) UpdateStatusIfCurrent(_ context.Context, _, _ string, _ statemachine.BuildPhase, _ string) (*db.Build, error) {
 	return nil, nil
 }
 func (f *fakeBuildStore) SetErrorMessage(_ context.Context, _ db.DBTX, _, _ string) error { return nil }
@@ -648,4 +652,48 @@ type fakeStatusBuildStoreWithError struct {
 
 func (f *fakeStatusBuildStoreWithError) ListByProject(_ context.Context, _, _ string, _, _ int) ([]db.Build, error) {
 	return nil, f.err
+}
+
+// TestGetRedeploySource_PreservesRuntime — canonical regression-protector for
+// loopzero#185 (root cause found during Cleanroom-UP-LIVE mandate 2026-07-04):
+// `GetRedeploySource` copied Name/Type/Port/Path/Build/Start/Rendering/Secrets/
+// Replicas/Autoscaling but silently dropped `Runtime`. Cascading effect: redeployed
+// build had empty Runtime → build_plan resolveLanguageStrategy returned
+// unsupportedStrategy → "Failed to build manifests with custom domains" → no
+// release ACTIVE → 13 dogfood wrappers assuming deployed baseline failed.
+// The persisted BuildAppSpec HAD runtime="node" (first webhook autodeploy build);
+// the redeploy adapter was the leak.
+func TestGetRedeploySource_PreservesRuntime(t *testing.T) {
+	store := &fakeBuildStore{
+		build: &db.Build{
+			ID:          "build-source",
+			TenantID:    "tn-1",
+			ProjectID:   "teste",
+			Environment: "production",
+			CommitSHA:   "dcd30d4a3a70b6775684e2a9e32945d57663a9f0",
+			Status:      "SUCCEEDED",
+		},
+		apps: []db.BuildAppSpec{
+			{
+				Name:    "app",
+				Type:    "server",
+				Runtime: "node", // ← the field the adapter used to drop
+				Path:    ".",
+				Port:    3000,
+				Build:   "buildpack",
+				Start:   "npm start",
+			},
+		},
+	}
+	adapter := &BuildOrchestratorAdapter{BuildStore: store}
+	src, err := adapter.GetRedeploySource(context.Background(), "tn-1", "build-source")
+	if err != nil {
+		t.Fatalf("GetRedeploySource err=%v", err)
+	}
+	if len(src.Apps) != 1 {
+		t.Fatalf("expected 1 app, got %d", len(src.Apps))
+	}
+	if got := src.Apps[0].Runtime; got != "node" {
+		t.Fatalf("Runtime dropped by redeploy adapter: got=%q want=%q — reproduces loopzero#185 cascade", got, "node")
+	}
 }

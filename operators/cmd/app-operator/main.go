@@ -7,10 +7,17 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
+	// pgx stdlib driver — registered on import; used only when the data-plane
+	// poller is enabled (default OFF). Zero runtime cost for legacy operators.
+	_ "github.com/jackc/pgx/v5/stdlib"
+	promapi "github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,7 +28,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/app"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
@@ -75,8 +82,8 @@ func main() {
 	// via NewContextLogger(baseLogger, spanExtractorFn) and call FromContext
 	// at each reconcile boundary.
 
-	if shared.PprofEnabled() {
-		shared.StartPprofServer()
+	if reconcilehelpers.PprofEnabled() {
+		reconcilehelpers.StartPprofServer()
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -120,11 +127,11 @@ func main() {
 	// observed via task doctor. Pre-flip, the warning + loopzero_app_operator_
 	// cell_factory_disabled_total counter (T1.5/find_arch_007 wired) provides
 	// observability of the degraded mode.
-	var appFactory shared.RuntimeClientFactory
+	var appFactory reconcilehelpers.RuntimeClientFactory
 	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG") == "true"
 	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
 	if runtimeKubeconfig != "" {
-		runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+		runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
 		if err != nil {
 			if requireKubeconfig {
 				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true — refusing to start")
@@ -132,7 +139,7 @@ func main() {
 			}
 			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled (degraded)")
 		} else {
-			appFactory = shared.NewCellAwareRuntimeClientFactory(
+			appFactory = reconcilehelpers.NewCellAwareRuntimeClientFactory(
 				mgr.GetClient(), runtimeClient, "loopzero-system")
 			setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
 		}
@@ -152,6 +159,53 @@ func main() {
 	if err := app.SetupExposureController(mgr); err != nil {
 		setupLog.Error(err, "unable to setup ExposureController")
 		os.Exit(1)
+	}
+
+	// T2.2 of plan dashboard-badge-data-plane-poller — closes Red Team
+	// loopzero-cloud#128. Opt-in periodic Prometheus scrape that persists
+	// per-(tenant, project, environment) readiness snapshots into
+	// env_targets. See operators/internal/app/data_plane_poller.go.
+	//
+	// Env gate (default OFF): registering the Runnable is an operator
+	// decision because it introduces PG + Prometheus dependencies that
+	// legacy app-operator deployments don't need.
+	//
+	// When LOOPZERO_DATA_PLANE_POLLER_ENABLED=true, LOOPZERO_DATA_PLANE_POLLER_PG_URL
+	// and LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL become MANDATORY — refusing
+	// to start on missing config is the honest signal (fail-fast, no
+	// silent no-op that would hide misconfiguration).
+	//
+	// LOOPZERO_DATA_PLANE_POLLER_INTERVAL controls the scrape cadence; 30s is
+	// the canonical default (blueprint Q6 + EC-7 no-flicker headroom).
+	if os.Getenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED") == "true" {
+		pgURL := os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PG_URL")
+		promURL := os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL")
+		if pgURL == "" || promURL == "" {
+			setupLog.Error(nil, "LOOPZERO_DATA_PLANE_POLLER_ENABLED=true but PG_URL / PROMETHEUS_URL missing — refusing to start")
+			os.Exit(1)
+		}
+		interval := 30 * time.Second
+		if raw := os.Getenv("LOOPZERO_DATA_PLANE_POLLER_INTERVAL"); raw != "" {
+			if v, err := time.ParseDuration(raw); err == nil && v > 0 {
+				interval = v
+			}
+		}
+		db, err := sql.Open("pgx", pgURL)
+		if err != nil {
+			setupLog.Error(err, "data-plane-poller: sql.Open failed — refusing to start")
+			os.Exit(1)
+		}
+		promClient, err := promapi.NewClient(promapi.Config{Address: promURL})
+		if err != nil {
+			setupLog.Error(err, "data-plane-poller: prom client init failed — refusing to start")
+			os.Exit(1)
+		}
+		poller := app.NewDataPlanePoller(&app.PromV1Adapter{API: promv1.NewAPI(promClient)}, db, interval, nil)
+		if err := mgr.Add(poller); err != nil {
+			setupLog.Error(err, "data-plane-poller: mgr.Add failed — refusing to start")
+			os.Exit(1)
+		}
+		setupLog.Info("data-plane-poller: enabled", "interval", interval)
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

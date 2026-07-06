@@ -13,11 +13,12 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -49,15 +50,15 @@ type AppAutoscalingInput struct {
 
 // AppInput describes a single app from the CLI request.
 type AppInput struct {
-	Name      string               `json:"name"`
-	Type      string               `json:"type,omitempty"`       // "server", "worker", "frontend"
-	Port      int                  `json:"port,omitempty"`
-	Path      string               `json:"path,omitempty"`
-	Runtime   string               `json:"runtime,omitempty"`     // services.json runtime: "python" | "node" — the build-strategy key (T1, F-dom-2)
-	Build     string               `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
-	Start     string               `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
-	Rendering string               `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
-	Secrets   []string             `json:"secrets,omitempty"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type,omitempty"` // "server", "worker", "frontend"
+	Port      int      `json:"port,omitempty"`
+	Path      string   `json:"path,omitempty"`
+	Runtime   string   `json:"runtime,omitempty"`   // services.json runtime: "python" | "node" — the build-strategy key (T1, F-dom-2)
+	Build     string   `json:"build,omitempty"`     // "dockerfile", "buildpack", "custom"
+	Start     string   `json:"start,omitempty"`     // T0.2: declared services.json start command (canonical Dockerfile CMD)
+	Rendering string   `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Secrets   []string `json:"secrets,omitempty"`
 	// B15: scaling config — either Replicas OR Autoscaling (never both).
 	// Orchestrator enforces plan caps and mutual exclusion.
 	Replicas    int                  `json:"replicas,omitempty"`
@@ -168,7 +169,7 @@ type AdmissionChecker interface {
 
 // CellResolver resolves the cell_id for a given tenant.
 // MEET-053 A-06: Replaces hardcoded DefaultCellID in admission checks.
-// Implemented by db.PostgresCellStore.GetTenantCellID.
+// Implemented by store.PostgresCellStore.GetTenantCellID.
 type CellResolver interface {
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
@@ -179,12 +180,12 @@ type CellResolver interface {
 // detected by the BuildReconcileLoop which polls Argo Workflow CRDs from the
 // control plane. The build cluster no longer calls the API.
 type BuildHandler struct {
-	orch          BuildOrchestratorService
-	logger        *slog.Logger
-	admission     AdmissionChecker     // nil = disabled, no-op
-	cellResolver  CellResolver         // MEET-053: resolves tenant → cell_id per-request
-	envEnsurer    EnvironmentEnsurer   // Plan T2.2 D5: auto-create env on first deploy --env <novo>
-	secretResync  SecretResyncer       // V9 L20: resync PG secrets to workload K8s post-envEnsurer
+	orch         BuildOrchestratorService
+	logger       *slog.Logger
+	admission    AdmissionChecker   // nil = disabled, no-op
+	cellResolver CellResolver       // MEET-053: resolves tenant → cell_id per-request
+	envEnsurer   EnvironmentEnsurer // Plan T2.2 D5: auto-create env on first deploy --env <novo>
+	secretResync SecretResyncer     // V9 L20: resync PG secrets to workload K8s post-envEnsurer
 }
 
 // NewBuildHandler creates a new BuildHandler.
@@ -321,13 +322,27 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// the gap — empty bodies now reach the guard as 500 INTERNAL_ERROR.
 	// Fail fast at the system boundary with a typed 400 instead.
 	if len(req.Apps) == 0 {
+		// Red Team loopzero-cloud#126 — when this is a redeploy_of request and
+		// the source build itself has no apps (legacy seed data or synthetic
+		// fixture), the user has no local `.loopzero/services.json` to edit;
+		// pointing them there is misleading. Surface a redeploy-specific
+		// message that names the source build and explains the actionable
+		// fix: pick a source build that has apps.
+		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
+		if req.RedeployOf != "" {
+			detail = fmt.Sprintf(
+				"Source build %s has no apps to redeploy. Pick a build that completed with at least one app.",
+				req.RedeployOf,
+			)
+		}
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			// Red Team loopzero-cloud#123 — guide the customer to the canonical
-			// `.loopzero/services.json` (loopzerokit v2). The legacy `loopzero.yaml` /
-			// `apps:` has been retired; following stale guidance leads users
-			// to edit a file the build silently ignores.
-			"At least one app is required. Check your `.loopzero/services.json` for a `services:` array.",
+			// Red Team loopzero-cloud#123 — when this is a fresh deploy, guide
+			// the customer to the canonical `.loopzero/services.json` (loopzerokit
+			// v2). The legacy `loopzero.yaml` / `apps:` has been retired;
+			// following stale guidance leads users to edit a file the build
+			// silently ignores.
+			detail,
 			400,
 		))
 		return
@@ -550,7 +565,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 // mapBuildError maps orchestrator errors to HTTP responses.
 //
 // Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
-// extends the ladder with services.AsSubmitBuildError dispatch BEFORE the
+// extends the ladder with build.AsSubmitBuildError dispatch BEFORE the
 // fallback so wrap-site discriminated errors from BuildOrchestrator.SubmitBuild
 // (workflow / project ensure / DB write / app normalize / unknown) surface
 // with reason-specific messages composed with the verbatim cause — instead
@@ -581,7 +596,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// BEFORE the generic catchall. The reason label is the wire form
 	// (Stringer output); the verbatim cause is composed into the user-
 	// facing message via pkg/errors.NewBuildSubmitFailedFromReason.
-	if se, ok := services.AsSubmitBuildError(err); ok {
+	if se, ok := build.AsSubmitBuildError(err); ok {
 		slog.Error("build trigger failed (typed)",
 			"reason", se.Reason.String(),
 			"stage", string(se.Stage),
@@ -611,4 +626,3 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// errors that genuinely came from outside BuildOrchestrator.SubmitBuild.
 	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 }
-

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 // =============================================================================
@@ -17,12 +17,12 @@ import (
 func TestTenantDBDeleterAdapter_DeleteTenantsFKOrdered_MapsFields(t *testing.T) {
 	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): store type widened
 	// from concrete *db.PostgresTenantStore (deleted) to
-	// db.AdminTenantStore interface. The test exercises the adapter
+	// store.AdminTenantStore interface. The test exercises the adapter
 	// wiring by constructing the sqlc-backed wrapper with a nil pool
-	// — db.NewTenantStoreSqlc(nil) returns a non-nil store that
+	// — store.NewTenantStoreSqlc(nil) returns a non-nil store that
 	// satisfies AdminTenantStore. Actual DB calls would panic via the
 	// SqlcBridge guard (which is the desired fail-fast behavior).
-	store := db.NewTenantStoreSqlc(nil)
+	store := store.NewTenantStoreSqlc(nil)
 	adapter := &TenantDBDeleterAdapter{Store: store}
 	if adapter.Store == nil {
 		t.Fatal("expected non-nil store")
@@ -68,7 +68,6 @@ func TestRollbackServiceAdapter_StructExists(t *testing.T) {
 // =============================================================================
 // Verify compile-time interface assertions
 // =============================================================================
-
 
 // =============================================================================
 // BuildOrchestratorAdapter - OnBuildCompleted (covers app translation)

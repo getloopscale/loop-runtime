@@ -3,7 +3,9 @@ module github.com/getloopscale/loopzero/operators
 go 1.26.1
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/go-logr/logr v1.4.3
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/minio/madmin-go/v3 v3.0.110
 	github.com/minio/minio-go/v7 v7.0.90
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -21,7 +23,12 @@ require (
 	sigs.k8s.io/controller-runtime v0.23.3
 )
 
-require github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+require (
+	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+)
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
@@ -66,7 +73,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.5 // indirect
+	github.com/prometheus/common v0.67.5
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/prometheus/prom2json v1.4.2 // indirect
 	github.com/prometheus/prometheus v0.303.0 // indirect

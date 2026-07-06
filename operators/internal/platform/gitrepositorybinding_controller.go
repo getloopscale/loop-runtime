@@ -23,7 +23,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
@@ -55,16 +55,16 @@ var gitRepositoryBindingDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for GitRepositoryBinding resources.
 func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := shared.StartReconcileSpan(ctx, "gitrepobinding", req.Name, req.Namespace)
+	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "gitrepobinding", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			shared.RecordError(span, retErr)
+			reconcilehelpers.RecordError(span, retErr)
 		} else {
-			shared.SetSuccess(span)
+			reconcilehelpers.SetSuccess(span)
 		}
-		shared.ReconcileOutcome("gitrepobinding", start, retErr)
+		reconcilehelpers.ReconcileOutcome("gitrepobinding", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -82,7 +82,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	ctx = correlation.WithID(ctx, binding.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.GitRepositoryBinding { return &loopzerov1.GitRepositoryBinding{} },
 		func(x *loopzerov1.GitRepositoryBinding) *[]metav1.Condition { return &x.Status.Conditions },
 		gitRepositoryBindingDetailTypes)()
@@ -93,7 +93,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Add finalizer if not present. Re-fetches in place to avoid stale resourceVersion.
-	if err := shared.EnsureFinalizer(ctx, r.Client, &binding, repoBindingFinalizer, req.NamespacedName); err != nil {
+	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &binding, repoBindingFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -355,7 +355,7 @@ func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, bi
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the manager.
 func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Client) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.GitRepositoryBinding{}, shared.ForOption()).
+		For(&loopzerov1.GitRepositoryBinding{}, reconcilehelpers.ForOption()).
 		Named("gitrepositorybinding").
 		Complete(&GitRepositoryBindingReconciler{
 			Client:     mgr.GetClient(),

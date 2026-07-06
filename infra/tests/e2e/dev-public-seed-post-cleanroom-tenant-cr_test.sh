@@ -16,8 +16,8 @@
 #   - seed-post-cleanroom-all.sh just succeeded (this test is the post-condition)
 #
 # Scenarios:
-#   A — admin@loopzero.example's Tenant CR (tn-78d5c2d4f678b774) present
-#   B — paulohenrique.java@gmail.com's Tenant CR (tn-79611071399a2e5e) present  ← the bug
+#   A — admin@loopzero.example's Tenant CR (tn-243c747b30c41e51) present
+#   B — paulohenrique.java@gmail.com's Tenant CR (tn-ffdf1c7f4cc0168e) present  ← the bug
 #
 # Pre-fix expectation: A passes, B fails (NotFound) → 1/2 PASS, exit non-zero.
 # Post-fix expectation: A and B pass → 2/2 PASS, exit 0.
@@ -45,8 +45,8 @@ APIVERSION_GROUP="tenants.loopzero.io"
 # canonical EMAIL=admin@loopzero.example and EMAIL=paulohenrique.java@gmail.com
 # seed runs respectively (per seed-admin script lines 230-280: tenant_id is
 # derived from the Kratos identity id via a stable canonical format).
-TENANT_ADMIN="tn-78d5c2d4f678b774"
-TENANT_REDTEAM="tn-79611071399a2e5e"
+TENANT_ADMIN="tn-243c747b30c41e51"
+TENANT_REDTEAM="tn-ffdf1c7f4cc0168e"
 
 SKIP_LIVE=0
 SCENARIO=""

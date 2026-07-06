@@ -102,13 +102,28 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-preview.sh"           # J-23
   "archive/canonical-tests-v1/scripts/local/dogfood-live-url.sh"          # J-25
   "archive/canonical-tests-v1/scripts/local/dogfood-login.sh"             # J-01 (M0 Plan A v0.19.0)
+  "archive/canonical-tests-v1/scripts/local/dogfood-register.sh"          # J-02 (M0 — provisioning snapshot + completing screen)
+  "archive/canonical-tests-v1/scripts/local/dogfood-verification.sh"      # J-03 (M0 — resend cooldown + PinInput)
+  "archive/canonical-tests-v1/scripts/local/dogfood-overview.sh"          # J-06 (M1 — KPI strip: plan_price + deploys aggregate)
   "archive/canonical-tests-v1/scripts/local/dogfood-seed-post-cleanroom-tenant-cr.sh"  # Red Team #118 (2026-06-29)
   "archive/canonical-tests-v1/scripts/local/dogfood-promote-no-op.sh"                  # Red Team #120 P0 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-deployments-active-row-attribution.sh"  # Red Team #121 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-health-truth.sh"                       # Red Team #124 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-projects-badge-data-plane-aware.sh"    # Red Team #128 (2026-07-01) — plan dashboard-badge-data-plane-poller
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-seed-restarts-cloud.sh"          # Red Team loopzero/loopzero#154 (2026-07-01) — billing 404 upgrade dead
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-stripe-price-ids-seed-canonical.sh"    # Red Team loopzero/loopzero#155 (2026-07-01) — BILLING_NOT_CONFIGURED (Stripe price IDs unset)
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-webhook-fulfillment.sh"                 # Red Team loopzero-cloud#156 (2026-07-01) — payment succeeds but plan stays starter (webhook not delivered)
+  "archive/canonical-tests-v1/scripts/local/dogfood-billing-pro-price-canonical.sh"                  # Red Team loopzero-cloud#157 (2026-07-01) — preço divergente (Stripe $19 vs UI $29)
+  "archive/canonical-tests-v1/scripts/local/dogfood-promote-ensure-env.sh"                           # Red Team loopzero-cloud#158 (2026-07-01)
+  "archive/canonical-tests-v1/scripts/local/dogfood-promote-canonical-url.sh"                           # Red Team loopzero-cloud#159 (2026-07-01) — loopzero promote imprime URL sem prefixo de tenant (404)
+  "archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh"                    # Red Team loopzero-cloud#160 (2026-07-01) — loopzero logs sem --build "No builds found" apesar de builds existirem
+  "archive/canonical-tests-v1/scripts/local/dogfood-cli-promote-non-tty.sh"                               # Red Team loopzero-cloud#161 (2026-07-01) — promote non-TTY hang
+  "archive/canonical-tests-v1/scripts/local/dogfood-signup-auth-check-email.sh"                           # Red Team loopzero/loopzero#162 (2026-07-01) — BLOCKER P0 signup /auth/check-email 404
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-a11y-contrast-label-in-name.sh"             # Red Team loopzero/loopzero#163 (2026-07-01) — MAJOR a11y WCAG 1.4.3 + 2.5.3
   "archive/canonical-tests-v1/scripts/local/dogfood-build-error-canonical-manifest.sh"               # Red Team #123 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-deployment-detail-fail-loud.sh"                  # Red Team #122 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-status-preview-only-honest.sh"        # Red Team #98 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-c13-valid-destructive-config.sh"                 # c13 chaos — valid-but-destructive config fail-loud (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-repository-route-canonical.sh" # Red Team #102 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-project-status-no-retry-4xx.sh"       # Red Team #96 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-overview-recent-deploys-status-env-badges.sh" # Red Team #97 (2026-06-30)
@@ -127,9 +142,12 @@ WRAPPERS=(
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-auth-form-id-name.sh"                  # Red Team #51 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-onboarding-derive-deploy.sh"          # Red Team #56 (2026-06-30)
   "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-registration-alias.sh"                # Red Team #55 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-defer-jwt-exchange.sh"                # Red Team #50 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-loopzero-cloud-billing-seats-from-tenant-members.sh" # Red Team #42 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-dashboard-upgrade-error-actionable.sh"          # Red Team #40 (2026-06-30)
+  "archive/canonical-tests-v1/scripts/local/dogfood-engine-project-cap-rls-independent.sh"         # Red Team #111 (2026-06-30, latent-risk)
+  "archive/canonical-tests-v1/scripts/local/dogfood-engine-redeploy-empty-source-message.sh"       # Red Team #126 (2026-06-30)
   # Backlog journeys (added as their wrappers ship per roadmap Phase 3):
-  #   J-02 dogfood-register.sh
-  #   J-03 dogfood-verification.sh
   #   J-06 dogfood-overview.sh
   #   J-12 dogfood-team-rbac.sh
   #   J-13 dogfood-billing.sh

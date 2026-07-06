@@ -7,7 +7,54 @@ package generated
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const buildStatsByDay = `-- name: BuildStatsByDay :many
+SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS count
+FROM builds
+WHERE tenant_id = $1
+  AND created_at >= $2
+GROUP BY day
+ORDER BY day
+`
+
+type BuildStatsByDayParams struct {
+	TenantID  string             `json:"tenant_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type BuildStatsByDayRow struct {
+	Day   pgtype.Date `json:"day"`
+	Count int64       `json:"count"`
+}
+
+// J-06 / MEET-2026-07-03-003 D2: tenant-wide per-day build (deploy) counts for
+// the Overview deploys-by-day sparkline. Tenant isolation (#106/#111) — the
+// WHERE tenant_id = $1 predicate is the ONLY barrier under the BYPASSRLS engine
+// pool; NOT tenantpredicate:exempt so the CI gate enforces it. $2 is the window
+// lower bound (now() - window), computed in Go from the enumerated {7d,30d,90d}.
+// Day bucketing is server-side in UTC; the handler zero-fills missing days.
+func (q *Queries) BuildStatsByDay(ctx context.Context, db DBTX, arg BuildStatsByDayParams) ([]BuildStatsByDayRow, error) {
+	rows, err := db.Query(ctx, buildStatsByDay, arg.TenantID, arg.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BuildStatsByDayRow
+	for rows.Next() {
+		var i BuildStatsByDayRow
+		if err := rows.Scan(&i.Day, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const cancelActiveBuildsByEnv = `-- name: CancelActiveBuildsByEnv :many
 UPDATE builds
@@ -665,6 +712,59 @@ func (q *Queries) UpdateBuildStatusToRunning(ctx context.Context, db DBTX, arg U
 	return i, err
 }
 
+const updateBuildStatusToRunningIfCurrent = `-- name: UpdateBuildStatusToRunningIfCurrent :one
+UPDATE builds
+SET status = $1,
+    started_at = NOW()
+WHERE id = $2 AND tenant_id = $3 AND status = $4
+RETURNING id, tenant_id, project_id, environment, status, correlation_id, created_by, commit_sha, apps_spec, workflow_id, error_message, duration_seconds, cell_id, processing_by, processing_since, created_at, started_at, finished_at, bundle_digest
+`
+
+type UpdateBuildStatusToRunningIfCurrentParams struct {
+	Status   string `json:"status"`
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Status_2 string `json:"status_2"`
+}
+
+// CAS variant of UpdateBuildStatusToRunning (M9 5b, ADR 2026-07-03-m9-5b-nil-tx-status-atomicity).
+// Lock-free atomic QUEUED->RUNNING: applies ONLY if the row is still in the
+// expected `from` status ($4), closing the read-then-write window without a tx
+// or advisory lock. 0 rows => a concurrent lock-holder already advanced the
+// build => caller treats it as a superseded no-op. Tenant predicate preserved
+// (defense-in-depth; caller supplies req.TenantID).
+func (q *Queries) UpdateBuildStatusToRunningIfCurrent(ctx context.Context, db DBTX, arg UpdateBuildStatusToRunningIfCurrentParams) (Build, error) {
+	row := db.QueryRow(ctx, updateBuildStatusToRunningIfCurrent,
+		arg.Status,
+		arg.ID,
+		arg.TenantID,
+		arg.Status_2,
+	)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Environment,
+		&i.Status,
+		&i.CorrelationID,
+		&i.CreatedBy,
+		&i.CommitSha,
+		&i.AppsSpec,
+		&i.WorkflowID,
+		&i.ErrorMessage,
+		&i.DurationSeconds,
+		&i.CellID,
+		&i.ProcessingBy,
+		&i.ProcessingSince,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.BundleDigest,
+	)
+	return i, err
+}
+
 const updateBuildStatusToTerminal = `-- name: UpdateBuildStatusToTerminal :one
 UPDATE builds
 SET status = $1,
@@ -685,6 +785,58 @@ type UpdateBuildStatusToTerminalParams struct {
 // NULL (e.g., a QUEUED build cancelled before running) — duration = 0.
 func (q *Queries) UpdateBuildStatusToTerminal(ctx context.Context, db DBTX, arg UpdateBuildStatusToTerminalParams) (Build, error) {
 	row := db.QueryRow(ctx, updateBuildStatusToTerminal, arg.Status, arg.ID, arg.TenantID)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Environment,
+		&i.Status,
+		&i.CorrelationID,
+		&i.CreatedBy,
+		&i.CommitSha,
+		&i.AppsSpec,
+		&i.WorkflowID,
+		&i.ErrorMessage,
+		&i.DurationSeconds,
+		&i.CellID,
+		&i.ProcessingBy,
+		&i.ProcessingSince,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.BundleDigest,
+	)
+	return i, err
+}
+
+const updateBuildStatusToTerminalIfCurrent = `-- name: UpdateBuildStatusToTerminalIfCurrent :one
+UPDATE builds
+SET status = $1,
+    finished_at = NOW(),
+    duration_seconds = COALESCE(EXTRACT(EPOCH FROM (NOW() - started_at))::int, 0)
+WHERE id = $2 AND tenant_id = $3 AND status = $4
+RETURNING id, tenant_id, project_id, environment, status, correlation_id, created_by, commit_sha, apps_spec, workflow_id, error_message, duration_seconds, cell_id, processing_by, processing_since, created_at, started_at, finished_at, bundle_digest
+`
+
+type UpdateBuildStatusToTerminalIfCurrentParams struct {
+	Status   string `json:"status"`
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Status_2 string `json:"status_2"`
+}
+
+// CAS variant of UpdateBuildStatusToTerminal (M9 5b). Lock-free atomic
+// transition to a terminal phase, applied ONLY if the row is still in the
+// expected `from` status ($4). COALESCE handles NULL started_at (duration=0).
+// 0 rows => superseded no-op.
+func (q *Queries) UpdateBuildStatusToTerminalIfCurrent(ctx context.Context, db DBTX, arg UpdateBuildStatusToTerminalIfCurrentParams) (Build, error) {
+	row := db.QueryRow(ctx, updateBuildStatusToTerminalIfCurrent,
+		arg.Status,
+		arg.ID,
+		arg.TenantID,
+		arg.Status_2,
+	)
 	var i Build
 	err := row.Scan(
 		&i.ID,

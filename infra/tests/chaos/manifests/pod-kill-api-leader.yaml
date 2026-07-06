@@ -24,12 +24,13 @@ metadata:
     loopzero.io/roadmap: "01"
     loopzero.io/dod-test: "Non-leader pod restart count = 0 during 30 min"
     loopzero.io/hypothesis: "Killing leader pod elects new leader within 90s; surviving pod never restarts"
+    # No pod restarts during the experiment window AND API health stays
+    # 200. `and on()` is the canonical join across heterogeneous vectors
+    # (pod metric vs blackbox probe instance label set differ); without
+    # the explicit `on()` modifier the implicit set-intersection returns
+    # empty even when both conditions hold.
     loopzero.io/slo-query: |
-      # No pod restarts during the experiment window
-      increase(kube_pod_container_status_restarts_total{pod=~"loopzero-api-.*"}[5m]) == 0
-      and
-      # API health stays 200
-      probe_success{job="loopzero-api-health"} == 1
+      ((sum(increase(kube_pod_container_status_restarts_total{pod=~"loopzero-api-.*"}[5m])) or vector(0)) == 0) and on() (max(probe_success{job="loopzero-api-health"}) == 1)
 spec:
   action: pod-kill
   mode: one

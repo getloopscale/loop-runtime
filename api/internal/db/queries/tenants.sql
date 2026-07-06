@@ -91,6 +91,14 @@ WHERE tenant_id = ANY($1::text[]);
 DELETE FROM tenants
 WHERE id = ANY($1::text[]);
 
+-- name: AdminEvictMeteringCursors :execrows
+-- SC-5 (ADR-13, plan metering-compute-loop) — GC the compute-metering cursors on
+-- tenant eviction, so a reused/reprovisioned tenant_id cannot bill a stale
+-- [old_last_metered_at, now()] window (resurrection double-bill). metering_cursor
+-- has no FK to tenants, so ordering vs the other evict steps does not matter.
+DELETE FROM metering_cursor
+WHERE tenant_id = ANY($1::text[]);
+
 -- =========================================================================
 -- SOFT-DELETE LIFECYCLE (PostgresTenantDeletionStore — MEET-052)
 -- =========================================================================

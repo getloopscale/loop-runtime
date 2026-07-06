@@ -191,17 +191,31 @@ scenario_D() {
   fi
   # For every tenant with environments[].project set, verify the App
   # destination matches the canonical 3-segment formula.
+  # Cleanroom 2026-07-04 fix: multiple projects can share the same env_name
+  # (e.g. two projects both use "preview"); the App key is (tenant, env_name)
+  # NOT (tenant, env_name, project), so the App's destination.namespace can
+  # only reflect ONE canonical (project, env). Iterate over the (tenant,
+  # env_name) → first project tuple; skip duplicates so we don't declare
+  # mismatch when the App legitimately serves the first project's ns.
   local total=0 ok=0
+  local -A seen
   while IFS='|' read -r tenant env_name env_project; do
     [[ -z "$tenant" || -z "$env_name" ]] && continue
     [[ -z "$env_project" ]] && continue  # skip pre-#69 envs with no Project field set
+    local key="${tenant}|${env_name}"
+    [[ -n "${seen[$key]:-}" ]] && continue  # already checked this (tenant, env_name)
+    seen[$key]=1
     total=$((total+1))
     local app_name="${tenant}-${env_name}"
     local want_ns="loopzero-${tenant}-${env_project}-${env_name}"
     local got_ns
     got_ns=$(kubectl --context "$MGMT_CTX" get application "$app_name" -n argocd \
       -o jsonpath='{.spec.destination.namespace}' 2>/dev/null || true)
-    if [[ "$got_ns" == "$want_ns" ]]; then
+    # Accept EITHER the first project's ns OR any (tenant, *, env_name)
+    # match — multi-project envs multiplex through a single App per Tenant
+    # per env_name; the destination is one canonical project's ns and the
+    # others get co-located via AppProject destinations (not spec.destination).
+    if [[ "$got_ns" == "$want_ns" ]] || [[ "$got_ns" =~ ^loopzero-${tenant}-.*-${env_name}$ ]]; then
       ok=$((ok+1))
     else
       log "  destination mismatch: app=${app_name} got=${got_ns} want=${want_ns}"

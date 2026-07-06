@@ -30,16 +30,18 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
 //
 // Both fields required:
-//   • TenantID — must exist in tenants table.
-//   • CellID   — must match cells table (gated by FK semantics in
-//                CellPinner.Pin); must be in 'active' status (Pin
-//                rejects pinning to draining/maintenance/retired).
+//   - TenantID — must exist in tenants table.
+//   - CellID   — must match cells table (gated by FK semantics in
+//     CellPinner.Pin); must be in 'active' status (Pin
+//     rejects pinning to draining/maintenance/retired).
 type AdminPinCellInput struct {
 	TenantID string `json:"tenant_id"`
 	CellID   string `json:"cell_id"`
@@ -50,21 +52,21 @@ type AdminPinCellInput struct {
 // Reports the previous cell so operator can rollback via a second
 // call: `pin --tenant <id> --cell <previous>`.
 type AdminPinCellResponse struct {
-	TenantID    string `json:"tenant_id"`
+	TenantID     string `json:"tenant_id"`
 	PreviousCell string `json:"previous_cell"`
-	NewCell     string `json:"new_cell"`
-	Updated     bool   `json:"updated"`
+	NewCell      string `json:"new_cell"`
+	Updated      bool   `json:"updated"`
 }
 
 // CellPinner is the service interface for pinning a tenant to a cell.
 // Implementation lives in services/cell_pinner.go (scaffold next).
 //
 // Errors returned:
-//   • ErrCellNotFound      — cell_id does not exist in cells table.
-//   • ErrCellNotPinnable   — cells.status ∈ {draining, maintenance,
-//                            retired}; only 'active' accepts pin.
-//   • ErrCellAtCapacity    — cells.capacity_tenants_max reached.
-//   • ErrTenantNotFound    — tenant_id does not exist.
+//   - ErrCellNotFound      — cell_id does not exist in cells table.
+//   - ErrCellNotPinnable   — cells.status ∈ {draining, maintenance,
+//     retired}; only 'active' accepts pin.
+//   - ErrCellAtCapacity    — cells.capacity_tenants_max reached.
+//   - ErrTenantNotFound    — tenant_id does not exist.
 type CellPinner interface {
 	Pin(ctx context.Context, tenantID, cellID string) (previousCell string, err error)
 }
@@ -124,16 +126,16 @@ func AdminPinCellHandler(pinner CellPinner) http.HandlerFunc {
 			status := http.StatusInternalServerError
 			code := "internal"
 			switch {
-			case errors.Is(err, services.ErrTenantNotFound):
+			case errors.Is(err, placementsvc.ErrTenantNotFound):
 				status = http.StatusNotFound
 				code = "tenant_not_found"
-			case errors.Is(err, services.ErrCellNotFound):
+			case errors.Is(err, placementsvc.ErrCellNotFound):
 				status = http.StatusNotFound
 				code = "cell_not_found"
-			case errors.Is(err, services.ErrCellNotPinnable):
+			case errors.Is(err, placementsvc.ErrCellNotPinnable):
 				status = http.StatusConflict
 				code = "cell_not_pinnable"
-			case errors.Is(err, services.ErrCellAtCapacity):
+			case errors.Is(err, build.ErrCellAtCapacity):
 				status = http.StatusConflict
 				code = "cell_at_capacity"
 			}

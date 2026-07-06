@@ -9,9 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -30,7 +31,7 @@ var _ db.ReleaseStore = nil
 // The release_db source alone delivers ~60% of the canonical timeline
 // signal (release transitions: PENDING → ACTIVE → ROLLED_BACK), enough
 // for the v1 dashboard hero card while the remaining adapters mature.
-func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db.ReleaseStore) services.DeployTimelineSpawner {
+func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db.ReleaseStore) build.DeployTimelineSpawner {
 	if eventStore == nil {
 		return nil
 	}

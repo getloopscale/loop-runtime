@@ -16,13 +16,13 @@ import (
 // PoolConfig holds configurable database pool parameters.
 // All values have sensible defaults set by config.Load().
 type PoolConfig struct {
-	MaxConns         int32
-	MinConns         int32
-	MaxConnIdleTime  time.Duration
-	MaxConnLifetime  time.Duration
+	MaxConns          int32
+	MinConns          int32
+	MaxConnIdleTime   time.Duration
+	MaxConnLifetime   time.Duration
 	HealthCheckPeriod time.Duration
-	ConnectTimeout   time.Duration
-	StatementTimeout string // milliseconds as string for PostgreSQL runtime param
+	ConnectTimeout    time.Duration
+	StatementTimeout  string // milliseconds as string for PostgreSQL runtime param
 }
 
 // NewPool creates a PgxAdapter wrapping a new pgxpool.Pool connected to the given URL.

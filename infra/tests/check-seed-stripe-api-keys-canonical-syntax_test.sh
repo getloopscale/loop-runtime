@@ -47,9 +47,37 @@ assert "graceful exit 0 path" grep -qE "^[[:space:]]*exit 0$" "$SCRIPT"
 # interprets `|` as a shell pipe and `(` as syntax).
 assert "api_key prefix guard rk_test_/sk_test_ (EC-2) — line present" \
   grep -q "stripe.api_key field" "$SCRIPT"
-assert "size ≤ 100 LoC" test "$(wc -l < "$SCRIPT")" -le 100
+assert "size ≤ 130 LoC" test "$(wc -l < "$SCRIPT")" -le 130
 assert "no Co-Authored-By" ! grep -q "Co-Authored-By" "$SCRIPT"
 assert "allowlist entry present" grep -q 'seed-stripe-api-keys-canonical.sh' "$ALLOWLIST"
+
+# Red Team loopzero-cloud/loopzero#154 (2026-07-01): after materializing the
+# Secret, the seed MUST roll out loopzero-cloud so the pod picks up
+# STRIPE_API_KEY. Without a restart, boot-order dependency leaves
+# billingHandler nil → /v1/billing* returns 404 → upgrade flow dead.
+# Sibling seed-broker-canonical.sh establishes the canonical pattern
+# ("rollout restart deployment/loopzero-api" post-materialization); this
+# guard locks the same discipline for the Stripe seed.
+assert "rollout restart loopzero-cloud post-materialization (#154)" \
+  grep -q 'rollout restart deployment/loopzero-cloud' "$SCRIPT"
+assert "rollout status loopzero-cloud waits Ready (#154)" \
+  grep -q 'rollout status deployment/loopzero-cloud' "$SCRIPT"
+
+# Red Team loopzero/loopzero#155 (2026-07-01): after #154 unlocked the routes,
+# POST /v1/billing/checkout {"plan":"pro"} returns 503 BILLING_NOT_CONFIGURED
+# because STRIPE_PRICE_{STARTER,PRO,TEAM} env vars are unset in the pod.
+# loopzero-cloud/internal/billing/plans.go::PriceIDForPlan reads them via
+# os.Getenv — the seed MUST materialize all 3 into loopzero-stripe-api-keys
+# alongside STRIPE_API_KEY. Sponsor populates the IDs in dev-credentials.json
+# under stripe.price_{starter,pro,team}; the seed reads + materializes.
+assert "STRIPE_PRICE_PRO env-var materialization (#155)" \
+  grep -q 'from-literal=STRIPE_PRICE_PRO=' "$SCRIPT"
+assert "STRIPE_PRICE_TEAM env-var materialization (#155)" \
+  grep -q 'from-literal=STRIPE_PRICE_TEAM=' "$SCRIPT"
+assert "STRIPE_PRICE_STARTER env-var materialization (#155)" \
+  grep -q 'from-literal=STRIPE_PRICE_STARTER=' "$SCRIPT"
+assert "reads stripe.price_pro from dev-credentials.json (#155)" \
+  grep -q 'price_pro' "$SCRIPT"
 
 printf '\nsummary: %d pass / %d fail\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

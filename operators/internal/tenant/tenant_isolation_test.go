@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -141,7 +142,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should create loopzero-{tenant}-{env} namespace for each declared environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopzero-%s-%s", tenantName, env)
+				nsName := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -151,19 +152,19 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should set loopzero.io/tenant label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-%s", tenantName, env), "loopzero.io/tenant", tenantName)
+				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env), "loopzero.io/tenant", tenantName)
 			}
 		})
 
 		It("should set loopzero.io/environment label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-%s", tenantName, env), "loopzero.io/environment", env)
+				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env), "loopzero.io/environment", env)
 			}
 		})
 
 		It("should set loopzero.io/managed-by=environment-controller on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopzero-%s-%s", tenantName, env)
+				nsName := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -205,8 +206,8 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should give each tenant a distinct namespace that the other cannot claim", func() {
-			nsA := fmt.Sprintf("loopzero-%s-production", tenantA)
-			nsB := fmt.Sprintf("loopzero-%s-production", tenantB)
+			nsA := fmt.Sprintf("loopzero-%s-default-project-production", tenantA)
+			nsB := fmt.Sprintf("loopzero-%s-default-project-production", tenantB)
 
 			Eventually(func(g Gomega) {
 				var a, b corev1.Namespace
@@ -335,7 +336,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should not duplicate the loopzero-deployer ServiceAccount after re-reconcile", func() {
-			nsName := fmt.Sprintf("loopzero-%s-production", tenantName)
+			nsName := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var saList corev1.ServiceAccountList
 				g.Expect(k8sClient.List(ctx, &saList, client.InNamespace(nsName))).To(Succeed())
@@ -375,11 +376,11 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should create loopzero-deployer ServiceAccount in the runtime namespace", func() {
-			expectServiceAccountExists("loopzero-deployer", fmt.Sprintf("loopzero-%s-production", tenantName))
+			expectServiceAccountExists("loopzero-deployer", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
 		})
 
 		It("should create loopzero-deployer RoleBinding that binds the SA to a Role", func() {
-			expectDeployerRoleBinding(fmt.Sprintf("loopzero-%s-production", tenantName))
+			expectDeployerRoleBinding(fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
 		})
 
 		AfterAll(func() {
@@ -428,7 +429,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		It("should set correct tenantRef and namespace.name on each Environment CR", func() {
 			for _, env := range []string{"production", "staging"} {
 				envCRName := fmt.Sprintf("%s-%s", tenantName, env)
-				expectedNS := fmt.Sprintf("loopzero-%s-%s", tenantName, env)
+				expectedNS := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -450,9 +451,12 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 	// Source: src_tenant_isolation_missing_tenant_namespace_creation_fails
 	// BC: Capsule BC-003 (spec validation) → LoopZero CRD kubebuilder:validation:MinItems=1
 
-	Context("golden_tenant_isolation_empty_environments_rejected", func() {
-		It("should reject a Tenant CR with an empty environments list at admission", func() {
-			// minItems: 1 is enforced by the CRD structural schema — no controller needed.
+	Context("golden_tenant_isolation_empty_environments_accepted", func() {
+		It("should ACCEPT a Tenant CR with an empty environments list (CRD MinItems: 0 by design)", func() {
+			// environments is MinItems=0 BY DESIGN (config/crd/bases/loopzero.io_tenants.yaml
+			// schema comment: forcing MinItems=1 required factories to pre-populate).
+			// An empty list is accepted at admission. (This spec previously asserted a
+			// minItems:1 rejection — stale after the deliberate MinItems 1→0 change.)
 			tenant := &loopzerov1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "golden-empty-envs",
@@ -467,13 +471,19 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 						Branch:   "main",
 					},
 					Preview: loopzerov1.PreviewSpec{},
-					Limits:  loopzerov1.ResourceLimits{},
+					// Valid Limits (maxBuildConcurrency CRD minimum is 1) so the CR is
+					// otherwise-valid and only the empty environments list is under test.
+					Limits: loopzerov1.ResourceLimits{
+						MaxCPU:              resource.MustParse("8"),
+						MaxMemory:           resource.MustParse("16Gi"),
+						MaxStorage:          resource.MustParse("50Gi"),
+						MaxBuildConcurrency: 2,
+					},
 				},
 			}
 			err := k8sClient.Create(ctx, tenant)
-			Expect(err).To(HaveOccurred(), "empty environments list must be rejected by CRD admission")
-			Expect(err.Error()).To(ContainSubstring("spec.environments"),
-				"error message must reference the offending field")
+			Expect(err).NotTo(HaveOccurred(), "empty environments list is accepted (CRD MinItems: 0)")
+			_ = k8sClient.Delete(ctx, tenant)
 		})
 
 		AfterAll(func() {

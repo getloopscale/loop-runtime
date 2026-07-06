@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -25,7 +27,7 @@ import (
 // mustEnsure drives the deploy-time auto-create (nil tx → EnsureProject opens its
 // own tx and account-lock, the EC-1 own-tx branch). Mirrors what the build-submit
 // path does, minus the env-lock (covered separately by the held-env-lock test).
-func mustEnsure(t *testing.T, store *db.PostgresProjectStore, tenant, name, owner string) error {
+func mustEnsure(t *testing.T, store *store.PostgresProjectStore, tenant, name, owner string) error {
 	t.Helper()
 	return store.EnsureProject(context.Background(), nil, tenant, name, owner)
 }

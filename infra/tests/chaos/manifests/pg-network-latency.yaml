@@ -20,13 +20,13 @@ metadata:
   annotations:
     loopzero.io/roadmap: "04"
     loopzero.io/hypothesis: "500ms PG latency degrades gracefully, no 500s, no deadlocks"
+    # SLO query post-decomposition (2026-06-29). Canonical names
+    # loopzero_http_* → loopzero_api_*. Histogram + counter scraped via
+    # job=loopzero-api-metrics (infra/helm/monitoring/values-prometheus.yaml).
+    # `or vector(0)` defaults the 5xx rate to 0 when no 5xx series
+    # exist (the desired steady state).
     loopzero.io/slo-query: |
-      # p99 HTTP latency stays < 30s AND no 500 errors
-      histogram_quantile(0.99,
-        sum by (le) (rate(loopzero_http_request_duration_seconds_bucket[2m]))
-      ) < 30
-      and
-      sum(rate(loopzero_http_requests_total{code=~"5.."}[2m])) == 0
+      (histogram_quantile(0.99, sum by (le) (rate(loopzero_api_request_duration_seconds_bucket[2m]))) < 30) and on() ((sum(rate(loopzero_api_requests_total{status=~"5.."}[2m])) or vector(0)) == 0)
 spec:
   action: delay
   mode: all

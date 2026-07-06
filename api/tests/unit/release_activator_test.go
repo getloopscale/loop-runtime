@@ -9,9 +9,23 @@ import (
 	"testing"
 	"time"
 
+	releasesvc "github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
+
+// fakeDeployEventStore is a no-op AppendDeployEvent stub. The kernel calls it
+// on the SAME tx as the state transition (J-16 outbox — MEET-2026-07-03-005
+// Option C). These tests exercise state-transition semantics; the outbox emit
+// is covered by dedicated tests in the outbox package. Returning nil keeps the
+// kernel's transactional emit path exercised without pulling PG into unit
+// tests.
+type fakeDeployEventStore struct{}
+
+func (fakeDeployEventStore) AppendDeployEvent(_ context.Context, _ db.DBTX, _ store.DeployEvent) error {
+	return nil
+}
 
 // --- TestActivateReleaseKernel_HappyPath ---
 // Full 7-step activation sequence: re-fetch confirms PENDING, gets previous
@@ -37,14 +51,15 @@ func TestActivateReleaseKernel_HappyPath(t *testing.T) {
 		Status: "PENDING", CreatedAt: time.Now(),
 	}
 
-	apps := []services.ActivationAppInfo{
+	apps := []releasesvc.ActivationAppInfo{
 		{Name: "web", Status: "deployed", URL: "https://acme-my-app-web-production.test.local"},
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		apps, 42, testLogger,
 	)
 
@@ -108,9 +123,10 @@ func TestActivateReleaseKernel_SupersedesPreviousRelease(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 10, testLogger,
 	)
 
@@ -151,9 +167,10 @@ func TestActivateReleaseKernel_NoPreviousRelease(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 5, testLogger,
 	)
 
@@ -195,10 +212,11 @@ func TestActivateReleaseKernel_AlreadyActive_NoSideEffects(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
-		[]services.ActivationAppInfo{{Name: "web", Status: "deployed"}},
+		fakeDeployEventStore{},
+		[]releasesvc.ActivationAppInfo{{Name: "web", Status: "deployed"}},
 		10, testLogger,
 	)
 
@@ -238,9 +256,10 @@ func TestDeriveDeployID_Format_ViaCompletedEvent(t *testing.T) {
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		nil, 5, testLogger,
 	)
 
@@ -292,15 +311,16 @@ func TestReleaseAppsToActivationApps_ViaCompletedEvent(t *testing.T) {
 		Status: "PENDING", CreatedAt: time.Now(),
 	}
 
-	apps := []services.ActivationAppInfo{
+	apps := []releasesvc.ActivationAppInfo{
 		{Name: "api", Status: "deployed", URL: "https://acme-my-app-api-staging.test.local"},
 		{Name: "worker", Status: "deployed"}, // no URL for worker
 	}
 
 	// Act
-	err := services.ActivateReleaseKernel(
+	err := releasesvc.ActivateReleaseKernel(
 		context.Background(), nil, release,
 		releaseStore, envTargetStore, eventStore,
+		fakeDeployEventStore{},
 		apps, 15, testLogger,
 	)
 

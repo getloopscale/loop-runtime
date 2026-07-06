@@ -10,6 +10,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
+	domainsvc "github.com/getloopscale/loopzero/api/internal/services/domain"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loopzero/api/internal/cfkv"
@@ -20,7 +32,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -159,7 +170,7 @@ func setupDomains(
 	workflows *WorkflowDeps,
 	cfg config.Config,
 	logger *slog.Logger,
-) (*routes.DomainHandler, *services.DomainProvisioner, *services.DomainHealthChecker, *cfzone.Client) {
+) (*routes.DomainHandler, *domainsvc.DomainProvisioner, *domainsvc.DomainHealthChecker, *cfzone.Client) {
 	cnameTarget := "cname." + cfg.BaseDomain
 	domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
 	dnsVerifier := &domain.DNSVerifier{}
@@ -173,10 +184,10 @@ func setupDomains(
 		logger.Info("custom domains: TXT verification mode (v1)")
 	}
 
-	domainProvisioner := services.NewDomainProvisioner(
+	domainProvisioner := domainsvc.NewDomainProvisioner(
 		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
 		workflows.GitOpsPusher, stores.Locker, logger,
-		services.DomainProvisionerConfig{
+		domainsvc.DomainProvisionerConfig{
 			Interval:          30 * time.Second,
 			BaseDomain:        cfg.BaseDomain,
 			RegistryURL:       cfg.RegistryURL,
@@ -188,8 +199,8 @@ func setupDomains(
 		domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
 	}
 
-	domainHealthChecker := services.NewDomainHealthChecker(
-		stores.DomainStore, logger, services.DomainHealthCheckerConfig{
+	domainHealthChecker := domainsvc.NewDomainHealthChecker(
+		stores.DomainStore, logger, domainsvc.DomainHealthCheckerConfig{
 			CNAMETarget: cnameTarget,
 			GraceDays:   14,
 			StaleDays:   7,
@@ -213,8 +224,8 @@ func createCoreLoops(
 	orchDeps *OrchestratorDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	domainProvisioner *services.DomainProvisioner,
-	domainHealthChecker *services.DomainHealthChecker,
+	domainProvisioner *domainsvc.DomainProvisioner,
+	domainHealthChecker *domainsvc.DomainHealthChecker,
 	cfg config.Config,
 	logger *slog.Logger,
 ) []bgLoop {
@@ -223,7 +234,7 @@ func createCoreLoops(
 	envTargetStore := stores.EnvTargetStore
 	pgEventStore := stores.PgEventStore
 
-	reconcileLoop := services.NewBuildReconcileLoop(
+	reconcileLoop := build.NewBuildReconcileLoop(
 		buildStore,
 		workflows.WorkflowSubmitter,
 		orchDeps.Orchestrator,
@@ -232,7 +243,7 @@ func createCoreLoops(
 		k8sDeps.AppCRMgr,
 		pgEventStore,
 		logger,
-		services.BuildReconcileLoopConfig{
+		build.BuildReconcileLoopConfig{
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
@@ -241,18 +252,21 @@ func createCoreLoops(
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 		},
 	)
-	if lister, ok := cellRouter.(services.CellLister); ok {
+	if lister, ok := cellRouter.(deploycontracts.CellLister); ok {
 		reconcileLoop.WithCellLister(lister)
 	}
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
+	// reconcile-retry FAILED path.
+	reconcileLoop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
-	reaper := services.NewBuildReaper(
+	reaper := build.NewBuildReaper(
 		buildStore,
-		&services.PostgresStaleBuildChecker{DB: dbAdapter},
+		&build.PostgresStaleBuildChecker{DB: dbAdapter},
 		stores.Locker,
 		workflows.WorkflowSubmitter,
 		stores.EventStore,
 		logger,
-		services.BuildReaperConfig{
+		build.BuildReaperConfig{
 			QueueTimeout:     cfg.BuildQueueTimeout,
 			RunningTimeout:   cfg.BuildRunningTimeout,
 			ReleasingTimeout: cfg.BuildReleasingTimeout,
@@ -261,14 +275,17 @@ func createCoreLoops(
 		},
 		reconcileLoop,
 	)
+	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
+	// reaper FAILED path (cancel-timeout → CANCELLED does NOT emit).
+	reaper.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
-	releaseReaper := services.NewReleaseReaper(
+	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&services.PostgresStaleReleaseChecker{DB: dbAdapter},
+		&release.PostgresStaleReleaseChecker{DB: dbAdapter},
 		stores.Locker,
 		pgEventStore,
 		logger,
-		services.ReleaseReaperConfig{
+		release.ReleaseReaperConfig{
 			ReadyTimeout:   cfg.ReleaseReadyTimeout,
 			PendingTimeout: cfg.ReleasePendingTimeout,
 			Interval:       cfg.ReleaseReaperInterval,
@@ -278,28 +295,31 @@ func createCoreLoops(
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain (canonical
 	// LOOPZERO_PUBLIC_DOMAIN) preferred over BaseDomain for deploy.completed
 	// URL so it matches `loopzero status`.
-	releaseConvergenceLoop := services.NewReleaseConvergenceLoop(
+	releaseConvergenceLoop := release.NewReleaseConvergenceLoop(
 		releaseStore, envTargetStore, workflows.SyncClient, stores.Locker,
 		stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
-		services.ReleaseConvergenceLoopConfig{
+		release.ReleaseConvergenceLoopConfig{
 			Interval:      10 * time.Second,
 			SyncTimeout:   300 * time.Second,
 			MaxConcurrent: 10,
 		},
 	)
+	// J-16 slice 3 — wire the deploy.succeeded transactional-outbox writer so
+	// the convergence-loop activation path stages deploy_events on the tx.
+	releaseConvergenceLoop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
-	idempotencyCleaner := services.NewIdempotencyCleaner(
-		&db.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
+	idempotencyCleaner := platform.NewIdempotencyCleaner(
+		&store.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
 	)
 	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
 	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
-	buildGC := services.NewBuildGC(
-		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
+	buildGC := build.NewBuildGC(
+		&store.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
 	)
 	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
 	// (1 year default). Was implemented but never wired, leaving audit_log to
 	// grow unbounded. PruneOnce runs nightly at 02:00 local via Start().
-	auditLogPruner := services.NewAuditLogPruner(dbAdapter.Pool, services.AuditLogPrunerOpts{
+	auditLogPruner := platform.NewAuditLogPruner(dbAdapter.Pool, platform.AuditLogPrunerOpts{
 		Logger: logger,
 	})
 
@@ -318,9 +338,9 @@ func createCoreLoops(
 	}
 
 	// OrphanDetector (conditional on CellLister + OrphanedTenantQuerier)
-	if lister, ok := cellRouter.(services.CellLister); ok {
-		if querier, ok2 := interface{}(stores.CellStore).(services.OrphanedTenantQuerier); ok2 {
-			orphanDetector := services.NewOrphanDetector(lister, querier, logger, 60*time.Second)
+	if lister, ok := cellRouter.(deploycontracts.CellLister); ok {
+		if querier, ok2 := interface{}(stores.CellStore).(platform.OrphanedTenantQuerier); ok2 {
+			orphanDetector := platform.NewOrphanDetector(lister, querier, logger, 60*time.Second)
 			loops = append(loops, bgLoop{"orphan-detector", orphanDetector.Start})
 		}
 	}
@@ -341,8 +361,8 @@ func createOptionalLoops(
 	// KVReconciler (optional)
 	if workflows.KVClient != nil {
 		if kvC, ok := workflows.KVClient.(*cfkv.Client); ok {
-			if kvSource, ok2 := interface{}(stores.BuildStore).(services.KVRoutingSource); ok2 {
-				kvReconciler := services.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
+			if kvSource, ok2 := interface{}(stores.BuildStore).(platform.KVRoutingSource); ok2 {
+				kvReconciler := platform.NewKVReconciler(kvC, kvSource, logger, 5*time.Minute)
 				loops = append(loops, bgLoop{"kv-reconciler", kvReconciler.Start})
 			}
 		}
@@ -350,8 +370,8 @@ func createOptionalLoops(
 
 	// DomainCFReconciler (optional)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
-		if cfStore, ok := interface{}(stores.DomainStore).(services.CFZoneReconcilerStore); ok {
-			domainCFReconciler := services.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
+		if cfStore, ok := interface{}(stores.DomainStore).(domainsvc.CFZoneReconcilerStore); ok {
+			domainCFReconciler := domainsvc.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
 			loops = append(loops, bgLoop{"domain-cf-reconciler", domainCFReconciler.Start})
 		}
 	}
@@ -403,8 +423,8 @@ func startLeaderLoops(
 	orchDeps *OrchestratorDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	domainProvisioner *services.DomainProvisioner,
-	domainHealthChecker *services.DomainHealthChecker,
+	domainProvisioner *domainsvc.DomainProvisioner,
+	domainHealthChecker *domainsvc.DomainHealthChecker,
 	cfZoneClient *cfzone.Client,
 	cfg config.Config,
 	logger *slog.Logger,

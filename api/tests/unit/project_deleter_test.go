@@ -9,18 +9,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/services/platform"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/services"
 )
 
 // --- Fakes for ProjectDeleter tests ---
 
 // fakeDeleteBuildStore implements db.BuildStore (only CancelActiveBuilds is used by ProjectDeleter).
 type fakeDeleteBuildStore struct {
-	cancelledByEnv    map[string]int      // key: "tenant:project:env" -> count
-	workflowsByEnv    map[string][]string // key: "tenant:project:env" -> workflow IDs
-	cancelErr         error
+	cancelledByEnv map[string]int      // key: "tenant:project:env" -> count
+	workflowsByEnv map[string][]string // key: "tenant:project:env" -> workflow IDs
+	cancelErr      error
 }
 
 func newFakeDeleteBuildStore() *fakeDeleteBuildStore {
@@ -41,8 +47,8 @@ func (f *fakeDeleteBuildStore) CancelActiveBuilds(_ context.Context, _ db.DBTX, 
 }
 
 // Unused methods — satisfy the interface.
-func (f *fakeDeleteBuildStore) Create(context.Context, db.DBTX, *db.Build) error        { return nil }
-func (f *fakeDeleteBuildStore) GetByID(context.Context, string) (*db.Build, error)       { return nil, nil }
+func (f *fakeDeleteBuildStore) Create(context.Context, db.DBTX, *db.Build) error   { return nil }
+func (f *fakeDeleteBuildStore) GetByID(context.Context, string) (*db.Build, error) { return nil, nil }
 func (f *fakeDeleteBuildStore) GetByIDForTenant(context.Context, string, string) (*db.Build, error) {
 	return nil, nil
 }
@@ -50,6 +56,10 @@ func (f *fakeDeleteBuildStore) HasActiveBuild(context.Context, db.DBTX, string, 
 	return false, nil
 }
 func (f *fakeDeleteBuildStore) UpdateStatus(context.Context, db.DBTX, string, string) (*db.Build, error) {
+	return nil, nil
+}
+
+func (f *fakeDeleteBuildStore) UpdateStatusIfCurrent(_ context.Context, _, _ string, _ statemachine.BuildPhase, _ string) (*db.Build, error) {
 	return nil, nil
 }
 func (f *fakeDeleteBuildStore) SetErrorMessage(context.Context, db.DBTX, string, string) error {
@@ -77,9 +87,9 @@ func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context, string) ([]db.B
 	return nil, nil
 }
 
-// fakeDeleteEnvTargetStore implements db.EnvironmentTargetStore for delete tests.
+// fakeDeleteEnvTargetStore implements store.EnvironmentTargetStore for delete tests.
 type fakeDeleteEnvTargetStore struct {
-	targets   []db.EnvironmentTarget
+	targets   []store.EnvironmentTarget
 	listErr   error
 	deleteErr error
 	deleted   []string // track deleted environments
@@ -89,7 +99,7 @@ func newFakeDeleteEnvTargetStore() *fakeDeleteEnvTargetStore {
 	return &fakeDeleteEnvTargetStore{}
 }
 
-func (f *fakeDeleteEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+func (f *fakeDeleteEnvTargetStore) ListByProject(_ context.Context, _, _ string) ([]store.EnvironmentTarget, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -110,7 +120,7 @@ func (f *fakeDeleteEnvTargetStore) SetDesired(context.Context, db.DBTX, string, 
 func (f *fakeDeleteEnvTargetStore) SetActive(context.Context, db.DBTX, string, string, string, string) error {
 	return nil
 }
-func (f *fakeDeleteEnvTargetStore) Get(context.Context, string, string, string) (*db.EnvironmentTarget, error) {
+func (f *fakeDeleteEnvTargetStore) Get(context.Context, string, string, string) (*store.EnvironmentTarget, error) {
 	return nil, nil
 }
 
@@ -128,7 +138,7 @@ func (f *fakeDeleteEnvTargetStore) DeleteByKind(context.Context, db.DBTX, string
 	return nil
 }
 
-// fakeDeleteProjectStore implements services.ProjectDeleteProjectStore.
+// fakeDeleteProjectStore implements platform.ProjectDeleteProjectStore.
 type fakeDeleteProjectStore struct {
 	deleteErr error
 	deleted   bool
@@ -142,7 +152,7 @@ func (f *fakeDeleteProjectStore) DeleteProject(_ context.Context, _, _ string) e
 	return nil
 }
 
-// fakeDeleteLocker implements services.EnvironmentLocker for delete tests.
+// fakeDeleteLocker implements deploycontracts.EnvironmentLocker for delete tests.
 // Executes fn immediately with nil tx (no real lock).
 type fakeDeleteLocker struct {
 	lockErr error
@@ -155,17 +165,17 @@ func (f *fakeDeleteLocker) WithLock(_ context.Context, _, _, _ string, fn func(t
 	return fn(nil)
 }
 
-// fakeDeleteGitOps implements services.GitOpsPusher for delete tests.
+// fakeDeleteGitOps implements deploycontracts.GitOpsPusher for delete tests.
 type fakeDeleteGitOps struct {
 	removeErr    error
-	removeCalled []services.GitOpsRemoveOpts
+	removeCalled []deploycontracts.GitOpsRemoveOpts
 }
 
-func (f *fakeDeleteGitOps) Push(_ context.Context, _ services.GitOpsPushOpts) (string, error) {
+func (f *fakeDeleteGitOps) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
 	return "fake-sha", nil
 }
 
-func (f *fakeDeleteGitOps) Remove(_ context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+func (f *fakeDeleteGitOps) Remove(_ context.Context, opts deploycontracts.GitOpsRemoveOpts) (string, error) {
 	f.removeCalled = append(f.removeCalled, opts)
 	if f.removeErr != nil {
 		return "", f.removeErr
@@ -173,7 +183,7 @@ func (f *fakeDeleteGitOps) Remove(_ context.Context, opts services.GitOpsRemoveO
 	return "fake-remove-sha", nil
 }
 
-// fakeWorkflowCanceller implements services.WorkflowCanceller for delete tests.
+// fakeWorkflowCanceller implements platform.WorkflowCanceller for delete tests.
 type fakeWorkflowCanceller struct {
 	cancelledIDs []string
 	cancelErr    error
@@ -199,7 +209,7 @@ func TestProjectDeleterDeleteSingleEnvironment(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -258,7 +268,7 @@ func TestProjectDeleterDeleteAllEnvironments(t *testing.T) {
 	buildStore.cancelledByEnv["tenant-1:my-saas:staging"] = 3
 
 	envTargetStore := newFakeDeleteEnvTargetStore()
-	envTargetStore.targets = []db.EnvironmentTarget{
+	envTargetStore.targets = []store.EnvironmentTarget{
 		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "production"},
 		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "staging"},
 	}
@@ -267,7 +277,7 @@ func TestProjectDeleterDeleteAllEnvironments(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -317,7 +327,7 @@ func TestProjectDeleterDeleteNoActiveBuilds(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -357,7 +367,7 @@ func TestProjectDeleterLockFailure(t *testing.T) {
 	locker := &fakeDeleteLocker{lockErr: fmt.Errorf("lock timeout")}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -393,7 +403,7 @@ func TestProjectDeleterCancelBuildError(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -429,7 +439,7 @@ func TestProjectDeleterGitOpsFailureIsFatal(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{removeErr: fmt.Errorf("gitea unreachable")}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -463,7 +473,7 @@ func TestProjectDeleterDeleteAllEnvsProjectDeleteFails(t *testing.T) {
 	// This is non-fatal (logged as warning).
 	buildStore := newFakeDeleteBuildStore()
 	envTargetStore := newFakeDeleteEnvTargetStore()
-	envTargetStore.targets = []db.EnvironmentTarget{
+	envTargetStore.targets = []store.EnvironmentTarget{
 		{TenantID: "tenant-1", ProjectID: "my-saas", Environment: "production"},
 	}
 
@@ -471,7 +481,7 @@ func TestProjectDeleterDeleteAllEnvsProjectDeleteFails(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -510,7 +520,7 @@ func TestProjectDeleterListByProjectError(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -546,7 +556,7 @@ func TestProjectDeleterDeleteTargetError(t *testing.T) {
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -576,13 +586,13 @@ func TestProjectDeleterDeleteAllEnvsNoEnvironments(t *testing.T) {
 	// Arrange — project has no environments (already cleaned or never deployed)
 	buildStore := newFakeDeleteBuildStore()
 	envTargetStore := newFakeDeleteEnvTargetStore()
-	envTargetStore.targets = []db.EnvironmentTarget{} // empty
+	envTargetStore.targets = []store.EnvironmentTarget{} // empty
 
 	projectStore := &fakeDeleteProjectStore{}
 	locker := &fakeDeleteLocker{}
 	gitops := &fakeDeleteGitOps{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:     buildStore,
 		EnvTargetStore: envTargetStore,
 		ProjectStore:   projectStore,
@@ -636,7 +646,7 @@ func TestProjectDeleterCancelsActiveWorkflows(t *testing.T) {
 	gitops := &fakeDeleteGitOps{}
 	wfCanceller := &fakeWorkflowCanceller{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:        buildStore,
 		EnvTargetStore:    envTargetStore,
 		ProjectStore:      projectStore,
@@ -684,7 +694,7 @@ func TestProjectDeleterSkipsBuildWithoutWorkflowID(t *testing.T) {
 	gitops := &fakeDeleteGitOps{}
 	wfCanceller := &fakeWorkflowCanceller{}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:        buildStore,
 		EnvTargetStore:    envTargetStore,
 		ProjectStore:      projectStore,
@@ -726,7 +736,7 @@ func TestProjectDeleterContinuesOnWorkflowCancelFailure(t *testing.T) {
 	gitops := &fakeDeleteGitOps{}
 	wfCanceller := &fakeWorkflowCanceller{cancelErr: fmt.Errorf("argo: connection refused")}
 
-	deleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
+	deleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
 		BuildStore:        buildStore,
 		EnvTargetStore:    envTargetStore,
 		ProjectStore:      projectStore,

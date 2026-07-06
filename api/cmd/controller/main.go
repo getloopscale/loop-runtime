@@ -148,6 +148,10 @@ func main() {
 	bgWg.Add(1)
 	go runHeartbeat(shutdownCtx, &bgWg, acquirer, lease, logger, cancel)
 	startBackgroundLoops(shutdownCtx, &bgWg, deps, cfg, logger)
+	// Compute-metering producer (plan metering-compute-loop T3.2 S5b). Leader-gated
+	// via the lease above; observe-only + non-fatal (a wiring failure logs + skips
+	// metering, never crashes the controller).
+	startMeteringLoop(shutdownCtx, &bgWg, cfg, *lease, logger)
 
 	// ---- Minimal HTTP surface for liveness + metrics ----
 	healthSrv := newHealthServer(logger, acquirer, lease)
@@ -159,7 +163,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("loopzero-controller ready — 6 loops running")
+	logger.Info("loopzero-controller ready — background loops running (6 core + compute-metering, observe-only)")
 
 	// Block until SIGTERM / SIGINT or a fatal heartbeat failure.
 	<-shutdownCtx.Done()

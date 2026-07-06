@@ -11,6 +11,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
+	"github.com/getloopscale/loopzero/api/internal/services/preview"
+
+	"github.com/getloopscale/loopzero/api/internal/services/billing"
+
+	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -24,7 +36,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
@@ -54,7 +65,7 @@ func buildServerConfig(
 	ghDeps *GitHubDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	cellStore *db.PostgresCellStore,
+	cellStore *store.PostgresCellStore,
 	domainHandler *routes.DomainHandler,
 	buildHandler *routes.BuildHandler,
 	healthServices []routes.ServiceHealthChecker,
@@ -72,33 +83,33 @@ func buildServerConfig(
 	contextLogger := pkglogging.NewContextLogger(logger, nil)
 
 	sc := server.Config{
-		Port:                         cfg.Port,
-		MetricsPort:                  cfg.MetricsPort,
-		Logger:                       logger,
-		ContextLogger:                contextLogger,
-		HealthServices:               healthServices,
-		TokenValidator:               tokenValidator,
-		TenantCRMgr:                  k8sDeps.TenantCRMgr,
-		SecretK8sSync:                k8sDeps.SecretK8sSync,
+		Port:           cfg.Port,
+		MetricsPort:    cfg.MetricsPort,
+		Logger:         logger,
+		ContextLogger:  contextLogger,
+		HealthServices: healthServices,
+		TokenValidator: tokenValidator,
+		TenantCRMgr:    k8sDeps.TenantCRMgr,
+		SecretK8sSync:  k8sDeps.SecretK8sSync,
 		// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
 		// running without advisory lock). Reuses the same locker injected
 		// into build orchestrators, so secret writes serialize with deploys
 		// on the same (tenant, project, env) key. Lock-domain parity EC-2.
-		SecretEnvLocker:              stores.Locker,
+		SecretEnvLocker: stores.Locker,
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): inject
-		// the existing *db.PostgresProjectStore as the cross-tenant binding
+		// the existing *store.PostgresProjectStore as the cross-tenant binding
 		// checker (EC-03 absorption — 404 byte-identical between cross-
 		// tenant attempts + nonexistent projects; CWE-204 defense). The
 		// PostgresProjectStore.GetByName signature already matches
 		// routes.SecretProjectChecker — no adapter needed.
-		SecretProjectChecker:         dbDeps.ProjectStore,
-		DomainHandler:                domainHandler,
-		BuildHandler:                 buildHandler,
+		SecretProjectChecker: dbDeps.ProjectStore,
+		DomainHandler:        domainHandler,
+		BuildHandler:         buildHandler,
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
 		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
 		// returns real data (was always 404 because the store was nil).
 		BuildAttestationHandler: routes.NewBuildAttestationHandler(
-			db.NewPostgresAttestationStore(dbAdapter), logger,
+			store.NewPostgresAttestationStore(dbAdapter), logger,
 		),
 		// Sprint 6 / T1.2: per-app SBOM endpoint. The store is the
 		// release_app_attestations sidecar (T0.1). The presigner is
@@ -136,7 +147,7 @@ func buildServerConfig(
 		IsProduction:                 cfg.IsProduction(),
 		UpgradeURL:                   os.Getenv("BILLING_UPGRADE_URL"),
 		PGCircuitBreakerThresholdPct: 90,
-		CORSAllowedOrigin:           cfg.CORSAllowedOrigin,
+		CORSAllowedOrigin:            cfg.CORSAllowedOrigin,
 	}
 
 	if dbDeps != nil {
@@ -157,7 +168,7 @@ func buildServerConfig(
 		// SqlcBridge (DBTX) — dbAdapter is the pgx-based DBTX, not the
 		// legacy StdDB. StdDB is still retained for enforcement.LimitsStore
 		// which has a wider surface and lives outside api/internal/db/.
-		costStore := db.NewSQLCostStore(dbAdapter)
+		costStore := store.NewSQLCostStore(dbAdapter)
 		costChecker := enforcement.NewCapChecker(costStore)
 		// Reuse the same SQL `subscriptions.plan` lookup PlanLimiter uses,
 		// via a fresh NewSQLLimitsStore. PlanLimiter does not expose its
@@ -165,7 +176,7 @@ func buildServerConfig(
 		// the query is centralized in enforcement.sqlLimitsStore so this
 		// is single-source-of-truth.
 		limitsStore := enforcement.NewSQLLimitsStore(dbDeps.StdDB)
-		planReader := db.NewPlanReader(limitsStore)
+		planReader := store.NewPlanReader(limitsStore)
 		sc.CostEnforcer = middleware.NewCostEnforcer(costChecker, planReader, logger)
 		// Wire PlanTierStore into ScaleHandler + ProjectHandler so they
 		// resolve the canonical tier (per ADR D4 of plan
@@ -226,6 +237,7 @@ func buildServerConfig(
 		sc.StatusSSEHandler = orchDeps.StatusSSEHandler
 		sc.ScaleHandler = orchDeps.ScaleHandler
 		sc.BuildListHandler = orchDeps.BuildListHandler
+		sc.BuildStatsHandler = orchDeps.BuildStatsHandler
 		sc.ProjectDeleter = orchDeps.ProjectDeleter
 	}
 
@@ -236,7 +248,7 @@ func buildServerConfig(
 	}
 
 	if dbAdapter != nil {
-		sc.IdempotencyStore = &db.PostgresIdempotencyStore{DB: dbAdapter}
+		sc.IdempotencyStore = &store.PostgresIdempotencyStore{DB: dbAdapter}
 		// T1.6 of deep-review-remediation: wire BillingHandler so
 		// GET /api/v1/billing returns plan + usage instead of 404.
 		// T1.9 production: also wire the cost cap CostStore so the
@@ -247,7 +259,7 @@ func buildServerConfig(
 		billingHandler := routes.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
 		if dbDeps != nil && dbDeps.StdDB != nil {
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
-			billingHandler.WithCostSource(db.NewSQLCostStore(dbAdapter))
+			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
 		}
 		// T2.7 of maturity-3-62-to-4-0-roadmap: wire Stripe Customer
 		// Portal SDK if STRIPE_SECRET_KEY env is set. Production sets
@@ -276,20 +288,20 @@ func buildServerConfig(
 				returnURL = "https://app.loopzero.cloud/billing"
 			}
 			billingHandler.WithPortalSessionCreator(
-				services.NewStripePortalSessionCreator(stripeKey),
+				billing.NewStripePortalSessionCreator(stripeKey),
 				returnURL,
 			)
 		}
 		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.
-		teamStore := &db.PostgresTeamStore{DB: dbAdapter}
+		teamStore := &store.PostgresTeamStore{DB: dbAdapter}
 		sc.TeamHandler = routes.NewTeamHandler(teamStore)
 		sc.AuthUserLookup = teamStore
 		// Plan T2.5 D8 full — persistent active-team selection backed by
 		// users.active_tenant_id column (migration 000018).
-		sc.ActiveTeamStore = db.NewPostgresActiveTeamStore(dbAdapter)
-		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
+		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
+		sc.AuditHandler = routes.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
 		// /api/v1/admin/tenants/pin endpoint registered in router.go can
@@ -299,7 +311,7 @@ func buildServerConfig(
 		// tenant.
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
 		// so operator reconcile re-emits ArgoCD destination with new cell.
-		sc.AdminPinner = services.NewCellPinner(&db.PostgresCellStore{DB: dbAdapter}).
+		sc.AdminPinner = placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
 			WithKubeClient(buildMgmtDynamicClient(logger), "loopzero-system")
 		// T4.4 of plan 2026-05-28-meet-001-engineering-closure: wire the
 		// ReleaseInspector so GET /api/v1/admin/releases/{id}/inspect can
@@ -315,18 +327,18 @@ func buildServerConfig(
 		// ReleaseInspector is read-only path so AppendSideEffect emit
 		// never fires; pass a no-op eventStore that returns 0/nil to
 		// satisfy the non-nil contract without touching sse_events table.
-		sc.ReleaseInspector = services.NewReleaseInspector(
-			db.NewReleaseStoreSqlc(dbAdapter, db.NoopEventStore{}),
-			&db.PostgresAuditStore{DB: dbAdapter},
+		sc.ReleaseInspector = release.NewReleaseInspector(
+			store.NewReleaseStoreSqlc(dbAdapter, store.NoopEventStore{}),
+			&store.PostgresAuditStore{DB: dbAdapter},
 			nil,
 		)
 		sc.AuditWriter = func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
-			entry := db.AuditEntry{
+			entry := store.AuditEntry{
 				TenantID: tenantID, Action: action, Actor: actor,
 				ResourceType: resourceType, ResourceID: resourceID,
 				CorrelationID: correlationID, Metadata: metadata,
 			}
-			if err := db.WriteAuditLog(context.Background(), dbAdapter, entry); err != nil {
+			if err := store.WriteAuditLog(context.Background(), dbAdapter, entry); err != nil {
 				logger.Warn("audit write failed", "error", err)
 			}
 		}
@@ -339,10 +351,10 @@ func buildServerConfig(
 		// service drives the dual-write (CR + DB) per ADR D7. When the
 		// BuildOrchestrator is available (always, post-Sprint-2), the
 		// service can submit builds for previews (best-effort).
-		previewStore := db.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-		var previewService *services.PreviewService
+		previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
+		var previewService *preview.PreviewService
 		if orchDeps != nil && orchDeps.Orchestrator != nil {
-			ps, perr := services.NewPreviewService(services.PreviewServiceDeps{
+			ps, perr := preview.NewPreviewService(preview.PreviewServiceDeps{
 				Store:               previewStore,
 				Builds:              orchDeps.Orchestrator,
 				BuildApps:           &previewAppsLookupAdapter{builds: stores.BuildStore},
@@ -367,12 +379,12 @@ func buildServerConfig(
 		// Red Team loopzero-cloud#92 absorption (2026-06-27): wire the
 		// ProjectChecker so /previews handlers reject non-existent
 		// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty
-		// list. Existing *db.PostgresProjectStore matches the narrow
+		// list. Existing *store.PostgresProjectStore matches the narrow
 		// interface signature — no adapter needed.
 		sc.PreviewHandler = routes.
 			NewPreviewHandler(previewStore, previewService, logger).
 			WithPhaseLookup(k8sDeps.PreviewCRMgr).
-			WithProjectChecker(&db.PostgresProjectStore{DB: dbAdapter})
+			WithProjectChecker(&store.PostgresProjectStore{DB: dbAdapter})
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
@@ -393,14 +405,14 @@ func buildServerConfig(
 // Sprint 6 / T1.2.
 // T1.3b (plan 2026-05-29-sqlc-migration v1.3): adapter inner type
 // widened from concrete *PostgresAppAttestationStore to
-// db.AppAttestationStore interface so AppAttestationStoreSqlc drops in
+// store.AppAttestationStore interface so AppAttestationStoreSqlc drops in
 // without churn.
 type appSBOMStoreAdapter struct {
-	inner db.AppAttestationStore
+	inner store.AppAttestationStore
 }
 
 func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
-	return &appSBOMStoreAdapter{inner: db.NewAppAttestationStoreSqlc(d)}
+	return &appSBOMStoreAdapter{inner: store.NewAppAttestationStoreSqlc(d)}
 }
 
 func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
@@ -583,12 +595,12 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 	// orchestrator (workflow_submitter.go); the pre-Sprint-8 comment about
 	// per-tenant namespaces was incorrect — workflows have ALWAYS lived in
 	// argo, only the build PODS run per-tenant. KISS + least privilege.
-	source := services.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
+	source := build.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
 	// terminalIDs is nil — first-tick startup may emit duplicate step events
 	// for already-running workflows; the watcher's internal lastPhase dedup
 	// catches duplicates from tick 2 onwards. A future enhancement can wire
 	// a BuildStore-backed TerminalBuildIDStore for cleaner cold start.
-	watcher := services.NewArgoStepWatcher(source, eventStore, nil, logger)
+	watcher := build.NewArgoStepWatcher(source, eventStore, nil, logger)
 	source.WithWatchErrorHandler(watcher.ReportWatchError)
 
 	go func() {
@@ -643,13 +655,13 @@ func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID strin
 }
 
 // previewSlotLookupAdapter implements routes.PreviewSlotLookup using
-// the db.PreviewSlotStore.
+// the store.PreviewSlotStore.
 //
 // 2026-06-07 per-project model (migration 000028): ListPreviewSlots
 // returns ALL slots for the tenant — one per project. Empty slice
 // when the tenant has no previews; never nil.
 type previewSlotLookupAdapter struct {
-	store *db.PostgresPreviewSlotStore
+	store *store.PostgresPreviewSlotStore
 }
 
 func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]routes.PreviewSlotInfo, error) {

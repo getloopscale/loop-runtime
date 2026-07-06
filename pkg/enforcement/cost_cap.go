@@ -36,6 +36,9 @@ const (
 	MetricEgressBytes  = plan.MetricEgressBytes
 	MetricDOCRPulls    = plan.MetricDOCRPulls
 	MetricBuildMinutes = plan.MetricBuildMinutes
+	// Compute metrics (observe-only; plan metering-compute-loop T1.1).
+	MetricCPUCoreSeconds = plan.MetricCPUCoreSeconds
+	MetricMemGBSeconds   = plan.MetricMemGBSeconds
 )
 
 // Plan identifies a subscription tier. Alias of plan.Plan.

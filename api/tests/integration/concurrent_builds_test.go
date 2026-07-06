@@ -24,9 +24,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/services/build"
+
+	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -35,23 +42,22 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
-// --- Route-level adapter: bridges services.BuildOrchestrator to routes.BuildOrchestratorService ---
+// --- Route-level adapter: bridges build.BuildOrchestrator to routes.BuildOrchestratorService ---
 
-// buildOrchestratorAdapter adapts the real services.BuildOrchestrator to the
+// buildOrchestratorAdapter adapts the real build.BuildOrchestrator to the
 // routes.BuildOrchestratorService interface used by the HTTP handler.
 type buildOrchestratorAdapter struct {
-	orch       *services.BuildOrchestrator
+	orch       *build.BuildOrchestrator
 	buildStore db.BuildStore
 }
 
 func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
-	var apps []services.AppSpec
+	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
 		if appType == "" {
@@ -61,14 +67,14 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		if appPort == 0 && appType == "server" {
 			appPort = 8080
 		}
-		apps = append(apps, services.AppSpec{
+		apps = append(apps, deploycontracts.AppSpec{
 			Name: app.Name,
 			Type: appType,
 			Port: appPort,
 		})
 	}
 
-	resp, err := a.orch.SubmitBuild(ctx, services.SubmitBuildRequest{
+	resp, err := a.orch.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
 		TenantID:    req.TenantID,
 		ProjectID:   req.ProjectID,
 		Environment: req.Environment,
@@ -102,16 +108,16 @@ func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 }
 
 func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
-	var apps []services.AppRelease
+	var apps []deploycontracts.AppRelease
 	for _, app := range result.Apps {
-		apps = append(apps, services.AppRelease{
+		apps = append(apps, deploycontracts.AppRelease{
 			Name:        app.Name,
 			ImageDigest: app.ImageDigest,
 			URL:         app.URL,
 			DurationMs:  app.DurationMs,
 		})
 	}
-	return a.orch.OnBuildCompleted(ctx, buildID, services.BuildCallbackRequest{
+	return a.orch.OnBuildCompleted(ctx, buildID, deploycontracts.BuildCallbackRequest{
 		Status: result.Status,
 		Apps:   apps,
 	})
@@ -152,7 +158,7 @@ func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ str
 
 type fakeWorkflowSubmitter struct{}
 
-func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSpec) (string, error) {
+func (f *fakeWorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.WorkflowSpec) (string, error) {
 	return "wf-" + spec.BuildID, nil
 }
 
@@ -160,17 +166,17 @@ func (f *fakeWorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowI
 	return nil
 }
 
-func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*services.WorkflowStatus, error) {
-	return &services.WorkflowStatus{Phase: "Succeeded"}, nil
+func (f *fakeWorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID string) (*deploycontracts.WorkflowStatus, error) {
+	return &deploycontracts.WorkflowStatus{Phase: "Succeeded"}, nil
 }
 
 type fakeGitOpsPusher struct{}
 
-func (f *fakeGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
 	return "fake-commit-sha", nil
 }
 
-func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemoveOpts) (string, error) {
+func (f *fakeGitOpsPusher) Remove(ctx context.Context, opts deploycontracts.GitOpsRemoveOpts) (string, error) {
 	return "fake-commit-sha", nil
 }
 
@@ -250,17 +256,17 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 
 	// Create real stores backed by the pool
 	adapter := &db.PgxAdapter{Pool: pool}
-	buildStore := db.NewBuildStoreSqlc(adapter) // T1.2b
-	releaseStore := db.NewReleaseStoreSqlc(adapter, db.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
-	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
+	buildStore := store.NewBuildStoreSqlc(adapter)                             // T1.2b
+	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
+	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	eventStore := sse.NewPostgresEventStore(adapter, adapter)
-	idempotencyStore := &db.PostgresIdempotencyStore{DB: adapter}
+	idempotencyStore := &store.PostgresIdempotencyStore{DB: adapter}
 
 	// Create real locker backed by the pool (reusing adapters package — no duplication)
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
 	// Create real orchestrator with fake external services
-	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
+	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:     buildStore,
 		ReleaseStore:   releaseStore,
 		EnvTargetStore: envTargetStore,
@@ -316,20 +322,29 @@ func migrationsDir() string {
 	return filepath.Join(apiDir, "internal", "db", "migrations")
 }
 
-// runMigrations applies all SQL migration files to the test database.
+// runMigrations applies every `*.up.sql` file in the shared migrations dir to
+// the test database in numeric-prefix order. Discovers files via a glob so the
+// helper stays in-sync as new migrations land (the old hardcoded 000001..000003
+// list drifted stale by 2026-04 — closes #184). Errors from IF NOT EXISTS /
+// duplicate-object statements are logged, not fatal, so the helper is safe
+// against an already-migrated DB (the operator harness runs `migrate up`
+// before invoking the tests).
 func runMigrations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	ctx := context.Background()
 	dir := migrationsDir()
 
-	migrations := []string{
-		filepath.Join(dir, "000001_initial_schema.up.sql"),
-		filepath.Join(dir, "000002_auth_tenants.up.sql"),
-		filepath.Join(dir, "000003_deploy_support.up.sql"),
+	paths, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil {
+		t.Fatalf("failed to glob migrations in %s: %v", dir, err)
 	}
+	if len(paths) == 0 {
+		t.Fatalf("no *.up.sql migrations found in %s", dir)
+	}
+	sort.Strings(paths) // numeric prefix (000001, 000002, …) sorts lexicographically
 
-	for _, path := range migrations {
+	for _, path := range paths {
 		sql, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("failed to read migration %s: %v", path, err)
@@ -350,10 +365,11 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 	// Clean up any existing test data (idempotent)
 	cleanupTestData(t, pool)
 
-	// Create test user
+	// Create test user (username NOT NULL + UNIQUE per migration 000034 —
+	// user-test is stable so the ON CONFLICT still catches re-seeds).
 	_, err := pool.Exec(ctx,
-		`INSERT INTO users (id, email, github_id, display_name)
-		 VALUES ('user-test', 'test@example.com', 12345, 'Test User')
+		`INSERT INTO users (id, email, github_id, display_name, username)
+		 VALUES ('user-test', 'test@example.com', 12345, 'Test User', 'user-test')
 		 ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		t.Fatalf("failed to seed user: %v", err)

@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# LoopZero Engine — consumer-facing HTTP contract (OpenAPI 3.0.3).
-# M1.4 (plan m1-4-openapi-contract-tests). CONSUMER-DRIVEN scope: documents
-# only the routes the TS CLI (loopzero/cli) and the Go cloud (/engine proxy)
-# actually call — NOT the full 41-route surface. Internal routes (/internal/*,
-# webhooks) are intentionally excluded. Source of truth for paths:
-# api/internal/server/router.go.
+# LoopZero Engine — public HTTP contract (OpenAPI 3.0.3).
+# M1.4 (plan m1-4-openapi-contract-tests) started this CONSUMER-DRIVEN (cli/cloud
+# routes only). M11 (plan m11-api-validation) SUPERSEDES that scope: this spec now
+# documents 100% of the public /api/v1 router surface — enforced by
+# TestEngineConformance_RouterRoutesAreDocumented (every registered /api/v1 route
+# is documented) alongside SpecPathsAreRegistered (no phantom spec), giving
+# bijective coverage. Only /internal/* routes stay excluded — they are service-auth
+# internal, not part of the public consumer contract. Source of truth for paths:
+# api/internal/server/router.go (+ helper registrations in api/internal/routes/).
 openapi: 3.0.3
 info:
   title: LoopZero Engine API
@@ -17,22 +20,22 @@ info:
     M2/M3 extractions can be validated against a machine-checkable contract.
 
 servers:
-  - url: /
-    description: engine root (relative; consumers supply the base URL)
+- url: /
+  description: engine root (relative; consumers supply the base URL)
 
 tags:
-  - name: meta
-  - name: auth
-  - name: projects
-  - name: builds
-  - name: secrets
-  - name: environments
-  - name: domains
-  - name: billing
-  - name: teams
-  - name: audit
-  - name: source
-  - name: admin
+- name: meta
+- name: auth
+- name: projects
+- name: builds
+- name: secrets
+- name: environments
+- name: domains
+- name: billing
+- name: teams
+- name: audit
+- name: source
+- name: admin
 
 paths:
   /api/v1/health:
@@ -44,7 +47,7 @@ paths:
           description: service healthy
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Health" }
+              schema: {$ref: "#/components/schemas/Health"}
 
   /api/v1/version:
     get:
@@ -55,7 +58,7 @@ paths:
           description: version info
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/VersionResponse" }
+              schema: {$ref: "#/components/schemas/VersionResponse"}
 
   /api/v1/auth/whoami:
     get:
@@ -66,8 +69,8 @@ paths:
           description: identity
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+              schema: {type: object, additionalProperties: true}
+        "401": {$ref: "#/components/responses/Unauthorized"}
 
   /api/v1/auth/team/switch:
     post:
@@ -77,14 +80,14 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: {type: object, additionalProperties: true}
       responses:
         "200":
           description: switched
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+              schema: {type: object, additionalProperties: true}
+        "401": {$ref: "#/components/responses/Unauthorized"}
 
   /api/v1/projects:
     get:
@@ -97,11 +100,18 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Project" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+                items: {$ref: "#/components/schemas/Project"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      tags:
+      - projects
+      summary: Create a project
+      responses:
+        '200':
+          description: create a project
 
   /api/v1/projects/{name}:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     get:
       tags: [projects]
       summary: Get one project
@@ -110,11 +120,18 @@ paths:
           description: project
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Project" }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: {$ref: "#/components/schemas/Project"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags:
+      - projects
+      summary: Delete a project
+      responses:
+        '200':
+          description: delete a project
 
   /api/v1/projects/{name}/status:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     get:
       tags: [projects]
       summary: Project runtime status
@@ -123,7 +140,7 @@ paths:
           description: status
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/builds:
     post:
@@ -133,18 +150,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: {type: object, additionalProperties: true}
       responses:
         "202":
           description: build accepted
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Build" }
+              schema: {$ref: "#/components/schemas/Build"}
         "409":
           description: concurrent build rejected
 
   /api/v1/projects/{name}/builds:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     get:
       tags: [builds]
       summary: List builds for a project
@@ -155,10 +172,10 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Build" }
+                items: {$ref: "#/components/schemas/Build"}
 
   /api/v1/builds/{id}:
-    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    parameters: [$ref: "#/components/parameters/BuildID"]
     get:
       tags: [builds]
       summary: Get one build
@@ -167,11 +184,11 @@ paths:
           description: build
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Build" }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: {$ref: "#/components/schemas/Build"}
+        "404": {$ref: "#/components/responses/NotFound"}
 
   /api/v1/builds/{id}/cancel:
-    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    parameters: [$ref: "#/components/parameters/BuildID"]
     post:
       tags: [builds]
       summary: Cancel a build
@@ -180,12 +197,12 @@ paths:
           description: cancellation accepted
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
         "409":
           description: build not cancellable in current state
 
   /api/v1/builds/{id}/logs/stream:
-    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    parameters: [$ref: "#/components/parameters/BuildID"]
     get:
       tags: [builds]
       summary: Stream build logs (SSE)
@@ -197,10 +214,10 @@ paths:
           description: event stream
           content:
             text/event-stream:
-              schema: { type: string }
+              schema: {type: string}
 
   /api/v1/builds/{id}/stream:
-    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    parameters: [$ref: "#/components/parameters/BuildID"]
     get:
       tags: [builds]
       summary: Stream build events (SSE)
@@ -209,10 +226,10 @@ paths:
           description: event stream
           content:
             text/event-stream:
-              schema: { type: string }
+              schema: {type: string}
 
   /api/v1/projects/{name}/logs/stream:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     get:
       tags: [projects]
       summary: Stream runtime logs (SSE)
@@ -221,7 +238,7 @@ paths:
           description: event stream
           content:
             text/event-stream:
-              schema: { type: string }
+              schema: {type: string}
 
   /api/v1/secrets:
     get:
@@ -234,7 +251,14 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { type: object, additionalProperties: true }
+                items: {type: object, additionalProperties: true}
+    post:
+      tags:
+      - secrets
+      summary: Create or update a secret
+      responses:
+        '200':
+          description: create or update a secret
 
   /api/v1/environments:
     get:
@@ -247,10 +271,17 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Environment" }
+                items: {$ref: "#/components/schemas/Environment"}
+    post:
+      tags:
+      - environments
+      summary: Create an environment
+      responses:
+        '200':
+          description: create an environment
 
   /api/v1/environments/{name}:
-    parameters: [{ $ref: "#/components/parameters/EnvName" }]
+    parameters: [$ref: "#/components/parameters/EnvName"]
     get:
       tags: [environments]
       summary: Get one environment
@@ -259,8 +290,15 @@ paths:
           description: environment
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Environment" }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: {$ref: "#/components/schemas/Environment"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags:
+      - environments
+      summary: Delete an environment
+      responses:
+        '200':
+          description: delete an environment
 
   /api/v1/domains:
     get:
@@ -273,14 +311,21 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Domain" }
+                items: {$ref: "#/components/schemas/Domain"}
+    post:
+      tags:
+      - domains
+      summary: Add a custom domain
+      responses:
+        '200':
+          description: add a custom domain
 
   /api/v1/domains/{domain}:
     parameters:
-      - name: domain
-        in: path
-        required: true
-        schema: { type: string }
+    - name: domain
+      in: path
+      required: true
+      schema: {type: string}
     get:
       tags: [domains]
       summary: Get one domain
@@ -289,8 +334,15 @@ paths:
           description: domain
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Domain" }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: {$ref: "#/components/schemas/Domain"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags:
+      - domains
+      summary: Remove a custom domain
+      responses:
+        '200':
+          description: remove a custom domain
 
   /api/v1/billing:
     get:
@@ -301,7 +353,7 @@ paths:
           description: billing summary
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/billing/portal:
     post:
@@ -312,7 +364,7 @@ paths:
           description: portal URL
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/teams/members:
     get:
@@ -325,22 +377,29 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { type: object, additionalProperties: true }
+                items: {type: object, additionalProperties: true}
+    post:
+      tags:
+      - teams
+      summary: Add a team member
+      responses:
+        '200':
+          description: add a team member
 
   /api/v1/audit:
     get:
       tags: [audit]
       summary: List audit-log entries (filterable, paginated)
       parameters:
-        - { name: action, in: query, required: false, schema: { type: string } }
-        - { name: resource_type, in: query, required: false, schema: { type: string } }
-        - { name: since, in: query, required: false, schema: { type: string } }
+      - {name: action, in: query, required: false, schema: {type: string}}
+      - {name: resource_type, in: query, required: false, schema: {type: string}}
+      - {name: since, in: query, required: false, schema: {type: string}}
       responses:
         "200":
           description: audit entries
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/source/upload:
     post:
@@ -358,8 +417,8 @@ paths:
           description: upload accepted
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
-        "400": { $ref: "#/components/responses/BadRequest" }
+              schema: {type: object, additionalProperties: true}
+        "400": {$ref: "#/components/responses/BadRequest"}
 
   /api/v1/admin/tenants/evict:
     post:
@@ -370,7 +429,7 @@ paths:
           description: evicted
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/admin/tenants/pin:
     post:
@@ -381,10 +440,10 @@ paths:
           description: pinned
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/admin/releases/{id}/inspect:
-    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    parameters: [$ref: "#/components/parameters/BuildID"]
     get:
       tags: [admin]
       summary: Inspect a release (admin)
@@ -393,10 +452,10 @@ paths:
           description: release inspection
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/builds/{id}/logs:
-    parameters: [{ $ref: "#/components/parameters/BuildID" }]
+    parameters: [$ref: "#/components/parameters/BuildID"]
     get:
       tags: [builds]
       summary: Build logs (non-streaming)
@@ -405,20 +464,20 @@ paths:
           description: logs
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
 
   /api/v1/secrets/{name}:
-    parameters: [{ $ref: "#/components/parameters/SecretName" }]
+    parameters: [$ref: "#/components/parameters/SecretName"]
     delete:
       tags: [secrets]
       summary: Delete a secret
       responses:
-        "200": { description: deleted }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200": {description: deleted}
+        "404": {$ref: "#/components/responses/NotFound"}
 
   /api/v1/domains/{domain}/verify:
     parameters:
-      - { name: domain, in: path, required: true, schema: { type: string } }
+    - {name: domain, in: path, required: true, schema: {type: string}}
     post:
       tags: [domains]
       summary: Trigger domain verification
@@ -427,11 +486,11 @@ paths:
           description: verification result
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
-        "429": { description: rate limited }
+              schema: {type: object, additionalProperties: true}
+        "429": {description: rate limited}
 
   /api/v1/projects/{name}/connect:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     get:
       tags: [projects]
       summary: Get repository connection
@@ -440,7 +499,7 @@ paths:
           description: connection
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: {type: object, additionalProperties: true}
     post:
       tags: [projects]
       summary: Connect a repository
@@ -448,28 +507,28 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: {type: object, additionalProperties: true}
       responses:
-        "200": { description: connected }
+        "200": {description: connected}
     delete:
       tags: [projects]
       summary: Disconnect the repository
       responses:
-        "200": { description: disconnected }
+        "200": {description: disconnected}
 
   /api/v1/projects/{name}/environments/{env}:
     parameters:
-      - { $ref: "#/components/parameters/ProjectName" }
-      - { name: env, in: path, required: true, schema: { type: string } }
+    - {$ref: "#/components/parameters/ProjectName"}
+    - {name: env, in: path, required: true, schema: {type: string}}
     delete:
       tags: [environments]
       summary: Delete a project environment
       responses:
-        "200": { description: deleted }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "200": {description: deleted}
+        "404": {$ref: "#/components/responses/NotFound"}
 
   /api/v1/projects/{name}/promote:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     post:
       tags: [projects]
       summary: Promote a release between environments
@@ -477,22 +536,22 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: {type: object, additionalProperties: true}
       responses:
-        "200": { description: promoted }
-        "409": { description: conflict }
+        "200": {description: promoted}
+        "409": {description: conflict}
 
   /api/v1/projects/{name}/rollback:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     post:
       tags: [projects]
       summary: Roll back to the previous release
       responses:
-        "200": { description: rolled back }
-        "409": { description: no previous release }
+        "200": {description: rolled back}
+        "409": {description: no previous release}
 
   /api/v1/projects/{name}/scale:
-    parameters: [{ $ref: "#/components/parameters/ProjectName" }]
+    parameters: [$ref: "#/components/parameters/ProjectName"]
     post:
       tags: [projects]
       summary: Scale a project
@@ -500,14 +559,14 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: {type: object, additionalProperties: true}
       responses:
-        "200": { description: scaled }
-        "402": { description: plan upgrade required }
+        "200": {description: scaled}
+        "402": {description: plan upgrade required}
 
   /api/v1/projects/{project}/previews:
     parameters:
-      - { name: project, in: path, required: true, schema: { type: string } }
+    - {name: project, in: path, required: true, schema: {type: string}}
     get:
       tags: [projects]
       summary: List preview environments
@@ -518,12 +577,19 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { type: object, additionalProperties: true }
+                items: {type: object, additionalProperties: true}
+    post:
+      tags:
+      - projects
+      summary: Create a preview environment
+      responses:
+        '200':
+          description: create a preview environment
 
   /api/v1/projects/{project}/previews/{id}:
     parameters:
-      - { name: project, in: path, required: true, schema: { type: string } }
-      - { $ref: "#/components/parameters/BuildID" }
+    - {name: project, in: path, required: true, schema: {type: string}}
+    - {$ref: "#/components/parameters/BuildID"}
     get:
       tags: [projects]
       summary: Get one preview environment
@@ -532,17 +598,24 @@ paths:
           description: preview
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
-        "404": { $ref: "#/components/responses/NotFound" }
+              schema: {type: object, additionalProperties: true}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags:
+      - projects
+      summary: Delete a preview environment
+      responses:
+        '200':
+          description: delete a preview environment
 
   /api/v1/teams/members/{username}:
     parameters:
-      - { name: username, in: path, required: true, schema: { type: string } }
+    - {name: username, in: path, required: true, schema: {type: string}}
     delete:
       tags: [teams]
       summary: Remove a team member
       responses:
-        "200": { description: removed }
+        "200": {description: removed}
     patch:
       tags: [teams]
       summary: Update a team member's role
@@ -550,9 +623,184 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: {type: object, additionalProperties: true}
       responses:
-        "200": { description: updated }
+        "200": {description: updated}
+
+  # M10 T2.1 (EC-1) — dashboard-consumed engine routes previously absent from the
+  # spec (all registered in api/internal/server/router.go). Added so the
+  # dashboard↔engine consumer contract (dashboard_consumer_test.go) is GREEN
+  # without trimming the manifest. See plan m10-test-foundation-gap.
+  /api/v1/deploys/{deployID}/timeline:
+    parameters:
+    - {name: deployID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [deploys]
+      summary: Deploy timeline event stream (SSE)
+      responses:
+        "200":
+          description: server-sent event stream of deploy timeline phases
+          content:
+            text/event-stream:
+              schema: {type: string}
+  /api/v1/integrations/github/installations/{id}/repositories:
+    parameters:
+    - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [integrations]
+      summary: List repositories for a GitHub App installation
+      responses:
+        "200":
+          description: repository list for the installation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /api/v1/projects/{name}/signals/stream:
+    parameters: [$ref: "#/components/parameters/ProjectName"]
+    get:
+      tags: [projects]
+      summary: Project runtime signals stream (SSE)
+      responses:
+        "200":
+          description: server-sent event stream of runtime status signals
+          content:
+            text/event-stream:
+              schema: {type: string}
+  /api/v1/projects/{name}/builds/stream:
+    parameters: [$ref: "#/components/parameters/ProjectName"]
+    get:
+      tags: [projects]
+      summary: Project builds stream (SSE)
+      responses:
+        "200":
+          description: server-sent event stream of build updates
+          content:
+            text/event-stream:
+              schema: {type: string}
+  /api/v1/builds/{id}/attestation:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - builds
+      summary: Get build attestation
+      responses:
+        '200':
+          description: get build attestation
+  /api/v1/builds/{id}/sbom:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - builds
+      summary: Get build SBOM
+      responses:
+        '200':
+          description: get build sbom
+  /api/v1/builds/stats:
+    get:
+      tags:
+      - builds
+      summary: Tenant deploys aggregate stats
+      responses:
+        '200':
+          description: tenant deploys aggregate stats
+  /api/v1/health/deep:
+    get:
+      tags:
+      - health
+      summary: Deep health check
+      responses:
+        '200':
+          description: deep health check
+  /api/v1/projects/{name}/build-envs:
+    parameters:
+    - name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - projects
+      summary: List build environments for a project
+      responses:
+        '200':
+          description: list build environments for a project
+  /api/v1/projects/{name}/metrics:
+    parameters:
+    - name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - projects
+      summary: Project runtime metrics (Prometheus proxy)
+      responses:
+        '200':
+          description: project runtime metrics (prometheus proxy)
+  /api/v1/secrets/bulk:
+    post:
+      tags:
+      - secrets
+      summary: Bulk create/update secrets
+      responses:
+        '200':
+          description: bulk create/update secrets
+  /api/v1/tenants/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    delete:
+      tags:
+      - tenants
+      summary: Soft-delete a tenant
+      responses:
+        '200':
+          description: soft-delete a tenant
+  /api/v1/tenants/bulk-delete:
+    post:
+      tags:
+      - tenants
+      summary: Bulk-delete tenants
+      responses:
+        '200':
+          description: bulk-delete tenants
+  /api/v1/tenants/{id}/restore:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    post:
+      tags:
+      - tenants
+      summary: Restore a soft-deleted tenant
+      responses:
+        '200':
+          description: restore a soft-deleted tenant
+  /api/v1/webhooks/github:
+    post:
+      tags:
+      - webhooks
+      summary: GitHub App webhook receiver
+      responses:
+        '200':
+          description: github app webhook receiver
 
 components:
   parameters:
@@ -560,22 +808,22 @@ components:
       name: name
       in: path
       required: true
-      schema: { type: string }
+      schema: {type: string}
     EnvName:
       name: name
       in: path
       required: true
-      schema: { type: string }
+      schema: {type: string}
     BuildID:
       name: id
       in: path
       required: true
-      schema: { type: string }
+      schema: {type: string}
     SecretName:
       name: name
       in: path
       required: true
-      schema: { type: string }
+      schema: {type: string}
 
   responses:
     Unauthorized:
@@ -594,11 +842,11 @@ components:
       additionalProperties: false
       required: [version, commit, build_date, go_version, platform]
       properties:
-        version:    { type: string }
-        commit:     { type: string }
-        build_date: { type: string }
-        go_version: { type: string }
-        platform:   { type: string }
+        version: {type: string}
+        commit: {type: string}
+        build_date: {type: string}
+        go_version: {type: string}
+        platform: {type: string}
     Project:
       type: object
       additionalProperties: true

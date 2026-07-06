@@ -22,7 +22,7 @@ import (
 	k "github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	"github.com/getloopscale/loopzero/operators/internal/metrics"
-	"github.com/getloopscale/loopzero/operators/internal/shared"
+	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -34,7 +34,7 @@ func (r *TenantReconciler) ensureHarborProject(ctx context.Context, tenant *loop
 		return nil
 	}
 
-	ctx, span := shared.StartChildSpan(ctx, "tenant.harbor.ensure")
+	ctx, span := reconcilehelpers.StartChildSpan(ctx, "tenant.harbor.ensure")
 	defer span.End()
 
 	quota := harborQuotaForPlan(tenant.Spec.Plan)
@@ -43,7 +43,7 @@ func (r *TenantReconciler) ensureHarborProject(ctx context.Context, tenant *loop
 		StorageQuota: quota,
 		Immutable:    true,
 	}); err != nil {
-		shared.RecordError(span, err)
+		reconcilehelpers.RecordError(span, err)
 		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeHarborProjectReady,
 			metav1.ConditionFalse, "EnsureProjectFailed", err.Error(), tenant.Generation)
 		return fmt.Errorf("harbor project %s: %w", tenant.Name, err)

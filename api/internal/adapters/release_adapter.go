@@ -9,6 +9,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // StatusReleaseStoreAdapter implements routes.StatusReleaseStore using db.ReleaseStore.
@@ -42,47 +43,17 @@ func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID
 	}, nil
 }
 
-// resolveEntryApp picks the canonical "entry" app — the one whose IngressRoute
-// the dashboard's "Visit" link should target. Resolution rules (FAANG canonical
-// J-25 sponsor walkthrough 2026-06-12 LIVE catch — second-order bug after the
-// first FAANG fix shipped in commit bfb21e0f):
-//
-//  1. Prefer the FIRST `server` app — server apps are always Traefik-routed
-//     via IngressRoute, so the canonical URL formula resolves cleanly.
-//  2. Fall back to the first `frontend` with rendering != "static" — those
-//     also get Traefik IngressRoutes (containerized HTTP server).
-//  3. SKIP `rendering: static` frontends entirely — they are delivered via
-//     CF Worker + DO Spaces (`api/internal/services/container_delivery.go`),
-//     NOT Traefik. Their URL field in release.Apps uses the same internal
-//     SNI formula but no IngressRoute exists at that host, so emitting it
-//     as status.url produces a Traefik 404 (the exact symptom sponsor caught
-//     when teste/web=static was picked instead of teste/api=server).
-//  4. Worker-only releases (no server/frontend) AND frontend-only releases
-//     that are 100% static return "" — StatusHandler then suppresses
-//     status.url and the dashboard renders "URL pending" (ADR D3 fail-closed).
-//
-// Malformed JSON (should never happen — emitted by the API at release
-// activation) returns "" rather than propagating an error, degrading the URL
-// gracefully into "URL pending".
+// resolveEntryApp delegates to the canonical SoT at pkg/naming.
+// Kept as a package-private forwarder so existing call sites in adapters
+// don't need to change AND so the tests in release_adapter_test.go keep
+// exercising the same helper name. Moved to pkg/naming 2026-07-01 (Red
+// Team loopzero-cloud#159 closure) so the promote path can reuse it —
+// promotion_orchestrator.go now emits the SAME canonical URL formula as
+// status.go, closing the "promote prints URL that 404s" divergence.
 func resolveEntryApp(appsRaw json.RawMessage) string {
-	if len(appsRaw) == 0 {
-		return ""
-	}
-	var specs []db.BuildAppSpec
-	if err := json.Unmarshal(appsRaw, &specs); err != nil {
-		return ""
-	}
-	// Pass 1: prefer server apps — Traefik-routed by definition.
-	for _, s := range specs {
-		if s.Type == "server" {
-			return s.Name
-		}
-	}
-	// Pass 2: fall back to non-static frontend — also Traefik-routed.
-	for _, s := range specs {
-		if s.Type == "frontend" && s.Rendering != "static" {
-			return s.Name
-		}
-	}
-	return ""
+	return naming.ResolveEntryAppFromApps(appsRaw)
 }
+
+// _ = db.BuildAppSpec{} — retained import placeholder; other adapters may
+// grow AppSpec usage. Preserving the import avoids a rippling churn.
+var _ = db.BuildAppSpec{}

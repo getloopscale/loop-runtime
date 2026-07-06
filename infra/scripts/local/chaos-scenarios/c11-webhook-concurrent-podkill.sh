@@ -116,17 +116,41 @@ dispatch_webhook_async() {
 assert_chain_recovery() {
   log "Asserting chain link 9 (HTTPS 200) within ${MAX_DURATION_SECONDS}s budget"
   local deadline=$(( START_EPOCH + MAX_DURATION_SECONDS ))
-  local fixture_url="${PUBLIC_FIXTURE_URL:-https://teste-dev.loopzero.example}"
+  local fixture_url="${PUBLIC_FIXTURE_URL:-}"
+
+  # Derive fixture URL canonically from /status if not provided. This is
+  # loopzero/loopzero#154 sibling — the c11 default URL `teste-dev.loopzero.example`
+  # is a legacy shape that 404s in dev-public; canonical URL comes from
+  # `naming.AppURL(tenant, project, entryApp, env, domain)` which the
+  # engine emits at /engine/api/v1/projects/{name}/status.url. Deriving
+  # here means the test survives any renaming of the AppURL formula.
+  if [ -z "$fixture_url" ] ; then
+    local jwt_file="${LOOPZERO_JWT_FILE:-$HOME/.loopzero/local-dogfood-session-jwt.txt}"
+    local status_url="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}/engine/api/v1/projects/${PROBE_PROJECT:-teste}/status?env=${PROBE_ENV:-production}"
+    if [ -f "$jwt_file" ] ; then
+      local jwt
+      jwt="$(cat "$jwt_file" 2>/dev/null || true)"
+      fixture_url="$(curl -sk -H "Authorization: Bearer ${jwt}" --max-time 8 "$status_url" 2>/dev/null \
+        | python3 -c "import sys,json;d=json.load(sys.stdin);u=(d.get('active_release') or {}).get('url') or d.get('url') or '';print(u)" 2>/dev/null || true)"
+    fi
+    if [ -z "$fixture_url" ] ; then
+      log "FAIL: could not derive PUBLIC_FIXTURE_URL from /status (JWT expired? probe project missing?)"
+      log "      Set PUBLIC_FIXTURE_URL explicitly or seed the probe project first."
+      return 1
+    fi
+    log "Derived fixture URL from /status.url: ${fixture_url}"
+  fi
+
   while [ "$(date +%s)" -lt "$deadline" ] ; do
     local code
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${fixture_url}/health" 2>&1 || echo "000")"
+    code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${fixture_url}/health" 2>&1 || echo "000")"
     if [ "$code" = "200" ] ; then
-      log "OK (chain link 9): HTTPS 200 post-recovery"
+      log "OK (chain link 9): HTTPS 200 post-recovery (${fixture_url})"
       return 0
     fi
     sleep 15
   done
-  log "FAIL: chain link 9 (HTTPS 200) not reached in ${MAX_DURATION_SECONDS}s"
+  log "FAIL: chain link 9 (HTTPS 200) not reached in ${MAX_DURATION_SECONDS}s at ${fixture_url}"
   return 1
 }
 

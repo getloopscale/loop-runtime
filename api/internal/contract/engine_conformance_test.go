@@ -38,13 +38,19 @@ import (
 const (
 	specPath   = "../../openapi/engine.yaml"
 	routerPath = "../server/router.go"
+	// routesDir holds helper-registered routes (e.g. RegisterDeployTimelineRoute
+	// mounts GET /api/v1/deploys/{deployID}/timeline) that router.go calls but does
+	// not spell out as a literal `.Get("...")`. Scanning it too keeps the
+	// spec⟺router contract honest for helper-registered routes. Monotonic: it only
+	// adds to the registered set, so it can never introduce a new phantom-spec fail.
+	routesDir = "../routes"
 )
 
 // registeredRouteRE matches chi registrations in either form:
 //   r.Get("/api/v1/health", ...)
 //   r.With(mw...).Post("/api/v1/builds", ...)   (middleware-wrapped)
 // — i.e. any `.<Method>("<path>"` chain, not only the bare `r.<Method>(` form.
-var registeredRouteRE = regexp.MustCompile(`\.(Get|Post|Put|Delete|Patch)\("([^"]+)"`)
+var registeredRouteRE = regexp.MustCompile(`\.(Get|Post|Put|Delete|Patch)\(\s*"([^"]+)"`)
 
 func loadSpec(t *testing.T) *openapi3.T {
 	t.Helper()
@@ -63,9 +69,23 @@ func registeredRoutes(t *testing.T) map[string]bool {
 		t.Fatalf("read router.go: %v", err)
 	}
 	set := map[string]bool{}
-	for _, m := range registeredRouteRE.FindAllStringSubmatch(string(src), -1) {
-		method := strings.ToUpper(m[1])
-		set[method+" "+m[2]] = true
+	scan := func(b []byte) {
+		for _, m := range registeredRouteRE.FindAllStringSubmatch(string(b), -1) {
+			set[strings.ToUpper(m[1])+" "+m[2]] = true
+		}
+	}
+	scan(src)
+	// Also scan the routes package for helper-registered routes (non-test .go).
+	if entries, derr := os.ReadDir(routesDir); derr == nil {
+		for _, e := range entries {
+			n := e.Name()
+			if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+				continue
+			}
+			if b, rerr := os.ReadFile(routesDir + "/" + n); rerr == nil {
+				scan(b)
+			}
+		}
 	}
 	return set
 }

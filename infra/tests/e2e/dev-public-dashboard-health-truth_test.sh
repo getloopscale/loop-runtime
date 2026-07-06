@@ -41,7 +41,7 @@ set -euo pipefail
 PLAN_SLUG="dashboard-health-truth"
 ISSUE_REF="loopzero-cloud#124"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
-PROJECT_NAME="${PROJECT_NAME:-loopzerokit-example}"
+PROJECT_NAME="${PROJECT_NAME:-teste}"
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"
 SKIP_LIVE=0
 JSON_OUTPUT=0

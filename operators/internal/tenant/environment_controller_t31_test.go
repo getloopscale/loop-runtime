@@ -72,7 +72,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "loopzero-tn-t31-teste-production",
 				}, &ns)).To(Succeed())
-			}, "10s", "200ms").Should(Succeed())
+			}, timeout, interval).Should(Succeed())
 		})
 
 		AfterAll(func() {
@@ -84,6 +84,17 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 	})
 
 	Context("EC-3 63-char overflow (RED 2)", func() {
+		// Fixed by MEET-2026-07-02-002 (t31 flake). The former ~50% flake was a
+		// status-write concurrency bug: the environment reconcile persisted the
+		// NameTooLong condition via a refetch-then-restore Status().Update that
+		// silently dropped the condition on an optimistic-concurrency conflict
+		// (return nil, no requeue), and the phase never reached Pending so a
+		// later delete hit an absent Empty→Deleting SM edge. Root-cause fix:
+		// single-status-writer merge-patch (Status().Patch(MergeFrom(base))) +
+		// requeue-on-conflict + the additive SM edge. Proven deterministically
+		// in operators/internal/environment/environment_controller_conflict_test.go
+		// (fake-client conflict injection) — this envtest spec is now the
+		// end-to-end corroboration, no longer quarantined.
 		It("sets Status condition NameTooLong without requeue when computed name >63 chars", func() {
 			// Compose tenant + project + env so the canonical name exceeds
 			// 63 chars: `loopzero-<26>-<27>-<25>` = 4 + 26 + 1 + 27 + 1 + 25 = 84 chars.
@@ -111,7 +122,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 				g.Expect(found).To(BeTrue(),
 					"expected NamespaceReady=False Reason=NameTooLong; got conditions: %+v",
 					fetched.Status.Conditions)
-			}, "10s", "200ms").Should(Succeed())
+			}, timeout, interval).Should(Succeed())
 
 			// Sanity: no namespace was actually created at the M2 or any other form.
 			var ns corev1.Namespace

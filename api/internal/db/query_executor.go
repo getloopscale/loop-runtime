@@ -12,6 +12,16 @@ import (
 // Equivalent to pgx.ErrNoRows / sql.ErrNoRows.
 var ErrNoRows = errors.New("no rows in result set")
 
+// ErrNilTxStatusMutation is returned by the read-modify-write status mutators
+// (BuildStoreSqlc / ReleaseStoreSqlc UpdateStatus) when called with a nil tx.
+// A status read-modify-write (GetByIDTx → SafeTransition → UPDATE) MUST run in
+// one transaction under withEnvironmentLock; a nil tx would split the fetch and
+// the update across two pooled auto-committed connections (no atomicity, the
+// advisory lock never held). Lock-free conditional updates must use the
+// single-statement CAS UpdateStatusIfCurrent instead. M9 5b, ADR
+// 2026-07-03-m9-5b-nil-tx-status-atomicity.
+var ErrNilTxStatusMutation = errors.New("db: status read-modify-write requires a non-nil tx (advisory-lock scope) — use UpdateStatusIfCurrent for lock-free conditional updates")
+
 // QueryExecutor abstracts pgx query methods for read operations.
 // Implemented by *pgxpool.Pool, *pgx.Conn, and test fakes.
 type QueryExecutor interface {

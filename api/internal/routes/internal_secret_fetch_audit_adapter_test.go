@@ -57,7 +57,7 @@ func TestSecretReadAuditAdapter_SatisfiesInterface(t *testing.T) {
 // configured). We use a mock that captures the call AND triggers an
 // error to ensure the propagation path is exercised.
 
-// failingLogger is a noop *db.AuditLogger substitute. We can't construct
+// failingLogger is a noop *store.AuditLogger substitute. We can't construct
 // a real one without a DB; so we test error propagation through the
 // nil-logger guard. Other propagation paths (DB error) are integration-
 // level concerns, NOT unit-level.

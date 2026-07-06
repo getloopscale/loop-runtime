@@ -1,0 +1,79 @@
+# M9 gate-set oracle baseline — frozen 2026-07-02 (native --list order; do NOT sort)
+# Source: loopzero-ops quality --list  (MA-1, MEET-2026-07-02-001; hardened per verification-architect sign-off)
+# MA-3 check: loopzero-ops quality --list | diff - <(grep -v '^#' THIS_FILE)  MUST be empty
+# Column 2 = TASKS: comma-joined sorted taskfiles/quality.yml task(s) invoking the gate, or '-' (per-task
+#   attribution replaced the boolean 'wired' union so a silent un-wire from quality:gates flips the cell).
+# NAME<TAB>TASKS<TAB>SUMMARY
+acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
+advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
+agpl-isolation	-	Verifies AGPL-licensed code stays isolated from proprietary import paths.
+alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
+anonymous-auth	gates	Forbids anonymous/unauthenticated access on protected API surfaces.
+base-image-digest	-	Base images are pinned by digest, not floating tags.
+baseline-compare	-	Compares a captured steady-state baseline against the current state.
+baseline-update	-	Updates the committed steady-state baseline artifact.
+caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
+cli-bundle-size	-	Guards the CLI published bundle size against regression.
+cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
+cluster-role-no-secrets-star	gates	Forbids unconditional cluster-wide secrets/configmaps RBAC grants.
+clusterimagepolicy-mode	-	Validates the sigstore ClusterImagePolicy enforcement mode.
+contract-consumers	-	Verifies cross-repo contract consumers stay in sync with the contract.
+corrections-txt-closed	gates	Asserts CORRECTIONS.txt items are all closed.
+correlation-header	gates	Correlation-ID header is forwarded across the request path.
+cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
+coverage-diff	-	Diffs test coverage against a baseline to catch regressions.
+coverage-merge	-	Merges per-package coverage profiles into one report.
+crd-semantic-diff	-	Semantic diff of CRD schemas to catch breaking spec changes.
+dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
+dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
+dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
+db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
+decisions-deletion	-	Guards deletion of decision/ADR records.
+divergence-matrix	-	Checks the local-vs-prod divergence matrix is current.
+dockerfile-no-docker-hub	gates	Forbids unqualified docker.io/Docker Hub base images.
+drill-creds-isolation	-	Ensures DR-drill credentials are isolated from production.
+drill-outputs-consumers	-	Verifies drill Pulumi-output consumers use the canonical schema.
+git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
+helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
+helm-drift	-	Detects drift between rendered Helm charts and the deployed state.
+helm-overlap-parity	gates	Keeps the dual Helm chart systems (infra/helm vs charts) in parity.
+ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.
+migration-test-coverage	-	Every DB migration has corresponding test coverage.
+mock-budget	-	Caps the number of mocks per test (SRP smell budget).
+no-aes-remaining	gates	Calendar-gated: fails on remaining AES code paths post-transit migration.
+no-env-vault-secrets	gates	Forbids secrets-as-env-var regression after the ESO/OpenBao migration.
+no-legacy-sa-token-secret	gates	Forbids legacy kubernetes.io/service-account-token Secrets.
+no-migrate-force	-	Forbids forced/destructive DB migration operations.
+no-new-bash	diff	Blocks new .sh files not in the shell-scripts allowlist.
+no-pulumi-inline-secrets	-	Forbids inline secret literals in Pulumi code.
+no-shell-wrap	-	Forbids thin shell wrappers around pure-logic that belongs in Go.
+orphan-alerts	-	Detects Prometheus alerts with no owning dashboard/runbook.
+pkg-usage-matrix	-	Verifies the pkg/ cross-component usage matrix is current.
+postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
+prod-image-digests	gates	Production manifests reference images by digest.
+prod-image-tags	-	Forbids mutable :latest-style image tags in production manifests.
+quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
+regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.
+regression-test	-	Asserts a regression test exists for tracked fixed bugs.
+runtime-slo	-	Validates runtime SLO definitions and thresholds.
+script-count	gates	Tracks the total shell-script count against the reduction target.
+scripts-audit	-	Audits shell scripts against the allowlist ledger.
+security-context	-	Enforces pod securityContext (non-root, limits, probes).
+service-auth-rotation	-	Enforces the Ed25519 service-auth key rotation cadence.
+services-acyclic	gates	M9 Step 6: services bounded-context imports form the frozen acyclic DAG.
+shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
+skip-link	-	Verifies accessibility skip-link presence in the dashboard.
+spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.
+sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
+sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
+stack-coverage	-	Verifies the tool-inventory stack-coverage claims via grep.
+taskfile-interface	-	Validates the Taskfile public-interface contract.
+template-compliance	-	Checks documents comply with their canonical templates.
+tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security veto-backed).
+test-deletion	-	Guards deletion of test files against coverage loss.
+test-pyramid	-	Validates the unit/integration/e2e test-pyramid balance.
+test-targets	-	Verifies Taskfile test targets exist and are wired.
+transit-coverage	gates	Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store).
+trivy-scan	gates	Runs Trivy CVE scanning on filesystem/images.
+trufflehog-scan	gates	Runs TruffleHog verified-secret scanning.
+unhomed-logic	gates	Forbids un-homed operational logic that belongs in a pkg/quality gate.

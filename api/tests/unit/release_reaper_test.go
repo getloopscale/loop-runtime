@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/services/release"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services"
 	"github.com/getloopscale/loopzero/pkg/logging"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -17,11 +18,11 @@ import (
 // --- fake stale release checker ---
 
 type fakeStaleReleaseChecker struct {
-	releases []services.StaleRelease
+	releases []release.StaleRelease
 	err      error
 }
 
-func (f *fakeStaleReleaseChecker) FindStaleReleases(_ context.Context, _ string, _, _ time.Duration) ([]services.StaleRelease, error) {
+func (f *fakeStaleReleaseChecker) FindStaleReleases(_ context.Context, _ string, _, _ time.Duration) ([]release.StaleRelease, error) {
 	return f.releases, f.err
 }
 
@@ -39,7 +40,7 @@ func TestReleaseReaper_ReapsReadyRelease(t *testing.T) {
 	}
 
 	checker := &fakeStaleReleaseChecker{
-		releases: []services.StaleRelease{
+		releases: []release.StaleRelease{
 			{
 				ID:          "rel-stale-ready",
 				State:       statemachine.RPhReady,
@@ -56,7 +57,7 @@ func TestReleaseReaper_ReapsReadyRelease(t *testing.T) {
 	eventStore := newFakeEventStoreOrch()
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewReleaseReaper(releaseStore, checker, locker, eventStore, logger, services.ReleaseReaperConfig{
+	reaper := release.NewReleaseReaper(releaseStore, checker, locker, eventStore, logger, release.ReleaseReaperConfig{
 		ReadyTimeout:   5 * time.Minute,
 		PendingTimeout: 2 * time.Minute,
 		Interval:       1 * time.Second,
@@ -98,7 +99,7 @@ func TestReleaseReaper_ReapsPendingRelease(t *testing.T) {
 	}
 
 	checker := &fakeStaleReleaseChecker{
-		releases: []services.StaleRelease{
+		releases: []release.StaleRelease{
 			{
 				ID:          "rel-stale-pending",
 				State:       statemachine.RPhPending,
@@ -115,7 +116,7 @@ func TestReleaseReaper_ReapsPendingRelease(t *testing.T) {
 	eventStore := newFakeEventStoreOrch()
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewReleaseReaper(releaseStore, checker, locker, eventStore, logger, services.DefaultReleaseReaperConfig())
+	reaper := release.NewReleaseReaper(releaseStore, checker, locker, eventStore, logger, release.DefaultReleaseReaperConfig())
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())
@@ -153,7 +154,7 @@ func TestReleaseReaper_SkipsTerminalReleases(t *testing.T) {
 	}
 
 	checker := &fakeStaleReleaseChecker{
-		releases: []services.StaleRelease{
+		releases: []release.StaleRelease{
 			{
 				ID:          "rel-done",
 				State:       statemachine.RPhReady,
@@ -169,7 +170,7 @@ func TestReleaseReaper_SkipsTerminalReleases(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewReleaseReaper(releaseStore, checker, locker, nil, logger, services.DefaultReleaseReaperConfig())
+	reaper := release.NewReleaseReaper(releaseStore, checker, locker, nil, logger, release.DefaultReleaseReaperConfig())
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())
@@ -185,13 +186,13 @@ func TestReleaseReaper_SkipsReleasesWithinTimeout(t *testing.T) {
 	releaseStore := newFakeReleaseStoreOrch()
 
 	checker := &fakeStaleReleaseChecker{
-		releases: []services.StaleRelease{}, // no stale releases
+		releases: []release.StaleRelease{}, // no stale releases
 	}
 
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewReleaseReaper(releaseStore, checker, locker, nil, logger, services.DefaultReleaseReaperConfig())
+	reaper := release.NewReleaseReaper(releaseStore, checker, locker, nil, logger, release.DefaultReleaseReaperConfig())
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())
@@ -217,7 +218,7 @@ func TestReleaseReaper_SkipsAlreadyAdvancedRelease(t *testing.T) {
 	}
 
 	checker := &fakeStaleReleaseChecker{
-		releases: []services.StaleRelease{
+		releases: []release.StaleRelease{
 			{
 				ID:          "rel-advanced",
 				State:       statemachine.RPhPending,
@@ -233,7 +234,7 @@ func TestReleaseReaper_SkipsAlreadyAdvancedRelease(t *testing.T) {
 	locker := &fakeEnvironmentLocker{}
 	logger := logging.NewLogger("test")
 
-	reaper := services.NewReleaseReaper(releaseStore, checker, locker, nil, logger, services.DefaultReleaseReaperConfig())
+	reaper := release.NewReleaseReaper(releaseStore, checker, locker, nil, logger, release.DefaultReleaseReaperConfig())
 
 	// Act
 	reaped := reaper.ReapOnce(context.Background())

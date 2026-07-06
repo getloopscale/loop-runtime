@@ -258,6 +258,23 @@ type ProjectSummary struct {
 	// Dashboard renders this as the canonical "Live envs" count;
 	// EnvironmentCount stays for backwards compat as the all-kinds total.
 	ProductionEnvCount int64 `json:"production_env_count"`
+	// ActiveEnvCount is the count of env_targets that have a currently
+	// serving ACTIVE release (preview OR permanent kind). This is what
+	// the dashboard "LIVE ENVS" counter SHOULD reflect — a project with
+	// a preview env in the ACTIVE state + Live URL serving 200 must
+	// count as 1, not 0. Red Team loopzero-cloud#134 absorption (2026-07-02).
+	//
+	// Semantic distinction:
+	//   - EnvironmentCount   — all env_targets (any kind, any release state)
+	//   - ProductionEnvCount — kind='permanent' subset (any release state)
+	//   - ActiveEnvCount     — any kind WITH corresponding release.status='ACTIVE'
+	//
+	// Legacy `production_env_count` stays for the `isPreviewOnly`
+	// heuristic (dashboard `project-detail.tsx`) which asks a different
+	// question: "was any PERMANENT env provisioned?" — not "how many
+	// envs are currently live?". The two counters answer different
+	// questions on the same page; conflating them was the #134 bug.
+	ActiveEnvCount int64 `json:"active_env_count"`
 	// LastDeployStatus is one of: "live", "building", "failed", "idle",
 	// "queued" — derived from the latest build's status via
 	// pkg/enforcement.MapBuildStatusToProjectStatus.
@@ -297,6 +314,21 @@ type ProjectSummary struct {
 	// production releases rendered Live across 4 surfaces. Empty string
 	// when no builds exist.
 	LatestBuildEnvironment string `json:"latest_build_environment,omitempty"`
+	// LastReplicasReadyValue + LastReplicasReadyAt — T3.2 of plan
+	// dashboard-badge-data-plane-poller closing Red Team loopzero-cloud#128
+	// (badge lies "Live" when control-plane ACTIVE + data-plane 502).
+	// The DataPlanePoller Runnable in loopzero-app-operator scrapes
+	// kube_deployment_status_replicas_ready per (tenant,project,env)
+	// tuple and UPDATEs environment_targets on each tick. Surfaced here
+	// via the ListProjectsWithSummaryByTenant LATERAL join for the
+	// permanent (production-flavor) env. Nil means no snapshot yet —
+	// the dashboard maps NULL to the honest "Unknown" state per EC-7
+	// no-flicker headroom, NOT to Live-or-Down. Pointer + `omitempty`
+	// forces key absence on the wire (value-type time.Time with omitempty
+	// silently serializes `"0001-01-01T00:00:00Z"` — the same trap #118
+	// fixed for LastDeployAt).
+	LastReplicasReadyValue *int       `json:"last_replicas_ready_value,omitempty"`
+	LastReplicasReadyAt    *time.Time `json:"last_replicas_ready_at,omitempty"`
 }
 
 // ProjectStore abstracts project persistence (DIP).

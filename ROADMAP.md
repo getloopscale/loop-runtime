@@ -34,6 +34,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 - **Multi-cell auto-rebalance** — *why excluded:* ADR-0008 + ADR-0021 sticky placement, manual `loopzero admin tenants pin` only
 - **Vercel-style multi-URL preview** — *why excluded:* sponsor verbatim 2026-06-07 "K8S pode sobrecarregar e elevar os custos por usuario"; chose Netlify single-slot model
 - **CLI parity with dashboard** — *why excluded:* CLI is primary interface per CLAUDE.md Rule 9; dashboard adds visualization, doesn't replace CLI
+- **LLM-judge semantic assertions (Rule 3 / product-copy) + AIOps over observability** — *why excluded:* deferred per sponsor 2026-07-05 when scoping M10–M13; non-deterministic (LLM-judge is a hybrid soft-signal, never a hard gate; AIOps is a separate prod-MTTR initiative). Revisit as a post-M13 milestone.
 
 > Items in this list are off-limits for V1. To reconsider, write a new roadmap revision — do not silently expand scope.
 
@@ -255,6 +256,117 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
+### M9 — [ ] Engine Architecture Hardening
+
+**Objective:** apply the 8-step behavior-preserving migration plan from the FAANG-level architecture audit (score 77/100, verdict `REFACTOR LIGHTLY`, report `architect-output/architecture-report.md`) to fix all 5 MEDIUM findings — oversized flat packages, one god file, `pkg/quality` boundary misfit, one generic god-folder, and mixed-responsibility operator package. **Why now:** de-risk before the `loopzero-contracts`/`loopzero-cloud` extractions — finding #3 (`pkg/quality` would be dragged into the contracts base) hardens into real debt post-split, and every step is behavior-preserving today.
+
+> **Governance note:** classified **T2** (ratified). **APPROVED_WITH_CONDITIONS** at `docs/meetings/records/MEET-2026-07-02-001.md` (Review Board + PDR + CVP + contract-api-operators + state-guardian; no T3 escalation, no veto). Engineering start is unblocked once the 12 mandatory actions are wired — the load-bearing ones: MA-1 build `loopzero-ops quality --list` gate-set oracle FIRST (before step 3); MA-2 deliver as 8 atomic `develop→main` PRs (not one mega-PR); MA-7 keep `store` the only exported status-mutation path (no `db/generated` bypass of `SafeTransition`); MA-9 operator split stays one binary/one manager. Step 7 (gate self-registration) re-classified low→**HIGH** (silent gate un-wire risk). Per-step validation is hermetic (`go build && go test && task quality:gates && task lint` + envtest), NOT per-step LIVE.
+
+**Definition of done:**
+
+- [ ] Steps 1+2 (risk: low, `behavior_change: none`): `operators/internal/shared` renamed to `reconcilehelpers`; Environment reconciler extracted from `operators/internal/tenant` into `operators/internal/environment` — `go build ./... && go test ./...` green
+- [ ] Steps 3+4 (risk: medium, `behavior_change: none`): `pkg/quality` (14.6k LOC ≈ 59% of `pkg/`) relocated out of the shared-contracts base + gate importers rewired + scanned paths externalized — `task quality:gates` green AND `pkg/` LOC drops materially
+- [ ] Steps 5+6 (risk: medium, `behavior_change: none`): `api/internal/db` (70 files/14.8k LOC) split into generated/repository/store; `api/internal/services` (56 files/12.3k LOC, 86 structs) grouped by domain — `cd api && go test ./internal/db/... ./internal/services/...` green
+- [ ] Step 7 (risk: low, `behavior_change: minor`): `cmd/loopzero-ops/quality_subcmd.go` (2909 LOC god file) refactored to per-gate self-registration — `task quality:gates` green, gate behavior identical
+- [ ] Step 8 (verification): no new import cycles (`go build ./...` authoritative); `go test ./... && task lint` green after EVERY step; re-run `/loop-codebase-architect loopzero/` scores ≥ 85 (Keep band)
+
+**Dependencies:** none — orthogonal to the dashboard journeys M0..M8; can start at any time independent of journey progress.
+
+**Top risks:**
+
+1. Import rewiring across ~38k LOC of flat packages (db/services/routes) can break call sites the compiler misses at the edges (reflection, build tags). Mitigation: incremental per-step `go build && go test` gate; every step `behavior_change: none`.
+2. `pkg/quality` relocation is a T2 change (shared `pkg/`) that could destabilize the 77 CI quality gates if a gate importer path is missed. Mitigation: `task quality:gates` after steps 3/4/7; T2 governance meeting before implementation.
+
+---
+
+### M10 — [ ] Test Foundation: Ginkgo Harness + Spec-Based Contract Layer
+
+**Objective:** estabelecer a base **determinística** de validação — Ginkgo suite + **extensão da camada spec-based Go já existente e LIVE-validada** (`api/openapi/engine.yaml` OpenAPI 3.0 + `api/internal/contract/` com `engine_conformance_test.go` + `cli_consumer_test.go` + `testdata/cli-consumed-paths.txt`) para cobertura bilateral cli↔cloud↔engine↔contracts. **NÃO é greenfield nem Pact-broker:** a org já escolheu — e LIVE-validou (`canonical-tests-rewrite-v2`, 3 iterações de review) — o modelo **bidirectional spec-based em Go puro** (KISS, sem broker, `getkin/kin-openapi`), que é preferível a Pact-go CDC para uma única org. **Absorve e formaliza** `ADR-2026-06-17-T3-canonical-tests-rewrite`, convertendo a `Precondition (PAUSE M0-M8)` numa milestone rastreável. **Why now:** 2.567 LOC de bash em débito + a decomposição em polyrepo precisa de contract tests **antes** de as extrações endurecerem o integration drift.
+
+> **Relationship to ratified ADR:** M10 é o wrapper rastreável da precondition acima + do plan `canonical-tests-rewrite-v2` (já parcialmente entregue). As `Pre-conditions to unblock M0-M8` tornam-se a DoD. Fechar M10 = destravar M0-M8.
+
+**Definition of done:**
+
+- [ ] Ginkgo suite em `loopzero-contracts` GREEN (sponsor checkpoint 1 da ADR)
+- [ ] Camada spec-based Go estendida a bilateral cli↔cloud↔engine↔contracts: consumer-path manifests + `engine_conformance_test.go` GREEN em todos os pares (reusa `api/internal/contract/`, não reinventa)
+- [ ] Contract-conformance wired como **gate** determinístico (falha o build se um consumidor usa path/shape fora da spec) — o gate que os scripts manuais nunca serão
+- [ ] Chain v2 (cleanroom + dogfood + chaos + contra-prova) reconstruída em Ginkgo; suite bash antiga em quarentena **read-only** (consultável per ADR D5)
+- [ ] 3 execuções consecutivas chain 6-etapas verde → DELETE quarentena + sponsor verbatim *"M0-M8 destravado"*
+
+**Dependencies:** none — ortogonal às journeys M0..M8 (é a própria precondition que as destrava). Pode começar imediatamente.
+
+**Top risks:**
+
+1. Divergência entre o texto do roadmap e o que `canonical-tests-rewrite-v2` já entregou — mitigado por reconciliar M10 com esse plan LIVE-validado ANTES de `/auto-plan` (não abrir artefato concorrente).
+2. Consumer-path manifest (`cli-consumed-paths.txt`) ficar stale vs consumo real do CLI — mitigado por gerar/verificar o manifesto no CI, não à mão.
+
+---
+
+### M11 — [ ] API Validation: complete spec (73%→100%) + property-based fuzzing
+
+**Objective:** substituir os **~50%** dos `infra/tests/e2e/dev-public-*.sh` que são asserções de API (curl endpoint + check JSON/status) por (a) **completar `api/openapi/engine.yaml` de ~73% para 100% de cobertura de rotas** (hoje: ~38 paths na spec vs ~52 rotas REST no router — as 14 faltantes são o gap), depois (b) **property-based fuzzing** sobre a spec completa e (c) **Go integration tests** no harness Ginkgo do M10. **Why now:** os scripts curl são manual-only (`OPERATOR HARD STOP`) e não rodam em nenhum CI; fuzzing property-based revela edge-cases (500s, validation bypass) que o `engine_conformance_test.go` atual não cobre.
+
+> **Spike required (ferramenta NÃO decidida a 95%):** completar a spec é pré-requisito e vale por si só (fecha spec-drift). Para o fuzzer, comparar **schemathesis** (Python, best-in-class OpenAPI property-based; Python já está no toolchain) vs **Go-native** (`gopter`/`testing/quick` + oráculos manuais, mantém tudo em Go) num PoC de UM endpoint antes de comprometer. Critério: cobertura de bug/edge vs custo de manter uma toolchain Python só para isto.
+
+**Definition of done:**
+
+- [ ] `api/openapi/engine.yaml` cobre 100% das rotas REST do router (`spec_loads_test.go` + um novo gate spec-vs-router provam paridade — sem rota órfã)
+- [ ] Spike schemathesis vs Go-native concluído com decisão registrada (ADR curto); fuzzer escolhido wired num runner determinístico com JUnit report
+- [ ] ≥ 50% dos `dev-public-*.sh` de asserção-de-API migrados para Go integration tests no harness M10 (o inventário classifica exatamente quais scripts)
+- [ ] Cada teste migrado: falha vira **diff estruturado** (não `exit 1`); roda headless sem infra LIVE completa
+- [ ] Os scripts bash substituídos + seus `check-*-syntax_test.sh` + aggregators DELETADOS; entradas correspondentes da allowlist removidas
+
+**Dependencies:** M10 (precisa do harness Ginkgo + camada spec-based estendida).
+
+**Top risks:**
+
+1. Completar a spec a 100% expõe rotas mal-documentadas/inconsistentes — é feature, não bug (spec-drift vira visível); mitigado pelo gate spec-vs-router.
+2. Tool-sprawl se o spike escolher schemathesis (+1 toolchain Python; 74% dos times querem menos) — mitigado por Python já estar no toolchain + output JUnit; o spike existe justamente para pesar isto vs Go-native.
+
+---
+
+### M12 — [ ] Dashboard Validation: Playwright + axe-core (kill bundle-grep)
+
+**Objective:** substituir os **~30%** dos `dev-public-*.sh` de dashboard (**bundle-grep** de literais minificados no JS servido) por **Playwright** (DOM/browser real) + **axe-core** (a11y declarativo). Fecha a fragilidade **D1** (o pior anti-pattern presente). **Why now:** bundle-grep testa o **compilador**, não o comportamento — quebra a cada mudança de minificação; e os issues de a11y (#71/#79/#80/#81/#83) são exatamente o que axe-core detecta declarativamente.
+
+**Definition of done:**
+
+- [ ] Playwright suite headless em CI **e** rodável contra dev-public (a mesma suíte serve os dois mundos — o mandate LIVE sobrevive)
+- [ ] axe-core integrado; issues de a11y (#71/#79/#80/#81/#83) cobertos por **asserção declarativa** (não grep)
+- [ ] 100% dos scripts bundle-grep de dashboard substituídos por asserção de comportamento/DOM real
+- [ ] Visual regression baseline capturado para as telas críticas do dashboard
+- [ ] Scripts bundle-grep + `check-*-syntax_test.sh` + aggregators DELETADOS; allowlist encolhe
+
+**Dependencies:** M10 (harness/CI base). Independente de M11 (pode correr em paralelo).
+
+**Top risks:**
+
+1. Async-state flakiness — Playwright auto-wait cobre DOM readiness mas **não** business-state (o "optimistic-UI trap" da literatura); mitigado por waits explícitos de estado.
+2. Vendor lock-in de tooling AI de self-healing — mitigado por manter **Playwright puro** como fundação (self-healing/Planner-Generator-Healer é opcional por cima, não obrigatório).
+
+---
+
+### M13 — [ ] Chaos Declarative + Bash Strangler Completion
+
+**Objective:** (a) reexpressar os cenários de chaos `c11`/`c12`/`c13` de orquestração bash para **experimentos declarativos Chaos Mesh** (CRD/Workflow) + asserção em Go; (b) **completar o strangler** — com M11+M12 tendo migrado as asserções, deletar o resíduo de bash e fazer a **allowlist encolher** rumo ao alvo `≤ 30` já definido em `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`. **Why now:** fecha o loop; sem esta milestone a allowlist volta a crescer a cada issue.
+
+**Definition of done:**
+
+- [ ] `c11`/`c12`/`c13` reexpressos como Chaos Mesh declarativo + asserção Go (não bash orchestration)
+- [ ] Inversão do gate `no-new-bash`: default passa a *"teste novo nasce na camada estruturada"*; bash **só** para glue operador irredutível (categoria `KEEP-OPERATOR` da allowlist)
+- [ ] allowlist de scripts encolhe de 500+ para **≤ 30** (o alvo do shell-script-strategic-plan) — **KPI invertido: encolhe, não cresce**
+- [ ] Zero asserção **de comportamento** restante em bash; o residual bash é 100% orquestração operador
+- [ ] `feedback_issue_fix_requires_failing_e2e_test` mandate atualizado: o **artefato** passa de bash → estruturado (o mandate INQUEBRÁVEL sobrevive; muda o formato, não a regra)
+
+**Dependencies:** M11, M12 (só dá para deletar bash de uma área depois que o substituto estruturado dela está GREEN).
+
+**Top risks:**
+
+1. Deletar bash cedo demais (antes do substituto cobrir a área) cria gap de cobertura — mitigado por deletar **por-área**, só após o teste estruturado equivalente estar GREEN.
+2. Cleanroom LIVE mandate ser mal-interpretado como "podemos largar LIVE" — mitigado: Playwright (M12) + Ginkgo (M10) rodam LIVE contra dev-public; `cleanroom-up-live-test-mandate.md` é preservado explicitamente.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |
@@ -264,6 +376,10 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 | Railway Dashboard | proprietary (UX study only) | reference per-project env scoping + service mesh | M2, M3 |
 | Fly.io Dashboard | proprietary (UX study only) | reference scale + region UX | M4 |
 | Linear Dashboard | proprietary (UX study only) | reference table density + keyboard-first | M3, M7 |
+| getkin/kin-openapi | MIT | OpenAPI 3 loader/validator — foundation of the existing spec-based Go contract layer (`api/internal/contract/`) | M10 |
+| PactFlow bidirectional contracts (concept) | proprietary (concept study only) | reference for spec-based bidirectional contract testing — the lean model the org already chose homegrown vs full Pact CDC | M10 |
+| schemathesis | MIT | candidate (spike vs Go-native) for property-based API fuzzing from OpenAPI | M11 |
+| Playwright (+ axe-core) | Apache-2.0 (axe-core MPL-2.0) | real-browser E2E + declarative a11y; kills bundle-grep | M12 |
 
 ---
 

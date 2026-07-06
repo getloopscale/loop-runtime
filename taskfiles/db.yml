@@ -183,7 +183,7 @@ tasks:
         echo "[PASS] sqlc generate completed; verify api/internal/db/generated/ and commit any diff"
 
   db:verify-sync:
-    desc: Verify committed api/internal/db/generated/ is in-sync with a fresh `sqlc generate` (pkg/quality/sqlcsync gate; CI runs this too)
+    desc: Verify committed api/internal/db/generated/ is in-sync with a fresh `sqlc generate` (cmd/loopzero-ops/internal/quality/sqlcsync gate; CI runs this too)
     cmds:
       - |
         if ! command -v sqlc >/dev/null; then

@@ -97,15 +97,35 @@ ON CONFLICT (id) DO UPDATE SET
 " >/dev/null
 log "user ensured"
 
-# 4) Insert tenant. Schema requires slug (UNIQUE) + owner_id (FK to users).
+# 3.5) Insert bootstrap account FIRST. Migration 000044 made tenants.account_id
+# NOT NULL after the 000037 backfill. Production code calls EnsureAccount on
+# first login; this batch seed mirrors that path for standalone-multi.
+# Canonical 1:1 user->account per migration 000034 UNIQUE(owner_id) — same
+# constraint that enables ON CONFLICT idempotency in EnsureAccount itself.
+# Re-runs after Cleanroom are a no-op (owner_id already has an account row).
+# Pattern matches api/tests/integration/project_cap_m4_test.go canonical seed.
+ACCOUNT_ID="${SEED_ACCOUNT_ID:-acct-bootstrap}"
+run_psql -c "
+INSERT INTO accounts (id, display_name, plan, owner_id)
+VALUES ('$ACCOUNT_ID', '$DISPLAY_NAME', 'starter', '$USER_ID')
+ON CONFLICT (owner_id) DO NOTHING;
+" >/dev/null
+log "account ensured (owner=$USER_ID)"
+
+# 4) Insert tenant. Schema requires slug (UNIQUE) + owner_id (FK to users) +
+# account_id (NOT NULL since migration 000044). Resolve account_id by
+# owner_id lookup (UNIQUE) so the seed works whether the account was just
+# created above OR was minted by EnsureAccount on a prior first login.
 # slug derived from id (replace anything non-alphanumeric with '-').
 SLUG=$(printf '%s' "$TENANT_ID" | tr -c 'a-zA-Z0-9' '-' | tr '[:upper:]' '[:lower:]')
 run_psql -c "
-INSERT INTO tenants (id, slug, owner_id, display_name)
-VALUES ('$TENANT_ID', '$SLUG', '$USER_ID', '$TENANT_ID')
+INSERT INTO tenants (id, slug, owner_id, display_name, account_id)
+SELECT '$TENANT_ID', '$SLUG', '$USER_ID', '$TENANT_ID', a.id
+FROM accounts a
+WHERE a.owner_id = '$USER_ID'
 ON CONFLICT (id) DO NOTHING;
 " >/dev/null
-log "tenant ensured (slug=$SLUG owner=$USER_ID)"
+log "tenant ensured (slug=$SLUG owner=$USER_ID account=$ACCOUNT_ID)"
 
 # 5) Strip pre-existing memberships of this user OUTSIDE the canonical
 #    tenant before inserting/updating the canonical row.
