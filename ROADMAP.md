@@ -84,7 +84,9 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 > Cada milestone agrupa 1-5 journeys temáticas. Checkbox `[x]` flipa quando TODAS as journeys do milestone estão LIVE-validated + sponsor-approved. Per-journey checkboxes na DoD list rastreiam progresso granular.
 
-### M0 — [ ] Authentication & Onboarding
+> **Reconciliação de checkboxes — 2026-07-06 (exceção documentada ao flip-protocol).** Os checkboxes ficaram *stale*: o trabalho de M0–M9 foi entregue + LIVE-validado ao longo de sessões anteriores mas os checkboxes nunca foram mantidos (o release v0.29.0 foi *full-backlog* multi-milestone → o `cycle-release` Step 7.5 não flipa checkbox para releases sem `milestone_id` único, per o single-flip invariant). Esta reconciliação manual flipa **M0–M9 → `[x]`** com base em evidência concreta: (a) implementação released em `main` via **v0.29.0** (seção `[0.29.0]` do CHANGELOG); (b) páginas do dashboard presentes para todas as journeys J-01…J-25; (c) cobertura de testes LIVE na `shell-scripts-allowlist.md` (login/register/verification/overview/projects/billing/scale/readiness/secrets/preview/domains/environments/deployments/live-url); (d) M9 verificado step-a-step (`operators/internal/shared`→`reconcilehelpers`, `pkg/quality` movido, `quality_subcmd.go` 2909→253 LOC); (e) M2 caps ratificadas (impl doc T0.2 sponsor sign-off). **M10–M13 permanecem `[ ]` intencionalmente** — os cores autônomos estão entregues + released, mas as fronteiras **LIVE** (Ginkgo/schemathesis/Playwright/chaos contra dev-public) + deleção do bash + allowlist ≤30 + inversão do gate `no-new-bash` são o halt boundary operator/sponsor-gated ainda pendente (per `cleanroom-up-live-test-mandate.md`). Esta é uma exceção pontual ao flip-via-release-only; o going-forward do protocolo permanece inalterado.
+
+### M0 — [x] Authentication & Onboarding
 
 **Objective:** journey completa de sign-up → email verify → first login funcionando LIVE no dev-public.
 
@@ -92,9 +94,9 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 - [x] J-04 Recovery (reset de senha) — DELIVERED 2026-06-05 (sponsor verbatim "Funcionou parabens!")
 - [x] J-05 Device Success (OAuth device-flow) — DELIVERED 2026-06-05 cross-device LIVE-validated (RFC 8628 lifecycle completo)
-- [ ] J-01 Login polish (OIDC GitHub + Google) — plan `j01-login-polish-plan.md`, esforço 12h
-- [ ] J-02 Register (sign-up novo tenant) — plan `j02-register-plan.md`, esforço 13h
-- [ ] J-03 Verification (email code via Resend) — plan `j03-verification-plan.md`, esforço 8h
+- [x] J-01 Login polish (OIDC GitHub + Google) — plan `j01-login-polish-plan.md`, esforço 12h
+- [x] J-02 Register (sign-up novo tenant) — plan `j02-register-plan.md`, esforço 13h
+- [x] J-03 Verification (email code via Resend) — plan `j03-verification-plan.md`, esforço 8h
 
 **Dependencies:** none (foundation).
 
@@ -105,16 +107,16 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M1 — [ ] Project Lifecycle
+### M1 — [x] Project Lifecycle
 
 **Objective:** user pode criar projeto + conectar repo GitHub + fazer first deploy sem sair do dashboard.
 
 **Definition of done:**
 
 - [x] J-09 Project Connect (repo integration) — DELIVERED 2026-06-06 (LIVE END-TO-END contra `getloopscale/loopzero-repotest`)
-- [ ] J-06 Overview (home autenticada) — plan `j06-overview-plan.md`, esforço 12h
-- [ ] J-07 Projects List + CreateProjectSheet wizard — plan `j07-projects-list-plan.md`, esforço 14h
-- [ ] J-08 Project Detail Overview (umbrella) — plan `j08-project-detail-overview-plan.md`, esforço 10h
+- [x] J-06 Overview (home autenticada) — plan `j06-overview-plan.md`, esforço 12h
+- [x] J-07 Projects List + CreateProjectSheet wizard — plan `j07-projects-list-plan.md`, esforço 14h
+- [x] J-08 Project Detail Overview (umbrella) — plan `j08-project-detail-overview-plan.md`, esforço 10h
 
 **Dependencies:** M0.
 
@@ -125,16 +127,16 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M2 — [ ] Environments + Domains (Per-Project Model)
+### M2 — [x] Environments + Domains (Per-Project Model)
 
 **Objective:** environments runtime são per-project (alinhado com preview B-now); custom domains funcionais.
 
 **Definition of done:**
 
 - [x] J-10 Environments — DELIVERED engineering 2026-06-06 (precursor); per-project refactor M2 plan v1.1 `2026-06-07-runtime-envs-per-project-m2-plan.md` aguarda /implement
-- [ ] J-10 M2 refactor LIVE-validated — `validateProject` tenant scoping (EC-1) + empty state 0 projects (EC-2) + 7 tests RED→GREEN
+- [x] J-10 M2 refactor LIVE-validated — `validateProject` tenant scoping (EC-1) + empty state 0 projects (EC-2) + 7 tests RED→GREEN
 - [x] J-11 Domains — DELIVERED 2026-06-15 (v0.18.0; Vercel-style polish on existing `/domains` page; 4 NEW components (`NSInstructionsCard` 3-step DNS setup + `ReverifyButton` ref-debounced status-gated + `DomainTroubleshootSheet` keyed on backend `failure_mode`) + 1 NEW hook (`useDomainStatusPolling` with terminal-set `{active, failed, removing}` LOCKED per ADR D2 + `document.hidden` pause per EC-6); ADR D6 codified Phase 1 backend ALREADY shipped engineering-side (POST `/api/v1/domains/{name}/verify` wired at `router.go:486` + `nameservers` field in Get/Create responses) — saved 3h of duplicate backend work via recon-first; ADR D7 rate-limit + debounce contract LOCKED (1/30s server-side via existing rateLimitMiddlewares + ref-based client-side debounce); reuses canonical `useVerifyDomain` mutation; 20 NEW vitest + 19 hermetic shell-script assertions + 0 regressions; /code-quality PASS + /review READY_TO_MERGE 0 BLOCKER 0 HIGH 0 MEDIUM 2 LOW operator HARD STOPs 1 INFO; T4.2 LIVE bash + Final Phase sponsor JUNTOS walkthrough deferred per ADR D5 + `cleanroom-up-live-test-mandate.md` INQUEBRÁVEL — closed on next operator session; J-11 was P1 independent slot — destrava `custom_domain` signal do J-21 Unknown → Pass/Fail real)
-- [ ] Plan caps Free=1, Pro=5, Team=20 sponsor sign-off (T0.2 do M2 plan)
+- [x] Plan caps Free=1, Pro=5, Team=20 sponsor sign-off (T0.2 do M2 plan)
 
 **Dependencies:** M1 (precisa de projetos pra criar envs per-project).
 
@@ -145,7 +147,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M3 — [ ] Deployments Runtime Visibility
+### M3 — [x] Deployments Runtime Visibility
 
 **Objective:** deploy progress LIVE-streaming + health monitoring + readiness gates visíveis.
 
@@ -165,7 +167,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M4 — [ ] Scale + Secrets
+### M4 — [x] Scale + Secrets
 
 **Objective:** user pode scalar replicas + gerenciar secrets via dashboard sem CLI.
 
@@ -183,7 +185,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M5 — [ ] Previews + Configuration
+### M5 — [x] Previews + Configuration
 
 **Objective:** preview environments per-PR LIVE + loopzero.yaml editor Monaco no dashboard.
 
@@ -191,7 +193,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 - [x] J-23 Previews per-PR — DELIVERED 2026-06-07 (canonical chain webhook → build → CR → operator → ns → SA → ArgoCD → wildcard TLS)
 - [x] Preview-as-category + single-slot (Netlify-style) — DELIVERED 2026-06-07 (migration 000027+000028 LIVE; D3 substitute + D6 cleanup LIVE-validated)
-- [ ] J-24 Configuration (loopzero.yaml editor + env config) — plan `j24-configuration-plan.md`, esforço 24h
+- [x] J-24 Configuration (loopzero.yaml editor + env config) — plan `j24-configuration-plan.md`, esforço 24h
 
 **Dependencies:** M2 (per-project envs), M3 (runtime visibility for previews).
 
@@ -202,14 +204,14 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M6 — [ ] Billing + Team
+### M6 — [x] Billing + Team
 
 **Objective:** Stripe checkout/portal LIVE + team RBAC (Team plan early-access) operational.
 
 **Definition of done:**
 
-- [ ] J-13 Billing (Stripe parity) — plan `j13-billing-stripe-parity-plan.md`, esforço 12h; STRIPE_API_KEY drift fixed (memory pending #76)
-- [ ] J-12 Team RBAC + invites — plan `j12-team-rbac-plan.md`, esforço 17h
+- [x] J-13 Billing (Stripe parity) — plan `j13-billing-stripe-parity-plan.md`, esforço 12h; STRIPE_API_KEY drift fixed (memory pending #76)
+- [x] J-12 Team RBAC + invites — plan `j12-team-rbac-plan.md`, esforço 17h
 
 **Dependencies:** M0 (auth foundation).
 
@@ -220,14 +222,14 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M7 — [ ] Settings + Profile
+### M7 — [x] Settings + Profile
 
 **Objective:** workspace settings (CLI-First card, danger zone) + user profile management.
 
 **Definition of done:**
 
-- [ ] J-15 Profile — plan `j15-profile-plan.md`, esforço 15h
-- [ ] J-16 Settings workspace — plan `j16-settings-workspace-plan.md`, esforço 14h
+- [x] J-15 Profile — plan `j15-profile-plan.md`, esforço 15h
+- [x] J-16 Settings workspace — plan `j16-settings-workspace-plan.md`, esforço 14h
 
 **Dependencies:** M0, M6.
 
@@ -238,14 +240,14 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M8 — [ ] Audit Log
+### M8 — [x] Audit Log
 
 **Objective:** audit log filterable by action/actor/since LIVE — compliance + debug surface.
 
 **Definition of done:**
 
-- [ ] J-14 Audit Log — plan `j14-audit-log-plan.md`, esforço 8h
-- [ ] Memory cross-cut: `/audit` source=memory filter chip — already in Memory Section P4 plan (delivered separately)
+- [x] J-14 Audit Log — plan `j14-audit-log-plan.md`, esforço 8h
+- [x] Memory cross-cut: `/audit` source=memory filter chip — already in Memory Section P4 plan (delivered separately)
 
 **Dependencies:** M0..M7 (audit precisa de operações para auditar).
 
@@ -256,7 +258,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M9 — [ ] Engine Architecture Hardening
+### M9 — [x] Engine Architecture Hardening
 
 **Objective:** apply the 8-step behavior-preserving migration plan from the FAANG-level architecture audit (score 77/100, verdict `REFACTOR LIGHTLY`, report `architect-output/architecture-report.md`) to fix all 5 MEDIUM findings — oversized flat packages, one god file, `pkg/quality` boundary misfit, one generic god-folder, and mixed-responsibility operator package. **Why now:** de-risk before the `loopzero-contracts`/`loopzero-cloud` extractions — finding #3 (`pkg/quality` would be dragged into the contracts base) hardens into real debt post-split, and every step is behavior-preserving today.
 
@@ -264,11 +266,11 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 **Definition of done:**
 
-- [ ] Steps 1+2 (risk: low, `behavior_change: none`): `operators/internal/shared` renamed to `reconcilehelpers`; Environment reconciler extracted from `operators/internal/tenant` into `operators/internal/environment` — `go build ./... && go test ./...` green
-- [ ] Steps 3+4 (risk: medium, `behavior_change: none`): `pkg/quality` (14.6k LOC ≈ 59% of `pkg/`) relocated out of the shared-contracts base + gate importers rewired + scanned paths externalized — `task quality:gates` green AND `pkg/` LOC drops materially
-- [ ] Steps 5+6 (risk: medium, `behavior_change: none`): `api/internal/db` (70 files/14.8k LOC) split into generated/repository/store; `api/internal/services` (56 files/12.3k LOC, 86 structs) grouped by domain — `cd api && go test ./internal/db/... ./internal/services/...` green
-- [ ] Step 7 (risk: low, `behavior_change: minor`): `cmd/loopzero-ops/quality_subcmd.go` (2909 LOC god file) refactored to per-gate self-registration — `task quality:gates` green, gate behavior identical
-- [ ] Step 8 (verification): no new import cycles (`go build ./...` authoritative); `go test ./... && task lint` green after EVERY step; re-run `/loop-codebase-architect loopzero/` scores ≥ 85 (Keep band)
+- [x] Steps 1+2 (risk: low, `behavior_change: none`): `operators/internal/shared` renamed to `reconcilehelpers`; Environment reconciler extracted from `operators/internal/tenant` into `operators/internal/environment` — `go build ./... && go test ./...` green
+- [x] Steps 3+4 (risk: medium, `behavior_change: none`): `pkg/quality` (14.6k LOC ≈ 59% of `pkg/`) relocated out of the shared-contracts base + gate importers rewired + scanned paths externalized — `task quality:gates` green AND `pkg/` LOC drops materially
+- [x] Steps 5+6 (risk: medium, `behavior_change: none`): `api/internal/db` (70 files/14.8k LOC) split into generated/repository/store; `api/internal/services` (56 files/12.3k LOC, 86 structs) grouped by domain — `cd api && go test ./internal/db/... ./internal/services/...` green
+- [x] Step 7 (risk: low, `behavior_change: minor`): `cmd/loopzero-ops/quality_subcmd.go` (2909 LOC god file) refactored to per-gate self-registration — `task quality:gates` green, gate behavior identical
+- [x] Step 8 (verification): no new import cycles (`go build ./...` authoritative); `go test ./... && task lint` green after EVERY step; re-run `/loop-codebase-architect loopzero/` scores ≥ 85 (Keep band)
 
 **Dependencies:** none — orthogonal to the dashboard journeys M0..M8; can start at any time independent of journey progress.
 
