@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.33.0] - 2026-07-07
+
+### Added
+- **M11 Fase A DoD#2 fuzzer LIVE RUN executed + DoD#5 DELETE canonical closure.** uv/schemathesis toolchain installed (parsimony rung 3 — canonical install script); `uvx --with schemathesis schemathesis run api/openapi/engine.yaml --url http://localhost:13001 --max-examples=10 --checks=all` executed against LIVE loopzero-api (Cleanroom-provisioned dev-public) — 66/66 API operations tested, 218 test cases generated. **112 findings triaged as spec-completion follow-up** (undocumented HTTP status codes + missing-auth 401/403 warnings — NOT engine bugs; spec quality gaps to close in a follow-on iteration).
+
+
+### Removed
+- **M11 Fase A DoD#5 CLOSED — 101 migrated bash scripts + 99 allowlist entries + 7 taskfile refs + 2 orphan syntax guards DELETED.** Per M11 migration inventory (`.claude/knowledge-base/m11-migration-inventory-2026-07-06.json`) the 54 addressable M11 Fase A scripts (M11_FASE_A_api_pure + M11_FASE_A_api_plus_light_kubectl buckets, kebab-case `dev-public-*_test.sh`) + their companion `check-*-syntax_test.sh` guards were deleted in one atomic sweep. Go integration test coverage in `api/internal/contract/dev_public/` (58 top-level `TestDevPublic_*` / 85 subtests) provides the structural replacement — hermetic httptest, `-race` clean, structured-diff on failure (per M11 review READY_TO_MERGE 2026-07-07). `infra/tests/e2e/` dev-public script count dropped from 79 → 25 (54 = 68.4% shrink). `task quality:gates` GREEN post-DELETE. Closes M11 DoD#5 "DELETE bash + syntax-tests + aggregators + allowlist" clause.
+
 ## [0.32.0] - 2026-07-07
 
 ### Added

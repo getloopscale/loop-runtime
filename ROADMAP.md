@@ -281,7 +281,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M10 — [ ] Test Foundation: Ginkgo Harness + Spec-Based Contract Layer
+### M10 — [x] Test Foundation: Ginkgo Harness + Spec-Based Contract Layer
 
 **Objective:** estabelecer a base **determinística** de validação — Ginkgo suite + **extensão da camada spec-based Go já existente e LIVE-validada** (`api/openapi/engine.yaml` OpenAPI 3.0 + `api/internal/contract/` com `engine_conformance_test.go` + `cli_consumer_test.go` + `testdata/cli-consumed-paths.txt`) para cobertura bilateral cli↔cloud↔engine↔contracts. **NÃO é greenfield nem Pact-broker:** a org já escolheu — e LIVE-validou (`canonical-tests-rewrite-v2`, 3 iterações de review) — o modelo **bidirectional spec-based em Go puro** (KISS, sem broker, `getkin/kin-openapi`), que é preferível a Pact-go CDC para uma única org. **Absorve e formaliza** `ADR-2026-06-17-T3-canonical-tests-rewrite`, convertendo a `Precondition (PAUSE M0-M8)` numa milestone rastreável. **Why now:** 2.567 LOC de bash em débito + a decomposição em polyrepo precisa de contract tests **antes** de as extrações endurecerem o integration drift.
 
