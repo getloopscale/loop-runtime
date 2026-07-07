@@ -26,6 +26,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -534,5 +535,31 @@ func runAllowlistSunsets(args []string) int {
 		return 1
 	}
 	fmt.Println("check-allowlist-sunsets: PASS — 7 fixture cases + live check GREEN (future/today/past/malformed/bad-date/missing/live)")
+	return 0
+}
+
+// runRouteAuthCoverage enforces R2-F8 (HIGH): every user-facing router.go route
+// MUST be inside middleware.Auth group OR registerProtectedRoutes OR appear in
+// the explicit public-allowlist.
+// Migrated from infra/tests/check-route-auth-coverage_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runRouteAuthCoverage(args []string) int {
+	fs := flag.NewFlagSet("route-auth-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := routeauthcoverage.Check(routeauthcoverage.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "route-auth-coverage: FAIL — %v\n", err)
+		if len(outcome.Violations) > 0 {
+			fmt.Fprintf(os.Stderr, "  Auth group spans lines %d..%d\n", outcome.AuthStart, outcome.AuthEnd)
+			fmt.Fprintf(os.Stderr, "  registerProtectedRoutes spans lines %d..%d\n", outcome.ProtStart, outcome.ProtEnd)
+			for _, v := range outcome.Violations { fmt.Fprintf(os.Stderr, "  %s\n", v) }
+			fmt.Fprintln(os.Stderr, "Fix: move the route inside middleware.Auth group OR add explicit allowlist entry with rationale.")
+		}
+		return 1
+	}
+	fmt.Printf("route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
+		outcome.PassCount, outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
 	return 0
 }

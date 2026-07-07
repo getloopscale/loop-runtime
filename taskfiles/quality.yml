@@ -144,7 +144,7 @@ tasks:
       # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
-      - bash infra/tests/check-route-auth-coverage_test.sh
+      - /tmp/loopzero-ops quality route-auth-coverage                                # M-Migrate2 (2026-07-07): replaced infra/tests/check-route-auth-coverage_test.sh with pure-logic Go gate. R2-F8 HIGH: every router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. 40 routes verified.
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
       # derived host.k3d.internal (T1.2), F1 SAN-aligned kubernetes_host, Step
