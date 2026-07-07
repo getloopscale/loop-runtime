@@ -32,6 +32,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellcheckadvisory"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -671,5 +672,30 @@ func runShellcheckAdvisory(args []string) int {
 		return 0
 	}
 	fmt.Printf("shellcheck-advisory: PASS — %d files clean (SC1091/SC2155/SC2086/SC2046 tolerated)\n", outcome.ScannedFiles)
+	return 0
+}
+
+// runLoopZeroAPIOpenbao enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync:
+// the loopzero-api chart unconditionally wires the AppRole secret_id via
+// envFrom.secretRef to K8s Secret loopzero-openbao-approle with optional=true,
+// with NO inline value: for OPENBAO_VAULT_SECRET_ID (anti-hardcode).
+// Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runLoopZeroAPIOpenbao(args []string) int {
+	fs := flag.NewFlagSet("loopzero-api-openbao-approle-envfrom", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
+		return 0
+	}
+	fmt.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
 	return 0
 }
