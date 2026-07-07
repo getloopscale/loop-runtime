@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.40.0] - 2026-07-07
+
 ### Removed
 - **M-Migrate2/3 aggressive audit rounds — 24 additional bash scripts DELETED (185 → 161, 13% additional shrink).** Post v0.39.0 fixed-point convergence, expanded audit criteria surfaced additional deletion candidates: (a) 9 orphan KEEP-CI-WIRED (misclassified — no `taskfiles/` invocation despite label): `fulcio-diagnose/mock-kubectl.sh` + `check-fulcio-oidc-diagnose_test.sh` (coupled pair) + 8 helm structural tests (`sigstore-extras-podselector`, `ory-hydra-device-urls`, `ory-hydra-canonical-urls`, `ory-hydra-cookie-secure-attribute`, `tilt-secret-keys-classification`, `promtail-canonical-pipeline`, `loopzero-api-base-domain-per-env`, `check-default-permanent-env-parity`); (b) 9 parity/ scripts (`cell2-canary-stage1`/`stage2`/`rollback-slo`, `doks-install`, `droplet-cloud-init`/`install`, `k3d-virgin-install`, `preflight`, `validate-matrix`) + 1 vitest pin (`cell2-canary-scripts.test.ts`) — parity scripts have Ginkgo substitutes (`parity_cell2_test.go`) per memory `finding-2026-05-24-parity-scripts-are-operator-procedures-not-invariants`; (c) 4 additional isolates with no task/code deps + no chain-invoker (`install-local-path-provisioner`, `dogfood/full-loop`, `load/run-l1`, `dev-public-device-flow_test`). `task quality:gates` GREEN post-DELETE. Total canonical allowlist: 161 entries (61 grandfathered + 77 KEEP-OPERATOR + 19 KEEP-CI-WIRED + 4 KEEP-CI-ORCHESTRATOR + 1 KEEP-HARNESS-HOOK + 1 TEMPORARY-DELETE). Combined shrink from historical baseline: 500+ → 161 (~68%).
 
