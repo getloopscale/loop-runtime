@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.50.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/k6loadrigor` — pure-logic Go gate migrated from `infra/tests/check-k6-load-rigor_test.sh`.** Hermetic structural test for the k6 load-harness rigor fixes (plan k6-load-test-rigor-fixes). Preserves 11 assertions bit-for-bit: (1) `dropped_iterations` threshold in `thresholds.js` `base` block (not `perLevel` — so it applies to every level) with `count<` form (EC-2 — `dropped_iterations` is a k6 Counter, not a Rate; using `rate<` would be a silent no-op); (2) `testrun-l5-distributed.yaml` is valid YAML (EC-1 — via `python3 -c yaml.safe_load_all` with parity-tolerant fallback), has `kind: TestRun` + `apiVersion: k6.io/v1alpha1` + `parallelism` + pinned `grafana/k6:0.52.0` + `K6_PROMETHEUS_RW_SERVER_URL` + `secretKeyRef` + no inline hex-secret value + references `scripts/l5-multicell.js`; (3) `k6:distributed:l5:` task defined in `taskfiles/test.yml` and applies the L5 manifest; (4) README documents per-level runner path (single-pod + distributed both named); (5) gate wired in `quality:gates` and allowlist row (if still bash) is well-formed (EC-3). Test suite 2/2 GREEN (real-repo sanity walk drives all 15+ sub-assertions + missing-thresholds FAIL). Registered as `loopzero-ops quality k6-load-rigor` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/k6loadrigor/check.go`, `cmd/loopzero-ops/internal/quality/k6loadrigor/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/check-k6-load-rigor_test.sh` — replaced by the `k6-load-rigor` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 151 → 150 entries (KEEP-CI-WIRED band: 9 → 8). Regression contract fully preserved (identical 11 assertions; more coverage via 15+ sub-checks in the Go implementation). Unhomedlogic classifier test-case swapped to `helm/ory-kratos-lifespan_test.sh`. (`.claude/rules/shell-scripts-allowlist.md`, `cmd/loopzero-ops/internal/quality/unhomedlogic/check_test.go`)
+
 ## [0.49.0] - 2026-07-07 (route-auth-coverage Go gate migration)
 
 ### Added
