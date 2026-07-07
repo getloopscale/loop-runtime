@@ -30,6 +30,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -624,5 +625,25 @@ func runDevPublicEnv(args []string) int {
 		return 1
 	}
 	fmt.Println("dev-public-env: PASS — dev-public.yaml canonical shape preserved (dev URLs, cookieDomain, CORS, D5 OAuth reuse)")
+	return 0
+}
+
+// runOryKratosLifespan enforces canonical self-service flow lifespans in
+// infra/helm/ory-kratos/values.yaml.gotmpl (login=10m, registration=10m,
+// recovery=15m — defense pair with edge rate_limit for Red Team #89).
+// Migrated from infra/tests/helm/ory-kratos-lifespan_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runOryKratosLifespan(args []string) int {
+	fs := flag.NewFlagSet("ory-kratos-lifespan", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := orykratoslifespan.Check(orykratoslifespan.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
 	return 0
 }

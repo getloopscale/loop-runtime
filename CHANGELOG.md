@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.53.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/orykratoslifespan` — pure-logic Go gate migrated from `infra/tests/helm/ory-kratos-lifespan_test.sh`.** Locks canonical self-service flow lifespans in `infra/helm/ory-kratos/values.yaml.gotmpl`: `selfservice.flows.login.lifespan=10m` + `selfservice.flows.registration.lifespan=10m` + `selfservice.flows.recovery.lifespan=15m`. Defense-in-depth pair with edge rate_limit zones (T1.2 of plan `kratos-self-service-rate-limit-systemic` v1.1) — together they close Red Team `loopzero-cloud#89` (email-bomb via unlimited recovery flow-creates). The Go implementation **improves on** the bash `grep -A 12` heuristic by extracting each YAML section body strictly (stops at the next line whose leading indent is ≤ the header's), so a sibling section's `lifespan:` cannot leak in and false-PASS a wrong login value. The bash guard's optional helmfile-template branch was dropped intentionally (Anti-Pattern #8 — Go shell-wrap of helmfile adds no value; source-level assertion is the canonical gate and always runs). 7 assertions preserved: total lifespan count ≥ 3, each of login/registration/recovery within its own scoped body, plan slug cited ≥ 3× for traceability, file under 500 LoC. Test suite 7/7 GREEN including canonical fixture + missing file + wrong login lifespan (regression the strict scoping catches; bash guard would silently pass) + missing recovery section + missing plan slug citation + file too long + real-repo sanity walk. Registered as `loopzero-ops quality ory-kratos-lifespan` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/orykratoslifespan/check.go`, `cmd/loopzero-ops/internal/quality/orykratoslifespan/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/helm/ory-kratos-lifespan_test.sh` — replaced by the `ory-kratos-lifespan` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 148 → 147 entries (KEEP-CI-WIRED band: 6 → 5). Contract STRICTER than bash (section-scoped extraction closes the `grep -A 12` false-PASS class). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.52.0] - 2026-07-07
 
 ### Added
