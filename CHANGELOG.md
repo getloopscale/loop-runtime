@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.45.0] - 2026-07-07
+
+### Added
+
 - **`pkg/quality/optionbeso` — pure-logic Go gate migrated from `infra/tests/check-option-b-eso-deploy-doc_test.sh`.** Hermetic contract test for `docs/operations/option-b-mgmt-helmfile-eso-deploy.md` (the iter-31 productive-idle architectural analysis of Option B mgmt-cluster ESO deploy paths). Preserves 25 assertions across 11 sections bit-for-bit: (A) doc exists; (B) 4 sub-paths B1/B2/B3/B4 named; (C) B1 RECOMMENDED for dev-public iter 1, B4 REJECTED (mandate violation), B3 NOT recommended; (D) B1 canonical commands (helmfile sync --selector name=external-secrets, kubectl wait ... Available within 2 lines, kubectl get crd); (E) **ESO version drift defense** — the version pinned in the doc is compared against the runtime helmfile canonical release block; a bump in one that is not mirrored in the other fires FAIL (ports the bash guard's awk block-scan); (F) architectural finding origin cited + runbook Open Question cross-link; (G) Rollback section with `helmfile destroy` + `git restore`; (H) Decision matrix with Time + Risk columns; (I) Cross-references section cites `runtime.helmfile.yaml.gotmpl` as canonical pattern source; (J) anti-patterns — no `Co-Authored-By` trailer, Rule 4 mandate cited; (K) plan slug (`2026-06-10-j22-openbao-transit-eso-sync`) + productive-idle mandate memory cited. Test suite 8/8 GREEN including canonical fixture, missing-section FAIL cases, ESO version drift FAIL case, `Co-Authored-By` forbidden case, and real-repo doc sanity walk. Registered as `loopzero-ops quality option-b-eso-deploy-doc` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/optionbeso/check.go`, `cmd/loopzero-ops/internal/quality/optionbeso/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
 
 ### Changed
