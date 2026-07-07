@@ -28,6 +28,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -581,5 +582,26 @@ func runK6LoadRigor(args []string) int {
 		return 1
 	}
 	fmt.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
+	return 0
+}
+
+// runSkillPaths enforces T0.1 EC D5 — every infra/scripts/ path AND every
+// `task <name>` invocation referenced in any .claude/skills/*/SKILL.md
+// MUST resolve on disk (or be an allow-listed generic skill).
+// Migrated from infra/tests/skills/skill-paths_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runSkillPaths(args []string) int {
+	fs := flag.NewFlagSet("skill-paths", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
+		outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
 	return 0
 }

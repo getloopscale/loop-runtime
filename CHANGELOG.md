@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.51.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/skillpaths` — pure-logic Go gate migrated from `infra/tests/skills/skill-paths_test.sh`.** Enforces T0.1 EC D5 from plan 2026-05-21-deep-review-remediation: every `infra/scripts/` path AND every `` `task X` `` invocation cited in any `.claude/skills/*/SKILL.md` MUST resolve on disk. Ports the bash `awk` task-name extractor bit-for-bit into Go: walks the root `Taskfile.yml` + 8 flattened sub-file includes (bare namespace) + `taskfiles/{drill,quality}.yml` (namespaced prefix), then for each `SKILL.md` extracts (a) `infra/scripts/*.sh` refs, (b) abbreviated `drill/*.sh` refs (resolved against `infra/scripts/drill/`), (c) backtick-scoped `` `task X` `` invocations. Skips `task-automation` skill (generic third-party). Enforces per-skill anti-patterns (`dogfood` cannot reference `GH_TOKEN` from `.env`; `to-plan` cannot reference the non-existent `task teardown`). Real-repo output identical to bash guard: **106 skills · 10 paths · 8 task invocations verified**. Test suite 8/8 GREEN including canonical fixture + missing script path FAIL + missing task invocation FAIL + task-automation skip PASS + wildcard-ignored PASS + `dogfood` anti-pattern FAIL + `to-plan` anti-pattern FAIL + real-repo sanity walk PASS. Registered as `loopzero-ops quality skill-paths` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/skillpaths/check.go`, `cmd/loopzero-ops/internal/quality/skillpaths/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/skills/skill-paths_test.sh` — replaced by the `skill-paths` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 150 → 149 entries (KEEP-CI-WIRED band: 8 → 7). Regression contract fully preserved (identical assertion set; more coverage via 8 hermetic sub-tests). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.50.0] - 2026-07-07
 
 ### Added
