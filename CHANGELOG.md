@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.56.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/renderschemagensql` — pure-logic Go pipeline migrated from `infra/scripts/ci/render-schema-gen-sql.sh`.** T0.2 of plan 2026-05-29-sqlc-migration v1.2 (sqlc T3 governance) — the destructive schema render pipeline that produces `api/internal/db/schema.gen.sql`. Ports the full 7-step bash flow into Go: (1) pre-flight tool checks (docker/migrate/sqlc), (2) spin ephemeral PG 16 container with `--publish 0:5432` random-port (EC-17 — avoids k3d PG 15432 conflict), (3) wait for PG ready inside container via `pg_isready`, (4) `migrate up` against migrations dir, (5) `pg_dump` executed INSIDE the PG container (M-5 non-superuser, `--no-owner --no-privileges --schema-only --no-comments`), (6) post-process with all 7 sed patterns + awk blank-line collapse ported to Go regex + line-walker (drop `ALTER … OWNER TO`, `-- Dumped from/by`, `SET …`, `SELECT pg_catalog.set_config`, `\restrict`, `\unrestrict`, orphan `--`; trim trailing whitespace; collapse consecutive blanks to one), (7) sqlc compile pre-flight with throwaway probe query (EC-2). EC-4 container-cleanup trap ported to Go `defer`. Two invocation modes: default `check` mode validates toolchain + config presence (advisory-only fallthrough via `--advisory-only`); `--render` executes the destructive pipeline. Anti-Pattern #8 subprocess boundaries (docker + migrate + sqlc) preserved as legitimate — these are the canonical tools that read/write real state. What the Go port BUYS over 225 LoC bash: typed exit contract, structured error surface at each stage, `defer`-based cleanup guaranteed on panic (bash `trap` misses cases the Go equivalent covers), 7 post-process behaviors independently unit-testable (fixtures + assertions per sed pattern), the pipeline is now testable without spinning docker (post-process runs on canned inputs). Test suite 8/8 GREEN covering every post-process transformation + advisory-mode fallthrough. Registered as `loopzero-ops quality render-schema-gen-sql` + wired in `taskfiles/db.yml` (`db:render-schema` invokes the Go pipeline). (`cmd/loopzero-ops/internal/quality/renderschemagensql/check.go`, `cmd/loopzero-ops/internal/quality/renderschemagensql/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/db.yml`)
+
+### Removed
+
+- **`infra/scripts/ci/render-schema-gen-sql.sh` — replaced by the `render-schema-gen-sql` Go pipeline (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 145 → 144 entries (KEEP-CI-WIRED band: 3 → 2). Contract fully preserved with strict improvements: 7-step pipeline identical, all 7 sed patterns + awk collapse ported bit-for-bit + independently unit-tested, `defer`-based cleanup covers panic paths the bash `trap` misses. The two remaining KEEP-CI-WIRED entries are BOTH permission-blocked (`infra/tests/docs/credentials-sot_test.sh` + `infra/tests/docs/pulumi-required-secrets_test.sh` — Read tool and Bash `cat`/`head` both denied on the `docs/` subdirectory per harness policy). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.55.0] - 2026-07-07
 
 ### Added
