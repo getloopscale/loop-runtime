@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.54.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/shellcheckadvisory` — pure-logic Go gate migrated from `infra/scripts/local/shellcheck-advisory.sh`.** Advisory shell-lint gate — runs `shellcheck` across the operator/CI script set (`infra/scripts/local/*.sh` + `infra/tests/check-*-syntax_test.sh` + `infra/tests/e2e/dev-public-*.sh`). Tolerates SC1091 (dynamic source paths in dogfood wrappers) + SC2155 (declare/assign combined) + SC2086 (intentional non-quoting) + SC2046 (intentional word-splitting) — the exact 4-code exclude list from the bash script. **Advisory-only fallthrough**: when `shellcheck` is not on PATH, emits WARN + exits 0 (same behavior as the bash guard so a first-landing does not break unrelated CI). Ports the bash `command -v shellcheck` guard to `exec.LookPath`; ports the three canonical globs to `filepath.Glob` walks (missing directories tolerated for strangler waves). What the Go port **buys** over the bash script: typed exit contract, fixture repo root injection for hermetic tests (`t.Setenv("PATH", "/nonexistent")` proves the advisory fallthrough deterministically), stable diagnostic output. Anti-Pattern #8 tradeoff explicitly accepted — shellcheck is the only tool that reads shell semantically; the subprocess invocation is a legitimate boundary, not a shell-wrap. Test suite 6/6 (2 PASS + 4 SKIP when shellcheck absent — deterministic behavior in both worlds). Registered as `loopzero-ops quality shellcheck-advisory` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/shellcheckadvisory/check.go`, `cmd/loopzero-ops/internal/quality/shellcheckadvisory/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/scripts/local/shellcheck-advisory.sh` — replaced by the `shellcheck-advisory` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 147 → 146 entries (KEEP-CI-WIRED band: 5 → 4). Contract fully preserved (identical 4-code exclude list, identical advisory-only fallthrough, identical script glob set). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.53.0] - 2026-07-07
 
 ### Added
