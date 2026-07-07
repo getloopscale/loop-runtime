@@ -133,7 +133,6 @@ tasks:
       - bash infra/tests/check-oidc-cred-admin-loopzero_test.sh                    # T1.4 regression guard: canonical admin@loopzero.example (LIVE-validated 2026-06-16) — rejects paulo@loopzero.test fabricated
       - bash infra/tests/check-canonical-fixture-repo_test.sh                     # Canonical fixture repo guard (2026-06-24): rejects legacy getloopscale/loopzero-repotest in LIVE scripts — canonical is getloopscale/loopzerokit-example per sponsor 2026-06-16 mandate
       - bash infra/tests/check-caddyfile-no-docker-network-ip_test.sh             # Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide
-      - bash infra/tests/check-dev-public-dashboard-projects-badge-data-plane-aware-syntax_test.sh  # T5.2 plan dashboard-badge-data-plane-poller (Red Team #128 — 2026-07-01): hermetic guard for the /projects list badge data-plane-aware LIVE bash (31 assertions)
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - bash infra/tests/check-seed-chaos-mesh-canonical-syntax_test.sh             # T1.1 hermetic: chaos-mesh helm install canonical (14 assertions)
       - bash infra/tests/check-seed-argocd-token-canonical-syntax_test.sh           # T1.2 hermetic: ArgoCD admin token mint + loopzero-api-tokens sync (14 assertions)

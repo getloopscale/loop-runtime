@@ -304,7 +304,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M11 — [ ] API Validation: complete spec (73%→100%) + property-based fuzzing
+### M11 — [x] API Validation: complete spec (73%→100%) + property-based fuzzing
 
 **Objective:** substituir os **~50%** dos `infra/tests/e2e/dev-public-*.sh` que são asserções de API (curl endpoint + check JSON/status) por (a) **completar `api/openapi/engine.yaml` de ~73% para 100% de cobertura de rotas** (hoje: ~38 paths na spec vs ~52 rotas REST no router — as 14 faltantes são o gap), depois (b) **property-based fuzzing** sobre a spec completa e (c) **Go integration tests** no harness Ginkgo do M10. **Why now:** os scripts curl são manual-only (`OPERATOR HARD STOP`) e não rodam em nenhum CI; fuzzing property-based revela edge-cases (500s, validation bypass) que o `engine_conformance_test.go` atual não cobre.
 
