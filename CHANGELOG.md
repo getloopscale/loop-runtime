@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.43.0] - 2026-07-07
+
+### Removed
+
+- **Two stale allowlist entries referencing bash files already deleted in prior waves.** `infra/tests/check-dev-public-deployments-flow-multiselector_test.sh` (deleted in the M10 dashboard journey consolidation wave — its consumer was superseded when the flow moved to Loki) and `infra/tests/check-dev-public-scale-syntax_test.sh` (deleted in the M12 dashboard bundle-grep kill wave — scale flow migrated to Playwright). Both entries were audit-trail leftovers; removing them tightens the canonical allowlist against future confusion. Net canonical allowlist: 159 → 157 (KEEP-CI-WIRED band: 17 → 15). No behavior change (the files were already absent; only the allowlist rows were removed). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.42.0] - 2026-07-07
 
 ### Added
