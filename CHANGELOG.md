@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.57.0] - 2026-07-07
+
+### Added
+
+- **Grandfathered scripts audit — 57 entries walked, 0 stale found.** Full ref-count audit of every `grandfathered 2026-05-22` entry in `.claude/rules/shell-scripts-allowlist.md`. Methodology (documented at `.claude/knowledge-base/audits/2026-07-07-grandfathered-scripts-audit.md`): repo-wide `grep -rl <basename>` across `.yml` / `.md` / `.sh` / `.go` / `.py` / `.json` excluding the allowlist itself + CHANGELOG. Results: 0 MISSING (every file on disk), 0 ORPHAN (every file referenced ≥ 2 places), 9 LOW-USAGE (2-3 refs — deletion candidates if underlying test-harness callers migrate to Go), 48 ENTRENCHED (≥ 4 refs — active canonical scripts). Compared to 2026-06-24 audit closure (`05d14d5f` — 74 legitimately in-use of 77 entries; 1 stale DELETED), the current baseline is even tighter: M-Migrate2 waves in v0.36.0-v0.56.0 already removed orphan candidates. **Verdict**: no immediate action. Baseline audit complete; LOW-USAGE cluster documented as future deletion candidates. (`.claude/knowledge-base/audits/2026-07-07-grandfathered-scripts-audit.md`)
+
 ## [0.56.0] - 2026-07-07
 
 ### Added
