@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/webhookcanonicalpath"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -369,5 +370,22 @@ func runCanonicalFixtureRepo(args []string) int {
 		return 1
 	}
 	fmt.Println("canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
+	return 0
+}
+
+// runInstallGitHooks validates the M8 1.5 pre-push hook + installer.
+// Migrated from infra/tests/check-install-git-hooks_test.sh (M-Migrate2 2026-07-07).
+func runInstallGitHooks(args []string) int {
+	fs := flag.NewFlagSet("install-git-hooks", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := installgithooks.Check(installgithooks.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
 	return 0
 }

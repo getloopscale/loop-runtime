@@ -85,6 +85,7 @@ var gateRegistry = []gateSpec{
 	{"webhook-canonical-path", "Blocks the /engine/api/v1/webhooks/github 301 trap; enforces the canonical /api/v1/webhooks/github (M-Migrate2 2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh).", runWebhookCanonicalPath},
 	{"oidc-cred-admin-loopzero", "Rejects fabricated paulo@loopzero.test/LoopZeroDev2026! credentials; canonical is admin@loopzero.example/loopzero-dev-password (M-Migrate2 2026-07-07 replaces infra/tests/check-oidc-cred-admin-loopzero_test.sh).", runOIDCCredAdminLoopzero},
 	{"canonical-fixture-repo", "Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).", runCanonicalFixtureRepo},
+	{"install-git-hooks", "Validates the M8 1.5 pre-push hook + installer canonical shape + idempotency (M-Migrate2 2026-07-07 replaces infra/tests/check-install-git-hooks_test.sh).", runInstallGitHooks},
 	{"orphan-alerts", "Detects Prometheus alerts with no owning dashboard/runbook.", runOrphanAlerts},
 	{"pkg-usage-matrix", "Verifies the pkg/ cross-component usage matrix is current.", runPkgUsageMatrix},
 	{"postgresql-pdb-config", "Validates the PostgreSQL PodDisruptionBudget configuration.", runPostgresqlPDBConfig},
