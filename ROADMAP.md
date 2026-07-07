@@ -348,7 +348,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M13 — [ ] Chaos Declarative + Bash Strangler Completion
+### M13 — [x] Chaos Declarative + Bash Strangler Completion
 
 **Objective:** (a) reexpressar os cenários de chaos `c11`/`c12`/`c13` de orquestração bash para **experimentos declarativos Chaos Mesh** (CRD/Workflow) + asserção em Go; (b) **completar o strangler** — com M11+M12 tendo migrado as asserções, deletar o resíduo de bash e fazer a **allowlist encolher** rumo ao alvo `≤ 30` já definido em `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`. **Why now:** fecha o loop; sem esta milestone a allowlist volta a crescer a cada issue.
 
