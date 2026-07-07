@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- **M12 Fase A DoD#5 CLOSED — final 1 dashboard bundle-grep script + companion syntax guard + allowlist entries DELETED.** The 23/24 M12 bundle-grep scripts were already caught in the M11 wave (kebab-case `dev-public-dashboard-*_test.sh` pattern); the last remaining (`dev-public-dashboard-projects-badge-data-plane-aware_test.sh` — the M12 Fase A #128 regression protector) + its `check-*-syntax_test.sh` are now DELETED, closing M12 DoD#5. Structural replacement lives in the sibling loopzero-cloud dashboard: `dashboard/e2e/a11y.spec.ts` (axe-core declarative, chromium 4/4 GREEN) + `dashboard/e2e/dashboard-m12-fase-a-bundle-grep-migration.spec.ts` (19-test behavioral coverage) + visual regression baselines (3 committed PNGs). `task quality:gates` GREEN post-DELETE. bundle-grep anti-pattern (D1) genuinely killed for the migrated surface.
 
 ### Fixed
 
