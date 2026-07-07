@@ -64,7 +64,7 @@ tasks:
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality caddyfile-csp   # plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 — operator-local-edge Caddyfile invariants (no CSP / no Vite handle 404 / 4 preserved headers / reverse_proxy + plan kratos-self-service-rate-limit-systemic v1.1 invariants 12-15 rate-limit + trusted_proxies + register-route)
       # F-wire-7 absorption: plan kratos-self-service-rate-limit-systemic v1.1 hermetic structural gates.
-      - bash infra/tests/helm/ory-kratos-lifespan_test.sh             # T2.2 hermetic — Kratos lifespan overlay golden test
+      - /tmp/loopzero-ops quality ory-kratos-lifespan                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/ory-kratos-lifespan_test.sh with pure-logic Go gate. T2.2 hermetic Kratos lifespan overlay golden test (source-level, section-scoped).
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - task: contract   # M10 T3.1 — spec-based consumer contract (engine conformance + cli↔engine + dashboard↔engine); in-repo, no sibling needed, so it gates every pre-push deterministically
       - /tmp/loopzero-ops quality shell-hygiene
