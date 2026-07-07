@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pkg/quality/caddyfilenodockerip` — pure-logic Go gate migrated from `infra/tests/check-caddyfile-no-docker-network-ip_test.sh`.** Closes the Red Team `loopzero-cloud#127` regression-protector as a `loopzero-ops quality caddyfile-no-docker-ip` subcommand: reads `infra/local/Caddyfile` and asserts (a) zero non-comment lines contain a `172\.18\.[0-9]+\.[0-9]+` literal (Docker network subnet — DHCP-assigned + drifts across `docker restart`); (b) the `*.prod-dev.loopzero.example` wildcard block reverse_proxies to `https://127.0.0.1:8443` (stable k3d host-port form); (c) the `*.preview-dev.loopzero.example` block does the same. Hermetic: NO network, NO docker, NO caddy invocation — pure text walk with brace-balanced block extraction. Test suite 7/7 GREEN (canonical PASSes; hardcoded 172.18.x.x FAILs; comment-only 172.18 PASSes; either wildcard block missing canonical upstream FAILs; missing Caddyfile FAILs; real repo Caddyfile PASSes via up-to-8-parents sanity walk). Registered in `cmd/loopzero-ops/quality_registry.go` + wired in `taskfiles/quality.yml`. The bash guard was DELETED + its allowlist row removed. Same pattern as `webhook-canonical-path` / `oidc-cred-admin-loopzero` / `canonical-fixture-repo` / `install-git-hooks` (M-Migrate2 canonical). (`cmd/loopzero-ops/internal/quality/caddyfilenodockerip/check.go`, `cmd/loopzero-ops/internal/quality/caddyfilenodockerip/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
 ### Changed
 
 ### Deprecated
 
 ### Removed
+
+- **`infra/tests/check-caddyfile-no-docker-network-ip_test.sh` — replaced by the `caddyfile-no-docker-ip` Go gate (see Added above).** Bash file DELETED; allowlist row for `check-caddyfile-no-docker-network-ip_test.sh` removed. Net allowlist canonical: 161 → 160 entries (KEEP-CI-WIRED band: 19 → 18). The regression-protector contract is fully preserved (identical assertions; more test coverage via 7 hermetic sub-tests including a real-repo sanity walk). (`.claude/rules/shell-scripts-allowlist.md`)
 
 ### Fixed
 
