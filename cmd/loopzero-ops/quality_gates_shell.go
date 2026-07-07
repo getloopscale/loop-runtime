@@ -21,6 +21,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/patchkratoscheckonly"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -429,5 +430,25 @@ func runPatchKratosCheckOnly(args []string) int {
 		return 1
 	}
 	fmt.Println("patch-kratos-check-only: PASS — patch-kratos-dev-public.sh --check-only is read-only (DRY_RUN=1 + SKIP_RESTART=1 + guard)")
+	return 0
+}
+
+// runVaultBootstrapUnsealLoop enforces the 2026-06-15 canonical fix of
+// infra/scripts/local/vault-bootstrap-dev.sh Steps 2 + 3 (rc-independent
+// bao-status parse, capitalized "True" compare, no lowercase fallback trap).
+// Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runVaultBootstrapUnsealLoop(args []string) int {
+	fs := flag.NewFlagSet("vault-bootstrap-unseal-loop", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-bootstrap-unseal-loop: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("vault-bootstrap-unseal-loop: PASS — canonical fix preserved (rc-independent parse, capitalized True compare, anti-patterns absent)")
 	return 0
 }
