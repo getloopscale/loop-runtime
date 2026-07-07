@@ -28,6 +28,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.35.2
 	k8s.io/apimachinery v0.35.2
 	k8s.io/client-go v0.35.2
+	k8s.io/component-helpers v0.35.2
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/yaml v1.6.0
@@ -36,7 +37,6 @@ require (
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
-	k8s.io/component-helpers v0.35.2 // indirect
 )
 
 require (
@@ -83,13 +83,13 @@ require (
 	github.com/oasdiff/yaml3 v0.0.13 // indirect
 	github.com/openbao/openbao/api/v2 v2.5.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/getloopscale/loopzero-contracts v0.1.0
+	github.com/getloopscale/loopzero-contracts v0.3.0
 	github.com/getloopscale/loopzero/operators/api v0.0.0
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect

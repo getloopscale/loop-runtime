@@ -5,7 +5,7 @@ ENV GOWORK=off
 ENV GOPRIVATE=github.com/getloopscale/*
 
 # loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
-# requires github.com/getloopscale/loopzero-contracts v0.1.0, NO replace). The private module
+# requires github.com/getloopscale/loopzero-contracts v0.3.0, NO replace). The private module
 # is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
 # token is NEVER written to an image layer. git is required for the module VCS fetch.
 RUN apk add --no-cache git
