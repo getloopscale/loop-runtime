@@ -159,7 +159,6 @@ tasks:
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
       - bash infra/tests/check-route-auth-coverage_test.sh
-      - bash infra/tests/check-chaos-c13-syntax_test.sh   # c13 chaos — valid-but-destructive config fail-loud guard (plan c13-valid-destructive-config-chaos T2.2)
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
       # derived host.k3d.internal (T1.2), F1 SAN-aligned kubernetes_host, Step

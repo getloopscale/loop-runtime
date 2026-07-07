@@ -327,7 +327,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M12 — [ ] Dashboard Validation: Playwright + axe-core (kill bundle-grep)
+### M12 — [x] Dashboard Validation: Playwright + axe-core (kill bundle-grep)
 
 **Objective:** substituir os **~30%** dos `dev-public-*.sh` de dashboard (**bundle-grep** de literais minificados no JS servido) por **Playwright** (DOM/browser real) + **axe-core** (a11y declarativo). Fecha a fragilidade **D1** (o pior anti-pattern presente). **Why now:** bundle-grep testa o **compilador**, não o comportamento — quebra a cada mudança de minificação; e os issues de a11y (#71/#79/#80/#81/#83) são exatamente o que axe-core detecta declarativamente.
 

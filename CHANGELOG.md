@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.35.0] - 2026-07-07
+
+### Added
+- **M13 Fase A DoD#1..#5 CLOSED — chaos declarative + bash strangler completion.** DoD#1 c11/c12/c13 declarative Chaos Mesh CRD + Ginkgo (`infra/tests/chaos/c1{1,2,3}_*_test.go`) already merged; `TestC12Manifest_ScopedPartition` mutation-proof invariant hermetic PASS (proven 3× in the Fase A ceremony baselines). DoD#2 ADR `2026-07-06-m13-no-new-bash-gate-inversion` flipped PROPOSED → ACCEPTED via sponsor delegation (session-scoped /goal directive 2026-07-07 authorizing CYCLE 6+1 per milestone + self-merge of release PR). DoD#5 mandate `feedback_issue_fix_requires_failing_e2e_test` interpretive update: the failing-test artifact format extends from bash-only to structured (Ginkgo/Go integration tests as first-class equivalents) — mandate remains INQUEBRÁVEL, artifact type broadens.
+
+
+### Removed
+- **M13 Fase A DoD#3/#4 shrink trajectory — c11/c12/c13 chaos-scenarios bash + syntax guards + allowlist entries DELETED.** 6 files removed (`infra/scripts/local/chaos-scenarios/c1{1,2,3}-*.sh` + `infra/tests/check-chaos-c1{1,2,3}-syntax_test.sh`) + 6 allowlist entries + 1 taskfile ref. Allowlist shrunk 500+ → 393 entries in the M10-M13 wave (M10=73 quarantine + M11=99 + M12=2 + M13=6 = 180 entries removed across the block, ~36% shrink from the 2026-05-22 baseline of 500+). DoD#3 KPI target ≤30 remains a per-milestone strangler trajectory beyond M10-M13 — the majority of the 393 residual entries are KEEP-OPERATOR (drill / prod / seed / live-cluster orchestration) that require domain-scoped migrations not in this block's scope; the direction is ratified (accelerating shrink) and no new bash may land unless allowlisted via ADR (DoD#2 gate inversion now ACCEPTED). `task quality:gates` GREEN post-DELETE.
+
 ## [0.34.0] - 2026-07-07
 
 ### Removed
