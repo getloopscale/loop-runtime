@@ -29,6 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -603,5 +604,25 @@ func runSkillPaths(args []string) int {
 	}
 	fmt.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
 		outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
+	return 0
+}
+
+// runDevPublicEnv enforces the canonical shape of
+// infra/helmfile/environments/dev-public.yaml (dev URLs, cookieDomain,
+// CORS + allowedReturnUrls, no localhost/legacy leaks, D5 OAuth reuse).
+// Migrated from infra/tests/helm/dev-public-env_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runDevPublicEnv(args []string) int {
+	fs := flag.NewFlagSet("dev-public-env", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := devpublicenv.Check(devpublicenv.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dev-public-env: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("dev-public-env: PASS — dev-public.yaml canonical shape preserved (dev URLs, cookieDomain, CORS, D5 OAuth reuse)")
 	return 0
 }

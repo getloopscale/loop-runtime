@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.52.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/devpublicenv` — pure-logic Go gate migrated from `infra/tests/helm/dev-public-env_test.sh`.** Enforces T2.1 canonical shape of `infra/helmfile/environments/dev-public.yaml`: `publicAuthUrl`/`publicCloudUrl`/`uiBaseUrl`/`dashboardOrigin` point to `*-dev.loopzero.example`, `cookieDomain=loopzero.example`, CORS + `allowedReturnUrls` cover both dev hosts with trailing-slash variants, NO localhost or legacy non-dev URL leaks, D5 OAuth-reuse pattern (no `LOOPZERO_(GITHUB|GOOGLE)_CLIENT_(ID|SECRET)_DEV` env-var override), `loopzero-stripe-webhook-dev` per-env split documented. Pure YAML text walk — no helm/kubectl. Test suite 7/7 GREEN including canonical PASS + missing file FAIL + localhost leak FAIL + legacy non-dev URL FAIL + `_DEV` env var FAIL + wrong `cookieDomain` FAIL + real-repo sanity walk PASS. Both wiring points updated: `taskfiles/quality.yml` runs the Go gate on every `task quality:gates`, and `infra/scripts/local/test-all-dev-public.sh run_hermetic_suites` invokes it in the dev-public aggregate harness. Registered as `loopzero-ops quality dev-public-env`. (`cmd/loopzero-ops/internal/quality/devpublicenv/check.go`, `cmd/loopzero-ops/internal/quality/devpublicenv/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`, `infra/scripts/local/test-all-dev-public.sh`)
+
+### Removed
+
+- **`infra/tests/helm/dev-public-env_test.sh` — replaced by the `dev-public-env` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 149 → 148 entries (KEEP-CI-WIRED band: 7 → 6). Regression contract fully preserved (identical 15 assertions; more coverage via 7 hermetic sub-tests including 5 independent negative cases). Both call sites migrated in the same commit — no dangling invocation. (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.51.0] - 2026-07-07
 
 ### Added
