@@ -23,6 +23,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/patchkratoscheckonly"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -472,5 +473,25 @@ func runOptionBESO(args []string) int {
 		return 1
 	}
 	fmt.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
+	return 0
+}
+
+// runVaultBootstrapInMgmt enforces the `task k3d:vault:bootstrap-in-mgmt`
+// shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
+// with exactly two well-known differences (context swap + pre-flight message).
+// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runVaultBootstrapInMgmt(args []string) int {
+	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
 	return 0
 }
