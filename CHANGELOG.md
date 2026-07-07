@@ -7,17 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-### Changed
-
-### Deprecated
-
 ### Removed
+- **M-Migrate3 batches 2+3: 47 additional bash scripts DELETED via reference-graph audit (259 → 189 total allowlist, ~27% additional shrink).** Batch 2 (11 scripts): test-only-pinned e2e LIVE test scripts whose only non-doc refs were in `.claude/knowledge-base/plans/completed/`, `implementations/`, `blueprints/`, `m11-migration-inventory-*.json` — all historical artifacts, no runtime deps (recovery/github-webhook/preview/secrets-write-path-subset/cleanroom-canonical-9-journeys/login-error-states/loopzero-cloud-memory-exports/loopzero-cloud-billing-seats/engine-project-cap-rls/engine-redeploy/migrate-legacy-namespaces flows). Batch 3 (36 scripts): scripts whose non-doc refs were exclusively CSV/JSON/evidence/audit artifacts (`docs/scripts-audit/2026-05-22.csv`, `docs/operations/evidence/*/dogfood-ginkgo-junit.xml`, `.claude/knowledge-base/audits/*`) — helmfile/scripts (health-check-postsync, migrate-database), infra/tests bootstrap-smoke + capacity/run-capacity + dogfood/cli-coverage + e2e/supply-chain-e2e + load/stress-20k + snapshots/{render-drill,sanitize} + helm/{sigstore-extras-policy,render-loopzero-ci-workflows,helmfile-public-urls,loopzero-service-auth-envfrom,...} etc. Rule 3 safety: Claude Code hooks (`.claude/hooks/{dead-code-check,doc-drift-check,loop-stop,task-completed,validate-command}`) were explicitly EXCLUDED from delete list via settings.json registration check + KEEP-HARNESS-HOOK classification — none of these are removable without breaking Claude runtime behavior or Rule 4 git enforcement. `task quality:gates` GREEN post-DELETE both batches.
 
-### Fixed
 
-### Security
 
 ## [0.37.0] - 2026-07-07
 
