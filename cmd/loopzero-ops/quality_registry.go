@@ -87,6 +87,7 @@ var gateRegistry = []gateSpec{
 	{"canonical-fixture-repo", "Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).", runCanonicalFixtureRepo},
 	{"install-git-hooks", "Validates the M8 1.5 pre-push hook + installer canonical shape + idempotency (M-Migrate2 2026-07-07 replaces infra/tests/check-install-git-hooks_test.sh).", runInstallGitHooks},
 	{"caddyfile-no-docker-ip", "Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).", runCaddyfileNoDockerIP},
+	{"patch-kratos-check-only", "Enforces patch-kratos-dev-public.sh --check-only is a read-only alias for --dry-run --skip-restart (M-Migrate2 2026-07-07 replaces infra/tests/check-patch-kratos-check-only-readonly_test.sh — dogfood-login Suite 0 Cleanroom-survival gate).", runPatchKratosCheckOnly},
 	{"orphan-alerts", "Detects Prometheus alerts with no owning dashboard/runbook.", runOrphanAlerts},
 	{"pkg-usage-matrix", "Verifies the pkg/ cross-component usage matrix is current.", runPkgUsageMatrix},
 	{"postgresql-pdb-config", "Validates the PostgreSQL PodDisruptionBudget configuration.", runPostgresqlPDBConfig},

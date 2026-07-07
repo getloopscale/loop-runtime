@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.42.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/patchkratoscheckonly` — pure-logic Go gate migrated from `infra/tests/check-patch-kratos-check-only-readonly_test.sh`.** Enforces that `patch-kratos-dev-public.sh --check-only` is a read-only alias for `--dry-run --skip-restart`. The dogfood-login Suite 0 pre-flight invokes `--check-only` as a Cleanroom-SURVIVAL gate — it MUST be read-only, else the pre-flight would mutate the Kratos config it validates. Six assertions preserved bit-for-bit from the bash guard (target exists, `bash -n` syntax clean, `--check-only` flag present, `--check-only)` case handler sets `DRY_RUN=1`, sets `SKIP_RESTART=1`, and `DRY_RUN` guard exists around apply path). Test suite 7/7 GREEN including real-repo sanity walk. Registered as `loopzero-ops quality patch-kratos-check-only` + wired in `taskfiles/quality.yml`. Same M-Migrate2 canonical pattern as v0.41.0 caddyfile-no-docker-ip. (`cmd/loopzero-ops/internal/quality/patchkratoscheckonly/check.go`, `cmd/loopzero-ops/internal/quality/patchkratoscheckonly/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/check-patch-kratos-check-only-readonly_test.sh` — replaced by the `patch-kratos-check-only` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 160 → 159 entries (KEEP-CI-WIRED band: 18 → 17). Regression contract fully preserved (identical six assertions; more coverage via 7 hermetic sub-tests including negative cases for each missing invariant). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.41.0] - 2026-07-07
 
 ### Added
