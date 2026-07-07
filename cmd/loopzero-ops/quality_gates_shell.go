@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -387,5 +388,25 @@ func runInstallGitHooks(args []string) int {
 		return 1
 	}
 	fmt.Println("install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
+	return 0
+}
+
+// runCaddyfileNoDockerIP enforces that the canonical infra/local/Caddyfile does
+// NOT hardcode Docker network IPs (172.18.x.x) in non-comment lines and that
+// both wildcard blocks reverse_proxy to the stable https://127.0.0.1:8443.
+// Migrated from infra/tests/check-caddyfile-no-docker-network-ip_test.sh
+// (M-Migrate2 continuation 2026-07-07 — closes Red Team loopzero-cloud#127 guard).
+func runCaddyfileNoDockerIP(args []string) int {
+	fs := flag.NewFlagSet("caddyfile-no-docker-ip", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := caddyfilenodockerip.Check(caddyfilenodockerip.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations { fmt.Fprintf(os.Stderr, "  %s\n", v) }
+		return 1
+	}
+	fmt.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
 	return 0
 }
