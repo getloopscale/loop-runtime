@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.48.0] - 2026-07-07
 
+**Contents of this release are the same as v0.47.0 tail — see below.**
+
 ### Added
 
 - **`pkg/quality/allowlistsunsets` — pure-logic Go gate migrated from `infra/tests/check-allowlist-sunsets_test.sh`.** Hermetic contract test that drives `.claude/scripts/check-allowlist-sunsets.py` (T5.2.a of plan 2026-06-11-code-review-remediation-147-findings v1.2, EC-15 absorbed) with 6 fixture allowlists + 1 LIVE check. Asserts the Python gate's exit-code contract: 0 for future/today/missing-file/live-clean (with WARN on today), 1 for past-sunset (with `past sunset` marker), 2 for malformed OR bad-date (with `malformed` / `bad sunset_date` markers). The Go gate seeds each fixture in a temp dir, invokes `python3 .claude/scripts/check-allowlist-sunsets.py`, and verifies both the exit code AND the output marker. Test coverage 2/2 GREEN (real-repo sanity walk drives all 7 assertions + missing-gate FAIL). Requires python3 on PATH; if missing, tests skip cleanly. Registered as `loopzero-ops quality check-allowlist-sunsets` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/allowlistsunsets/check.go`, `cmd/loopzero-ops/internal/quality/allowlistsunsets/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
