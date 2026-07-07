@@ -31,6 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellcheckadvisory"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -645,5 +646,30 @@ func runOryKratosLifespan(args []string) int {
 		return 1
 	}
 	fmt.Println("ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
+	return 0
+}
+
+// runShellcheckAdvisory runs shellcheck as an advisory-only quality gate.
+// When shellcheck is missing on PATH, emits WARN + exits 0 (advisory).
+// When shellcheck is installed, exits 1 on violations (excluding tolerated
+// codes: SC1091, SC2155, SC2086, SC2046).
+// Migrated from infra/scripts/local/shellcheck-advisory.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runShellcheckAdvisory(args []string) int {
+	fs := flag.NewFlagSet("shellcheck-advisory", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("[shellcheck] WARN: shellcheck not installed — gate is advisory-only.")
+		fmt.Println("[shellcheck] Install via apt/brew/go to enable enforcement (R1-F5 T4.1).")
+		return 0
+	}
+	fmt.Printf("shellcheck-advisory: PASS — %d files clean (SC1091/SC2155/SC2086/SC2046 tolerated)\n", outcome.ScannedFiles)
 	return 0
 }

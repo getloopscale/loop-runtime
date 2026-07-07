@@ -137,11 +137,11 @@ tasks:
       - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
       - /tmp/loopzero-ops quality patch-kratos-check-only                             # M-Migrate2 (2026-07-07): replaced infra/tests/check-patch-kratos-check-only-readonly_test.sh with pure-logic Go gate. M0 J-01 T5.3 EC-9: patch-kratos --check-only read-only guard (6 assertions).
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
-      # shell-lint advisory — invokes infra/scripts/local/shellcheck-advisory.sh.
-      # Re-homed from inline `bash -c '...'` after that form broke YAML parsing
-      # (shell metachars + nested quotes). Script is conditional: runs
-      # shellcheck when installed; emits WARN + exits 0 when absent.
-      - bash infra/scripts/local/shellcheck-advisory.sh
+      # shell-lint advisory — invokes loopzero-ops quality shellcheck-advisory.
+      # M-Migrate2 (2026-07-07): replaced infra/scripts/local/shellcheck-advisory.sh
+      # with pure-logic Go gate that shells out to shellcheck. Conditional:
+      # runs shellcheck when installed; emits WARN + exits 0 when absent.
+      - /tmp/loopzero-ops quality shellcheck-advisory
       # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
