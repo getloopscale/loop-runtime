@@ -15,6 +15,9 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptcount"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptsaudit"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellhygiene"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/webhookcanonicalpath"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -302,5 +305,69 @@ func runScriptsAudit(args []string) int {
 		// Visibility for operator running interactively
 		fmt.Fprintf(os.Stderr, "scripts-audit: %d scripts inventoried to %s\n", len(scripts), *output)
 	}
+	return 0
+}
+
+// runWebhookCanonicalPath enforces that no test/seed script references the
+// wrong /engine/api/v1/webhooks/github URL (Caddy 301-redirect + 404 trap).
+// The canonical is /api/v1/webhooks/github (handler-direct).
+// Migrated from infra/tests/check-webhook-canonical-path_test.sh (M-Migrate2, 2026-07-07).
+func runWebhookCanonicalPath(args []string) int {
+	fs := flag.NewFlagSet("webhook-canonical-path", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "webhook-canonical-path: FAIL — /engine/api/v1/webhooks/github detected in %d place(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("webhook-canonical-path: PASS — no forbidden /engine/api/v1/webhooks/github references")
+	return 0
+}
+
+// runOIDCCredAdminLoopzero enforces the canonical admin@loopzero.example / loopzero-dev-password
+// credential — rejects fabricated paulo@loopzero.test / LoopZeroDev2026!.
+// Migrated from infra/tests/check-oidc-cred-admin-loopzero_test.sh (M-Migrate2 2026-07-07).
+func runOIDCCredAdminLoopzero(args []string) int {
+	fs := flag.NewFlagSet("oidc-cred-admin-loopzero", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "oidc-cred-admin-loopzero: FAIL — %d fabricated credential reference(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("oidc-cred-admin-loopzero: PASS — no fabricated paulo@loopzero.test/LoopZeroDev2026! (canonical: admin@loopzero.example)")
+	return 0
+}
+
+// runCanonicalFixtureRepo enforces canonical getloopscale/loopzerokit-example fixture.
+// Migrated from infra/tests/check-canonical-fixture-repo_test.sh (M-Migrate2 2026-07-07).
+func runCanonicalFixtureRepo(args []string) int {
+	fs := flag.NewFlagSet("canonical-fixture-repo", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := canonicalfixturerepo.Check(canonicalfixturerepo.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
 	return 0
 }
