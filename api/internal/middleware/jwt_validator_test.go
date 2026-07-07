@@ -25,7 +25,7 @@ func TestJWTOnlyValidator_HMACValidToken(t *testing.T) {
 	v := NewJWTOnlyValidator(nil, issuer)
 
 	// Issue a valid token
-	token, _, err := issuer.Issue("user-123", "test@test.com", "Test User", "tn-test")
+	token, _, err := issuer.Issue("user-123", "test@test.com", "Test User", "tn-test", "acct-test")
 	if err != nil {
 		t.Fatalf("failed to issue token: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestJWTOnlyValidator_WrongSecret(t *testing.T) {
 	issuerA := loopzerojwt.NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 	issuerB := loopzerojwt.NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
 
-	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn")
+	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn", "acct-a")
 	v := NewJWTOnlyValidator(nil, issuerB)
 
 	_, err := v.ValidateToken(context.Background(), token)
@@ -72,7 +72,7 @@ func TestJWTOnlyValidator_RSAOnly_RejectsHMAC(t *testing.T) {
 
 	// Issue a valid HMAC token
 	issuer := loopzerojwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopzero-cloud", "loopzero-cloud", 1*time.Hour)
-	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn")
+	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn", "acct-1")
 
 	_, err := v.ValidateToken(context.Background(), token)
 	if err == nil {

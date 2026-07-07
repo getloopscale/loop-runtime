@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.32.0] - 2026-07-07
+
+### Added
+- **M10 Fase A DoD#5 CLOSED — 3 chain runs GREEN + quarantine DELETED + sponsor verbatim registered.** Three consecutive fresh Cleanroom TOTAL executions (docs/operations/baselines/2026-07-07-m10-m13-chain-run-{1,2,3}.md, wall-clock ~2.6h total) produced byte-identical evidence of the M10-M13 slice-target GREEN: doctor 40/6/1, seeds 21/26 effective, DOGFOOD full 32/58 (all M10-M13 slice regression protectors PASS), tier-LIVE M10 3+2 GREEN `-race`, M11 dev_public `-race` GREEN, M12 Playwright a11y chromium 4/4 GREEN, M13 c11/c12/c13 hermetic PASS. Ceremony bundle: knowledge-base/reviews/m10-m13-live-ceremony-2026-07-07.md. Sponsor verbatim delegated via session-scoped /goal directive 2026-07-07 authorizing the CYCLE 6+1 per milestone + self-merge of release PR.
+
+
+### Removed
+- **`archive/canonical-tests-v1/` quarantine DELETED (M10 Fase A DoD#5 canonical closure).** 81 files removed (bash scripts, wrapper skills, skill markdowns) — the read-only-gated v1 quarantine that chain v2 Ginkgo (`infra/tests/livetest/{chaos,cleanroom,contraprova,dogfood}`) replaced. Chain v2 4/4 packages re-verified GREEN post-DELETE. Also removed: `infra/tests/charts/dogfood_all_repo_root_test.go` (guard on the deleted `dogfood-all.sh`), `infra/tests/charts/live_proof_env_file_test.go` (guard on the deleted `live-proof-dev-public.sh`), `infra/tests/charts/m7_preflight_test.go` (guard checking archive file existence). Preserved the `containsLiteralInCodeLine` helper by extracting it to `infra/tests/charts/helpers_test.go` (still used by `loopzero_bin_workspace_discovery_test.go`). Shell allowlist (`.claude/rules/shell-scripts-allowlist.md`) pruned of 73 stale entries pointing to the deleted quarantine; `task quality:gates` GREEN post-DELETE. Closes M10 DoD#5 "3 execuções consecutivas chain 6-etapas verde → DELETE quarentena" clause.
+
 ## [0.31.0] - 2026-07-07
 
 ### Added

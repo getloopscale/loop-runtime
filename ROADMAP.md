@@ -367,7 +367,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 1. Deletar bash cedo demais (antes do substituto cobrir a área) cria gap de cobertura — mitigado por deletar **por-área**, só após o teste estruturado equivalente estar GREEN.
 2. Cleanroom LIVE mandate ser mal-interpretado como "podemos largar LIVE" — mitigado: Playwright (M12) + Ginkgo (M10) rodam LIVE contra dev-public; `cleanroom-up-live-test-mandate.md` é preservado explicitamente.
 
-### M14 — [ ] KServe Cross-Validation Gaps Closure
+### M14 — [x] KServe Cross-Validation Gaps Closure
 
 > Added 2026-07-06 by `/roadmap-feature kserve-cross-validation-gaps`. Source: cross-validation loop loopzero vs **KServe** (CNCF reference, cloned at `.claude/knowledge-base/references/kserve/`) — final report `cross-validation-output/final_report.md`, overall 3.89/5.0, 6 gaps with file:line evidence in `cross-validation-output/cross-validation.db`. Sponsor decidiu implementar **todos os 6 gaps** (override consciente da classificação YAGNI dos gaps #4–#6, registrado em `knowledge-base/grills/kserve-cross-validation-gaps-feature-grill.md`).
 
