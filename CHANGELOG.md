@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.48.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/allowlistsunsets` — pure-logic Go gate migrated from `infra/tests/check-allowlist-sunsets_test.sh`.** Hermetic contract test that drives `.claude/scripts/check-allowlist-sunsets.py` (T5.2.a of plan 2026-06-11-code-review-remediation-147-findings v1.2, EC-15 absorbed) with 6 fixture allowlists + 1 LIVE check. Asserts the Python gate's exit-code contract: 0 for future/today/missing-file/live-clean (with WARN on today), 1 for past-sunset (with `past sunset` marker), 2 for malformed OR bad-date (with `malformed` / `bad sunset_date` markers). The Go gate seeds each fixture in a temp dir, invokes `python3 .claude/scripts/check-allowlist-sunsets.py`, and verifies both the exit code AND the output marker. Test coverage 2/2 GREEN (real-repo sanity walk drives all 7 assertions + missing-gate FAIL). Requires python3 on PATH; if missing, tests skip cleanly. Registered as `loopzero-ops quality check-allowlist-sunsets` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/allowlistsunsets/check.go`, `cmd/loopzero-ops/internal/quality/allowlistsunsets/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/check-allowlist-sunsets_test.sh` — replaced by the `check-allowlist-sunsets` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 153 → 152 entries (KEEP-CI-WIRED band: 11 → 10). Regression contract fully preserved (identical 7 fixture assertions + LIVE check; the Python gate itself is unchanged and still runs directly via `taskfiles/quality.yml` on every `task quality:gates`). Unhomedlogic classifier test-case swapped to `check-route-auth-coverage_test.sh`. (`.claude/rules/shell-scripts-allowlist.md`, `cmd/loopzero-ops/internal/quality/unhomedlogic/check_test.go`)
+
 ## [0.47.0] - 2026-07-07
 
 ### Added
