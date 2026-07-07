@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.49.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/routeauthcoverage` — pure-logic Go gate migrated from `infra/tests/check-route-auth-coverage_test.sh`.** Enforces R2-F8 (HIGH) from the 49-findings code review: every user-facing route in `api/internal/server/router.go` MUST be inside the `middleware.Auth` chi.Router group OR the `registerProtectedRoutes` helper OR the explicit 10-entry public-allowlist. Ports the bash `awk` brace-counter into a Go line-walker with `strings.Count` for `{`/`}` depth tracking. Real-repo verification confirms **40 routes** are correctly protected — identical count to bash guard. Test suite 6/6 GREEN including canonical fixture PASS + `router.go` missing FAIL + Auth-group missing FAIL + unprotected route FAIL + allowlist prefix-match PASS + real-repo sanity walk PASS. Registered as `loopzero-ops quality route-auth-coverage` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/routeauthcoverage/check.go`, `cmd/loopzero-ops/internal/quality/routeauthcoverage/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/check-route-auth-coverage_test.sh` — replaced by the `route-auth-coverage` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 152 → 151 entries (KEEP-CI-WIRED band: 10 → 9). Regression contract fully preserved (identical 40-route coverage verified via same allowlist prefix-match algorithm). Unhomedlogic classifier test-case swapped to `check-k6-load-rigor_test.sh`. (`.claude/rules/shell-scripts-allowlist.md`, `cmd/loopzero-ops/internal/quality/unhomedlogic/check_test.go`)
+
 ## [0.48.0] - 2026-07-07
 
 **Contents of this release are the same as v0.47.0 tail — see below.**
