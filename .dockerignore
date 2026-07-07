@@ -23,6 +23,7 @@ infra/pulumi-control-plane/node_modules
 !**/README.md
 **/dist/
 **/build/
+!api/internal/services/build/
 **/coverage/
 **/*.log
 **/.DS_Store
