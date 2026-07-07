@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
-## [0.49.0] - 2026-07-07
+## [0.49.0] - 2026-07-07 (route-auth-coverage Go gate migration)
 
 ### Added
 
