@@ -117,7 +117,7 @@ tasks:
       # with upstream / overlay role_id hardcode / rehearsal block falling
       # through to encrypt path).
       - bash infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh           # iter 20 T6.1: chart envFrom secretRef contract (7 assertions)
-      - bash infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh              # iter 24 Option (c) shortcut parity with upstream task (18 assertions)
+      - /tmp/loopzero-ops quality vault-bootstrap-in-mgmt-task                       # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh with pure-logic Go gate. iter 24 Option (c) shortcut parity with upstream task (18 assertions).
       - bash infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh  # iter 25 dev-public ESO overlay shape + anti-hardcode (18 assertions)
       - /tmp/loopzero-ops quality option-b-eso-deploy-doc                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-option-b-eso-deploy-doc_test.sh with pure-logic Go gate. iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions).
       - /tmp/loopzero-ops quality vault-bootstrap-unseal-loop                        # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-unseal-loop_test.sh with pure-logic Go gate. 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard).

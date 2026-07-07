@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pkg/quality/vaultbootstrapinmgmt` — pure-logic Go gate migrated from `infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh`.** Locks the `task k3d:vault:bootstrap-in-mgmt` shortcut as a canonical mirror of the upstream `task k3d:vault:bootstrap` with EXACTLY two well-known differences (kube-context swap `k3d-loopzero-vault` → `k3d-loopzero-mgmt` + pre-flight message references `task setup`). 18 assertions preserved bit-for-bit across 6 sections: (A) both tasks + sibling `status-in-mgmt` registered; (B) helmfile sync + kubectl wait counts match between upstream and shortcut, and shortcut declares all 4 named selectors (cert-manager, cluster-issuer, openbao-cert, openbao); (C) context swap totality (uses k3d-loopzero-mgmt, ZERO k3d-loopzero-vault references in shortcut body); (D) pre-flight references `task setup`, not `task k3d:vault:create`; (E) desc cites runbook + iter 23 audit + isolation trade-off + prod-cutover warning; (F) anti-patterns absent (no Co-Authored-By trailer, no `--no-verify`). Ports the bash `awk` range extraction into a Go `strings.HasPrefix` line-walk. Test suite 7/7 GREEN including canonical fixture, count drift FAIL, context leakage FAIL, missing `task setup` pre-flight FAIL, trailer-forbidden FAIL, and real-repo `taskfiles/k3d.yml` sanity walk. Registered as `loopzero-ops quality vault-bootstrap-in-mgmt-task` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt/check.go`, `cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
 ### Changed
 
 ### Deprecated
 
 ### Removed
+
+- **`infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh` — replaced by the `vault-bootstrap-in-mgmt-task` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 155 → 154 entries (KEEP-CI-WIRED band: 13 → 12). Regression contract fully preserved (identical 18 assertions; more coverage via 7 hermetic sub-tests including negative cases for count drift + context leakage). (`.claude/rules/shell-scripts-allowlist.md`)
 
 ### Fixed
 
