@@ -24,6 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -493,5 +494,25 @@ func runVaultBootstrapInMgmt(args []string) int {
 		return 1
 	}
 	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
+	return 0
+}
+
+// runESOOverlay enforces the dev-public loopzero-external-secrets overlay contract
+// (post-T1.2 workload identity: enabled=false safe default, K8s-auth shape,
+// no legacy AppRole roleId/secretRef, canonical mgmt DNS, traceability).
+// Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runESOOverlay(args []string) int {
+	fs := flag.NewFlagSet("dev-public-loopzero-external-secrets-overlay", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dev-public-loopzero-external-secrets-overlay: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("dev-public-loopzero-external-secrets-overlay: PASS — post-T1.2 workload-identity contract preserved (K8s-auth, no legacy AppRole)")
 	return 0
 }

@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.47.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/esooverlay` — pure-logic Go gate migrated from `infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh`.** Locks the post-T1.2 (issue #111 / Jeito A) workload-identity contract for `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`. 18 assertions preserved bit-for-bit across 9 sections: (B) `enabled: false` safe default + anti-foot-shooting guard against `enabled: true`; (C) canonical mgmt-cluster in-cluster DNS `https://openbao.vault-system.svc.cluster.local:8200`; (D) K8s-auth workload identity (`kind: "kubernetes"` + role + serviceAccountRef + audiences); (E) anti-hardcode guards — NO legacy AppRole `roleId:`/`secretRef:` fields, NO fabricated UUID literals, `caBundle` empty; (F) documentation traceability (issue #111 / Jeito A / OpenBao init runbook / EC-1 / EC-2); (G) no `Co-Authored-By` trailer; (H) top-level `openbaoTransit:` key matches chart schema; (I) `loopzero-vault` cross-cluster topology cited. Test suite 9/9 GREEN including canonical fixture + missing overlay FAIL + `enabled: true` FAIL + non-https FAIL + legacy `roleId:` FAIL + legacy `secretRef:` FAIL + hardcoded UUID FAIL + trailer-forbidden FAIL + real-repo sanity walk PASS. Registered as `loopzero-ops quality dev-public-loopzero-external-secrets-overlay` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/esooverlay/check.go`, `cmd/loopzero-ops/internal/quality/esooverlay/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh` — replaced by the `dev-public-loopzero-external-secrets-overlay` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 154 → 153 entries (KEEP-CI-WIRED band: 12 → 11). Regression contract fully preserved (identical 18 assertions; more coverage via 9 hermetic sub-tests). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.46.0] - 2026-07-07
 
 ### Added
