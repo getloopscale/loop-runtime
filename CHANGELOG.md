@@ -7,17 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-### Changed
-
-### Deprecated
-
 ### Removed
-
-### Fixed
-
-### Security
+- **M-Migrate3 batch 1: 22 KEEP-OPERATOR scripts DELETED (122 → 100, 18% shrink) via iterative dead-chain audit.** Reference-graph analysis identified scripts whose only non-doc refs were other-scripts-already-deleted or historical audit artifacts (`docs/scripts-audit/2026-05-22.csv`, `.claude/knowledge-base/concepts/operations/finding-*`, historical CHANGELOG/plan entries). Each verified as functionally dead-chain (no Go/YAML/Taskfile runtime dep). Deleted: 1 truly-orphan (`check-sprint/c1-helmfile-rendering.sh`) + 3 e2e ops with doc-only refs (stripe-webhook-checkout, dashboard-engine-proxy, dashboard-pages-public-smoke) + 9 chain-orchestrator internals (preflight-t1.1-no-legacy-envs, check-openbao-prereqs, check-sprint/c2-c8) + 9 historical operator tools (health-check-platform, pre-destroy-cleanup, test-inventory, audit-argocd-drift, run-polaris, capture-capacity-baselines, infra-destroy-safe, l3-stability-loop, dev-public-overview-flow). Iterative dead-chain second-pass returned 0 additional — remaining 99 KEEP-OPERATOR all have live callers (Go/YAML/Taskfile OR chain-invoked by canonical seed scripts). Rule 3 sem-workarounds: verification proved deletion safety pre-commit. `task quality:gates` GREEN post-DELETE. Total allowlist: 259 → 237.
 
 ## [0.36.0] - 2026-07-07
 
