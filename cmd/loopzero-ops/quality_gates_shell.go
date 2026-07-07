@@ -34,6 +34,8 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellcheckadvisory"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -737,5 +739,48 @@ func runRenderSchemaGenSQL(args []string) int {
 		return 0
 	}
 	fmt.Printf("render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
+	return 0
+}
+
+// runCredentialsSot enforces T1.1 SoT drift audit — every Secret created by
+// canonical generator scripts is enumerated in docs/operations/credentials-required.md.
+// Migrated from infra/tests/docs/credentials-sot_test.sh
+// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
+func runCredentialsSot(args []string) int {
+	fs := flag.NewFlagSet("credentials-sot", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := credentialssot.Check(credentialssot.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		if len(outcome.Discovered) > 0 {
+			fmt.Fprintln(os.Stderr, "Discovered Secret names:")
+			for _, s := range outcome.Discovered { fmt.Fprintf(os.Stderr, "  - %s\n", s) }
+		}
+		return 1
+	}
+	fmt.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations/credentials-required.md\n", len(outcome.Discovered))
+	return 0
+}
+
+// runPulumiRequiredSecrets enforces T1.5 — every Pulumi.<env>.yaml enumerates
+// the required secret keys for that environment (either as `secure:` entry
+// or as a comment). Cross-checks the same keys appear in the SoT doc.
+// Migrated from infra/tests/docs/pulumi-required-secrets_test.sh
+// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
+func runPulumiRequiredSecrets(args []string) int {
+	fs := flag.NewFlagSet("pulumi-required-secrets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := pulumirequiredsecrets.Check(pulumirequiredsecrets.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
 	return 0
 }

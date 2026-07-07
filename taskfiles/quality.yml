@@ -81,7 +81,7 @@ tasks:
       # Bash security/governance gates re-homed 2026-05-24 (were unwired since
       # GitHub Actions removal). TODO: migrate these to loopzero-ops quality Go gates
       # (strategic home) and drop the bash. Until then they run here = enforced.
-      - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
+      - /tmp/loopzero-ops quality pulumi-required-secrets            # M-Migrate2 (2026-07-07): replaced infra/tests/docs/pulumi-required-secrets_test.sh with pure-logic Go gate. Security: prod/staging/drill secrets externalized.
       - /tmp/loopzero-ops quality skill-paths                        # M-Migrate2 (2026-07-07): replaced infra/tests/skills/skill-paths_test.sh with pure-logic Go gate. Governance: SKILL.md path resolution (declared BLOCKING).
       - /tmp/loopzero-ops quality dev-public-env                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/dev-public-env_test.sh with pure-logic Go gate. dev-public.yaml canonical shape (dev URLs + cookieDomain + CORS + D5 OAuth reuse + no localhost/legacy leaks).
       - /tmp/loopzero-ops quality k6-load-rigor                      # M-Migrate2 (2026-07-07): replaced infra/tests/check-k6-load-rigor_test.sh with pure-logic Go gate. k6 load rigor: dropped_iterations threshold + L5 distributed + per-level doc (plan k6-load-test-rigor-fixes).
@@ -108,7 +108,7 @@ tasks:
       - bash infra/tests/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
       - bash infra/tests/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when vault-system NS absent (dogfood compat)
       - bash infra/tests/check-loki-retention-schema_test.sh                   # openbao-adoption iter 34: T8.2 Loki retention_stream schema valid (cleanroom Loki bootstrap)
-      - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
+      - /tmp/loopzero-ops quality credentials-sot                    # M-Migrate2 (2026-07-07): replaced infra/tests/docs/credentials-sot_test.sh with pure-logic Go gate. Doc-sync: credentials-required.md enumerates bootstrap Secrets.
       # J-22 openbao-transit v1.2 productive-idle hermetic tests (iters 20-26) — wired iter 27.
       # All 4 are anti-drift contract guards for the engineering deliverables
       # iter 18 (T2.5 wire-up) → iter 26 (rehearsal mode). Each test runs in
