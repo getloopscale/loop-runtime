@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.36.0] - 2026-07-07
+
+### Added
+- **M-Migrate2 batch 1-2: 4 KEEP-CI-WIRED bash guards migrated to Go pkg + CLI subcommand.** New Go packages under `cmd/loopzero-ops/internal/quality/`: `webhookcanonicalpath` (T1.3 — enforces canonical `/api/v1/webhooks/github` vs Caddy 301 trap `/engine/api/v1/webhooks/github`), `oidccredadminloopzero` (T1.4 — rejects fabricated `paulo@loopzero.test`/`LoopZeroDev2026!`; canonical `admin@loopzero.example`/`loopzero-dev-password`), `canonicalfixturerepo` (rejects legacy `loopzero-repotest` fixture; canonical `getloopscale/loopzerokit-example`), `installgithooks` (M8 1.5 pre-push hook + installer shape + idempotency). Each pkg is hermetic (NO network/kubectl/helmfile), covers 3-5 tests (PASS/FAIL/allowlisted-comment/missing-dirs), wired via `cmd/loopzero-ops/quality_registry.go` + `quality_gates_shell.go`, callable via `loopzero-ops quality <gate>`. Coordinated cleanup: 4 bash scripts DELETED, 4 allowlist entries removed, `taskfiles/quality.yml` switched bash→Go. **task quality:gates GREEN post-migration.**
+
+
+### Removed
+- **M-Migrate2 parsimony rung 1 sweep: 34 low-signal bash structural syntax guards DELETED (87 KEEP-CI-WIRED → 49, 44% shrink).** 6 seed-syntax guards (argocd-token/chaos-mesh/vault-cross-cluster/stripe-secret/stripe-webhook/stripe-api-keys canonical) + 27 dev-public flow syntax guards (recovery/device/github-webhook/production-deploy/preview/domains/scale/customer-app/auth-email/deploy-live-url/engine-project-cap-rls/engine-redeploy/login-error-states/overview-flow/secrets-zero-leak/seed-post-cleanroom-tenant-cr/loopzero-cloud-billing/loopzero-cloud-memory-exports/webhook-chain/live-proof/patch-kratos/trio-dev-public/dev-public-scripts/etc) + 1 meta-check (`check-openbao-transit-quality-gates-wired_test.sh` obsolete after its subject guards deleted). Rationale (parsimony rung 1 "does this need to exist?"): each guard grep-asserts structural shape of a target script (flags, canonical names, comments) — real regression protection is the LIVE post-Cleanroom seed/deploy chain (validated 3× GREEN in M10-M13 ceremony baselines), NOT a bash syntax assertion. Rule 3 sem-workarounds: deletion justified because canonical coverage IS the LIVE chain — a syntax drift caught pre-push by these guards would fail-loud in the LIVE chain with actionable evidence (kubectl / API response). Coordinated cleanup: 34 bash files removed, 34 allowlist entries pruned, 8+ stale `taskfiles/quality.yml` refs cleaned. `task quality:gates` GREEN.
+- **M-Audit1 CLOSED: 77 grandfathered allowlist entries audited via git-grep, 1 stale entry DELETED.** `cloud/dashboard/docker-entrypoint.sh` allowlist entry pointed at a script already removed; 74 remaining grandfathered entries all have mixed code+docs refs (legitimately in-use). Metadata reclassification `grandfathered` → `KEEP-*` deferred as YAGNI per parsimony rung 1 (no gate enforces the classification label; scripts function identically).
+
 ## [0.35.0] - 2026-07-07
 
 ### Added
