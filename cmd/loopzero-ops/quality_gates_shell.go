@@ -27,6 +27,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -561,5 +562,24 @@ func runRouteAuthCoverage(args []string) int {
 	}
 	fmt.Printf("route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
 		outcome.PassCount, outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
+	return 0
+}
+
+// runK6LoadRigor enforces the k6 load-harness rigor fixes (dropped_iterations
+// threshold in base + L5 distributed manifest shape + README per-level doc).
+// Migrated from infra/tests/check-k6-load-rigor_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runK6LoadRigor(args []string) int {
+	fs := flag.NewFlagSet("k6-load-rigor", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := k6loadrigor.Check(k6loadrigor.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
 	return 0
 }
