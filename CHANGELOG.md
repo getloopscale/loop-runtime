@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.39.0] - 2026-07-07
+
+### Removed
+- **M-Migrate3 iterative fixed-point audit: 4 additional historical-only scripts DELETED (189 → 185).** Two additional rounds of reference-graph audit after v0.38.0 landed: 3 scripts (`check-cosign-v3-deadline_test.sh`, `check-m07-cutover-preflight_test.sh`, `m07-cutover-rollback.sh`) whose only refs were historical CSV/audit/evidence artifacts + 1 more script surfaced in round 5. Rounds 6-9 returned zero more candidates → **iterative fixed point reached** for the historical-only heuristic. `task quality:gates` GREEN. Final canonical allowlist: 185 entries (65 grandfathered + 29 KEEP-CI-WIRED + 87 KEEP-OPERATOR + 4 KEEP-CI-ORCHESTRATOR + 1 KEEP-HARNESS-HOOK + 1 TEMPORARY-DELETE). Combined shrink from 500+ historical baseline: ~63%. Further shrink beyond this fixed point requires per-script LIVE Ginkgo migration + individual sponsor sign-off (out of scope for the reference-graph heuristic).
+
 ## [0.38.0] - 2026-07-07
 
 ### Removed
