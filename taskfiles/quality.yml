@@ -126,7 +126,7 @@ tasks:
       - bash infra/tests/check-archive-script-repo-root_test.sh                   # T1.2 regression guard: archive/ scripts use canonical 4-dirs-up REPO_ROOT (broken post-quarantine 289cf9d6)
       - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide.
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
-      - bash infra/tests/check-allowlist-sunsets_test.sh                         # T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt)
+      - /tmp/loopzero-ops quality check-allowlist-sunsets                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-allowlist-sunsets_test.sh with pure-logic Go gate. T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt).
       - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
       # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.

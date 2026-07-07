@@ -25,6 +25,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -514,5 +515,24 @@ func runESOOverlay(args []string) int {
 		return 1
 	}
 	fmt.Println("dev-public-loopzero-external-secrets-overlay: PASS — post-T1.2 workload-identity contract preserved (K8s-auth, no legacy AppRole)")
+	return 0
+}
+
+// runAllowlistSunsets is a hermetic contract test for the Python
+// .claude/scripts/check-allowlist-sunsets.py gate (T5.2.a fixture verifier).
+// Migrated from infra/tests/check-allowlist-sunsets_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runAllowlistSunsets(args []string) int {
+	fs := flag.NewFlagSet("check-allowlist-sunsets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := allowlistsunsets.Check(allowlistsunsets.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("check-allowlist-sunsets: PASS — 7 fixture cases + live check GREEN (future/today/past/malformed/bad-date/missing/live)")
 	return 0
 }
