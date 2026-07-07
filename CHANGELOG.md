@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.55.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/loopzeroapiopenbao` — pure-logic Go gate migrated from `infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh`.** Enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2: the `loopzero-api` chart unconditionally wires the AppRole `secret_id` via `envFrom.secretRef` to K8s Secret `loopzero-openbao-approle` (`optional=true` — graceful when Secret missing) with NO inline `value:` for `OPENBAO_VAULT_SECRET_ID`. Renders the chart via `helm template` subprocess (Anti-Pattern #8 legitimate — helm is the canonical rendering tool; the subprocess boundary matches the same tradeoff as `shellcheck-advisory`). Advisory fallthrough when helm is not on PATH (`WARN` + exit 0 — mirrors the operator-time gate posture). 7 assertions preserved bit-for-bit: A1 secret name present, A2 `optional: true` in the same envFrom block (section-scoped extraction stricter than bash `awk` range — sibling envFrom `optional:` values cannot leak in and false-PASS), B1 plan citation, B2 runbook cross-link, C1 anti-hardcode guard (regex-detects the exact `name: OPENBAO_VAULT_SECRET_ID` immediately followed by `value:` anti-pattern), D1 sibling envFrom `loopzero-service-auth` still renders (regression defense), E1 secret-canonical memory pointer. Test suite 4/4 (3 PASS + 1 SKIP when helm installed — deterministic in both worlds via `TestCheck_HelmAbsentIsAdvisoryWhenChartExists`). Registered as `loopzero-ops quality loopzero-api-openbao-approle-envfrom` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/loopzeroapiopenbao/check.go`, `cmd/loopzero-ops/internal/quality/loopzeroapiopenbao/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Removed
+
+- **`infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh` — replaced by the `loopzero-api-openbao-approle-envfrom` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 146 → 145 entries (KEEP-CI-WIRED band: 4 → 3). Contract fully preserved (identical 7 assertions with section-scoped optional=true detection stricter than bash `awk`). (`.claude/rules/shell-scripts-allowlist.md`)
+
 ## [0.54.0] - 2026-07-07
 
 ### Added

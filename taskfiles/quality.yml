@@ -117,7 +117,7 @@ tasks:
       # OpenBao Transit chain (server URL drift / shortcut going out of sync
       # with upstream / overlay role_id hardcode / rehearsal block falling
       # through to encrypt path).
-      - bash infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh           # iter 20 T6.1: chart envFrom secretRef contract (7 assertions)
+      - /tmp/loopzero-ops quality loopzero-api-openbao-approle-envfrom                   # M-Migrate2 (2026-07-07): replaced infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh with Go gate. iter 20 T6.1 chart envFrom secretRef contract (7 assertions). Advisory when helm absent.
       - /tmp/loopzero-ops quality vault-bootstrap-in-mgmt-task                       # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh with pure-logic Go gate. iter 24 Option (c) shortcut parity with upstream task (18 assertions).
       - /tmp/loopzero-ops quality dev-public-loopzero-external-secrets-overlay           # M-Migrate2 (2026-07-07): replaced infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh with pure-logic Go gate. iter 25 dev-public ESO overlay shape + anti-hardcode (18 assertions).
       - /tmp/loopzero-ops quality option-b-eso-deploy-doc                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-option-b-eso-deploy-doc_test.sh with pure-logic Go gate. iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions).
