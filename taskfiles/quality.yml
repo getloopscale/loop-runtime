@@ -120,7 +120,7 @@ tasks:
       - bash infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh              # iter 24 Option (c) shortcut parity with upstream task (18 assertions)
       - bash infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh  # iter 25 dev-public ESO overlay shape + anti-hardcode (18 assertions)
       - bash infra/tests/check-option-b-eso-deploy-doc_test.sh                   # iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions)
-      - bash infra/tests/check-vault-bootstrap-unseal-loop_test.sh               # 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard)
+      - /tmp/loopzero-ops quality vault-bootstrap-unseal-loop                        # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-unseal-loop_test.sh with pure-logic Go gate. 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard).
       # M1 hermetic guards (plan m1-commit-canonical-30-fixes v1.2 SHIPPABLE 96.4 — 2026-06-23)
       - bash infra/tests/check-no-cloud-dev-default_test.sh                       # T1.1 regression guard: no cloud-dev defaults in test/seed scripts (Caddy 301 trap post ee77b8da; EC-1 absorption excludes /api/v1/webhooks/github)
       - bash infra/tests/check-archive-script-repo-root_test.sh                   # T1.2 regression guard: archive/ scripts use canonical 4-dirs-up REPO_ROOT (broken post-quarantine 289cf9d6)

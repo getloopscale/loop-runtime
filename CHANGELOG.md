@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.44.0] - 2026-07-07
+
+### Added
+
+- **`pkg/quality/vaultbootstrapunsealloop` — pure-logic Go gate migrated from `infra/tests/check-vault-bootstrap-unseal-loop_test.sh`.** Regression guard for the 2026-06-15 dev-public Cleanroom Phase 4 canonical fix of `vault-bootstrap-dev.sh` Steps 2+3 (the `pipefail + bao rc=2` silent-skip trap). Preserves 16 assertions across 5 sections bit-for-bit: (A) `bash -n` syntax when bash on PATH; (B) Step 2 stdout-captured-then-parsed canonical pattern + Python-cap `"True"` compare; (C) Step 3 same pattern with ≥2 `BAO_STATUS_JSON` captures count guard; (D) anti-pattern guards — original buggy `bao status -format=json | python3` direct-pipe pattern AND lowercase `"true"` fallback on parse assign lines (`INIT_STATUS=`/`SEALED=`) both forbidden via Go line-scanner (ports the bash guard's Python scanner); (E) audit trail — `CANONICAL FIX 2026-06-15` marker + `exit-code SEMANTICS` + `pipefail…bao rc=2` + `sem WORKAROUNDs` sponsor mandate. Comment-line references to the lowercase fallback are allowed (audit-trail exemption). Test suite 8/8 GREEN including canonical fixture + real-repo sanity walk + each anti-pattern independently negatively-tested. Registered as `loopzero-ops quality vault-bootstrap-unseal-loop` + wired in `taskfiles/quality.yml`. (`cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop/check.go`, `cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop/check_test.go`, `cmd/loopzero-ops/quality_gates_shell.go`, `cmd/loopzero-ops/quality_registry.go`, `taskfiles/quality.yml`)
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+- **`infra/tests/check-vault-bootstrap-unseal-loop_test.sh` — replaced by the `vault-bootstrap-unseal-loop` Go gate (see Added above).** Bash file DELETED; allowlist row removed. Net canonical allowlist: 157 → 156 entries (KEEP-CI-WIRED band: 15 → 14). Regression contract fully preserved (identical 16 assertions; more coverage via 8 hermetic sub-tests). The unhomedlogic test-case reference was swapped to `check-option-b-eso-deploy-doc_test.sh` to keep the `KEEP-CI-WIRED → Homed` classifier assertion pointing at a live example. (`.claude/rules/shell-scripts-allowlist.md`, `cmd/loopzero-ops/internal/quality/unhomedlogic/check_test.go`)
+
+### Fixed
+
+### Security
+
 ## [0.43.0] - 2026-07-07
 
 ### Removed
