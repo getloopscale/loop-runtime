@@ -22,6 +22,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/patchkratoscheckonly"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -450,5 +451,26 @@ func runVaultBootstrapUnsealLoop(args []string) int {
 		return 1
 	}
 	fmt.Println("vault-bootstrap-unseal-loop: PASS — canonical fix preserved (rc-independent parse, capitalized True compare, anti-patterns absent)")
+	return 0
+}
+
+// runOptionBESO enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
+// contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands
+// documented, rollback + decision matrix + cross-references present, ESO
+// version drift against runtime helmfile detected).
+// Migrated from infra/tests/check-option-b-eso-deploy-doc_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runOptionBESO(args []string) int {
+	fs := flag.NewFlagSet("option-b-eso-deploy-doc", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
 	return 0
 }
