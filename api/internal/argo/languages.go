@@ -64,20 +64,45 @@ type LanguageStrategy interface {
 // services.json schema, so an empty/unknown runtime at build time is a contract
 // violation, not a "default to node" situation — it fails closed. Silent
 // defaulting is precisely how a python app could be built as node.
+// RuntimeDescriptor models a supported runtime as DATA rather than a hardcoded
+// switch arm (M14 gap #1, blueprint Q1 — kserve's ServingRuntime treats a
+// runtime as a declarative descriptor). Adding a runtime is a registry entry,
+// not a code branch.
+//
+// D2: the registry is OPERATOR-ONLY config, never tenant-supplied — it is a
+// package-level literal populated at init, so a tenant cannot inject a runtime.
+// The fixed LoopZeroKit stack (python, node) stays fail-closed.
+type RuntimeDescriptor struct {
+	Name     string
+	Strategy LanguageStrategy
+}
+
+// runtimeRegistry is the single source of truth for which runtimes resolve.
+// Operator-only: to add a runtime, add a descriptor here — do NOT branch in
+// ResolveStrategy. python + node only (D1/D4 fail-closed).
+var runtimeRegistry = map[string]RuntimeDescriptor{
+	"node":   {Name: "node", Strategy: &NodeStrategy{}},
+	"python": {Name: "python", Strategy: &PythonStrategy{}},
+}
+
+// ResolveStrategy returns the LanguageStrategy for a `services.json` runtime by
+// looking it up in runtimeRegistry (M14 gap #1 — data-driven, was a switch).
+//
+// EC-3: the lookup is EXACT-MATCH (case-sensitive, no trim), preserving the
+// legacy switch semantics byte-for-byte. "Python", "python ", "" all miss and
+// fail closed — normalizing would change behavior for existing callers.
+//
+// D4: there is NO empty-default-to-Node branch. `runtime` is required by the
+// services.json schema, so an empty/unknown runtime at build time is a contract
+// violation — it fails closed. Silent defaulting is precisely how a python app
+// could be built as node.
 func ResolveStrategy(runtime string) LanguageStrategy {
-	switch runtime {
-	case "node":
-		return &NodeStrategy{}
-	case "python":
-		return &PythonStrategy{}
-	default:
-		// Fixed LoopZeroKit stack is python + node ONLY. Empty or anything else
-		// fails closed at build time — no legacy framework mapping, no Node
-		// default, no loopzero-packs, no silent fallback (D1/D4).
-		slog.Warn("unsupported runtime for the fixed LoopZeroKit stack — failing closed",
-			"runtime", runtime, "supported", "python, node")
-		return &unsupportedStrategy{runtime: runtime}
+	if d, ok := runtimeRegistry[runtime]; ok {
+		return d.Strategy
 	}
+	slog.Warn("unsupported runtime for the fixed LoopZeroKit stack — failing closed",
+		"runtime", runtime, "supported", "python, node")
+	return &unsupportedStrategy{runtime: runtime}
 }
 
 // unsupportedStrategy fails closed for any runtime outside the fixed LoopZeroKit

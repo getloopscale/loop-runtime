@@ -367,6 +367,29 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 1. Deletar bash cedo demais (antes do substituto cobrir a área) cria gap de cobertura — mitigado por deletar **por-área**, só após o teste estruturado equivalente estar GREEN.
 2. Cleanroom LIVE mandate ser mal-interpretado como "podemos largar LIVE" — mitigado: Playwright (M12) + Ginkgo (M10) rodam LIVE contra dev-public; `cleanroom-up-live-test-mandate.md` é preservado explicitamente.
 
+### M14 — [ ] KServe Cross-Validation Gaps Closure
+
+> Added 2026-07-06 by `/roadmap-feature kserve-cross-validation-gaps`. Source: cross-validation loop loopzero vs **KServe** (CNCF reference, cloned at `.claude/knowledge-base/references/kserve/`) — final report `cross-validation-output/final_report.md`, overall 3.89/5.0, 6 gaps with file:line evidence in `cross-validation-output/cross-validation.db`. Sponsor decidiu implementar **todos os 6 gaps** (override consciente da classificação YAGNI dos gaps #4–#6, registrado em `knowledge-base/grills/kserve-cross-validation-gaps-feature-grill.md`).
+
+**Objective:** fechar os 6 gaps estruturais identificados na comparação com a referência KServe — levar a fronteira de admission dos CRDs, a mecanização do dual-chart sync e a pluggabilidade de runtime/storage/logging ao nível do padrão CNCF, preservando as invariantes de segurança do loopzero (stack fail-closed, sem superfície tenant-facing nova). **Why now:** a análise acabou de concluir com evidência persistida; o gap #2 corresponde a uma classe de incidente já vivida (M2 legacy-namespace).
+
+**Definition of done:**
+
+- [ ] **Gap #2 — Admission validation nos CRDs `loopzero.io`:** CEL VAPs ou `CustomValidator` com `failurePolicy=Fail` rejeitam CR malformado direto no API server (invariantes cross-field: project RFC1123, cell immutability); envtest cobrindo aceitação+rejeição. *Referência: kserve `pkg/apis/serving/v1beta1/inference_service_validation.go:72` + `inference_service_defaults.go:56` (defaulter/validator co-locados com os types).*
+- [ ] **Gap #3 — Content-diff gate dos charts sobrepostos:** gate em `task quality:gates` renderiza os 3 charts duplicados (`infra/helm/` vs `charts/`) e falha em divergência de security-context/resource-limits/helpers. *Referência: kserve `Makefile:342` (`precommit` → `generate-chart-manifests` + `sync-helm-common-helpers` + `verify-minimal-crd-sync`).*
+- [ ] **Gap #1 — Runtime registry data-driven:** `ResolveStrategy` vira lookup sobre descriptors de runtime carregados de config (operator-only, NUNCA tenant-facing); python+node continuam os únicos habilitados por default (fail-closed preservado). *Referência: kserve `pkg/apis/serving/v1alpha1/servingruntime_types.go:31` + `config/runtimes/kserve-sklearnserver.yaml` (runtime como dado declarativo).*
+- [ ] **Gap #4 — Conversion webhook:** pattern Hub/Convertible instalado nos CRDs `loopzero.io` v1, provando round-trip de conversão em envtest. *Referência: kserve `pkg/apis/serving/v1beta1/inference_service_conversion.go`.*
+- [ ] **Gap #5 — `ObjectStore` interface:** interface no domínio (DIP) com o client S3 como primeiro adapter; nenhum call-site fora do composition root importa o driver direto. *Referência: kserve `pkg/credentials/service_account_credentials.go` (multi-backend por abstração).*
+- [ ] **Gap #6 — Payload/request logger assíncrono:** dispatcher+worker não-bloqueante, opt-in por tenant, com scrub de PII — nunca logging síncrono no request path. *Referência: kserve `pkg/logger/dispatcher.go`.*
+- [ ] Suíte completa verde (`go test ./...` + `task quality:gates`) + CHANGELOG `[Unreleased]` por entrega; zero regressão nos gates existentes.
+
+**Dependencies:** M9 (Engine Architecture Hardening — a superfície operators/CRDs/API que este milestone toca). A ordenação por ID do `cycle-roadmap` garante M10–M13 antes.
+
+**Top risks:**
+
+1. Registry de runtimes data-driven pode reabrir a superfície RCE que a remoção do BYO-Dockerfile fechou — mitigação: descriptors são config operator-only (nunca tenant-supplied), allow-list de imagens preservada.
+2. Webhooks `failurePolicy=Fail` no caminho crítico do API server podem deadlockar operações do cluster (classe B33 já vivida com VAPs) — mitigação: preferir CEL VAPs onde possível + `matchConditions` excluindo system controllers (`namespace-controller`, `kube-controller-manager`).
+
 ---
 
 ## State-of-the-art references
@@ -382,6 +405,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 | PactFlow bidirectional contracts (concept) | proprietary (concept study only) | reference for spec-based bidirectional contract testing — the lean model the org already chose homegrown vs full Pact CDC | M10 |
 | schemathesis | MIT | candidate (spike vs Go-native) for property-based API fuzzing from OpenAPI | M11 |
 | Playwright (+ axe-core) | Apache-2.0 (axe-core MPL-2.0) | real-browser E2E + declarative a11y; kills bundle-grep | M12 |
+| kserve/kserve | Apache-2.0 | CNCF model-inference platform — gold standard da cross-validation 2026-07-06 (score 3.89/5.0); fonte de todos os 6 gaps do M14, clonado em `.claude/knowledge-base/references/kserve/` | M14 |
 
 ---
 

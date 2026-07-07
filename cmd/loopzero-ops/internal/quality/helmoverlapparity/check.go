@@ -133,6 +133,40 @@ func Check(cfg Config) (*Outcome, error) {
 				Reason:           "drift: bootstrap chart leads published",
 			})
 		}
+
+		// M14 gap #3 — content diff of the security-critical fields that MUST be
+		// identical across both chart copies (version parity alone does not prove
+		// content parity). Two layers:
+		//   (a) values.yaml fields (resources.*) — cheap, no render needed.
+		//   (b) RENDERED securityContext (runAsUser/runAsNonRoot) — those live in
+		//       templates/deployment.yaml, not values.yaml, so only a helm render
+		//       can compare them. This is the invariant loopzero-design.md names.
+		bootstrapValues := filepath.Join(cfg.RepoRoot, "infra/helm", pair.BootstrapDir, "values.yaml")
+		publishedValues := filepath.Join(cfg.RepoRoot, "charts", pair.PublishedDir, "values.yaml")
+		out.Violations = append(out.Violations, diffChartContent(bootstrapValues, publishedValues, pair.BootstrapDir)...)
+
+		bootstrapChart := filepath.Join(cfg.RepoRoot, "infra/helm", pair.BootstrapDir)
+		publishedChart := filepath.Join(cfg.RepoRoot, "charts", pair.PublishedDir)
+		bRendered, bErr := renderHelm(bootstrapChart)
+		pRendered, pErr := renderHelm(publishedChart)
+		if bErr != nil || pErr != nil {
+			// Render failure is surfaced honestly, never silently skipped — a gate
+			// that cannot render cannot prove parity.
+			reason := "cannot render chart for securityContext parity"
+			if bErr != nil {
+				reason += fmt.Sprintf(" (bootstrap: %v)", bErr)
+			}
+			if pErr != nil {
+				reason += fmt.Sprintf(" (published: %v)", pErr)
+			}
+			out.Violations = append(out.Violations, Violation{
+				BootstrapPath: relativeOrAbs(cfg.RepoRoot, bootstrapChart),
+				PublishedPath: relativeOrAbs(cfg.RepoRoot, publishedChart),
+				Reason:        reason,
+			})
+			continue
+		}
+		out.Violations = append(out.Violations, diffRenderedSecurityContext(bRendered, pRendered, pair.BootstrapDir)...)
 	}
 	out.Pass = len(out.Violations) == 0
 	return out, nil
