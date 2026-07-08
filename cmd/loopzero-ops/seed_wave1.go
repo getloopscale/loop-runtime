@@ -9,4 +9,5 @@ import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
 // Registration order = execution order for `seed all` (deterministic, D3).
 func init() {
 	seedRegistry.Register(seed.NewGitHubAppDevSeed())
+	seedRegistry.Register(seed.NewStripeWebhookSecretSeed())
 }

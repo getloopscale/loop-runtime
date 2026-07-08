@@ -308,8 +308,8 @@ else
   skip_step "14-seed-vault-cross-cluster-addr" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
-# Step 15 (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
-run_step "15-seed-stripe-secret-canonical" "bash $SCRIPT_DIR/seed-stripe-secret-canonical.sh $VERIFY_FLAG"
+# Step 15 (M15 W1: migrated to loopzero-ops seed; bash script deleted) (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
+run_step "15-seed-stripe-webhook-secret" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed stripe-webhook-secret ${VERIFY_FLAG:+--verify})"
 
 # Step 15b (NEW 2026-06-24 — plan stripe-l2-wiring-canonical-fix T3.2) —
 # loopzero-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;

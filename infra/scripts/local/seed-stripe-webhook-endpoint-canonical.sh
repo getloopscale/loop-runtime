@@ -27,7 +27,7 @@
 #   (3) POST /v1/webhook_endpoints with url + 5 canonical enabled_events.
 #       Capture the returned `secret` field (`whsec_test_*`).
 #   (4) Persist whsec to (a) ~/.loopzero/dev-credentials.json `stripe.webhook_secret`
-#       AND (b) `loopzero-stripe-webhook` K8s Secret via seed-stripe-secret-canonical.sh
+#       AND (b) `loopzero-stripe-webhook` K8s Secret via `loopzero-ops seed stripe-webhook-secret` (M15 W1)
 #       (delegates to preserve DRY + mode 0600 invariants).
 #   (5) Rollout restart loopzero-cloud so the pod picks up the new whsec via
 #       envFrom secretRef (matches sibling seed-stripe-api-keys #154 chain).
@@ -53,6 +53,7 @@ MGMT_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
 CREDS_FILE="${LOOPZERO_DEV_CREDENTIALS:-$HOME/.loopzero/dev-credentials.json}"
 WEBHOOK_URL="${LOOPZERO_WEBHOOK_URL:-https://app-dev.loopzero.example/v1/webhooks/stripe}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VERIFY=0
 DRY_RUN=0
 for arg in "$@"; do
@@ -108,9 +109,10 @@ for ep in d.get('data', []):
 # Stripe test-mode API returns `whsec_<random>` — no `test_` subprefix.
 if [[ -n "$EXISTING_ID" && "$EXISTING_WHSEC" =~ ^whsec_ && ! "$EXISTING_WHSEC" =~ ^whsec_dev_ ]]; then
   log "SKIP — endpoint $EXISTING_ID exists AND whsec already canonical"
-  # Still ensure Secret materialized (idempotent — sibling seed handles this)
+  # Still ensure Secret materialized (idempotent — sibling seed handles this).
+  # M15 W1: seed-stripe-secret-canonical.sh migrated to `loopzero-ops seed stripe-webhook-secret`.
   if [[ "$DRY_RUN" != "1" ]]; then
-    bash "$SCRIPT_DIR/seed-stripe-secret-canonical.sh"
+    (cd "$REPO_ROOT/cmd/loopzero-ops" && go run . seed stripe-webhook-secret)
   fi
   exit 0
 fi
@@ -165,8 +167,8 @@ CREDS_FILE="$CREDS_FILE" NEW_WHSEC="$NEW_WHSEC" python3 -c "import json,os;p=os.
 log "persisted whsec to $CREDS_FILE stripe.webhook_secret"
 
 # Delegate K8s Secret materialization to sibling (DRY — mode+SKIP semantics
-# already canonical there per seed-stripe-secret-canonical.sh).
-bash "$SCRIPT_DIR/seed-stripe-secret-canonical.sh" --verify
+# already canonical there per `loopzero-ops seed stripe-webhook-secret` — M15 W1).
+(cd "$REPO_ROOT/cmd/loopzero-ops" && go run . seed stripe-webhook-secret --verify)
 
 # --- Layer 5: rollout restart loopzero-cloud so pod picks up new whsec ---
 # Matches sibling seed-stripe-api-keys-canonical.sh #154 rollout pattern.

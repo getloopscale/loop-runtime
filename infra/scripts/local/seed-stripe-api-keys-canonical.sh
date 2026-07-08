@@ -5,7 +5,7 @@
 # Canonical loopzero-stripe-api-keys K8s Secret materialization from
 # ~/.loopzero/dev-credentials.json `stripe.api_key`.
 #
-# Sibling of seed-stripe-secret-canonical.sh — separate Secret per ADR D1
+# Sibling of `loopzero-ops seed stripe-webhook-secret` (M15 W1) — separate Secret per ADR D1
 # (rotation cadence isolation: webhook secret vs API key rotate on different
 # triggers per Stripe's runbook). Both Secrets are consumed by loopzero-cloud
 # via envFrom secretRef in infra/helm/loopzero-cloud/templates/deployment.yaml.
