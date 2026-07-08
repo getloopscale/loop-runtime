@@ -21,7 +21,7 @@
 # 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
 # 6. loopzero-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
-# 7. seed-broker-canonical.sh      — loopzero-broker token + CSS + envFrom
+# 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token + CSS + envFrom
 # 8. seed-loki-cross-cluster.sh    — Loki NodePort + Promtail URL +
 #                                    loopzero-api LOKI_URL
 # 9. seed-tenant-fixture-canonical.sh — subscription plan + GH installation
@@ -253,7 +253,7 @@ run_step "6-seed-gitea-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed 
 run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-gitea-creds ${VERIFY_FLAG:+--verify})"
 
 # Step 7
-run_step "7-seed-broker-canonical" "bash $SCRIPT_DIR/seed-broker-canonical.sh $VERIFY_FLAG"
+run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed broker ${VERIFY_FLAG:+--verify})"
 
 # Step 7b (NEW 2026-06-16) — Vault role_id sync into loopzero-api (MUST run AFTER vault-bootstrap-dev)
 run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"

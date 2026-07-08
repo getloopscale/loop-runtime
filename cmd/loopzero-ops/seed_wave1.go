@@ -24,4 +24,5 @@ func init() {
 	seedRegistry.Register(seed.NewVaultRoleIDSyncSeed())
 	seedRegistry.Register(seed.NewNetworkingCrossClusterCorednsSeed())
 	seedRegistry.Register(seed.NewSecretsSeedDevSeed())
+	seedRegistry.Register(seed.NewBrokerSeed())
 }
