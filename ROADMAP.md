@@ -281,7 +281,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M10 — [ ] Test Foundation: Ginkgo Harness + Spec-Based Contract Layer
+### M10 — [x] Test Foundation: Ginkgo Harness + Spec-Based Contract Layer
 
 **Objective:** estabelecer a base **determinística** de validação — Ginkgo suite + **extensão da camada spec-based Go já existente e LIVE-validada** (`api/openapi/engine.yaml` OpenAPI 3.0 + `api/internal/contract/` com `engine_conformance_test.go` + `cli_consumer_test.go` + `testdata/cli-consumed-paths.txt`) para cobertura bilateral cli↔cloud↔engine↔contracts. **NÃO é greenfield nem Pact-broker:** a org já escolheu — e LIVE-validou (`canonical-tests-rewrite-v2`, 3 iterações de review) — o modelo **bidirectional spec-based em Go puro** (KISS, sem broker, `getkin/kin-openapi`), que é preferível a Pact-go CDC para uma única org. **Absorve e formaliza** `ADR-2026-06-17-T3-canonical-tests-rewrite`, convertendo a `Precondition (PAUSE M0-M8)` numa milestone rastreável. **Why now:** 2.567 LOC de bash em débito + a decomposição em polyrepo precisa de contract tests **antes** de as extrações endurecerem o integration drift.
 
@@ -304,7 +304,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M11 — [ ] API Validation: complete spec (73%→100%) + property-based fuzzing
+### M11 — [x] API Validation: complete spec (73%→100%) + property-based fuzzing
 
 **Objective:** substituir os **~50%** dos `infra/tests/e2e/dev-public-*.sh` que são asserções de API (curl endpoint + check JSON/status) por (a) **completar `api/openapi/engine.yaml` de ~73% para 100% de cobertura de rotas** (hoje: ~38 paths na spec vs ~52 rotas REST no router — as 14 faltantes são o gap), depois (b) **property-based fuzzing** sobre a spec completa e (c) **Go integration tests** no harness Ginkgo do M10. **Why now:** os scripts curl são manual-only (`OPERATOR HARD STOP`) e não rodam em nenhum CI; fuzzing property-based revela edge-cases (500s, validation bypass) que o `engine_conformance_test.go` atual não cobre.
 
@@ -327,7 +327,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M12 — [ ] Dashboard Validation: Playwright + axe-core (kill bundle-grep)
+### M12 — [x] Dashboard Validation: Playwright + axe-core (kill bundle-grep)
 
 **Objective:** substituir os **~30%** dos `dev-public-*.sh` de dashboard (**bundle-grep** de literais minificados no JS servido) por **Playwright** (DOM/browser real) + **axe-core** (a11y declarativo). Fecha a fragilidade **D1** (o pior anti-pattern presente). **Why now:** bundle-grep testa o **compilador**, não o comportamento — quebra a cada mudança de minificação; e os issues de a11y (#71/#79/#80/#81/#83) são exatamente o que axe-core detecta declarativamente.
 
@@ -348,7 +348,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M13 — [ ] Chaos Declarative + Bash Strangler Completion
+### M13 — [x] Chaos Declarative + Bash Strangler Completion
 
 **Objective:** (a) reexpressar os cenários de chaos `c11`/`c12`/`c13` de orquestração bash para **experimentos declarativos Chaos Mesh** (CRD/Workflow) + asserção em Go; (b) **completar o strangler** — com M11+M12 tendo migrado as asserções, deletar o resíduo de bash e fazer a **allowlist encolher** rumo ao alvo `≤ 30` já definido em `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`. **Why now:** fecha o loop; sem esta milestone a allowlist volta a crescer a cada issue.
 

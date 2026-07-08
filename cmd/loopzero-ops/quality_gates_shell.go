@@ -15,6 +15,27 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptcount"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptsaudit"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellhygiene"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/webhookcanonicalpath"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/patchkratoscheckonly"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellcheckadvisory"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -302,5 +323,464 @@ func runScriptsAudit(args []string) int {
 		// Visibility for operator running interactively
 		fmt.Fprintf(os.Stderr, "scripts-audit: %d scripts inventoried to %s\n", len(scripts), *output)
 	}
+	return 0
+}
+
+// runWebhookCanonicalPath enforces that no test/seed script references the
+// wrong /engine/api/v1/webhooks/github URL (Caddy 301-redirect + 404 trap).
+// The canonical is /api/v1/webhooks/github (handler-direct).
+// Migrated from infra/tests/check-webhook-canonical-path_test.sh (M-Migrate2, 2026-07-07).
+func runWebhookCanonicalPath(args []string) int {
+	fs := flag.NewFlagSet("webhook-canonical-path", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "webhook-canonical-path: FAIL — /engine/api/v1/webhooks/github detected in %d place(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("webhook-canonical-path: PASS — no forbidden /engine/api/v1/webhooks/github references")
+	return 0
+}
+
+// runOIDCCredAdminLoopzero enforces the canonical admin@loopzero.example / loopzero-dev-password
+// credential — rejects fabricated paulo@loopzero.test / LoopZeroDev2026!.
+// Migrated from infra/tests/check-oidc-cred-admin-loopzero_test.sh (M-Migrate2 2026-07-07).
+func runOIDCCredAdminLoopzero(args []string) int {
+	fs := flag.NewFlagSet("oidc-cred-admin-loopzero", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "oidc-cred-admin-loopzero: FAIL — %d fabricated credential reference(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("oidc-cred-admin-loopzero: PASS — no fabricated paulo@loopzero.test/LoopZeroDev2026! (canonical: admin@loopzero.example)")
+	return 0
+}
+
+// runCanonicalFixtureRepo enforces canonical getloopscale/loopzerokit-example fixture.
+// Migrated from infra/tests/check-canonical-fixture-repo_test.sh (M-Migrate2 2026-07-07).
+func runCanonicalFixtureRepo(args []string) int {
+	fs := flag.NewFlagSet("canonical-fixture-repo", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := canonicalfixturerepo.Check(canonicalfixturerepo.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
+	return 0
+}
+
+// runInstallGitHooks validates the M8 1.5 pre-push hook + installer.
+// Migrated from infra/tests/check-install-git-hooks_test.sh (M-Migrate2 2026-07-07).
+func runInstallGitHooks(args []string) int {
+	fs := flag.NewFlagSet("install-git-hooks", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := installgithooks.Check(installgithooks.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
+	return 0
+}
+
+// runCaddyfileNoDockerIP enforces that the canonical infra/local/Caddyfile does
+// NOT hardcode Docker network IPs (172.18.x.x) in non-comment lines and that
+// both wildcard blocks reverse_proxy to the stable https://127.0.0.1:8443.
+// Migrated from infra/tests/check-caddyfile-no-docker-network-ip_test.sh
+// (M-Migrate2 continuation 2026-07-07 — closes Red Team loopzero-cloud#127 guard).
+func runCaddyfileNoDockerIP(args []string) int {
+	fs := flag.NewFlagSet("caddyfile-no-docker-ip", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := caddyfilenodockerip.Check(caddyfilenodockerip.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations { fmt.Fprintf(os.Stderr, "  %s\n", v) }
+		return 1
+	}
+	fmt.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
+	return 0
+}
+
+// runPatchKratosCheckOnly enforces that patch-kratos-dev-public.sh --check-only
+// is a read-only alias for --dry-run --skip-restart (dogfood-login Suite 0
+// pre-flight MUST NOT mutate the Kratos config it validates).
+// Migrated from infra/tests/check-patch-kratos-check-only-readonly_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runPatchKratosCheckOnly(args []string) int {
+	fs := flag.NewFlagSet("patch-kratos-check-only", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := patchkratoscheckonly.Check(patchkratoscheckonly.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "patch-kratos-check-only: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("patch-kratos-check-only: PASS — patch-kratos-dev-public.sh --check-only is read-only (DRY_RUN=1 + SKIP_RESTART=1 + guard)")
+	return 0
+}
+
+// runVaultBootstrapUnsealLoop enforces the 2026-06-15 canonical fix of
+// infra/scripts/local/vault-bootstrap-dev.sh Steps 2 + 3 (rc-independent
+// bao-status parse, capitalized "True" compare, no lowercase fallback trap).
+// Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runVaultBootstrapUnsealLoop(args []string) int {
+	fs := flag.NewFlagSet("vault-bootstrap-unseal-loop", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-bootstrap-unseal-loop: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("vault-bootstrap-unseal-loop: PASS — canonical fix preserved (rc-independent parse, capitalized True compare, anti-patterns absent)")
+	return 0
+}
+
+// runOptionBESO enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
+// contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands
+// documented, rollback + decision matrix + cross-references present, ESO
+// version drift against runtime helmfile detected).
+// Migrated from infra/tests/check-option-b-eso-deploy-doc_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runOptionBESO(args []string) int {
+	fs := flag.NewFlagSet("option-b-eso-deploy-doc", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
+	return 0
+}
+
+// runVaultBootstrapInMgmt enforces the `task k3d:vault:bootstrap-in-mgmt`
+// shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
+// with exactly two well-known differences (context swap + pre-flight message).
+// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runVaultBootstrapInMgmt(args []string) int {
+	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
+	return 0
+}
+
+// runESOOverlay enforces the dev-public loopzero-external-secrets overlay contract
+// (post-T1.2 workload identity: enabled=false safe default, K8s-auth shape,
+// no legacy AppRole roleId/secretRef, canonical mgmt DNS, traceability).
+// Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runESOOverlay(args []string) int {
+	fs := flag.NewFlagSet("dev-public-loopzero-external-secrets-overlay", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dev-public-loopzero-external-secrets-overlay: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("dev-public-loopzero-external-secrets-overlay: PASS — post-T1.2 workload-identity contract preserved (K8s-auth, no legacy AppRole)")
+	return 0
+}
+
+// runAllowlistSunsets is a hermetic contract test for the Python
+// .claude/scripts/check-allowlist-sunsets.py gate (T5.2.a fixture verifier).
+// Migrated from infra/tests/check-allowlist-sunsets_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runAllowlistSunsets(args []string) int {
+	fs := flag.NewFlagSet("check-allowlist-sunsets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := allowlistsunsets.Check(allowlistsunsets.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("check-allowlist-sunsets: PASS — 7 fixture cases + live check GREEN (future/today/past/malformed/bad-date/missing/live)")
+	return 0
+}
+
+// runRouteAuthCoverage enforces R2-F8 (HIGH): every user-facing router.go route
+// MUST be inside middleware.Auth group OR registerProtectedRoutes OR appear in
+// the explicit public-allowlist.
+// Migrated from infra/tests/check-route-auth-coverage_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runRouteAuthCoverage(args []string) int {
+	fs := flag.NewFlagSet("route-auth-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := routeauthcoverage.Check(routeauthcoverage.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "route-auth-coverage: FAIL — %v\n", err)
+		if len(outcome.Violations) > 0 {
+			fmt.Fprintf(os.Stderr, "  Auth group spans lines %d..%d\n", outcome.AuthStart, outcome.AuthEnd)
+			fmt.Fprintf(os.Stderr, "  registerProtectedRoutes spans lines %d..%d\n", outcome.ProtStart, outcome.ProtEnd)
+			for _, v := range outcome.Violations { fmt.Fprintf(os.Stderr, "  %s\n", v) }
+			fmt.Fprintln(os.Stderr, "Fix: move the route inside middleware.Auth group OR add explicit allowlist entry with rationale.")
+		}
+		return 1
+	}
+	fmt.Printf("route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
+		outcome.PassCount, outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
+	return 0
+}
+
+// runK6LoadRigor enforces the k6 load-harness rigor fixes (dropped_iterations
+// threshold in base + L5 distributed manifest shape + README per-level doc).
+// Migrated from infra/tests/check-k6-load-rigor_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runK6LoadRigor(args []string) int {
+	fs := flag.NewFlagSet("k6-load-rigor", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := k6loadrigor.Check(k6loadrigor.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
+	return 0
+}
+
+// runSkillPaths enforces T0.1 EC D5 — every infra/scripts/ path AND every
+// `task <name>` invocation referenced in any .claude/skills/*/SKILL.md
+// MUST resolve on disk (or be an allow-listed generic skill).
+// Migrated from infra/tests/skills/skill-paths_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runSkillPaths(args []string) int {
+	fs := flag.NewFlagSet("skill-paths", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
+		outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
+	return 0
+}
+
+// runDevPublicEnv enforces the canonical shape of
+// infra/helmfile/environments/dev-public.yaml (dev URLs, cookieDomain,
+// CORS + allowedReturnUrls, no localhost/legacy leaks, D5 OAuth reuse).
+// Migrated from infra/tests/helm/dev-public-env_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runDevPublicEnv(args []string) int {
+	fs := flag.NewFlagSet("dev-public-env", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := devpublicenv.Check(devpublicenv.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dev-public-env: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("dev-public-env: PASS — dev-public.yaml canonical shape preserved (dev URLs, cookieDomain, CORS, D5 OAuth reuse)")
+	return 0
+}
+
+// runOryKratosLifespan enforces canonical self-service flow lifespans in
+// infra/helm/ory-kratos/values.yaml.gotmpl (login=10m, registration=10m,
+// recovery=15m — defense pair with edge rate_limit for Red Team #89).
+// Migrated from infra/tests/helm/ory-kratos-lifespan_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runOryKratosLifespan(args []string) int {
+	fs := flag.NewFlagSet("ory-kratos-lifespan", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := orykratoslifespan.Check(orykratoslifespan.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
+	return 0
+}
+
+// runShellcheckAdvisory runs shellcheck as an advisory-only quality gate.
+// When shellcheck is missing on PATH, emits WARN + exits 0 (advisory).
+// When shellcheck is installed, exits 1 on violations (excluding tolerated
+// codes: SC1091, SC2155, SC2086, SC2046).
+// Migrated from infra/scripts/local/shellcheck-advisory.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runShellcheckAdvisory(args []string) int {
+	fs := flag.NewFlagSet("shellcheck-advisory", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("[shellcheck] WARN: shellcheck not installed — gate is advisory-only.")
+		fmt.Println("[shellcheck] Install via apt/brew/go to enable enforcement (R1-F5 T4.1).")
+		return 0
+	}
+	fmt.Printf("shellcheck-advisory: PASS — %d files clean (SC1091/SC2155/SC2086/SC2046 tolerated)\n", outcome.ScannedFiles)
+	return 0
+}
+
+// runLoopZeroAPIOpenbao enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync:
+// the loopzero-api chart unconditionally wires the AppRole secret_id via
+// envFrom.secretRef to K8s Secret loopzero-openbao-approle with optional=true,
+// with NO inline value: for OPENBAO_VAULT_SECRET_ID (anti-hardcode).
+// Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runLoopZeroAPIOpenbao(args []string) int {
+	fs := flag.NewFlagSet("loopzero-api-openbao-approle-envfrom", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
+		return 0
+	}
+	fmt.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
+	return 0
+}
+
+// runRenderSchemaGenSQL renders api/internal/db/schema.gen.sql via
+// an ephemeral PG 16 container + golang-migrate replay + pg_dump + sqlc
+// compile pre-flight. Use --render for the full destructive pipeline; the
+// default check-only mode validates toolchain + config presence.
+// Migrated from infra/scripts/ci/render-schema-gen-sql.sh (M-Migrate2 continuation 2026-07-07).
+func runRenderSchemaGenSQL(args []string) int {
+	fs := flag.NewFlagSet("render-schema-gen-sql", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	render := fs.Bool("render", false, "run the destructive render pipeline (spins docker + rewrites schema.gen.sql); default is check-only")
+	advisoryOnly := fs.Bool("advisory-only", false, "return Warn instead of failure when a required tool is missing")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	cfg := renderschemagensql.Config{RepoRoot: *root, AdvisoryOnly: *advisoryOnly}
+	if !*render {
+		outcome, err := renderschemagensql.Check(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "render-schema-gen-sql: FAIL — %v\n", err)
+			return 1
+		}
+		if outcome.Warn {
+			fmt.Printf("render-schema-gen-sql: WARN (%s) — pass --advisory-only=false to convert to hard fail once toolchain lands\n", outcome.WarnReason)
+			return 0
+		}
+		fmt.Println("render-schema-gen-sql: PASS — toolchain + migrations + sqlc.yaml present; pass --render to execute the pipeline")
+		return 0
+	}
+	outcome, err := renderschemagensql.Render(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "render-schema-gen-sql: FAIL — %v\n%s\n", err, outcome.Diagnostic)
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Printf("render-schema-gen-sql: WARN (%s)\n", outcome.WarnReason)
+		return 0
+	}
+	fmt.Printf("render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
+	return 0
+}
+
+// runCredentialsSot enforces T1.1 SoT drift audit — every Secret created by
+// canonical generator scripts is enumerated in docs/operations/credentials-required.md.
+// Migrated from infra/tests/docs/credentials-sot_test.sh
+// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
+func runCredentialsSot(args []string) int {
+	fs := flag.NewFlagSet("credentials-sot", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := credentialssot.Check(credentialssot.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		if len(outcome.Discovered) > 0 {
+			fmt.Fprintln(os.Stderr, "Discovered Secret names:")
+			for _, s := range outcome.Discovered { fmt.Fprintf(os.Stderr, "  - %s\n", s) }
+		}
+		return 1
+	}
+	fmt.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations/credentials-required.md\n", len(outcome.Discovered))
+	return 0
+}
+
+// runPulumiRequiredSecrets enforces T1.5 — every Pulumi.<env>.yaml enumerates
+// the required secret keys for that environment (either as `secure:` entry
+// or as a comment). Cross-checks the same keys appear in the SoT doc.
+// Migrated from infra/tests/docs/pulumi-required-secrets_test.sh
+// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
+func runPulumiRequiredSecrets(args []string) int {
+	fs := flag.NewFlagSet("pulumi-required-secrets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil { return 1 }
+	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	outcome, err := pulumirequiredsecrets.Check(pulumirequiredsecrets.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+		return 1
+	}
+	fmt.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
 	return 0
 }

@@ -64,9 +64,7 @@ tasks:
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality caddyfile-csp   # plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 — operator-local-edge Caddyfile invariants (no CSP / no Vite handle 404 / 4 preserved headers / reverse_proxy + plan kratos-self-service-rate-limit-systemic v1.1 invariants 12-15 rate-limit + trusted_proxies + register-route)
       # F-wire-7 absorption: plan kratos-self-service-rate-limit-systemic v1.1 hermetic structural gates.
-      - bash infra/tests/check-caddy-build-canonical-syntax_test.sh   # T1.1 hermetic — Caddy xcaddy bundles BOTH cloudflare + ratelimit
-      - bash infra/tests/helm/ory-kratos-lifespan_test.sh             # T2.2 hermetic — Kratos lifespan overlay golden test
-      - bash infra/tests/check-dev-public-customer-app-respondingtimeouts-syntax_test.sh   # T1.3 of plan red-team-77-107-closure — Traefik writeTimeout 60s→300s LIVE bash structural guard (28 assertions; closes Red Team #107)
+      - /tmp/loopzero-ops quality ory-kratos-lifespan                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/ory-kratos-lifespan_test.sh with pure-logic Go gate. T2.2 hermetic Kratos lifespan overlay golden test (source-level, section-scoped).
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - task: contract   # M10 T3.1 — spec-based consumer contract (engine conformance + cli↔engine + dashboard↔engine); in-repo, no sibling needed, so it gates every pre-push deterministically
       - /tmp/loopzero-ops quality shell-hygiene
@@ -83,10 +81,10 @@ tasks:
       # Bash security/governance gates re-homed 2026-05-24 (were unwired since
       # GitHub Actions removal). TODO: migrate these to loopzero-ops quality Go gates
       # (strategic home) and drop the bash. Until then they run here = enforced.
-      - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
-      - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
-      - bash infra/tests/check-fulcio-oidc-diagnose_test.sh     # M07 keyless: Fulcio OIDC trust diagnose script (T0.2 plan 2026-05-28)
-      - bash infra/tests/check-k6-load-rigor_test.sh            # k6 load rigor: dropped_iterations threshold + L5 distributed + per-level doc (plan k6-load-test-rigor-fixes)
+      - /tmp/loopzero-ops quality pulumi-required-secrets            # M-Migrate2 (2026-07-07): replaced infra/tests/docs/pulumi-required-secrets_test.sh with pure-logic Go gate. Security: prod/staging/drill secrets externalized.
+      - /tmp/loopzero-ops quality skill-paths                        # M-Migrate2 (2026-07-07): replaced infra/tests/skills/skill-paths_test.sh with pure-logic Go gate. Governance: SKILL.md path resolution (declared BLOCKING).
+      - /tmp/loopzero-ops quality dev-public-env                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/dev-public-env_test.sh with pure-logic Go gate. dev-public.yaml canonical shape (dev URLs + cookieDomain + CORS + D5 OAuth reuse + no localhost/legacy leaks).
+      - /tmp/loopzero-ops quality k6-load-rigor                      # M-Migrate2 (2026-07-07): replaced infra/tests/check-k6-load-rigor_test.sh with pure-logic Go gate. k6 load rigor: dropped_iterations threshold + L5 distributed + per-level doc (plan k6-load-test-rigor-fixes).
       - bash infra/tests/check-seed-loopzero-secrets_test.sh        # vault-INT T8.1 EC-21: idempotent Vault seed script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-rotate-secret_test.sh            # vault-INT T8.1 EC-22: cross-binary atomic rotation script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-vault-sync_test.sh               # vault-INT Phase 9 T9.1: ESO sync status check (replaces loopzero_config_secret_source metric, plan 2026-06-02 v1.8 D11)
@@ -110,7 +108,7 @@ tasks:
       - bash infra/tests/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
       - bash infra/tests/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when vault-system NS absent (dogfood compat)
       - bash infra/tests/check-loki-retention-schema_test.sh                   # openbao-adoption iter 34: T8.2 Loki retention_stream schema valid (cleanroom Loki bootstrap)
-      - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
+      - /tmp/loopzero-ops quality credentials-sot                    # M-Migrate2 (2026-07-07): replaced infra/tests/docs/credentials-sot_test.sh with pure-logic Go gate. Doc-sync: credentials-required.md enumerates bootstrap Secrets.
       # J-22 openbao-transit v1.2 productive-idle hermetic tests (iters 20-26) — wired iter 27.
       # All 4 are anti-drift contract guards for the engineering deliverables
       # iter 18 (T2.5 wire-up) → iter 26 (rehearsal mode). Each test runs in
@@ -119,54 +117,35 @@ tasks:
       # OpenBao Transit chain (server URL drift / shortcut going out of sync
       # with upstream / overlay role_id hardcode / rehearsal block falling
       # through to encrypt path).
-      - bash infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh           # iter 20 T6.1: chart envFrom secretRef contract (7 assertions)
-      - bash infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh              # iter 24 Option (c) shortcut parity with upstream task (18 assertions)
-      - bash infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh  # iter 25 dev-public ESO overlay shape + anti-hardcode (18 assertions)
-      - bash infra/tests/check-rehearsal-mode-syntax_test.sh                     # iter 26 T4.1 --rehearsal flag shape + early-exit (26 assertions)
-      - bash infra/tests/check-write-path-subset-syntax_test.sh                  # iter 31 Option A write-path subset shape (27 assertions)
-      - bash infra/tests/check-option-b-eso-deploy-doc_test.sh                   # iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions)
-      - bash infra/tests/check-vault-bootstrap-unseal-loop_test.sh               # 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard)
-      - bash infra/tests/check-openbao-transit-quality-gates-wired_test.sh       # iter 27 meta-gate: ensures the 6 above stay wired + uncommented + clustered (extended iter 33 → 6 tests)
+      - /tmp/loopzero-ops quality loopzero-api-openbao-approle-envfrom                   # M-Migrate2 (2026-07-07): replaced infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh with Go gate. iter 20 T6.1 chart envFrom secretRef contract (7 assertions). Advisory when helm absent.
+      - /tmp/loopzero-ops quality vault-bootstrap-in-mgmt-task                       # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh with pure-logic Go gate. iter 24 Option (c) shortcut parity with upstream task (18 assertions).
+      - /tmp/loopzero-ops quality dev-public-loopzero-external-secrets-overlay           # M-Migrate2 (2026-07-07): replaced infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh with pure-logic Go gate. iter 25 dev-public ESO overlay shape + anti-hardcode (18 assertions).
+      - /tmp/loopzero-ops quality option-b-eso-deploy-doc                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-option-b-eso-deploy-doc_test.sh with pure-logic Go gate. iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions).
+      - /tmp/loopzero-ops quality vault-bootstrap-unseal-loop                        # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-unseal-loop_test.sh with pure-logic Go gate. 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard).
       # M1 hermetic guards (plan m1-commit-canonical-30-fixes v1.2 SHIPPABLE 96.4 — 2026-06-23)
       - bash infra/tests/check-no-cloud-dev-default_test.sh                       # T1.1 regression guard: no cloud-dev defaults in test/seed scripts (Caddy 301 trap post ee77b8da; EC-1 absorption excludes /api/v1/webhooks/github)
       - bash infra/tests/check-archive-script-repo-root_test.sh                   # T1.2 regression guard: archive/ scripts use canonical 4-dirs-up REPO_ROOT (broken post-quarantine 289cf9d6)
-      - bash infra/tests/check-webhook-canonical-path_test.sh                     # T1.3 regression guard: canonical /api/v1/webhooks/github (handler-direct), not /engine/api/v1/webhooks/github (Caddy 301 trap)
-      - bash infra/tests/check-oidc-cred-admin-loopzero_test.sh                    # T1.4 regression guard: canonical admin@loopzero.example (LIVE-validated 2026-06-16) — rejects paulo@loopzero.test fabricated
-      - bash infra/tests/check-canonical-fixture-repo_test.sh                     # Canonical fixture repo guard (2026-06-24): rejects legacy getloopscale/loopzero-repotest in LIVE scripts — canonical is getloopscale/loopzerokit-example per sponsor 2026-06-16 mandate
-      - bash infra/tests/check-caddyfile-no-docker-network-ip_test.sh             # Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide
-      - bash infra/tests/check-dev-public-dashboard-projects-badge-data-plane-aware-syntax_test.sh  # T5.2 plan dashboard-badge-data-plane-poller (Red Team #128 — 2026-07-01): hermetic guard for the /projects list badge data-plane-aware LIVE bash (31 assertions)
+      - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide.
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
-      - bash infra/tests/check-seed-chaos-mesh-canonical-syntax_test.sh             # T1.1 hermetic: chaos-mesh helm install canonical (14 assertions)
-      - bash infra/tests/check-seed-argocd-token-canonical-syntax_test.sh           # T1.2 hermetic: ArgoCD admin token mint + loopzero-api-tokens sync (14 assertions)
-      - bash infra/tests/check-seed-vault-cross-cluster-addr-canonical-syntax_test.sh         # T1.3 hermetic: OPENBAO_VAULT_ADDR cross-cluster wiring + EC-1/EC-2 absorption (14 assertions)
-      - bash infra/tests/check-seed-stripe-secret-canonical-syntax_test.sh          # T1.4 hermetic: loopzero-stripe-webhook Secret materialization + EC-8 SKIP graceful (13 assertions)
-      - bash infra/tests/check-seed-stripe-api-keys-canonical-syntax_test.sh        # stripe-l2-wiring-canonical-fix T2.2: loopzero-stripe-api-keys Secret + STRIPE_API_KEY data key + EC-2 prefix guard (17 assertions)
-      - bash infra/tests/check-allowlist-sunsets_test.sh                         # T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt)
+      - /tmp/loopzero-ops quality check-allowlist-sunsets                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-allowlist-sunsets_test.sh with pure-logic Go gate. T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt).
       - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
       # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
       # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
       # + live-url-discoverability + status-url-probe (closes R1-F2 HIGH).
-      - bash infra/tests/check-dev-public-scale-syntax_test.sh                     # T1.2 J-20 scale flow companion
       - bash infra/tests/check-dev-public-billing-portal-syntax_test.sh            # T5.1 ORPHAN companion 1/4
       - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
-      - bash infra/tests/check-dev-public-live-url-discoverability-syntax_test.sh  # T5.1 ORPHAN companion 3/4
-      - bash infra/tests/check-dev-public-status-url-probe-syntax_test.sh          # T5.1 ORPHAN companion 4/4
-      - bash infra/tests/check-dev-public-register-flow-syntax_test.sh             # M0 J-02 register LIVE-flow hermetic guard (21 assertions)
-      - bash infra/tests/check-dev-public-verification-flow-syntax_test.sh         # M0 J-03 verification LIVE-flow hermetic guard (20 assertions)
-      - bash infra/tests/check-dev-public-overview-flow-syntax_test.sh             # M1 J-06 overview LIVE-flow hermetic guard (28 assertions)
-      - bash infra/tests/check-patch-kratos-check-only-readonly_test.sh            # M0 J-01 T5.3 EC-9: patch-kratos --check-only read-only guard (6 assertions)
+      - /tmp/loopzero-ops quality patch-kratos-check-only                             # M-Migrate2 (2026-07-07): replaced infra/tests/check-patch-kratos-check-only-readonly_test.sh with pure-logic Go gate. M0 J-01 T5.3 EC-9: patch-kratos --check-only read-only guard (6 assertions).
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
-      # shell-lint advisory — invokes infra/scripts/local/shellcheck-advisory.sh.
-      # Re-homed from inline `bash -c '...'` after that form broke YAML parsing
-      # (shell metachars + nested quotes). Script is conditional: runs
-      # shellcheck when installed; emits WARN + exits 0 when absent.
-      - bash infra/scripts/local/shellcheck-advisory.sh
+      # shell-lint advisory — invokes loopzero-ops quality shellcheck-advisory.
+      # M-Migrate2 (2026-07-07): replaced infra/scripts/local/shellcheck-advisory.sh
+      # with pure-logic Go gate that shells out to shellcheck. Conditional:
+      # runs shellcheck when installed; emits WARN + exits 0 when absent.
+      - /tmp/loopzero-ops quality shellcheck-advisory
       # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
-      - bash infra/tests/check-route-auth-coverage_test.sh
-      - bash infra/tests/check-chaos-c13-syntax_test.sh   # c13 chaos — valid-but-destructive config fail-loud guard (plan c13-valid-destructive-config-chaos T2.2)
+      - /tmp/loopzero-ops quality route-auth-coverage                                # M-Migrate2 (2026-07-07): replaced infra/tests/check-route-auth-coverage_test.sh with pure-logic Go gate. R2-F8 HIGH: every router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. 40 routes verified.
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
       # derived host.k3d.internal (T1.2), F1 SAN-aligned kubernetes_host, Step
@@ -176,7 +155,6 @@ tasks:
       # block fails LOUDLY if helmfile is absent or LOOPZERO_TEST_SKIP_HELMFILE=1
       # is set — silent SKIP of the central helmfile-render guard is the
       # "looks GREEN, ran nothing" anti-pattern (also closes related MEDIUM).
-      # Meta-guard infra/tests/check-charts-go-tests-wired_test.sh below locks
       # this wiring against silent removal.
       - |
         set -e

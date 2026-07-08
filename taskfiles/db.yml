@@ -160,9 +160,9 @@ tasks:
   # sqlc migration (T0.2 of plan 2026-05-29-sqlc-migration v1.2)
   # ---------------------------------------------------------------------------
   db:render-schema:
-    desc: Render api/internal/db/schema.gen.sql via ephemeral PG 16 + golang-migrate replay (deterministic; EC-4 trap + EC-17 random port + EC-2 sqlc pre-flight)
+    desc: Render api/internal/db/schema.gen.sql via ephemeral PG 16 + golang-migrate replay (deterministic; EC-4 defer cleanup + EC-17 random port + EC-2 sqlc pre-flight). M-Migrate2 (2026-07-07) — replaced bash render-schema-gen-sql.sh with pure-logic Go pipeline.
     cmds:
-      - bash infra/scripts/ci/render-schema-gen-sql.sh
+      - /tmp/loopzero-ops quality render-schema-gen-sql --render
 
   db:generate:
     desc: Regenerate api/internal/db/generated/*.go from queries/*.sql via sqlc v1.31.1

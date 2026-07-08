@@ -37,7 +37,7 @@ func TestClassify_KeepIsHomed(t *testing.T) {
 		// on every Red Team closure (baseline drift 121→146 since 2026-06-30
 		// which triggered the un-homed-logic gate to block PRs on legitimate
 		// CI-wired guards).
-		{"infra/tests/check-caddyfile-no-docker-network-ip_test.sh", "KEEP-CI-WIRED — hermetic guard wired in task quality:gates", Homed},
+		{"infra/tests/helm/ory-kratos-lifespan_test.sh", "KEEP-CI-WIRED — hermetic guard wired in task quality:gates", Homed},
 		{"infra/scripts/quality/coverage-cli.sh", "REVIEW-NEEDED", Unhomed},
 		{"infra/tests/parity/validate-matrix.sh", "MIGRATE-GINKGO", Unhomed},
 		{"infra/helmfile/scripts/generate-secrets.sh", "MIGRATE-GENERATOR", Unhomed},
