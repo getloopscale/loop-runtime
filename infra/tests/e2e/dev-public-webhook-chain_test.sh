@@ -102,7 +102,7 @@ preflight() {
   fi
   if [ ! -s "$SESSION_FILE" ] ; then
     log "ERROR (EC-12): admin@loopzero.example session file missing/empty at $SESSION_FILE"
-    log "       Run: bash infra/scripts/local/seed-admin-loopzero-dev.sh --verify"
+    log "       Run: loopzero-ops seed admin-loopzero-dev --verify"
     return 1
   fi
   log "Preflight OK (rate=${rate}/5000 ctx=${cur_ctx})"
