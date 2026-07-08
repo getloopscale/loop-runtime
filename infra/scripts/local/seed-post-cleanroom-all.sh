@@ -20,7 +20,7 @@
 # 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
 # 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
-# 6. seed-gitea-token-canonical.sh — Gitea API token mint + 3-way sync
+# 6. loopzero-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
 # 7. seed-broker-canonical.sh      — loopzero-broker token + CSS + envFrom
 # 8. seed-loki-cross-cluster.sh    — Loki NodePort + Promtail URL +
 #                                    loopzero-api LOKI_URL
@@ -247,7 +247,7 @@ else
 fi
 
 # Step 6
-run_step "6-seed-gitea-token-canonical" "bash $SCRIPT_DIR/seed-gitea-token-canonical.sh $VERIFY_FLAG"
+run_step "6-seed-gitea-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed gitea-token ${VERIFY_FLAG:+--verify})"
 
 # Step 6b (NEW 2026-06-16) — ArgoCD ↔ Gitea repo-creds (MUST run AFTER step 6 so token is canonical)
 run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-gitea-creds ${VERIFY_FLAG:+--verify})"

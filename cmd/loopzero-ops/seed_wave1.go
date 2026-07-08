@@ -16,4 +16,5 @@ func init() {
 	seedRegistry.Register(seed.NewMinioCanonicalSeed())
 	// Wave 2 — HTTP-API (port-forward-based)
 	seedRegistry.Register(seed.NewArgoCDTokenSeed())
+	seedRegistry.Register(seed.NewGiteaTokenSeed())
 }
