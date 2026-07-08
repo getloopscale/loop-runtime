@@ -21,4 +21,5 @@ func init() {
 	seedRegistry.Register(seed.NewAdminHydraClientSeed())
 	// Wave 3 — complex + multi-cluster
 	seedRegistry.Register(seed.NewVaultCrossClusterAddrSeed())
+	seedRegistry.Register(seed.NewVaultRoleIDSyncSeed())
 }
