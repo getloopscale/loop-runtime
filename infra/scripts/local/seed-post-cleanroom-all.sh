@@ -300,7 +300,7 @@ fi
 
 # Step 14 (NEW M2 2026-06-23) — OPENBAO_VAULT_ADDR cross-cluster (dev-public only — Jeito A)
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "14-seed-vault-cross-cluster-addr" "bash $SCRIPT_DIR/seed-vault-cross-cluster-addr-canonical.sh $VERIFY_FLAG"
+  run_step "14-seed-vault-cross-cluster-addr" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-cross-cluster-addr ${VERIFY_FLAG:+--verify})"
 else
   skip_step "14-seed-vault-cross-cluster-addr" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi

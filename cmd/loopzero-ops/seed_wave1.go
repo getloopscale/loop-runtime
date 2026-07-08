@@ -19,4 +19,6 @@ func init() {
 	seedRegistry.Register(seed.NewGiteaTokenSeed())
 	seedRegistry.Register(seed.NewHydraURLsSeed())
 	seedRegistry.Register(seed.NewAdminHydraClientSeed())
+	// Wave 3 — complex + multi-cluster
+	seedRegistry.Register(seed.NewVaultCrossClusterAddrSeed())
 }
