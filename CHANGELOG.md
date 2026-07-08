@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.59.0] - 2026-07-08
+
+### Added
 - **Engine migration `000056_lens_fired_alerts` — queryable fired-alert history (loopzero-lens M84).** A Cloud-owned per-tenant table (`id lfa-{16hex}`, `rule_id` FK to `lens_alert_rules` ON DELETE CASCADE, `tenant_id` FK to `tenants` ON DELETE CASCADE, `metric`/`comparator` CHECK-constrained, `threshold`+`value` doubles, `fired_at`, `transition_id`, `delivery_id`; `idx_lens_fired_alerts_rule_time (rule_id, tenant_id, fired_at DESC)` for the paginated read + `uq_lens_fired_alerts_transition (rule_id, transition_id)` anti-storm dedup). Where `000054_lens_alert_rules` carries only a single `last_triggered_at`, this records ONE row per breach so an alert firing is auditable over time. The loopzero-cloud `lens_alert_evaluator` INSERTs one row here in the SAME transaction as the webhook enqueue + status flip (all-or-nothing). `delivery_id` is a SOFT reference (no FK) so the audit history outlives delivery retention. Queried by `LensAlertRulesHandler.History` (raw `database/sql`); the engine owns the schema. Forward-only.
 - **M15 Wave 3 seed 8 — `loopzero-ops seed admin-loopzero-dev` (COMPLETES Wave 3 + M15 20-of-20).** Go port of `infra/scripts/local/seed-admin-loopzero-dev.sh` (~750 LoC bash + Python helper) to `cmd/loopzero-ops/internal/seed/admin_loopzero_dev.go` (~490 LoC + ~330 LoC test). The largest and most complex seed in the M15 chain. 4-phase canonical Kratos session seed for `admin@loopzero.example` (per memory `project_canonical_dev_user`): (1) Kratos identity resolve-or-create via admin API `GET /admin/identities?credentials_identifier=<email>` + POST-create on absent; (2) SERIALIZABLE-shape PG transaction — 7 canonical statements (users, accounts, tenants, tenant_members, user_identity_map, users.active_tenant_id update, subscriptions) reproducing EC-3 auxiliary-state absorbtion from the bash SQL block byte-for-byte; (3) identity password reset via `PUT /admin/identities/<id>` (Kratos v26 quirk documented in bash — PUT hashes on save, JSON Patch stores cleartext) + browser-mode login flow with `net/http/cookiejar` preserving CSRF cookie across GET+POST + cookie file write at mode 0600; (4) `--verify` probes `/sessions/whoami` with the persisted cookie. Env overrides preserved (EMAIL / SEED_PASSWORD / PUBLIC_KRATOS_URL / PUBLIC_CLOUD_URL / KRATOS_ADMIN_URL / SESSION_FILE / SESSION_JWT_FILE / LOOPZERO_PG_CONN) so the Red Team QA identity seed (step 3b: `EMAIL=paulohenrique.java@gmail.com SESSION_FILE=…`) works identically via env prefix. SKIP graceful when `KRATOS_ADMIN_URL` unset (usually port-forward svc/ory-kratos-admin). 13/13 hermetic tests GREEN under `-race`: httptest Kratos admin+public stub covers list/create/get/put/browser-flow/whoami; stubPgConn asserts all 7 canonical INSERT/UPDATE statements ran with correct arg positions; cookie-jar round-trip verifies ory_kratos_session extraction; file-mode 0600 verified via os.Stat. Master step 3 + step 3b delegate to Go with env prefix. Retires the Python helper `seed_admin_loopzero_dev.py`. Allowlist: 123 → 122. **M15 COMPLETE — 20 of 20 seeds migrated.** Full LIVE Cleanroom parity for this seed (Kratos admin API v26 quirks + PG SERIALIZABLE txn + cookie-jar semantics + JWT exchange) requires sponsor JUNTOS ratification per cleanroom-up-live-test-mandate.md INQUEBRÁVEL — hermetic + LIVE-dry-run parity established.
 - **M15 Wave 3 seed 7 — `loopzero-ops seed tenant-fixture`.** Go port of `infra/scripts/local/seed-tenant-fixture-canonical.sh` (~225 LoC bash → `cmd/loopzero-ops/internal/seed/tenant_fixture.go` ~330 LoC + ~260 LoC test). Post-Cleanroom fixture state for LIVE dogfood tests. 3-layer chain: (1) PG subscription upsert via jackc/pgx/v5 direct connect (canonical INSERT INTO subscriptions … ON CONFLICT (account_id) DO UPDATE — plan tier from `LOOPZERO_PLAN_TIER` env: starter/pro/team); (2) canonical GitHub App `installation.created` webhook replay with HMAC-SHA256 signature (stdlib `crypto/hmac` + `crypto/sha256`) to `LOOPZERO_CLOUD_BASE/api/v1/webhooks/github` — exercises production broker-validate + handler-process + PG-write paths, NOT direct DB insert; (3) Tenant CR + ArgoCD AppProject via unstructured Create-or-Update (decouples from CRD scheme registration — fake client tests don't need loopzero.io + argoproj.io schemes). SKIP graceful when `LOOPZERO_HELMFILE_ENV != "dev-public"` OR `LOOPZERO_TENANT_ID` unset. `pgConnectFn` + `tenantFixtureHTTPClient` package vars enable hermetic tests without live PG / HTTPS. Plan tier maps to canonical CRD PlanTier enum: starter→starter / pro→growth / team→enterprise. 9/9 hermetic tests GREEN under `-race`. Master step 9 delegates to Go; bash retired; allowlist 124 → 123.
@@ -34,9 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **M15 Phase 0 — `loopzero-ops seed` foundation.** New `cmd/loopzero-ops/internal/seed` package (Verdict/Result/Seed/Registry core, `KubeClient` DIP abstraction with idempotent CreateOrUpdate + wait-for-ready backed by controller-runtime, credential-file loader with 0600/absent/placeholder/malformed handling) + `loopzero-ops seed <name>|list|all [--verify|--dry-run|--json]` dispatch. 18 hermetic tests GREEN under `-race` (fake client — no cluster). Foundation for migrating the canonical post-Cleanroom bash seeds to Go (M15 DoD#2). Adds client-go/apimachinery/cli-runtime/controller-runtime v0.35.x/v0.23.3 to the loopzero-ops module (versions aligned with `operators/`; zero new dependency class in the monorepo).
 - **Engine migration `000055_lens_dashboards` — per-workspace custom dashboard config (loopzero-lens M66).** A Cloud-owned per-workspace table (`id ldb-{16hex}`, `tenant_id` FK to `tenants` ON DELETE CASCADE, `created_by` audit, `name` CHECK 1..64, `config JSONB` for the ordered widget list, `created_at`/`updated_at`, `idx_lens_dashboards_tenant (tenant_id)`). Unlike `000053_lens_saved_views` (personal, `subject+tenant`), a custom dashboard is a SHARED team artifact scoped by `tenant_id` alone (the peer-standard model — opik/langfuse scope dashboards to the workspace); `created_by` is audit-only, never a scope filter. Queried by the loopzero-cloud `LensDashboardsHandler` (raw `database/sql`); the engine owns the schema. Validated round-trip + name CHECK against real Postgres. Forward-only.
 
-### Changed
-
-### Deprecated
 
 ### Removed
 - **`infra/scripts/local/seed-admin-loopzero-dev.sh`** + `seed_admin_loopzero_dev.py` — migrated to `loopzero-ops seed admin-loopzero-dev` (M15 Wave 3, entry 8/8 — **COMPLETES Wave 3 + M15 20-of-20**). Master steps 3 + 3b delegate to Go with env prefix. Allowlist: 123 → 122.
@@ -59,10 +70,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`infra/scripts/local/seed-stripe-api-keys-canonical.sh`** — migrated to `loopzero-ops seed stripe-api-keys` (M15 Wave 1, entry 3/5). Master step 15b delegates to Go; sibling `seed-stripe-webhook-endpoint-canonical.sh` comment + `infra/helm/loopzero-cloud/templates/deployment.yaml` comment + `infra/tests/e2e/dev-public-billing-stripe-price-ids-seed-canonical_test.sh` doc-refs updated. Allowlist: 140 → 139.
 - **`infra/scripts/local/seed-stripe-secret-canonical.sh`** — migrated to `loopzero-ops seed stripe-webhook-secret` (M15 Wave 1, entry 2/5). Master step 15 delegates to the Go seed; sibling `seed-stripe-webhook-endpoint-canonical.sh` delegation calls (2×) + `seed-stripe-api-keys-canonical.sh` doc-comment updated. Allowlist: 141 → 140.
 - **`infra/scripts/local/seed-github-app-dev.sh`** — migrated to `loopzero-ops seed github-app-dev` (M15 Wave 1, entry 1/5). Master chain `seed-post-cleanroom-all.sh` step 5 delegates to the Go seed; sibling seeds (`seed-broker-canonical.sh`, `seed-github-webhook-fixture-canonical.sh`, `seed-tenant-fixture-canonical.sh`) + fixtures (`infra/tests/fixtures/secret-producers.txt`) + env-gate test (`infra/tests/scripts/seed_post_cleanroom_env_gate_test.go`) updated to reference the new form. Allowlist: 142 → 141.
-
-### Fixed
-
-### Security
 
 ## [0.58.0] - 2026-07-07
 
