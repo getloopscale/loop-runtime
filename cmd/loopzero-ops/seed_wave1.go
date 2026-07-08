@@ -12,4 +12,5 @@ func init() {
 	seedRegistry.Register(seed.NewStripeWebhookSecretSeed())
 	seedRegistry.Register(seed.NewStripeAPIKeysSeed())
 	seedRegistry.Register(seed.NewArgoCDGiteaCredsSeed())
+	seedRegistry.Register(seed.NewMinioCanonicalSeed())
 }

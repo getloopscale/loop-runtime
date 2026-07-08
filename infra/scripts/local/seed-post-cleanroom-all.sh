@@ -15,7 +15,7 @@
 #
 # 1. vault-bootstrap-dev.sh        — OpenBao init + unseal + AppRole +
 #                                    transit chain + SPKI pin
-# 2. seed-minio-canonical.sh       — MinIO password reset (mgmt + build)
+# 2. loopzero-ops seed minio (M15 W1)        — MinIO password reset (mgmt + build)
 # 3. seed-admin-loopzero-dev.sh     — Kratos identity + tenant + session JWT
 # 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
 # 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
@@ -172,7 +172,7 @@ else
 fi
 
 # Step 2
-run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VERIFY_FLAG"
+run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
 
 # CANONICAL ORDER FIX 2026-06-18 (Finding #4 of issue #91 — Cleanroom
 # mandate canonical chain run): Step 4 (patch-kratos-dev-public) MUST

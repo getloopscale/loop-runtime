@@ -133,14 +133,11 @@ func emitSeedResult(name string, r seed.Result, asJSON bool) {
 // Only ErrCredsBadMode / ErrCredsMalformed are surfaced upstream (operator
 // error → FAIL). A missing kubeconfig IS a hard error (nothing to do).
 func buildSeedDeps(dryRun bool) (seed.Deps, error) {
-	cfgFlags := genericclioptions.NewConfigFlags(true)
-	restCfg, err := cfgFlags.ToRESTConfig()
+	// Default (mgmt) client via the standard ConfigFlags — respects
+	// KUBECONFIG / --kubeconfig / --context override.
+	mgmt, err := buildKubeClient("")
 	if err != nil {
 		return seed.Deps{}, fmt.Errorf("kubeconfig: %w", err)
-	}
-	cli, err := client.New(restCfg, client.Options{})
-	if err != nil {
-		return seed.Deps{}, fmt.Errorf("kube client: %w", err)
 	}
 	credsPath := os.Getenv("LOOPZERO_DEV_CREDENTIALS")
 	if credsPath == "" {
@@ -152,9 +149,30 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 		return seed.Deps{}, fmt.Errorf("creds: %w", credsErr)
 	}
 	return seed.Deps{
-		Ctx:    context.Background(),
-		Kube:   seed.NewKubeClient(cli),
-		Creds:  creds,
-		DryRun: dryRun,
+		Ctx:        context.Background(),
+		Kube:       mgmt,
+		Creds:      creds,
+		DryRun:     dryRun,
+		ClientCtor: buildKubeClient, // multi-cluster seeds request contexts lazily
 	}, nil
+}
+
+// buildKubeClient resolves a controller-runtime client for the given kubeconfig
+// context name. The empty string uses the default context (equivalent to
+// `kubectl` without --context). Multi-cluster seeds request build/workload/vault
+// contexts via Deps.ClientFor which memoizes.
+func buildKubeClient(ctxName string) (seed.KubeClient, error) {
+	cfgFlags := genericclioptions.NewConfigFlags(true)
+	if ctxName != "" {
+		cfgFlags.Context = &ctxName
+	}
+	restCfg, err := cfgFlags.ToRESTConfig()
+	if err != nil {
+		return nil, fmt.Errorf("kubeconfig context %q: %w", ctxName, err)
+	}
+	cli, err := client.New(restCfg, client.Options{})
+	if err != nil {
+		return nil, fmt.Errorf("kube client context %q: %w", ctxName, err)
+	}
+	return seed.NewKubeClient(cli), nil
 }

@@ -40,6 +40,15 @@ type KubeClient interface {
 	// whether a missing Deployment is a hard failure (bash returned exit 1
 	// in that case; the sibling seed's rollout is post-apply and non-fatal).
 	RolloutRestartDeployment(ctx context.Context, namespace, name string) error
+	// SecretExists reports whether a Secret is present. Returns (false, nil)
+	// on NotFound so callers can branch without inspecting a typed error.
+	// Used by seeds that patch an optional sibling Secret only when present
+	// (e.g. minio-credentials legacy alias).
+	SecretExists(ctx context.Context, namespace, name string) (bool, error)
+	// PatchSecretData replaces the given keys' values on the target Secret
+	// (Get+Update — preserves resourceVersion + other keys). Returns
+	// NotFound-shaped errors verbatim so callers can decide skip vs fail.
+	PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error
 }
 
 // kubeClient is the production KubeClient backed by a controller-runtime client.
@@ -81,6 +90,34 @@ func (k *kubeClient) GetSecret(ctx context.Context, namespace, name string) (*co
 		return nil, fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
 	}
 	return &s, nil
+}
+
+func (k *kubeClient) SecretExists(ctx context.Context, namespace, name string) (bool, error) {
+	var s corev1.Secret
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &s); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
+	}
+	return true, nil
+}
+
+func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error {
+	var existing corev1.Secret
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &existing); err != nil {
+		return fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
+	}
+	if existing.Data == nil {
+		existing.Data = map[string][]byte{}
+	}
+	for k2, v := range patch {
+		existing.Data[k2] = v
+	}
+	if err := k.c.Update(ctx, &existing); err != nil {
+		return fmt.Errorf("update secret %s/%s: %w", namespace, name, err)
+	}
+	return nil
 }
 
 func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, name string) error {

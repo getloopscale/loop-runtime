@@ -12,7 +12,15 @@
 //   FAIL — a typed error the operator must fix (bad mode, malformed input, k8s error)
 package seed
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrNoClientCtor signals that a seed asked for an alternate-context KubeClient
+// but the composition root did not wire a ClientCtor factory. The seed maps
+// this to FAIL — the operator must fix the composition root, not the seed.
+var ErrNoClientCtor = errors.New("seed: Deps.ClientCtor not wired (multi-cluster seed needs a ClientCtor)")
 
 // Verdict is the tri-state outcome of a seed Run/Verify. It mirrors the
 // PASS/SKIP/FAIL vocabulary the bash seeds print, so parity is a verdict
@@ -61,11 +69,42 @@ type Result struct {
 // the composition root (seed_subcmd.go) — never constructed inside seed logic
 // (architecture.md § Dependency Inversion). DryRun makes Run print intended
 // actions without mutating the cluster.
+//
+// Clients holds additional per-context KubeClients for multi-cluster seeds
+// (build / workload / vault). The default Kube points at the k3d-loopzero-mgmt
+// context; alternate contexts are resolved lazily via Deps.ClientFor.
 type Deps struct {
-	Ctx    context.Context
-	Kube   KubeClient
-	Creds  *Creds
-	DryRun bool
+	Ctx        context.Context
+	Kube       KubeClient // mgmt (default) context
+	Clients    map[string]KubeClient
+	ClientCtor func(context string) (KubeClient, error) // lazy factory for missing contexts
+	Creds      *Creds
+	DryRun     bool
+}
+
+// ClientFor returns the KubeClient for the given kubeconfig context name.
+// The empty string returns the default (mgmt) client. Missing entries are
+// lazily constructed via ClientCtor; a nil ClientCtor + missing entry is a
+// FAIL-shaped error (the operator forgot to wire the second cluster).
+func (d *Deps) ClientFor(context string) (KubeClient, error) {
+	if context == "" {
+		return d.Kube, nil
+	}
+	if k, ok := d.Clients[context]; ok && k != nil {
+		return k, nil
+	}
+	if d.ClientCtor == nil {
+		return nil, ErrNoClientCtor
+	}
+	k, err := d.ClientCtor(context)
+	if err != nil {
+		return nil, err
+	}
+	if d.Clients == nil {
+		d.Clients = map[string]KubeClient{}
+	}
+	d.Clients[context] = k
+	return k, nil
 }
 
 // Seed is one migrated canonical seed. Name is the CLI token (e.g. "github-app").
