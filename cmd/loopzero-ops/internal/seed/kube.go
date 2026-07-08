@@ -49,6 +49,11 @@ type KubeClient interface {
 	// (Get+Update — preserves resourceVersion + other keys). Returns
 	// NotFound-shaped errors verbatim so callers can decide skip vs fail.
 	PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error
+	// GetConfigMap fetches a ConfigMap. NotFound-shaped errors bubble up.
+	GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error)
+	// PatchConfigMapData replaces the given data keys on the target ConfigMap
+	// (Get+Update — preserves resourceVersion + other keys).
+	PatchConfigMapData(ctx context.Context, namespace, name string, patch map[string]string) error
 }
 
 // kubeClient is the production KubeClient backed by a controller-runtime client.
@@ -116,6 +121,31 @@ func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string
 	}
 	if err := k.c.Update(ctx, &existing); err != nil {
 		return fmt.Errorf("update secret %s/%s: %w", namespace, name, err)
+	}
+	return nil
+}
+
+func (k *kubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error) {
+	var c corev1.ConfigMap
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &c); err != nil {
+		return nil, fmt.Errorf("get configmap %s/%s: %w", namespace, name, err)
+	}
+	return &c, nil
+}
+
+func (k *kubeClient) PatchConfigMapData(ctx context.Context, namespace, name string, patch map[string]string) error {
+	var existing corev1.ConfigMap
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &existing); err != nil {
+		return fmt.Errorf("get configmap %s/%s: %w", namespace, name, err)
+	}
+	if existing.Data == nil {
+		existing.Data = map[string]string{}
+	}
+	for k2, v := range patch {
+		existing.Data[k2] = v
+	}
+	if err := k.c.Update(ctx, &existing); err != nil {
+		return fmt.Errorf("update configmap %s/%s: %w", namespace, name, err)
 	}
 	return nil
 }

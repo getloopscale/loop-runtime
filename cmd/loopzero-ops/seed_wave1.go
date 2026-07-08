@@ -17,4 +17,5 @@ func init() {
 	// Wave 2 — HTTP-API (port-forward-based)
 	seedRegistry.Register(seed.NewArgoCDTokenSeed())
 	seedRegistry.Register(seed.NewGiteaTokenSeed())
+	seedRegistry.Register(seed.NewHydraURLsSeed())
 }

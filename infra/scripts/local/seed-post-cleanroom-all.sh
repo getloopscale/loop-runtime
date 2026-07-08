@@ -206,10 +206,10 @@ if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
   fi
 
   # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
-  run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+  run_step "4b-seed-hydra-urls" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed hydra-urls ${VERIFY_FLAG:+--verify})"
 else
   skip_step "4-patch-kratos-dev-public" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "4b-seed-hydra-urls-canonical" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "4b-seed-hydra-urls" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit

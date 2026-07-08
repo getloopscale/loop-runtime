@@ -65,7 +65,7 @@ func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 	// T4. Step 4b (seed-hydra-urls-canonical) MUST be inside the same
 	// env-gate block (or its own equivalent gate). Hydra URLs are
 	// equally dev-public-specific.
-	if !stepIsInsideEnvGate(body, "seed-hydra-urls-canonical.sh") {
+	if !stepIsInsideEnvGate(body, "seed hydra-urls") {
 		t.Error("Step 4b (seed-hydra-urls-canonical) is NOT inside the LOOPZERO_HELMFILE_ENV=dev-public conditional — issue #99 regression")
 	}
 
