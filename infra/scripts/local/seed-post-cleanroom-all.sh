@@ -237,7 +237,7 @@ run_step "5-seed-github-app-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . se
 # block). SKIP-graceful when gh unauthenticated or dev-credentials.json
 # absent (standalone-multi tier).
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "5b-seed-github-webhook-fixture-canonical" "bash $SCRIPT_DIR/seed-github-webhook-fixture-canonical.sh $VERIFY_FLAG"
+  run_step "5b-seed-github-webhook-fixture" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed github-webhook-fixture ${VERIFY_FLAG:+--verify})"
 else
   skip_step "5b-seed-github-webhook-fixture-canonical" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
