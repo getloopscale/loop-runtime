@@ -63,3 +63,69 @@ func TestBrokerSeed_Name(t *testing.T) {
 		t.Errorf("Name = %q, want broker", got)
 	}
 }
+
+func TestBrokerSeed_Run_DryRunReports(t *testing.T) {
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	deps := Deps{
+		Ctx:    context.Background(),
+		Kube:   NewKubeClient(c),
+		DryRun: true,
+	}
+	got := NewBrokerSeed().Run(deps)
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+	if got.Reason == "" {
+		t.Error("empty reason on dry-run")
+	}
+}
+
+func TestBrokerSeed_Run_FailsWhenClientCtorMissing(t *testing.T) {
+	// mgmt Kube present but no ClientCtor → workload resolution fails at Layer 2.
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	got := NewBrokerSeed().Run(deps)
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+	// Must fail no later than Layer 2 (workload resolve).
+	if !stringContainsAny(got.Reason, "Layer 2", "resolve workload") {
+		t.Errorf("Reason = %q, want Layer 2 failure marker", got.Reason)
+	}
+}
+
+func TestBrokerSeed_Verify_FailWhenMgmtSecretAbsent(t *testing.T) {
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	got := NewBrokerSeed().Verify(deps)
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+}
+
+func TestBrokerSeed_Verify_FailWhenCanonicalKeyMissing(t *testing.T) {
+	// Secret present but missing LOOPZERO_BROKER_TOKEN key (legacy-only shape).
+	legacy := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: brokerSecretName},
+		Data:       map[string][]byte{brokerTokenKey: []byte("legacy-token-no-canonical")},
+	}
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(legacy).Build()
+	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	got := NewBrokerSeed().Verify(deps)
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+	if !stringContainsAny(got.Reason, "LOOPZERO_BROKER_TOKEN") {
+		t.Errorf("Reason = %q, want LOOPZERO_BROKER_TOKEN marker", got.Reason)
+	}
+}
+
+// stringContainsAny returns true when any of subs is present in s.
+func stringContainsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}

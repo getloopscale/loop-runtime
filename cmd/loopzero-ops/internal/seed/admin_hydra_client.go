@@ -139,12 +139,14 @@ func (s *AdminHydraClientSeed) Verify(d Deps) Result {
 
 // adminHydraLookupUserID connects to PG and looks up the admin user id.
 // Small connection: single query, no pool needed.
+// Uses pgConnectFn seam (shared with tenant_fixture + admin_loopzero_dev) so
+// tests can substitute a stubPgConn without a live PG.
 func adminHydraLookupUserID(ctx context.Context, url, email string) (string, error) {
-	c, err := pgx.Connect(ctx, url)
+	c, err := pgConnectFn(ctx, url)
 	if err != nil {
 		return "", err
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 	// Timeout the query so a stuck PG doesn't hang the halt-loop.
 	qctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
