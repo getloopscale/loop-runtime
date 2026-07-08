@@ -199,11 +199,7 @@ run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio 
 # SKIP message in other envs. Defaults to SKIP when env var unset.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
   # Step 4
-  if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
-    run_step "4-patch-kratos-dev-public" "bash $SCRIPT_DIR/patch-kratos-dev-public.sh --verify"
-  else
-    skip_step "4-patch-kratos-dev-public" "script not yet present in canonical chain"
-  fi
+  run_step "4-patch-kratos-dev-public" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed patch-kratos ${VERIFY_FLAG:+--verify})"
 
   # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
   run_step "4b-seed-hydra-urls" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed hydra-urls ${VERIFY_FLAG:+--verify})"

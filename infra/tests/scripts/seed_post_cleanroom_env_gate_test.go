@@ -58,8 +58,9 @@ func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 	// the env-gated block. We detect this by checking that between the
 	// gate condition and the run_step line, there are no `else` or `fi`
 	// tokens that would close the block prematurely.
-	if !stepIsInsideEnvGate(body, "patch-kratos-dev-public.sh") {
-		t.Error("Step 4 (patch-kratos-dev-public) is NOT inside the LOOPZERO_HELMFILE_ENV=dev-public conditional — issue #99 regression")
+	// Migrated to Go seed 2026-07-08: the invocation is now `seed patch-kratos`.
+	if !stepIsInsideEnvGate(body, "seed patch-kratos") {
+		t.Error("Step 4 (patch-kratos) is NOT inside the LOOPZERO_HELMFILE_ENV=dev-public conditional — issue #99 regression")
 	}
 
 	// T4. Step 4b (seed-hydra-urls-canonical) MUST be inside the same

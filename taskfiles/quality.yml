@@ -135,7 +135,6 @@ tasks:
       # + live-url-discoverability + status-url-probe (closes R1-F2 HIGH).
       - bash infra/tests/check-dev-public-billing-portal-syntax_test.sh            # T5.1 ORPHAN companion 1/4
       - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
-      - /tmp/loopzero-ops quality patch-kratos-check-only                             # M-Migrate2 (2026-07-07): replaced infra/tests/check-patch-kratos-check-only-readonly_test.sh with pure-logic Go gate. M0 J-01 T5.3 EC-9: patch-kratos --check-only read-only guard (6 assertions).
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
       # shell-lint advisory — invokes loopzero-ops quality shellcheck-advisory.
       # M-Migrate2 (2026-07-07): replaced infra/scripts/local/shellcheck-advisory.sh

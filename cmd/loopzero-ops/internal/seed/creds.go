@@ -20,7 +20,13 @@ type Creds struct {
 		AppID         string `json:"app_id"`
 		AppPrivateKey string `json:"app_private_key"`
 		WebhookSecret string `json:"webhook_secret"`
+		ClientID      string `json:"client_id"`
+		ClientSecret  string `json:"client_secret"`
 	} `json:"github"`
+	Google struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	} `json:"google"`
 	Stripe struct {
 		APIKey        string `json:"api_key"`
 		WebhookSecret string `json:"webhook_secret"`

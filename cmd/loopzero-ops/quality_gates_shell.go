@@ -20,7 +20,6 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/patchkratoscheckonly"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
@@ -424,26 +423,6 @@ func runCaddyfileNoDockerIP(args []string) int {
 		return 1
 	}
 	fmt.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
-	return 0
-}
-
-// runPatchKratosCheckOnly enforces that patch-kratos-dev-public.sh --check-only
-// is a read-only alias for --dry-run --skip-restart (dogfood-login Suite 0
-// pre-flight MUST NOT mutate the Kratos config it validates).
-// Migrated from infra/tests/check-patch-kratos-check-only-readonly_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runPatchKratosCheckOnly(args []string) int {
-	fs := flag.NewFlagSet("patch-kratos-check-only", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := patchkratoscheckonly.Check(patchkratoscheckonly.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "patch-kratos-check-only: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("patch-kratos-check-only: PASS — patch-kratos-dev-public.sh --check-only is read-only (DRY_RUN=1 + SKIP_RESTART=1 + guard)")
 	return 0
 }
 
