@@ -15,6 +15,9 @@ package seed
 import (
 	"context"
 	"errors"
+
+	"k8s.io/client-go/rest"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ErrNoClientCtor signals that a seed asked for an alternate-context KubeClient
@@ -78,6 +81,16 @@ type Deps struct {
 	Kube       KubeClient // mgmt (default) context
 	Clients    map[string]KubeClient
 	ClientCtor func(context string) (KubeClient, error) // lazy factory for missing contexts
+	// PortForwardCtor opens a Tunnel to a Pod matching podLabels in namespace.
+	// Composed by the composition root so seeds do not import client-go rest
+	// config directly. Seeds pass namespace/labels/remotePort/probePath.
+	PortForwardCtor func(ctx context.Context, contextName, namespace string, podLabels map[string]string, remotePort int, probePath string) (*Tunnel, error)
+	// RestConfig + CtrlClient are the raw client-go artifacts for the mgmt
+	// context — kept on Deps so the PortForwardCtor default implementation
+	// (in the composition root) can lazily resolve pods without re-reading
+	// kubeconfig. Test injection substitutes them.
+	RestConfig *rest.Config
+	CtrlClient ctrlclient.Client
 	Creds      *Creds
 	DryRun     bool
 }

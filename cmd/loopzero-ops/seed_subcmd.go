@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/rest"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
@@ -135,7 +137,7 @@ func emitSeedResult(name string, r seed.Result, asJSON bool) {
 func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 	// Default (mgmt) client via the standard ConfigFlags — respects
 	// KUBECONFIG / --kubeconfig / --context override.
-	mgmt, err := buildKubeClient("")
+	mgmt, mgmtRest, mgmtCtrl, err := buildKubeClientAndRest("")
 	if err != nil {
 		return seed.Deps{}, fmt.Errorf("kubeconfig: %w", err)
 	}
@@ -148,12 +150,36 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 	if credsErr != nil && !errors.Is(credsErr, seed.ErrCredsAbsent) {
 		return seed.Deps{}, fmt.Errorf("creds: %w", credsErr)
 	}
+	// PortForwardCtor: memoize (ctx, rest, ctrl) triples per kubeconfig context.
+	// For the mgmt context we already have them; other contexts resolve via
+	// buildKubeClientAndRest lazily.
+	restByCtx := map[string]*rest.Config{"": mgmtRest}
+	ctrlByCtx := map[string]ctrlclient.Client{"": mgmtCtrl}
+	pfCtor := func(ctx context.Context, contextName, namespace string,
+		labels map[string]string, remotePort int, probePath string,
+	) (*seed.Tunnel, error) {
+		r, ok := restByCtx[contextName]
+		c, ok2 := ctrlByCtx[contextName]
+		if !ok || !ok2 {
+			_, rr, cc, err := buildKubeClientAndRest(contextName)
+			if err != nil {
+				return nil, err
+			}
+			r, c = rr, cc
+			restByCtx[contextName] = rr
+			ctrlByCtx[contextName] = cc
+		}
+		return seed.OpenTunnelForService(ctx, r, c, namespace, labels, remotePort, probePath)
+	}
 	return seed.Deps{
-		Ctx:        context.Background(),
-		Kube:       mgmt,
-		Creds:      creds,
-		DryRun:     dryRun,
-		ClientCtor: buildKubeClient, // multi-cluster seeds request contexts lazily
+		Ctx:             context.Background(),
+		Kube:            mgmt,
+		RestConfig:      mgmtRest,
+		CtrlClient:      mgmtCtrl,
+		Creds:           creds,
+		DryRun:          dryRun,
+		ClientCtor:      buildKubeClient,
+		PortForwardCtor: pfCtor,
 	}, nil
 }
 
@@ -162,17 +188,26 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 // `kubectl` without --context). Multi-cluster seeds request build/workload/vault
 // contexts via Deps.ClientFor which memoizes.
 func buildKubeClient(ctxName string) (seed.KubeClient, error) {
+	k, _, _, err := buildKubeClientAndRest(ctxName)
+	return k, err
+}
+
+// buildKubeClientAndRest returns the KubeClient wrapper alongside the raw
+// *rest.Config + client.Client so the composition root can pass them to
+// PortForwardCtor (port-forward needs the rest.Config; pod-listing for label
+// resolution needs the client.Client).
+func buildKubeClientAndRest(ctxName string) (seed.KubeClient, *rest.Config, client.Client, error) {
 	cfgFlags := genericclioptions.NewConfigFlags(true)
 	if ctxName != "" {
 		cfgFlags.Context = &ctxName
 	}
 	restCfg, err := cfgFlags.ToRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("kubeconfig context %q: %w", ctxName, err)
+		return nil, nil, nil, fmt.Errorf("kubeconfig context %q: %w", ctxName, err)
 	}
 	cli, err := client.New(restCfg, client.Options{})
 	if err != nil {
-		return nil, fmt.Errorf("kube client context %q: %w", ctxName, err)
+		return nil, nil, nil, fmt.Errorf("kube client context %q: %w", ctxName, err)
 	}
-	return seed.NewKubeClient(cli), nil
+	return seed.NewKubeClient(cli), restCfg, cli, nil
 }

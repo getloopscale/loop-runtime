@@ -5,12 +5,15 @@ package main
 
 import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
 
-// init registers the Wave 1 seeds (K8s-Secret class — CreateOrUpdate mechanic).
+// init registers Wave 1 (K8s-Secret) + Wave 2 (HTTP-API port-forward) seeds.
 // Registration order = execution order for `seed all` (deterministic, D3).
 func init() {
+	// Wave 1 — K8s-Secret CreateOrUpdate mechanic
 	seedRegistry.Register(seed.NewGitHubAppDevSeed())
 	seedRegistry.Register(seed.NewStripeWebhookSecretSeed())
 	seedRegistry.Register(seed.NewStripeAPIKeysSeed())
 	seedRegistry.Register(seed.NewArgoCDGiteaCredsSeed())
 	seedRegistry.Register(seed.NewMinioCanonicalSeed())
+	// Wave 2 — HTTP-API (port-forward-based)
+	seedRegistry.Register(seed.NewArgoCDTokenSeed())
 }

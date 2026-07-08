@@ -296,9 +296,9 @@ run_step "12-seed-chaos-mesh-canonical" "bash $SCRIPT_DIR/seed-chaos-mesh-canoni
 # Step 13 (NEW M2 2026-06-23) — ArgoCD admin token
 # EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD não existe em outros envs
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" || "${LOOPZERO_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
-  run_step "13-seed-argocd-token-canonical" "bash $SCRIPT_DIR/seed-argocd-token-canonical.sh $VERIFY_FLAG"
+  run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
 else
-  skip_step "13-seed-argocd-token-canonical" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "13-seed-argocd-token" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 14 (NEW M2 2026-06-23) — OPENBAO_VAULT_ADDR cross-cluster (dev-public only — Jeito A)
