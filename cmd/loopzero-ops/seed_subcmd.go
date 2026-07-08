@@ -13,9 +13,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
 )
@@ -119,12 +124,37 @@ func emitSeedResult(name string, r seed.Result, asJSON bool) {
 	}
 }
 
-// buildSeedDeps is the composition root for the k8s client + creds. Phase 0
-// leaves the KubeClient nil (no seeds registered yet to consume it); the wave
-// PRs wire genericclioptions.ConfigFlags → controller-runtime client here.
+// buildSeedDeps is the composition root: resolves kubeconfig via ConfigFlags
+// (kubectl-like — blueprint T1 cnpg plugin.go:86 pattern), builds a typed
+// controller-runtime client, and loads dev-credentials.json.
+//
+// A missing creds file is NOT an error at this level — LoadCreds returns
+// ErrCredsAbsent and each seed maps that to SKIP (SKIP-graceful semantics).
+// Only ErrCredsBadMode / ErrCredsMalformed are surfaced upstream (operator
+// error → FAIL). A missing kubeconfig IS a hard error (nothing to do).
 func buildSeedDeps(dryRun bool) (seed.Deps, error) {
+	cfgFlags := genericclioptions.NewConfigFlags(true)
+	restCfg, err := cfgFlags.ToRESTConfig()
+	if err != nil {
+		return seed.Deps{}, fmt.Errorf("kubeconfig: %w", err)
+	}
+	cli, err := client.New(restCfg, client.Options{})
+	if err != nil {
+		return seed.Deps{}, fmt.Errorf("kube client: %w", err)
+	}
+	credsPath := os.Getenv("LOOPZERO_DEV_CREDENTIALS")
+	if credsPath == "" {
+		home, _ := os.UserHomeDir()
+		credsPath = filepath.Join(home, ".loopzero", "dev-credentials.json")
+	}
+	creds, credsErr := seed.LoadCreds(credsPath)
+	if credsErr != nil && !errors.Is(credsErr, seed.ErrCredsAbsent) {
+		return seed.Deps{}, fmt.Errorf("creds: %w", credsErr)
+	}
 	return seed.Deps{
 		Ctx:    context.Background(),
+		Kube:   seed.NewKubeClient(cli),
+		Creds:  creds,
 		DryRun: dryRun,
 	}, nil
 }

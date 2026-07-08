@@ -74,7 +74,8 @@ func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 	// fixture) MUST remain unconditional (or have their own independent
 	// gating logic, but NOT the dev-public env gate). Spot-check Steps 2
 	// and 5 — both env-agnostic.
-	for _, step := range []string{"seed-minio-canonical.sh", "seed-github-app-dev.sh"} {
+	// M15 Wave 1: seed-github-app-dev.sh → `loopzero-ops seed github-app-dev`.
+	for _, step := range []string{"seed-minio-canonical.sh", "seed github-app-dev"} {
 		if stepIsInsideEnvGate(body, step) {
 			t.Errorf("step %s is inside the env-gate but should remain unconditional — over-scoped fix", step)
 		}

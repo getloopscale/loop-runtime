@@ -26,7 +26,7 @@
 #
 # Per cleanroom-up-live-test-mandate.md INQUEBRÁVEL: this script is part
 # of the canonical post-Cleanroom chain alongside seed-admin-loopzero-dev.sh
-# + seed-github-app-dev.sh + patch-kratos-dev-public.
+# + loopzero-ops seed github-app-dev + patch-kratos-dev-public.
 
 set -euo pipefail
 

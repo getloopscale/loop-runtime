@@ -18,7 +18,7 @@
 # 2. seed-minio-canonical.sh       — MinIO password reset (mgmt + build)
 # 3. seed-admin-loopzero-dev.sh     — Kratos identity + tenant + session JWT
 # 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
-# 5. seed-github-app-dev.sh        — GitHub App PEM + webhook secret
+# 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
 # 6. seed-gitea-token-canonical.sh — Gitea API token mint + 3-way sync
 # 7. seed-broker-canonical.sh      — loopzero-broker token + CSS + envFrom
@@ -41,6 +41,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 VERIFY=0
 SKIP_VAULT=0
@@ -136,7 +137,6 @@ VERIFY_FLAG=""
 # standalone doesn't run loopzero-vault, and prod requires the witnessed
 # ceremony per the mandate § Sub-step 2.5 prod/persistent path.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
-  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
   run_step "0a-vault-cluster-create" "cd $REPO_ROOT && task k3d:vault:create"
   run_step "0b-vault-cluster-bootstrap" "cd $REPO_ROOT && task k3d:vault:bootstrap"
 else
@@ -227,8 +227,8 @@ run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.s
 # the admin session at the canonical path is not overwritten.
 run_step "3b-seed-redteam-qa-identity" "EMAIL=paulohenrique.java@gmail.com DISPLAY_NAME='Red Team QA' USERNAME=redteam-qa TENANT_SLUG=redteam-qa SESSION_FILE=\$HOME/.loopzero/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopzero/redteam-qa-session-jwt.txt bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
 
-# Step 5
-run_step "5-seed-github-app-dev" "bash $SCRIPT_DIR/seed-github-app-dev.sh $VERIFY_FLAG"
+# Step 5 (M15 W1: migrated to loopzero-ops seed; bash script deleted)
+run_step "5-seed-github-app-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed github-app-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 5b (NEW 2026-07-04) — canonical GitHub webhook on the fixture
 # repo. Without this, `loopzero push` on getloopscale/loopzerokit-example silently

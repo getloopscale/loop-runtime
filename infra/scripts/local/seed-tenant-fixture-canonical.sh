@@ -90,7 +90,7 @@ if [[ "$SKIP_GH" == "0" ]]; then
   WEBHOOK_SECRET=$(kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" \
     get secret loopzero-github-webhook -o jsonpath='{.data.value}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   if [[ -z "$WEBHOOK_SECRET" ]]; then
-    log "Layer 2 SKIP: loopzero-github-webhook Secret missing — run seed-github-app-dev.sh first"
+    log "Layer 2 SKIP: loopzero-github-webhook Secret missing — run loopzero-ops seed github-app-dev first"
   else
     PAYLOAD=$(printf '{"action":"created","installation":{"id":%s,"account":{"login":"%s","type":"User"},"target_type":"User","repository_selection":"all"},"sender":{"login":"%s"}}' \
       "$GH_INSTALLATION_ID" "$GH_ACCOUNT_LOGIN" "$GH_ACCOUNT_LOGIN")
@@ -105,7 +105,7 @@ if [[ "$SKIP_GH" == "0" ]]; then
     if [[ "$HTTP_CODE" == "200" ]]; then
       log "Layer 2: GitHub installation $GH_INSTALLATION_ID canonical webhook replayed (HTTP 200)"
     else
-      log "Layer 2 WARN: webhook replay HTTP $HTTP_CODE (canonical chain may not be ready yet — re-run after seed-github-app-dev.sh + seed-broker-canonical.sh)"
+      log "Layer 2 WARN: webhook replay HTTP $HTTP_CODE (canonical chain may not be ready yet — re-run after loopzero-ops seed github-app-dev + seed-broker-canonical.sh)"
     fi
   fi
 else

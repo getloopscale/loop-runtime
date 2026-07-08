@@ -11,7 +11,7 @@
 # with "chain link N (workflow submit) not reached".
 #
 # The GitHub App itself (installation, PEM, webhook secret) is already
-# canonical-seeded by seed-github-app-dev.sh. This script closes the
+# canonical-seeded by loopzero-ops seed github-app-dev. This script closes the
 # separate seam: the REPO-level webhook is a per-repo config that lives
 # on the GitHub side, NOT in the App installation, and it MUST point at
 # the dev-public Caddy edge (https://app-dev.loopzero.example/api/v1/webhooks/github)
@@ -19,7 +19,7 @@
 #
 # Behavior:
 #   - Reads webhook secret from ~/.loopzero/dev-credentials.json (mode 0600
-#     enforced pre-read) — the same SoT as seed-github-app-dev.sh.
+#     enforced pre-read) — the same SoT as loopzero-ops seed github-app-dev.
 #   - GET /repos/{owner}/{repo}/hooks → checks for a hook whose
 #     config.url equals the canonical URL; PATCHes it in place (secret
 #     rotation) OR POSTs a new one.
