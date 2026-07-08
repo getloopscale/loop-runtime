@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Roadmap amended: added M15 Operator Glue → Go: Allowlist ≤ 30 (Strangler Final) (`/roadmap-feature operator-glue-go-migration`)
 - **Engine migration `000055_lens_dashboards` — per-workspace custom dashboard config (loopzero-lens M66).** A Cloud-owned per-workspace table (`id ldb-{16hex}`, `tenant_id` FK to `tenants` ON DELETE CASCADE, `created_by` audit, `name` CHECK 1..64, `config JSONB` for the ordered widget list, `created_at`/`updated_at`, `idx_lens_dashboards_tenant (tenant_id)`). Unlike `000053_lens_saved_views` (personal, `subject+tenant`), a custom dashboard is a SHARED team artifact scoped by `tenant_id` alone (the peer-standard model — opik/langfuse scope dashboards to the workspace); `created_by` is audit-only, never a scope filter. Queried by the loopzero-cloud `LensDashboardsHandler` (raw `database/sql`); the engine owns the schema. Validated round-trip + name CHECK against real Postgres. Forward-only.
 
 ### Changed

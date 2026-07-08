@@ -392,6 +392,29 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
+### M15 — [ ] Operator Glue → Go: Allowlist ≤ 30 (Strangler Final)
+
+> Added 2026-07-08 by `/roadmap-feature` (slug: `operator-glue-go-migration`). See CHANGELOG `[Unreleased] § Added`. Grill (respondido via delegação sponsor `/goal` 2026-07-08): `knowledge-base/grills/operator-glue-go-migration-feature-grill.md`.
+
+**Objective:** completar o strangler de shell scripts até o alvo **literal** `allowlist ≤ 30` (hoje 142 entries / 189 scripts reais) — migrar os seeds canônicos post-Cleanroom + operator tools (`infra/scripts/`, `infra/helmfile/scripts/`, resíduo de `infra/tests/`) para **subcomandos Go do `loopzero-ops`** (precedente M9 `quality_subcmd`) e deletar o bash migrado, mantendo apenas glue operador irredutível (KEEP-OPERATOR re-justificado). **Why now:** CTO mandate 2026-07-08 (eliminação de shell scripts, tooling FAANG-level); o M13 fechou com o DoD#3 como *trajetória* — o alvo literal do `shell-script-strategic-plan` (2026-05-22) permanece aberto; o gate `no-new-bash` invertido estanca o crescimento mas não elimina o estoque.
+
+**Definition of done:**
+
+- [ ] `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 30** (KPI literal, invertido — encolhe, não cresce)
+- [ ] Seeds canônicos post-Cleanroom migrados para subcomandos Go `loopzero-ops seed <nome>` com paridade **LIVE `--verify` verde no Go ANTES do `git rm` do `.sh`** correspondente (strangler por-área, padrão M13)
+- [ ] Zero asserção de comportamento em bash: residual 100% KEEP-OPERATOR irredutível, cada entry re-auditada com justificativa D4 válida
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote de DELETE; zero referência quebrada a caminho deletado (grep sweep em `taskfiles/`, `docs/` vivos, `.claude/skills/` = 0 hits)
+- [ ] CHANGELOG `[Unreleased]`: `§ Removed` com os scripts deletados por lote; `§ Added` com os subcomandos Go novos
+
+**Dependencies:** M13 (a onda strangler que este milestone completa + gate inversion) e M9 (precedente `loopzero-ops` subcommand). Ambos `[x]` — M15 elegível imediatamente.
+
+**Top risks (new — pre-existing risks documented elsewhere in roadmap):**
+
+1. Perda de semântica de orquestração live-cluster na migração bash→Go (kubectl exec/port-forward com trap de cleanup, retry/backoff, idempotência de seeds) — mitigação: paridade por-seed (`--verify` LIVE verde no Go antes do delete do bash); nunca big-bang (precedente da falha 2026-05-23).
+2. Referências penduradas (runbooks, memories, Taskfile targets, `seed-post-cleanroom-all.sh` chain, skills) apontando para scripts deletados — mitigação: gate de referência (grep sweep DoD#4) + atualização dos consumidores no MESMO commit de cada lote.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |
