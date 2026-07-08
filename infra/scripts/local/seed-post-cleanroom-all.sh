@@ -250,7 +250,7 @@ fi
 run_step "6-seed-gitea-token-canonical" "bash $SCRIPT_DIR/seed-gitea-token-canonical.sh $VERIFY_FLAG"
 
 # Step 6b (NEW 2026-06-16) — ArgoCD ↔ Gitea repo-creds (MUST run AFTER step 6 so token is canonical)
-run_step "6b-seed-argocd-gitea-creds-canonical" "bash $SCRIPT_DIR/seed-argocd-gitea-creds-canonical.sh --hard-refresh"
+run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-gitea-creds ${VERIFY_FLAG:+--verify})"
 
 # Step 7
 run_step "7-seed-broker-canonical" "bash $SCRIPT_DIR/seed-broker-canonical.sh $VERIFY_FLAG"

@@ -11,4 +11,5 @@ func init() {
 	seedRegistry.Register(seed.NewGitHubAppDevSeed())
 	seedRegistry.Register(seed.NewStripeWebhookSecretSeed())
 	seedRegistry.Register(seed.NewStripeAPIKeysSeed())
+	seedRegistry.Register(seed.NewArgoCDGiteaCredsSeed())
 }

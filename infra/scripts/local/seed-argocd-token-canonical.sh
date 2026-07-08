@@ -6,7 +6,7 @@
 # Secret. Used by release_convergence_loop in loopzero-api to trigger
 # POST /api/v1/applications/{name}/sync on ArgoCD REST.
 #
-# Distinct from seed-argocd-gitea-creds-canonical.sh (Step 6b — repo-creds /
+# Distinct from `loopzero-ops seed argocd-gitea-creds` (Step 6b — repo-creds /
 # git auth). This script handles the admin-side OIDC-bypass token.
 #
 # Idempotent: token mint is name-scoped (canonical-seed); re-running mints
