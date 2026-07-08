@@ -29,4 +29,5 @@ func init() {
 	seedRegistry.Register(seed.NewPatchKratosSeed())
 	seedRegistry.Register(seed.NewStripeWebhookEndpointSeed())
 	seedRegistry.Register(seed.NewGitHubWebhookFixtureSeed())
+	seedRegistry.Register(seed.NewTenantFixtureSeed())
 }

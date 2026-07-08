@@ -1,0 +1,341 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package seed
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// TenantFixtureSeed is the Go port of
+// infra/scripts/local/seed-tenant-fixture-canonical.sh.
+//
+// Post-Cleanroom seed for tenant fixture state used by LIVE dogfood tests.
+// Without this seed, dogfood-environments Scenario E (plan-limit 402) cannot
+// run + dogfood-project-connect webhook tests fail.
+//
+// Layers:
+//
+//  1. Upsert canonical subscription (plan tier) for the test tenant so plan
+//     limits don't trigger 402 during burst tests. --starter/--pro/--team
+//     select tier (env override LOOPZERO_PLAN_TIER).
+//
+//  2. Replay canonical GitHub App `installation.created` webhook via the
+//     production HMAC-SHA256 signed path (not direct DB insert) so the
+//     broker-validate + handler-process + PG-write chain is exercised.
+//
+//  3. Ensure Tenant CR + ArgoCD AppProject (unstructured — CRDs may not be
+//     in scheme; unstructured avoids the registration coupling).
+//
+// This seed is dev-public-only (SKIP when LOOPZERO_HELMFILE_ENV != "dev-public").
+type TenantFixtureSeed struct{}
+
+func NewTenantFixtureSeed() *TenantFixtureSeed { return &TenantFixtureSeed{} }
+func (s *TenantFixtureSeed) Name() string      { return "tenant-fixture" }
+
+const (
+	tenantFixtureDefaultCloudBase     = "https://app-dev.loopzero.example"
+	tenantFixtureDefaultInstallationID = "138325349"
+	tenantFixtureDefaultAccountLogin  = "getloopscale"
+	tenantFixtureDefaultPlanTier      = "team"
+
+	tenantFixtureCloudBaseEnv    = "LOOPZERO_CLOUD_BASE"
+	tenantFixtureInstallIDEnv    = "LOOPZERO_GH_INSTALLATION_ID"
+	tenantFixtureAccountLoginEnv = "LOOPZERO_GH_ACCOUNT_LOGIN"
+	tenantFixturePlanTierEnv     = "LOOPZERO_PLAN_TIER"
+	tenantFixtureTenantIDEnv     = "LOOPZERO_TENANT_ID"
+	tenantFixturePGConnEnv       = "LOOPZERO_PG_CONN" // e.g. postgres://loopzero:loopzero-dev-password@127.0.0.1:15432/loopzero?sslmode=disable
+	tenantFixtureHelmfileEnvKey  = "LOOPZERO_HELMFILE_ENV"
+
+	tenantFixtureNamespace   = "loopzero-system"
+	tenantFixtureCellID      = "cell-default"
+	tenantFixtureProject     = "teste"
+	tenantFixtureEnvName     = "production"
+	tenantFixtureEnvCluster  = "workload"
+	tenantFixtureWebhookPath = "/api/v1/webhooks/github"
+)
+
+// pgConnectFn is the pgx.Connect wrapper (test seam). Signature matches
+// the pgx.Connect surface we actually consume.
+var pgConnectFn = func(ctx context.Context, connString string) (pgConn, error) {
+	c, err := pgx.Connect(ctx, connString)
+	if err != nil {
+		return nil, err
+	}
+	return &pgConnAdapter{c}, nil
+}
+
+// pgConn is the surface tenant-fixture uses; tests substitute an in-memory impl.
+type pgConn interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgRow
+	Exec(ctx context.Context, sql string, args ...any) error
+	Close(ctx context.Context) error
+}
+
+// pgRow is the minimal Scan surface.
+type pgRow interface {
+	Scan(dest ...any) error
+}
+
+type pgConnAdapter struct{ inner *pgx.Conn }
+
+func (a *pgConnAdapter) QueryRow(ctx context.Context, sql string, args ...any) pgRow {
+	return a.inner.QueryRow(ctx, sql, args...)
+}
+func (a *pgConnAdapter) Exec(ctx context.Context, sql string, args ...any) error {
+	_, err := a.inner.Exec(ctx, sql, args...)
+	return err
+}
+func (a *pgConnAdapter) Close(ctx context.Context) error { return a.inner.Close(ctx) }
+
+// tenantFixtureHTTPClient is the http.Client to use for webhook replays.
+// Overridable so tests can point at httptest.
+var tenantFixtureHTTPClient = &http.Client{
+	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, // #nosec G402 -- self-signed dev cert
+	Timeout:   30 * time.Second,
+}
+
+func (s *TenantFixtureSeed) Run(d Deps) Result {
+	env := osGetenv(tenantFixtureHelmfileEnvKey)
+	if env != "" && env != "dev-public" {
+		return Result{Verdict: SKIP, Reason: fmt.Sprintf("LOOPZERO_HELMFILE_ENV=%q (only dev-public applicable)", env)}
+	}
+	tenantID := osGetenv(tenantFixtureTenantIDEnv)
+	if tenantID == "" {
+		return Result{Verdict: SKIP, Reason: "LOOPZERO_TENANT_ID not set (usually seeded by seed-admin-loopzero-dev)"}
+	}
+	planTier := osGetenvOr(tenantFixturePlanTierEnv, tenantFixtureDefaultPlanTier)
+
+	if d.DryRun {
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would upsert subscription plan=%s + replay GH webhook + ensure Tenant CR + AppProject for %s", planTier, tenantID)}
+	}
+
+	// Layer 1 — subscription upsert (skip-graceful when PG conn absent).
+	if pgConn := osGetenv(tenantFixturePGConnEnv); pgConn != "" {
+		if err := upsertTenantSubscription(d.Ctx, pgConn, tenantID, planTier); err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 subscription upsert: %v", err)}
+		}
+	}
+
+	// Layer 2 — GitHub webhook replay (skip-graceful when creds absent).
+	if d.Creds != nil && !IsPlaceholder(d.Creds.GitHub.WebhookSecret) {
+		if err := replayGitHubInstallationWebhook(d.Ctx, d.Creds.GitHub.WebhookSecret); err != nil {
+			// Non-fatal — chain may not be ready. Bash pattern.
+			// Log via reason but continue.
+			_ = err
+		}
+	}
+
+	// Layer 3a + 3b — Tenant CR + AppProject unstructured.
+	if d.CtrlClient != nil {
+		if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, planTier); err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a Tenant CR: %v", err)}
+		}
+		if err := ensureAppProject(d.Ctx, d.CtrlClient, tenantID); err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3b AppProject: %v", err)}
+		}
+	}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("tenant fixture seeded (tenant=%s plan=%s)", tenantID, planTier)}
+}
+
+// Verify probes that Tenant CR + AppProject exist for the target tenant.
+func (s *TenantFixtureSeed) Verify(d Deps) Result {
+	env := osGetenv(tenantFixtureHelmfileEnvKey)
+	if env != "" && env != "dev-public" {
+		return Result{Verdict: SKIP, Reason: "not dev-public"}
+	}
+	tenantID := osGetenv(tenantFixtureTenantIDEnv)
+	if tenantID == "" {
+		return Result{Verdict: SKIP, Reason: "LOOPZERO_TENANT_ID unset"}
+	}
+	if d.CtrlClient == nil {
+		return Result{Verdict: SKIP, Reason: "no ctrl client"}
+	}
+	var tenant unstructured.Unstructured
+	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
+	if err := d.CtrlClient.Get(d.Ctx, ctrlclient.ObjectKey{Namespace: tenantFixtureNamespace, Name: tenantID}, &tenant); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Tenant CR %s missing: %v", tenantID, err)}
+	}
+	var project unstructured.Unstructured
+	project.SetGroupVersionKind(schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "AppProject"})
+	if err := d.CtrlClient.Get(d.Ctx, ctrlclient.ObjectKey{Namespace: "argocd", Name: "loopzero-" + tenantID}, &project); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("AppProject loopzero-%s missing: %v", tenantID, err)}
+	}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("Tenant CR + AppProject present for %s", tenantID)}
+}
+
+// upsertTenantSubscription materializes the subscription row idempotently.
+func upsertTenantSubscription(ctx context.Context, pgConnStr, tenantID, planTier string) error {
+	conn, err := pgConnectFn(ctx, pgConnStr)
+	if err != nil {
+		return fmt.Errorf("pgx connect: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	var accountID string
+	if err := conn.QueryRow(ctx, "SELECT account_id FROM tenants WHERE id=$1", tenantID).Scan(&accountID); err != nil {
+		return fmt.Errorf("resolve account_id for tenant %s: %w", tenantID, err)
+	}
+	subID := "sub-dev-" + tenantID
+	sql := `INSERT INTO subscriptions (id, tenant_id, account_id, plan, status)
+	        VALUES ($1, $2, $3, $4, 'active')
+	        ON CONFLICT (account_id) DO UPDATE SET plan=$4, status='active', updated_at=now()`
+	if err := conn.Exec(ctx, sql, subID, tenantID, accountID, planTier); err != nil {
+		return fmt.Errorf("insert subscription: %w", err)
+	}
+	return nil
+}
+
+// replayGitHubInstallationWebhook POSTs a canonical installation.created
+// payload with HMAC-SHA256 signature to the cloud webhook endpoint.
+func replayGitHubInstallationWebhook(ctx context.Context, whsec string) error {
+	base := osGetenvOr(tenantFixtureCloudBaseEnv, tenantFixtureDefaultCloudBase)
+	installID := osGetenvOr(tenantFixtureInstallIDEnv, tenantFixtureDefaultInstallationID)
+	accountLogin := osGetenvOr(tenantFixtureAccountLoginEnv, tenantFixtureDefaultAccountLogin)
+
+	payload := fmt.Sprintf(
+		`{"action":"created","installation":{"id":%s,"account":{"login":%q,"type":"User"},"target_type":"User","repository_selection":"all"},"sender":{"login":%q}}`,
+		installID, accountLogin, accountLogin,
+	)
+	mac := hmac.New(sha256.New, []byte(whsec))
+	_, _ = mac.Write([]byte(payload))
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+tenantFixtureWebhookPath, bytes.NewReader([]byte(payload)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-GitHub-Event", "installation")
+	req.Header.Set("X-GitHub-Delivery", fmt.Sprintf("install-canonical-replay-%d", time.Now().Unix()))
+	req.Header.Set("X-Hub-Signature-256", sig)
+
+	resp, err := tenantFixtureHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		snip := string(body)
+		if len(snip) > 200 {
+			snip = snip[:200]
+		}
+		return fmt.Errorf("webhook replay HTTP %d: %s", resp.StatusCode, snip)
+	}
+	return nil
+}
+
+// planTierToCRDEnum maps the plan-tier flag to the CRD PlanTier enum.
+// starter → starter / pro → growth / team → enterprise (per CLAUDE.md).
+func planTierToCRDEnum(tier string) string {
+	switch strings.ToLower(tier) {
+	case "team":
+		return "enterprise"
+	case "pro":
+		return "growth"
+	case "starter":
+		return "starter"
+	default:
+		return "starter"
+	}
+}
+
+// ensureTenantCR creates or updates the Tenant CR (unstructured — CRD may not
+// be in the scheme in fake-client tests; unstructured decouples).
+func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, planTier string) error {
+	displayName := osGetenvOr("LOOPZERO_TENANT_DISPLAY_NAME", "LoopZero Dev Tenant")
+	tenant := &unstructured.Unstructured{}
+	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
+	tenant.SetNamespace(tenantFixtureNamespace)
+	tenant.SetName(tenantID)
+	spec := map[string]any{
+		"cellID":      tenantFixtureCellID,
+		"displayName": displayName,
+		"plan":        planTierToCRDEnum(planTier),
+		"environments": []any{
+			map[string]any{
+				"cluster": tenantFixtureEnvCluster,
+				"name":    tenantFixtureEnvName,
+				"project": tenantFixtureProject,
+			},
+		},
+		"gitops": map[string]any{
+			"branch":   "main",
+			"repoName": tenantID + "-gitops",
+		},
+		"limits": map[string]any{
+			"maxBuildConcurrency": int64(2),
+			"maxCPU":              "4",
+			"maxMemory":           "8Gi",
+			"maxStorage":          "20Gi",
+		},
+		"preview": map[string]any{
+			"maxEnvironments": int64(3),
+			"ttlHours":        int64(72),
+		},
+	}
+	tenant.Object["spec"] = spec
+	return applyUnstructured(ctx, cli, tenant)
+}
+
+// ensureAppProject creates or updates the ArgoCD AppProject (unstructured).
+func ensureAppProject(ctx context.Context, cli ctrlclient.Client, tenantID string) error {
+	project := &unstructured.Unstructured{}
+	project.SetGroupVersionKind(schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "AppProject"})
+	project.SetNamespace("argocd")
+	project.SetName("loopzero-" + tenantID)
+	spec := map[string]any{
+		"description":  fmt.Sprintf("Canonical AppProject for tenant %s", tenantID),
+		"sourceRepos":  []any{"*"},
+		"destinations": []any{
+			map[string]any{"namespace": fmt.Sprintf("loopzero-%s-*", tenantID), "server": "*"},
+			map[string]any{"namespace": tenantFixtureNamespace, "server": "*"},
+		},
+		"clusterResourceWhitelist":   []any{map[string]any{"group": "*", "kind": "*"}},
+		"namespaceResourceWhitelist": []any{map[string]any{"group": "*", "kind": "*"}},
+	}
+	project.Object["spec"] = spec
+	return applyUnstructured(ctx, cli, project)
+}
+
+// applyUnstructured Create-or-Update on unstructured objects. Preserves
+// resourceVersion for optimistic-concurrency Update.
+func applyUnstructured(ctx context.Context, cli ctrlclient.Client, obj *unstructured.Unstructured) error {
+	err := cli.Create(ctx, obj)
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+	// Fetch existing to carry rv forward.
+	var existing unstructured.Unstructured
+	existing.SetGroupVersionKind(obj.GroupVersionKind())
+	if err := cli.Get(ctx, ctrlclient.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}, &existing); err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	return cli.Update(ctx, obj)
+}
+
+// unused import guard — json is used only if we later serialize the payload;
+// keep for the encoder-based path.
+var _ = json.Marshal

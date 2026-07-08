@@ -264,7 +264,7 @@ run_step "8-seed-loki-cross-cluster" "(cd $REPO_ROOT/cmd/loopzero-ops && go run 
 # canonical dev-public tier. QA dogfooding 2026-06-21 caught the
 # Scale page showing `starter` plan ceiling 2 even after the canonical
 # chain ran — root cause was the env-shadowing path.
-run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh --team"
+run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loopzero-ops && LOOPZERO_PLAN_TIER=team go run . seed tenant-fixture ${VERIFY_FLAG:+--verify})"
 
 # Step 10 (NEW 2026-06-16) — admin-cli Hydra OAuth2 client.
 # Required for dogfood-login Suite 0 T5.4 (≥ 3 Hydra clients).
