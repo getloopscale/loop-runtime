@@ -30,4 +30,5 @@ func init() {
 	seedRegistry.Register(seed.NewStripeWebhookEndpointSeed())
 	seedRegistry.Register(seed.NewGitHubWebhookFixtureSeed())
 	seedRegistry.Register(seed.NewTenantFixtureSeed())
+	seedRegistry.Register(seed.NewAdminLoopzeroDevSeed())
 }

@@ -210,7 +210,7 @@ fi
 
 # Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
 # requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
-run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
+run_step "3-seed-admin-loopzero-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-loopzero-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
 # canonical identity. The seed-admin script is generic over EMAIL +
@@ -221,7 +221,7 @@ run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.s
 # recovery returns the anti-enumeration mute for their address.
 # Session is persisted to a separate file (~/.loopzero/redteam-qa-*) so
 # the admin session at the canonical path is not overwritten.
-run_step "3b-seed-redteam-qa-identity" "EMAIL=paulohenrique.java@gmail.com DISPLAY_NAME='Red Team QA' USERNAME=redteam-qa TENANT_SLUG=redteam-qa SESSION_FILE=\$HOME/.loopzero/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopzero/redteam-qa-session-jwt.txt bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
+run_step "3b-seed-redteam-qa-identity" "(cd $REPO_ROOT/cmd/loopzero-ops && EMAIL=paulohenrique.java@gmail.com SESSION_FILE=\$HOME/.loopzero/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopzero/redteam-qa-session-jwt.txt go run . seed admin-loopzero-dev)"
 
 # Step 5 (M15 W1: migrated to loopzero-ops seed; bash script deleted)
 run_step "5-seed-github-app-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed github-app-dev ${VERIFY_FLAG:+--verify})"

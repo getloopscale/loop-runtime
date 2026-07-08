@@ -1,0 +1,319 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package seed
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// kratosAdminStub is a minimal Kratos admin+public API stub for hermetic tests.
+type kratosAdminStub struct {
+	mu           sync.Mutex
+	existingID   string
+	created      bool
+	putSetPw     bool
+	loginFlowID  string
+	sessionValue string
+}
+
+func newKratosStub(t *testing.T, existingIdentityID string) (*kratosAdminStub, *httptest.Server) {
+	t.Helper()
+	stub := &kratosAdminStub{existingID: existingIdentityID, sessionValue: "session-cookie-abc123"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stub.mu.Lock()
+		defer stub.mu.Unlock()
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/admin/identities") && r.URL.RawQuery != "" && r.Method == http.MethodGet:
+			// List by credentials_identifier
+			if stub.existingID != "" {
+				_ = json.NewEncoder(w).Encode([]kratosIdentity{{ID: stub.existingID}})
+			} else {
+				_, _ = w.Write([]byte("[]"))
+			}
+		case r.URL.Path == "/admin/identities" && r.Method == http.MethodPost:
+			stub.created = true
+			stub.existingID = "id-newly-created"
+			_ = json.NewEncoder(w).Encode(kratosIdentity{ID: stub.existingID})
+		case strings.HasPrefix(r.URL.Path, "/admin/identities/") && r.Method == http.MethodGet:
+			// Fetch identity for PUT base
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":     stub.existingID,
+				"traits": map[string]any{"email": "admin@loopzero.example"},
+			})
+		case strings.HasPrefix(r.URL.Path, "/admin/identities/") && r.Method == http.MethodPut:
+			stub.putSetPw = true
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(kratosIdentity{ID: stub.existingID})
+		case r.URL.Path == "/self-service/login/browser" && r.Method == http.MethodGet:
+			// Emit a flow with action URL pointing back to this server.
+			stub.loginFlowID = "flow-abc"
+			resp := map[string]any{
+				"id": stub.loginFlowID,
+				"ui": map[string]any{
+					"action": srv().URL + "/self-service/login",
+					"nodes":  []any{},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+		case r.URL.Path == "/self-service/login" && r.Method == http.MethodPost:
+			// Set the ory_kratos_session cookie in the response.
+			http.SetCookie(w, &http.Cookie{Name: "ory_kratos_session", Value: stub.sessionValue, Path: "/"})
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"session":{"id":"s1"}}`))
+		case r.URL.Path == "/sessions/whoami" && r.Method == http.MethodGet:
+			c, err := r.Cookie("ory_kratos_session")
+			if err != nil || c.Value != stub.sessionValue {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"identity": map[string]any{
+					"traits": map[string]string{"email": "admin@loopzero.example"},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	return stub, srv
+}
+
+// srv is a placeholder to enable closure-referenced URL in newKratosStub.
+// We rebuild by referencing the outer server via wrapper.
+func srv() *httptest.Server { return currentTestServer.Load().(*httptest.Server) }
+
+// currentTestServer holds the active httptest.Server for a test. Reset in
+// each test via storeTestServer.
+var currentTestServer = new(atomicHolder)
+
+type atomicHolder struct {
+	mu  sync.Mutex
+	val any
+}
+
+func (a *atomicHolder) Store(v any) { a.mu.Lock(); a.val = v; a.mu.Unlock() }
+func (a *atomicHolder) Load() any   { a.mu.Lock(); defer a.mu.Unlock(); return a.val }
+
+func TestLoadAdminConfig_UsesDefaults(t *testing.T) {
+	defer stubEnv(t, map[string]string{})()
+	cfg := loadAdminConfig()
+	if cfg.Email != adminDefaultEmail {
+		t.Errorf("Email = %q, want %q", cfg.Email, adminDefaultEmail)
+	}
+	if cfg.SeedPassword != adminSeedPassword {
+		t.Errorf("SeedPassword default not applied")
+	}
+	if cfg.PublicKratosURL != adminDefaultPublicKratos {
+		t.Errorf("PublicKratosURL default = %q", cfg.PublicKratosURL)
+	}
+}
+
+func TestLoadAdminConfig_EnvOverride(t *testing.T) {
+	defer stubEnv(t, map[string]string{
+		adminEmailEnv:        "other@loopzero.example",
+		adminSeedPasswordEnv: "custom-pw",
+		adminPublicKratosEnv: "https://other-kratos",
+		adminKratosAdminEnv:  "http://127.0.0.1:54434",
+	})()
+	cfg := loadAdminConfig()
+	if cfg.Email != "other@loopzero.example" {
+		t.Errorf("Email = %q", cfg.Email)
+	}
+	if cfg.SeedPassword != "custom-pw" {
+		t.Errorf("SeedPassword override not applied")
+	}
+	if cfg.KratosAdminURL != "http://127.0.0.1:54434" {
+		t.Errorf("KratosAdminURL not applied")
+	}
+}
+
+func TestAdminLoopzeroDev_SkipWhenKratosAdminUnset(t *testing.T) {
+	defer stubEnv(t, map[string]string{})()
+	got := NewAdminLoopzeroDevSeed().Run(Deps{Ctx: context.Background()})
+	if got.Verdict != SKIP {
+		t.Fatalf("Verdict = %s (%s), want SKIP", got.Verdict, got.Reason)
+	}
+}
+
+func TestAdminLoopzeroDev_DryRunReports(t *testing.T) {
+	defer stubEnv(t, map[string]string{adminKratosAdminEnv: "http://x"})()
+	got := NewAdminLoopzeroDevSeed().Run(Deps{Ctx: context.Background(), DryRun: true})
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "dry-run") {
+		t.Errorf("Reason = %q", got.Reason)
+	}
+}
+
+func TestKratosResolveOrCreateIdentity_ReusesExisting(t *testing.T) {
+	stub, server := newKratosStub(t, "id-existing")
+	currentTestServer.Store(server)
+	defer server.Close()
+	cfg := AdminLoopzeroDevConfig{Email: "admin@loopzero.example", KratosAdminURL: server.URL}
+	id, err := kratosResolveOrCreateIdentity(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if id != "id-existing" {
+		t.Errorf("id = %q, want id-existing", id)
+	}
+	if stub.created {
+		t.Error("stub reports created=true when identity was existing")
+	}
+}
+
+func TestKratosResolveOrCreateIdentity_CreatesWhenAbsent(t *testing.T) {
+	stub, server := newKratosStub(t, "")
+	currentTestServer.Store(server)
+	defer server.Close()
+	cfg := AdminLoopzeroDevConfig{
+		Email:       "admin@loopzero.example",
+		DisplayName: "LoopZero Admin",
+		KratosAdminURL: server.URL,
+	}
+	id, err := kratosResolveOrCreateIdentity(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if id == "" {
+		t.Fatal("empty id after create")
+	}
+	if !stub.created {
+		t.Error("stub reports created=false when identity should have been POSTed")
+	}
+}
+
+func TestKratosSetIdentityPassword_PUTHashes(t *testing.T) {
+	stub, server := newKratosStub(t, "id-x")
+	currentTestServer.Store(server)
+	defer server.Close()
+	cfg := AdminLoopzeroDevConfig{
+		SeedPassword:   "pw",
+		KratosAdminURL: server.URL,
+	}
+	if err := kratosSetIdentityPassword(context.Background(), cfg, "id-x"); err != nil {
+		t.Fatalf("password reset: %v", err)
+	}
+	if !stub.putSetPw {
+		t.Error("PUT was not called (Kratos v26 requires PUT — JSON Patch stores cleartext)")
+	}
+}
+
+func TestKratosMintSessionCookie_ReturnsCookie(t *testing.T) {
+	_, server := newKratosStub(t, "id-x")
+	currentTestServer.Store(server)
+	defer server.Close()
+	cfg := AdminLoopzeroDevConfig{
+		Email:            "admin@loopzero.example",
+		SeedPassword:     "pw",
+		PublicKratosURL:  server.URL,
+		KratosAdminURL:   server.URL,
+	}
+	cookie, err := kratosMintSessionCookie(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if cookie != "session-cookie-abc123" {
+		t.Errorf("cookie = %q, want session-cookie-abc123", cookie)
+	}
+}
+
+func TestAdminWriteSessionFile_Mode0600(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "sub", "sub2", "session.txt")
+	if err := adminWriteSessionFile(target, "cookie-value"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %o, want 0600", info.Mode().Perm())
+	}
+	body, _ := os.ReadFile(target)
+	if string(body) != "cookie-value" {
+		t.Errorf("content = %q", body)
+	}
+}
+
+func TestAdminEnsurePGState_ExecutesCanonicalStatements(t *testing.T) {
+	conn := &stubPgConn{}
+	defer stubPG(t, conn)()
+	cfg := AdminLoopzeroDevConfig{
+		Email: "admin@loopzero.example", Username: "admin",
+		DisplayName: "LoopZero Admin", TenantSlug: "admin", PGConn: "postgres://x",
+	}
+	if err := adminEnsurePGState(context.Background(), cfg, "kratos-id-1"); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	// Verify all 7 canonical statements ran.
+	if len(conn.execs) != 7 {
+		t.Fatalf("statements run = %d, want 7 (users + accounts + tenants + tenant_members + user_identity_map + users update + subscriptions)", len(conn.execs))
+	}
+	joined := strings.ToLower(func() string {
+		var b strings.Builder
+		for _, e := range conn.execs {
+			b.WriteString(e.sql)
+			b.WriteByte(' ')
+		}
+		return b.String()
+	}())
+	for _, want := range []string{
+		"insert into users",
+		"insert into accounts",
+		"insert into tenants",
+		"insert into tenant_members",
+		"insert into user_identity_map",
+		"update users",
+		"insert into subscriptions",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing canonical statement: %s", want)
+		}
+	}
+}
+
+func TestAdminLoopzeroDev_Verify_PassWhenCookieValid(t *testing.T) {
+	_, server := newKratosStub(t, "id-x")
+	currentTestServer.Store(server)
+	defer server.Close()
+	dir := t.TempDir()
+	sessionFile := filepath.Join(dir, "session.txt")
+	_ = os.WriteFile(sessionFile, []byte("session-cookie-abc123"), 0o600)
+	defer stubEnv(t, map[string]string{
+		adminSessionFileEnv:  sessionFile,
+		adminPublicKratosEnv: server.URL,
+	})()
+	got := NewAdminLoopzeroDevSeed().Verify(Deps{Ctx: context.Background()})
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+}
+
+func TestAdminLoopzeroDev_Verify_FailWhenSessionFileEmpty(t *testing.T) {
+	dir := t.TempDir()
+	sessionFile := filepath.Join(dir, "session.txt")
+	_ = os.WriteFile(sessionFile, []byte(""), 0o600)
+	defer stubEnv(t, map[string]string{adminSessionFileEnv: sessionFile})()
+	got := NewAdminLoopzeroDevSeed().Verify(Deps{Ctx: context.Background()})
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+}
+
+func TestAdminLoopzeroDev_Name(t *testing.T) {
+	if got := NewAdminLoopzeroDevSeed().Name(); got != "admin-loopzero-dev" {
+		t.Errorf("Name = %q", got)
+	}
+}
