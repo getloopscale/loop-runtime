@@ -259,7 +259,7 @@ run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed broke
 run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"
 
 # Step 8
-run_step "8-seed-loki-cross-cluster" "bash $SCRIPT_DIR/seed-loki-cross-cluster.sh $VERIFY_FLAG"
+run_step "8-seed-loki-cross-cluster" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed loki-cross-cluster ${VERIFY_FLAG:+--verify})"
 
 # Step 9
 # #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
