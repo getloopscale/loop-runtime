@@ -317,7 +317,7 @@ run_step "15b-seed-stripe-api-keys" "(cd $REPO_ROOT/cmd/loopzero-ops && go run .
 # signature validation even if events arrived. Idempotent: skips when
 # endpoint already exists AND whsec canonical. SKIP graceful when
 # stripe.api_key placeholder/missing (standalone-multi tier).
-run_step "15c-seed-stripe-webhook-endpoint-canonical" "bash $SCRIPT_DIR/seed-stripe-webhook-endpoint-canonical.sh $VERIFY_FLAG"
+run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed stripe-webhook-endpoint ${VERIFY_FLAG:+--verify})"
 
 # Step 16 (NEW 2026-07-01 — plan dashboard-badge-data-plane-poller T6.1) —
 # data-plane poller first-tick warm-up. EC-2 absorption: without this,

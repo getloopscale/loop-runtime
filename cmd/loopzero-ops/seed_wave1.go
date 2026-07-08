@@ -27,4 +27,5 @@ func init() {
 	seedRegistry.Register(seed.NewBrokerSeed())
 	seedRegistry.Register(seed.NewLokiCrossClusterSeed())
 	seedRegistry.Register(seed.NewPatchKratosSeed())
+	seedRegistry.Register(seed.NewStripeWebhookEndpointSeed())
 }
