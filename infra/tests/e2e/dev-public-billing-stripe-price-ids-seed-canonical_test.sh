@@ -11,7 +11,7 @@
 #   * Root cause: STRIPE_PRICE_{STARTER,PRO,TEAM} env vars unset no pod
 #     loopzero-cloud → PriceIDForPlan("pro") retorna "" →
 #     `internal/routes/billing.go:216` emite 503 BILLING_NOT_CONFIGURED.
-#   * Fix: seed-stripe-api-keys-canonical.sh lê `stripe.price_{starter,pro,
+#   * Fix: `loopzero-ops seed stripe-api-keys` lê `stripe.price_{starter,pro,
 #     team}` do dev-credentials.json e materializa no Secret
 #     `loopzero-stripe-api-keys` alongside STRIPE_API_KEY. Restart do #154
 #     garante que o pod pega os novos env vars.
@@ -30,7 +30,7 @@
 # Slug:           billing-stripe-price-ids-seed-canonical
 # Issue:          loopzero/loopzero#155
 # Family:         #154 (billing routes 404) — this closes the follow-up layer
-# Closed by:      infra/scripts/local/seed-stripe-api-keys-canonical.sh (extended)
+# Closed by:      infra/scripts/local/`loopzero-ops seed stripe-api-keys` (extended)
 # Allowlist:      .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (#155)
 # Companion (CI): infra/tests/check-seed-stripe-api-keys-canonical-syntax_test.sh (extended)
 

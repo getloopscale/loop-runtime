@@ -171,7 +171,7 @@ log "persisted whsec to $CREDS_FILE stripe.webhook_secret"
 (cd "$REPO_ROOT/cmd/loopzero-ops" && go run . seed stripe-webhook-secret --verify)
 
 # --- Layer 5: rollout restart loopzero-cloud so pod picks up new whsec ---
-# Matches sibling seed-stripe-api-keys-canonical.sh #154 rollout pattern.
+# Matches sibling `loopzero-ops seed stripe-api-keys` (M15 W1) #154 rollout pattern.
 log "rollout restart deployment/loopzero-cloud (pod boot re-reads envFrom secretRef)"
 kubectl --context "$MGMT_CONTEXT" -n loopzero-system rollout restart deployment/loopzero-cloud
 kubectl --context "$MGMT_CONTEXT" -n loopzero-system rollout status deployment/loopzero-cloud --timeout=120s

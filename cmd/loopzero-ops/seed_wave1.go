@@ -10,4 +10,5 @@ import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
 func init() {
 	seedRegistry.Register(seed.NewGitHubAppDevSeed())
 	seedRegistry.Register(seed.NewStripeWebhookSecretSeed())
+	seedRegistry.Register(seed.NewStripeAPIKeysSeed())
 }

@@ -314,7 +314,7 @@ run_step "15-seed-stripe-webhook-secret" "(cd $REPO_ROOT/cmd/loopzero-ops && go 
 # Step 15b (NEW 2026-06-24 — plan stripe-l2-wiring-canonical-fix T3.2) —
 # loopzero-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;
 # separate rotation cadence: webhook secret vs API key per Stripe runbook).
-run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-keys-canonical.sh $VERIFY_FLAG"
+run_step "15b-seed-stripe-api-keys" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed stripe-api-keys ${VERIFY_FLAG:+--verify})"
 
 # Step 15c (NEW 2026-07-01 — Red Team loopzero-cloud#156) — Stripe test-mode
 # webhook endpoint provisioning + real whsec capture. Without this the

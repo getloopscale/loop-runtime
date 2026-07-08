@@ -31,6 +31,15 @@ type KubeClient interface {
 	// WaitDeploymentReady blocks until the Deployment's readyReplicas ==
 	// spec.replicas or the timeout elapses (apimachinery wait, blueprint T4).
 	WaitDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error
+	// RolloutRestartDeployment triggers a pod rollout by bumping the
+	// `kubectl.kubernetes.io/restartedAt` annotation on the Deployment template
+	// — same mechanism as `kubectl rollout restart`. Idempotent: two calls in
+	// rapid succession produce distinct annotation values.
+	//
+	// SKIP-friendly: NotFound → nil (returning error) so callers can decide
+	// whether a missing Deployment is a hard failure (bash returned exit 1
+	// in that case; the sibling seed's rollout is post-apply and non-fatal).
+	RolloutRestartDeployment(ctx context.Context, namespace, name string) error
 }
 
 // kubeClient is the production KubeClient backed by a controller-runtime client.
@@ -72,6 +81,22 @@ func (k *kubeClient) GetSecret(ctx context.Context, namespace, name string) (*co
 		return nil, fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
 	}
 	return &s, nil
+}
+
+func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, name string) error {
+	var d appsv1.Deployment
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
+		return fmt.Errorf("get deployment %s/%s: %w", namespace, name, err)
+	}
+	if d.Spec.Template.ObjectMeta.Annotations == nil {
+		d.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+	}
+	d.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] =
+		time.Now().UTC().Format(time.RFC3339)
+	if err := k.c.Update(ctx, &d); err != nil {
+		return fmt.Errorf("update deployment %s/%s: %w", namespace, name, err)
+	}
+	return nil
 }
 
 func (k *kubeClient) WaitDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error {
