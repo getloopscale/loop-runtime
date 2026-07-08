@@ -275,11 +275,8 @@ run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture
 # Complements bootstrap-oauth-clients.sh (which provisions loopzero-cli +
 # loopzero-bootstrap) with the admin-side client_credentials path.
 # Per reference_admin_cli_hydra_client_canonical memory.
-if [[ -x "$SCRIPT_DIR/seed-admin-hydra-client-canonical.sh" ]]; then
-  run_step "10-seed-admin-hydra-client-canonical" "bash $SCRIPT_DIR/seed-admin-hydra-client-canonical.sh $VERIFY_FLAG"
-else
-  skip_step "10-seed-admin-hydra-client-canonical" "script not yet present"
-fi
+# Step 10 (M15 W2: migrated to loopzero-ops seed; bash script deleted)
+run_step "10-seed-admin-hydra-client" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-hydra-client ${VERIFY_FLAG:+--verify})"
 
 # Step 11 (NEW 2026-06-16) — connect canonical fixture (project "teste" +
 # repo link). Required by LIVE wrappers that probe /projects/teste/* paths.

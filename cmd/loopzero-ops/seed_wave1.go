@@ -18,4 +18,5 @@ func init() {
 	seedRegistry.Register(seed.NewArgoCDTokenSeed())
 	seedRegistry.Register(seed.NewGiteaTokenSeed())
 	seedRegistry.Register(seed.NewHydraURLsSeed())
+	seedRegistry.Register(seed.NewAdminHydraClientSeed())
 }
