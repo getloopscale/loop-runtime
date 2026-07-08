@@ -22,4 +22,5 @@ func init() {
 	// Wave 3 — complex + multi-cluster
 	seedRegistry.Register(seed.NewVaultCrossClusterAddrSeed())
 	seedRegistry.Register(seed.NewVaultRoleIDSyncSeed())
+	seedRegistry.Register(seed.NewNetworkingCrossClusterCorednsSeed())
 }
