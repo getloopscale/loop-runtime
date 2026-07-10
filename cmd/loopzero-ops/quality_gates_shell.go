@@ -37,6 +37,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sprintsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -817,5 +818,33 @@ func runArchiveScriptRepoRoot(args []string) int {
 		return 1
 	}
 	fmt.Println("archive-script-repo-root: PASS — no 3-dirs-up REPO_ROOT resolution in archive/canonical-tests-v1/scripts/local/")
+	return 0
+}
+
+// runNoCloudDevDefault enforces T1.1 of plan m1-commit-canonical-30-fixes —
+// no test/seed script may declare a default env-var value pointing at
+// `cloud-dev.loopzero.example` (Caddy 301 redirect trap). Webhook handler is
+// the single exception (EC-1 absorption).
+// Migrated from infra/tests/check-no-cloud-dev-default_test.sh
+// (M-Migrate2 2026-07-10 M16 T2.3 Wave 1).
+func runNoCloudDevDefault(args []string) int {
+	fs := flag.NewFlagSet("no-cloud-dev-default", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := nocloud.Check(nocloud.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		fmt.Fprintln(os.Stderr, "Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
+		return 1
+	}
+	fmt.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
 	return 0
 }
