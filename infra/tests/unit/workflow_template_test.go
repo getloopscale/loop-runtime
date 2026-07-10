@@ -13,7 +13,18 @@ import (
 )
 
 // cwtDir returns the path to the ClusterWorkflowTemplate YAML files.
+// F27 (M23 audit 2026-07-10): CWTs migrated from `infra/helm/argo-workflows/
+// templates/` to `charts/loopzero-build-cwts/templates/` when Argo Workflows moved
+// to the published-chart tier. Fall back to legacy path only if new path absent
+// (both paths tolerated).
 func cwtDir() string {
+	// New canonical location (charts/loopzero-build-cwts/templates/)
+	newPath := filepath.Join(helmDir(), "..", "..", "charts", "loopzero-build-cwts", "templates")
+	if info, err := os.Stat(newPath); err == nil && info.IsDir() {
+		if matches, _ := filepath.Glob(filepath.Join(newPath, "cwt-*.yaml")); len(matches) > 0 {
+			return newPath
+		}
+	}
 	return filepath.Join(helmDir(), "argo-workflows", "templates")
 }
 

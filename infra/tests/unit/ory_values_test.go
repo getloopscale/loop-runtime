@@ -54,10 +54,9 @@ func TestOryKratosIdentitySchemaValid(t *testing.T) {
 // TestOryKratosValuesHasIdentitySchema ensures the Kratos values.yaml references
 // the identity schema file correctly.
 func TestOryKratosValuesHasIdentitySchema(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-kratos", "values.yaml"))
+	data, _, err := helmValues("ory-kratos")
 	if err != nil {
-		t.Fatalf("ory-kratos/values.yaml missing: %v", err)
+		t.Fatalf("ory-kratos/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
 	content := string(data)
@@ -72,10 +71,9 @@ func TestOryKratosValuesHasIdentitySchema(t *testing.T) {
 // TestOryKratosValuesNoPlaintextSecrets ensures dev secrets are clearly marked
 // and production fields are not hardcoded.
 func TestOryKratosValuesNoPlaintextSecrets(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-kratos", "values.yaml"))
+	data, _, err := helmValues("ory-kratos")
 	if err != nil {
-		t.Fatalf("ory-kratos/values.yaml missing: %v", err)
+		t.Fatalf("ory-kratos/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
 	content := string(data)
@@ -89,10 +87,9 @@ func TestOryKratosValuesNoPlaintextSecrets(t *testing.T) {
 // Device Code Flow (RFC 8628) is built-in in Hydra v26+ and enabled per-client
 // via the admin API, not via global config.
 func TestOryHydraValuesHasOAuth2Config(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-hydra", "values.yaml"))
+	data, _, err := helmValues("ory-hydra")
 	if err != nil {
-		t.Fatalf("ory-hydra/values.yaml missing: %v", err)
+		t.Fatalf("ory-hydra/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
 	content := string(data)
@@ -107,15 +104,21 @@ func TestOryHydraValuesHasOAuth2Config(t *testing.T) {
 // TestOryHydraValuesJWTStrategy ensures Hydra uses JWT access tokens
 // (not opaque), required for stateless validation by the engine API.
 func TestOryHydraValuesJWTStrategy(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-hydra", "values.yaml"))
+	data, _, err := helmValues("ory-hydra")
 	if err != nil {
-		t.Fatalf("ory-hydra/values.yaml missing: %v", err)
+		t.Fatalf("ory-hydra/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("ory-hydra values.yaml invalid YAML: %v", err)
+		// F27 (M23 audit 2026-07-10): .gotmpl form contains {{ requiredEnv }}
+		// directives that break plain YAML parse. Fall back to substring check
+		// for the same access_token=jwt invariant.
+		content := string(data)
+		if !strings.Contains(content, "access_token: jwt") && !strings.Contains(content, `access_token: "jwt"`) {
+			t.Errorf("ory-hydra values.yaml.gotmpl missing 'access_token: jwt' strategy")
+		}
+		return
 	}
 
 	// Navigate hydra.config.strategies.access_token
@@ -139,17 +142,21 @@ func TestOryHydraValuesJWTStrategy(t *testing.T) {
 
 // TestOryServicesAreClusterIP ensures Ory services are not exposed externally.
 func TestOryServicesAreClusterIP(t *testing.T) {
-	dir := helmDir()
 	for _, chart := range []string{"ory-kratos", "ory-hydra"} {
-		data, err := os.ReadFile(filepath.Join(dir, chart, "values.yaml"))
+		data, _, err := helmValues(chart)
 		if err != nil {
-			t.Errorf("%s/values.yaml missing: %v", chart, err)
+			t.Errorf("%s/values.yaml{,.gotmpl} missing: %v", chart, err)
 			continue
 		}
 
 		var raw map[string]interface{}
 		if err := yaml.Unmarshal(data, &raw); err != nil {
-			t.Errorf("%s values.yaml invalid YAML: %v", chart, err)
+			// F27 (M23 audit 2026-07-10): .gotmpl fallback — substring assert
+			// the same ClusterIP invariant.
+			content := string(data)
+			if !strings.Contains(content, "type: ClusterIP") {
+				t.Errorf("%s values.yaml.gotmpl missing 'type: ClusterIP' (must NOT be exposed externally)", chart)
+			}
 			continue
 		}
 

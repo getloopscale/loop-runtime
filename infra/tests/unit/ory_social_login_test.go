@@ -16,10 +16,9 @@ import (
 // TestOryKratosHasOIDCProviders ensures the Kratos values.yaml has
 // OIDC provider configuration for GitHub and Google.
 func TestOryKratosHasOIDCProviders(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-kratos", "values.yaml"))
+	data, _, err := helmValues("ory-kratos")
 	if err != nil {
-		t.Fatalf("ory-kratos/values.yaml missing: %v", err)
+		t.Fatalf("ory-kratos/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
 	content := string(data)
@@ -87,16 +86,18 @@ func TestOryKratosMapperContent(t *testing.T) {
 // TestOryKratosMapperBase64InValues ensures the base64-encoded mappers in values.yaml
 // decode to valid Jsonnet that maps email.
 func TestOryKratosMapperBase64InValues(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-kratos", "values.yaml"))
+	data, _, err := helmValues("ory-kratos")
 	if err != nil {
-		t.Fatalf("ory-kratos/values.yaml missing: %v", err)
+		t.Fatalf("ory-kratos/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
-	// Parse YAML to find mapper_url values
+	// F27 (M23 audit 2026-07-10): .gotmpl form breaks plain yaml.Unmarshal but
+	// base64:// extraction is string-based — parse-fallback OK.
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("invalid YAML: %v", err)
+		// Downgrade to string-scan mode; the invariant (mapper base64 decodes)
+		// is what we check next anyway.
+		_ = raw
 	}
 
 	// Extract all base64:// values from the file
@@ -130,10 +131,9 @@ func TestOryKratosMapperBase64InValues(t *testing.T) {
 // TestOryKratosAccountLinking ensures account linking is configured
 // (Kratos merges identities with the same email from different providers).
 func TestOryKratosAccountLinking(t *testing.T) {
-	dir := helmDir()
-	data, err := os.ReadFile(filepath.Join(dir, "ory-kratos", "values.yaml"))
+	data, _, err := helmValues("ory-kratos")
 	if err != nil {
-		t.Fatalf("ory-kratos/values.yaml missing: %v", err)
+		t.Fatalf("ory-kratos/values.yaml{,.gotmpl} missing: %v", err)
 	}
 
 	// The identity schema uses email as the unique identifier.

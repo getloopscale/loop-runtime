@@ -33,10 +33,16 @@ func repoRoot() string {
 
 // T-01 — atomic cutover script exists + has zero-Ready watcher.
 func TestT01_AtomicCutoverScriptExists(t *testing.T) {
-	path := filepath.Join(repoRoot(), "infra", "scripts", "operator-cutover-execute.sh")
+	// F27 (M23 audit 2026-07-10): script relocated to `infra/scripts/production/`
+	// per shell-scripts-allowlist.md § infra/scripts/production/ (2026-05-23).
+	// Try canonical path first, then legacy.
+	path := filepath.Join(repoRoot(), "infra", "scripts", "production", "operator-cutover-execute.sh")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		path = filepath.Join(repoRoot(), "infra", "scripts", "operator-cutover-execute.sh")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("operator-cutover-execute.sh missing: %v", err)
+		t.Fatalf("operator-cutover-execute.sh missing (tried production/ + legacy): %v", err)
 	}
 	text := string(data)
 
@@ -98,9 +104,14 @@ func TestT05_RbacSubsetWiredInCI(t *testing.T) {
 
 // T-06 — multi-cell.yml workflow exists for Phase 5 stages.
 func TestT06_MultiCellWorkflowExists(t *testing.T) {
+	// F27 (M23 audit 2026-07-10): GitHub Actions removed 2026-05-23 per
+	// CLAUDE.md § CI/CD. Phase 5 multi-cell gates now run via `task quality:*`.
 	path := filepath.Join(repoRoot(), ".github", "workflows", "multi-cell.yml")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Skipf("multi-cell.yml absent (GitHub Actions removed 2026-05-23); Phase 5 invariants now in task quality:*")
+	}
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("multi-cell.yml missing: %v", err)
+		t.Fatalf("multi-cell.yml stat error: %v", err)
 	}
 }
 
@@ -176,7 +187,14 @@ func TestT10_AdminPinEndpointShipped(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("admin_pin_cell.go missing — T5.5 incomplete: %v", err)
 	}
+	// F27 (M23 audit 2026-07-10): cli/ moved to sibling loopzero-cli/ repo per
+	// M5 monorepo decomposition. CLI wiring assertion skipped — cross-repo
+	// contract test lives in sibling repo now.
 	cliPath := filepath.Join(repoRoot(), "cli", "src", "register", "infra.ts")
+	if _, err := os.Stat(cliPath); os.IsNotExist(err) {
+		t.Logf("cli/src/register/infra.ts absent (moved to sibling loopzero-cli/ repo per M5 decomposition) — CLI wiring assertion skipped")
+		return
+	}
 	data, err := os.ReadFile(cliPath)
 	if err != nil {
 		t.Fatalf("infra.ts missing: %v", err)

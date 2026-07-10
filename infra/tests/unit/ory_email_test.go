@@ -106,9 +106,10 @@ func TestEmailTemplatesValidURLs(t *testing.T) {
 }
 
 func TestKratosHTTPCourierConfigured(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(helmDir(), "ory-kratos", "values.yaml"))
+	// F27 (M23 audit 2026-07-10): use helmValues() to tolerate .gotmpl variant.
+	data, _, err := helmValues("ory-kratos")
 	if err != nil {
-		t.Fatalf("values.yaml missing: %v", err)
+		t.Fatalf("ory-kratos values.yaml{,.gotmpl} missing: %v", err)
 	}
 	content := string(data)
 	// MEET-036: DigitalOcean blocks SMTP — using Resend HTTP API instead.
