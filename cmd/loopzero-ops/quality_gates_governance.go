@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfiledevserverdeny"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpubliocidcredirectsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
@@ -550,5 +551,32 @@ func runDevPublicBillingPortalSyntax(args []string) int {
 		return 1
 	}
 	fmt.Println("dev-public-billing-portal-syntax: PASS — 8/8 hermetic assertions on infra/tests/e2e/dev-public-billing-portal_test.sh (M20 T2.1)")
+	return 0
+}
+
+// runDevPublicOIDCRedirectSyntax is the Go home for M22 T2.1 Wave A gate 2/17
+// (M-Migrate2 canonical shape reused verbatim from M20 T2.1 devpublicbillingportalsyntax).
+func runDevPublicOIDCRedirectSyntax(args []string) int {
+	fs := flag.NewFlagSet("dev-public-oidc-redirect-syntax", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := devpubliocidcredirectsyntax.Check(devpubliocidcredirectsyntax.Config{RepoRoot: *root})
+	if err != nil {
+		if len(outcome.Failures) == 0 {
+			fmt.Fprintf(os.Stderr, "dev-public-oidc-redirect-syntax: %v\n", err)
+			return 5
+		}
+		fmt.Fprintf(os.Stderr, "dev-public-oidc-redirect-syntax: FAIL — %d assertion(s) violated:\n", len(outcome.Failures))
+		for _, v := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("dev-public-oidc-redirect-syntax: PASS — 9/9 hermetic assertions on infra/tests/e2e/dev-public-oidc-redirect_test.sh (M22 T2.1)")
 	return 0
 }

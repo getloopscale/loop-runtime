@@ -52,6 +52,7 @@ var gateRegistry = []gateSpec{
 	{"caddyfile-csp", "Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).", runCaddyfileCSP},
 	{"caddyfile-dev-server-deny", "Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.", runCaddyfileDevServerDeny},
 	{"dev-public-billing-portal-syntax", "Hermetic contract for infra/tests/e2e/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.", runDevPublicBillingPortalSyntax},
+	{"dev-public-oidc-redirect-syntax", "Hermetic contract for infra/tests/e2e/dev-public-oidc-redirect_test.sh — 9 assertions (bash -n / strict-mode / log+assert+test_provider / OIDC provider ref / Kratos browser flow path / exit-code / allowlisted). M22 T2.1 Wave A gate 2/17.", runDevPublicOIDCRedirectSyntax},
 	{"cli-bundle-size", "Guards the CLI published bundle size against regression.", runCLIBundleSize},
 	{"cli-exit-codes", "Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).", runCLIExitCodes},
 	{"clusterimagepolicy-mode", "Validates the sigstore ClusterImagePolicy enforcement mode.", runClusterImagePolicyMode},
