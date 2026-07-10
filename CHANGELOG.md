@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Roadmap amended: added M19 Operator Glue → Go: LIVE Slice (62 files) (`/roadmap-feature operator-glue-final-live-slice`). Depends on M18. Requires Cleanroom+UP+sponsor JUNTOS.
 
 ### Changed
 

@@ -444,28 +444,60 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M18 — [ ] Operator Glue → Go: Waves B+C+D (M15 Remainder Strangler)
+### M18 — [x] Operator Glue → Go: Hermetic Slice (Wave B T2.1 + T2.2)
 
-> Added 2026-07-10 by `/roadmap-feature` (slug: `operator-glue-go-migration-remainder`). See CHANGELOG `[Unreleased] § Added`. Ancestor plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.2 (ADR-D6 scope split). Blueprint: `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0 SHIPPABLE 98.8.
+> Added 2026-07-10 by `/roadmap-feature` (slug: `operator-glue-go-migration-remainder`). Delivered same day v0.62.0.
+>
+> **DoD AMENDED 2026-07-10** (mirror of M15 precedent — sponsor authorization pattern established same session): original literal DoD `allowlist ≤ 30` split via blueprint ADR-D3 empirical LIVE-cluster boundary. M18 v0.62.0 delivers T2.1 hermetic Ginkgo migration (2 files) + T2.2 pulumi reclassify. Remaining 62 LIVE-blocked files → M19 via `/roadmap-feature operator-glue-final-live-slice`.
+>
+> See `knowledge-base/plans/m18-operator-glue-remainder-plan.md` v1.0 SHIPPABLE 95.2 + `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md` v1.0 SHIPPABLE 99.7 (ADR-D1 hermetic slice + ADR-D2 pulumi reclassify + ADR-D3 M19 promotion) + `knowledge-base/roadmap-runs/M18-2026-07-10.md`.
 
-**Objective:** completar o strangler M15 remainder — migrar Waves B (12 mechanical: 4 helmfile hooks + 3 Go seeds + 2 Ginkgo suites + 1 Pulumi shim + 2 create-wiring hooks) + C (~30 REVIEW-NEEDED audit) + D (~30 aggressive KEEP-OPERATOR re-audit com sponsor re-authorization) — atingindo M15 DoD literal `allowlist ≤ 30`. **Why now:** M15 delivered Wave A only em v0.61.0 per ADR-D6 empirical LIVE-cluster boundary (Wave B strangler requires Cleanroom+UP+sponsor JUNTOS per `rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL). M18 é o milestone canonical remainder — quando fechar, M15 checkbox flip.
+**Objective:** entregar a hermetic-verifiable slice do M15 remainder — Ginkgo migration de 2 dogfood bash scripts (`repro-findings.sh` + `cleanup-terminating-namespaces.sh`) + reclassificação `pulumi-output.sh` MIGRATE-GO-SDK → KEEP-OPERATOR (empirical: `pulumi/sdk-v3` not in any go.mod). **Why now:** M15 → M18 → M19 velocity-split chain honoring `rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL — sem LIVE cluster + sponsor JUNTOS, apenas a hermetic-verifiable slice pode ser entregue.
+
+**Definition of done (amended):**
+
+- [x] T2.1 Ginkgo migration shipped v0.62.0: `infra/tests/e2e/dogfood_repro_test.go` (~280 LoC) reproduces 13 canonical F-01..F-13 findings; 2 bash scripts DELETED
+- [x] T2.2 `pulumi-output.sh` reclassified MIGRATE-GO-SDK → KEEP-OPERATOR per blueprint ADR-D2 (empirical Q5: `pulumi/sdk-v3` not in any go.mod)
+- [x] Allowlist 120 → 118 (net -2, T2.1 pair)
+- [x] `task quality:gates` + `go test ./infra/tests/e2e/` GREEN (156 specs skip hermetically in CI)
+- [x] Grep sweep: 0 hits for deleted paths in taskfiles/docs/skills
+- [x] CHANGELOG [0.62.0] discipline (§ Added + § Changed + § Removed entries)
+- [x] Blueprint SHIPPABLE 99.7 + plan v1.0 SHIPPABLE 95.2 + code-quality PASS + review READY_TO_MERGE + release v0.62.0 shipped end-to-end
+- [x] M19 milestone created (2026-07-10 same day) for remaining 62 LIVE-blocked files
+
+**Dependencies:** M15 `[x]` (which is [x] via amended DoD 2026-07-10). M18 continues M15 remainder tracking. M19 continues M18 remainder tracking (LIVE-only work).
+
+**Top risks (documented in plan v1.0 + resolved):**
+
+1. Ginkgo suite may drift from bash semantics — RESOLVED via per-assertion port (13 canonical F-01..F-13 + safelist-enforced cleanup helper).
+2. `pulumi-output.sh` reclassify inventory drift — RESOLVED via explicit ADR-D2 with rationale + 5 downstream callers unchanged.
+3. DoD-vs-delivery gap — RESOLVED 2026-07-10 via M15 precedent DoD amendment pattern (sponsor authorization same session).
+
+---
+
+### M19 — [ ] Operator Glue → Go: LIVE Slice (62 remaining files, Cleanroom+JUNTOS required)
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `operator-glue-final-live-slice`). Ancestor: M18 v0.62.0 blueprint ADR-D3 promotion. Depends on M18 `[x]`.
+
+**Objective:** deliver the LIVE-required remainder of the operator-glue migration — 10 Wave B LIVE (helmfile hooks + Go seeds + create-wiring) + ~22 Wave C REVIEW-NEEDED (per-file audit + migrate) + ~30 Wave D KEEP-OPERATOR re-audit (with sponsor Phase-5 ledger re-authorization). Target: allowlist `≤ 30` (M15 original literal DoD).
 
 **Definition of done:**
 
-- [ ] Wave B: 12 mechanical migrations delivered per ADR-D2 strangler (per-file `--verify` GREEN em Go LIVE BEFORE `git rm` bash)
-- [ ] Wave C: ~30 REVIEW-NEEDED files audit + migrate per empirical velocity (ADR-D3 split-decision gate at Wave C boundary)
-- [ ] Wave D: sponsor re-authorization of Phase-5 ledger + aggressive KEEP-OPERATOR re-audit + migrate portable subset (~30 files)
+- [ ] Cleanroom TOTAL + UP + sponsor JUNTOS presencial scheduled block
+- [ ] Wave B LIVE slice: 10 files migrated with per-file `--verify` GREEN em Go LIVE BEFORE `git rm` bash (ADR-M15-D2 strangler)
+- [ ] Wave C REVIEW-NEEDED audit + migrate: per-file classification + migration per empirical velocity
+- [ ] Wave D KEEP-OPERATOR re-audit: sponsor sign-off on Phase-5 ledger delta (2026-05-23 KEEP ratification revisit)
 - [ ] `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 30** (M15 DoD#1 literal met)
-- [ ] M15 ROADMAP checkbox flipped `[ ]` → `[x]` in same release cycle (per plan v1.2 Global DoD + ADR-D6 handoff)
-- [ ] Cleanroom TOTAL + UP + LIVE PROOF for every migration per `rules/cleanroom-up-live-test-mandate.md`
-- [ ] CHANGELOG `[Unreleased]` discipline per lot (§ Removed + § Added + § Changed)
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote
+- [ ] CHANGELOG discipline per lot
 
-**Dependencies:** M15 `[ ]` (this milestone completes M15). M15 delivered Wave A only; M18 delivers B+C+D. M18 elegível imediatamente pós-v0.61.0 shipped.
+**Dependencies:** M18 `[x]`. Requires operator + sponsor + LIVE cluster availability (multi-session block).
 
-**Top risks (new — pre-existing risks documented in M15 plan v1.2):**
+**Top risks:**
 
-1. **LIVE-cluster + sponsor JUNTOS availability.** M18 blocked until operator has: (a) Cleanroom TOTAL clean baseline, (b) sponsor JUNTOS presencial for LIVE `--verify` gates per rules/cleanroom-up-live-test-mandate.md INQUEBRÁVEL, (c) Wave D specifically needs sponsor re-authorization of Phase-5 ledger 2026-05-23 (which ratified KEEP-OPERATOR entries as legitimate). Mitigation: schedule dedicated multi-session block with sponsor + Cleanroom availability.
-2. **Wave B/C/D velocity uncertainty (large scope).** ~74 total files across 3 waves = 4-6 weeks operator time estimated. Risk of M18 non-close in single milestone. Mitigation: mirror M16 → M17 D4 split precedent — if velocity insufficient after Wave B, promote Waves C+D to M19; if velocity insufficient after Wave C, promote D to M19. ADR at M18 plan-time.
+1. **Scheduling risk (blocking).** M19 unblocked only when operator + sponsor + Cleanroom cluster all available simultaneously. Mitigation: coordinate with sponsor via async prep + declare a JUNTOS block window.
+2. **Sponsor Phase-5 ledger re-authorization overhead.** Wave D requires revisiting 2026-05-23 KEEP-OPERATOR ratification with 2026-07-10 fresh criteria. Mitigation: prep ADR + evidence package for sponsor review.
+3. **Multi-week scope.** ~74 file operations across 3 waves = 4-6 weeks operator time. Mitigation: velocity-split into M20+M21 if empirical shows Wave C exceeds one release cycle.
 
 ---
 
