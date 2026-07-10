@@ -23,6 +23,7 @@
 package e2e
 
 import (
+	"log"
 	"os"
 	"os/exec"
 )
@@ -93,14 +94,22 @@ func clusterKubectlArgs(role ClusterRole) []string {
 	if testEnv == "drill" {
 		drillDir := os.Getenv("DRILL_KUBECONFIG_DIR")
 		if drillDir == "" {
-			panic("[cluster_kubectl_helpers] LOOPZERO_TEST_ENV=drill requires DRILL_KUBECONFIG_DIR pointing at /tmp/drill-kc/")
+			// M23 T4.1 (F18): panic() -> log.Fatalf() to remove stack-trace noise
+			// and provide a clean single-line CI error. Full t.Skipf/t.Fatalf
+			// refactor would require signature cascade to 40+ callers (many of
+			// which have no *testing.T in scope, e.g., kubectlForCluster and its
+			// wrappers kubectlBuild, kubectlMgmt, kubectlWorkload). Per parsimony
+			// ladder rung 2 (stdlib does it), log.Fatalf is the FAANG-appropriate
+			// pragmatic fix: fail-fast, fail-clear, no whole-suite stack noise.
+			log.Fatalf("[cluster_kubectl_helpers] LOOPZERO_TEST_ENV=drill requires DRILL_KUBECONFIG_DIR pointing at /tmp/drill-kc/ — set DRILL_KUBECONFIG_DIR before running drill tests")
 		}
 		return []string{"kubectl", "--kubeconfig", drillDir + "/" + drillFileFor(role), "--insecure-skip-tls-verify"}
 	}
 
 	// Prod resolver — stub (future-ready per ADR-2026-05-20-D5)
 	if testEnv == "prod" {
-		panic("[cluster_kubectl_helpers] LOOPZERO_TEST_ENV=prod not yet supported — operator action: implement prod kubeconfig resolver per ADR D5")
+		// M23 T4.1 (F18): same rationale as drill branch above.
+		log.Fatalf("[cluster_kubectl_helpers] LOOPZERO_TEST_ENV=prod not yet supported — operator action: implement prod kubeconfig resolver per ADR-2026-05-20-D5")
 	}
 
 	// Default: local k3d (LOOPZERO_TEST_ENV=k3d or unset)
