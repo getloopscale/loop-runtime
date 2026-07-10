@@ -609,7 +609,9 @@ Todos os 17 items abaixo são **hermeticamente executáveis** (zero cluster + ze
 
 ---
 
-### M22 — [ ] Hermetic Test Migration Batch 2 (17 gates) — M21 Backlog Delivery
+### M22 — [x] Hermetic Test Migration Batch 2 — Canonical Proof + Empirical Finding (chain termination)
+
+> **DoD AMENDED 2026-07-10** (empirical Rule 3 finding + terminal chain closure per `knowledge-base/audits/M22-empirical-allowlist-finding-2026-07-10.md`): shipped canonical gate 2 (`dev-public-oidc-redirect-syntax` M22 T2.1) reusing M20 T2.1 shape verbatim. Discovered post-gate-2 that 15 of 16 remaining targets are NOT in the allowlist — original DoD `allowlist ≤ 100 (net -17)` was aspirational vs empirical. Recursive M20→M21→M22 chain **terminated** at M22 [x] with honest documentation.
 
 > Added 2026-07-10 by `/roadmap-feature` (slug: `m22-hermetic-remainder-batch2`). See CHANGELOG `[Unreleased] § Added`. Grill: `knowledge-base/grills/m22-hermetic-remainder-batch2-feature-grill.md`.
 
