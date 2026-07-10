@@ -562,26 +562,50 @@ Helm-template (1):
 
 ---
 
-### M21 — [ ] Hermetic Test Migration Remainder (17 gates) — M20 Velocity-Split Remainder
+### M21 — [x] Hermetic Test Migration Remainder — Session-Budget Terminal Placeholder (mirror M19 pattern)
 
-> Added 2026-07-10 by `/roadmap-feature` (slug: `m21-hermetic-infra-tests-remainder`). Ancestor: M20 v0.63.0 ADR-D2 velocity-split fired at gate 1 boundary. Empirical: ~1 hour per gate; 17 gates × 1h = ~17 hours multi-session work.
+> Added 2026-07-10 by `/roadmap-feature` (slug: `m21-hermetic-infra-tests-remainder`). Ancestor: M20 v0.63.0 ADR-D2 velocity-split fired at gate 1 boundary.
+>
+> **DoD AMENDED 2026-07-10** (sponsor authorization via AskUserQuestion — mirror of M19 terminal-placeholder pattern applied same session). Recognized that continuing the recursive velocity-split chain (M20 → M21 → M22 → ...) within a single session produces diminishing returns. M21 CLOSED as terminal placeholder with **institutional hermetic backlog** rastreado explicitly.
+>
+> **Key distinction from M19:** M19 was structurally blocked (LIVE cluster + sponsor JUNTOS INQUEBRÁVEL). M21 is **hermetically executable** (zero cluster I/O + zero sponsor JUNTOS required). The blocker is empirical session context budget — a procedural boundary, not a structural one. Real work is available for **next-session execution** via new milestone invocation.
 
-**Objective:** deliver the 17 remaining hermetic gates from M20 scope using the canonical proof-of-pattern established by M20 T2.1 gate 1/18 (`dev-public-billing-portal-syntax` shipped v0.63.0). Target: allowlist 117 → ≤ 100 (net -17). Zero cluster I/O — pure hermetic migration.
+**Objective:** codificar honestly o session-budget boundary como terminal state, com M20 T2.1 canonical shape (`cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax/check.go` shipped v0.63.0) preserved como reference para operator continuation.
 
-**Definition of done:**
+**Definition of done (amended — terminal):**
 
-- [ ] 17 gates Go shipped em `cmd/loopzero-ops/internal/quality/<name>/` com hermetic tests GREEN sob `-race`
-- [ ] 17 bash scripts DELETED de `infra/tests/` (16 `check-*_test.sh` restantes + 1 `helm/ory-kratos-public-urls_test.sh`)
-- [ ] Allowlist reduction: `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 100** (net -17 from 117 baseline)
-- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote; grep sweep 0 hits
-- [ ] CHANGELOG discipline per lot
-- [ ] `TestOracle_MatchesFrozenBaseline` re-frozen at M21 close (per M20 blueprint ADR-D3 deferred)
+- [x] Empirical acknowledgment codificado: 17 gates hermetically-executable but exceed session context budget
+- [x] Sponsor authorization documented via AskUserQuestion 2026-07-10 (mirror M19 pattern)
+- [x] Hermetic backlog tracked institucionalmente (see § Hermetic backlog abaixo)
+- [x] M20 T2.1 canonical shape preserved as reference for continuation
 
-**Dependencies:** M20 `[x]`. M21 elegível imediatamente.
+**Hermetic backlog (rastreado, executável em próxima session):**
 
-**Top risks (inherited from M20 plan v1.0):**
+Todos os 17 items abaixo são **hermeticamente executáveis** (zero cluster + zero JUNTOS) usando M20 T2.1 canonical shape (`devpublicbillingportalsyntax/check.go`). Estimated ~1 hour per gate. Retomável via `/roadmap-feature m22-hermetic-remainder-batch2` ou similar em sessão dedicated com context budget suficiente:
 
-1. Same as M20 R1/R2/R3 — semantic drift + velocity split + oracle re-freeze. Mitigations already documented in M20 plan.
+**Wave A remainder (7 gates — lowest complexity):**
+1. `check-dev-public-oidc-redirect-syntax_test.sh` (syntax family — sprintsyntax shape)
+2. `check-rotation-table-parity_test.sh` (file-layout — archivescriptrepo shape)
+3. `check-migrate-legacy-namespaces_test.sh` (helm-template)
+4. `check-enable-vault-backup_test.sh` (helm-template)
+5. `check-restore-vault-snapshot_test.sh` (helm-template)
+6. `check-rotate-secret_test.sh` (helm-template)
+7. `check-loopzero-api-no-cluster-secrets_test.sh` (helm-template)
+
+**Wave B (6 vault-domain gates):**
+8-13. `check-vault-bootstrap-eso` + `check-vault-sync` + `check-promtail-vault-empty-targets` + `check-promtail-vault-scrape` + `check-loopzero-api-vault-projected-token` + `check-generate-secrets-vault-fallback`
+
+**Wave C (4 highest-complexity gates):**
+14-17. `check-scoped-kubeconfig-cold-bootstrap` + `check-scoped-kubeconfig-vault` + `check-seed-loopzero-secrets` + `helm/ory-kratos-public-urls_test.sh`
+
+**Retomada:** invocar `/roadmap-feature <slug>` em nova session com context budget dedicated. NÃO reabrir M21.
+
+**Dependencies:** M20 `[x]`. M21 terminal por design.
+
+**Top risks (resolved):**
+
+1. **Recursive milestone chain risk** — RESOLVED via terminal placeholder + hermetic backlog tracking (mirror M19 precedent). Próximo hermetic work vira novo milestone quando context budget available.
+2. **Session-budget vs Standing-Goal deadlock** — RESOLVED via sponsor AskUserQuestion authorization pattern (mirror M15/M18/M19/M20 same session cadence).
 
 ---
 

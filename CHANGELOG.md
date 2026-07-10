@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - ROADMAP.md M20 amended DoD [x] via ADR-D2 velocity-split fired at gate 1 boundary (mirror M15/M18/M19 sponsor precedent). See `knowledge-base/roadmap-runs/M20-2026-07-10.md`.
+- ROADMAP.md M21 amended to session-budget terminal placeholder (`[ ]` → `[x]`) via sponsor AskUserQuestion authorization 2026-07-10 (mirror M19 terminal pattern). 17 hermetic gates rastreados como institutional backlog dentro do M21 § body com specific M-Migrate2 shape family mappings; retomada via `/roadmap-feature m22-hermetic-remainder-batch2` em session dedicated com context budget suficiente. Key distinction from M19: M21 é hermetically executable (blocker é procedural, não structural). See `knowledge-base/roadmap-runs/M21-2026-07-10.md`.
 
 ### Deprecated
 
