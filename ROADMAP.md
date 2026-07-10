@@ -509,6 +509,57 @@ Todo trabalho abaixo requer **explicit sponsor JUNTOS + Cleanroom + UP** para se
 
 ---
 
+### M20 — [ ] Hermetic Test Migration Remainder: `infra/tests/check-*_test.sh` (17) + `helm/*_test.sh` (1) → Go Quality Gates
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `m20-hermetic-infra-tests-remainder`). See CHANGELOG `[Unreleased] § Added`. Grill: `knowledge-base/grills/m20-hermetic-infra-tests-remainder-feature-grill.md`.
+
+**Objective:** completar o strangler hermetic de `infra/tests/` migrando 17 `check-*_test.sh` restantes + `infra/tests/helm/ory-kratos-public-urls_test.sh` (18 total) para novos gates Go em `cmd/loopzero-ops/internal/quality/<name>/`, seguindo o padrão M-Migrate2 canonical estabelecido pelo M16 (2026-07-10 mesmo dia). **Why now:** (a) M16 provou o padrão empiricamente shipando 10 gates em 1 sessão (v0.60.0); (b) os 17+1 restantes são pure-logic (helm-template + bash-n + file-layout, zero cluster I/O); (c) allowlist 118 → ~100 hermeticamente sem sponsor JUNTOS + Cleanroom cluster; (d) fecha o débito do KPI M15/M18/M19 sem depender de LIVE session. Precedent técnico: M9 (`loopzero-ops quality` subcommand) + M16 canonical shape (`cmd/loopzero-ops/internal/quality/{sprintsyntax,archivescriptrepo,nocloud,...}/check.go`).
+
+**Scope (18 target files):**
+
+Vault domain (8):
+- `check-enable-vault-backup_test.sh`
+- `check-generate-secrets-vault-fallback_test.sh`
+- `check-restore-vault-snapshot_test.sh`
+- `check-vault-bootstrap-eso_test.sh`
+- `check-vault-sync_test.sh`
+- `check-promtail-vault-empty-targets_test.sh`
+- `check-promtail-vault-scrape_test.sh`
+- `check-loopzero-api-vault-projected-token_test.sh`
+
+Kubeconfig + secrets domain (5):
+- `check-scoped-kubeconfig-cold-bootstrap_test.sh`
+- `check-scoped-kubeconfig-vault_test.sh`
+- `check-seed-loopzero-secrets_test.sh`
+- `check-rotate-secret_test.sh`
+- `check-rotation-table-parity_test.sh`
+
+Ancillary (4):
+- `check-migrate-legacy-namespaces_test.sh`
+- `check-loopzero-api-no-cluster-secrets_test.sh`
+- `check-dev-public-billing-portal-syntax_test.sh`
+- `check-dev-public-oidc-redirect-syntax_test.sh`
+
+Helm-template (1):
+- `infra/tests/helm/ory-kratos-public-urls_test.sh`
+
+**Definition of done:**
+
+- [ ] 18 gates Go shipados em `cmd/loopzero-ops/internal/quality/<name>/` com hermetic tests GREEN sob `-race`
+- [ ] 18 bash scripts DELETED de `infra/tests/` (17 `check-*_test.sh` + 1 `helm/ory-kratos-public-urls_test.sh`); per-file byte-identical parity capture bash-then-Go antes de `git rm` (M-Migrate2 T2.0 baseline)
+- [ ] Allowlist reduction: `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 100** (net -18 rows do 118 baseline)
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote; grep sweep 0 hits em `taskfiles/`, `docs/` vivos, `.claude/skills/` para cada script deletado
+- [ ] CHANGELOG `[Unreleased]` discipline per lot: `§ Added` (Go gates) + `§ Removed` (bash scripts) + `§ Changed` (`taskfiles/quality.yml` wiring)
+
+**Dependencies:** M16 `[x]` (padrão M-Migrate2 canonical estabelecido pelos 10 gates shipados 2026-07-10 v0.60.0). M9 `[x]` implícito (loopzero-ops subcommand). M20 elegível imediatamente.
+
+**Top risks (new — pre-existing risks documented in M16 § Top risks):**
+
+1. **Semantic drift na tradução bash → Go (MEDIUM).** 6-8 dos 17 scripts usam padrões de assertion complexos (jq multi-line, yq com escape edge cases, YAML round-trip). Naive port pode perder cobertura silenciosamente — teste que passa hermetic em bash mas silently permite falso-negativo em Go é worse que ruído. **Mitigação:** byte-identical parity capture bash-then-Go antes de `git rm` (M-Migrate2 T2.0 baseline pattern); salvar output diff em `knowledge-base/audits/` como evidence per gate.
+2. **Velocity split-decision timing (LOW).** Se decidir muito tarde (após gate 12+), custo context-switch alto; se decidir muito cedo (gate 6), sinal empirical insuficiente. **Mitigação:** baseline capture at gate 8 boundary (metade) + explicit ADR-D<n> velocity-split mid-milestone conforme mirror M16 D4 protocol. Split-decision: se velocity < 8 gates/sessão, promover residual a M21 via `/roadmap-feature`.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |
