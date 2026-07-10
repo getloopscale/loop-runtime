@@ -195,6 +195,20 @@ app-dev.loopzero.example {
   # through every explicit handle — i.e., dashboard SPA routes, not API
   # paths. Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.3.
 
+  # loopzero-cloud#141 (SECURITY) defense-in-depth — explicit deny of
+  # dev-server-only paths that MUST NEVER be reachable on the public
+  # edge, even if a stale/dev build accidentally landed in DASHBOARD_DIST.
+  # Blocks source (/src/*), Vite runtime (/@vite/*, /@react-refresh),
+  # node_modules, config files (vite.config.*, tsconfig.*, package.json,
+  # package-lock.json), and secret env (/.env, /.env.*). Returns 404 (not
+  # 403) so the response gives no signal that the path was blocked —
+  # matches the "path does not exist" shape a prod-only build would return.
+  # Ordered before session/BFF handlers so nothing downstream can bypass.
+  @dev_server_only {
+    path /src/* /@vite/* /@react-refresh /node_modules/* /vite.config.* /tsconfig.* /package.json /package-lock.json /.env /.env.*
+  }
+  respond @dev_server_only 404
+
   handle /sessions/* {
     reverse_proxy localhost:14433 {
       header_up Host auth-dev.loopzero.example

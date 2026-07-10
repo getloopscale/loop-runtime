@@ -131,6 +131,36 @@ func TestPredefinedErrors(t *testing.T) {
 	}
 }
 
+// TestErrNoActiveRelease_MessageIsOperationNeutral pins the docstring
+// invariant on ErrNoActiveRelease (line 227-229 of errors.go): the
+// message is shared between promote AND rollback flows, so it must
+// NOT include the operation-specific verbs "promoting" or "rolling
+// back", nor the source-only noun "source environment".
+//
+// Regression protection for loopzero-cloud#166 (CRITICAL): user hit this
+// misleading message during a rollback path — the promote-flavored
+// wording ("source environment", "promoting or rolling back") sent
+// operators looking for a promote-side problem when the actual
+// upstream cause was state-divergence between env_targets.active_release_id
+// and releases.status. Fix: message operation-neutral so the CLI can
+// still surface it in both flows without falsely blaming one side.
+func TestErrNoActiveRelease_MessageIsOperationNeutral(t *testing.T) {
+	msg := ErrNoActiveRelease.Message
+
+	forbidden := []string{
+		"source environment", // promote-specific noun
+		"promoting",          // promote-specific verb
+	}
+	for _, term := range forbidden {
+		if strings.Contains(msg, term) {
+			t.Errorf("ErrNoActiveRelease.Message contains %q — docstring pins operation-neutral wording (loopzero-cloud#166). Full message: %q", term, msg)
+		}
+	}
+	if msg == "" {
+		t.Error("ErrNoActiveRelease.Message must not be empty")
+	}
+}
+
 func TestLoopZeroErrorUnwrap(t *testing.T) {
 	t.Run("Unwrap returns the cause", func(t *testing.T) {
 		cause := fmt.Errorf("database connection refused")

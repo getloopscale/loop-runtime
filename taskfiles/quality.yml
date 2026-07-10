@@ -63,6 +63,7 @@ tasks:
       - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality caddyfile-csp   # plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 — operator-local-edge Caddyfile invariants (no CSP / no Vite handle 404 / 4 preserved headers / reverse_proxy + plan kratos-self-service-rate-limit-systemic v1.1 invariants 12-15 rate-limit + trusted_proxies + register-route)
+      - /tmp/loopzero-ops quality caddyfile-dev-server-deny  # loopzero-cloud#141 defense-in-depth — app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*, /package.json)
       # F-wire-7 absorption: plan kratos-self-service-rate-limit-systemic v1.1 hermetic structural gates.
       - /tmp/loopzero-ops quality ory-kratos-lifespan                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/ory-kratos-lifespan_test.sh with pure-logic Go gate. T2.2 hermetic Kratos lifespan overlay golden test (source-level, section-scoped).
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
@@ -124,7 +125,7 @@ tasks:
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
       # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
       # + live-url-discoverability + status-url-probe (closes R1-F2 HIGH).
-      - bash infra/tests/check-dev-public-billing-portal-syntax_test.sh            # T5.1 ORPHAN companion 1/4
+      - /tmp/loopzero-ops quality dev-public-billing-portal-syntax                    # M20 T2.1 (2026-07-10) — migrated from check-dev-public-billing-portal-syntax_test.sh per M-Migrate2 canonical (M16 T2.1 sprintsyntax shape)
       - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
       # shell-lint advisory — invokes loopzero-ops quality shellcheck-advisory.
