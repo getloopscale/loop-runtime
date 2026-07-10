@@ -23,7 +23,6 @@
 package e2e
 
 import (
-	"log"
 	"os"
 	"os/exec"
 )
