@@ -67,10 +67,6 @@ func TestRegressionScriptHasAllBugChecks(t *testing.T) {
 	}
 }
 
-func TestRegressionMatrixDocumentsAllBugs(t *testing.T) {
-	t.Skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11")
-}
-
 func TestRegressionRunsAgainstLiveCluster(t *testing.T) {
 	if os.Getenv("LOOPZERO_REGRESSION_LIVE") == "" {
 		t.Skip("LOOPZERO_REGRESSION_LIVE not set — skipping live regression run")
@@ -371,24 +367,6 @@ func TestB31ImageTagsPinned(t *testing.T) {
 
 // TestB32ControllerImageRepository — controllers must use loopzero-tenant-controller
 // (the operators monolith binary), not loopzero-api (HTTP API server).
-func TestB32ControllerImageRepository(t *testing.T) {
-	t.Skip("loopzero-controller chart deleted T1.5 (commit 27cfe6cd) — split-operator image repos covered by per-chart Helm CI")
-	files := []string{
-		"../../helm/loopzero-controller/values.yaml",
-		"../../helm/tenant-controller/values.yaml",
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		s := string(data)
-		if !strings.Contains(s, "repository: registry.digitalocean.com/loopzero-system/loopzero-tenant-controller") {
-			t.Errorf("B32 regression: %s repository must be loopzero-tenant-controller (operators binary)", f)
-		}
-	}
-}
-
 // TestB33B36GenerateSecretsStandaloneFallback — script must create
 // loopzero-db-credentials and loopzero-cluster-kubeconfigs even without LOOPZERO_DB_HOST.
 func TestB33B36GenerateSecretsStandaloneFallback(t *testing.T) {
@@ -449,43 +427,7 @@ func TestB40LoopZeroApiServicePort3001(t *testing.T) {
 }
 
 // TestB41ControllersGiteaTokenEnv — controllers must map gitea-admin.token → GITEA_TOKEN.
-func TestB41ControllersGiteaTokenEnv(t *testing.T) {
-	t.Skip("loopzero-controller chart deleted T1.5 — Gitea token env covered by per-split-binary chart per ADR-0023")
-	files := []string{
-		"../../helm/loopzero-controller/templates/deployment.yaml",
-		"../../helm/tenant-controller/templates/deployment.yaml",
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		s := string(data)
-		if !strings.Contains(s, "name: GITEA_TOKEN") {
-			t.Errorf("B41 regression: %s must export env GITEA_TOKEN", f)
-		}
-	}
-}
-
 // TestB43ControllersBaseDomain — controllers require BASE_DOMAIN env.
-func TestB43ControllersBaseDomain(t *testing.T) {
-	t.Skip("loopzero-controller chart deleted T1.5 — BASE_DOMAIN env covered by per-split-binary chart per ADR-0023")
-	files := []string{
-		"../../helm/loopzero-controller/values.yaml",
-		"../../helm/tenant-controller/values.yaml",
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		s := string(data)
-		if !strings.Contains(s, "BASE_DOMAIN:") {
-			t.Errorf("B43 regression: %s missing BASE_DOMAIN env var", f)
-		}
-	}
-}
-
 // TestB44SmokeTestImageHasCurl — alpine/k8s bundles kubectl + curl;
 // bitnamilegacy/kubectl does NOT have curl.
 func TestB44SmokeTestImageHasCurl(t *testing.T) {
@@ -568,41 +510,7 @@ func TestB50LoopZeroCloudPort13002(t *testing.T) {
 }
 
 // TestB51ControllerRolesWildcard — both ClusterRoles must have loopzero.io: ["*"].
-func TestB51ControllerRolesWildcard(t *testing.T) {
-	t.Skip("loopzero-controller chart deleted T1.5 — split-operator RBAC verified by infra/tests/unit/split_operator_clusterrole_grants_test.go (per I-7 of operator-split-invariants matrix)")
-	files := []string{
-		"../../helm/loopzero-controller/templates/rbac.yaml",
-		"../../helm/tenant-controller/templates/rbac.yaml",
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		s := string(data)
-		// Need: apiGroups ["loopzero.io"] resources ["*"]
-		if !strings.Contains(s, `apiGroups: ["loopzero.io"]`) {
-			t.Errorf("B51 regression: %s missing loopzero.io apiGroup", f)
-		}
-		if !strings.Contains(s, `resources: ["*"]`) {
-			t.Errorf("B51 regression: %s ClusterRole must have resources:[\"*\"]  for loopzero.io (binary monolith watches all 10 CRDs)", f)
-		}
-	}
-}
-
 // TestB51LoopZeroControllerReplicaCountZero — leader election dedup.
-func TestB51LoopZeroControllerReplicaCountZero(t *testing.T) {
-	t.Skip("loopzero-controller chart deleted T1.5 — replica counts for 4 split charts verified by infra/pulumi/src/__tests__/operator-split-invariants.test.ts (I-5: replicaCount: 2 minimum)")
-	data, err := os.ReadFile("../../helm/loopzero-controller/values.yaml")
-	if err != nil {
-		t.Fatalf("read loopzero-controller values.yaml: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "replicaCount: 0") {
-		t.Errorf("B51 regression: loopzero-controller chart must replicaCount:0 (leader election dedup with tenant-controller)")
-	}
-}
-
 // TestB53ArgocdAppsValuesObject — at least 25 Apps must have helm.valuesObject.
 func TestB53ArgocdAppsValuesObject(t *testing.T) {
 	entries, err := os.ReadDir("../../argocd-bootstrap/apps")
@@ -841,23 +749,6 @@ func TestBootstrapClusterScript(t *testing.T) {
 // TestB66TenantControllerHasGiteaUrl — GITEA_URL must be in values for
 // tenant-controller (B66 fix). Without this, controller fails: "GITEA_TOKEN
 // is required" / circuit breaker open / connection refused.
-func TestB66TenantControllerHasGiteaUrl(t *testing.T) {
-	t.Skip("tenant-controller chart deleted T1.5 — Gitea URL env now in charts/loopzero-tenant-operator/ (post operator-split)")
-	for _, f := range []string{
-		"../../helm/tenant-controller/values.yaml",
-		"../../helm/loopzero-controller/values.yaml",
-	} {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		s := string(data)
-		if !strings.Contains(s, "GITEA_URL:") {
-			t.Errorf("B66 regression: %s must declare GITEA_URL env var", f)
-		}
-	}
-}
-
 // TestB77LoopZeroApiGiteaOrgConfigurable — loopzero-api setup files must read
 // orgName from cfg.GiteaOrg (env var GITEA_ORG), not hardcoded "loopzero".
 // Same pattern as B69 (operators) but applied to api/cmd/setup_*.go.
@@ -1131,27 +1022,6 @@ func TestB82StaticAssetsChartExists(t *testing.T) {
 // kubernetes.default.svc. In standalone-multi the workload is a separate
 // k3d cluster, so the env var MUST be present in the overlay or AppProject
 // + Application destinations land on the wrong (mgmt) cluster.
-func TestB82WorkloadClusterURLConfigurable(t *testing.T) {
-	t.Skip("tenant-controller chart deleted T1.5 — workload-cluster URL now sourced from ClusterCredential CR + cellmgr (cell-aware reconcile per Phase 1 plan-2026-05-15-close-all-gaps)")
-	overlay, err := os.ReadFile("../../helm/tenant-controller/values-standalone-multi.yaml")
-	if err != nil {
-		t.Fatalf("read tenant-controller standalone-multi overlay: %v", err)
-	}
-	o := string(overlay)
-	if !strings.Contains(o, "WORKLOAD_CLUSTER_URL") {
-		t.Error("B82 regression: tenant-controller standalone-multi overlay must set WORKLOAD_CLUSTER_URL — otherwise AppProject destination defaults to mgmt cluster and ArgoCD silently applies nothing")
-	}
-	// Code-level invariant: the controller must continue to read this env
-	// (regression catch if someone deletes it).
-	main, err := os.ReadFile("../../../operators/cmd/main.go")
-	if err != nil {
-		t.Fatalf("read operators/cmd/main.go: %v", err)
-	}
-	if !strings.Contains(string(main), `os.Getenv("WORKLOAD_CLUSTER_URL")`) {
-		t.Error("B82 regression: operators/cmd/main.go must read WORKLOAD_CLUSTER_URL env")
-	}
-}
-
 // TestB82ScopedKubeconfigK3dRewrite — in k3d the kubeconfig server defaults
 // to https://0.0.0.0:6444 which resolves to localhost inside any pod. The
 // scoped-kubeconfig.sh helper must rewrite this to the docker-bridge IP of
@@ -1349,29 +1219,6 @@ func TestF07VersionEndpointRegistered(t *testing.T) {
 // "rpc error: code = Unavailable" em loop. Overlay deve setar
 // LOOPZERO_TRACING_ENABLED=false. Em dev/prod o env não é setado → tracing
 // ativo via DefaultEndpoint (backward compat).
-func TestF10TracingDisabledInStandaloneMulti(t *testing.T) {
-	t.Skip("tenant-controller chart deleted T1.5 — tracing config now in charts/loopzero-tenant-operator/values.yaml (post operator-split)")
-	data, err := os.ReadFile("../../helm/tenant-controller/values-standalone-multi.yaml")
-	if err != nil {
-		t.Fatalf("read tenant-controller standalone-multi overlay: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "LOOPZERO_TRACING_ENABLED") {
-		t.Error("F-10 regression: standalone-multi overlay must set LOOPZERO_TRACING_ENABLED env")
-	}
-	if !strings.Contains(s, `LOOPZERO_TRACING_ENABLED: "false"`) {
-		t.Error("F-10 regression: LOOPZERO_TRACING_ENABLED must be \"false\" in standalone-multi (no otel-collector chart)")
-	}
-	// Default values.yaml NÃO seta LOOPZERO_TRACING_ENABLED — preserve dev/prod.
-	defaults, err := os.ReadFile("../../helm/tenant-controller/values.yaml")
-	if err != nil {
-		t.Fatalf("read tenant-controller defaults: %v", err)
-	}
-	if strings.Contains(string(defaults), "LOOPZERO_TRACING_ENABLED") {
-		t.Error("F-10 regression: default values.yaml must NOT set LOOPZERO_TRACING_ENABLED (only standalone-multi opts out)")
-	}
-}
-
 // TestF08LoopZeroApiServiceMonitorOptIn — chart DEVE renderizar metrics port
 // no Service + Deployment + ServiceMonitor opt-in via toggle. Em
 // standalone-multi sem prometheus-operator, ServiceMonitor não renderiza
@@ -1640,10 +1487,6 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 
 // TestADR0018C7_RolloutRunbookExists — C7 enforcement: runbook with
 // mandatory deployment order T3.3 → T3.1 → T3.2 + abort criteria + rollback.
-func TestADR0018C7_RolloutRunbookExists(t *testing.T) {
-	t.Skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11")
-}
-
 // TestT12ExitCodeContractTestExists — T1.2 (CHG-2026-04-29-DOGFOOD).
 // Garante que o fork-based exit code contract test exists e cobre matrix
 // mínima de comandos (auth-gated, validate, parse errors, help/version).

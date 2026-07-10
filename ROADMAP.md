@@ -719,6 +719,19 @@ Wave C (4 highest-complexity gates):
 
 2. **`time.Sleep → PollWithBackoff` refactor changes test timing semantics (MEDIUM).** The 41 sleep sites are distributed across e2e/, chaos/, load/, capacity/ — some may have implicit ordering assumptions the polling helper won't preserve (e.g., "wait exactly 3s so the next assertion sees the mid-canary state"). Refactor may pass hermetically but fail in Cleanroom where timing is jittery. **Mitigation:** run full Ginkgo suite with `-race` + `-count=3` (repeated runs) before-and-after each sub-batch; keep sleep for benchmark/rate-limit/chaos-sync (documented survivals per PR #2 scope). If a polling refactor introduces a new order-dependency, revert that specific site and document the survival.
 
+## Post-M23 backlog (deferred findings tracker per T7.1)
+
+The following findings from the 2026-07-10 `infra/tests/` code-review audit were explicitly deferred out of M23 scope (per plan v1.1 § Coverage Matrix EC-4 absorption). All are LOW/MEDIUM severity — none block the M23 goal metric (11 HIGH → 0 HIGH).
+
+- **F15** — God-file `load/real_deploy_test.go` + `real_deploy_harness.go` (1566 LoC combined). Deferred: orthogonal to systemic root cause; requires separate refactor discovery. Follow-up milestone: TBD.
+- **F16** — God-file `chaos/chaos_test.go` (759 LoC). Deferred: pre-dates per-scenario `c<N>` convention; requires chaos-domain expertise + separate discovery.
+- **F17** — God-file `dogfood/preflight.sh` (522 LoC). Deferred: allowlist-side "DELEGATE-HELMFILE" candidate — requires helmfile-side migration ADR (not test-side refactor).
+- **F21** — `charts/helpers_test.go` at 21 LoC (naming/merge-vs-expand decision). Deferred: LOW severity, ~15min opportunistic cleanup best batched with next `charts/` touch.
+- **F23** — 17 files marked `is_test=1` register 0 tests via counter (helpers vs malformed). Deferred: audit-per-file work (17 individual reads); most are legitimate `*_test.go` helpers per Go convention.
+- **F24** — INFO advisory: `infra/tests/` pyramid is by-design integration-heavy; do NOT fold into repo-wide pyramid analysis. Documented in Baseline Context glossary; no action required.
+
+Source: `code-review-output-infra-tests-2026-07-10/final_report.md` + `.claude/knowledge-base/plans/infra-tests-audit-remediation-plan.md` v1.1 § Coverage Matrix.
+
 ---
 
 ## State-of-the-art references

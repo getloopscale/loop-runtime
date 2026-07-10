@@ -53,14 +53,3 @@ func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testi
 	}
 }
 
-func TestOperatorMetricsRegistration_MonolithStillImports(t *testing.T) {
-	// The monolith `operators/cmd/main.go` was DELETED in T1.4 (ADR-0023
-	// operator-split, commit 27cfe6cd 2026-05-04 LOCAL cutover complete).
-	// The 4 split-binary main.go files (app/platform/preview/tenant-operator)
-	// each register their own metrics independently — verified by the
-	// per-binary test ABOVE this one. This "monolith still imports"
-	// pinning was migration-window safety, now structurally impossible
-	// to regress (no monolith binary exists). See finding
-	// `concepts/operations/finding-2026-05-15-infra-tests-load-regression-obsolete.md`.
-	t.Skip("monolith binary deleted T1.4 (commit 27cfe6cd) — 4 splits verified individually above")
-}

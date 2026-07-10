@@ -11,12 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Roadmap amended: added M23 Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening (`/roadmap-feature infra-tests-audit-remediation`). Source of scope: `code-review-output-infra-tests-2026-07-10/final_report.md` (2026-07-10 audit, 38 findings). Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Sponsor override of skill DO-NOT clause (refactor without user-visible change = ad-hoc mode) explicit — user chose milestone shape to give `cycle-roadmap` a single checkbox for the systemic quality-debt closure vs 5 fragmented ad-hoc releases.
 
 ### Changed
+- M23 T7.1: ROADMAP.md § Post-M23 backlog section added — tracks 6 explicitly-deferred findings (F15-F17 god-files, F21 charts/helpers 21 LoC, F23 17 zero-test files, F24 pyramid advisory) with rationale per plan v1.1 Coverage Matrix EC-4 absorption.
 
 ### Deprecated
 
 ### Removed
+- M23 T1.1: 4 permanent-Skip test functions citing "runbook files removed 2026-05-11" — replacement (docs/runbooks/) was deleted in same governance consolidation event, no unique coverage to preserve. Deletions: `infra/tests/load/regression_test.go:71+1644`, `l3_variants_test.go:247`, `unit/operator_cutover_invariants_test.go:72` (F1-F4).
+- M23 T1.2: 2 permanent-Skip test functions citing "monolith binary deleted T1.4 (commit 27cfe6cd)" — coverage confirmed at replacement paths: `TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics` (combined split test covers all 4 binaries) + 3 per-binary cache-scoping tests (`TestCacheScoping_TenantOperator/PlatformOperator/AppOperator`). Deletions: `infra/tests/unit/operator_metrics_registration_test.go:65`, `cache_scoping_test.go:116` (F5-F6).
+- M23 T1.3: 5 permanent-Skip test functions citing "loopzero-controller chart deleted T1.5" — replacement verified: `infra/pulumi/src/__tests__/operator-split-invariants.test.ts` contains I-5 replicaCount + I-7 RBAC invariants (4 matches). WARN: file is 8w stale in Pulumi legacy tree pending Terraform re-platform (per plan D3 EC-1 HC-4 absorption). Deletions: `regression_test.go:375,453,472,572,595` (F7).
+- M23 T1.4: 3 permanent-Skip test functions citing "tenant-controller chart deleted T1.5" — replacement verified at 2 paths: (a) `charts/loopzero-tenant-operator/values.yaml` (Gitea URL env + tracing config present, 3w fresh); (b) `operators/internal/environment/environment_controller.go` (RENAMED from `operators/internal/tenant/` per blueprint Q6 CRITICAL finding) contains cell-aware `RuntimeFactory` + `spec.cellID` reconcile logic. Deletions: `regression_test.go:845,1135,1353` (F8).
+- 14 test functions total deleted across 5 files; `regression_test.go` reduced 1762 → 1605 LoC (still god-file — T1.5 split deferred).
 
 ### Fixed
+- M23 T4.2 (F19): `cleanupWorkDir` in `infra/tests/e2e/journey_rollout_test.go:274` replaced `exec.Command("rm","-rf",path).Run()` with path-traversal-safe `os.RemoveAll(absPath)` per plan v1.1 ADR-D3 EC-1/EC-2 absorption. Added guards: filepath.Clean → filepath.Abs → filepath.Rel(tempRoot,absPath) rejects paths outside `os.TempDir()`; explicit rejection of bare `/tmp/` OR `os.TempDir()` root. Prevents catastrophic cleanup escape (e.g., attacker-controllable `/tmp/../etc/passwd` no longer passes HasPrefix + traversal).
 
 ### Security
 
