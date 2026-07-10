@@ -137,7 +137,7 @@ extraScrapeConfigs: |
   # to env_targets. Address `k3d-loopzero-workload-server-0:30030` is the
   # NodePort exposed by the workload monitoring chart; resolves via
   # the CoreDNS NodeHosts patch shipped by
-  # `infra/scripts/local/networking-cross-cluster-coredns.sh`.
+  # `loopzero-ops seed networking-cross-cluster-coredns` (M15 W3).
   # Same cross-cluster mechanism the Loki scrape uses (memory
   # `j17-aprendizado-coredns-cross-cluster-build-lb`).
   - job_name: workload-cluster-kube-state-metrics

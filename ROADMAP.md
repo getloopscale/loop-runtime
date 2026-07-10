@@ -392,6 +392,54 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
+### M15 — [ ] Operator Glue → Go: Allowlist ≤ 30 (Strangler Final)
+
+> Added 2026-07-08 by `/roadmap-feature` (slug: `operator-glue-go-migration`). See CHANGELOG `[Unreleased] § Added`. Grill (respondido via delegação sponsor `/goal` 2026-07-08): `knowledge-base/grills/operator-glue-go-migration-feature-grill.md`.
+
+**Objective:** completar o strangler de shell scripts até o alvo **literal** `allowlist ≤ 30` (hoje 142 entries / 189 scripts reais) — migrar os seeds canônicos post-Cleanroom + operator tools (`infra/scripts/`, `infra/helmfile/scripts/`, resíduo de `infra/tests/`) para **subcomandos Go do `loopzero-ops`** (precedente M9 `quality_subcmd`) e deletar o bash migrado, mantendo apenas glue operador irredutível (KEEP-OPERATOR re-justificado). **Why now:** CTO mandate 2026-07-08 (eliminação de shell scripts, tooling FAANG-level); o M13 fechou com o DoD#3 como *trajetória* — o alvo literal do `shell-script-strategic-plan` (2026-05-22) permanece aberto; o gate `no-new-bash` invertido estanca o crescimento mas não elimina o estoque.
+
+**Definition of done:**
+
+- [ ] `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 30** (KPI literal, invertido — encolhe, não cresce)
+- [ ] Seeds canônicos post-Cleanroom migrados para subcomandos Go `loopzero-ops seed <nome>` com paridade **LIVE `--verify` verde no Go ANTES do `git rm` do `.sh`** correspondente (strangler por-área, padrão M13)
+- [ ] Zero asserção de comportamento em bash: residual 100% KEEP-OPERATOR irredutível, cada entry re-auditada com justificativa D4 válida
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote de DELETE; zero referência quebrada a caminho deletado (grep sweep em `taskfiles/`, `docs/` vivos, `.claude/skills/` = 0 hits)
+- [ ] CHANGELOG `[Unreleased]`: `§ Removed` com os scripts deletados por lote; `§ Added` com os subcomandos Go novos
+
+**Dependencies:** M13 (a onda strangler que este milestone completa + gate inversion) e M9 (precedente `loopzero-ops` subcommand). Ambos `[x]` — M15 elegível imediatamente.
+
+**Top risks (new — pre-existing risks documented elsewhere in roadmap):**
+
+1. Perda de semântica de orquestração live-cluster na migração bash→Go (kubectl exec/port-forward com trap de cleanup, retry/backoff, idempotência de seeds) — mitigação: paridade por-seed (`--verify` LIVE verde no Go antes do delete do bash); nunca big-bang (precedente da falha 2026-05-23).
+2. Referências penduradas (runbooks, memories, Taskfile targets, `seed-post-cleanroom-all.sh` chain, skills) apontando para scripts deletados — mitigação: gate de referência (grep sweep DoD#4) + atualização dos consumidores no MESMO commit de cada lote.
+
+---
+
+### M16 — [ ] Hermetic Test Migration: `infra/tests/check-*_test.sh` → Go Quality Gates (Wave 1+2+3)
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `infra-tests-hermetic-to-quality-gates`). See CHANGELOG `[Unreleased] § Added`. Grill: `knowledge-base/grills/infra-tests-hermetic-to-quality-gates-feature-grill.md`.
+
+**Objective:** completar o strangler de `infra/tests/*.sh` migrando 27 hermetic scripts (`check-*_test.sh`, ~4,000 LoC bash) para novos gates Go em `cmd/loopzero-ops/internal/quality/<name>/`, seguindo o padrão M-Migrate2 estabelecido pelos 101 gates existentes + 20 seeds de M15. **Why now:** M15 estabeleceu o padrão + a KPI literal `allowlist ≤ 30`; sem M16 o KPI fica bloqueado por débito residual de 27 hermetic scripts em `infra/tests/`. Precedent técnico M9 (`loopzero-ops quality` subcommand) + escopo bem-delimitado (todos os candidatos são pure-logic: `helm template | jq/grep` + `bash -n` + file layout asserts, zero cluster I/O).
+
+**Definition of done:**
+
+- [ ] **Wave 1** — 3 syntax/layout gates migrados: `check-sprint-syntax_test.sh`, `check-archive-script-repo-root_test.sh`, `check-no-cloud-dev-default_test.sh` → 3 pkgs Go novos em `cmd/loopzero-ops/internal/quality/*/` registrados em `quality_registry.go`. Bash deletado. ~200 LoC bash → ~450 LoC Go.
+- [ ] **Wave 2** — 6 helm-template gates migrados: `check-loki-vault-retention`, `check-loki-retention-schema`, `check-loopzero-external-secrets-{chart-sanity,creation-policy}`, `check-vault-prom-alerts`, `check-day30-day60-cronjobs`, `check-openbao-init-auth-mounts`. Helm binary D1-exempt via `os/exec`. ~800 LoC bash → ~1,800 LoC Go.
+- [ ] **Wave 3** — 11 bash-target pair migrations: migrar (test + target script) juntos para não deixar test órfão — inclui `migrate-legacy-namespaces`, `rotate-secret`, `enable-vault-backup`, `restore-vault-snapshot`, `seed-loopzero-secrets`, `vault-sync`, `generate-secrets-vault-fallback`, `promtail-vault-{scrape,empty-targets}`, `scoped-kubeconfig-{cold-bootstrap,vault}`. ~4,000 LoC bash → ~6,000 LoC Go. Split em Wave 3a/3b OU promote para M17 se ritmo indicar risco de non-close.
+- [ ] Allowlist reduction quantificada: `allowlist -= 27` (target subset — não substitui M15 KPI global de `≤ 30`).
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote de DELETE; zero regressão.
+- [ ] Padrão M-Migrate2 seguido rigidamente por gate: pkg Go + hermetic test + registro em `quality_registry.go` + `git rm` bash + CHANGELOG `§ Removed` + `§ Added`.
+- [ ] Zero referência pendurada (grep sweep obrigatório): 0 hits em `taskfiles/*`, `docs/*`, `.claude/skills/*` após cada DELETE.
+
+**Dependencies:** M13 (bash strangler completion + gate `no-new-bash` invertido) + M15 (padrão M-Migrate2 estabelecido pelos 20 seeds). M13 é `[x]`; M15 é `[ ]` in-progress — M16 elegível quando M15 fechar.
+
+**Top risks (new — pre-existing risks documented elsewhere in roadmap):**
+
+1. **Perda de semântica de assertion na tradução bash → Go.** Bash tests usam `grep -q` + `jq` + `bash -n` com sutilezas de escape/quoting que podem drift na Go port. Um teste que passa hermetico em bash mas silently permite falso-negativo em Go é worse que ruído. Mitigação: **byte-for-byte parity** por gate — rodar bash + rodar Go em modo comparativo antes de `git rm`; salvar output diff em `knowledge-base/audits/` como evidence.
+2. **Wave 3 scope creep — 11 pares bash-target migrados juntos.** Migrar 11 pares (test + target) é 2-3x maior que Waves 1+2 juntos (~4,000 LoC bash + ~6,000 LoC Go, 2-3 semanas). Risco de milestone não fechar em 1 release cycle. Mitigação: **split Wave 3 em 3a (6 pares mais simples) + 3b (5 mais complexos)** OU **promover Wave 3 para M17** se estourar prazo. Decision no meio do M16 baseado no ritmo real de Waves 1+2.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |

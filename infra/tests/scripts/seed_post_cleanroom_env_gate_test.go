@@ -58,14 +58,15 @@ func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 	// the env-gated block. We detect this by checking that between the
 	// gate condition and the run_step line, there are no `else` or `fi`
 	// tokens that would close the block prematurely.
-	if !stepIsInsideEnvGate(body, "patch-kratos-dev-public.sh") {
-		t.Error("Step 4 (patch-kratos-dev-public) is NOT inside the LOOPZERO_HELMFILE_ENV=dev-public conditional — issue #99 regression")
+	// Migrated to Go seed 2026-07-08: the invocation is now `seed patch-kratos`.
+	if !stepIsInsideEnvGate(body, "seed patch-kratos") {
+		t.Error("Step 4 (patch-kratos) is NOT inside the LOOPZERO_HELMFILE_ENV=dev-public conditional — issue #99 regression")
 	}
 
 	// T4. Step 4b (seed-hydra-urls-canonical) MUST be inside the same
 	// env-gate block (or its own equivalent gate). Hydra URLs are
 	// equally dev-public-specific.
-	if !stepIsInsideEnvGate(body, "seed-hydra-urls-canonical.sh") {
+	if !stepIsInsideEnvGate(body, "seed hydra-urls") {
 		t.Error("Step 4b (seed-hydra-urls-canonical) is NOT inside the LOOPZERO_HELMFILE_ENV=dev-public conditional — issue #99 regression")
 	}
 
@@ -74,7 +75,8 @@ func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 	// fixture) MUST remain unconditional (or have their own independent
 	// gating logic, but NOT the dev-public env gate). Spot-check Steps 2
 	// and 5 — both env-agnostic.
-	for _, step := range []string{"seed-minio-canonical.sh", "seed-github-app-dev.sh"} {
+	// M15 Wave 1: seed-github-app-dev.sh → `loopzero-ops seed github-app-dev`.
+	for _, step := range []string{"seed minio", "seed github-app-dev"} {
 		if stepIsInsideEnvGate(body, step) {
 			t.Errorf("step %s is inside the env-gate but should remain unconditional — over-scoped fix", step)
 		}

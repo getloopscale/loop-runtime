@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package seed
+
+import (
+	"fmt"
+	"strings"
+)
+
+// StripeAPIKeysSeed is the Go port of
+// infra/scripts/local/seed-stripe-api-keys-canonical.sh.
+// It materializes loopzero-system/loopzero-stripe-api-keys with 4 keys:
+//
+//	STRIPE_API_KEY        (secret; rk_/sk_ + test_/live_ prefix)
+//	STRIPE_PRICE_STARTER  (may be empty — free tier)
+//	STRIPE_PRICE_PRO      (Red Team #155 closure)
+//	STRIPE_PRICE_TEAM     (Red Team #155 closure)
+//
+// After apply, loopzero-cloud is rollout-restarted so envFrom re-reads STRIPE_API_KEY
+// (mirrors bash Layer 4; Red Team #154 closure). A missing loopzero-cloud Deployment
+// on Run is non-fatal (out-of-cluster gateway shape today).
+//
+// Parity contract (D3):
+//   - creds absent (Deps.Creds == nil)                    → SKIP
+//   - stripe.api_key empty                                → SKIP
+//   - stripe.api_key ∈ {REDACTED_SECRET_050, REDACTED_SECRET_051} → SKIP
+//   - stripe.api_key prefix not rk_/sk_ + test_/live_     → FAIL (EC-2)
+//   - k8s API error on Secret apply                       → FAIL
+//   - success                                             → PASS
+type StripeAPIKeysSeed struct{}
+
+// NewStripeAPIKeysSeed returns the seed instance for the registry.
+func NewStripeAPIKeysSeed() *StripeAPIKeysSeed { return &StripeAPIKeysSeed{} }
+
+// Name is the CLI token: `loopzero-ops seed stripe-api-keys`.
+func (s *StripeAPIKeysSeed) Name() string { return "stripe-api-keys" }
+
+const (
+	stripeAPIKeysNamespace = "loopzero-system"
+	stripeAPIKeysName      = "loopzero-stripe-api-keys"
+	stripeAPIKeyKey        = "STRIPE_API_KEY"
+	stripePriceStarterKey  = "STRIPE_PRICE_STARTER"
+	stripePriceProKey      = "STRIPE_PRICE_PRO"
+	stripePriceTeamKey     = "STRIPE_PRICE_TEAM"
+	stripeCloudDeployment  = "loopzero-cloud"
+)
+
+// stripeAPIKeyPlaceholders is the small set of literal sentinels the bash seed
+// treats as SKIP-graceful (in addition to the generic IsPlaceholder check).
+var stripeAPIKeyPlaceholders = map[string]bool{
+	"REDACTED_SECRET_050": true,
+	"REDACTED_SECRET_051": true,
+}
+
+func (s *StripeAPIKeysSeed) Run(d Deps) Result {
+	if r, skip := s.precondition(d); skip {
+		return r
+	}
+	if d.DryRun {
+		return Result{Verdict: PASS, Reason: "dry-run: would apply loopzero-stripe-api-keys + rollout loopzero-cloud"}
+	}
+	data := map[string][]byte{
+		stripeAPIKeyKey:       []byte(strings.TrimRight(d.Creds.Stripe.APIKey, "\n")),
+		stripePriceStarterKey: []byte(strings.TrimRight(d.Creds.Stripe.PriceStarter, "\n")),
+		stripePriceProKey:     []byte(strings.TrimRight(d.Creds.Stripe.PricePro, "\n")),
+		stripePriceTeamKey:    []byte(strings.TrimRight(d.Creds.Stripe.PriceTeam, "\n")),
+	}
+	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx,
+		secretOf(stripeAPIKeysNamespace, stripeAPIKeysName, data)); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("apply %s: %v", stripeAPIKeysName, err)}
+	}
+	// Rollout restart loopzero-cloud so envFrom re-reads STRIPE_API_KEY. Byte-parity
+	// contract with the bash seed (D3): a missing loopzero-cloud Deployment is FAIL
+	// (bash exit 1) — even though the Secret was successfully applied — because
+	// the operator's canonical expectation is that the pod actually re-reads
+	// the new key. A softer PASS + reason would be a nicer contract; treat
+	// that as a follow-up ADR after all Wave 1 seeds are migrated.
+	if err := d.Kube.RolloutRestartDeployment(d.Ctx, stripeAPIKeysNamespace, stripeCloudDeployment); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout restart %s: %v", stripeCloudDeployment, err)}
+	}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("applied %s + rollout %s", stripeAPIKeysName, stripeCloudDeployment)}
+}
+
+func (s *StripeAPIKeysSeed) Verify(d Deps) Result {
+	if r, skip := s.precondition(d); skip {
+		return r
+	}
+	got, err := d.Kube.GetSecret(d.Ctx, stripeAPIKeysNamespace, stripeAPIKeysName)
+	if err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get %s: %v", stripeAPIKeysName, err)}
+	}
+	if string(got.Data[stripeAPIKeyKey]) != strings.TrimRight(d.Creds.Stripe.APIKey, "\n") {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s/%s value diverges from creds", stripeAPIKeysName, stripeAPIKeyKey)}
+	}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("%s/%s matches creds", stripeAPIKeysName, stripeAPIKeyKey)}
+}
+
+func (s *StripeAPIKeysSeed) precondition(d Deps) (Result, bool) {
+	if d.Creds == nil {
+		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent (SKIP-graceful)"}, true
+	}
+	apiKey := d.Creds.Stripe.APIKey
+	if apiKey == "" || stripeAPIKeyPlaceholders[apiKey] {
+		return Result{Verdict: SKIP, Reason: "stripe.api_key placeholder/absent (sponsor-blocked)"}, true
+	}
+	// EC-2: prefix guard prevents publishable_key (pk_*) silently accepted.
+	if !hasStripeAPIKeyPrefix(apiKey) {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("stripe.api_key wrong prefix (got %q…); expected rk_test_/rk_live_/sk_test_/sk_live_", first8(apiKey))}, true
+	}
+	return Result{}, false
+}
+
+func hasStripeAPIKeyPrefix(k string) bool {
+	for _, p := range []string{"rk_test_", "rk_live_", "sk_test_", "sk_live_"} {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func first8(s string) string {
+	if len(s) <= 8 {
+		return s
+	}
+	return s[:8]
+}

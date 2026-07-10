@@ -15,13 +15,13 @@
 #
 # 1. vault-bootstrap-dev.sh        — OpenBao init + unseal + AppRole +
 #                                    transit chain + SPKI pin
-# 2. seed-minio-canonical.sh       — MinIO password reset (mgmt + build)
+# 2. loopzero-ops seed minio (M15 W1)        — MinIO password reset (mgmt + build)
 # 3. seed-admin-loopzero-dev.sh     — Kratos identity + tenant + session JWT
 # 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
-# 5. seed-github-app-dev.sh        — GitHub App PEM + webhook secret
+# 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
-# 6. seed-gitea-token-canonical.sh — Gitea API token mint + 3-way sync
-# 7. seed-broker-canonical.sh      — loopzero-broker token + CSS + envFrom
+# 6. loopzero-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
+# 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token + CSS + envFrom
 # 8. seed-loki-cross-cluster.sh    — Loki NodePort + Promtail URL +
 #                                    loopzero-api LOKI_URL
 # 9. seed-tenant-fixture-canonical.sh — subscription plan + GH installation
@@ -41,6 +41,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 VERIFY=0
 SKIP_VAULT=0
@@ -136,7 +137,6 @@ VERIFY_FLAG=""
 # standalone doesn't run loopzero-vault, and prod requires the witnessed
 # ceremony per the mandate § Sub-step 2.5 prod/persistent path.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
-  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
   run_step "0a-vault-cluster-create" "cd $REPO_ROOT && task k3d:vault:create"
   run_step "0b-vault-cluster-bootstrap" "cd $REPO_ROOT && task k3d:vault:bootstrap"
 else
@@ -172,7 +172,7 @@ else
 fi
 
 # Step 2
-run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VERIFY_FLAG"
+run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
 
 # CANONICAL ORDER FIX 2026-06-18 (Finding #4 of issue #91 — Cleanroom
 # mandate canonical chain run): Step 4 (patch-kratos-dev-public) MUST
@@ -199,22 +199,18 @@ run_step "2-seed-minio-canonical" "bash $SCRIPT_DIR/seed-minio-canonical.sh $VER
 # SKIP message in other envs. Defaults to SKIP when env var unset.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
   # Step 4
-  if [[ -x "$SCRIPT_DIR/patch-kratos-dev-public.sh" ]]; then
-    run_step "4-patch-kratos-dev-public" "bash $SCRIPT_DIR/patch-kratos-dev-public.sh --verify"
-  else
-    skip_step "4-patch-kratos-dev-public" "script not yet present in canonical chain"
-  fi
+  run_step "4-patch-kratos-dev-public" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed patch-kratos ${VERIFY_FLAG:+--verify})"
 
   # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
-  run_step "4b-seed-hydra-urls-canonical" "bash $SCRIPT_DIR/seed-hydra-urls-canonical.sh $VERIFY_FLAG"
+  run_step "4b-seed-hydra-urls" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed hydra-urls ${VERIFY_FLAG:+--verify})"
 else
   skip_step "4-patch-kratos-dev-public" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "4b-seed-hydra-urls-canonical" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "4b-seed-hydra-urls" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
 # requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
-run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
+run_step "3-seed-admin-loopzero-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-loopzero-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
 # canonical identity. The seed-admin script is generic over EMAIL +
@@ -225,10 +221,10 @@ run_step "3-seed-admin-loopzero-dev" "bash $SCRIPT_DIR/seed-admin-loopzero-dev.s
 # recovery returns the anti-enumeration mute for their address.
 # Session is persisted to a separate file (~/.loopzero/redteam-qa-*) so
 # the admin session at the canonical path is not overwritten.
-run_step "3b-seed-redteam-qa-identity" "EMAIL=paulohenrique.java@gmail.com DISPLAY_NAME='Red Team QA' USERNAME=redteam-qa TENANT_SLUG=redteam-qa SESSION_FILE=\$HOME/.loopzero/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopzero/redteam-qa-session-jwt.txt bash $SCRIPT_DIR/seed-admin-loopzero-dev.sh"
+run_step "3b-seed-redteam-qa-identity" "(cd $REPO_ROOT/cmd/loopzero-ops && EMAIL=paulohenrique.java@gmail.com SESSION_FILE=\$HOME/.loopzero/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopzero/redteam-qa-session-jwt.txt go run . seed admin-loopzero-dev)"
 
-# Step 5
-run_step "5-seed-github-app-dev" "bash $SCRIPT_DIR/seed-github-app-dev.sh $VERIFY_FLAG"
+# Step 5 (M15 W1: migrated to loopzero-ops seed; bash script deleted)
+run_step "5-seed-github-app-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed github-app-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 5b (NEW 2026-07-04) — canonical GitHub webhook on the fixture
 # repo. Without this, `loopzero push` on getloopscale/loopzerokit-example silently
@@ -241,25 +237,25 @@ run_step "5-seed-github-app-dev" "bash $SCRIPT_DIR/seed-github-app-dev.sh $VERIF
 # block). SKIP-graceful when gh unauthenticated or dev-credentials.json
 # absent (standalone-multi tier).
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "5b-seed-github-webhook-fixture-canonical" "bash $SCRIPT_DIR/seed-github-webhook-fixture-canonical.sh $VERIFY_FLAG"
+  run_step "5b-seed-github-webhook-fixture" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed github-webhook-fixture ${VERIFY_FLAG:+--verify})"
 else
   skip_step "5b-seed-github-webhook-fixture-canonical" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 6
-run_step "6-seed-gitea-token-canonical" "bash $SCRIPT_DIR/seed-gitea-token-canonical.sh $VERIFY_FLAG"
+run_step "6-seed-gitea-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed gitea-token ${VERIFY_FLAG:+--verify})"
 
 # Step 6b (NEW 2026-06-16) — ArgoCD ↔ Gitea repo-creds (MUST run AFTER step 6 so token is canonical)
-run_step "6b-seed-argocd-gitea-creds-canonical" "bash $SCRIPT_DIR/seed-argocd-gitea-creds-canonical.sh --hard-refresh"
+run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-gitea-creds ${VERIFY_FLAG:+--verify})"
 
 # Step 7
-run_step "7-seed-broker-canonical" "bash $SCRIPT_DIR/seed-broker-canonical.sh $VERIFY_FLAG"
+run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed broker ${VERIFY_FLAG:+--verify})"
 
 # Step 7b (NEW 2026-06-16) — Vault role_id sync into loopzero-api (MUST run AFTER vault-bootstrap-dev)
-run_step "7b-seed-vault-role-id-sync" "bash $SCRIPT_DIR/seed-vault-role-id-sync.sh $VERIFY_FLAG"
+run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"
 
 # Step 8
-run_step "8-seed-loki-cross-cluster" "bash $SCRIPT_DIR/seed-loki-cross-cluster.sh $VERIFY_FLAG"
+run_step "8-seed-loki-cross-cluster" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed loki-cross-cluster ${VERIFY_FLAG:+--verify})"
 
 # Step 9
 # #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
@@ -268,18 +264,15 @@ run_step "8-seed-loki-cross-cluster" "bash $SCRIPT_DIR/seed-loki-cross-cluster.s
 # canonical dev-public tier. QA dogfooding 2026-06-21 caught the
 # Scale page showing `starter` plan ceiling 2 even after the canonical
 # chain ran — root cause was the env-shadowing path.
-run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh --team"
+run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loopzero-ops && LOOPZERO_PLAN_TIER=team go run . seed tenant-fixture ${VERIFY_FLAG:+--verify})"
 
 # Step 10 (NEW 2026-06-16) — admin-cli Hydra OAuth2 client.
 # Required for dogfood-login Suite 0 T5.4 (≥ 3 Hydra clients).
 # Complements bootstrap-oauth-clients.sh (which provisions loopzero-cli +
 # loopzero-bootstrap) with the admin-side client_credentials path.
 # Per reference_admin_cli_hydra_client_canonical memory.
-if [[ -x "$SCRIPT_DIR/seed-admin-hydra-client-canonical.sh" ]]; then
-  run_step "10-seed-admin-hydra-client-canonical" "bash $SCRIPT_DIR/seed-admin-hydra-client-canonical.sh $VERIFY_FLAG"
-else
-  skip_step "10-seed-admin-hydra-client-canonical" "script not yet present"
-fi
+# Step 10 (M15 W2: migrated to loopzero-ops seed; bash script deleted)
+run_step "10-seed-admin-hydra-client" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-hydra-client ${VERIFY_FLAG:+--verify})"
 
 # Step 11 (NEW 2026-06-16) — connect canonical fixture (project "teste" +
 # repo link). Required by LIVE wrappers that probe /projects/teste/* paths.
@@ -296,25 +289,25 @@ run_step "12-seed-chaos-mesh-canonical" "bash $SCRIPT_DIR/seed-chaos-mesh-canoni
 # Step 13 (NEW M2 2026-06-23) — ArgoCD admin token
 # EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD não existe em outros envs
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" || "${LOOPZERO_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
-  run_step "13-seed-argocd-token-canonical" "bash $SCRIPT_DIR/seed-argocd-token-canonical.sh $VERIFY_FLAG"
+  run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
 else
-  skip_step "13-seed-argocd-token-canonical" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "13-seed-argocd-token" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 14 (NEW M2 2026-06-23) — OPENBAO_VAULT_ADDR cross-cluster (dev-public only — Jeito A)
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "14-seed-vault-cross-cluster-addr" "bash $SCRIPT_DIR/seed-vault-cross-cluster-addr-canonical.sh $VERIFY_FLAG"
+  run_step "14-seed-vault-cross-cluster-addr" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-cross-cluster-addr ${VERIFY_FLAG:+--verify})"
 else
   skip_step "14-seed-vault-cross-cluster-addr" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
-# Step 15 (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
-run_step "15-seed-stripe-secret-canonical" "bash $SCRIPT_DIR/seed-stripe-secret-canonical.sh $VERIFY_FLAG"
+# Step 15 (M15 W1: migrated to loopzero-ops seed; bash script deleted) (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
+run_step "15-seed-stripe-webhook-secret" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed stripe-webhook-secret ${VERIFY_FLAG:+--verify})"
 
 # Step 15b (NEW 2026-06-24 — plan stripe-l2-wiring-canonical-fix T3.2) —
 # loopzero-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;
 # separate rotation cadence: webhook secret vs API key per Stripe runbook).
-run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-keys-canonical.sh $VERIFY_FLAG"
+run_step "15b-seed-stripe-api-keys" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed stripe-api-keys ${VERIFY_FLAG:+--verify})"
 
 # Step 15c (NEW 2026-07-01 — Red Team loopzero-cloud#156) — Stripe test-mode
 # webhook endpoint provisioning + real whsec capture. Without this the
@@ -324,7 +317,7 @@ run_step "15b-seed-stripe-api-keys-canonical" "bash $SCRIPT_DIR/seed-stripe-api-
 # signature validation even if events arrived. Idempotent: skips when
 # endpoint already exists AND whsec canonical. SKIP graceful when
 # stripe.api_key placeholder/missing (standalone-multi tier).
-run_step "15c-seed-stripe-webhook-endpoint-canonical" "bash $SCRIPT_DIR/seed-stripe-webhook-endpoint-canonical.sh $VERIFY_FLAG"
+run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed stripe-webhook-endpoint ${VERIFY_FLAG:+--verify})"
 
 # Step 16 (NEW 2026-07-01 — plan dashboard-badge-data-plane-poller T6.1) —
 # data-plane poller first-tick warm-up. EC-2 absorption: without this,

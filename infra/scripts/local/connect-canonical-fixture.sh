@@ -98,7 +98,7 @@ preflight_gh() {
 preflight_session() {
   if [ ! -f "$SESSION_FILE" ] ; then
     log "ERROR: admin@loopzero.example session file missing at $SESSION_FILE"
-    log "       Run: bash infra/scripts/local/seed-admin-loopzero-dev.sh --verify"
+    log "       Run: loopzero-ops seed admin-loopzero-dev --verify"
     return 1
   fi
   if [ ! -s "$SESSION_FILE" ] ; then

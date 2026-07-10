@@ -32,6 +32,7 @@ SUBCOMMANDS:
   pulumi archive [flags]               Export Pulumi stack state to S3 archive
   drill <subcommand> [flags]           Drill/DR pure-logic helpers (see drill --help)
   chaos <subcommand> [flags]           Chaos runner pure-logic helpers (see chaos --help)
+  seed <name> [flags]                  Canonical post-Cleanroom seeds (see seed --help)
 
 EXIT CODES (PERMANENT — CLAUDE.md Rule 4):
   0  success
@@ -59,6 +60,8 @@ func run(args []string) int {
 		return runDrill(args[1:])
 	case "chaos":
 		return runChaos(args[1:])
+	case "seed":
+		return runSeed(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

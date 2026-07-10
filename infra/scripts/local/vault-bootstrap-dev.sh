@@ -79,7 +79,7 @@ OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.vault-syste
 # Secret out of reach of loopzero-api Deployment (envFrom reads from
 # loopzero-system ns), so a fresh Cleanroom seed left loopzero-api in
 # CrashLoopBackOff with "OPENBAO_VAULT_SECRET_ID required" and the
-# downstream master seed Step 2 (seed-minio-canonical) Layer 4 timed
+# downstream master seed Step 2 (`loopzero-ops seed minio` (M15 W1) Layer 4 timed
 # out waiting for loopzero-api rollout. Default now points at the
 # canonical consumer ns (loopzero-system) so the chain converges on first
 # run. Operators with workloads still bound to external-secrets ns

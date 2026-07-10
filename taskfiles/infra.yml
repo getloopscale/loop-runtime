@@ -695,7 +695,7 @@ tasks:
       # cluster's kube-state-metrics NodePort (values-prometheus.yaml).
       # Idempotent (diff-then-patch). Same mechanism J-17 Loki cross-
       # cluster uses (memory j17-aprendizado-coredns-cross-cluster-build-lb).
-      - bash infra/scripts/local/networking-cross-cluster-coredns.sh
+      - (cd cmd/loopzero-ops && go run . seed networking-cross-cluster-coredns)
 
   tokens:provision:
     desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
