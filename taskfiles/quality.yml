@@ -63,6 +63,7 @@ tasks:
       - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality caddyfile-csp   # plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 — operator-local-edge Caddyfile invariants (no CSP / no Vite handle 404 / 4 preserved headers / reverse_proxy + plan kratos-self-service-rate-limit-systemic v1.1 invariants 12-15 rate-limit + trusted_proxies + register-route)
+      - /tmp/loopzero-ops quality caddyfile-dev-server-deny  # loopzero-cloud#141 defense-in-depth — app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*, /package.json)
       # F-wire-7 absorption: plan kratos-self-service-rate-limit-systemic v1.1 hermetic structural gates.
       - /tmp/loopzero-ops quality ory-kratos-lifespan                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/ory-kratos-lifespan_test.sh with pure-logic Go gate. T2.2 hermetic Kratos lifespan overlay golden test (source-level, section-scoped).
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)

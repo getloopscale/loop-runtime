@@ -50,6 +50,7 @@ var gateRegistry = []gateSpec{
 	{"baseline-compare", "Compares a captured steady-state baseline against the current state.", runBaselineCompare},
 	{"baseline-update", "Updates the committed steady-state baseline artifact.", runBaselineUpdate},
 	{"caddyfile-csp", "Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).", runCaddyfileCSP},
+	{"caddyfile-dev-server-deny", "Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.", runCaddyfileDevServerDeny},
 	{"cli-bundle-size", "Guards the CLI published bundle size against regression.", runCLIBundleSize},
 	{"cli-exit-codes", "Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).", runCLIExitCodes},
 	{"clusterimagepolicy-mode", "Validates the sigstore ClusterImagePolicy enforcement mode.", runClusterImagePolicyMode},

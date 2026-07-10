@@ -16,6 +16,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselinecompare"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselineupdate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfiledevserverdeny"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
@@ -478,5 +479,47 @@ func runCaddyfileCSP(args []string) int {
 		return 1
 	}
 	fmt.Println("caddyfile-csp: PASS — app-dev block serves prod-bundle via file_server + canonical CSP + 4 preserved headers + try_files SPA fallback (Red Team #66 closed)")
+	return 0
+}
+
+// runCaddyfileDevServerDeny is the Go home for the caddyfile-dev-server-deny
+// gate (loopzero-cloud#141 defense-in-depth). Enforces that the app-dev block
+// explicitly 404s dev-server-only paths (/src/*, /.env, /@vite/*, etc.) so
+// that a stale/dev build accidentally landed in DASHBOARD_DIST cannot leak
+// source or secrets. Upstream root cause (dashboard pod running vite dev
+// instead of nginx serving the prod bundle) belongs to the loopzero-cloud repo.
+func runCaddyfileDevServerDeny(args []string) int {
+	fs := flag.NewFlagSet("caddyfile-dev-server-deny", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := caddyfiledevserverdeny.Check(caddyfiledevserverdeny.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "caddyfile-dev-server-deny: %v\n", err)
+		return 5
+	}
+	if outcome.Skipped {
+		fmt.Println("caddyfile-dev-server-deny: SKIP — infra/local/Caddyfile not present")
+		return 0
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "caddyfile-dev-server-deny: FAIL — %d invariant(s) violated:\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "loopzero-cloud#141 defense-in-depth: the operator-local Caddyfile app-dev block")
+		fmt.Fprintln(os.Stderr, "MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*,")
+		fmt.Fprintln(os.Stderr, "/vite.config.*, /package.json). The @dev_server_only matcher + `respond 404`")
+		fmt.Fprintln(os.Stderr, "must be declared BEFORE the catch-all `handle {` so try_files fallback cannot")
+		fmt.Fprintln(os.Stderr, "bypass the deny with SPA-fallback to index.html.")
+		return 1
+	}
+	fmt.Println("caddyfile-dev-server-deny: PASS — app-dev block explicitly 404s dev-server-only paths (loopzero-cloud#141 defense-in-depth)")
 	return 0
 }

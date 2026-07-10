@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ErrNoActiveRelease.Message` reformulada para wording operation-neutral ("No active release found for this environment. Deploy at least once before running this operation.") — reg de loopzero-cloud#166 (CRITICAL): a mensagem anterior continha "source environment" + "promoting" (promote-flavored), induzindo operadores a diagnosticar mal o rollback path. Docstring pin + test `TestErrNoActiveRelease_MessageIsOperationNeutral` garante regressão. Hermetic-only fix — LIVE reproduction pending sponsor JUNTOS (state divergence between env_targets.active_release_id + releases.status suspeita como upstream cause, precisa cluster real). (#166)
 
 ### Security
+- Caddyfile app-dev defense-in-depth: `@dev_server_only` matcher + `respond 404` bloqueia dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*, /package.json, /package-lock.json, /tsconfig.*) — loopzero-cloud#141 (SECURITY: Vite DEV server exposto). Novo gate `loopzero-ops quality caddyfile-dev-server-deny` wired em `taskfiles/quality.yml § quality:gates` com 8 hermetic assertions. Upstream root cause (dashboard pod running vite dev instead of nginx serving prod bundle) belongs to loopzero-cloud repo — issue OPEN pending LIVE remediation. (#141)
 
 ## [0.62.0] - 2026-07-10
 
