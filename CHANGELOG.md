@@ -8,23 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.62.0] - 2026-07-10
+
+### Added
 - Roadmap amended: added M18 Operator Glue → Go: Waves B+C+D (M15 Remainder Strangler) (`/roadmap-feature operator-glue-go-migration-remainder`). Depends on M15. When M18 closes, M15 checkbox flips per plan v1.2 Global DoD + ADR-D6 handoff.
 - M18 T2.1 hermetic Ginkgo migration: `infra/tests/e2e/dogfood_repro_test.go` — 13 canonical 2026-04-29 dogfood findings (F-01..F-13) as Ginkgo specs + `cleanupTerminatingNamespaces` helper folded in. `LOOPZERO_E2E=""` → hermetic skip; `LOOPZERO_E2E=1` → LIVE mode. Compiles + skips cleanly in CI.
+
 
 ### Changed
 - `.claude/rules/shell-scripts-allowlist.md`: `pulumi-output.sh` reclassified MIGRATE-GO-SDK → KEEP-OPERATOR per M18 T2.2 ADR-D2 (empirical: `pulumi/sdk-v3` not in any go.mod; Path A canonical).
 - `taskfiles/test.yml § test:dogfood:repro`: bash invocation swapped for `go test` Ginkgo invocation with `--ginkgo.label-filter="dogfood-repro"`.
 - `docs/operations/ginkgo-migration-map.md`: strike-out entries for the 2 migrated dogfood bash scripts; add M18 T2.1 cross-reference.
 
-### Deprecated
 
 ### Removed
 - `infra/tests/dogfood/repro-findings.sh` (302 LoC) — MIGRATE-GINKGO delivered via M18 T2.1 (Ginkgo suite `dogfood_repro_test.go`).
 - `infra/tests/dogfood/scripts/cleanup-terminating-namespaces.sh` (111 LoC) — folded as helper in `dogfood_repro_test.go` per M18 T2.1 KISS + parsimony rung 5 (single-file reuse).
-
-### Fixed
-
-### Security
 
 ## [0.61.0] - 2026-07-10
 
