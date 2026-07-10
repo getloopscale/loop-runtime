@@ -74,7 +74,13 @@ func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
 }
 
 func TestF03CommanderExitOverrideRegistered(t *testing.T) {
-	data, err := os.ReadFile("../../../cli/src/index.ts")
+	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
+	// loopzero-cli/ repo. Cross-repo test wiring is a follow-up milestone.
+	const indexPath = "../../../cli/src/index.ts"
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		t.Skipf("F-03 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
+	}
+	data, err := os.ReadFile(indexPath)
 	if err != nil {
 		t.Fatalf("read cli index.ts: %v", err)
 	}
@@ -96,7 +102,13 @@ func TestF03CommanderExitOverrideRegistered(t *testing.T) {
 }
 
 func TestF05InitPreflightAuthDep(t *testing.T) {
-	data, err := os.ReadFile("../../../cli/src/commands/init.ts")
+	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
+	// loopzero-cli/ repo. Cross-repo test wiring is a follow-up milestone.
+	const initPath = "../../../cli/src/commands/init.ts"
+	if _, err := os.Stat(initPath); os.IsNotExist(err) {
+		t.Skipf("F-05 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
+	}
+	data, err := os.ReadFile(initPath)
 	if err != nil {
 		t.Fatalf("read init.ts: %v", err)
 	}

@@ -8,14 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- M23 T5.1 (batch 3.5): `task quality:test:coverage:report` gate wired in `taskfiles/quality.yml`. Runs `go test -race -cover` on hermetic packages (charts/chaos/capacity/livetest/*) and prints total statement coverage (24.8% baseline).
+- ROADMAP.md § Post-M23 backlog: three PRE-EXISTING findings discovered during 2026-07-10 post-release audit — F25 (gitea Redis Service name drift), F26 (generate-secrets.sh log-string drift), F27 (`infra/tests/unit/` chart-path removal drift). Each surfaces existing infra-tests debt orthogonal to M23 batch scope; require dedicated follow-up milestones with their own scope.
 
 ### Changed
+- ROADMAP.md § M23 DoD: audited per sub-bullet 2026-07-10 with evidence citations. Sub-bullets 704/705/706/707/709/712 confirmed `[x]` with `wc -l`, `grep` (comment-excluded), and `task quality:test:coverage:report` LIVE verification. Sub-bullets 708/710/711 explicitly annotated as pending with paths-to-close documented per Rule 3 honesty (no silent flip).
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+- M23 T6.1 (batch 3.5): added `os.Stat` skip-guards to `TestF03CommanderExitOverrideRegistered`, `TestF05InitPreflightAuthDep`, `TestT12ExitCodeContractTestExists` — same stale-path pattern as TestF06 already shipped. All three test files under `cli/*` moved to sibling `loopzero-cli/` repo per M5 monorepo decomposition; cross-repo test wiring TBD as follow-up milestone. Tests now SKIP cleanly when target files absent.
 
 ### Security
 

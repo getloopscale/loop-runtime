@@ -228,6 +228,26 @@ tasks:
           echo "SKIP: loopzero-cli sibling absent (umbrella layout required)"
         fi
 
+  test:coverage:report:
+    desc: |
+      M23 T5.1 (Post-Cleanroom coverage gate). Runs Go coverage for infra/tests
+      hermetic packages (build-tag safe — no LIVE cluster required) and prints
+      total statement coverage %. Consumed by /loop-code-review re-audits +
+      operator hygiene sweeps.
+    cmds:
+      - |
+        set -e
+        OUT=/tmp/loopzero-infra-tests-coverage.out
+        cd infra/tests
+        # Hermetic-only packages (no live cluster required). Full -tags=helm_render
+        # sweep is provided by `task helm:test` separately.
+        go test -race -count=1 -coverprofile="$OUT" -covermode=atomic \
+          ./charts/... ./chaos/... ./capacity/... ./livetest/... 2>&1 | tail -20
+        cd -
+        echo "---"
+        pct=$(go tool cover -func="$OUT" | tail -1 | awk '{print $NF}')
+        echo "infra/tests hermetic coverage: $pct"
+
   all:
     desc: Standard quality suite — hermetic tests + full-scan gates + contract
     deps: [hermetic, gates, contract]
