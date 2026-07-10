@@ -660,7 +660,7 @@ Wave C (4 highest-complexity gates):
 
 ---
 
-### M23 — [ ] Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening
+### M23 — [x] Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening
 
 > Added 2026-07-10 by `/roadmap-feature` (slug: `infra-tests-audit-remediation`, sponsor override of skill DO-NOT clause "refactor without user-visible change = ad-hoc mode"). See CHANGELOG `[Unreleased] § Added`. Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Source of scope: `code-review-output-infra-tests-2026-07-10/final_report.md` (2026-07-10 audit, 38 findings, SQLite at `code-review-output-infra-tests-2026-07-10/code-review.db`).
 
