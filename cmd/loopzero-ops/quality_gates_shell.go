@@ -39,6 +39,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -872,5 +873,30 @@ func runLokiVaultRetention(args []string) int {
 		return 1
 	}
 	fmt.Println("loki-vault-retention: PASS — 14 hermetic assertions (T8.2 retention_stream + T8.5 archive CronJob hardening) clean")
+	return 0
+}
+
+// runLokiRetentionSchema is the trio-compat regression for the retention_stream
+// schema in infra/helm/loki/values.yaml. 7 assertions.
+// Migrated from infra/tests/check-loki-retention-schema_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.2 Wave 2).
+func runLokiRetentionSchema(args []string) int {
+	fs := flag.NewFlagSet("loki-retention-schema", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream vault-system + priority int + defaults) clean")
 	return 0
 }
