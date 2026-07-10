@@ -45,6 +45,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -1025,5 +1026,37 @@ func runESOCreationPolicy(args []string) int {
 		return 0
 	}
 	fmt.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
+	return 0
+}
+
+// runOpenbaoInitAuth enforces T5.1-T5.9 openbao-init auth mounts + per-binary roles.
+// Migrated from infra/tests/check-openbao-init-auth-mounts_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.7 Wave 2 — Wave 2 COMPLETE).
+func runOpenbaoInitAuth(args []string) int {
+	fs := flag.NewFlagSet("openbao-init-auth-mounts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := openbaoinitauth.Check(openbaoinitauth.Config{RepoRoot: *root})
+	if errors.Is(err, openbaoinitauth.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "openbao-init-auth-mounts: FAIL — openbao-init chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "openbao-init-auth-mounts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("openbao-init-auth-mounts: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("openbao-init-auth-mounts: PASS — T5.1-T5.9 auth mounts + per-binary roles + isolation invariants clean")
 	return 0
 }
