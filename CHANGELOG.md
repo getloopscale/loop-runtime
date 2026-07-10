@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Roadmap amended: added M16 Hermetic Test Migration: `infra/tests/check-*_test.sh` → Go Quality Gates (Wave 1+2+3) (`/roadmap-feature infra-tests-hermetic-to-quality-gates`)
+- **M16 Wave 1 gate 2/3 — `loopzero-ops quality archive-script-repo-root`.** Pure-logic Go migration of `infra/tests/check-archive-script-repo-root_test.sh` (~32 LoC bash → `cmd/loopzero-ops/internal/quality/archivescriptrepo/check.go` ~100 LoC + `check_test.go` ~140 LoC). T1.2 hermetic guard of plan m1-commit-canonical-30-fixes v1.2 SHIPPABLE 96.4: no script in `archive/canonical-tests-v1/scripts/local/` may resolve REPO_ROOT with 3-dirs-up (`$(dirname "$0")/../../..`) — canonical post-quarantine 289cf9d6 is 4-dirs-up. Shape 3 (file-layout via `filepath.WalkDir` + regex) per blueprint Q7 mapping. 6/6 hermetic tests GREEN under `-race`: clean-repo / forbidden-pattern / mixed-file-one-hit / missing-dir-empty / .md-skipped / real-repo. Sanity-run against real repo: PASS. Wired in `taskfiles/quality.yml § quality:gates`. (M16 T2.2)
 - **M16 Wave 1 gate 1/3 — `loopzero-ops quality sprint-syntax`.** Pure-logic Go migration of `infra/tests/check-sprint-syntax_test.sh` (~55 LoC bash → `cmd/loopzero-ops/internal/quality/sprintsyntax/check.go` ~215 LoC + `check_test.go` ~180 LoC). Hermetic contract for `infra/scripts/local/check-sprint.sh` + its homed helper `check_sprint.py`: 11 assertions preserved verbatim (script exists / `bash -n` clean / helper exists / `python3 -m py_compile` clean / no python3 heredoc [T3.2 de-costume gate] / JSON report valid / `pass: 6` present / spaced-detail preserved / results[0] == `[c1, PASS, OK]` tuple / allowlist file exists / script name allowlisted). Requires bash + python3 on PATH. 6/6 hermetic tests GREEN under `-race`. Follows blueprint canonical shape (plan D2 stdlib-only imports: `bytes`, `encoding/json`, `errors`, `fmt`, `io`, `os`, `os/exec`, `path/filepath`, `regexp` — zero third-party). Modal `Failures []string` per blueprint ADR D1. Sanity-run against real repo: PASS. Wired in `taskfiles/quality.yml § quality:gates`. (M16 T2.1)
 
 ### Changed
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- **`infra/tests/check-archive-script-repo-root_test.sh` — superseded by Go quality gate `archive-script-repo-root`.** M-Migrate2 2026-07-10 M16 T2.2 Wave 1. Single-assertion structural guard preserved (with expanded scenario coverage in Go). Parity baseline at `knowledge-base/audits/M16-wave1-check-archive-script-repo-root-baseline-2026-07-10.txt` shows PASS pre-migration.
 - **`infra/tests/check-sprint-syntax_test.sh` — superseded by Go quality gate `sprint-syntax`.** M-Migrate2 2026-07-10 M16 T2.1 Wave 1. 11 hermetic contract assertions preserved byte-for-byte in Go; parity baseline captured at `knowledge-base/audits/M16-wave1-check-sprint-syntax-baseline-2026-07-10.txt` shows 11/11 PASS pre-migration. Bash test deleted, allowlist row unchanged (script itself — `check-sprint.sh` — remains allowlisted; Wave 3 will migrate the target script).
 
 ### Fixed
