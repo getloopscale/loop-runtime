@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfiledevserverdeny"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpubliocidcredirectsyntax"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
@@ -578,5 +579,39 @@ func runDevPublicOIDCRedirectSyntax(args []string) int {
 		return 1
 	}
 	fmt.Println("dev-public-oidc-redirect-syntax: PASS — 9/9 hermetic assertions on infra/tests/e2e/dev-public-oidc-redirect_test.sh (M22 T2.1)")
+	return 0
+}
+
+// runOryKratosPublicURLs is the Go home for the ory-kratos-public-urls gate
+// (M22 empirical follow-up — the ONLY M22 target that was allowlisted).
+// Follows M16 T3.5 esochartsanity canonical shape (helm-template golden
+// test + per-env regex assertions + advisory-fallthrough when helmfile
+// binary absent).
+func runOryKratosPublicURLs(args []string) int {
+	fs := flag.NewFlagSet("ory-kratos-public-urls", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := orykratospublicurls.Check(orykratospublicurls.Config{RepoRoot: *root})
+	if err != nil {
+		if len(outcome.Failures) == 0 {
+			fmt.Fprintf(os.Stderr, "ory-kratos-public-urls: %v\n", err)
+			return 5
+		}
+		fmt.Fprintf(os.Stderr, "ory-kratos-public-urls: FAIL — %d golden assertion(s) violated:\n", len(outcome.Failures))
+		for _, v := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	if outcome.Skipped {
+		fmt.Printf("ory-kratos-public-urls: SKIP — %s\n", outcome.SkipReason)
+		return 0
+	}
+	fmt.Println("ory-kratos-public-urls: PASS — helm-template golden assertions on Ory Kratos public URLs (M22 empirical follow-up)")
 	return 0
 }

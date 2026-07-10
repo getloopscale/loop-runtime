@@ -8,12 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **M22 empirical follow-up gate — `loopzero-ops quality ory-kratos-public-urls`.** Pure-logic Go migration of `infra/tests/helm/ory-kratos-public-urls_test.sh` (~77 LoC bash → `cmd/loopzero-ops/internal/quality/orykratospublicurls/check.go` ~180 LoC + `check_test.go` ~85 LoC). Helm-template golden test for Ory Kratos `serve.public.base_url` + CORS + cookie.domain + `allowed_return_urls` + dashboardRoute-mapped `ui_url` across standalone-public + dev envs. Follows M16 T3.5 esochartsanity canonical shape (helm-template subprocess + per-env regex golden assertions + advisory-fallthrough when helmfile absent + skip when no env renders). This is the ONLY M22 target that was actually in the allowlist per M22 empirical finding audit — delivers empirical allowlist reduction 118 → 117 (net -1). 3/3 hermetic tests GREEN sob `-race`; live gate: SKIP (envs WIP per bash test SKIP semantics).
 
 ### Changed
 
 ### Deprecated
 
 ### Removed
+- `infra/tests/helm/ory-kratos-public-urls_test.sh` (~77 LoC) — migrated to Go gate `loopzero-ops quality ory-kratos-public-urls` per M22 empirical follow-up M-Migrate2. Allowlist row also removed (118 → 117).
 
 ### Fixed
 
