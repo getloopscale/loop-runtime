@@ -40,6 +40,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -898,5 +899,29 @@ func runLokiRetentionSchema(args []string) int {
 		return 1
 	}
 	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream vault-system + priority int + defaults) clean")
+	return 0
+}
+
+// runVaultPromAlerts enforces T8.4 PrometheusRule vault-audit-alerts contract.
+// Migrated from infra/tests/check-vault-prom-alerts_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.3 Wave 2).
+func runVaultPromAlerts(args []string) int {
+	fs := flag.NewFlagSet("vault-prom-alerts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
 	return 0
 }

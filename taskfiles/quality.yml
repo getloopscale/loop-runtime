@@ -156,6 +156,7 @@ tasks:
       - /tmp/loopzero-ops quality no-cloud-dev-default                               # M16 T2.3 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-no-cloud-dev-default_test.sh (T1.1 Caddy 301 redirect trap guard: no test/seed script may default to cloud-dev.loopzero.example; webhook handler /api/v1/webhooks/github is single exception).
       - /tmp/loopzero-ops quality loki-vault-retention                               # M16 T3.1 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-vault-retention_test.sh (T8.2 + T8.5 Loki per-NS retention + archive CronJob hardening; 14 assertions).
       - /tmp/loopzero-ops quality loki-retention-schema                              # M16 T3.2 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-retention-schema_test.sh (trio-compat schema regression: SingleBinary + retention_stream vault-system + priority int; 7 assertions).
+      - /tmp/loopzero-ops quality vault-prom-alerts                                  # M16 T3.3 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-vault-prom-alerts_test.sh (T8.4 PrometheusRule vault-audit-alerts: 4 P1 alerts + severity=critical + runbook_url + team+domain labels + invariant marker).
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
       # derived host.k3d.internal (T1.2), F1 SAN-aligned kubernetes_host, Step
