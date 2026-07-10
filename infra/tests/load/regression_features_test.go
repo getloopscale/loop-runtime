@@ -7,41 +7,17 @@
 // CI fails early if any of those bugs reappear via configuration drift.
 //
 // Run:
-//   LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
+//
+//	LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
 package load
 
 import (
-	"bytes"
 	"os"
-	"os/exec"
-	"regexp"
 	"strings"
 	"testing"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
-func runRegressionScript(t *testing.T) (string, int) {
-	t.Helper()
-	scriptPath := "../../helmfile/scripts/regression-checks.sh"
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		t.Fatalf("regression-checks.sh not found at %s", scriptPath)
-	}
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "LOOPZERO_DOMAIN=dev.loopzero.example")
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	exitCode := 0
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
-	}
-	return buf.String(), exitCode
-}
-
 func TestF01LoopZeroApiNodePortInStandaloneMulti(t *testing.T) {
 	data, err := os.ReadFile("../../helm/loopzero-api/values-standalone-multi.yaml")
 	if err != nil {
@@ -324,7 +300,7 @@ func TestF09EnsurePullSecretHandlesNotFound(t *testing.T) {
 	// `operators/internal/tenant/` (tenant-operator binary owns the
 	// EnvironmentReconciler). See finding `concepts/operations/
 	// finding-2026-05-15-infra-tests-load-regression-obsolete.md`.
-	data, err := os.ReadFile("../../../operators/internal/tenant/environment_rbac.go")
+	data, err := os.ReadFile("../../../operators/internal/environment/environment_rbac.go")
 	if err != nil {
 		t.Fatalf("read environment_rbac.go: %v", err)
 	}
@@ -337,4 +313,3 @@ func TestF09EnsurePullSecretHandlesNotFound(t *testing.T) {
 		t.Error("F-09 regression: NotFound case must set condition reason=SourceMissing")
 	}
 }
-

@@ -7,14 +7,14 @@
 // CI fails early if any of those bugs reappear via configuration drift.
 //
 // Run:
-//   LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
+//
+//	LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
 package load
 
 import (
 	"bytes"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"testing"
 )

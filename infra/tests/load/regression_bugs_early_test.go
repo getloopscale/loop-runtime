@@ -7,41 +7,18 @@
 // CI fails early if any of those bugs reappear via configuration drift.
 //
 // Run:
-//   LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
+//
+//	LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
 package load
 
 import (
-	"bytes"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
-func runRegressionScript(t *testing.T) (string, int) {
-	t.Helper()
-	scriptPath := "../../helmfile/scripts/regression-checks.sh"
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		t.Fatalf("regression-checks.sh not found at %s", scriptPath)
-	}
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "LOOPZERO_DOMAIN=dev.loopzero.example")
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	exitCode := 0
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
-	}
-	return buf.String(), exitCode
-}
-
 func TestB18RuntimeMaxNodesConfig(t *testing.T) {
 	data, err := os.ReadFile("../../pulumi/Pulumi.dev.yaml")
 	if err != nil {
@@ -374,4 +351,3 @@ func TestB49LoopZeroCloudOryUrls(t *testing.T) {
 		t.Errorf("B49 regression: loopzero-cloud must use ory-hydra-admin.loopzero-auth.svc.cluster.local")
 	}
 }
-
