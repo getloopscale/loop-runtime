@@ -662,11 +662,11 @@ Wave C (4 highest-complexity gates):
 
 ### M23 — [ ] Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening
 
-> Added 2026-07-10 by `/roadmap-feature` (slug: `infra-tests-audit-remediation`, sponsor override of skill DO-NOT clause "refactor without user-visible change = ad-hoc mode"). See CHANGELOG `[Unreleased] § Added`. Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Source of scope: `code-review-output/final_report.md` (2026-07-10 audit, 38 findings, SQLite at `code-review-output/code-review.db`).
+> Added 2026-07-10 by `/roadmap-feature` (slug: `infra-tests-audit-remediation`, sponsor override of skill DO-NOT clause "refactor without user-visible change = ad-hoc mode"). See CHANGELOG `[Unreleased] § Added`. Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Source of scope: `code-review-output-infra-tests-2026-07-10/final_report.md` (2026-07-10 audit, 38 findings, SQLite at `code-review-output-infra-tests-2026-07-10/code-review.db`).
 
 **Objective:** close the 11 HIGH + 8 MEDIUM findings from the 2026-07-10 `infra/tests/` code-review audit as a single strategic quality-debt milestone, targeting the ONE systemic root cause (post-M15 chart-family consolidation dead-Skip debt in `load/regression_test.go` + 4 sibling files) plus 4 orthogonal hygiene PRs (flakiness sweep, panic-in-helper fix, exec.rm hardening, coverage tooling). **Why now:** the audit just concluded with the 11 HIGH cluster on a single actionable root cause; every day of delay compounds the LoC drift in `load/` (currently 1762 LoC monolith with 57%+ dead-Skip ratio) and lets the dead-code smell propagate to new tests written against the same file. Post-V1 quality-debt is a legitimate strategic intent — the roadmap 22/22 `[x]` state signals V1 delivered, and this milestone acknowledges the debt without pretending V1 was pristine.
 
-**Scope (5 remediation PRs from `code-review-output/final_report.md § Remediation plan`):**
+**Scope (5 remediation PRs from `code-review-output-infra-tests-2026-07-10/final_report.md § Remediation plan`):**
 
 **PR #1 — Post-M15 dead-Skip sweep + god-file split (systemic root cause; closes 11 findings):**
 
@@ -709,7 +709,7 @@ Wave C (4 highest-complexity gates):
 - [ ] `task test:coverage:report` gate exists in `taskfiles/quality.yml` and prints coverage % on invocation.
 - [ ] Re-run `/loop-code-review infra/tests/` returns 0 HIGH findings (verified against fresh `code-review.db`).
 - [ ] `go test -race ./infra/tests/...` PASS after every PR merge (no test-count regression, no order-dependency introduced by god-file split).
-- [ ] CHANGELOG discipline: `§ Fixed` entry per PR referencing finding IDs (F1-F22) + `code-review-output/final_report.md` as source.
+- [ ] CHANGELOG discipline: `§ Fixed` entry per PR referencing finding IDs (F1-F22) + `code-review-output-infra-tests-2026-07-10/final_report.md` as source.
 
 **Dependencies:** M22 `[x]` (last released). Optional context: M15 `[x]` (introduced the debt via T1.4/T1.5 chart deletions in commit `27cfe6cd` — the milestone this remediation cleans up after).
 
