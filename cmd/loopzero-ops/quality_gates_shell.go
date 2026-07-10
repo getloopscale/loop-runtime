@@ -44,6 +44,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -992,5 +993,37 @@ func runESOChartSanity(args []string) int {
 		return 0
 	}
 	fmt.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
+	return 0
+}
+
+// runESOCreationPolicy is the iter 20 P0 regression for creationPolicy: Orphan.
+// Migrated from infra/tests/check-loopzero-external-secrets-creation-policy_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.6 Wave 2).
+func runESOCreationPolicy(args []string) int {
+	fs := flag.NewFlagSet("loopzero-external-secrets-creation-policy", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: *root})
+	if errors.Is(err, esocreationpolicy.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("loopzero-external-secrets-creation-policy: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
 	return 0
 }
