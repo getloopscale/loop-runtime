@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -41,6 +42,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -923,5 +925,38 @@ func runVaultPromAlerts(args []string) int {
 		return 1
 	}
 	fmt.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
+	return 0
+}
+
+// runDay30Day60CronJobs enforces T10.1-T10.4 Day 30 verify + Day 60 AES delete
+// CronJob contracts. Renders loopzero-api chart with 3 --set overrides.
+// Migrated from infra/tests/check-day30-day60-cronjobs_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.4 Wave 2).
+func runDay30Day60CronJobs(args []string) int {
+	fs := flag.NewFlagSet("day30-day60-cronjobs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := day30day60cronjobs.Check(day30day60cronjobs.Config{RepoRoot: *root})
+	if errors.Is(err, day30day60cronjobs.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "day30-day60-cronjobs: FAIL — loopzero-api chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "day30-day60-cronjobs: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("day30-day60-cronjobs: WARN (advisory-only: helm not on PATH — LIVE render skipped)")
+		return 0
+	}
+	fmt.Println("day30-day60-cronjobs: PASS — T10.1-T10.4 CronJob contracts (disabled-by-default + Day 30 schedule/EC-12/Forbid + Day 60 safety defaults/migrate-to-transit + hardening) clean")
 	return 0
 }

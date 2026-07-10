@@ -157,6 +157,7 @@ tasks:
       - /tmp/loopzero-ops quality loki-vault-retention                               # M16 T3.1 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-vault-retention_test.sh (T8.2 + T8.5 Loki per-NS retention + archive CronJob hardening; 14 assertions).
       - /tmp/loopzero-ops quality loki-retention-schema                              # M16 T3.2 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-retention-schema_test.sh (trio-compat schema regression: SingleBinary + retention_stream vault-system + priority int; 7 assertions).
       - /tmp/loopzero-ops quality vault-prom-alerts                                  # M16 T3.3 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-vault-prom-alerts_test.sh (T8.4 PrometheusRule vault-audit-alerts: 4 P1 alerts + severity=critical + runbook_url + team+domain labels + invariant marker).
+      - /tmp/loopzero-ops quality day30-day60-cronjobs                               # M16 T3.4 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-day30-day60-cronjobs_test.sh (T10.1-T10.4 Day 30 verify + Day 60 AES delete CronJobs; helm-template with 3 --set overrides; advisory when helm absent).
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
       # derived host.k3d.internal (T1.2), F1 SAN-aligned kubernetes_host, Step
