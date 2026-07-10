@@ -609,6 +609,55 @@ Todos os 17 items abaixo são **hermeticamente executáveis** (zero cluster + ze
 
 ---
 
+### M22 — [ ] Hermetic Test Migration Batch 2 (17 gates) — M21 Backlog Delivery
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `m22-hermetic-remainder-batch2`). See CHANGELOG `[Unreleased] § Added`. Grill: `knowledge-base/grills/m22-hermetic-remainder-batch2-feature-grill.md`.
+
+**Objective:** deliver the 17 hermetic gates rastreados como institutional backlog no M21 § body, reusando M20 T2.1 canonical shape (`cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax/check.go` shipped v0.63.0) verbatim. Target: allowlist 117 → ≤ 100 (net -17) + `TestOracle_MatchesFrozenBaseline` re-frozen (closes M20 blueprint ADR-D3 deferred). **Why now:** M20 T2.1 shape provou-se aplicável 2026-07-10 (6/6 hermetic tests GREEN + sanity real repo PASS); M21 rastreou o remainder com specific shape family mappings; session dedicated com context budget suficiente pode shipar 8+ gates seguindo M16 precedent (mesmo dia shipou 10). Zero cluster I/O + zero sponsor JUNTOS.
+
+**Scope (17 target files rastreados do M21 § body):**
+
+Wave A remainder (7 gates — lowest complexity):
+- `check-dev-public-oidc-redirect-syntax_test.sh` (syntax — sprintsyntax shape)
+- `check-rotation-table-parity_test.sh` (file-layout — archivescriptrepo shape)
+- `check-migrate-legacy-namespaces_test.sh` (helm-template — day30day60cronjobs)
+- `check-enable-vault-backup_test.sh` (helm-template — lokivaultretention)
+- `check-restore-vault-snapshot_test.sh` (helm-template — day30day60cronjobs)
+- `check-rotate-secret_test.sh` (helm-template — lokivaultretention)
+- `check-loopzero-api-no-cluster-secrets_test.sh` (helm-template — esocreationpolicy)
+
+Wave B (6 vault-domain gates):
+- `check-vault-bootstrap-eso_test.sh` (helm-template — esochartsanity)
+- `check-vault-sync_test.sh` (helm-template — esocreationpolicy)
+- `check-promtail-vault-empty-targets_test.sh` (helm-template — esochartsanity)
+- `check-promtail-vault-scrape_test.sh` (helm-template — esochartsanity)
+- `check-loopzero-api-vault-projected-token_test.sh` (helm-template — loopzeroapiopenbao)
+- `check-generate-secrets-vault-fallback_test.sh` (helm-template + YAML — lokiretentionschema)
+
+Wave C (4 highest-complexity gates):
+- `check-scoped-kubeconfig-cold-bootstrap_test.sh` (helm-template + auth mounts — openbaoinitauth)
+- `check-scoped-kubeconfig-vault_test.sh` (helm-template + auth mounts — openbaoinitauth)
+- `check-seed-loopzero-secrets_test.sh` (helm-template + YAML — lokiretentionschema)
+- `infra/tests/helm/ory-kratos-public-urls_test.sh` (helm-template golden — esochartsanity)
+
+**Definition of done:**
+
+- [ ] 17 gates Go shipados em `cmd/loopzero-ops/internal/quality/<name>/` com hermetic tests GREEN sob `-race`
+- [ ] 17 bash scripts DELETED de `infra/tests/` (16 `check-*_test.sh` restantes + 1 `helm/ory-kratos-public-urls_test.sh`); per-file byte-identical parity capture bash-then-Go antes de `git rm` (M-Migrate2 T2.0 baseline)
+- [ ] Allowlist reduction: `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 100** (net -17 from 117 baseline)
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote; grep sweep 0 hits em `taskfiles/`, `docs/` vivos para cada script deletado
+- [ ] CHANGELOG discipline per lot: `§ Added` Go gates + `§ Removed` bash + `§ Changed` taskfile wiring
+- [ ] `TestOracle_MatchesFrozenBaseline` re-frozen at M22 close (T5.X terminal step apenas — closes M20 blueprint ADR-D3 deferred)
+
+**Dependencies:** M20 `[x]` + M21 `[x]`. M20 shipou canonical shape reference; M21 rastreou institutional backlog. M22 elegível imediatamente.
+
+**Top risks (new — pre-existing risks documented in M20 plan v1.0):**
+
+1. **Wave C complexity + kubeconfig auth-mounts semantic drift (MEDIUM).** Os 4 gates da Wave C têm complexidade domain-specific alta (K8s auth mounts + YAML round-trip + helm-golden). M20 T2.1 shape (billing-portal-syntax) NÃO é direct match — requer referenciar M16 T3.7 openbaoinitauth + T3.2 lokiretentionschema + T3.5 esochartsanity. **Mitigação:** per-gate shape family mapping explicit no plan (M22 blueprint), byte-identical parity capture bash-then-Go antes de `git rm`.
+2. **TestOracle_MatchesFrozenBaseline re-freeze timing coordenação (LOW).** O re-freeze é stateful (produces committed artifact) e precisa acontecer exactamente at M22 close (final terminal step). Se re-freeze happens mid-M22, gates shipados subsequentemente vão falhar oracle test até próximo re-freeze. **Mitigação:** T5.X terminal step apenas, executed depois de todos 17 gates shipped + code-quality PASS.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |
