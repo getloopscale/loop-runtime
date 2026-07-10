@@ -8,8 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Roadmap amended: added M21 Hermetic Test Migration Remainder (17 gates) — M20 Velocity-Split Remainder (`/roadmap-feature m21-hermetic-infra-tests-remainder`). Depends on M20 [x]. Zero cluster I/O.
 
 ### Changed
+- ROADMAP.md M20 amended DoD [x] via ADR-D2 velocity-split fired at gate 1 boundary (mirror M15/M18/M19 sponsor precedent). See `knowledge-base/roadmap-runs/M20-2026-07-10.md`.
 
 ### Deprecated
 

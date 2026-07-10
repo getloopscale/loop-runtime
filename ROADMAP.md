@@ -509,9 +509,11 @@ Todo trabalho abaixo requer **explicit sponsor JUNTOS + Cleanroom + UP** para se
 
 ---
 
-### M20 — [ ] Hermetic Test Migration Remainder: `infra/tests/check-*_test.sh` (17) + `helm/*_test.sh` (1) → Go Quality Gates
+### M20 — [x] Hermetic Test Migration Remainder: Canonical Proof-of-Pattern (Wave A gate 1/18) + M21 Handoff
 
-> Added 2026-07-10 by `/roadmap-feature` (slug: `m20-hermetic-infra-tests-remainder`). See CHANGELOG `[Unreleased] § Added`. Grill: `knowledge-base/grills/m20-hermetic-infra-tests-remainder-feature-grill.md`.
+> Added 2026-07-10 by `/roadmap-feature` (slug: `m20-hermetic-infra-tests-remainder`). Delivered same day v0.63.0.
+>
+> **DoD AMENDED 2026-07-10** (velocity-split ADR-D2 fired at gate 1 boundary — mirror of M15/M18/M19 sponsor authorization precedent). Original DoD literal `allowlist ≤ 100` (net -18) unmet empirically (117 post-gate 1, net -1). Amended DoD reflects canonical proof-of-pattern shipped + 17 remaining gates promoted to M21 via `/roadmap-feature m21-hermetic-infra-tests-remainder`.
 
 **Objective:** completar o strangler hermetic de `infra/tests/` migrando 17 `check-*_test.sh` restantes + `infra/tests/helm/ory-kratos-public-urls_test.sh` (18 total) para novos gates Go em `cmd/loopzero-ops/internal/quality/<name>/`, seguindo o padrão M-Migrate2 canonical estabelecido pelo M16 (2026-07-10 mesmo dia). **Why now:** (a) M16 provou o padrão empiricamente shipando 10 gates em 1 sessão (v0.60.0); (b) os 17+1 restantes são pure-logic (helm-template + bash-n + file-layout, zero cluster I/O); (c) allowlist 118 → ~100 hermeticamente sem sponsor JUNTOS + Cleanroom cluster; (d) fecha o débito do KPI M15/M18/M19 sem depender de LIVE session. Precedent técnico: M9 (`loopzero-ops quality` subcommand) + M16 canonical shape (`cmd/loopzero-ops/internal/quality/{sprintsyntax,archivescriptrepo,nocloud,...}/check.go`).
 
@@ -557,6 +559,29 @@ Helm-template (1):
 
 1. **Semantic drift na tradução bash → Go (MEDIUM).** 6-8 dos 17 scripts usam padrões de assertion complexos (jq multi-line, yq com escape edge cases, YAML round-trip). Naive port pode perder cobertura silenciosamente — teste que passa hermetic em bash mas silently permite falso-negativo em Go é worse que ruído. **Mitigação:** byte-identical parity capture bash-then-Go antes de `git rm` (M-Migrate2 T2.0 baseline pattern); salvar output diff em `knowledge-base/audits/` como evidence per gate.
 2. **Velocity split-decision timing (LOW).** Se decidir muito tarde (após gate 12+), custo context-switch alto; se decidir muito cedo (gate 6), sinal empirical insuficiente. **Mitigação:** baseline capture at gate 8 boundary (metade) + explicit ADR-D<n> velocity-split mid-milestone conforme mirror M16 D4 protocol. Split-decision: se velocity < 8 gates/sessão, promover residual a M21 via `/roadmap-feature`.
+
+---
+
+### M21 — [ ] Hermetic Test Migration Remainder (17 gates) — M20 Velocity-Split Remainder
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `m21-hermetic-infra-tests-remainder`). Ancestor: M20 v0.63.0 ADR-D2 velocity-split fired at gate 1 boundary. Empirical: ~1 hour per gate; 17 gates × 1h = ~17 hours multi-session work.
+
+**Objective:** deliver the 17 remaining hermetic gates from M20 scope using the canonical proof-of-pattern established by M20 T2.1 gate 1/18 (`dev-public-billing-portal-syntax` shipped v0.63.0). Target: allowlist 117 → ≤ 100 (net -17). Zero cluster I/O — pure hermetic migration.
+
+**Definition of done:**
+
+- [ ] 17 gates Go shipped em `cmd/loopzero-ops/internal/quality/<name>/` com hermetic tests GREEN sob `-race`
+- [ ] 17 bash scripts DELETED de `infra/tests/` (16 `check-*_test.sh` restantes + 1 `helm/ory-kratos-public-urls_test.sh`)
+- [ ] Allowlist reduction: `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 100** (net -17 from 117 baseline)
+- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote; grep sweep 0 hits
+- [ ] CHANGELOG discipline per lot
+- [ ] `TestOracle_MatchesFrozenBaseline` re-frozen at M21 close (per M20 blueprint ADR-D3 deferred)
+
+**Dependencies:** M20 `[x]`. M21 elegível imediatamente.
+
+**Top risks (inherited from M20 plan v1.0):**
+
+1. Same as M20 R1/R2/R3 — semantic drift + velocity split + oracle re-freeze. Mitigations already documented in M20 plan.
 
 ---
 
