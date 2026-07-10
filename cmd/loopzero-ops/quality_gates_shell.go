@@ -38,6 +38,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sprintsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -846,5 +847,30 @@ func runNoCloudDevDefault(args []string) int {
 		return 1
 	}
 	fmt.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
+	return 0
+}
+
+// runLokiVaultRetention enforces T8.2 + T8.5 of plan 2026-06-02-openbao-adoption:
+// Loki per-NS retention config + archive CronJob hardening. 14 assertions.
+// Migrated from infra/tests/check-loki-vault-retention_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.1 Wave 2).
+func runLokiVaultRetention(args []string) int {
+	fs := flag.NewFlagSet("loki-vault-retention", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("loki-vault-retention: PASS — 14 hermetic assertions (T8.2 retention_stream + T8.5 archive CronJob hardening) clean")
 	return 0
 }
