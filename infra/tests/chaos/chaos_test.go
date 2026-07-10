@@ -170,6 +170,7 @@ func waitForDeploymentReady(namespace, name string, minReady int, timeout time.D
 	// freshly-issued `kubectl delete pod` before we start counting.
 	// Without this, the first iteration counts the doomed pod as Ready
 	// and exits immediately (race we hit in iter 19+).
+	// intentional-sleep: chaos synchronization window
 	time.Sleep(3 * time.Second)
 
 	for {
@@ -264,6 +265,7 @@ func checkAPIHealth() error {
 		if attempt < maxAttempts {
 			GinkgoWriter.Printf("  checkAPIHealth attempt %d/%d transient: %v\n",
 				attempt, maxAttempts, err)
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(backoff)
 		}
 	}
@@ -316,6 +318,7 @@ func checkMetricExists(metricName string) {
 		if attempt < maxAttempts {
 			GinkgoWriter.Printf("  checkMetricExists(%s) attempt %d/%d transient miss; retrying in %s\n",
 				metricName, attempt, maxAttempts, backoff)
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(backoff)
 		}
 	}
@@ -352,6 +355,7 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cleanup()
 
 			// Wait for the fault to take effect (pod killed).
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(15 * time.Second)
 
 			// During chaos: with multi-replica, the API should never drop to
@@ -418,6 +422,7 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cleanup()
 
 			// Wait for fault + recovery.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(10 * time.Second)
 
 			err := waitForPodReady("loopzero-system", "app.kubernetes.io/component=loopzero-operator", 120*time.Second)
@@ -449,10 +454,12 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// Hold the stress for the experiment duration (120s).
 			GinkgoWriter.Println("  Holding PG stress for 120s...")
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(130 * time.Second)
 
 			// After the experiment, the breaker should reset.
 			// Give it 30s to recover (LowWaterMark=0.75).
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(30 * time.Second)
 
 			// Health check should pass after recovery.
@@ -473,6 +480,7 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cleanup()
 
 			// Wait for latency injection to take effect.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(10 * time.Second)
 
 			// API should still respond (slower, but not crash).
@@ -480,6 +488,7 @@ var _ = Describe("Chaos Engineering", func() {
 			Expect(err).NotTo(HaveOccurred(), "API should survive PG latency injection")
 
 			// Wait for experiment to expire.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(60 * time.Second)
 		})
 	})
@@ -496,6 +505,7 @@ var _ = Describe("Chaos Engineering", func() {
 			cleanup := applyChaos("argocd-crash.yaml")
 			defer cleanup()
 
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(10 * time.Second)
 
 			err := waitForPodReady("argocd", "app.kubernetes.io/name=argocd-server", 120*time.Second)
@@ -509,6 +519,7 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cleanup()
 
 			// API should remain healthy even while ArgoCD is down.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(5 * time.Second)
 			err := checkAPIHealth()
 			Expect(err).NotTo(HaveOccurred(), "API should be healthy during ArgoCD outage")
@@ -528,6 +539,7 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cleanup()
 
 			// Wait for fault to take effect.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(10 * time.Second)
 
 			// API should still be healthy (Gitea is not on the health path).
@@ -535,6 +547,7 @@ var _ = Describe("Chaos Engineering", func() {
 			Expect(err).NotTo(HaveOccurred(), "API should be healthy during Gitea outage")
 
 			// Wait for experiment to expire.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(60 * time.Second)
 
 			// After recovery, verify Gitea is responsive.
@@ -599,6 +612,7 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// Wait briefly then uncordon — new workflows should schedule
 			// on remaining nodes.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(30 * time.Second)
 		})
 	})
@@ -714,6 +728,7 @@ var _ = Describe("Chaos Engineering", func() {
 			// replica. In standalone (single replica), the kill +
 			// restart is observable as 502 for ~5s — acceptable for
 			// chaos validation.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(30 * time.Second)
 
 			// Post-chaos: API back, deploy state should not be stuck.
@@ -747,6 +762,7 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// Wait for K8s to observe + restart. PodChaos pod-kill is
 			// instantaneous; we give Deployment controller 90s.
+			// intentional-sleep: chaos synchronization window
 			time.Sleep(90 * time.Second)
 
 			// Post-recovery: API still healthy (no lingering bad state).

@@ -79,6 +79,7 @@ func TestCellIsolation_K3dStop(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("mgmt loopzero-api unhealthy 60s after workload stop — blast radius violation")
 		}
+		// intentional-sleep: chaos synchronization window
 		time.Sleep(5 * time.Second)
 	}
 

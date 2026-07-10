@@ -209,6 +209,7 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 		}()
 
 		// Wait for port-forward to be ready
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(3 * time.Second)
 
 		Eventually(func() string {
@@ -244,6 +245,7 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 			_ = pfCmd.Process.Kill()
 			_ = pfCmd.Wait()
 		}()
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(3 * time.Second)
 
 		Eventually(func() string {

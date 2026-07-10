@@ -411,6 +411,7 @@ func (h *RealDeployHarness) ProvisionTenant(ctx context.Context, t TenantIdentit
 func (h *RealDeployHarness) waitForTenantReady(ctx context.Context, t TenantIdentity) error {
 	deadline := time.Now().Add(120 * time.Second)
 	// Initial delay — give the controller a head start before polling.
+	// intentional-sleep: load-tier pacing (interleaved deploy submission)
 	time.Sleep(5 * time.Second)
 
 	for time.Now().Before(deadline) {
@@ -432,6 +433,7 @@ func (h *RealDeployHarness) waitForTenantReady(ctx context.Context, t TenantIden
 
 		resp, err := h.client.Do(req)
 		if err != nil {
+			// intentional-sleep: load-tier pacing (interleaved deploy submission)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -441,6 +443,7 @@ func (h *RealDeployHarness) waitForTenantReady(ctx context.Context, t TenantIden
 			return nil
 		}
 
+		// intentional-sleep: load-tier pacing (interleaved deploy submission)
 		time.Sleep(5 * time.Second)
 	}
 

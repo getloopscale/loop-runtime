@@ -136,6 +136,7 @@ func cleanupTenant(tenantID string, timeout time.Duration) {
 		if allGone {
 			return
 		}
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -480,6 +481,7 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 		defer close(killCh)
 
 		// Wait briefly for port-forward to bind.
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(500 * time.Millisecond)
 
 		// HTTP GET via the port-forwarded localhost tunnel.
@@ -548,6 +550,7 @@ func httpGetWithHost(host, path string) (int, string, error) {
 		resp, err := client.Get(targetURL)
 		if err != nil {
 			lastErr = err
+			// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -556,6 +559,7 @@ func httpGetWithHost(host, path string) (int, string, error) {
 		if readErr != nil {
 			lastStatus = resp.StatusCode
 			lastErr = readErr
+			// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -565,6 +569,7 @@ func httpGetWithHost(host, path string) (int, string, error) {
 		if !strings.Contains(lastBody, kedaColdStartPlaceholder) {
 			return lastStatus, lastBody, nil
 		}
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(5 * time.Second)
 	}
 	return lastStatus, lastBody, lastErr

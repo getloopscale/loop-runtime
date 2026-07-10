@@ -173,6 +173,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 	totalDuration := time.Since(submitStart)
 
 	// Let monitor catch tail end.
+	// intentional-sleep: benchmark warmup / measurement window
 	time.Sleep(2 * pollInterval)
 	monitorCancel()
 	<-monitorDone

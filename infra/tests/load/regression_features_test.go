@@ -116,7 +116,14 @@ func TestF05InitPreflightAuthDep(t *testing.T) {
 }
 
 func TestF06LogoutHasTokenDep(t *testing.T) {
-	data, err := os.ReadFile("../../../cli/src/commands/logout.ts")
+	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
+	// loopzero-cli/ repo per CLAUDE.md § Workspace layout. Skip when missing
+	// (cross-repo test wiring is a follow-up milestone).
+	logoutPath := "../../../cli/src/commands/logout.ts"
+	if _, err := os.Stat(logoutPath); os.IsNotExist(err) {
+		t.Skipf("F-06 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
+	}
+	data, err := os.ReadFile(logoutPath)
 	if err != nil {
 		t.Fatalf("read logout.ts: %v", err)
 	}

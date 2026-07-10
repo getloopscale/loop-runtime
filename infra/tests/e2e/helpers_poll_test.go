@@ -117,6 +117,7 @@ func TestPollUntil_ctxCancel(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
+		// intentional-sleep: test-scaffolding — trigger ctx.Cancel mid-poll to validate PollUntil cancellation semantics
 		time.Sleep(20 * time.Millisecond)
 		cancel()
 	}()

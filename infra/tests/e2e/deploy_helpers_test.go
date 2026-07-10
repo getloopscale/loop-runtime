@@ -95,6 +95,7 @@ func waitForBuildStatus(buildID string, status string, timeout time.Duration) er
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err != nil {
+			// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -107,6 +108,7 @@ func waitForBuildStatus(buildID string, status string, timeout time.Duration) er
 			return nil
 		}
 
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(2 * time.Second)
 	}
 
