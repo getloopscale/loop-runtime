@@ -43,6 +43,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -958,5 +959,38 @@ func runDay30Day60CronJobs(args []string) int {
 		return 0
 	}
 	fmt.Println("day30-day60-cronjobs: PASS — T10.1-T10.4 CronJob contracts (disabled-by-default + Day 30 schedule/EC-12/Forbid + Day 60 safety defaults/migrate-to-transit + hardening) clean")
+	return 0
+}
+
+// runESOChartSanity enforces the iter 23 chart-sanity contract for
+// infra/helm/loopzero-external-secrets. 8 assertions across 5 canonical envs.
+// Migrated from infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.5 Wave 2).
+func runESOChartSanity(args []string) int {
+	fs := flag.NewFlagSet("loopzero-external-secrets-chart-sanity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: *root})
+	if errors.Is(err, esochartsanity.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("loopzero-external-secrets-chart-sanity: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
 	return 0
 }
