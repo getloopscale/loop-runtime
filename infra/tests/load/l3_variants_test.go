@@ -243,10 +243,6 @@ func TestRealDeploy_L3NoisyNeighbor(t *testing.T) {
 
 // TestL3CoverageMatrixHasAllBugColumns verifies the regression matrix covers
 // every bug exercised in the L3 variants.
-func TestL3CoverageMatrixHasAllBugColumns(t *testing.T) {
-	t.Skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11")
-}
-
 func strContains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

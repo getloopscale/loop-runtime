@@ -104,14 +104,3 @@ func TestCacheScoping_AppOperatorDoesNOTScope_WorkloadCRDs(t *testing.T) {
 	}
 }
 
-func TestCacheScoping_MonolithStillScopes(t *testing.T) {
-	// The monolith `operators/cmd/main.go` was DELETED in T1.4
-	// (ADR-0023 operator-split, commit 27cfe6cd 2026-05-04). ADR-0018
-	// C9 cache scoping is now enforced individually by each of the 4
-	// split binaries — the per-binary test directly above (in this
-	// file or the sibling registration test) verifies them. Migration
-	// window safety is structurally impossible to regress (no monolith
-	// binary exists). See finding
-	// `concepts/operations/finding-2026-05-15-infra-tests-load-regression-obsolete.md`.
-	t.Skip("monolith binary deleted T1.4 (commit 27cfe6cd) — ADR-0018 C9 covered per-binary")
-}

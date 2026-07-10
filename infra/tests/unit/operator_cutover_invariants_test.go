@@ -68,10 +68,6 @@ func TestT02_RollbackScriptExists(t *testing.T) {
 }
 
 // T-03 — runbook exists with all required sections.
-func TestT03_CutoverRunbookExists(t *testing.T) {
-	t.Skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11")
-}
-
 // T-04 — invariants doc exists with I-1..I-8.
 func TestT04_InvariantsDocExists(t *testing.T) {
 	// `docs/decisions/operator-split-invariants.md` deleted in

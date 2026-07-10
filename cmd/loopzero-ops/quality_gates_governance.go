@@ -20,6 +20,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpubliocidcredirectsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
@@ -613,5 +614,48 @@ func runOryKratosPublicURLs(args []string) int {
 		return 0
 	}
 	fmt.Println("ory-kratos-public-urls: PASS — helm-template golden assertions on Ory Kratos public URLs (M22 empirical follow-up)")
+	return 0
+}
+
+// runTestCoverageReport is the Go home for the test-coverage-report gate
+// (M23 T5.1 F22 closure — coverage_pct not measured). Runs `go test -cover -json`
+// against configured scope + threshold. Advisory-fallthrough when `go` binary
+// absent.
+func runTestCoverageReport(args []string) int {
+	fs := flag.NewFlagSet("test-coverage-report", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	threshold := fs.Float64("threshold", testcoveragereport.DefaultCoverageThreshold, "coverage percentage floor (0-100)")
+	tags := fs.String("tags", "", "go build tags (e.g., helm_render)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := testcoveragereport.Check(testcoveragereport.Config{
+		RepoRoot:          *root,
+		CoverageThreshold: *threshold,
+		BuildTags:         *tags,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "test-coverage-report: %v\n", err)
+		return 5
+	}
+	if outcome.Skipped {
+		fmt.Printf("test-coverage-report: SKIP — %s\n", outcome.SkipReason)
+		return 0
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "test-coverage-report: FAIL — coverage=%.2f%% (threshold=%.2f%%)", outcome.CoveragePct, *threshold)
+		if len(outcome.FailedPackages) > 0 {
+			fmt.Fprintf(os.Stderr, "; failed packages:")
+			for _, p := range outcome.FailedPackages {
+				fmt.Fprintf(os.Stderr, " %s", p)
+			}
+		}
+		fmt.Fprintln(os.Stderr)
+		return 1
+	}
+	fmt.Printf("test-coverage-report: PASS — coverage=%.2f%% (threshold=%.2f%%)\n", outcome.CoveragePct, *threshold)
 	return 0
 }

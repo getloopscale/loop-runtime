@@ -660,6 +660,80 @@ Wave C (4 highest-complexity gates):
 
 ---
 
+### M23 — [ ] Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `infra-tests-audit-remediation`, sponsor override of skill DO-NOT clause "refactor without user-visible change = ad-hoc mode"). See CHANGELOG `[Unreleased] § Added`. Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Source of scope: `code-review-output-infra-tests-2026-07-10/final_report.md` (2026-07-10 audit, 38 findings, SQLite at `code-review-output-infra-tests-2026-07-10/code-review.db`).
+
+**Objective:** close the 11 HIGH + 8 MEDIUM findings from the 2026-07-10 `infra/tests/` code-review audit as a single strategic quality-debt milestone, targeting the ONE systemic root cause (post-M15 chart-family consolidation dead-Skip debt in `load/regression_test.go` + 4 sibling files) plus 4 orthogonal hygiene PRs (flakiness sweep, panic-in-helper fix, exec.rm hardening, coverage tooling). **Why now:** the audit just concluded with the 11 HIGH cluster on a single actionable root cause; every day of delay compounds the LoC drift in `load/` (currently 1762 LoC monolith with 57%+ dead-Skip ratio) and lets the dead-code smell propagate to new tests written against the same file. Post-V1 quality-debt is a legitimate strategic intent — the roadmap 22/22 `[x]` state signals V1 delivered, and this milestone acknowledges the debt without pretending V1 was pristine.
+
+**Scope (5 remediation PRs from `code-review-output-infra-tests-2026-07-10/final_report.md § Remediation plan`):**
+
+**PR #1 — Post-M15 dead-Skip sweep + god-file split (systemic root cause; closes 11 findings):**
+
+- Delete 9 permanent-Skip cases in `infra/tests/load/regression_test.go` at lines 71, 375, 453, 472, 572, 595, 845, 1135, 1353, 1644 (all cite deleted artifacts: 4× runbooks 2026-05-11, 5× loopzero-controller chart T1.5, 3× tenant-controller chart T1.5 → but 4 of the 12 line numbers hit multiple Skip cases so effective delete count is 9 blocks).
+- Delete 2 monolith-binary Skip cases in `infra/tests/unit/operator_metrics_registration_test.go:65` + `cache_scoping_test.go:116`.
+- Delete runbook-deleted Skip cases in `infra/tests/unit/operator_cutover_invariants_test.go:72` + `infra/tests/load/l3_variants_test.go:247`.
+- Verify replacement coverage EXISTS at the paths cited in the Skip messages BEFORE deleting: `operator-split-invariants.test.ts` (I-5 replicaCount, I-7 RBAC), `charts/loopzero-tenant-operator/values.yaml`, `operators/internal/tenant/environment_controller.go`. If a replacement is missing, that's a NEW coverage gap — file follow-up issue, do NOT delete the case that "moved elsewhere" nowhere.
+- Split remaining `load/regression_test.go` by responsibility (per-cell, per-chart-family, per-scenario). Target: each split ≤ 500 LoC per `.claude/rules/architecture.md § Anti-patterns` (god modules).
+- Same treatment for `load/cell_scale_test.go` (1089 LoC): resolve or delete the 2 TODOs (Items 05-08 backlog check — if deferred beyond v1, delete the stubs).
+
+**PR #2 — Flakiness sweep (F20):**
+
+- Extract `PollWithBackoff(ctx, cond)` helper into `infra/tests/e2e/helpers_test.go` (or `helpers/poll.go` if PR #1's god-file split moves e2e helpers first).
+- Replace `time.Sleep(N*time.Second)` with `PollWithBackoff(ctx, checkCondFn)` across the 41 identified sites — assert on state, not on elapsed time.
+- Fixed-sleep survives ONLY for: benchmark harnesses, rate-limit tests (Retry-After validation), chaos synchronization windows. DOCUMENT each survival with a `// intentional-sleep: <reason>` comment.
+
+**PR #3 — panic-helper fix (F18):**
+
+- Replace `panic(...)` at `infra/tests/e2e/cluster_kubectl_helpers_test.go:96` + `:103` with `t.Skipf(...)` (env-missing case at line 96) and `t.Fatalf(...)` (programming-error case at line 103).
+- If a helper is called outside `*testing.T` context (BeforeSuite), return a typed error and let the caller decide.
+
+**PR #4 — exec.Command cleanup hardening (F19):**
+
+- Replace `exec.Command("rm","-rf",path).Run()` at `infra/tests/e2e/journey_rollout_test.go:278` with `os.RemoveAll(path)` (stdlib rung-2 per parsimony ladder).
+- Validate `path` is under a controlled temp root before deletion.
+- Callers assert the returned error, not ignore.
+
+**PR #5 — Coverage measurement gate (F22):**
+
+- Add `task test:coverage:report` in `taskfiles/quality.yml` that runs `go test -cover ./infra/tests/{unit,charts,helm}/... -tags=hermetic` and emits `coverage.out`.
+- LIVE-only e2e paths remain uncovered (measurement requires live cluster) — document in the task's docstring.
+
+**Definition of done:**
+
+- [ ] `infra/tests/load/regression_test.go` reduced to ≤ 500 LoC (from 1762), split by responsibility, with 0 permanent-Skip cases citing deleted artifacts.
+- [ ] `infra/tests/load/cell_scale_test.go` reduced to ≤ 500 LoC (from 1089), 0 TODO-Skip stubs (either implemented or explicitly deleted with backlog issue filed).
+- [ ] `panic(` occurrences in `infra/tests/e2e/cluster_kubectl_helpers_test.go` = 0 (grep-checked); replaced with `t.Skipf`/`t.Fatalf`.
+- [ ] `exec.Command("rm","-rf"` occurrences in `infra/tests/` = 0 (grep-checked); replaced with `os.RemoveAll`.
+- [ ] `time.Sleep(` occurrences in `infra/tests/` ≤ 10 (from 41 baseline; every survivor has `intentional-sleep:` comment).
+- [ ] `task test:coverage:report` gate exists in `taskfiles/quality.yml` and prints coverage % on invocation.
+- [ ] Re-run `/loop-code-review infra/tests/` returns 0 HIGH findings (verified against fresh `code-review.db`).
+- [ ] `go test -race ./infra/tests/...` PASS after every PR merge (no test-count regression, no order-dependency introduced by god-file split).
+- [ ] CHANGELOG discipline: `§ Fixed` entry per PR referencing finding IDs (F1-F22) + `code-review-output-infra-tests-2026-07-10/final_report.md` as source.
+
+**Dependencies:** M22 `[x]` (last released). Optional context: M15 `[x]` (introduced the debt via T1.4/T1.5 chart deletions in commit `27cfe6cd` — the milestone this remediation cleans up after).
+
+**Top risks (new):**
+
+1. **Skip-message replacement pointers may be stale (MEDIUM).** The 8 permanent-Skip cases scheduled for deletion cite specific replacement paths (`operator-split-invariants.test.ts` I-5/I-7, `charts/loopzero-tenant-operator/values.yaml`, `operators/internal/tenant/environment_controller.go`). If a replacement was itself deleted or moved after the Skip was written, deleting the case here creates a NEW coverage gap (undetected until the covered invariant regresses in prod). **Mitigation:** PR #1 acceptance criterion #1 is verify-then-delete — grep + read each cited replacement path BEFORE removing the corresponding Skip. If any replacement is missing, file a follow-up issue instead of deleting the case. Zero-tolerance: no case deleted without its replacement confirmed present.
+
+2. **`time.Sleep → PollWithBackoff` refactor changes test timing semantics (MEDIUM).** The 41 sleep sites are distributed across e2e/, chaos/, load/, capacity/ — some may have implicit ordering assumptions the polling helper won't preserve (e.g., "wait exactly 3s so the next assertion sees the mid-canary state"). Refactor may pass hermetically but fail in Cleanroom where timing is jittery. **Mitigation:** run full Ginkgo suite with `-race` + `-count=3` (repeated runs) before-and-after each sub-batch; keep sleep for benchmark/rate-limit/chaos-sync (documented survivals per PR #2 scope). If a polling refactor introduces a new order-dependency, revert that specific site and document the survival.
+
+## Post-M23 backlog (deferred findings tracker per T7.1)
+
+The following findings from the 2026-07-10 `infra/tests/` code-review audit were explicitly deferred out of M23 scope (per plan v1.1 § Coverage Matrix EC-4 absorption). All are LOW/MEDIUM severity — none block the M23 goal metric (11 HIGH → 0 HIGH).
+
+- **F15** — God-file `load/real_deploy_test.go` + `real_deploy_harness.go` (1566 LoC combined). Deferred: orthogonal to systemic root cause; requires separate refactor discovery. Follow-up milestone: TBD.
+- **F16** — God-file `chaos/chaos_test.go` (759 LoC). Deferred: pre-dates per-scenario `c<N>` convention; requires chaos-domain expertise + separate discovery.
+- **F17** — God-file `dogfood/preflight.sh` (522 LoC). Deferred: allowlist-side "DELEGATE-HELMFILE" candidate — requires helmfile-side migration ADR (not test-side refactor).
+- **F21** — `charts/helpers_test.go` at 21 LoC (naming/merge-vs-expand decision). Deferred: LOW severity, ~15min opportunistic cleanup best batched with next `charts/` touch.
+- **F23** — 17 files marked `is_test=1` register 0 tests via counter (helpers vs malformed). Deferred: audit-per-file work (17 individual reads); most are legitimate `*_test.go` helpers per Go convention.
+- **F24** — INFO advisory: `infra/tests/` pyramid is by-design integration-heavy; do NOT fold into repo-wide pyramid analysis. Documented in Baseline Context glossary; no action required.
+
+Source: `code-review-output-infra-tests-2026-07-10/final_report.md` + `.claude/knowledge-base/plans/infra-tests-audit-remediation-plan.md` v1.1 § Coverage Matrix.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |

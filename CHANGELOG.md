@@ -19,7 +19,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
-<<<<<<< HEAD
+## [0.65.0] - 2026-07-10
+
+### Added
+- Roadmap amended: added M23 Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening (`/roadmap-feature infra-tests-audit-remediation`). Source of scope: `code-review-output-infra-tests-2026-07-10/final_report.md` (2026-07-10 audit, 38 findings). Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Sponsor override of skill DO-NOT clause (refactor without user-visible change = ad-hoc mode) explicit — user chose milestone shape to give `cycle-roadmap` a single checkbox for the systemic quality-debt closure vs 5 fragmented ad-hoc releases.
+
+### Changed
+- M23 T7.1: ROADMAP.md § Post-M23 backlog section added — tracks 6 explicitly-deferred findings (F15-F17 god-files, F21 charts/helpers 21 LoC, F23 17 zero-test files, F24 pyramid advisory) with rationale per plan v1.1 Coverage Matrix EC-4 absorption.
+
+### Deprecated
+
+### Removed
+- M23 T1.1: 4 permanent-Skip test functions citing "runbook files removed 2026-05-11" — replacement (docs/runbooks/) was deleted in same governance consolidation event, no unique coverage to preserve. Deletions: `infra/tests/load/regression_test.go:71+1644`, `l3_variants_test.go:247`, `unit/operator_cutover_invariants_test.go:72` (F1-F4).
+- M23 T1.2: 2 permanent-Skip test functions citing "monolith binary deleted T1.4 (commit 27cfe6cd)" — coverage confirmed at replacement paths: `TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics` (combined split test covers all 4 binaries) + 3 per-binary cache-scoping tests (`TestCacheScoping_TenantOperator/PlatformOperator/AppOperator`). Deletions: `infra/tests/unit/operator_metrics_registration_test.go:65`, `cache_scoping_test.go:116` (F5-F6).
+- M23 T1.3: 5 permanent-Skip test functions citing "loopzero-controller chart deleted T1.5" — replacement verified: `infra/pulumi/src/__tests__/operator-split-invariants.test.ts` contains I-5 replicaCount + I-7 RBAC invariants (4 matches). WARN: file is 8w stale in Pulumi legacy tree pending Terraform re-platform (per plan D3 EC-1 HC-4 absorption). Deletions: `regression_test.go:375,453,472,572,595` (F7).
+- M23 T1.4: 3 permanent-Skip test functions citing "tenant-controller chart deleted T1.5" — replacement verified at 2 paths: (a) `charts/loopzero-tenant-operator/values.yaml` (Gitea URL env + tracing config present, 3w fresh); (b) `operators/internal/environment/environment_controller.go` (RENAMED from `operators/internal/tenant/` per blueprint Q6 CRITICAL finding) contains cell-aware `RuntimeFactory` + `spec.cellID` reconcile logic. Deletions: `regression_test.go:845,1135,1353` (F8).
+- 14 test functions total deleted across 5 files; `regression_test.go` reduced 1762 → 1605 LoC (still god-file — T1.5 split deferred).
+
+### Fixed
+- M23 T4.2 (F19): `cleanupWorkDir` in `infra/tests/e2e/journey_rollout_test.go:274` replaced `exec.Command("rm","-rf",path).Run()` with path-traversal-safe `os.RemoveAll(absPath)` per plan v1.1 ADR-D3 EC-1/EC-2 absorption. Added guards: filepath.Clean → filepath.Abs → filepath.Rel(tempRoot,absPath) rejects paths outside `os.TempDir()`; explicit rejection of bare `/tmp/` OR `os.TempDir()` root. Prevents catastrophic cleanup escape (e.g., attacker-controllable `/tmp/../etc/passwd` no longer passes HasPrefix + traversal).
+- M23 T1.5: `infra/tests/load/regression_test.go` split by responsibility from 1605 LoC → 5 files ≤ 500 LoC each (`regression_test.go` 191, `regression_adr_test.go` 113, `regression_features_test.go` 340, `regression_bugs_early_test.go` 377, `regression_bugs_late_test.go` 476). 64 test functions preserved across split. Closes F12 god-file finding.
+- M23 T2.1: `infra/tests/load/cell_scale_test.go` split by L-tier from 1089 LoC → 3 files (`cell_scale_l0_l2_test.go` 674, `cell_scale_l3_test.go` 524, `cell_scale_l4_l5_test.go` 697); 2 TODO stubs deleted (`TestL5_1000Tenants_FullScale` + `TestL4_500Tenants_MultiCell` — pure `t.Log("TODO") + t.Skip` cases citing Items 05-08 that never shipped). Partial F13 closure — individual L-tier tests remain large (avg ~170 LoC each); per-test refactoring is out of T2.1 mechanical-split scope.
+- M23 T3.1 (F20 helper): shipped `infra/tests/e2e/helpers_poll.go`'s `PollUntil[T any]` generic helper — canonical value-return closure shape per plan v1.1 ADR-D1 boundary-crossing analysis (matches e2e/journey_*_test.go idiom, NOT operators/-side subtest style). Semantics per EC-3 absorption: zero-value T is a valid success signal; no panic recovery per rules/error-handling.md. 6 hermetic tests PASS with -race in 1.164s (success/timeout/ctx-cancel/zero-interval-default/zero-value-T success EC-3/interval-exceeds-timeout EC-5).
+- M23 T4.1 (F18): `clusterKubectlArgs` in `infra/tests/e2e/cluster_kubectl_helpers_test.go:96,103` replaced `panic(...)` with `log.Fatalf(...)`. Rationale: full `t.Skipf`/`t.Fatalf` refactor would require signature cascade to 40+ callers (many lack `*testing.T` in scope — `kubectlForCluster` and its wrappers `kubectlBuild`/`kubectlMgmt`/`kubectlWorkload`). Per parsimony ladder rung 2 (stdlib does it), `log.Fatalf` is the FAANG-appropriate pragmatic fix: fail-fast, fail-clear, no whole-suite stack noise. Documented in-code with justification comment.
+
+### Added
+- M23 T5.1 (F22): shipped `loopzero-ops quality test-coverage-report` M9 quality gate — runs `go test -cover -json` against configured scope + threshold (default 30%). Follows M16 canonical shape (`type Config struct + func Check(cfg) (Outcome, error)`) per plan v1.1 ADR-D2 dual exemplar (`orykratospublicurls` + `esochartsanity`). 7 hermetic tests PASS with -race (EC-5 threshold-exactly-at-boundary + EC-7 malformed-JSON parser resilience + multi-package aggregation + failed-package collection + empty-output error + advisory-fallthrough shape + typed-error identity). Wired in `cmd/loopzero-ops/quality_registry.go` + `cmd/loopzero-ops/quality_gates_governance.go`. Closes F22 (coverage_pct not measured).
+
+### Security
+
 ## [0.64.1] - 2026-07-10
 
 ### Added
@@ -29,7 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 - `infra/tests/helm/ory-kratos-public-urls_test.sh` (~77 LoC) — migrated to Go gate `loopzero-ops quality ory-kratos-public-urls` per M22 empirical follow-up M-Migrate2. Allowlist row also removed (118 → 117).
 
-=======
 >>>>>>> origin/main
 ## [0.64.0] - 2026-07-10
 

@@ -26,7 +26,10 @@
 package e2e
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -271,9 +274,33 @@ func (e *skipError) Error() string { return e.msg }
 
 // cleanupWorkDir removes the temporary workdir created by copyFixture.
 // Idempotent: nil/empty path returns nil.
+//
+// M23 T4.2 (F19): replaced `exec.Command("rm","-rf",path).Run()` with
+// path-traversal-safe os.RemoveAll (per plan v1.1 ADR-D3 EC-1/EC-2 absorption).
+// Rejects: empty path, bare temp root, paths outside os.TempDir(). The
+// filepath.Clean + filepath.Rel guard prevents attacker-controllable or
+// mis-generated paths like "/tmp/../etc/passwd" from escaping the temp root.
 func cleanupWorkDir(path string) error {
 	if path == "" {
 		return nil
 	}
-	return exec.Command("rm", "-rf", path).Run()
+	cleaned := filepath.Clean(path)
+	// EC-2: reject bare temp root — deleting /tmp entirely is catastrophic in shared CI.
+	if cleaned == "" || cleaned == "/" || cleaned == "/tmp" || cleaned == filepath.Clean(os.TempDir()) {
+		return fmt.Errorf("cleanupWorkDir: refusing to remove bare temp root: %q", path)
+	}
+	// EC-1: prevent path traversal — require path IS UNDER tempRoot after Clean+Abs.
+	absPath, err := filepath.Abs(cleaned)
+	if err != nil {
+		return fmt.Errorf("cleanupWorkDir: resolve abs path %q: %w", path, err)
+	}
+	tempRoot, err := filepath.Abs(os.TempDir())
+	if err != nil {
+		return fmt.Errorf("cleanupWorkDir: resolve temp root: %w", err)
+	}
+	rel, err := filepath.Rel(tempRoot, absPath)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
+		return fmt.Errorf("cleanupWorkDir: refusing to remove path outside temp root: %q (rel=%q)", path, rel)
+	}
+	return os.RemoveAll(absPath)
 }
