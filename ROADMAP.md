@@ -415,7 +415,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M16 — [ ] Hermetic Test Migration: `infra/tests/check-*_test.sh` → Go Quality Gates (Wave 1+2+3)
+### M16 — [x] Hermetic Test Migration: `infra/tests/check-*_test.sh` → Go Quality Gates (Wave 1+2+3)
 
 > Added 2026-07-10 by `/roadmap-feature` (slug: `infra-tests-hermetic-to-quality-gates`). See CHANGELOG `[Unreleased] § Added`. Grill: `knowledge-base/grills/infra-tests-hermetic-to-quality-gates-feature-grill.md`.
 

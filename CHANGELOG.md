@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.61.0] - 2026-07-10
+
+### Added
+- M15 (`operator-glue-go-migration-final`): plan v1.1 SHIPPABLE 93.2 for Waves A+B delivery. Blueprint v1.0 SHIPPABLE 98.8 with 121-entry allowlist classification. ADR-D1 Path A (Waves A+B in v0.61.0; Wave C phase-3 split; Wave D → M18) sponsor-ratified 2026-07-10.
+
+
+### Changed
+- `docs/operations/openbao-transit-cutover-runbook.md § 4.1` updated: `reset-for-e2e.sh` reference replaced with canonical `task clean:all && task setup && seed-post-cleanroom-all.sh --verify` chain per `rules/cleanroom-up-live-test-mandate.md`.
+- `.claude/rules/shell-scripts-allowlist.md § TEMPORARY DELETE`: section closed 2026-07-10; entry `reset-for-e2e.sh` removed (M15 Wave A T2.1).
+
+
+### Removed
+- `infra/scripts/local/reset-for-e2e.sh` (~170 LoC) — TEMPORARY-DELETE per sponsor mandate 2026-06-08, umbrella T6.1 shipped in v0.60.0. Canonical replacement: Cleanroom TOTAL chain (M15 Wave A T2.1).
+
 ## [0.60.0] - 2026-07-10
 
 ### Added
