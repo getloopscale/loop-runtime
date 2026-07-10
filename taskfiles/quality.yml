@@ -125,7 +125,7 @@ tasks:
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
       # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
       # + live-url-discoverability + status-url-probe (closes R1-F2 HIGH).
-      - bash infra/tests/check-dev-public-billing-portal-syntax_test.sh            # T5.1 ORPHAN companion 1/4
+      - /tmp/loopzero-ops quality dev-public-billing-portal-syntax                    # M20 T2.1 (2026-07-10) — migrated from check-dev-public-billing-portal-syntax_test.sh per M-Migrate2 canonical (M16 T2.1 sprintsyntax shape)
       - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
       # shell-lint advisory — invokes loopzero-ops quality shellcheck-advisory.
