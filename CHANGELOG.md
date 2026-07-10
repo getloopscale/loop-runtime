@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Roadmap amended: added M16 Hermetic Test Migration: `infra/tests/check-*_test.sh` → Go Quality Gates (Wave 1+2+3) (`/roadmap-feature infra-tests-hermetic-to-quality-gates`)
+- **M16 Wave 1 gate 1/3 — `loopzero-ops quality sprint-syntax`.** Pure-logic Go migration of `infra/tests/check-sprint-syntax_test.sh` (~55 LoC bash → `cmd/loopzero-ops/internal/quality/sprintsyntax/check.go` ~215 LoC + `check_test.go` ~180 LoC). Hermetic contract for `infra/scripts/local/check-sprint.sh` + its homed helper `check_sprint.py`: 11 assertions preserved verbatim (script exists / `bash -n` clean / helper exists / `python3 -m py_compile` clean / no python3 heredoc [T3.2 de-costume gate] / JSON report valid / `pass: 6` present / spaced-detail preserved / results[0] == `[c1, PASS, OK]` tuple / allowlist file exists / script name allowlisted). Requires bash + python3 on PATH. 6/6 hermetic tests GREEN under `-race`. Follows blueprint canonical shape (plan D2 stdlib-only imports: `bytes`, `encoding/json`, `errors`, `fmt`, `io`, `os`, `os/exec`, `path/filepath`, `regexp` — zero third-party). Modal `Failures []string` per blueprint ADR D1. Sanity-run against real repo: PASS. Wired in `taskfiles/quality.yml § quality:gates`. (M16 T2.1)
 
 ### Changed
 - **M16 Phase 1 hygiene — wire 5 previously-registered M-Migrate2 gates into `task quality:gates`.** Discovery blueprint (2026-07-10 SHIPPABLE 98.3) identified 5 gates registered in `cmd/loopzero-ops/quality_registry.go` but unwired in `taskfiles/quality.yml § quality:gates` — a Rule 3 dead-code gap where `task quality:gates` GREEN falsely implied coverage for `webhook-canonical-path`, `oidc-cred-admin-loopzero`, `canonical-fixture-repo`, `install-git-hooks`, `render-schema-gen-sql`. Backfill wires all 5 with M16 T1.N docs comments; sanity-run confirmed 4 PASS + 1 WARN (advisory-only `render-schema-gen-sql`). Pre-Wave-1 close ahead of Wave 1 (3 syntax gates) migration. (M16 T1.1-T1.5)
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- **`infra/tests/check-sprint-syntax_test.sh` — superseded by Go quality gate `sprint-syntax`.** M-Migrate2 2026-07-10 M16 T2.1 Wave 1. 11 hermetic contract assertions preserved byte-for-byte in Go; parity baseline captured at `knowledge-base/audits/M16-wave1-check-sprint-syntax-baseline-2026-07-10.txt` shows 11/11 PASS pre-migration. Bash test deleted, allowlist row unchanged (script itself — `check-sprint.sh` — remains allowlisted; Wave 3 will migrate the target script).
 
 ### Fixed
 

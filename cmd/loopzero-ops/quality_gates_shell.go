@@ -35,6 +35,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sprintsyntax"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -761,5 +762,31 @@ func runPulumiRequiredSecrets(args []string) int {
 		return 1
 	}
 	fmt.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
+	return 0
+}
+
+// runSprintSyntax enforces the check-sprint.sh hermetic contract: script exists,
+// bash -n clean, helper compiles, no python3 heredoc, JSON report shape valid,
+// allowlist entry present. Requires bash + python3 on PATH.
+// Migrated from infra/tests/check-sprint-syntax_test.sh
+// (M-Migrate2 2026-07-10 M16 T2.1 Wave 1).
+func runSprintSyntax(args []string) int {
+	fs := flag.NewFlagSet("sprint-syntax", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := sprintsyntax.Check(sprintsyntax.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sprint-syntax: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("sprint-syntax: PASS — 11 hermetic contract assertions clean (script + bash-n + helper + no-heredoc + json-shape + allowlist)")
 	return 0
 }
