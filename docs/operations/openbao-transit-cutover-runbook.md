@@ -468,8 +468,10 @@ Only when rehearsal verdict=PASS proceed to step 4.1.
 ### 4.1 — Reset DB for clean E2E
 
 ```bash
-# Per feedback_temporary_reset_e2e_script_DELETE_ME — TEMPORARY but canonical until ralph-loop M07-style cleanroom-fresh ships
-infra/scripts/local/reset-for-e2e.sh
+# reset-for-e2e.sh was deleted in M15 Wave A (2026-07-10) per sponsor mandate.
+# Canonical replacement is a full Cleanroom TOTAL (task clean:all && task setup)
+# followed by seed-post-cleanroom-all.sh, per rules/cleanroom-up-live-test-mandate.md.
+task clean:all && task setup && bash infra/scripts/local/seed-post-cleanroom-all.sh --verify
 ```
 
 ### 4.2 — Seed canonical user
