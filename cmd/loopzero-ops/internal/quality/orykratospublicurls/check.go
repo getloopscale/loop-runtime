@@ -22,11 +22,7 @@ import (
 	"strings"
 )
 
-const (
-	helmfileRel  = "infra/helmfile/mgmt.helmfile.yaml.gotmpl"
-	allowlistRel = ".claude/rules/shell-scripts-allowlist.md"
-	allowlistTag = "infra/tests/helm/ory-kratos-public-urls_test.sh"
-)
+const helmfileRel = "infra/helmfile/mgmt.helmfile.yaml.gotmpl"
 
 // Config controls the check.
 type Config struct {
@@ -117,21 +113,10 @@ func Check(cfg Config) (Outcome, error) {
 		}, nil
 	}
 
-	// Allowlist check (mirror sibling M-Migrate2 gates).
-	allowlist := filepath.Join(root, allowlistRel)
-	allowBytes, allowErr := os.ReadFile(allowlist)
-	if allowErr != nil {
-		return Outcome{
-			Pass:     false,
-			Failures: []string{fmt.Sprintf("allowlist file exists: %s missing", allowlistRel)},
-		}, ErrViolations
-	}
-	if !strings.Contains(string(allowBytes), allowlistTag) {
-		return Outcome{
-			Pass:     false,
-			Failures: []string{fmt.Sprintf("script allowlisted: %q not found in %s", allowlistTag, allowlistRel)},
-		}, ErrViolations
-	}
+	// NOTE: unlike the M20/M22 T2.1 syntax gates, this gate does NOT assert
+	// the bash test is allowlisted — the bash test was DELETED during this
+	// migration (post-M22 empirical follow-up). The gate now validates the
+	// helm-template golden invariants directly against the chart.
 
 	var failures []string
 
