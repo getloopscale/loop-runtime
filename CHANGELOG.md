@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- `ErrNoActiveRelease.Message` reformulada para wording operation-neutral ("No active release found for this environment. Deploy at least once before running this operation.") — reg de loopzero-cloud#166 (CRITICAL): a mensagem anterior continha "source environment" + "promoting" (promote-flavored), induzindo operadores a diagnosticar mal o rollback path. Docstring pin + test `TestErrNoActiveRelease_MessageIsOperationNeutral` garante regressão. Hermetic-only fix — LIVE reproduction pending sponsor JUNTOS (state divergence between env_targets.active_release_id + releases.status suspeita como upstream cause, precisa cluster real). (#166)
 
 ### Security
 

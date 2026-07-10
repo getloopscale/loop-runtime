@@ -225,11 +225,14 @@ var (
 	}
 
 	// ErrNoActiveRelease is returned when rollback or promote is attempted but
-	// the source environment has no active release. Shared by both flows so the
-	// message must stay neutral (no "rollback"/"promote" wording).
+	// the target environment has no active release. Shared by both flows so the
+	// message must stay neutral (no "rollback"/"promote"/"source environment"
+	// wording). Regression: loopzero-cloud#166 (CRITICAL) — user hit the pre-fix
+	// promote-flavored wording during a rollback path and mis-diagnosed the
+	// upstream cause. Test pin: TestErrNoActiveRelease_MessageIsOperationNeutral.
 	ErrNoActiveRelease = &LoopZeroError{
 		Code:       "NO_ACTIVE_RELEASE",
-		Message:    "No active release found in the source environment. Deploy at least once before promoting or rolling back.",
+		Message:    "No active release found for this environment. Deploy at least once before running this operation.",
 	}
 
 	// ErrNoPreviousRelease is returned when rollback is attempted but no previous release exists.
