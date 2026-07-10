@@ -8,22 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Roadmap amended: added M19 Operator Glue → Go: LIVE Slice (62 files) (`/roadmap-feature operator-glue-final-live-slice`). Depends on M18. Requires Cleanroom+UP+sponsor JUNTOS.
-- Roadmap amended: added M20 Hermetic Test Migration Remainder: `infra/tests/check-*_test.sh` (17) + `helm/*_test.sh` (1) → Go Quality Gates (`/roadmap-feature m20-hermetic-infra-tests-remainder`). Depends on M16. Zero cluster I/O — hermetic-only migration seguindo padrão M-Migrate2 canonical.
-- **M20 T2.1 Wave A gate 1/18 — `loopzero-ops quality dev-public-billing-portal-syntax`.** Pure-logic Go migration of `infra/tests/check-dev-public-billing-portal-syntax_test.sh` (~38 LoC bash → `cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax/check.go` ~140 LoC + `check_test.go` ~180 LoC). 8 assertions preserved verbatim: (1) file exists / (2) bash -n syntax OK / (3) set -euo pipefail declared / (4) log() func defined / (5) assert() func defined / (6) Stripe billing endpoint referenced / (7) exit codes 0/1/2 only / (8) script allowlisted. 6/6 hermetic tests GREEN sob `-race`. Sanity-run against real repo: PASS. Follows M16 T2.1 sprintsyntax canonical shape verbatim per M20 blueprint ADR-D1. Wired em `taskfiles/quality.yml § quality:gates`. (M20 T2.1)
-
-### Changed
-- ROADMAP.md M19 amended to terminal canonical placeholder (`[ ]` → `[x]`) via sponsor AskUserQuestion authorization 2026-07-10 (recursive deadlock resolution). Original DoD (62 LIVE files migration) reframed as institutional backlog rastreado dentro do M19 § body; retomada via `/roadmap-feature operator-glue-live-session --slug <descritivo>` quando operator + sponsor JUNTOS + Cleanroom+UP+LIVE cluster simultaneamente disponíveis. See `knowledge-base/roadmap-runs/M19-2026-07-10.md`.
 
 ### Changed
 
 ### Deprecated
 
 ### Removed
+
+### Fixed
+
+### Security
+
+## [0.63.0] - 2026-07-10
+
+### Added
+- Roadmap amended: added M19 Operator Glue → Go: LIVE Slice (62 files) (`/roadmap-feature operator-glue-final-live-slice`). Depends on M18. Requires Cleanroom+UP+sponsor JUNTOS.
+- Roadmap amended: added M20 Hermetic Test Migration Remainder: `infra/tests/check-*_test.sh` (17) + `helm/*_test.sh` (1) → Go Quality Gates (`/roadmap-feature m20-hermetic-infra-tests-remainder`). Depends on M16. Zero cluster I/O — hermetic-only migration seguindo padrão M-Migrate2 canonical.
+- **M20 T2.1 Wave A gate 1/18 — `loopzero-ops quality dev-public-billing-portal-syntax`.** Pure-logic Go migration of `infra/tests/check-dev-public-billing-portal-syntax_test.sh` (~38 LoC bash → `cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax/check.go` ~140 LoC + `check_test.go` ~180 LoC). 8 assertions preserved verbatim: (1) file exists / (2) bash -n syntax OK / (3) set -euo pipefail declared / (4) log() func defined / (5) assert() func defined / (6) Stripe billing endpoint referenced / (7) exit codes 0/1/2 only / (8) script allowlisted. 6/6 hermetic tests GREEN sob `-race`. Sanity-run against real repo: PASS. Follows M16 T2.1 sprintsyntax canonical shape verbatim per M20 blueprint ADR-D1. Wired em `taskfiles/quality.yml § quality:gates`. (M20 T2.1)
+
+
+### Changed
+- ROADMAP.md M19 amended to terminal canonical placeholder (`[ ]` → `[x]`) via sponsor AskUserQuestion authorization 2026-07-10 (recursive deadlock resolution). Original DoD (62 LIVE files migration) reframed as institutional backlog rastreado dentro do M19 § body; retomada via `/roadmap-feature operator-glue-live-session --slug <descritivo>` quando operator + sponsor JUNTOS + Cleanroom+UP+LIVE cluster simultaneamente disponíveis. See `knowledge-base/roadmap-runs/M19-2026-07-10.md`.
+
+
+
+### Removed
 - `infra/tests/check-dev-public-billing-portal-syntax_test.sh` (~38 LoC) — migrated to Go gate `loopzero-ops quality dev-public-billing-portal-syntax` per M20 T2.1 M-Migrate2 canonical.
+
 
 ### Fixed
 - `ErrNoActiveRelease.Message` reformulada para wording operation-neutral ("No active release found for this environment. Deploy at least once before running this operation.") — reg de loopzero-cloud#166 (CRITICAL): a mensagem anterior continha "source environment" + "promoting" (promote-flavored), induzindo operadores a diagnosticar mal o rollback path. Docstring pin + test `TestErrNoActiveRelease_MessageIsOperationNeutral` garante regressão. Hermetic-only fix — LIVE reproduction pending sponsor JUNTOS (state divergence between env_targets.active_release_id + releases.status suspeita como upstream cause, precisa cluster real). (#166)
+
 
 ### Security
 - Caddyfile app-dev defense-in-depth: `@dev_server_only` matcher + `respond 404` bloqueia dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*, /package.json, /package-lock.json, /tsconfig.*) — loopzero-cloud#141 (SECURITY: Vite DEV server exposto). Novo gate `loopzero-ops quality caddyfile-dev-server-deny` wired em `taskfiles/quality.yml § quality:gates` com 8 hermetic assertions. Upstream root cause (dashboard pod running vite dev instead of nginx serving prod bundle) belongs to loopzero-cloud repo — issue OPEN pending LIVE remediation. (#141)
