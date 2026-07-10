@@ -753,12 +753,12 @@ tasks:
 
   dogfood:repro:
     desc: |
-      CHG-2026-04-29-DOGFOOD — Reproduce all 13 dogfood findings (F-01..F-13)
-      against k3d standalone-multi. Emits JSON to stdout + summary table to
-      stderr. Exit 0 when all REPRODUCED (consistent matrix), exit 1 when at
-      least one FIXED (matrix needs update).
+      Reproduce all 13 dogfood findings (F-01..F-13) against dev-public k3d.
+      Migrated to Ginkgo at infra/tests/e2e/dogfood_repro_test.go per M18 T2.1
+      (v0.62.0 2026-07-10). Run with LOOPZERO_E2E=1 for LIVE mode; unset for
+      hermetic skip (compile-verify only).
     cmds:
-      - bash infra/tests/dogfood/repro-findings.sh
+      - LOOPZERO_E2E=1 go test ./infra/tests/e2e/ -run TestDeployHappyPath -v --ginkgo.label-filter="dogfood-repro"
 
   test:dogfood:recovery:
     desc: |
