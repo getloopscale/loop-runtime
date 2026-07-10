@@ -70,8 +70,9 @@ respective LIVE stack. NOT autonomous.
 | `dogfood/preflight.sh` | 23 | the dogfood pre-flight — heavily referenced; KEEP or careful extend of BeforeSuite |
 | `dogfood/full-loop.sh` | 6 | the dogfood journey loop — overlaps e2e journey suite (106 specs) |
 | `dogfood/cli-coverage.sh` | 7 | CLI-by-CLI coverage — overlaps journey |
-| `dogfood/repro-findings.sh` | 1 | finding-repro harness |
-| `dogfood/scripts/cleanup-*.sh` | 0-1 | cleanup helpers — **EC-1 grep-before-delete** |
+| ~~`dogfood/repro-findings.sh`~~ | ~~1~~ | ~~finding-repro harness~~ — MIGRATED to Ginkgo at `infra/tests/e2e/dogfood_repro_test.go` (M18 T2.1, v0.62.0 2026-07-10) |
+| ~~`dogfood/scripts/cleanup-terminating-namespaces.sh`~~ | 0 | MIGRATED — folded as `cleanupTerminatingNamespaces` helper in `dogfood_repro_test.go` (M18 T2.1) |
+| `dogfood/scripts/cleanup-*.sh` (remaining) | 0-1 | remaining cleanup helpers — **EC-1 grep-before-delete** |
 | `dogfood/setup-monorepo-turbo.sh` | 0 | **EC-1 grep-before-delete** — fixture setup, may be orphan |
 
 ## Existing Ginkgo coverage
