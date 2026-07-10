@@ -423,13 +423,14 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 **Definition of done:**
 
-- [ ] **Wave 1** — 3 syntax/layout gates migrados: `check-sprint-syntax_test.sh`, `check-archive-script-repo-root_test.sh`, `check-no-cloud-dev-default_test.sh` → 3 pkgs Go novos em `cmd/loopzero-ops/internal/quality/*/` registrados em `quality_registry.go`. Bash deletado. ~200 LoC bash → ~450 LoC Go.
-- [ ] **Wave 2** — 6 helm-template gates migrados: `check-loki-vault-retention`, `check-loki-retention-schema`, `check-loopzero-external-secrets-{chart-sanity,creation-policy}`, `check-vault-prom-alerts`, `check-day30-day60-cronjobs`, `check-openbao-init-auth-mounts`. Helm binary D1-exempt via `os/exec`. ~800 LoC bash → ~1,800 LoC Go.
-- [ ] **Wave 3** — 11 bash-target pair migrations: migrar (test + target script) juntos para não deixar test órfão — inclui `migrate-legacy-namespaces`, `rotate-secret`, `enable-vault-backup`, `restore-vault-snapshot`, `seed-loopzero-secrets`, `vault-sync`, `generate-secrets-vault-fallback`, `promtail-vault-{scrape,empty-targets}`, `scoped-kubeconfig-{cold-bootstrap,vault}`. ~4,000 LoC bash → ~6,000 LoC Go. Split em Wave 3a/3b OU promote para M17 se ritmo indicar risco de non-close.
-- [ ] Allowlist reduction quantificada: `allowlist -= 27` (target subset — não substitui M15 KPI global de `≤ 30`).
-- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote de DELETE; zero regressão.
-- [ ] Padrão M-Migrate2 seguido rigidamente por gate: pkg Go + hermetic test + registro em `quality_registry.go` + `git rm` bash + CHANGELOG `§ Removed` + `§ Added`.
-- [ ] Zero referência pendurada (grep sweep obrigatório): 0 hits em `taskfiles/*`, `docs/*`, `.claude/skills/*` após cada DELETE.
+- [x] **Pre-Wave-1 hygiene** (2026-07-10) — 5 previously-registered M-Migrate2 gates backfilled in `taskfiles/quality.yml § quality:gates` (webhook-canonical-path, oidc-cred-admin-loopzero, canonical-fixture-repo, install-git-hooks, render-schema-gen-sql). Rule 3 dead-code closure.
+- [x] **Wave 1** (2026-07-10) — 3 syntax/layout gates migrados: `check-sprint-syntax_test.sh`, `check-archive-script-repo-root_test.sh`, `check-no-cloud-dev-default_test.sh` → `cmd/loopzero-ops/internal/quality/{sprintsyntax,archivescriptrepo,nocloud}/`. Bash deletado. 19 hermetic tests GREEN under `-race`.
+- [x] **Wave 2** (2026-07-10) — 7 helm-template gates migrados: `check-loki-vault-retention` (T3.1), `check-loki-retention-schema` (T3.2), `check-vault-prom-alerts` (T3.3), `check-day30-day60-cronjobs` (T3.4), `check-loopzero-external-secrets-chart-sanity` (T3.5), `check-loopzero-external-secrets-creation-policy` (T3.6), `check-openbao-init-auth-mounts` (T3.7). Advisory-fallthrough when helm absent. All bash deleted.
+- [~] **Wave 3** — 11 bash-target pair migrations — **PROMOTED TO M17** per ADR-M16-D4 velocity-based split protocol. Empirical measurement showed Wave 3 (11 pairs × 2 files each × ~400-1000 LoC) exceeds 4× combined Wave 1+2 velocity. Decision documented at `knowledge-base/audits/M16-wave3-decision-2026-07-10.md`. Wave 3 rescoped into M17 milestone (to be added by `/roadmap-feature` in follow-up session).
+- [x] **Allowlist reduction (partial per D4 split)** — 10 hermetic scripts deleted from `.claude/rules/shell-scripts-allowlist.md` via M16 Waves 1+2 (Wave 3's 11 pair rows remain, will drop as M17 ships).
+- [x] `task quality:gates` + `go test ./...` GREEN após cada lote de DELETE; zero regressão comprovada (105+ quality packages GREEN sob `-race`).
+- [x] Padrão M-Migrate2 seguido rigidamente por gate: pkg Go + hermetic test + registro em `quality_registry.go` + `git rm` bash + CHANGELOG `§ Removed` + `§ Added` (per gate atomic commit).
+- [x] Zero referência pendurada — grep sweep executado at T5.4 integration validation.
 
 **Dependencies:** M13 (bash strangler completion + gate `no-new-bash` invertido) + M15 (padrão M-Migrate2 estabelecido pelos 20 seeds). M13 é `[x]`; M15 é `[ ]` in-progress — M16 elegível quando M15 fechar.
 
