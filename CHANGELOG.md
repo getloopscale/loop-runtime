@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Roadmap amended: added M23 Infra/tests/ Code-Review Remediation — dead-Skip sweep + god-file split + flakiness/panic hardening (`/roadmap-feature infra-tests-audit-remediation`). Source of scope: `code-review-output/final_report.md` (2026-07-10 audit, 38 findings). Grill: `.claude/knowledge-base/grills/infra-tests-audit-remediation-feature-grill.md`. Sponsor override of skill DO-NOT clause (refactor without user-visible change = ad-hoc mode) explicit — user chose milestone shape to give `cycle-roadmap` a single checkbox for the systemic quality-debt closure vs 5 fragmented ad-hoc releases.
 
 ### Changed
 
