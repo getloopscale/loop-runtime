@@ -286,6 +286,7 @@ func TestRealDeploy_L2_50Tenants(t *testing.T) {
 		}(i, id)
 		// Stagger starts by 30s to simulate sustained arrival (not burst)
 		if i < tenantCount-1 {
+			// intentional-sleep: load-tier pacing (interleaved deploy submission)
 			time.Sleep(30 * time.Second)
 		}
 	}
@@ -425,6 +426,7 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			// Small stagger to simulate rapid pushes
+			// intentional-sleep: load-tier pacing (interleaved deploy submission)
 			time.Sleep(time.Duration(attempt) * 5 * time.Second)
 			r := harness.RealDeploy(ctx, identities[0])
 			// We expect some of these to be superseded (409) — that's correct behavior.

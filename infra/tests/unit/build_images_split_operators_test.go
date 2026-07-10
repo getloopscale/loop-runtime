@@ -27,7 +27,11 @@ func readBuildImagesYaml(t *testing.T) string {
 	)
 	data, err := os.ReadFile(wfPath)
 	if err != nil {
-		t.Fatalf("build-images.yml not found: %v", err)
+		// F27 (M23 audit 2026-07-10): GitHub Actions removed 2026-05-23 per
+		// CLAUDE.md § CI/CD (operator decision — not the CI/CD platform).
+		// The 4-split-operator invariant now lives in Taskfile / Tiltfile /
+		// docker-bake.hcl; this test is stale. Skip gracefully.
+		t.Skipf("build-images.yml absent (GitHub Actions removed 2026-05-23); split-operator invariant is enforced by task quality:gates now")
 	}
 	return string(data)
 }

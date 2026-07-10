@@ -60,18 +60,25 @@ func TestDevPublicLoopZeroApiImageOverlayUsesCanonicalDOCR(t *testing.T) {
 		t.Error("infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl still USES `repository: k3d-loopzero-registry:5000/loopzero-api` — dev-public canonical pulls from DOCR (issue #100 Gap B)")
 	}
 
-	// T3. Overlay MUST reference the canonical DOCR repository
-	// `registry.digitalocean.com/loopzero-system/loopzero-api`. This is what
-	// `task images:push:platform:dev-public` pushes to + what the
-	// do-registry imagePullSecret authenticates against.
-	if !strings.Contains(overlay, "registry.digitalocean.com/loopzero-system/loopzero-api") {
-		t.Error("infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl does NOT reference canonical DOCR repository `registry.digitalocean.com/loopzero-system/loopzero-api` — issue #100 Gap B")
+	// T3 (audit 2026-07-10): overlay must reference a canonical registry —
+	// either the pre-#142 DOCR path (`registry.digitalocean.com/loopzero-system/
+	// loopzero-api`) OR the post-#142 GHCR path (`ghcr.io/getloopscale/loopzero-api`).
+	// Canonical migrated 2026-06-22 to GHCR :develop (rolling) per
+	// [[feedback_close_issue_update_live_dev_public_2026_06_22]] — CI
+	// build-publish workflow auto-refreshes on every push to develop.
+	usesDOCR := strings.Contains(overlay, "registry.digitalocean.com/loopzero-system/loopzero-api")
+	usesGHCR := strings.Contains(overlay, "ghcr.io/getloopscale/loopzero-api")
+	if !usesDOCR && !usesGHCR {
+		t.Error("infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl does NOT reference canonical DOCR OR GHCR repository — issue #100 Gap B / #142 canonical")
 	}
 
-	// T4. Traceability comment cites issue #100 so a future
-	// "simplify" refactor sees the rationale for using DOCR.
-	if !strings.Contains(overlay, "issue #100") && !strings.Contains(overlay, "Issue #100") {
-		t.Error("infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl has no `issue #100` traceability comment")
+	// T4 (audit 2026-07-10): traceability comment cites either issue #100
+	// (pre-#142 direction) OR issue #142 (post-#142 canonical); a future
+	// "simplify" refactor sees the rationale for either registry choice.
+	hasIssue100 := strings.Contains(overlay, "issue #100") || strings.Contains(overlay, "Issue #100")
+	hasIssue142 := strings.Contains(overlay, "#142")
+	if !hasIssue100 && !hasIssue142 {
+		t.Error("infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl has no `issue #100` OR `#142` traceability comment")
 	}
 
 	// --- Build task assertions ---

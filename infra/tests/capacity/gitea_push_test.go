@@ -111,6 +111,7 @@ func TestCapacityGiteaPushLatency(t *testing.T) {
 			}
 
 			// Let Gitea settle after repo creation + seeding.
+			// intentional-sleep: benchmark warmup / measurement window
 			time.Sleep(5 * time.Second)
 		}
 

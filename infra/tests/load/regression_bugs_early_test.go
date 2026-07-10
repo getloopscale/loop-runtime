@@ -198,16 +198,22 @@ func TestB28GiteaHaConditional(t *testing.T) {
 }
 
 func TestB29RedisServiceHostname(t *testing.T) {
+	// F25 (M23 audit 2026-07-10): assertion was INVERTED — the local
+	// `infra/helm/gitea/templates/redis.yaml` template is DEAD (release uses
+	// remote gitea-charts/gitea chart per finding-2026-05-22-pg-password-
+	// divergence § gitea-redis; pointing at bare `gitea-redis` crashed with
+	// "lookup gitea-redis: no such host"). Canonical is `gitea-redis-master`
+	// from Bitnami primary Service (prod parity — same release runs dev+prod).
 	data, err := os.ReadFile("../../helm/gitea/values.yaml")
 	if err != nil {
 		t.Fatalf("read gitea values.yaml: %v", err)
 	}
 	s := string(data)
-	if strings.Contains(s, "addr=gitea-redis-master:6379") {
-		t.Errorf("B29 regression: gitea uses 'addr=gitea-redis-master:6379' (legacy Bitnami chart; current standalone Redis Service is `gitea-redis`)")
+	if !strings.Contains(s, "addr=gitea-redis-master:6379") {
+		t.Errorf("B29 regression: gitea must use 'addr=gitea-redis-master:6379' (Bitnami primary Service; local redis.yaml template is DEAD)")
 	}
-	if !strings.Contains(s, "addr=gitea-redis:6379") {
-		t.Errorf("B29 regression: gitea must use 'addr=gitea-redis:6379' (standalone Redis StatefulSet from `infra/helm/gitea/templates/redis.yaml`)")
+	if strings.Contains(s, `addr=gitea-redis:6379"`) {
+		t.Errorf("B29 regression: gitea must NOT use bare 'addr=gitea-redis:6379' (documented crash: lookup gitea-redis: no such host)")
 	}
 }
 
@@ -250,8 +256,11 @@ func TestB33B36GenerateSecretsStandaloneFallback(t *testing.T) {
 	if !strings.Contains(s, "B33: standalone fallback") {
 		t.Errorf("B33 regression: generate-secrets.sh missing standalone fallback marker for loopzero-db-credentials")
 	}
-	if !strings.Contains(s, "B36: standalone — generating synthetic in-cluster kubeconfig") {
-		t.Errorf("B36 regression: generate-secrets.sh missing synthetic kubeconfig generator")
+	// F26 (M23 audit 2026-07-10): B36 log-string canonicalized to
+	// "ensuring loopzero-cluster-kubeconfigs (per-slot idempotent)"; behavior
+	// preserved. Assert the canonical form.
+	if !strings.Contains(s, "B36: standalone — ensuring loopzero-cluster-kubeconfigs") {
+		t.Errorf("B36 regression: generate-secrets.sh missing canonical loopzero-cluster-kubeconfigs ensure step")
 	}
 	if !strings.Contains(s, "loopzero-cluster-kubeconfigs") {
 		t.Errorf("B36 regression: generate-secrets.sh must create loopzero-cluster-kubeconfigs Secret")

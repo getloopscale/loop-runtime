@@ -159,6 +159,7 @@ func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 
 	// --- Step 3: Wait for controller to ingest ---
 	t.Logf("waiting %v for ArgoCD controller to ingest Applications...", settleTime)
+	// intentional-sleep: benchmark warmup / measurement window
 	time.Sleep(settleTime)
 
 	// --- Step 4: Post-creation memory reading ---

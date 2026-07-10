@@ -67,6 +67,7 @@ func TestRun_SkipCleanroomAndSkipDoctor_StillReturnsOutcome(t *testing.T) {
 func TestRunPhase_CapturesErrorAndDuration(t *testing.T) {
 	// runPhase is an internal helper but accessible from same package test.
 	pr := runPhase(context.Background(), "test phase", func() error {
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(10 * time.Millisecond)
 		return nil
 	})

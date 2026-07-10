@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD-COMPLETO — Phase 0 (T0.1..T0.5)
 #
+# M23 F17 deferral (2026-07-10): this 522-LoC script exceeds the 500-LoC file
+# size budget per architecture.md § 6, but is intentionally NOT split during
+# M23. Per plan v1.1 § Coverage Matrix: this is a "D5 DELEGATE-HELMFILE
+# candidate" — the proper refactor is helmfile-side migration (moving preflight
+# probes into declarative helmfile hooks), NOT a shell-only file split which
+# would fragment pre-flight logic without addressing the root cause. Tracked
+# in ROADMAP.md § Post-M23 backlog.
+#
 # Pre-flight cluster validation para o dogfood completo. Idempotente,
 # shellcheck-clean, alvo <30s. Verifica que k3d-standalone-multi está em
 # estado idêntico a produção antes do dogfood iniciar — qualquer divergência

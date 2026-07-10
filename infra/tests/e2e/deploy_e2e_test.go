@@ -183,6 +183,7 @@ func waitForWorkloadPodRunning(t *testing.T, tenant string, timeout time.Duratio
 		if strings.TrimSpace(out) == "Running" {
 			return nil
 		}
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(5 * time.Second)
 	}
 	return fmt.Errorf("timeout waiting for pod (label=%s) to become Running", label)
@@ -201,6 +202,7 @@ func waitForHTTP200(url string, timeout time.Duration) error {
 		if resp != nil {
 			resp.Body.Close()
 		}
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(3 * time.Second)
 	}
 	return fmt.Errorf("timeout polling %s", url)

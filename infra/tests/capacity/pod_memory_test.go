@@ -165,6 +165,7 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 
 		// Wait for pod to stabilize.
 		t.Logf("  waiting %v for pod memory to stabilize...", stabilizeWait)
+		// intentional-sleep: benchmark warmup / measurement window
 		time.Sleep(stabilizeWait)
 
 		// Measure memory via kubectl top.

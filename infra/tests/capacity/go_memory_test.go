@@ -196,11 +196,13 @@ func TestCapacityGoMemory(t *testing.T) {
 		// Wait between waves for GC and memory stabilization.
 		if wave < waves {
 			t.Logf("  waiting 30s before next wave (memory leak detection)...")
+			// intentional-sleep: benchmark warmup / measurement window
 			time.Sleep(30 * time.Second)
 		}
 	}
 
 	// Give poller final reads, then stop.
+	// intentional-sleep: benchmark warmup / measurement window
 	time.Sleep(pollInterval + 1*time.Second)
 	pollerCancel()
 	<-pollerDone

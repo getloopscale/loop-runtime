@@ -131,6 +131,7 @@ func waitHTTP200(t *testing.T, url, hostHeader string, timeout time.Duration) {
 				return
 			}
 		}
+		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
 		time.Sleep(5 * time.Second)
 	}
 	t.Fatalf("timeout waiting for HTTP 200 from %s (Host: %s) after %v", url, hostHeader, timeout)
