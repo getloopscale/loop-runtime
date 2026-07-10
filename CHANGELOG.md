@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Roadmap amended: added M21 Hermetic Test Migration Remainder (17 gates) — M20 Velocity-Split Remainder (`/roadmap-feature m21-hermetic-infra-tests-remainder`). Depends on M20 [x]. Zero cluster I/O.
 - Roadmap amended: added M22 Hermetic Test Migration Batch 2 (17 gates) — M21 Backlog Delivery (`/roadmap-feature m22-hermetic-remainder-batch2`). Depends on M20 [x] + M21 [x]. Reuses M20 T2.1 canonical shape verbatim. Zero cluster I/O + zero sponsor JUNTOS. Closes M20 blueprint ADR-D3 deferred baseline oracle re-freeze at M22 terminal step.
+- **M22 T2.1 Wave A gate 2/17 — `loopzero-ops quality dev-public-oidc-redirect-syntax`.** Pure-logic Go migration of `infra/tests/check-dev-public-oidc-redirect-syntax_test.sh` (~39 LoC bash → `cmd/loopzero-ops/internal/quality/devpubliocidcredirectsyntax/check.go` ~135 LoC + `check_test.go` ~140 LoC). 9 assertions preserved verbatim: file exists / bash -n / strict-mode / log+assert+test_provider funcs / OIDC provider ref / Kratos browser flow / exit-code contract / allowlisted. 5/5 hermetic tests GREEN sob `-race`. Sanity-run against real repo: PASS. Reuses M20 T2.1 canonical shape verbatim per M22 blueprint ADR-D1. (M22 T2.1)
 
 ### Changed
 - ROADMAP.md M20 amended DoD [x] via ADR-D2 velocity-split fired at gate 1 boundary (mirror M15/M18/M19 sponsor precedent). See `knowledge-base/roadmap-runs/M20-2026-07-10.md`.
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- `infra/tests/check-dev-public-oidc-redirect-syntax_test.sh` (~39 LoC) — migrated to Go gate `loopzero-ops quality dev-public-oidc-redirect-syntax` per M22 T2.1 M-Migrate2 canonical.
 
 ### Fixed
 
