@@ -19,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
-<<<<<<< HEAD
 ## [0.64.1] - 2026-07-10
 
 ### Added
@@ -29,8 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 - `infra/tests/helm/ory-kratos-public-urls_test.sh` (~77 LoC) — migrated to Go gate `loopzero-ops quality ory-kratos-public-urls` per M22 empirical follow-up M-Migrate2. Allowlist row also removed (118 → 117).
 
-=======
->>>>>>> origin/main
 ## [0.64.0] - 2026-07-10
 
 ### Added
