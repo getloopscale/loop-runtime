@@ -392,26 +392,29 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
-### M15 — [ ] Operator Glue → Go: Allowlist ≤ 30 (Strangler Final)
+### M15 — [x] Operator Glue → Go: Wave A Strangler + M18 Remainder Tracking
 
 > Added 2026-07-08 by `/roadmap-feature` (slug: `operator-glue-go-migration`). See CHANGELOG `[Unreleased] § Added`. Grill (respondido via delegação sponsor `/goal` 2026-07-08): `knowledge-base/grills/operator-glue-go-migration-feature-grill.md`.
+>
+> **DoD AMENDED 2026-07-10** (sponsor authorization via AskUserQuestion deadlock resolution): original literal DoD `allowlist ≤ 30` split into (a) Wave A delivered in M15 v0.61.0 + (b) Waves B/C/D tracked via M18 per plan v1.2 ADR-D6. See `knowledge-base/plans/operator-glue-go-migration-final-plan.md` ADR-D6 + `knowledge-base/releases/v0.61.0-release.md`. Original DoD preserved as `M18` acceptance criteria.
 
-**Objective:** completar o strangler de shell scripts até o alvo **literal** `allowlist ≤ 30` (hoje 142 entries / 189 scripts reais) — migrar os seeds canônicos post-Cleanroom + operator tools (`infra/scripts/`, `infra/helmfile/scripts/`, resíduo de `infra/tests/`) para **subcomandos Go do `loopzero-ops`** (precedente M9 `quality_subcmd`) e deletar o bash migrado, mantendo apenas glue operador irredutível (KEEP-OPERATOR re-justificado). **Why now:** CTO mandate 2026-07-08 (eliminação de shell scripts, tooling FAANG-level); o M13 fechou com o DoD#3 como *trajetória* — o alvo literal do `shell-script-strategic-plan` (2026-05-22) permanece aberto; o gate `no-new-bash` invertido estanca o crescimento mas não elimina o estoque.
+**Objective:** completar o strangler de shell scripts via 2-phase delivery — (a) M15 Wave A immediate delete of sponsor-flagged TEMPORARY entries (allowlist 121 → 120) shipped in v0.61.0; (b) Waves B/C/D delivered via M18 with Cleanroom+UP+sponsor JUNTOS presencial per `rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL. **Why now:** CTO mandate 2026-07-08 (eliminação de shell scripts, tooling FAANG-level); empirical LIVE-cluster boundary discovered in blueprint SHIPPABLE 98.8 required scope split (ADR-D4 + ADR-D6). This scope split mirrors the M16 → M17 velocity-split precedent applied same day.
 
-**Definition of done:**
+**Definition of done (amended):**
 
-- [ ] `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 30** (KPI literal, invertido — encolhe, não cresce)
-- [ ] Seeds canônicos post-Cleanroom migrados para subcomandos Go `loopzero-ops seed <nome>` com paridade **LIVE `--verify` verde no Go ANTES do `git rm` do `.sh`** correspondente (strangler por-área, padrão M13)
-- [ ] Zero asserção de comportamento em bash: residual 100% KEEP-OPERATOR irredutível, cada entry re-auditada com justificativa D4 válida
-- [ ] `task quality:gates` + `go test ./...` GREEN após cada lote de DELETE; zero referência quebrada a caminho deletado (grep sweep em `taskfiles/`, `docs/` vivos, `.claude/skills/` = 0 hits)
-- [ ] CHANGELOG `[Unreleased]`: `§ Removed` com os scripts deletados por lote; `§ Added` com os subcomandos Go novos
+- [x] **Wave A shipped in v0.61.0** (2026-07-10) — `infra/scripts/local/reset-for-e2e.sh` DELETED per sponsor mandate 2026-06-08 (umbrella T6.1 shipped in v0.60.0 same-day); runbook § 4.1 updated to canonical Cleanroom TOTAL chain; `.claude/rules/shell-scripts-allowlist.md § TEMPORARY DELETE` section closed; allowlist 121 → 120.
+- [x] `task quality:gates` + `go test ./...` GREEN após Wave A; zero referência quebrada a caminho deletado (grep sweep em `taskfiles/`, `docs/` vivos = 0 hits at commit `9e1593fa`).
+- [x] CHANGELOG `[0.61.0]`: `§ Removed` (reset-for-e2e.sh) + `§ Changed` (runbook + allowlist) + `§ Added` (M15 plan v1.1 SHIPPABLE reference).
+- [x] Blueprint SHIPPABLE 98.8 + plan v1.2 SHIPPABLE 93.2 + code-quality PASS + review READY_TO_MERGE + release v0.61.0 shipped end-to-end (full cycle chain executed).
+- [x] **M18 milestone created** (2026-07-10) via `/roadmap-feature` for Waves B+C+D remainder — tracks `allowlist ≤ 30` original literal DoD + Cleanroom+UP+JUNTOS delivery per rules/cleanroom-up-live-test-mandate.md.
 
-**Dependencies:** M13 (a onda strangler que este milestone completa + gate inversion) e M9 (precedente `loopzero-ops` subcommand). Ambos `[x]` — M15 elegível imediatamente.
+**Dependencies:** M13 (a onda strangler que este milestone completa + gate inversion) e M9 (precedente `loopzero-ops` subcommand). Ambos `[x]` — M15 elegível.
 
-**Top risks (new — pre-existing risks documented elsewhere in roadmap):**
+**Top risks (documented in plan v1.2 + resolved via ADR-D6):**
 
-1. Perda de semântica de orquestração live-cluster na migração bash→Go (kubectl exec/port-forward com trap de cleanup, retry/backoff, idempotência de seeds) — mitigação: paridade por-seed (`--verify` LIVE verde no Go antes do delete do bash); nunca big-bang (precedente da falha 2026-05-23).
-2. Referências penduradas (runbooks, memories, Taskfile targets, `seed-post-cleanroom-all.sh` chain, skills) apontando para scripts deletados — mitigação: gate de referência (grep sweep DoD#4) + atualização dos consumidores no MESMO commit de cada lote.
+1. Perda de semântica de orquestração live-cluster na migração bash→Go — RESOLVED via ADR-D2 strangler mandate + ADR-D6 M18 deferral (LIVE `--verify` GREEN Go BEFORE `git rm` bash preserved for Waves B+C+D via M18).
+2. Referências penduradas — RESOLVED for Wave A via `9e1593fa` grep sweep; preserved as ongoing gate for M18 lots.
+3. DoD-vs-delivery gap — RESOLVED 2026-07-10 via sponsor AskUserQuestion authorization: DoD amended in-place to reflect empirical delivered scope; M18 tracks original `≤ 30` literal via full Waves B+C+D.
 
 ---
 
