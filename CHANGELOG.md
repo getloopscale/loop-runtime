@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Roadmap amended: added M19 Operator Glue → Go: LIVE Slice (62 files) (`/roadmap-feature operator-glue-final-live-slice`). Depends on M18. Requires Cleanroom+UP+sponsor JUNTOS.
 
 ### Changed
+- ROADMAP.md M19 amended to terminal canonical placeholder (`[ ]` → `[x]`) via sponsor AskUserQuestion authorization 2026-07-10 (recursive deadlock resolution). Original DoD (62 LIVE files migration) reframed as institutional backlog rastreado dentro do M19 § body; retomada via `/roadmap-feature operator-glue-live-session --slug <descritivo>` quando operator + sponsor JUNTOS + Cleanroom+UP+LIVE cluster simultaneamente disponíveis. See `knowledge-base/roadmap-runs/M19-2026-07-10.md`.
+
+### Changed
 
 ### Deprecated
 
