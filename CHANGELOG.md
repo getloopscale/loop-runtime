@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Roadmap amended: added M16 Hermetic Test Migration: `infra/tests/check-*_test.sh` → Go Quality Gates (Wave 1+2+3) (`/roadmap-feature infra-tests-hermetic-to-quality-gates`)
 
 ### Changed
+- **M16 Phase 1 hygiene — wire 5 previously-registered M-Migrate2 gates into `task quality:gates`.** Discovery blueprint (2026-07-10 SHIPPABLE 98.3) identified 5 gates registered in `cmd/loopzero-ops/quality_registry.go` but unwired in `taskfiles/quality.yml § quality:gates` — a Rule 3 dead-code gap where `task quality:gates` GREEN falsely implied coverage for `webhook-canonical-path`, `oidc-cred-admin-loopzero`, `canonical-fixture-repo`, `install-git-hooks`, `render-schema-gen-sql`. Backfill wires all 5 with M16 T1.N docs comments; sanity-run confirmed 4 PASS + 1 WARN (advisory-only `render-schema-gen-sql`). Pre-Wave-1 close ahead of Wave 1 (3 syntax gates) migration. (M16 T1.1-T1.5)
 
 ### Deprecated
 
