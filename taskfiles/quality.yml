@@ -92,22 +92,15 @@ tasks:
       - bash infra/tests/check-enable-vault-backup_test.sh      # vault-INT Runbook P4 codification: enable snapshot-agent backup (plan 2026-06-02 v1.8)
       - bash infra/tests/check-restore-vault-snapshot_test.sh   # vault-INT Runbook P5 DR codification: dry-run by default + --execute opt-in (plan 2026-06-02 v1.8)
       - bash infra/tests/check-rotation-table-parity_test.sh    # vault-INT parity gate: rotate-secret.sh ROTATION_TABLE vs loopzero-external-secrets/values.yaml inventory (plan 2026-06-02 v1.8 iter 17)
-      - bash infra/tests/check-loopzero-external-secrets-creation-policy_test.sh   # vault-INT iter 20 P0 regression: creationPolicy=Orphan (NOT Owner) — prevents K8s GC cascade-delete on rollback
-      - bash infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh      # vault-INT iter 23: comprehensive chart sanity (13 CRs + unique names + refresh intervals + per-env renders + vaultBinaryOverride positive/negative)
       # openbao-adoption v1.5 hermetic tests (iter 28-34) — wired iter 35
       - bash infra/tests/check-loopzero-api-no-cluster-secrets_test.sh             # openbao-adoption T5.13: legacyClusterWideSecrets backward-compat flag (deep review finding #1)
-      - bash infra/tests/check-openbao-init-auth-mounts_test.sh                # openbao-adoption T5.1-T5.9: 6 K8s auth mounts + per-binary roles + isolation invariants
       - bash infra/tests/check-loopzero-api-vault-projected-token_test.sh          # openbao-adoption T5.11: projected SA token audience=vault.loopzero.io + dual-chart parity
-      - bash infra/tests/check-vault-prom-alerts_test.sh                       # openbao-adoption T8.4: 4 P1 alerts severity=critical + runbook_url + audit-log-must-flow invariant
-      - bash infra/tests/check-day30-day60-cronjobs_test.sh                    # openbao-adoption T10.1+T10.3: Day 30 + Day 60 CronJobs safety defaults + EC-12 filter
       - bash infra/tests/check-scoped-kubeconfig-vault_test.sh                 # openbao-adoption T7.3: Vault kubernetes engine SA token fetch + legacy fallback
-      - bash infra/tests/check-loki-vault-retention_test.sh                    # openbao-adoption T8.2+T8.5: Loki per-NS retention 90d + DO Spaces archive cron
       - bash infra/tests/check-promtail-vault-scrape_test.sh                   # openbao-adoption T8.1+T8.3: Promtail vault-system scrape + Grafana dashboard
       # iter 34 trio compatibility regression tests (4 defensive-path locks)
       - bash infra/tests/check-generate-secrets-vault-fallback_test.sh         # openbao-adoption iter 34: T6.5 cold-bootstrap fallback Vault-skipped path (cleanroom)
       - bash infra/tests/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
       - bash infra/tests/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when vault-system NS absent (dogfood compat)
-      - bash infra/tests/check-loki-retention-schema_test.sh                   # openbao-adoption iter 34: T8.2 Loki retention_stream schema valid (cleanroom Loki bootstrap)
       - /tmp/loopzero-ops quality credentials-sot                    # M-Migrate2 (2026-07-07): replaced infra/tests/docs/credentials-sot_test.sh with pure-logic Go gate. Doc-sync: credentials-required.md enumerates bootstrap Secrets.
       # J-22 openbao-transit v1.2 productive-idle hermetic tests (iters 20-26) — wired iter 27.
       # All 4 are anti-drift contract guards for the engineering deliverables
@@ -123,8 +116,6 @@ tasks:
       - /tmp/loopzero-ops quality option-b-eso-deploy-doc                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-option-b-eso-deploy-doc_test.sh with pure-logic Go gate. iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions).
       - /tmp/loopzero-ops quality vault-bootstrap-unseal-loop                        # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-unseal-loop_test.sh with pure-logic Go gate. 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard).
       # M1 hermetic guards (plan m1-commit-canonical-30-fixes v1.2 SHIPPABLE 96.4 — 2026-06-23)
-      - bash infra/tests/check-no-cloud-dev-default_test.sh                       # T1.1 regression guard: no cloud-dev defaults in test/seed scripts (Caddy 301 trap post ee77b8da; EC-1 absorption excludes /api/v1/webhooks/github)
-      - bash infra/tests/check-archive-script-repo-root_test.sh                   # T1.2 regression guard: archive/ scripts use canonical 4-dirs-up REPO_ROOT (broken post-quarantine 289cf9d6)
       - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide.
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - /tmp/loopzero-ops quality check-allowlist-sunsets                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-allowlist-sunsets_test.sh with pure-logic Go gate. T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt).
@@ -145,6 +136,22 @@ tasks:
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
       - /tmp/loopzero-ops quality route-auth-coverage                                # M-Migrate2 (2026-07-07): replaced infra/tests/check-route-auth-coverage_test.sh with pure-logic Go gate. R2-F8 HIGH: every router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. 40 routes verified.
+      # M16 Phase 1 hygiene (2026-07-10): 5 previously-registered M-Migrate2 gates wired in per plan D1 (Rule 3 dead-code closure).
+      - /tmp/loopzero-ops quality webhook-canonical-path                             # M16 T1.1 (2026-07-10): pre-Wave-1 backfill. Registered in quality_registry.go:85 by M-Migrate2 (2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh) but not wired into quality:gates until now.
+      - /tmp/loopzero-ops quality oidc-cred-admin-loopzero                            # M16 T1.2 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07 replaces infra/tests/check-oidc-cred-admin-loopzero_test.sh) but not wired until now.
+      - /tmp/loopzero-ops quality canonical-fixture-repo                             # M16 T1.3 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
+      - /tmp/loopzero-ops quality install-git-hooks                                  # M16 T1.4 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
+      - /tmp/loopzero-ops quality render-schema-gen-sql                              # M16 T1.5 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
+      - /tmp/loopzero-ops quality sprint-syntax                                      # M16 T2.1 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-sprint-syntax_test.sh (11 hermetic contract assertions for check-sprint.sh + check_sprint.py: exists + bash -n + py_compile + no-heredoc + JSON shape + allowlist).
+      - /tmp/loopzero-ops quality archive-script-repo-root                           # M16 T2.2 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-archive-script-repo-root_test.sh (T1.2 hermetic guard: archive/canonical-tests-v1/scripts/local/*.sh MUST resolve REPO_ROOT with 4-dirs-up, NOT 3-dirs-up).
+      - /tmp/loopzero-ops quality no-cloud-dev-default                               # M16 T2.3 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-no-cloud-dev-default_test.sh (T1.1 Caddy 301 redirect trap guard: no test/seed script may default to cloud-dev.loopzero.example; webhook handler /api/v1/webhooks/github is single exception).
+      - /tmp/loopzero-ops quality loki-vault-retention                               # M16 T3.1 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-vault-retention_test.sh (T8.2 + T8.5 Loki per-NS retention + archive CronJob hardening; 14 assertions).
+      - /tmp/loopzero-ops quality loki-retention-schema                              # M16 T3.2 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-retention-schema_test.sh (trio-compat schema regression: SingleBinary + retention_stream vault-system + priority int; 7 assertions).
+      - /tmp/loopzero-ops quality vault-prom-alerts                                  # M16 T3.3 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-vault-prom-alerts_test.sh (T8.4 PrometheusRule vault-audit-alerts: 4 P1 alerts + severity=critical + runbook_url + team+domain labels + invariant marker).
+      - /tmp/loopzero-ops quality day30-day60-cronjobs                               # M16 T3.4 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-day30-day60-cronjobs_test.sh (T10.1-T10.4 Day 30 verify + Day 60 AES delete CronJobs; helm-template with 3 --set overrides; advisory when helm absent).
+      - /tmp/loopzero-ops quality loopzero-external-secrets-chart-sanity                 # M16 T3.5 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh (iter 23 chart sanity: 8 assertions across 5 canonical envs; helm-template; advisory when helm absent).
+      - /tmp/loopzero-ops quality loopzero-external-secrets-creation-policy              # M16 T3.6 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loopzero-external-secrets-creation-policy_test.sh (iter 20 P0 regression: creationPolicy Orphan NOT Owner; 4 assertions; helm-template; advisory when helm absent).
+      - /tmp/loopzero-ops quality openbao-init-auth-mounts                           # M16 T3.7 (2026-07-10): M-Migrate2 Wave 2 CLOSE — replaces infra/tests/check-openbao-init-auth-mounts_test.sh (T5.1-T5.9 per-cluster K8s auth mounts + per-binary roles + isolation invariants; helm-template; advisory when helm absent).
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
       # derived host.k3d.internal (T1.2), F1 SAN-aligned kubernetes_host, Step

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -35,6 +36,16 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sprintsyntax"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
@@ -761,5 +772,291 @@ func runPulumiRequiredSecrets(args []string) int {
 		return 1
 	}
 	fmt.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
+	return 0
+}
+
+// runSprintSyntax enforces the check-sprint.sh hermetic contract: script exists,
+// bash -n clean, helper compiles, no python3 heredoc, JSON report shape valid,
+// allowlist entry present. Requires bash + python3 on PATH.
+// Migrated from infra/tests/check-sprint-syntax_test.sh
+// (M-Migrate2 2026-07-10 M16 T2.1 Wave 1).
+func runSprintSyntax(args []string) int {
+	fs := flag.NewFlagSet("sprint-syntax", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := sprintsyntax.Check(sprintsyntax.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sprint-syntax: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("sprint-syntax: PASS — 11 hermetic contract assertions clean (script + bash-n + helper + no-heredoc + json-shape + allowlist)")
+	return 0
+}
+
+// runArchiveScriptRepoRoot enforces T1.2 of plan m1-commit-canonical-30-fixes —
+// no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT
+// via 3-dirs-up ($(dirname "$0")/../../..); canonical post-quarantine 289cf9d6
+// is 4-dirs-up.
+// Migrated from infra/tests/check-archive-script-repo-root_test.sh
+// (M-Migrate2 2026-07-10 M16 T2.2 Wave 1).
+func runArchiveScriptRepoRoot(args []string) int {
+	fs := flag.NewFlagSet("archive-script-repo-root", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := archivescriptrepo.Check(archivescriptrepo.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "archive-script-repo-root: FAIL — %d 3-dirs-up violation(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		fmt.Fprintln(os.Stderr, "Fix: replace `$(dirname \"$0\")/../../..` with `$(dirname \"$0\")/../../../..` (canonical post-quarantine 289cf9d6).")
+		return 1
+	}
+	fmt.Println("archive-script-repo-root: PASS — no 3-dirs-up REPO_ROOT resolution in archive/canonical-tests-v1/scripts/local/")
+	return 0
+}
+
+// runNoCloudDevDefault enforces T1.1 of plan m1-commit-canonical-30-fixes —
+// no test/seed script may declare a default env-var value pointing at
+// `cloud-dev.loopzero.example` (Caddy 301 redirect trap). Webhook handler is
+// the single exception (EC-1 absorption).
+// Migrated from infra/tests/check-no-cloud-dev-default_test.sh
+// (M-Migrate2 2026-07-10 M16 T2.3 Wave 1).
+func runNoCloudDevDefault(args []string) int {
+	fs := flag.NewFlagSet("no-cloud-dev-default", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := nocloud.Check(nocloud.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		fmt.Fprintln(os.Stderr, "Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
+		return 1
+	}
+	fmt.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
+	return 0
+}
+
+// runLokiVaultRetention enforces T8.2 + T8.5 of plan 2026-06-02-openbao-adoption:
+// Loki per-NS retention config + archive CronJob hardening. 14 assertions.
+// Migrated from infra/tests/check-loki-vault-retention_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.1 Wave 2).
+func runLokiVaultRetention(args []string) int {
+	fs := flag.NewFlagSet("loki-vault-retention", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("loki-vault-retention: PASS — 14 hermetic assertions (T8.2 retention_stream + T8.5 archive CronJob hardening) clean")
+	return 0
+}
+
+// runLokiRetentionSchema is the trio-compat regression for the retention_stream
+// schema in infra/helm/loki/values.yaml. 7 assertions.
+// Migrated from infra/tests/check-loki-retention-schema_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.2 Wave 2).
+func runLokiRetentionSchema(args []string) int {
+	fs := flag.NewFlagSet("loki-retention-schema", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream vault-system + priority int + defaults) clean")
+	return 0
+}
+
+// runVaultPromAlerts enforces T8.4 PrometheusRule vault-audit-alerts contract.
+// Migrated from infra/tests/check-vault-prom-alerts_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.3 Wave 2).
+func runVaultPromAlerts(args []string) int {
+	fs := flag.NewFlagSet("vault-prom-alerts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
+	return 0
+}
+
+// runDay30Day60CronJobs enforces T10.1-T10.4 Day 30 verify + Day 60 AES delete
+// CronJob contracts. Renders loopzero-api chart with 3 --set overrides.
+// Migrated from infra/tests/check-day30-day60-cronjobs_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.4 Wave 2).
+func runDay30Day60CronJobs(args []string) int {
+	fs := flag.NewFlagSet("day30-day60-cronjobs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := day30day60cronjobs.Check(day30day60cronjobs.Config{RepoRoot: *root})
+	if errors.Is(err, day30day60cronjobs.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "day30-day60-cronjobs: FAIL — loopzero-api chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "day30-day60-cronjobs: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("day30-day60-cronjobs: WARN (advisory-only: helm not on PATH — LIVE render skipped)")
+		return 0
+	}
+	fmt.Println("day30-day60-cronjobs: PASS — T10.1-T10.4 CronJob contracts (disabled-by-default + Day 30 schedule/EC-12/Forbid + Day 60 safety defaults/migrate-to-transit + hardening) clean")
+	return 0
+}
+
+// runESOChartSanity enforces the iter 23 chart-sanity contract for
+// infra/helm/loopzero-external-secrets. 8 assertions across 5 canonical envs.
+// Migrated from infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.5 Wave 2).
+func runESOChartSanity(args []string) int {
+	fs := flag.NewFlagSet("loopzero-external-secrets-chart-sanity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: *root})
+	if errors.Is(err, esochartsanity.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("loopzero-external-secrets-chart-sanity: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
+	return 0
+}
+
+// runESOCreationPolicy is the iter 20 P0 regression for creationPolicy: Orphan.
+// Migrated from infra/tests/check-loopzero-external-secrets-creation-policy_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.6 Wave 2).
+func runESOCreationPolicy(args []string) int {
+	fs := flag.NewFlagSet("loopzero-external-secrets-creation-policy", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: *root})
+	if errors.Is(err, esocreationpolicy.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("loopzero-external-secrets-creation-policy: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
+	return 0
+}
+
+// runOpenbaoInitAuth enforces T5.1-T5.9 openbao-init auth mounts + per-binary roles.
+// Migrated from infra/tests/check-openbao-init-auth-mounts_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.7 Wave 2 — Wave 2 COMPLETE).
+func runOpenbaoInitAuth(args []string) int {
+	fs := flag.NewFlagSet("openbao-init-auth-mounts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := openbaoinitauth.Check(openbaoinitauth.Config{RepoRoot: *root})
+	if errors.Is(err, openbaoinitauth.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "openbao-init-auth-mounts: FAIL — openbao-init chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "openbao-init-auth-mounts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("openbao-init-auth-mounts: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("openbao-init-auth-mounts: PASS — T5.1-T5.9 auth mounts + per-binary roles + isolation invariants clean")
 	return 0
 }
