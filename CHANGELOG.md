@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Roadmap amended: added M18 Operator Glue → Go: Waves B+C+D (M15 Remainder Strangler) (`/roadmap-feature operator-glue-go-migration-remainder`). Depends on M15. When M18 closes, M15 checkbox flips per plan v1.2 Global DoD + ADR-D6 handoff.
 
 ### Changed
 

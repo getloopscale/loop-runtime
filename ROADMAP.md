@@ -441,6 +441,31 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 ---
 
+### M18 — [ ] Operator Glue → Go: Waves B+C+D (M15 Remainder Strangler)
+
+> Added 2026-07-10 by `/roadmap-feature` (slug: `operator-glue-go-migration-remainder`). See CHANGELOG `[Unreleased] § Added`. Ancestor plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.2 (ADR-D6 scope split). Blueprint: `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0 SHIPPABLE 98.8.
+
+**Objective:** completar o strangler M15 remainder — migrar Waves B (12 mechanical: 4 helmfile hooks + 3 Go seeds + 2 Ginkgo suites + 1 Pulumi shim + 2 create-wiring hooks) + C (~30 REVIEW-NEEDED audit) + D (~30 aggressive KEEP-OPERATOR re-audit com sponsor re-authorization) — atingindo M15 DoD literal `allowlist ≤ 30`. **Why now:** M15 delivered Wave A only em v0.61.0 per ADR-D6 empirical LIVE-cluster boundary (Wave B strangler requires Cleanroom+UP+sponsor JUNTOS per `rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL). M18 é o milestone canonical remainder — quando fechar, M15 checkbox flip.
+
+**Definition of done:**
+
+- [ ] Wave B: 12 mechanical migrations delivered per ADR-D2 strangler (per-file `--verify` GREEN em Go LIVE BEFORE `git rm` bash)
+- [ ] Wave C: ~30 REVIEW-NEEDED files audit + migrate per empirical velocity (ADR-D3 split-decision gate at Wave C boundary)
+- [ ] Wave D: sponsor re-authorization of Phase-5 ledger + aggressive KEEP-OPERATOR re-audit + migrate portable subset (~30 files)
+- [ ] `grep -cE '^\| .*\.sh ' .claude/rules/shell-scripts-allowlist.md` retorna **≤ 30** (M15 DoD#1 literal met)
+- [ ] M15 ROADMAP checkbox flipped `[ ]` → `[x]` in same release cycle (per plan v1.2 Global DoD + ADR-D6 handoff)
+- [ ] Cleanroom TOTAL + UP + LIVE PROOF for every migration per `rules/cleanroom-up-live-test-mandate.md`
+- [ ] CHANGELOG `[Unreleased]` discipline per lot (§ Removed + § Added + § Changed)
+
+**Dependencies:** M15 `[ ]` (this milestone completes M15). M15 delivered Wave A only; M18 delivers B+C+D. M18 elegível imediatamente pós-v0.61.0 shipped.
+
+**Top risks (new — pre-existing risks documented in M15 plan v1.2):**
+
+1. **LIVE-cluster + sponsor JUNTOS availability.** M18 blocked until operator has: (a) Cleanroom TOTAL clean baseline, (b) sponsor JUNTOS presencial for LIVE `--verify` gates per rules/cleanroom-up-live-test-mandate.md INQUEBRÁVEL, (c) Wave D specifically needs sponsor re-authorization of Phase-5 ledger 2026-05-23 (which ratified KEEP-OPERATOR entries as legitimate). Mitigation: schedule dedicated multi-session block with sponsor + Cleanroom availability.
+2. **Wave B/C/D velocity uncertainty (large scope).** ~74 total files across 3 waves = 4-6 weeks operator time estimated. Risk of M18 non-close in single milestone. Mitigation: mirror M16 → M17 D4 split precedent — if velocity insufficient after Wave B, promote Waves C+D to M19; if velocity insufficient after Wave C, promote D to M19. ADR at M18 plan-time.
+
+---
+
 ## State-of-the-art references
 
 | Peer | License | Why it's here | Supports milestone(s) |
