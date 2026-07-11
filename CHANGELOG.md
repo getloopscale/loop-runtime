@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- `infra/tests/platform/check-migrate-legacy-namespaces_test.sh` (orphan) — its target `migrate-legacy-namespaces.sh` was intentionally deleted by M-Migrate3 (`5d49adc0`), leaving a dead test (exit 2, target-not-found; wired to no gate). Removed the test + the now-empty `platform/` dir + its allowlist entry (708→707).
 
 ### Fixed
 
