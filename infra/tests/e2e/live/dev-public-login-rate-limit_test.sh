@@ -26,7 +26,7 @@
 #   2  BLOCKED (dev-public unreachable, JWT seed missing, flow-init failure)
 #
 # Usage:
-#   bash infra/tests/e2e/dev-public-login-rate-limit_test.sh \
+#   bash infra/tests/e2e/live/dev-public-login-rate-limit_test.sh \
 #     [--skip-live] [--json] [--scenario=A|B] [--help]
 
 set -euo pipefail

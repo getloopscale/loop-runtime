@@ -24,7 +24,7 @@
 #   2  BLOCKED (dev-public unreachable, flow init failed)
 #
 # Usage:
-#   bash infra/tests/e2e/dev-public-redteam-canonical-paths_test.sh \
+#   bash infra/tests/e2e/live/dev-public-redteam-canonical-paths_test.sh \
 #     [--skip-live] [--json] [--scenario=A|B] [--help]
 
 set -euo pipefail

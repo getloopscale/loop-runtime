@@ -96,10 +96,10 @@ run_hermetic_suites() {
 
 run_live_suites() {
   run_suite "LIVE: dev-public-oidc-redirect_test.sh" \
-    "bash $REPO_ROOT/infra/tests/e2e/dev-public-oidc-redirect_test.sh"
+    "bash $REPO_ROOT/infra/tests/e2e/live/dev-public-oidc-redirect_test.sh"
 
   run_suite "LIVE: dev-public-billing-portal_test.sh" \
-    "bash $REPO_ROOT/infra/tests/e2e/dev-public-billing-portal_test.sh"
+    "bash $REPO_ROOT/infra/tests/e2e/live/dev-public-billing-portal_test.sh"
 
   run_suite "LIVE: live-proof-dev-public.sh" \
     "bash $REPO_ROOT/archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh"

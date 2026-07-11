@@ -41,7 +41,7 @@
 #      unreachable OR kubectl context broken)
 #
 # Usage:
-#   bash infra/tests/e2e/dev-public-auth-email-delivery_test.sh \
+#   bash infra/tests/e2e/live/dev-public-auth-email-delivery_test.sh \
 #     [--skip-live] [--json] [--scenario=A|B|C] [--help]
 
 set -euo pipefail

@@ -33,10 +33,10 @@
 # semantics; chain shape == M2 canonical with ZERO workarounds.
 #
 # Usage:
-#   bash infra/tests/e2e/dev-public-production-deploy_test.sh
-#   bash infra/tests/e2e/dev-public-production-deploy_test.sh --skip-live   # hermetic-only mode
-#   bash infra/tests/e2e/dev-public-production-deploy_test.sh --json        # machine-readable verdict
-#   bash infra/tests/e2e/dev-public-production-deploy_test.sh --skip-reset  # presumes reset-for-e2e.sh already ran
+#   bash infra/tests/e2e/live/dev-public-production-deploy_test.sh
+#   bash infra/tests/e2e/live/dev-public-production-deploy_test.sh --skip-live   # hermetic-only mode
+#   bash infra/tests/e2e/live/dev-public-production-deploy_test.sh --json        # machine-readable verdict
+#   bash infra/tests/e2e/live/dev-public-production-deploy_test.sh --skip-reset  # presumes reset-for-e2e.sh already ran
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-getloopscale}"

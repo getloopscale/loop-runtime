@@ -135,7 +135,7 @@ echo "" >&2
 
 phase "cleanroom-soft (config drift assertion)" "soft_cleanroom"
 phase "chaos-soft (6/6 hostnames TLS LE)"      "soft_chaos"
-phase "dogfood-soft (billing portal e2e)"      "bash $REPO_ROOT/infra/tests/e2e/dev-public-billing-portal_test.sh"
+phase "dogfood-soft (billing portal e2e)"      "bash $REPO_ROOT/infra/tests/e2e/live/dev-public-billing-portal_test.sh"
 phase "live-proof (3 checks × 3 layers)"        "bash $REPO_ROOT/archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh"
 
 hr

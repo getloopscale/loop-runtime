@@ -23,10 +23,10 @@
 # semantics (retry only on 401 once per EC-9).
 #
 # Usage:
-#   bash infra/tests/e2e/dev-public-webhook-chain_test.sh
-#   bash infra/tests/e2e/dev-public-webhook-chain_test.sh --skip-live   # hermetic-only mode
-#   bash infra/tests/e2e/dev-public-webhook-chain_test.sh --json        # machine-readable verdict
-#   bash infra/tests/e2e/dev-public-webhook-chain_test.sh --use-push-event   # force push-event path (EC-1 fallback)
+#   bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh
+#   bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh --skip-live   # hermetic-only mode
+#   bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh --json        # machine-readable verdict
+#   bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh --use-push-event   # force push-event path (EC-1 fallback)
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
