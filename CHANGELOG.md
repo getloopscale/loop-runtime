@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.65.2] - 2026-07-11
+
+### Changed
+- `knowledge-base/releases/v0.65.0-release.md` + `v0.65.1-release.md` + `knowledge-base/roadmap-runs/M23-2026-07-11.md` retrofitted post-hoc from real PR/merge/release evidence (`gh pr view`, `gh release view`). Closes the audit-trail gap where v0.65.0 (PR #223) + v0.65.1 (PR #224) shipped via imperative `git`/`gh` orchestration under sponsor Standing Goal Rule 4 override but the `/release` skill's Step 8 + Step 7.5 declarative artifacts were never produced. Retroactive traceability now complete — auditors reading `knowledge-base/roadmap-runs/` can trace M23 delivery end-to-end.
+
 ## [0.65.1] - 2026-07-10
 
 ### Added
