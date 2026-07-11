@@ -10,16 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 ### Changed
-- `infra/tests` taxonomy follow-ups (review 2026-07-11): dogfood utilities (`preflight.sh` + `traffic.js` + fixtures) consolidated under `infra/tests/livetest/dogfood/` (2 top-level dirs removed, lockstep allowlist/observability.yml/scriptsaudit gate); the 14 `secrets/check-*.sh` + `livetest/dogfood/preflight.sh` re-anchored from `..`-counting to `git -C <script-dir> rev-parse --show-toplevel` (move-proof + CWD-independent — the fragility that broke paths twice during the refactor).
 
 ### Deprecated
 
 ### Removed
-- `infra/tests/platform/check-migrate-legacy-namespaces_test.sh` (orphan) — its target `migrate-legacy-namespaces.sh` was intentionally deleted by M-Migrate3 (`5d49adc0`), leaving a dead test (exit 2, target-not-found; wired to no gate). Removed the test + the now-empty `platform/` dir + its allowlist entry (708→707).
 
 ### Fixed
 
 ### Security
+
+## [0.65.4] - 2026-07-11
+
+### Changed
+- `infra/tests` taxonomy follow-ups (review 2026-07-11): dogfood utilities (`preflight.sh` + `traffic.js` + fixtures) consolidated under `infra/tests/livetest/dogfood/` (2 top-level dirs removed, lockstep allowlist/observability.yml/scriptsaudit gate); the 14 `secrets/check-*.sh` + `livetest/dogfood/preflight.sh` re-anchored from `..`-counting to `git -C <script-dir> rev-parse --show-toplevel` (move-proof + CWD-independent — the fragility that broke paths twice during the refactor).
+
+
+### Removed
+- `infra/tests/platform/check-migrate-legacy-namespaces_test.sh` (orphan) — its target `migrate-legacy-namespaces.sh` was intentionally deleted by M-Migrate3 (`5d49adc0`), leaving a dead test (exit 2, target-not-found; wired to no gate). Removed the test + the now-empty `platform/` dir + its allowlist entry (708→707).
 
 ## [0.65.3] - 2026-07-11
 
