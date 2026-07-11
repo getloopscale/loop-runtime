@@ -438,7 +438,7 @@ func ProposeDisposition(s Script) string {
 	// 5. Ginkgo migration candidates: test orchestrators in parity/dogfood
 	//    (must come BEFORE generic check-/validate-/audit- heuristic, because
 	//    validate-matrix.sh em parity/ should go to Ginkgo, not pure-fn migration)
-	if strings.Contains(s.Path, "infra/tests/parity/") || strings.Contains(s.Path, "infra/tests/dogfood/") {
+	if strings.Contains(s.Path, "infra/tests/parity/") || strings.Contains(s.Path, "infra/tests/dogfood/") || strings.Contains(s.Path, "infra/tests/livetest/dogfood/") {
 		return "MIGRATE-GINKGO"
 	}
 

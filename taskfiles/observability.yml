@@ -90,7 +90,7 @@ tasks:
         TENANT_ID — soak tenant identifier
     cmds:
       - tmux kill-session -t phase6-traffic 2>/dev/null || true
-      - tmux new-session -d -s phase6-traffic 'k6 run --duration ${K6_DURATION:-4h} --vus ${K6_VUS:-50} --out experimental-prometheus-rw -e API_URL=$API_URL -e API_TOKEN=$API_TOKEN -e TENANT_ID=${TENANT_ID:-phase6-soak-tenant} infra/tests/dogfood-slo-gate/traffic.js 2>&1 | tee /tmp/phase6-k6.log'
+      - tmux new-session -d -s phase6-traffic 'k6 run --duration ${K6_DURATION:-4h} --vus ${K6_VUS:-50} --out experimental-prometheus-rw -e API_URL=$API_URL -e API_TOKEN=$API_TOKEN -e TENANT_ID=${TENANT_ID:-phase6-soak-tenant} infra/tests/livetest/dogfood/traffic.js 2>&1 | tee /tmp/phase6-k6.log'
       - sleep 30
       - tail -30 /tmp/phase6-k6.log | grep -E "iterations|http_req|error" || echo "(no k6 output yet — check API_TOKEN + API_URL)"
 

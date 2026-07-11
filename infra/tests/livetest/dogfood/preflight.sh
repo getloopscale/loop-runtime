@@ -27,8 +27,8 @@
 #   2 — erro de pré-condição (kubectl/k3d ausente)
 #
 # Uso:
-#   bash infra/tests/dogfood/preflight.sh
-#   bash infra/tests/dogfood/preflight.sh --json   # JSON em stdout (CI)
+#   bash infra/tests/livetest/dogfood/preflight.sh
+#   bash infra/tests/livetest/dogfood/preflight.sh --json   # JSON em stdout (CI)
 #
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
@@ -38,7 +38,7 @@ set -euo pipefail
 JSON_ONLY=0
 [[ "${1:-}" == "--json" ]] && JSON_ONLY=1
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 SEED_SCRIPT="${REPO_ROOT}/infra/helmfile/scripts/seed-local-user.sh"
 TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"
 
