@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- IP rate-limiter glue-boundary hardening — regression tests locking two edge cases where rate-limit bypasses hide: `groupIPKey` must bucket an IPv4-mapped IPv6 (`::ffff:a.b.c.d`) identically to the plain IPv4 (else a client alternates encodings for a double allowance), and `parsePeerIP` must return nil on empty/garbage `RemoteAddr` (not a bogus shared bucket). Behavior was already correct; these lock it (`api/internal/middleware/iprate_test.go`).
+
 ### Fixed
 - E2E suite false-green closed: `infra/tests/e2e/deploy_suite_test.go` used to `Skip` (report SUCCESS with 0 specs) even when `LOOPZERO_E2E=1` but the API/cluster was unreachable — the documented "looks GREEN but ran nothing" trap. Now, past the `LOOPZERO_E2E` gate the suite `Expect`s API health + cluster reachability (fails RED if the operator asked for E2E but infra is down); a `loudSkip` banner marks the intentional hermetic skip (`LOOPZERO_E2E` unset).
 

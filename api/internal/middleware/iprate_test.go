@@ -150,6 +150,55 @@ func TestGroupIPKey_IPv6Slash64(t *testing.T) {
 	}
 }
 
+// TestGroupIPKey_IPv4MappedIPv6_GroupsAsIPv4 locks a rate-limit-bypass
+// invariant at the IP-parsing glue boundary: an IPv4-mapped IPv6 address
+// (::ffff:a.b.c.d) MUST bucket identically to the plain IPv4 (a.b.c.d).
+// If the two encodings of the same address grouped differently, a client
+// could alternate between them to obtain two separate rate-limit buckets and
+// double its allowance. net.IP.To4() normalizes the mapped form; this guards
+// against a regression that drops that normalization from groupIPKey.
+func TestGroupIPKey_IPv4MappedIPv6_GroupsAsIPv4(t *testing.T) {
+	mapped := groupIPKey(net.ParseIP("::ffff:203.0.113.5"))
+	plain := groupIPKey(net.ParseIP("203.0.113.5"))
+	if mapped != plain {
+		t.Errorf("IPv4-mapped IPv6 must group as plain IPv4 (rate-limit bypass guard): mapped=%q plain=%q", mapped, plain)
+	}
+	if mapped != "203.0.113.5" {
+		t.Errorf("want 203.0.113.5, got %q", mapped)
+	}
+}
+
+// TestParsePeerIP covers the RemoteAddr parsing glue boundary directly
+// (previously only exercised transitively through the middleware): host:port,
+// bare IP, bracketed IPv6, and the malformed / empty negative cases that must
+// return nil rather than a bogus net.IP (which would become a shared "" bucket).
+func TestParsePeerIP(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+		wantNil        bool
+	}{
+		{"ipv4 host:port", "203.0.113.5:54321", "203.0.113.5", false},
+		{"ipv4 bare", "203.0.113.5", "203.0.113.5", false},
+		{"ipv6 bracketed", "[2001:db8::1]:443", "2001:db8::1", false},
+		{"empty", "", "", true},
+		{"garbage", "not-an-ip", "", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := parsePeerIP(c.in)
+			if c.wantNil {
+				if got != nil {
+					t.Errorf("parsePeerIP(%q) = %v, want nil", c.in, got)
+				}
+				return
+			}
+			if got == nil || got.String() != c.want {
+				t.Errorf("parsePeerIP(%q) = %v, want %s", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 // itoa avoids strconv import noise in tests.
 func itoa(i int) string {
 	if i < 10 {
