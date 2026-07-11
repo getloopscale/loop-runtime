@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 ### Changed
+- Testes de infra reorganizados por domínio (refactor `infra/tests`, review 2026-07-11): os 15 `check-*_test.sh` soltos na raiz foram homed em `infra/tests/secrets/` (14 vault/ESO/kubeconfig) e `infra/tests/platform/` (1 migração de namespace); `taskfiles/quality.yml` e a allowlist de shell atualizados em lockstep; sem mudança de comportamento (git mv, histórico preservado).
 
 ### Deprecated
 
