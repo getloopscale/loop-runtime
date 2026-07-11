@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -29,8 +30,8 @@ type tempoSearchResp struct {
 		TraceID  string `json:"traceID"`
 		RootSpan string `json:"rootSpan"`
 		Spans    []struct {
-			Name           string `json:"name"`
-			DurationNanos  int64  `json:"durationNanos"`
+			Name          string `json:"name"`
+			DurationNanos int64  `json:"durationNanos"`
 		} `json:"spans"`
 	} `json:"traces"`
 }
@@ -45,13 +46,20 @@ func FetchSpans(ctx context.Context, q TempoTraceQuery) (int, error) {
 		tempoURL = DefaultTempoURL
 	}
 
-	// Tempo /api/search supports JSON tag filter shape per docs.
+	// Tempo /api/search takes ONE `tags` param in logfmt (space-separated
+	// key="value" pairs). Repeating `tags=` (Set then Add) makes the server
+	// read only the first, silently dropping the operation filter — so build
+	// a single combined value instead.
 	params := url.Values{}
+	var filters []string
 	if q.Service != "" {
-		params.Set("tags", fmt.Sprintf(`service.name="%s"`, q.Service))
+		filters = append(filters, fmt.Sprintf(`service.name="%s"`, q.Service))
 	}
 	if q.Operation != "" {
-		params.Add("tags", fmt.Sprintf(`name="%s"`, q.Operation))
+		filters = append(filters, fmt.Sprintf(`name="%s"`, q.Operation))
+	}
+	if len(filters) > 0 {
+		params.Set("tags", strings.Join(filters, " "))
 	}
 	if q.Window > 0 {
 		params.Set("start", fmt.Sprintf("%d", time.Now().Add(-q.Window).Unix()))
