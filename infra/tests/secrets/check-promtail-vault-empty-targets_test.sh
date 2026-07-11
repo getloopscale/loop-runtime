@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 PROMTAIL="${REPO_ROOT}/infra/helm/promtail/values.yaml.gotmpl"
 
 FAIL=0; PASS=0

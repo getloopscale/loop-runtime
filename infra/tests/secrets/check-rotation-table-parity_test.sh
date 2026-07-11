@@ -33,7 +33,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ROTATE_SCRIPT="$REPO_ROOT/scripts/openbao/rotate-secret.sh"
 INVENTORY="$REPO_ROOT/helm/loopzero-external-secrets/values.yaml"
 

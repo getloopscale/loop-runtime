@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/charts/loopzero-api"
 
 # helm dependency build is REQUIRED before --show-only (loopzero-common subchart).

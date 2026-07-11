@@ -18,7 +18,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TARGET_SCRIPT="$REPO_ROOT/scripts/local/migrate-legacy-namespaces.sh"
 
 [[ -f "$TARGET_SCRIPT" ]] || { echo "FATAL: script not found at $TARGET_SCRIPT" >&2; exit 2; }

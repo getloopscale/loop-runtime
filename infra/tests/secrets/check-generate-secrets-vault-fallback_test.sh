@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SCRIPT="${REPO_ROOT}/infra/helmfile/scripts/generate-secrets.sh"
 
 FAIL=0; PASS=0
