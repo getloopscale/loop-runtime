@@ -10,12 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 ### Changed
-- Refatoração de taxonomia do `infra/tests` por domínio (review 2026-07-11) — sem mudança de comportamento, cada passo verde, com `taskfiles`/allowlist/gates Go atualizados em lockstep:
-  - **secrets/ + platform/**: os 15 `check-*_test.sh` soltos na raiz foram homed em `infra/tests/secrets/` (14 vault/ESO/kubeconfig) e `infra/tests/platform/` (1 migração de namespace).
-  - **helm envparity**: 60 arquivos `{dev,drill,prod}_test.go` quase idênticos (parity guard, ~1.860 LOC boilerplate) consolidados em 1 teste table-driven (`infra/tests/helm/envparity/`); `loopzero-api` (assertions reais por-env) mantém seus arquivos.
-  - **performance/**: `load/` + `k6/` + `capacity/` unificados em `infra/tests/performance/`; 5 testes de config-drift (regression) separados do `package load` para `infra/tests/config/`.
-  - **e2e**: `helpers_test.go` (810 LOC) dividido em arquivos por domínio (http/build/pod/audit/core, mesmo pacote); os 12 `dev-public-*_test.sh` (LIVE bash) isolados em `infra/tests/e2e/live/`, separando shell LIVE do suite Go Ginkgo.
-  - **fixtures**: cache regenerável (node_modules/.turbo/dist/.next, gitignored) do fixture `dogfood-monorepo` removido do disco (389 MB / 14.530 arquivos → 332 KB / 131).
 
 ### Deprecated
 
@@ -24,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 ### Security
+
+## [0.65.3] - 2026-07-11
+
+### Changed
+- Refatoração de taxonomia do `infra/tests` por domínio (review 2026-07-11) — sem mudança de comportamento, cada passo verde, com `taskfiles`/allowlist/gates Go atualizados em lockstep:
+  - **secrets/ + platform/**: os 15 `check-*_test.sh` soltos na raiz foram homed em `infra/tests/secrets/` (14 vault/ESO/kubeconfig) e `infra/tests/platform/` (1 migração de namespace).
+  - **helm envparity**: 60 arquivos `{dev,drill,prod}_test.go` quase idênticos (parity guard, ~1.860 LOC boilerplate) consolidados em 1 teste table-driven (`infra/tests/helm/envparity/`); `loopzero-api` (assertions reais por-env) mantém seus arquivos.
+  - **performance/**: `load/` + `k6/` + `capacity/` unificados em `infra/tests/performance/`; 5 testes de config-drift (regression) separados do `package load` para `infra/tests/config/`.
+  - **e2e**: `helpers_test.go` (810 LOC) dividido em arquivos por domínio (http/build/pod/audit/core, mesmo pacote); os 12 `dev-public-*_test.sh` (LIVE bash) isolados em `infra/tests/e2e/live/`, separando shell LIVE do suite Go Ginkgo.
+  - **fixtures**: cache regenerável (node_modules/.turbo/dist/.next, gitignored) do fixture `dogfood-monorepo` removido do disco (389 MB / 14.530 arquivos → 332 KB / 131).
 
 ## [0.65.2] - 2026-07-11
 
