@@ -6,7 +6,7 @@
 // 2026-05-23).
 //
 // It enforces close-out hygiene on the drill war-journal
-// infra/tests/load/CORRECTIONS.txt: every `### ` item must carry a
+// infra/tests/performance/load/CORRECTIONS.txt: every `### ` item must carry a
 // `**STATUS YYYY-MM-DD:**` annotation before the next heading, the header must
 // reference the audit finding, and no item containing a "Definitive fix" may
 // lack a STATUS. (The original bash also had a 4th no-op placeholder test for a

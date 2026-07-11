@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
+//	LOOPZERO_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
 package config
 
 import (
