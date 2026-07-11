@@ -38,7 +38,7 @@ set -euo pipefail
 JSON_ONLY=0
 [[ "${1:-}" == "--json" ]] && JSON_ONLY=1
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 SEED_SCRIPT="${REPO_ROOT}/infra/helmfile/scripts/seed-local-user.sh"
 TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"
 

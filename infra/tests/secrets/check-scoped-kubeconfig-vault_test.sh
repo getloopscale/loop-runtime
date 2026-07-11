@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 SCOPED="${REPO_ROOT}/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
 LIB="${REPO_ROOT}/infra/helmfile/scripts/lib/vault-k8s-engine-token.sh"
 

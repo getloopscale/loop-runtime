@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 PROMTAIL="${REPO_ROOT}/infra/helm/promtail/values.yaml.gotmpl"
 DASHBOARD="${REPO_ROOT}/infra/helm/monitoring/dashboards/openbao-audit.json"
 
