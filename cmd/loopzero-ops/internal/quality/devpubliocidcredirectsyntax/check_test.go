@@ -35,7 +35,7 @@ exit 0
 
 func writeFixture(t *testing.T, dir, scriptContent, allowlistContent string) {
 	t.Helper()
-	scriptPath := filepath.Join(dir, "infra", "tests", "e2e")
+	scriptPath := filepath.Join(dir, "infra", "tests", "e2e", "live")
 	if err := os.MkdirAll(scriptPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func writeFixture(t *testing.T, dir, scriptContent, allowlistContent string) {
 func TestCheck_HappyPath_PASS(t *testing.T) {
 	tmp := t.TempDir()
 	writeFixture(t, tmp, happyFixture,
-		"| infra/tests/e2e/dev-public-oidc-redirect_test.sh | ... |\n")
+		"| infra/tests/e2e/live/dev-public-oidc-redirect_test.sh | ... |\n")
 
 	out, err := Check(Config{RepoRoot: tmp})
 	if err != nil {
@@ -81,7 +81,7 @@ func TestCheck_MissingScript_FAIL(t *testing.T) {
 func TestCheck_MissingTestProvider_FAIL(t *testing.T) {
 	tmp := t.TempDir()
 	writeFixture(t, tmp, missingTestProviderFixture,
-		"| infra/tests/e2e/dev-public-oidc-redirect_test.sh | ... |\n")
+		"| infra/tests/e2e/live/dev-public-oidc-redirect_test.sh | ... |\n")
 
 	out, err := Check(Config{RepoRoot: tmp})
 	if !errors.Is(err, ErrViolations) {

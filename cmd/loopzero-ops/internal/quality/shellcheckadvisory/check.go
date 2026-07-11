@@ -45,7 +45,7 @@ var scanGlobs = []struct {
 }{
 	{"infra/scripts/local", `*.sh`},
 	{"infra/tests", `check-*-syntax_test.sh`},
-	{"infra/tests/e2e", `dev-public-*.sh`},
+	{"infra/tests/e2e/live", `dev-public-*.sh`},
 }
 
 // Config controls the check.

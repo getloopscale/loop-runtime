@@ -50,7 +50,7 @@ exit 5
 
 func writeFixture(t *testing.T, dir, scriptContent, allowlistContent string) string {
 	t.Helper()
-	scriptPath := filepath.Join(dir, "infra", "tests", "e2e")
+	scriptPath := filepath.Join(dir, "infra", "tests", "e2e", "live")
 	if err := os.MkdirAll(scriptPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func writeFixture(t *testing.T, dir, scriptContent, allowlistContent string) str
 func TestCheck_HappyPath_PASS(t *testing.T) {
 	tmp := t.TempDir()
 	writeFixture(t, tmp, happyFixture,
-		"| infra/tests/e2e/dev-public-billing-portal_test.sh | ... |\n")
+		"| infra/tests/e2e/live/dev-public-billing-portal_test.sh | ... |\n")
 
 	out, err := Check(Config{RepoRoot: tmp})
 	if err != nil {
@@ -99,7 +99,7 @@ func TestCheck_MissingScript_FAIL(t *testing.T) {
 func TestCheck_MissingLogFunc_FAIL(t *testing.T) {
 	tmp := t.TempDir()
 	writeFixture(t, tmp, missingLogFixture,
-		"| infra/tests/e2e/dev-public-billing-portal_test.sh | ... |\n")
+		"| infra/tests/e2e/live/dev-public-billing-portal_test.sh | ... |\n")
 
 	out, err := Check(Config{RepoRoot: tmp})
 	if !errors.Is(err, ErrViolations) {
@@ -113,7 +113,7 @@ func TestCheck_MissingLogFunc_FAIL(t *testing.T) {
 func TestCheck_ForeignExitCode_FAIL(t *testing.T) {
 	tmp := t.TempDir()
 	writeFixture(t, tmp, foreignExitFixture,
-		"| infra/tests/e2e/dev-public-billing-portal_test.sh | ... |\n")
+		"| infra/tests/e2e/live/dev-public-billing-portal_test.sh | ... |\n")
 
 	out, err := Check(Config{RepoRoot: tmp})
 	if !errors.Is(err, ErrViolations) {

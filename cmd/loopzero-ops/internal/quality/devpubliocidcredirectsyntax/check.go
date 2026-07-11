@@ -1,5 +1,5 @@
 // Package devpubliocidcredirectsyntax is a hermetic contract test for
-// infra/tests/e2e/dev-public-oidc-redirect_test.sh (M22 T2.1 Wave A gate 2/17).
+// infra/tests/e2e/live/dev-public-oidc-redirect_test.sh (M22 T2.1 Wave A gate 2/17).
 //
 // Reproduces 9 assertions from the bash test verbatim following M20 T2.1
 // canonical shape (devpublicbillingportalsyntax) per M22 blueprint ADR-D1.
@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	scriptRel    = "infra/tests/e2e/dev-public-oidc-redirect_test.sh"
+	scriptRel    = "infra/tests/e2e/live/dev-public-oidc-redirect_test.sh"
 	allowlistRel = ".claude/rules/shell-scripts-allowlist.md"
-	allowlistTag = "infra/tests/e2e/dev-public-oidc-redirect_test.sh"
+	allowlistTag = "infra/tests/e2e/live/dev-public-oidc-redirect_test.sh"
 )
 
 var (

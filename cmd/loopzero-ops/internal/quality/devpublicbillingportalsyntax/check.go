@@ -1,5 +1,5 @@
 // Package devpublicbillingportalsyntax is a hermetic contract test for
-// infra/tests/e2e/dev-public-billing-portal_test.sh.
+// infra/tests/e2e/live/dev-public-billing-portal_test.sh.
 //
 // Reproduces the 8 assertions from the original bash test
 // (infra/tests/check-dev-public-billing-portal-syntax_test.sh) as
@@ -32,9 +32,9 @@ import (
 )
 
 const (
-	scriptRel    = "infra/tests/e2e/dev-public-billing-portal_test.sh"
+	scriptRel    = "infra/tests/e2e/live/dev-public-billing-portal_test.sh"
 	allowlistRel = ".claude/rules/shell-scripts-allowlist.md"
-	allowlistTag = "infra/tests/e2e/dev-public-billing-portal_test.sh"
+	allowlistTag = "infra/tests/e2e/live/dev-public-billing-portal_test.sh"
 )
 
 var (

@@ -999,7 +999,7 @@ tasks:
       runtime ~5s. Forwards env vars LOOPZERO_KUBE_CONTEXT to the wrapped
       script for non-k3d-loopzero-mgmt cluster targeting.
     cmds:
-      - bash infra/tests/e2e/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
+      - bash infra/tests/e2e/live/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
 
   test:dogfood:environments:
     desc: |
@@ -1351,7 +1351,7 @@ tasks:
         if [ ! -f /tmp/baseline-pre-rebuild.json ] ; then
           echo "[scenario-1] EC-13 standalone mode — baseline-match assertion SKIP (no pre-rebuild snapshot); chain validation proceeds"
         fi
-        bash infra/tests/e2e/dev-public-webhook-chain_test.sh
+        bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh
 
   test:pre-release-rigor:scenario-4:
     desc: |

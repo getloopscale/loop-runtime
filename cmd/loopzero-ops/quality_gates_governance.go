@@ -552,7 +552,7 @@ func runDevPublicBillingPortalSyntax(args []string) int {
 		}
 		return 1
 	}
-	fmt.Println("dev-public-billing-portal-syntax: PASS — 8/8 hermetic assertions on infra/tests/e2e/dev-public-billing-portal_test.sh (M20 T2.1)")
+	fmt.Println("dev-public-billing-portal-syntax: PASS — 8/8 hermetic assertions on infra/tests/e2e/live/dev-public-billing-portal_test.sh (M20 T2.1)")
 	return 0
 }
 
@@ -579,7 +579,7 @@ func runDevPublicOIDCRedirectSyntax(args []string) int {
 		}
 		return 1
 	}
-	fmt.Println("dev-public-oidc-redirect-syntax: PASS — 9/9 hermetic assertions on infra/tests/e2e/dev-public-oidc-redirect_test.sh (M22 T2.1)")
+	fmt.Println("dev-public-oidc-redirect-syntax: PASS — 9/9 hermetic assertions on infra/tests/e2e/live/dev-public-oidc-redirect_test.sh (M22 T2.1)")
 	return 0
 }
 
