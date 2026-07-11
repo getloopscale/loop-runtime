@@ -16,6 +16,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	livechaos "github.com/getloopscale/loopzero/infra/tests/livetest/chaos"
 )
 
 // Container ports — these must match the Deployment spec exactly. Drift
@@ -770,6 +772,50 @@ var _ = Describe("Chaos Engineering", func() {
 			Expect(err).NotTo(HaveOccurred(), "API health post-recovery")
 
 			GinkgoWriter.Println("✓ Random tenant pod kill: peer SLO isolation upheld")
+		})
+	})
+
+	// ---------------------------------------------------------------
+	// Scenario: distributed tracing survives chaos (observability invariant)
+	//
+	// Wires the livetest/chaos Tempo helpers (AssertSpanCoverage) into the
+	// LIVE chaos suite: during a pod-kill window, loopzero-api spans must keep
+	// reaching Tempo — the tracing pipeline is resilient to pod churn.
+	// A chaos test that only checks health/SLO is blind to observability
+	// gaps; a silent trace outage during an incident is its own failure mode.
+	//
+	// Opt-in via LOOPZERO_CHAOS_TRACE_ASSERT=1 because it requires Tempo
+	// reachable: in-cluster (default DefaultTempoURL) or via a port-forward
+	// exposed through LOOPZERO_TEMPO_URL. Existing LOOPZERO_CHAOS_TEST runs without
+	// the flag SKIP it, so this is additive — it cannot regress the suite.
+	// ---------------------------------------------------------------
+	Context("distributed tracing during chaos", func() {
+		It("should keep delivering loopzero-api spans to Tempo through a pod-kill window", func() {
+			skipUnlessChaos()
+			if os.Getenv("LOOPZERO_CHAOS_TRACE_ASSERT") != "1" {
+				Skip("set LOOPZERO_CHAOS_TRACE_ASSERT=1 (and LOOPZERO_TEMPO_URL if not in-cluster) to assert span coverage under chaos")
+			}
+
+			cleanup := applyChaos("pod-kill-api-leader.yaml")
+			defer cleanup()
+
+			// Let the tracing pipeline emit + Tempo ingest during the churn.
+			// intentional-sleep: trace-ingest window (spans are async-flushed)
+			time.Sleep(30 * time.Second)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			q := livechaos.TempoTraceQuery{
+				TempoURL:  os.Getenv("LOOPZERO_TEMPO_URL"), // empty -> DefaultTempoURL (in-cluster)
+				Service:   "loopzero-api",
+				Operation: os.Getenv("LOOPZERO_CHAOS_TRACE_OP"), // empty -> any loopzero-api span
+				Window:    2 * time.Minute,
+			}
+			count, err := livechaos.AssertSpanCoverage(ctx, q, 1)
+			Expect(err).NotTo(HaveOccurred(),
+				"loopzero-api spans must keep reaching Tempo during pod-kill chaos (tracing pipeline resilience)")
+			GinkgoWriter.Printf("✓ tracing resilient under chaos: %d loopzero-api trace(s) in Tempo\n", count)
 		})
 	})
 })

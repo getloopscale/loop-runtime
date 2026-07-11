@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Chaos suite now asserts distributed-tracing resilience — a new opt-in `It` in `infra/tests/chaos/chaos_test.go` wires the previously-orphan `livetest/chaos` Tempo helper (`AssertSpanCoverage`) into the LIVE chaos suite: during a pod-kill window, loopzero-api spans must keep reaching Tempo. Additive + double-guarded (`LOOPZERO_CHAOS_TEST=1` + `LOOPZERO_CHAOS_TRACE_ASSERT=1`, `LOOPZERO_TEMPO_URL` for out-of-cluster) so it cannot regress existing runs. Resolves the "implemented but not wired" state of the `livetest/chaos` helper package. LIVE validation is operator-gated (needs chaos-mesh + Tempo).
 
 ### Changed
 
