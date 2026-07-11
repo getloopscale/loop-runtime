@@ -39,7 +39,7 @@ import (
 //	LOOPZERO_SERVICE_AUTH=... \
 //	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
 //	LOOPZERO_MGMT_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
-//	go test ./infra/tests/capacity/ -run TestCapacityGoMemory -v -timeout 45m \
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityGoMemory -v -timeout 45m \
 //	  -args -workers=10
 func TestCapacityGoMemory(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)

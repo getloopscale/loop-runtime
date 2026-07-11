@@ -35,7 +35,7 @@ import (
 //	LOOPZERO_CAPACITY=1 \
 //	LOOPZERO_ARGOCD_METRICS_URL=http://localhost:18082 \
 //	LOOPZERO_MGMT_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
-//	go test ./infra/tests/capacity/ -run TestCapacityArgoCDMemoryPerApp -v -timeout 15m
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCDMemoryPerApp -v -timeout 15m
 func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 

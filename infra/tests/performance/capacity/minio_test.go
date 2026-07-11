@@ -29,7 +29,7 @@ import (
 //   LOOPZERO_CAPACITY=1 LOOPZERO_MINIO_ENDPOINT=http://localhost:19000 \
 //   LOOPZERO_MINIO_ACCESS_KEY=... LOOPZERO_MINIO_SECRET_KEY=... \
 //   LOOPZERO_MINIO_BUCKET=loopzero-artifacts \
-//   go test ./infra/tests/capacity/ -run TestCapacityMinIO -v \
+//   go test ./infra/tests/performance/capacity/ -run TestCapacityMinIO -v \
 //     -args -rps=50 -duration=60s -workers=20
 func TestCapacityMinIOPut(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)

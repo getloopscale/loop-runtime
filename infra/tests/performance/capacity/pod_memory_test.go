@@ -41,7 +41,7 @@ import (
 //	LOOPZERO_SERVICE_AUTH=... \
 //	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
 //	LOOPZERO_RUNTIME_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-runtime \
-//	go test ./infra/tests/capacity/ -run TestCapacityPodMemoryByFramework -v -timeout 120m
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityPodMemoryByFramework -v -timeout 120m
 func TestCapacityPodMemoryByFramework(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 

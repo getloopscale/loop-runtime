@@ -27,7 +27,7 @@ import (
 // Run:
 //   LOOPZERO_CAPACITY=1 LOOPZERO_ARGOCD_URL=... \
 //   LOOPZERO_ARGOCD_TOKEN=... \
-//   go test ./infra/tests/capacity/ -run TestCapacityArgoCD -v \
+//   go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCD -v \
 //     -args -rps=50 -duration=60s -workers=20
 func TestCapacityArgoCDAppGet(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)

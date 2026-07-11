@@ -27,7 +27,7 @@ import (
 // Run:
 //   LOOPZERO_CAPACITY=1 LOOPZERO_API_URL=https://api.dev.loopzero.example \
 //   LOOPZERO_SERVICE_AUTH=... \
-//   go test ./infra/tests/capacity/ -run TestCapacityLoopZeroAPI -v \
+//   go test ./infra/tests/performance/capacity/ -run TestCapacityLoopZeroAPI -v \
 //     -args -rps=50 -duration=60s -workers=20
 func TestCapacityLoopZeroAPIBuildsSubmit(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)

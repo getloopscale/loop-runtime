@@ -34,7 +34,7 @@ import (
 //	LOOPZERO_GITEA_URL=http://localhost:13000 \
 //	LOOPZERO_GITEA_USER=gitea_admin \
 //	LOOPZERO_GITEA_PASS=... \
-//	go test ./infra/tests/capacity/ -run TestCapacityGiteaPush -v -timeout 30m \
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityGiteaPush -v -timeout 30m \
 //	  -args -workers=10
 func TestCapacityGiteaPushLatency(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)

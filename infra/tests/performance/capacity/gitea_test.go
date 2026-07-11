@@ -32,7 +32,7 @@ import (
 // Run:
 //   LOOPZERO_CAPACITY=1 LOOPZERO_GITEA_URL=http://.../ \
 //   LOOPZERO_GITEA_USER=loopzero-admin LOOPZERO_GITEA_PASS=... \
-//   go test ./infra/tests/capacity/ -run TestCapacityGiteaAuth -v \
+//   go test ./infra/tests/performance/capacity/ -run TestCapacityGiteaAuth -v \
 //     -args -rps=100 -duration=60s -workers=50
 func TestCapacityGiteaAuth(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)

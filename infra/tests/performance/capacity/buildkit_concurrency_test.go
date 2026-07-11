@@ -37,7 +37,7 @@ import (
 //	LOOPZERO_SERVICE_AUTH=... \
 //	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
 //	LOOPZERO_BUILD_NODES=2 \
-//	go test ./infra/tests/capacity/ -run TestCapacityBuildKitConcurrency -v -timeout 60m
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityBuildKitConcurrency -v -timeout 60m
 func TestCapacityBuildKitConcurrency(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
