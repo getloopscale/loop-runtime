@@ -140,7 +140,7 @@ refresh_jwt_if_needed() {
     if [ "$SKIP_LIVE" -eq 1 ]; then
         return 0
     fi
-    local refresh_script="${LOOPZERO_REPO_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}/infra/scripts/local/seed-admin-loopzero-dev.sh"
+    local refresh_script="${LOOPZERO_REPO_ROOT:-$(cd "$(dirname "$0")/../../../.." && pwd)}/infra/scripts/local/seed-admin-loopzero-dev.sh"
     if [ -x "$refresh_script" ]; then
         bash "$refresh_script" --refresh-only >/dev/null 2>&1 || true
     fi

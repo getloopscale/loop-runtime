@@ -122,7 +122,7 @@ curl_auth() {
     -b "ory_kratos_session=${token}" "$@" 2>&1 || true)"
   if [ "$code" = "401" ] ; then
     log "(EC-9) HTTP 401 mid-chain — invoking seed-admin --refresh-only + retry"
-    bash "$(dirname "$0")/../../scripts/local/seed-admin-loopzero-dev.sh" --refresh-only > /dev/null 2>&1 || {
+    bash "$(dirname "$0")/../../../scripts/local/seed-admin-loopzero-dev.sh" --refresh-only > /dev/null 2>&1 || {
       log "ERROR: seed-admin refresh-only failed"
       return 2
     }
