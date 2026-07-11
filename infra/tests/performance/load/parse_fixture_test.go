@@ -5,7 +5,7 @@ import (
 )
 
 func TestParseFixtureApps_DogfoodMonorepo(t *testing.T) {
-	apps, err := parseFixtureApps("../e2e/fixtures/dogfood-monorepo")
+	apps, err := parseFixtureApps("../../e2e/fixtures/dogfood-monorepo")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestParseFixtureApps_DogfoodMonorepo(t *testing.T) {
 }
 
 func TestParseFixtureApps_HelloServer(t *testing.T) {
-	apps, err := parseFixtureApps("../e2e/fixtures/hello-server")
+	apps, err := parseFixtureApps("../../e2e/fixtures/hello-server")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

@@ -73,7 +73,7 @@ func requireL2Harness(t *testing.T) *RealDeployHarness {
 		APIURL:      apiURL,
 		AppDomain:   os.Getenv("LOOPZERO_APP_DOMAIN"),
 		ServiceAuth: os.Getenv("LOOPZERO_SERVICE_AUTH"),
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)

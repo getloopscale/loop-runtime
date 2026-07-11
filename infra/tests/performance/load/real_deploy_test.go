@@ -29,7 +29,7 @@ import (
 //   LOOPZERO_API_URL               — required (e.g., https://api.dev.loopzero.example)
 //   LOOPZERO_APP_DOMAIN            — required (e.g., dev.loopzero.example)
 //   LOOPZERO_SERVICE_AUTH          — required (service auth bypass token)
-//   LOOPZERO_FIXTURE_PATH          — optional (default: ../e2e/fixtures/hello-server)
+//   LOOPZERO_FIXTURE_PATH          — optional (default: ../../e2e/fixtures/hello-server)
 func TestRealDeploy_L1_10Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
 		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
@@ -49,7 +49,7 @@ func TestRealDeploy_L1_10Tenants(t *testing.T) {
 	}
 	fixturePath := os.Getenv("LOOPZERO_FIXTURE_PATH")
 	if fixturePath == "" {
-		fixturePath = "../e2e/fixtures/hello-server"
+		fixturePath = "../../e2e/fixtures/hello-server"
 	}
 
 	const tenantCount = 10
@@ -222,7 +222,7 @@ func TestRealDeploy_L2_50Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -357,7 +357,7 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -478,7 +478,7 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 //     LOOPZERO_VERIFY_APP_NAME=api/web/gateway to switch.
 //
 // Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l3-realistic.
-// Default fixture: ../e2e/fixtures/dogfood-monorepo (override via
+// Default fixture: ../../e2e/fixtures/dogfood-monorepo (override via
 // LOOPZERO_FIXTURE_PATH).
 func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
@@ -522,7 +522,7 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/dogfood-monorepo"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -643,7 +643,7 @@ func TestRealDeploy_L4_500Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -737,7 +737,7 @@ func TestRealDeploy_L4_500Tenants(t *testing.T) {
 // with the hello-server fixture. This is a unit-level test (no infra
 // needed) that proves the fixture → git bundle pipeline works.
 func TestPrepareFixtureBundle_HelloServer(t *testing.T) {
-	bundle, err := PrepareFixtureBundle("../e2e/fixtures/hello-server")
+	bundle, err := PrepareFixtureBundle("../../e2e/fixtures/hello-server")
 	if err != nil {
 		t.Fatalf("PrepareFixtureBundle: %v", err)
 	}

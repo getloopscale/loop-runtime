@@ -18,7 +18,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-K6_DIR="$(cd "$SCRIPT_DIR/../k6" && pwd)"
+K6_DIR="$(cd "$SCRIPT_DIR/../performance/k6" && pwd)"
 
 # shellcheck source=./safety.sh
 . "$SCRIPT_DIR/safety.sh"

@@ -13,7 +13,7 @@
 # only the script shape via the hermetic companion test.
 
 set -uo pipefail
-cd "$(dirname "$0")/../../.."
+cd "$(dirname "$0")/../../../.."
 
 # === Flag parsing ===
 SKIP_LIVE=0

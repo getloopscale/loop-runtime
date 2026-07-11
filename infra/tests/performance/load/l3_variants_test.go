@@ -60,7 +60,7 @@ func TestRealDeploy_L3RealisticWithChurn(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/dogfood-monorepo"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -168,7 +168,7 @@ func TestRealDeploy_L3NoisyNeighbor(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/dogfood-monorepo"),
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)

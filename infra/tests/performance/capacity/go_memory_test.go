@@ -79,7 +79,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	// --- Step 1: Create deploy harness ---
 	fixturePath := os.Getenv("LOOPZERO_FIXTURE_PATH")
 	if fixturePath == "" {
-		fixturePath = "../e2e/fixtures/hello-server"
+		fixturePath = "../../e2e/fixtures/hello-server"
 	}
 	harness, err := load.NewRealDeployHarness(load.RealDeployConfig{
 		APIURL:      apiURL,

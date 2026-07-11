@@ -127,7 +127,7 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 			args := []string{
 				"--kube-context", ctx,
 				"install", release,
-				"../../helm/" + c.dir,
+				"../../../helm/" + c.dir,
 				"--namespace", ns,
 				"--wait=false",
 				"--timeout", "30s",
@@ -166,7 +166,7 @@ func TestK3d_AdmissionPoliciesChartInstalls(t *testing.T) {
 
 	// Install chart
 	out, exit := runCommand(t, "helm", "--kube-context", ctx,
-		"install", "ap-int", "../../helm/admission-policies/",
+		"install", "ap-int", "../../../helm/admission-policies/",
 		"--namespace", ns,
 		"--set", "domain=test.local",
 		"--set", "policyMode=warn",
@@ -217,7 +217,7 @@ func TestK3d_ScopedKubeconfigScript(t *testing.T) {
 	defer os.Remove(kcPath)
 
 	// Run scoped-kubeconfig.sh
-	scriptPath := "../../helmfile/scripts/lib/scoped-kubeconfig.sh"
+	scriptPath := "../../../helmfile/scripts/lib/scoped-kubeconfig.sh"
 	cmd := exec.Command("bash", scriptPath, "k3d-test", kcPath, scopedPath)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kcPath)
 	output, err := cmd.CombinedOutput()
@@ -273,7 +273,7 @@ func TestK3d_ArgocdRegisterScript(t *testing.T) {
 	kcPath := strings.TrimSpace(kc)
 	defer os.Remove(kcPath)
 
-	scopedScript := "../../helmfile/scripts/lib/scoped-kubeconfig.sh"
+	scopedScript := "../../../helmfile/scripts/lib/scoped-kubeconfig.sh"
 	cmd := exec.Command("bash", scopedScript, clusterName, kcPath, scopedPath)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kcPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -281,7 +281,7 @@ func TestK3d_ArgocdRegisterScript(t *testing.T) {
 	}
 
 	// Run argocd-register.sh
-	registerScript := "../../helmfile/scripts/lib/argocd-register.sh"
+	registerScript := "../../../helmfile/scripts/lib/argocd-register.sh"
 	regCmd := exec.Command("bash", registerScript, clusterName, scopedPath)
 	regCmd.Env = append(os.Environ(), "KUBECONFIG="+kcPath)
 	if out, err := regCmd.CombinedOutput(); err != nil {
@@ -311,7 +311,7 @@ func TestK3d_RegressionSuiteRunsAgainstClusterPartial(t *testing.T) {
 	kcPath := strings.TrimSpace(kc)
 	defer os.Remove(kcPath)
 
-	cmd := exec.Command("bash", "../../helmfile/scripts/regression-checks.sh", "dev.loopzero.example")
+	cmd := exec.Command("bash", "../../../helmfile/scripts/regression-checks.sh", "dev.loopzero.example")
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kcPath)
 	out, _ := cmd.CombinedOutput()
 	output := string(out)
