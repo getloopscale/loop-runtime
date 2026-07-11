@@ -453,7 +453,7 @@ check_no_terminating_namespaces() {
   local count
   count=$(kubectl --context "$WORKLOAD_CTX" get ns --no-headers 2>/dev/null | awk '$2=="Terminating"' | wc -l | tr -d '[:space:]')
   if [[ "$count" -gt 0 ]]; then
-    record "$id" "FAIL" "$count namespaces stuck in Terminating on workload cluster. Run: bash infra/tests/dogfood/scripts/cleanup-terminating-namespaces.sh"
+    record "$id" "FAIL" "$count namespaces stuck in Terminating on workload cluster. Run: bash infra/scripts/local/recover-mgmt-degraded.sh"
     return
   fi
   record "$id" "PASS" "no Terminating namespaces on workload cluster"

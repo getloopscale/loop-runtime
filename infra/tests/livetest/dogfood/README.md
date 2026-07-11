@@ -8,7 +8,7 @@ contra k3d standalone-multi.
 
 ```bash
 task dogfood:repro                                  # Run completo + summary
-bash infra/tests/dogfood/repro-findings.sh --json   # Apenas JSON (CI)
+bash infra/tests/livetest/dogfood/repro-findings.sh --json   # Apenas JSON (CI)
 ```
 
 ## Output Schema
