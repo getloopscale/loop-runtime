@@ -45,21 +45,40 @@ func TestDeployHappyPath(t *testing.T) {
 	RunSpecs(t, "LoopZero E2E Suite", suiteConfig, reporterConfig)
 }
 
+// loudSkip prints an unmissable banner to stderr before skipping the whole
+// suite. A bare BeforeSuite Skip reports SUCCESS with 0 specs — the documented
+// "looks GREEN but ran nothing" false-green trap (CLAUDE.md e2e onboarding).
+// The banner makes it obvious in CI logs that nothing actually ran, so a green
+// run cannot be mistaken for a passing suite.
+func loudSkip(reason string) {
+	banner := "\n" +
+		"════════════════════════════════════════════════════════════════════\n" +
+		"  ⚠  LOOPZERO E2E SUITE SKIPPED — 0 specs ran. THIS IS NOT A PASS.\n" +
+		"     " + reason + "\n" +
+		"     (set LOOPZERO_E2E=1 with a reachable cluster to actually run the suite)\n" +
+		"════════════════════════════════════════════════════════════════════\n"
+	fmt.Fprint(os.Stderr, banner)
+	GinkgoWriter.Print(banner)
+	Skip(reason)
+}
+
 var _ = SynchronizedBeforeSuite(func() []byte {
 	// First process: verify infrastructure health and seed data.
+	//
+	// LOOPZERO_E2E unset -> intentional hermetic skip (no cluster expected).
 	if os.Getenv("LOOPZERO_E2E") == "" {
-		Skip("Set LOOPZERO_E2E=1 to run E2E tests")
+		loudSkip("LOOPZERO_E2E unset")
 	}
 
-	// Verify API is reachable.
-	if err := verifyAPIHealth(); err != nil {
-		Skip("Infrastructure not ready: " + err.Error())
-	}
-
-	// Verify clusters are running.
-	if !clusterRunning() {
-		Skip("kubectl cluster-info failed — clusters not running")
-	}
+	// Past this point LOOPZERO_E2E IS set -> the operator asked for the E2E suite
+	// to run. Infra problems here are FAILURES, not silent skips. The old
+	// behavior (Skip on unreachable API / down cluster even with LOOPZERO_E2E=1)
+	// was the false-green trap: a broken cluster reported SUCCESS running 0
+	// specs. Fail loud instead so LOOPZERO_E2E=1 + broken infra is unmistakably RED.
+	Expect(verifyAPIHealth()).To(Succeed(),
+		"LOOPZERO_E2E=1 but API not reachable — infra must be up for the E2E suite (not a skip)")
+	Expect(clusterRunning()).To(BeTrue(),
+		"LOOPZERO_E2E=1 but clusters not running (kubectl cluster-info failed) — infra must be up (not a skip)")
 
 	// Seed E2E data (idempotent).
 	err := seed.Run(seed.Config{})
