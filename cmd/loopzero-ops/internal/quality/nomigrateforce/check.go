@@ -38,7 +38,7 @@ var DefaultExcludeDirs = []string{
 // and this gate's own package (which documents/tests the pattern). Mirrors the
 // bash self-exclusion of its own script + test file.
 var DefaultSkipSuffixes = []string{
-	"infra/tests/load/CORRECTIONS.txt",
+	"infra/tests/performance/load/CORRECTIONS.txt",
 	"cmd/loopzero-ops/internal/quality/nomigrateforce/check.go",
 	"cmd/loopzero-ops/internal/quality/nomigrateforce/check_test.go",
 }

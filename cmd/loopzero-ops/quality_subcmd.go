@@ -158,7 +158,7 @@ GATES:
                     --update-baseline  ratchet ceiling down to current (write)
 
   corrections-txt-closed
-                  Fail if infra/tests/load/CORRECTIONS.txt has any item without
+                  Fail if infra/tests/performance/load/CORRECTIONS.txt has any item without
                   a STATUS annotation, or a header missing the audit-finding
                   ref. Migrated from check-corrections-txt-closed_test.sh.
                   Flags:

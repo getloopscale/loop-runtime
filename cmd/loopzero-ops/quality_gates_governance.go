@@ -76,7 +76,7 @@ func runCLIExitCodes(args []string) int {
 
 // runCorrectionsTxtClosed is the Go home for the corrections-txt-closed gate
 // (migrated from infra/tests/check-corrections-txt-closed_test.sh). Enforces
-// close-out hygiene on the drill war-journal infra/tests/load/CORRECTIONS.txt.
+// close-out hygiene on the drill war-journal infra/tests/performance/load/CORRECTIONS.txt.
 func runCorrectionsTxtClosed(args []string) int {
 	fs := flag.NewFlagSet("corrections-txt-closed", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
@@ -87,7 +87,7 @@ func runCorrectionsTxtClosed(args []string) int {
 		*root = absRoot
 	}
 
-	outcome, err := correctionstxt.Check(filepath.Join(*root, "infra", "tests", "load", "CORRECTIONS.txt"))
+	outcome, err := correctionstxt.Check(filepath.Join(*root, "infra", "tests", "performance", "load", "CORRECTIONS.txt"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "corrections-txt-closed: %v\n", err)
 		return 5

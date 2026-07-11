@@ -9,7 +9,7 @@
 // Run:
 //
 //	LOOPZERO_REGRESSION=1 go test ./infra/tests/load/ -run TestRegression -v
-package load
+package config
 
 import (
 	"os"

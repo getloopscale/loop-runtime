@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/infra/tests/load"
+	"github.com/getloopscale/loopzero/infra/tests/performance/load"
 )
 
 // TestCapacityPodMemoryByFramework validates the cell-budget.md assumption:

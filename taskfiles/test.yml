@@ -172,7 +172,7 @@ tasks:
   # ─────────────────────────────────────────────
   # k6 Load Testing (Grafana k6, industry standard)
   # Replaces the previous shell-script smoke runners.
-  # See infra/tests/k6/README.md for details.
+  # See infra/tests/performance/k6/README.md for details.
   # ─────────────────────────────────────────────
 
   test:load:l1:
@@ -243,27 +243,27 @@ tasks:
   k6:distributed:l3:
     desc: Run distributed L3 test via k6 Operator (4 pods, ~65 min)
     cmds:
-      - kubectl apply -f infra/tests/k6/manifests/testrun-l3-distributed.yaml
+      - kubectl apply -f infra/tests/performance/k6/manifests/testrun-l3-distributed.yaml
       - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
 
   k6:distributed:l4:
     desc: Run distributed L4 test via k6 Operator (8 pods, ~2h)
     cmds:
-      - kubectl apply -f infra/tests/k6/manifests/testrun-l4-distributed.yaml
+      - kubectl apply -f infra/tests/performance/k6/manifests/testrun-l4-distributed.yaml
       - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
 
   k6:distributed:l5:
     desc: Run distributed L5 multi-cell test via k6 Operator (16 pods, ~4h) — 5,000 tenants
     cmds:
-      - kubectl apply -f infra/tests/k6/manifests/testrun-l5-distributed.yaml
+      - kubectl apply -f infra/tests/performance/k6/manifests/testrun-l5-distributed.yaml
       - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
 
   k6:soak:apply:
     desc: Apply weekly soak CronJob + alerts to cluster
     cmds:
-      - kubectl apply -f infra/tests/k6/manifests/rbac.yaml
-      - kubectl apply -f infra/tests/k6/manifests/soak-cronjob.yaml
-      - kubectl apply -f infra/tests/k6/manifests/soak-alerts.yaml
+      - kubectl apply -f infra/tests/performance/k6/manifests/rbac.yaml
+      - kubectl apply -f infra/tests/performance/k6/manifests/soak-cronjob.yaml
+      - kubectl apply -f infra/tests/performance/k6/manifests/soak-alerts.yaml
       - 'echo "Soak CronJob applied. Next run: Sunday 02:00 UTC"'
 
   # ─────────────────────────────────────────────
@@ -693,7 +693,7 @@ tasks:
       - task: validate:argocd-sync-waves
       - task: validate:helmfile-templates
       - bash infra/helmfile/scripts/test_helpers/run-all.sh
-      - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
+      - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
       - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e dev list >/dev/null
@@ -710,7 +710,7 @@ tasks:
         - 8/8 internal Helm charts install cleanly on real k8s
       CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 7 partial real-cluster validation.
     cmds:
-      - LOOPZERO_K3D_INTEGRATION=1 go test -timeout 5m ./infra/tests/load/ -run "TestK3d" -count=1 -v
+      - LOOPZERO_K3D_INTEGRATION=1 go test -timeout 5m ./infra/tests/performance/load/ -run "TestK3d" -count=1 -v
 
   validate:full:
     desc: |
@@ -725,7 +725,7 @@ tasks:
         - task validate:helm-charts (chart versions resolve in upstream repos)
         - task validate:helmfile-scripts (3 shell tests with mock-kubectl)
         - task validate:layered-bootstrap (aggregate offline)
-        - go test ./infra/tests/load/ regression
+        - go test ./infra/tests/config/
         - cd infra/pulumi && npx vitest run (Pulumi 75 tests)
     cmds:
       - task: lint
@@ -734,7 +734,7 @@ tasks:
       - task: validate:helm-charts
       - task: validate:helmfile-scripts
       - task: validate:layered-bootstrap
-      - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
+      - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
       - cd infra/pulumi && npx vitest run 2>&1 | tail -3
       - echo "✓ All CHG-2026-04-28-LAYERED-BOOTSTRAP validations PASS"
 

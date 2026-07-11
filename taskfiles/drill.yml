@@ -245,7 +245,7 @@ tasks:
         LOOPZERO_TOKEN="$JWT" \
           go test -timeout 120m -v \
             -run TestL2_1_FiftyConcurrentDeploys \
-            ./infra/tests/load/... || L2_EXIT=$?
+            ./infra/tests/performance/load/... || L2_EXIT=$?
 
         echo ""
         echo "=== Phase 7: Teardown (MANDATORY) ==="

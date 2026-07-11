@@ -526,9 +526,9 @@ tasks:
       LEVEL: '{{.LEVEL | default "l1"}}'
     cmds:
       - |
-        cd infra/tests/load
+        cd infra/tests/performance/load
         if [ ! -f run-tests.sh ]; then
-          echo "ERROR: run-tests.sh not found in infra/tests/load/"
+          echo "ERROR: run-tests.sh not found in infra/tests/performance/load/"
           exit 1
         fi
         echo "=== Load Test Level: {{.LEVEL}} ==="

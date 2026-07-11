@@ -47,7 +47,7 @@ echo ""
 RES_PREFIX="${PATTERN%%\%*}"
 
 # ---- Step 1: Kill pending test processes (optional) ----
-pkill -9 -f "real_deploy_test\|go test ./infra/tests/load" 2>/dev/null || true
+pkill -9 -f "real_deploy_test\|go test ./infra/tests/performance/load" 2>/dev/null || true
 sleep 2
 
 # ---- Step 2: Clean argo workflows that may recreate tenants ----

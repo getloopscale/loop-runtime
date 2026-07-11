@@ -40,11 +40,11 @@ var ErrViolations = errors.New("k6 load-harness rigor invariants violated")
 
 // Assertion targets.
 const (
-	thresholdsPath = "infra/tests/k6/scripts/lib/thresholds.js"
-	l5ManifestPath = "infra/tests/k6/manifests/testrun-l5-distributed.yaml"
+	thresholdsPath = "infra/tests/performance/k6/scripts/lib/thresholds.js"
+	l5ManifestPath = "infra/tests/performance/k6/manifests/testrun-l5-distributed.yaml"
 	testfilePath   = "taskfiles/test.yml"
 	qualityPath    = "taskfiles/quality.yml"
-	readmePath     = "infra/tests/k6/README.md"
+	readmePath     = "infra/tests/performance/k6/README.md"
 	allowlistPath  = ".claude/rules/shell-scripts-allowlist.md"
 )
 

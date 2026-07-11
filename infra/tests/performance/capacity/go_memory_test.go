@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/infra/tests/load"
+	"github.com/getloopscale/loopzero/infra/tests/performance/load"
 )
 
 // TestCapacityGoMemory validates the cell-budget.md assumption:
