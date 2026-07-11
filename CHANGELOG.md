@@ -13,8 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - E2E suite false-green closed: `infra/tests/e2e/deploy_suite_test.go` used to `Skip` (report SUCCESS with 0 specs) even when `LOOPZERO_E2E=1` but the API/cluster was unreachable — the documented "looks GREEN but ran nothing" trap. Now, past the `LOOPZERO_E2E` gate the suite `Expect`s API health + cluster reachability (fails RED if the operator asked for E2E but infra is down); a `loudSkip` banner marks the intentional hermetic skip (`LOOPZERO_E2E` unset).
 
-### Added
-
 ### Changed
 
 ### Deprecated

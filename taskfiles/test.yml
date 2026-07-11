@@ -131,8 +131,8 @@ tasks:
         OUTPUT_FILE="$(mktemp)"
         trap 'rm -f "$OUTPUT_FILE"' EXIT
         (cd infra/tests && go test ./e2e/... -v -timeout 60m) | tee "$OUTPUT_FILE"
-        if grep -q "Deploy Happy Path E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+5[[:space:]]+Specs" "$OUTPUT_FILE"; then
-          echo "E2E deploy suite was fully skipped (0/5 specs). Failing to avoid false green."
+        if grep -q "LoopZero E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+Specs" "$OUTPUT_FILE"; then
+          echo "E2E deploy suite ran 0 specs (fully skipped). Failing to avoid false green."
           exit 1
         fi
 
