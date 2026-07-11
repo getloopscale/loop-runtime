@@ -7,11 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Fixed
-- `livetest/chaos` Tempo client (`FetchSpans`) built a duplicated `tags=` query param (`Set` then `Add`), which Tempo's `/api/search` reads as first-only — silently dropping the operation filter when both service + operation are set. Now emits a single logfmt `tags` value (`service.name="x" name="y"`). Latent until the new chaos span-coverage assertion started exercising it. (found by review)
-
 ### Added
-- Chaos suite now asserts distributed-tracing resilience — a new opt-in `It` in `infra/tests/chaos/chaos_test.go` wires the previously-orphan `livetest/chaos` Tempo helper (`AssertSpanCoverage`) into the LIVE chaos suite: during a pod-kill window, loopzero-api spans must keep reaching Tempo. Additive + double-guarded (`LOOPZERO_CHAOS_TEST=1` + `LOOPZERO_CHAOS_TRACE_ASSERT=1`, `LOOPZERO_TEMPO_URL` for out-of-cluster) so it cannot regress existing runs. Resolves the "implemented but not wired" state of the `livetest/chaos` helper package. LIVE validation is operator-gated (needs chaos-mesh + Tempo).
 
 ### Changed
 
@@ -22,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 ### Security
+
+## [0.65.5] - 2026-07-11
+
+### Added
+- Chaos suite now asserts distributed-tracing resilience — a new opt-in `It` in `infra/tests/chaos/chaos_test.go` wires the previously-orphan `livetest/chaos` Tempo helper (`AssertSpanCoverage`) into the LIVE chaos suite: during a pod-kill window, loopzero-api spans must keep reaching Tempo. Additive + double-guarded (`LOOPZERO_CHAOS_TEST=1` + `LOOPZERO_CHAOS_TRACE_ASSERT=1`, `LOOPZERO_TEMPO_URL` for out-of-cluster) so it cannot regress existing runs. Resolves the "implemented but not wired" state of the `livetest/chaos` helper package. LIVE validation is operator-gated (needs chaos-mesh + Tempo).
+
+
+### Fixed
+- `livetest/chaos` Tempo client (`FetchSpans`) built a duplicated `tags=` query param (`Set` then `Add`), which Tempo's `/api/search` reads as first-only — silently dropping the operation filter when both service + operation are set. Now emits a single logfmt `tags` value (`service.name="x" name="y"`). Latent until the new chaos span-coverage assertion started exercising it. (found by review)
 
 ## [0.65.4] - 2026-07-11
 
