@@ -9,7 +9,7 @@
 #
 # The script:
 #   1. Runs the safety guard (refuses prod).
-#   2. Creates/updates the k6-scripts ConfigMap from infra/tests/k6/scripts.
+#   2. Creates/updates the k6-scripts ConfigMap from infra/tests/performance/k6/scripts.
 #   3. envsubst's the job-template with the chosen script + seed params.
 #   4. Deletes any previous Job and applies the new one.
 #   5. Streams the k6 logs until the Job reaches a terminal state.
