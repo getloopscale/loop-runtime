@@ -154,7 +154,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if cfg.AdminPinner != nil {
-		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner))
+		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's

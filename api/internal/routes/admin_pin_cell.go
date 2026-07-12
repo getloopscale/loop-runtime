@@ -30,6 +30,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/correlation"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
@@ -77,7 +79,15 @@ type CellPinner interface {
 var validCellIDPattern = regexp.MustCompile(`^cell-[a-z0-9-]+$`)
 
 // AdminPinCellHandler implements POST /api/v1/admin/tenants/pin.
-func AdminPinCellHandler(pinner CellPinner) http.HandlerFunc {
+//
+// vap-pinpath-exemption Phase 4 (security review MEET-2026-07-12-001 Condition 2):
+// a successful cell MOVE writes a TENANT_CELL_PINNED audit_log entry so the
+// placement change is forensically traceable now that the admission policy no
+// longer gates the loopzero-api SA on this path. audit may be nil (nil-safe — CI /
+// pinner-only wiring). The actor is the fixed string "admin:service-auth": this
+// route authenticates via a shared secret (LOOPZERO_ADMIN_SERVICE_AUTH_SECRET), which
+// carries no per-user subject — the raw secret is NEVER written to the audit body.
+func AdminPinCellHandler(pinner CellPinner, audit middleware.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Feature flag gate (matches admin_evict semantics).
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
@@ -143,13 +153,22 @@ func AdminPinCellHandler(pinner CellPinner) http.HandlerFunc {
 			return
 		}
 
+		// Audit the MOVE (not a no-op re-pin to the same cell). Records
+		// who/when/from/to so cell placement — the tenant-isolation SoT —
+		// stays auditable now that admission no longer gates this path.
+		moved := previous != in.CellID
+		if moved && audit != nil {
+			audit(in.TenantID, "TENANT_CELL_PINNED", "admin:service-auth", "tenant", in.TenantID,
+				correlation.Read(r), map[string]any{"from": previous, "to": in.CellID})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(AdminPinCellResponse{
 			TenantID:     in.TenantID,
 			PreviousCell: previous,
 			NewCell:      in.CellID,
-			Updated:      previous != in.CellID,
+			Updated:      moved,
 		})
 	}
 }

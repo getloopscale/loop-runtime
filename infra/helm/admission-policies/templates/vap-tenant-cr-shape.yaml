@@ -29,10 +29,18 @@ spec:
         resources: ["tenants"]
   matchConditions:
     # Anti-B33: never gate the platform's own controllers / kube system actors.
+    # vap-pinpath-exemption: also exempt the loopzero-api control-plane SA — it is the
+    # ONLY sanctioned cell-move writer (`loopzero admin tenants pin` →
+    # api/internal/services/placement/cell_pinner.go patchTenantCR runs as this SA
+    # via rest.InClusterConfig()). Without this, the immutability validation below
+    # Denies the sanctioned pin and the DB/CR split-brain (retries treat Deny as
+    # transient). Mirrors the kube-controller-manager exemption: the control-plane
+    # writer is trusted; the policy targets human `kubectl edit', not the pin path.
     - name: exclude-system-actors
       expression: >
         !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:')) &&
         request.userInfo.username != 'system:kube-controller-manager' &&
+        request.userInfo.username != 'system:serviceaccount:loopzero-system:loopzero-api' &&
         !('system:masters' in request.userInfo.groups)
   validations:
     # EC-1: has()-guard before iterating so a missing field denies cleanly.

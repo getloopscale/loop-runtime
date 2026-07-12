@@ -192,3 +192,36 @@ func TestTenantVAP_AppliesToRegularUser(t *testing.T) {
 		t.Error("regular user should be subject to the policy (matchCondition returned false)")
 	}
 }
+
+// TestTenantVAP_ExemptsLoopZeroAPIControlPlane (vap-pinpath-exemption T1): the
+// loopzero-api pod's own ServiceAccount is the ONLY sanctioned cell-move writer
+// (`loopzero admin tenants pin` → CellPinner.patchTenantCR runs as this SA via
+// rest.InClusterConfig()). It MUST be excluded from the policy, exactly like
+// kube-controller-manager — otherwise the immutability validation Denies the
+// sanctioned pin and the DB/CR split-brain. exclude expr must return false
+// (= policy skipped) for this SA.
+func TestTenantVAP_ExemptsLoopZeroAPIControlPlane(t *testing.T) {
+	_, _, exclude := loadTenantVAP(t)
+	vars := map[string]any{"request": map[string]any{"userInfo": map[string]any{
+		"username": "system:serviceaccount:loopzero-system:loopzero-api",
+		"groups":   []any{"system:authenticated", "system:serviceaccounts"},
+	}}}
+	if evalCEL(t, exclude, vars) {
+		t.Error("loopzero-api control-plane SA should be excluded so the sanctioned pin is admitted (matchCondition returned true = policy applies → pin Denied, split-brain)")
+	}
+}
+
+// TestTenantVAP_DoesNotExemptOtherServiceAccounts (vap-pinpath-exemption T2):
+// the exemption is scoped to the exact loopzero-api SA username — a look-alike SA
+// in the same namespace stays subject to the immutability guarantee (specific
+// equality, not a namespace prefix).
+func TestTenantVAP_DoesNotExemptOtherServiceAccounts(t *testing.T) {
+	_, _, exclude := loadTenantVAP(t)
+	vars := map[string]any{"request": map[string]any{"userInfo": map[string]any{
+		"username": "system:serviceaccount:loopzero-system:loopzero-operator",
+		"groups":   []any{"system:authenticated", "system:serviceaccounts"},
+	}}}
+	if !evalCEL(t, exclude, vars) {
+		t.Error("a non-loopzero-api SA must remain subject to the policy (matchCondition returned false = exempt)")
+	}
+}

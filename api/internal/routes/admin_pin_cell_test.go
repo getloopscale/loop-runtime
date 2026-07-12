@@ -51,7 +51,7 @@ func doPin(t *testing.T, body any, p CellPinner, env map[string]string, headers 
 		req.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(p).ServeHTTP(rec, req)
+	AdminPinCellHandler(p, nil).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -92,9 +92,77 @@ func TestAdminPinCell_BadJSON_Returns400(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader([]byte("{not json")))
 	req.Header.Set("X-Service-Auth", "secret")
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(&fakePinner{}).ServeHTTP(rec, req)
+	AdminPinCellHandler(&fakePinner{}, nil).ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+// TestAdminPinCell_Success_WritesAuditEntry (vap-pinpath-exemption T4 / security
+// review Condition 2): a successful cell MOVE writes exactly one TENANT_CELL_PINNED
+// audit entry with the safe fixed actor and from/to metadata. Proves the pin path
+// is now forensically traceable (was NOT before — the gap the review surfaced).
+func TestAdminPinCell_Success_WritesAuditEntry(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_API", "true")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret")
+
+	var calls int
+	var got struct {
+		tenantID, action, actor, resourceType, resourceID string
+		metadata                                          map[string]any
+	}
+	audit := func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
+		calls++
+		got.tenantID, got.action, got.actor = tenantID, action, actor
+		got.resourceType, got.resourceID, got.metadata = resourceType, resourceID, metadata
+	}
+
+	b, _ := json.Marshal(AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
+	req.Header.Set("X-Service-Auth", "secret")
+	rec := httptest.NewRecorder()
+	AdminPinCellHandler(&fakePinner{prev: "cell-default"}, audit).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if calls != 1 {
+		t.Fatalf("expected exactly 1 audit write on a move, got %d", calls)
+	}
+	if got.action != "TENANT_CELL_PINNED" {
+		t.Errorf("action: want TENANT_CELL_PINNED, got %q", got.action)
+	}
+	if got.actor != "admin:service-auth" {
+		t.Errorf("actor: want admin:service-auth (safe fixed string, no secret), got %q", got.actor)
+	}
+	if got.resourceType != "tenant" || got.resourceID != "tn-x" {
+		t.Errorf("resource: want tenant/tn-x, got %s/%s", got.resourceType, got.resourceID)
+	}
+	if got.metadata["from"] != "cell-default" || got.metadata["to"] != "cell-2" {
+		t.Errorf("metadata: want from=cell-default to=cell-2, got %+v", got.metadata)
+	}
+}
+
+// TestAdminPinCell_NoOpPin_WritesNoAudit: re-pinning to the same cell is not a
+// move — it must NOT emit an audit entry (keeps the audit log meaningful).
+func TestAdminPinCell_NoOpPin_WritesNoAudit(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_API", "true")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret")
+
+	var calls int
+	audit := func(_, _, _, _, _, _ string, _ map[string]any) { calls++ }
+
+	b, _ := json.Marshal(AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
+	req.Header.Set("X-Service-Auth", "secret")
+	rec := httptest.NewRecorder()
+	AdminPinCellHandler(&fakePinner{prev: "cell-2"}, audit).ServeHTTP(rec, req) // already on cell-2
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if calls != 0 {
+		t.Errorf("expected 0 audit writes on a no-op re-pin, got %d", calls)
 	}
 }
 
