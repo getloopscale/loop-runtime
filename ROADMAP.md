@@ -71,7 +71,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 - [x] canonical-tests-rewrite-v2 plan emitted with `/plan-confidence` ≥ SHIPPABLE_WITH_CAVEATS — v1.1 SHIPPABLE_WITH_CAVEATS 89.0
 - [x] Phase 1 loopzero-contracts greenfield Ginkgo suite GREEN (sponsor checkpoint 1) — `loopzero-contracts@88b0c03`, `go test ./...` 3/3 ok; CP1 sponsor sign-off "loopzero-contracts greenfield aprovado" 2026-07-12
-- [ ] Phase 2 loopzero-cli + loopzero-cloud smoke + Pact-go bilateral GREEN
+- [x] Phase 2 loopzero-cli + loopzero-cloud smoke + Pact-go bilateral GREEN — loopzero-cli Pact 14/14 + smoke (build+version+help) GREEN; loopzero-cloud Pact `ok` + smoke (Go compile + dashboard typecheck wired `eff781d`) GREEN. Consumer contracts + smoke hermetic-GREEN; provider-side Pact REPLAY (engine/loopzero-data) is LIVE-gated per plan T2.2/T2.5 stub DoD
 - [ ] Phase 3 loopzero chain v2 em Ginkgo (cleanroom + dogfood + chaos + contra-prova) GREEN
 - [ ] 3 execuções consecutivas chain 6 etapas verde (sponsor checkpoint 3) → DELETE quarentena
 - [ ] Sponsor verbatim sign-off: "M0-M8 destravado"
