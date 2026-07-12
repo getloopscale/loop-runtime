@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- v2 dogfood LIVE journey coverage completed to 25/25 (was 11/25): 14 new `//go:build live` Ginkgo specs at `infra/tests/livetest/dogfood/journey_j{01,04,05,07,08,09,10,11,19,20,21,22,23,25}_live_test.go`, each hitting a real engine route for its journey (`Scenario A`) with deeper mutation/streaming scenarios deferred (mirrors the j17 skeleton pattern). Part of canonical-tests-rewrite-v2 T3.2.
 
 ### Changed
 - `prod-image-tags` quality gate now also scans prod overlays (`infra/helmfile/values/prod/*.gotmpl`) and rejects bare split-form mutable tags (`tag: stable`/`develop`), closing a scan gap where the deployed `loopzero-cloud` prod tag `stable` was uncaught (#232). **Scope note (MEET-2026-07-12-001 C1):** the gate covers prod *overlays* only — `loopzero-api` and the 4 operators currently deploy `:latest` in prod via *empty* overlays inheriting the bootstrap default; that path is tracked separately as an operator digest task and is NOT closed by this change.
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - `task k3d:vault:destroy` is now idempotent (`|| true`, matching `clusters:delete`) — a fresh-Cleanroom re-run no longer aborts when the `loopzero-vault` cluster is already gone (#234).
+- v2 dogfood LIVE suite was a **false-green**: the package had `Describe` blocks but no `RunSpecs` bootstrap, so `go test -tags=live` ran **0 specs** (the "Suite skipped" trap). Added `dogfood_suite_test.go` — the suite now enumerates all 58 specs across 25 journeys. (Sibling `infra/tests/livetest/cleanroom` has the same missing-bootstrap gap — tracked separately.)
 
 ### Security
 - Release CI (`release-artifacts.yml`) pins its 3 GitHub Actions to immutable commit SHAs, matching the `build-publish.yml` sibling — removes the floating-tag re-point supply-chain vector (#233).
