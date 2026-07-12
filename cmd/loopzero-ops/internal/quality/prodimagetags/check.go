@@ -56,6 +56,11 @@ var (
 	// defaults under infra/helm/ legitimately carry `tag: latest` and are
 	// overridden at deploy time, so they stay out of scope (MEET-2026-07-12-001 C2).
 	splitMutableTagRe = regexp.MustCompile(`^\s*tag:\s*["']?(prod|latest|stable|develop)["']?\s*(#.*)?$`)
+	// #232 — inline colon-form `image: repo:stable` / `:develop`, overlay-scoped
+	// (the existing mutableTagRe only covers :prod/:latest). Boundary excludes
+	// `-`/`.` so `repo:stable-v2` / `repo:stable.1` are pins that PASS; `foo-stable:v1`
+	// PASS (stable is in the repo name, before the colon).
+	overlayInlineMutableRe = regexp.MustCompile(`(image|tag):\s*["']?[^"'#]+:(stable|develop)([^a-zA-Z0-9_.-]|$)`)
 	leadWSRe          = regexp.MustCompile(`^\s*`)
 	devFileRe         = regexp.MustCompile(`dev\.ya?ml$`)
 	stagingRe         = regexp.MustCompile(`staging\.ya?ml$`)
@@ -149,7 +154,8 @@ func scanFile(path string, out *Outcome) error {
 		lineNum++
 		matched := mutableTagRe.MatchString(line)
 		if !matched && overlay {
-			matched = splitMutableTagRe.MatchString(line) // #232 bare `tag: stable`
+			// #232 — prod overlays: bare `tag: stable` OR inline `image: repo:stable`.
+			matched = splitMutableTagRe.MatchString(line) || overlayInlineMutableRe.MatchString(line)
 		}
 		if !matched {
 			continue

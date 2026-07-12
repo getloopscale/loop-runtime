@@ -246,6 +246,43 @@ func TestProdOverlay_FalsePositiveGuards(t *testing.T) {
 	}
 }
 
+// TestProdOverlay_InlineMutableTag — closes the review's LOW false-negative:
+// an inline `image: repo:stable` / `:develop` in a prod overlay is a violation,
+// while `foo-stable:v1` (stable in the repo name) and `repo:stable-v2` (pinned)
+// PASS.
+func TestProdOverlay_InlineMutableTag(t *testing.T) {
+	fail := map[string]string{
+		"inline_stable":  "  image: registry.io/loopzero-cloud:stable\n",
+		"inline_develop": "  image: registry.io/loopzero-cloud:develop\n",
+	}
+	for name, content := range fail {
+		dir := t.TempDir()
+		write(t, dir, prodOverlayPath+"/x.yaml.gotmpl", content)
+		o, err := Check(Config{Root: dir, ScanPaths: []string{prodOverlayPath}})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if o.Pass {
+			t.Errorf("%s: expected Fail for inline mutable tag", name)
+		}
+	}
+	pass := map[string]string{
+		"repo_name_stable": "  image: registry.io/foo-stable:v1.2.3\n", // stable in repo name
+		"pinned_suffix":    "  image: registry.io/loopzero:stable-v2\n",    // stable-v2 is a pin
+	}
+	for name, content := range pass {
+		dir := t.TempDir()
+		write(t, dir, prodOverlayPath+"/x.yaml.gotmpl", content)
+		o, err := Check(Config{Root: dir, ScanPaths: []string{prodOverlayPath}})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !o.Pass {
+			t.Errorf("%s: expected Pass, got %v", name, o.Violations)
+		}
+	}
+}
+
 // TestProdOverlay_BootstrapDefaultsUnaffected — C2: the split-form detection is
 // SCOPED to prod overlays. A bootstrap default `tag: latest` under infra/helm/
 // (legitimately overridden at deploy time) MUST still PASS — the existing

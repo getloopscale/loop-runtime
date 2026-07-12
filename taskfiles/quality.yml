@@ -58,6 +58,7 @@ tasks:
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity
       - /tmp/loopzero-ops quality prod-image-digests
+      - /tmp/loopzero-ops quality prod-image-tags   # #232 — wire the mutable-tag gate (extended to prod overlays infra/helmfile/values/prod); was registered-but-unrun (review NEEDS_FIXES 2026-07-12)
       - /tmp/loopzero-ops quality trivy-scan
       - /tmp/loopzero-ops quality trufflehog-scan
       - /tmp/loopzero-ops quality dashboard-promtool
