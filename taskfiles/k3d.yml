@@ -183,7 +183,7 @@ tasks:
       Destroy loopzero-vault cluster. State is lost (in-memory devMode).
       Use this when iterating on cluster config or testing fresh cleanroom.
     cmds:
-      - k3d cluster delete loopzero-vault
+      - k3d cluster delete loopzero-vault || true   # idempotent-by-construction (matches clusters:delete L126); issue #234
       - echo "[OK] loopzero-vault destroyed."
 
   k3d:vault:bootstrap:

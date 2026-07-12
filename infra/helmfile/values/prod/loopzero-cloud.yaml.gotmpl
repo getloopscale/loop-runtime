@@ -14,7 +14,7 @@
 
 image:
   repository: registry.digitalocean.com/loopzero-system/loopzero-cloud
-  tag: stable
+  tag: stable  # loopzero:mutable-tag-allowed (#232 — operator to supply immutable digest; gate covers prod overlays, this is the only non-empty one)
   pullPolicy: IfNotPresent
 
 imagePullSecrets:

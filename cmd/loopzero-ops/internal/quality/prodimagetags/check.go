@@ -25,6 +25,7 @@ import (
 // DefaultScanPaths are scanned when Config.ScanPaths is empty.
 var DefaultScanPaths = []string{
 	"infra/helmfile/environments/prod.yaml",
+	"infra/helmfile/values/prod", // #232 — prod overlays (the actual deployed values)
 	"infra/helm",
 	"charts",
 }
@@ -48,9 +49,19 @@ var (
 	// `(image|tag): [<quote>]<repo>:(prod|latest)<boundary>` — matches the
 	// mutable-tag patterns; excludes inline comments via [^"'#]+.
 	mutableTagRe = regexp.MustCompile(`(image|tag):\s*["']?[^"'#]+:(prod|latest)([^a-zA-Z0-9_]|$)`)
-	leadWSRe     = regexp.MustCompile(`^\s*`)
-	devFileRe    = regexp.MustCompile(`dev\.ya?ml$`)
-	stagingRe    = regexp.MustCompile(`staging\.ya?ml$`)
+	// #232 — split-form (bare) mutable tag, e.g. `tag: stable`. Anchored to
+	// end-of-value so date-stamped/semver/sha/templated tags do NOT match
+	// (`tag: latest-20260420`, `tag: v1.2.3`, `tag: {{ .Values.x }}` all PASS).
+	// Applied ONLY to prod-overlay files (see isProdOverlay) — bootstrap
+	// defaults under infra/helm/ legitimately carry `tag: latest` and are
+	// overridden at deploy time, so they stay out of scope (MEET-2026-07-12-001 C2).
+	splitMutableTagRe = regexp.MustCompile(`^\s*tag:\s*["']?(prod|latest|stable|develop)["']?\s*(#.*)?$`)
+	leadWSRe          = regexp.MustCompile(`^\s*`)
+	devFileRe         = regexp.MustCompile(`dev\.ya?ml$`)
+	stagingRe         = regexp.MustCompile(`staging\.ya?ml$`)
+	// #232 — prod overlays live here; only these get the split-form check and
+	// have their `.gotmpl` templates scanned.
+	prodOverlayRe = regexp.MustCompile(`helmfile/values/prod/`)
 )
 
 // Check scans the configured paths for mutable prod image tags.
@@ -75,7 +86,7 @@ func Check(cfg Config) (*Outcome, error) {
 				if walkErr != nil {
 					return walkErr
 				}
-				if d.IsDir() || !isYAML(path) {
+				if d.IsDir() || !isScannable(path) {
 					return nil
 				}
 				return scanFile(path, out)
@@ -83,7 +94,7 @@ func Check(cfg Config) (*Outcome, error) {
 			if err != nil {
 				return nil, fmt.Errorf("walk %s: %w", full, err)
 			}
-		} else if isYAML(full) {
+		} else if isScannable(full) {
 			if err := scanFile(full, out); err != nil {
 				return nil, err
 			}
@@ -99,6 +110,23 @@ func isYAML(path string) bool {
 	return strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")
 }
 
+// isProdOverlay reports whether path is a prod overlay under
+// infra/helmfile/values/prod/ — the only scope for split-form detection and
+// the only place `.gotmpl` templates are scanned (#232, MEET-2026-07-12-001 C2).
+func isProdOverlay(path string) bool {
+	return prodOverlayRe.MatchString(filepath.ToSlash(path))
+}
+
+// isScannable reports whether a file should be read. YAML everywhere; templated
+// (.gotmpl) files ONLY when they are prod overlays — so infra/helm/**/*.gotmpl
+// keep their prior (unscanned) behavior.
+func isScannable(path string) bool {
+	if isYAML(path) {
+		return true
+	}
+	return isProdOverlay(path) && strings.HasSuffix(path, ".gotmpl")
+}
+
 func scanFile(path string, out *Outcome) error {
 	// Skip dev/staging-scoped files (mutable tags allowed there).
 	if devFileRe.MatchString(path) || stagingRe.MatchString(path) {
@@ -112,13 +140,18 @@ func scanFile(path string, out *Outcome) error {
 	defer f.Close()
 
 	out.ScannedFiles++
+	overlay := isProdOverlay(path) // #232 — split-form check applies here only
 	lineNum := 0
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineNum++
-		if !mutableTagRe.MatchString(line) {
+		matched := mutableTagRe.MatchString(line)
+		if !matched && overlay {
+			matched = splitMutableTagRe.MatchString(line) // #232 bare `tag: stable`
+		}
+		if !matched {
 			continue
 		}
 		stripped := leadWSRe.ReplaceAllString(line, "")

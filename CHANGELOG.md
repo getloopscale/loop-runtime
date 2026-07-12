@@ -10,14 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 ### Changed
+- `prod-image-tags` quality gate now also scans prod overlays (`infra/helmfile/values/prod/*.gotmpl`) and rejects bare split-form mutable tags (`tag: stable`/`develop`), closing a scan gap where the deployed `loopzero-cloud` prod tag `stable` was uncaught (#232). **Scope note (MEET-2026-07-12-001 C1):** the gate covers prod *overlays* only — `loopzero-api` and the 4 operators currently deploy `:latest` in prod via *empty* overlays inheriting the bootstrap default; that path is tracked separately as an operator digest task and is NOT closed by this change.
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+- `task k3d:vault:destroy` is now idempotent (`|| true`, matching `clusters:delete`) — a fresh-Cleanroom re-run no longer aborts when the `loopzero-vault` cluster is already gone (#234).
 
 ### Security
+- Release CI (`release-artifacts.yml`) pins its 3 GitHub Actions to immutable commit SHAs, matching the `build-publish.yml` sibling — removes the floating-tag re-point supply-chain vector (#233).
+- `alpine/curl` in the in-cluster quality-gate WorkflowTemplate is digest-pinned (was `:latest`) (#232).
 
 ## [0.65.6] - 2026-07-11
 

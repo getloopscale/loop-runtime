@@ -87,7 +87,7 @@ spec:
     # Reads Workflow status + posts to Gitea Checks API.
     - name: post-status
       container:
-        image: alpine/curl:latest
+        image: alpine/curl:8.14.1@sha256:bd3d6bf85a478818cb858cce42c87fcecbac141249f10814be96309e4abeb807  # digest-pinned (was :latest); issue #232
         command: ["/bin/sh", "-c"]
         args:
           - |
