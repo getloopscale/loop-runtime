@@ -342,6 +342,46 @@ else
   skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-app-operator ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
 fi
 
+# Step 17 (NEW 2026-07-14) — data-plane host + edge fail-closed probes.
+# Per ADR .claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md
+# (Option D — inline curl probes, no new .sh). Asserts the 3 data-plane
+# products (loopzero-memory / loopzero-rag / loopzero-lens) are UP + reachable through the
+# Caddy dev-public edge with the Model B ForwardAuth fail-closed contract
+# holding (401 without a `loopzero_live_*` / `rag_live_*` key). Env-gated to
+# dev-public — only environment where Caddy proxies data-plane paths.
+#
+# 6 probes total (2 per product):
+#   - Host process alive (memory expects 200 on /v1/health; rag expects 401 on
+#     /v1/health because rag's healthz requires auth by design; lens expects
+#     200 on /health).
+#   - Edge fail-closed (all 3: 401 on app-dev.loopzero.example/v1/{memory,rag,lens}/).
+#
+# A FAIL here means (a) the workspace docker stack is down (`make up-local`)
+# OR (b) the data-plane host process is down (`make {memory,rag,lens}-up`)
+# OR (c) Caddy dev-public routes regressed. Fix path is documented in the ADR.
+if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  DP_EDGE="${LOOPZERO_DATA_PLANE_EDGE:-https://app-dev.loopzero.example}"
+
+  # loopzero-memory (port 18081) — /v1/health is public (returns 200)
+  run_step "17a-data-plane-memory-host" "curl -fsS --max-time 5 http://localhost:18081/v1/health -o /dev/null"
+  run_step "17b-data-plane-memory-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/memory/)\" = '401'"
+
+  # loopzero-rag (port 18082) — /v1/health requires auth (401 without key proves process UP + auth active)
+  run_step "17c-data-plane-rag-host" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:18082/v1/health)\" = '401'"
+  run_step "17d-data-plane-rag-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/rag/)\" = '401'"
+
+  # loopzero-lens (port 18084) — /health is public (returns 200)
+  run_step "17e-data-plane-lens-host" "curl -fsS --max-time 5 http://localhost:18084/health -o /dev/null"
+  run_step "17f-data-plane-lens-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/lens/)\" = '401'"
+else
+  skip_step "17a-data-plane-memory-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "17b-data-plane-memory-edge-401" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "17c-data-plane-rag-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "17d-data-plane-rag-edge-401" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "17e-data-plane-lens-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "17f-data-plane-lens-edge-401" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+fi
+
 # Summary
 log ""
 log "=== canonical chain summary ==="

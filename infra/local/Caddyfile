@@ -234,6 +234,24 @@ app-dev.loopzero.example {
     }
   }
 
+  # DP7 (2026-07-14) — Data-plane products loopzero-memory / loopzero-rag / loopzero-lens
+  # onboarded per Model B ForwardAuth pattern. Traefik :8092 (loopzero-workspace
+  # docker-compose edge) owns the per-tenant credential mint
+  # (loopzero_live_* / rag_live_* → forward-auth-{memory,rag,lens} → data-plane
+  # host processes on ports 18081/18082/18084). Caddy proxies /v1/{memory,rag,
+  # lens}/* through so the Red Team reaches them at app-dev.loopzero.example.
+  # MUST precede the /v1/* catch-all below (Caddy first-match by longest
+  # prefix). ADR: .claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md
+  handle /v1/memory/* {
+    reverse_proxy localhost:8092
+  }
+  handle /v1/rag/* {
+    reverse_proxy localhost:8092
+  }
+  handle /v1/lens/* {
+    reverse_proxy localhost:8092
+  }
+
   # T6.2 follow-up canonical (2026-06-12 sponsor walkthrough catch): loopzero-cloud
   # API endpoints (/v1/auth/me, /v1/auth/session/token, /v1/projects, /v1/billing,
   # etc) accessed cross-origin from dashboard would require CORS, but loopzero-cloud
