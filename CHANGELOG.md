@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Cleanroom mandate Step 6 substituted: **QA Red Team test** replaces prior Sponsor JUNTOS browser walkthrough per sponsor verbatim 2026-07-14 INQUEBRÁVEL. Engineering hand-off deliverables: (a) edge fail-closed intact all Red-Team-facing surfaces, (b) platform admin keys persisted (`~/.loopzero/dev-credentials.json § data_plane`), (c) README-QA-REDTEAM.md up to date. Rule updated at `.claude/rules/cleanroom-up-live-test-mandate.md § Step 6`.
+
 ### Added
 - Data-plane products (loopzero-memory / loopzero-rag / loopzero-lens) integrated into the INQUEBRÁVEL Cleanroom mandate via a new Step 17 in `infra/scripts/local/seed-post-cleanroom-all.sh`: 6 inline curl probes (2 per product — host `/health` + Caddy edge fail-closed 401) verify the workspace stack + host processes + `app-dev.loopzero.example/v1/{memory,rag,lens}/*` proxy chain survived Cleanroom TOTAL. Env-gated to `LOOPZERO_HELMFILE_ENV=dev-public` (only environment where Caddy proxies data-plane paths). No new .sh (Option D of ADR — respects `shell-scripts-allowlist.md` D3). ADR at `.claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md` (accepted; sponsor JUNTOS validation pending).
 
