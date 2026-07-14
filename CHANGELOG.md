@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.67.2] - 2026-07-14
+
+### Fixed
+- **P0/BLOCKER loopzero-cloud#114 (2nd regression) — build submit unblocked.** Red Team QA session 2026-07-14T13:55 flagged: after v0.67.1 unblocked auth + stats, next deploy chain link failed with `orchestrator: Unauthorized`; `loopzero deploy` returned `BUILD_SUBMIT_FAILED` (exit 3), reproduced 2×. LIVE symptom: `kubectl logs deploy/loopzero-api` grep "build cluster auth failed" — recurring 401 every 2s (`argo step watcher`). Root cause: cross-cluster ClusterCredential Secret `loopzero-cluster-kubeconfigs.build.kubeconfig` had an expired/wrong SA token (`system:serviceaccount:kube-system:default` — 24h TTL from Cleanroom + wrong SA). Canonical fix per `docs/operations/build-cluster-token-rotation.md` runbook: ran `infra/scripts/local/regen-build-runtime-kubeconfigs.py` which mints fresh 24h tokens for `argo/loopzero-workflow-submitter` (correct SA with `list workflows.argoproj.io` permission) + rebuilds build.kubeconfig + patches Secret + rolls out loopzero-api. Post-fix LIVE evidence: `argo step watcher: started` + zero `build cluster auth failed` in logs since 14:00 UTC + GET /api/v1/projects returns 200. NO source code change — this is an operational rotation. Weekly cron for auto-rotate remains a TODO (runbook § Prevention). NO WORKAROUND: proper `regen-build-runtime-kubeconfigs.py` (Cleanroom-survivable) instead of ad-hoc `kubectl edit secret`.
+
 ## [0.67.1] - 2026-07-14
 
 ### Fixed
