@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **M1 canonical fix** — data-plane edge fail-closed regression resolved. Post `docker compose --force-recreate loopzero-cloud traefik` on the workspace stack, `/v1/rag/` and `/v1/lens/` began returning 404 unkeyed instead of the documented 401 (memory remained 401). Root cause (98% confidence via DISCOVER phase, Staff Engineer subagent): loopzero-cloud running stale `ghcr.io/getloopscale/loopzero-cloud:develop` GHCR pin from 2026-07-01 that predates M14 (rag ForwardAuth) and M38 (lens ForwardAuth) handlers. Traefik correctly invoked `/internal/authz/forward-{rag,lens}`, but the routes did not exist in the old binary → Go stdlib 404 forwarded to client. Canonical fix (parsimony rung 6): `make up-local` in `loopzero-workspace/` rebuilds `loopzero-cloud:local` from sibling checkout + auto-provisions Model B + recreates compose with local overrides; then `dev/{rag,lens}-up.sh` mint + wire the platform admin keys. Evidence: 401×3 across memory/rag/lens edges + 4 broker-wire lines in loopzero-cloud startup logs (promptly + rag + lens + memory-proxy). No workarounds — the class of drift is caught next Cleanroom by DP8 Step 17 probes (`17d-data-plane-rag-edge-401` + `17f-data-plane-lens-edge-401`). Plan: `.claude/knowledge-base/plans/m1-traefik-rag-lens-edge-regression-fix-plan.md`.
+
 ### Changed
 - Cleanroom mandate Step 6 substituted: **QA Red Team test** replaces prior Sponsor JUNTOS browser walkthrough per sponsor verbatim 2026-07-14 INQUEBRÁVEL. Engineering hand-off deliverables: (a) edge fail-closed intact all Red-Team-facing surfaces, (b) platform admin keys persisted (`~/.loopzero/dev-credentials.json § data_plane`), (c) README-QA-REDTEAM.md up to date. Rule updated at `.claude/rules/cleanroom-up-live-test-mandate.md § Step 6`.
 
