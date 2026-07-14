@@ -7,14 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Fixed
-- **M1 canonical fix** — data-plane edge fail-closed regression resolved. Post `docker compose --force-recreate loopzero-cloud traefik` on the workspace stack, `/v1/rag/` and `/v1/lens/` began returning 404 unkeyed instead of the documented 401 (memory remained 401). Root cause (98% confidence via DISCOVER phase, Staff Engineer subagent): loopzero-cloud running stale `ghcr.io/getloopscale/loopzero-cloud:develop` GHCR pin from 2026-07-01 that predates M14 (rag ForwardAuth) and M38 (lens ForwardAuth) handlers. Traefik correctly invoked `/internal/authz/forward-{rag,lens}`, but the routes did not exist in the old binary → Go stdlib 404 forwarded to client. Canonical fix (parsimony rung 6): `make up-local` in `loopzero-workspace/` rebuilds `loopzero-cloud:local` from sibling checkout + auto-provisions Model B + recreates compose with local overrides; then `dev/{rag,lens}-up.sh` mint + wire the platform admin keys. Evidence: 401×3 across memory/rag/lens edges + 4 broker-wire lines in loopzero-cloud startup logs (promptly + rag + lens + memory-proxy). No workarounds — the class of drift is caught next Cleanroom by DP8 Step 17 probes (`17d-data-plane-rag-edge-401` + `17f-data-plane-lens-edge-401`). Plan: `.claude/knowledge-base/plans/m1-traefik-rag-lens-edge-regression-fix-plan.md`.
-
-### Changed
-- Cleanroom mandate Step 6 substituted: **QA Red Team test** replaces prior Sponsor JUNTOS browser walkthrough per sponsor verbatim 2026-07-14 INQUEBRÁVEL. Engineering hand-off deliverables: (a) edge fail-closed intact all Red-Team-facing surfaces, (b) platform admin keys persisted (`~/.loopzero/dev-credentials.json § data_plane`), (c) README-QA-REDTEAM.md up to date. Rule updated at `.claude/rules/cleanroom-up-live-test-mandate.md § Step 6`.
-
 ### Added
-- Data-plane products (loopzero-memory / loopzero-rag / loopzero-lens) integrated into the INQUEBRÁVEL Cleanroom mandate via a new Step 17 in `infra/scripts/local/seed-post-cleanroom-all.sh`: 6 inline curl probes (2 per product — host `/health` + Caddy edge fail-closed 401) verify the workspace stack + host processes + `app-dev.loopzero.example/v1/{memory,rag,lens}/*` proxy chain survived Cleanroom TOTAL. Env-gated to `LOOPZERO_HELMFILE_ENV=dev-public` (only environment where Caddy proxies data-plane paths). No new .sh (Option D of ADR — respects `shell-scripts-allowlist.md` D3). ADR at `.claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md` (accepted; sponsor JUNTOS validation pending).
 
 ### Changed
 
@@ -25,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 ### Security
+
+## [0.66.0] - 2026-07-14
+
+### Fixed
+- **M1 canonical fix** — data-plane edge fail-closed regression resolved. Post `docker compose --force-recreate loopzero-cloud traefik` on the workspace stack, `/v1/rag/` and `/v1/lens/` began returning 404 unkeyed instead of the documented 401 (memory remained 401). Root cause (98% confidence via DISCOVER phase, Staff Engineer subagent): loopzero-cloud running stale `ghcr.io/getloopscale/loopzero-cloud:develop` GHCR pin from 2026-07-01 that predates M14 (rag ForwardAuth) and M38 (lens ForwardAuth) handlers. Traefik correctly invoked `/internal/authz/forward-{rag,lens}`, but the routes did not exist in the old binary → Go stdlib 404 forwarded to client. Canonical fix (parsimony rung 6): `make up-local` in `loopzero-workspace/` rebuilds `loopzero-cloud:local` from sibling checkout + auto-provisions Model B + recreates compose with local overrides; then `dev/{rag,lens}-up.sh` mint + wire the platform admin keys. Evidence: 401×3 across memory/rag/lens edges + 4 broker-wire lines in loopzero-cloud startup logs (promptly + rag + lens + memory-proxy). No workarounds — the class of drift is caught next Cleanroom by DP8 Step 17 probes (`17d-data-plane-rag-edge-401` + `17f-data-plane-lens-edge-401`). Plan: `.claude/knowledge-base/plans/m1-traefik-rag-lens-edge-regression-fix-plan.md`.
+
+### Changed
+- Cleanroom mandate Step 6 substituted: **QA Red Team test** replaces prior Sponsor JUNTOS browser walkthrough per sponsor verbatim 2026-07-14 INQUEBRÁVEL. Engineering hand-off deliverables: (a) edge fail-closed intact all Red-Team-facing surfaces, (b) platform admin keys persisted (`~/.loopzero/dev-credentials.json § data_plane`), (c) README-QA-REDTEAM.md up to date. Rule updated at `.claude/rules/cleanroom-up-live-test-mandate.md § Step 6`.
+
+### Added
+- Data-plane products (loopzero-memory / loopzero-rag / loopzero-lens) integrated into the INQUEBRÁVEL Cleanroom mandate via a new Step 17 in `infra/scripts/local/seed-post-cleanroom-all.sh`: 6 inline curl probes (2 per product — host `/health` + Caddy edge fail-closed 401) verify the workspace stack + host processes + `app-dev.loopzero.example/v1/{memory,rag,lens}/*` proxy chain survived Cleanroom TOTAL. Env-gated to `LOOPZERO_HELMFILE_ENV=dev-public` (only environment where Caddy proxies data-plane paths). No new .sh (Option D of ADR — respects `shell-scripts-allowlist.md` D3). ADR at `.claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md` (accepted; sponsor JUNTOS validation pending).
+- Canonical Caddy dev-public routes for `/v1/{memory,rag,lens}/*` → workspace Traefik `:8092` (DP7 backfilled into `infra/local/Caddyfile` so `caddy-up-dev-public.sh --sync` preserves data-plane routing across Cleanroom rebuilds).
 
 ## [0.65.6] - 2026-07-11
 
