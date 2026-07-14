@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **DP9 data-plane dogfood LIVE journeys** (`infra/tests/livetest/dogfood/journey_dp_{memory,rag,lens}_live_test.go` + `helpers_dataplane.go`) — 3 Ginkgo journeys (`DP-memory`, `DP-rag` labeled `anchor` = `rag-edge-live`, `DP-lens`) each proving (a) the edge fail-closed 401 contract at `app-dev.loopzero.example/v1/{product}/*` (M1 regression protector) AND (b) the direct-host product end-to-end with a per-tenant customer key: memory remember/list/forget, rag create-collection → raw-ingest → poll-to-ready → answers-with-citations (real OpenAI `text-embedding-3-small` + real LLM), lens replay-session + north-star + negative-case empty-traceId. Gated by `//go:build live`; runs in ~7s after infra warm. Helper `LoadDataPlaneEndpoint`/`LoadDataPlaneKey` read the operator-owned `~/.loopzero/dev-credentials.json § data_plane`. LIVE-validated 2026-07-14 04:59 UTC — **7 of 7 specs PASS**. Blueprint: `.claude/knowledge-base/discoveries/blueprints/dp9-data-plane-dogfood-journeys-blueprint.md`.
 
 ### Changed
 
