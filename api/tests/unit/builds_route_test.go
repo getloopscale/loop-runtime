@@ -245,6 +245,39 @@ func TestBuildsRoute(t *testing.T) {
 		}
 	})
 
+	t.Run("POST /builds over the Account project cap returns 422 PROJECTS_EXCEED_PLAN (deploy-path bypass #106)", func(t *testing.T) {
+		// M5 review F2 (handler-seam half): the deploy path (EnsureProject) returns
+		// a typed *LoopZeroError PROJECTS_EXCEED_PLAN when a NEW-project deploy would
+		// exceed the Account cap; the orchestrator passes it through unchanged. This
+		// proves the LIVE HTTP seam — SubmitBuild's typed error → mapBuildError →
+		// HTTP 422 with an honest code — instead of a silent 500 / build-failure
+		// (DoD #1). A refactor that stopped routing the SubmitBuild error through
+		// mapBuildError would fail here.
+		orch := &fakeBuildOrchestrator{
+			submitErr: loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap"),
+		}
+		handler := newBuildHandler(orch, "test-secret")
+
+		body := `{"project_id":"brand-new-project","environment":"production","apps":[{"name":"api","type":"server"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
+			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.Create(rec, req)
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422 (deploy-path project cap), got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if code, _ := resp["code"].(string); code != "PROJECTS_EXCEED_PLAN" {
+			t.Errorf("expected code PROJECTS_EXCEED_PLAN, got %q (body: %s)", code, rec.Body.String())
+		}
+	})
+
 	t.Run("POST /builds environment uppercase returns 400", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{}

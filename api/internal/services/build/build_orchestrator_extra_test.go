@@ -5,6 +5,7 @@ package build
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -714,5 +715,42 @@ func TestBuildOrchestrator_SubmitBuild_WithProjectEnsurer(t *testing.T) {
 	}
 	if resp.StreamURL == "" {
 		t.Error("expected non-empty stream URL")
+	}
+}
+
+// M5 review F2 (orchestrator half): when the deploy-path project-ensure returns
+// the per-Account cap rejection (*LoopZeroError PROJECTS_EXCEED_PLAN), SubmitBuild
+// MUST propagate that typed error UNCHANGED — wrapSubmitBuildError's EC-3 guard
+// passes *LoopZeroError through instead of collapsing it into a generic
+// SubmitBuildError. This is what lets the route ladder map it to HTTP 422 rather
+// than a silent build-failure/500 (DoD #1: "typed rejection surfaced to the
+// deploy flow, not a silent 500"). A refactor that stopped passing *LoopZeroError
+// through would fail here.
+func TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError(t *testing.T) {
+	bs := newFakeBuildStoreOrch()
+	capErr := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap")
+	pe := &fakeProjectEnsurer{ensureErr: capErr}
+
+	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
+		BuildStore:   bs,
+		ProjectStore: pe,
+		Locker:       &fakeLockerContainer{},
+		Workflow:     &fakeWorkflowSubmitterOrch{workflowID: "wf-1"},
+		EventStore:   &fakeEventStoreContainer{},
+	})
+
+	_, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
+		TenantID:    "tn-1",
+		ProjectID:   "brand-new-project",
+		Environment: "production",
+		Apps:        []deploycontracts.AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
+		CreatedBy:   "user@test.com",
+	})
+	if err == nil {
+		t.Fatal("expected a cap-rejection error, got nil")
+	}
+	var te *loopzeroerrors.LoopZeroError
+	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
+		t.Fatalf("SubmitBuild must propagate the typed PROJECTS_EXCEED_PLAN error unchanged; got %v", err)
 	}
 }
