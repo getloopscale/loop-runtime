@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Discovery plan for the customer-requested tenant blob-storage feature (managed file storage over S3, Vercel Blob / Supabase Storage shape) at `.claude/knowledge-base/discoveries/plans/tenant-blob-storage-plan.md` — 7 research questions across 4 coverage corners over 4 newly cloned OSS references (supabase/storage, nhost/hasura-storage, pocketbase, google/go-cloud; all Apache-2.0/MIT license-gated; MinIO/Garage AGPL explicitly excluded from source study)
 - v2 dogfood LIVE journey coverage completed to 25/25 (was 11/25): 14 new `//go:build live` Ginkgo specs at `infra/tests/livetest/dogfood/journey_j{01,04,05,07,08,09,10,11,19,20,21,22,23,25}_live_test.go`, each hitting a real engine route for its journey (`Scenario A`) with deeper mutation/streaming scenarios deferred (mirrors the j17 skeleton pattern). Part of canonical-tests-rewrite-v2 T3.2.
 
 ### Changed
