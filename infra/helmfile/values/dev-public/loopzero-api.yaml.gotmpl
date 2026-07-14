@@ -75,14 +75,13 @@ env:
   # JWKS_URL: internal cluster URL is faster + avoids outbound TLS — same
   # public keys regardless of fetch path.
   JWKS_URL: "https://auth-dev.loopzero.example/.well-known/jwks.json"
-  # CANONICAL FIX 2026-06-15 dev-public LIVE auth chain: JWT_ISSUER MUST
-  # match the `iss` claim set by Hydra at token mint time. Hydra is
-  # configured with `urls.self.issuer` = https://auth-dev.loopzero.example/
-  # (per dev-public/ory-hydra.yaml.gotmpl T3.1) so that browser-visible
-  # tokens carry the public URL as issuer. loopzero-api validation MUST
-  # accept that same public URL. Before this fix loopzero-api expected
-  # internal cluster URL, rejecting all browser-minted JWTs with 401.
-  JWT_ISSUER: "https://auth-dev.loopzero.example"
+  # CANONICAL FIX 2026-07-14 (2nd regression of loopzero-cloud#131): JWT_ISSUER
+  # MUST be byte-equal to Hydra's `URLS_SELF_ISSUER=https://auth-dev.loopzero.example/`
+  # (WITH trailing slash). go-jwt.WithIssuer does exact-string comparison —
+  # no normalization. Dropping the slash broke Red Team CLI device-flow
+  # 2026-07-14. This value MUST change in lockstep with loopzero-cloud overlay
+  # AND ory-hydra overlay (all 3 aligned).
+  JWT_ISSUER: "https://auth-dev.loopzero.example/"
   # BuildKit (in k3d-loopzero-build) pushes tenant images to k3d-loopzero-registry
   # via plain HTTP — canonical for local dev k3d topology. loopzero-api
   # configures BuildKit submitter with this hint so registry-config

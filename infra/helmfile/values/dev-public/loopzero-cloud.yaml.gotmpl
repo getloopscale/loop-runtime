@@ -58,13 +58,13 @@ env:
   # (/sessions/whoami), so INTERNAL_URL → ory-kratos-public.
   KRATOS_INTERNAL_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
 
-  # CANONICAL FIX 2026-06-15 dev-public LIVE auth chain: JWT_ISSUER MUST
-  # match the `iss` claim that Hydra sets at mint time. Hydra in dev-public
-  # is configured with `urls.self.issuer = https://auth-dev.loopzero.example/`
-  # (per dev-public/ory-hydra.yaml.gotmpl). The loopzero-cloud JWT validator
-  # default (`HydraPublicURL + "/"`) yields the internal cluster URL,
-  # which mismatches the public-URL iss claim in browser-minted JWTs.
-  # Override JWT_ISSUER explicitly so JWT validation accepts public-URL
-  # iss (matches what Hydra actually emits). HYDRA_PUBLIC_URL kept as
+  # CANONICAL FIX 2026-07-14 (2nd regression of loopzero-cloud#131): JWT_ISSUER
+  # MUST be byte-equal to what Hydra actually emits (`iss` claim). Hydra's
+  # `URLS_SELF_ISSUER=https://auth-dev.loopzero.example/` (WITH trailing slash)
+  # is mirrored verbatim into JWT.iss, and `go-jwt.WithIssuer(...)` does
+  # exact-string comparison — no normalization. The trailing slash is
+  # non-negotiable: dropping it broke Red Team CLI device-flow 2026-07-14.
+  # If Hydra's URLS_SELF_ISSUER changes shape, this MUST change in lockstep
+  # (loopzero-cloud + loopzero-api overlays both). HYDRA_PUBLIC_URL kept as
   # internal for JWKS fetch (faster, no outbound TLS).
-  JWT_ISSUER: "https://auth-dev.loopzero.example"
+  JWT_ISSUER: "https://auth-dev.loopzero.example/"
