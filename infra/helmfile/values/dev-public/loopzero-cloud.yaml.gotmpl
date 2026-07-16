@@ -68,3 +68,27 @@ env:
   # (loopzero-cloud + loopzero-api overlays both). HYDRA_PUBLIC_URL kept as
   # internal for JWKS fetch (faster, no outbound TLS).
   JWT_ISSUER: "https://auth-dev.loopzero.example/"
+
+  # T1 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md): supersedes the volatile
+  # `kubectl set env deployment/loopzero-cloud RAG_BASE_URL=...` applied 2026-07-15.
+  # Without RAG_BASE_URL the loopzero-rag broker in cmd/main.go stays nil and the
+  # `mountRagDashboard(...)` call at cmd/main.go:998 is skipped, so
+  # `/v1/dashboard/rag/*` returns 404 (breaks app-dev.loopzero.example/rag/analytics).
+  # `host.k3d.internal` is the k3d hostAlias that resolves to the host running
+  # loopzero-rag on :18082 (per dev-public data-plane topology: loopzero-rag runs as a
+  # host process outside the k3d cluster; per DELEGATION brief § Repos § loopzero-rag).
+  # Companion Secret loopzero-rag-admin-key provides RAG_PLATFORM_ADMIN_KEY (see
+  # infra/helm/loopzero-cloud/templates/deployment.yaml env block).
+  RAG_BASE_URL: "http://host.k3d.internal:18082"
+
+# T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
+# ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
+# OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
+# the existing `loopzero-vault-secrets` ClusterSecretStore. Chart template gates
+# on `.Values.rag.externalSecretEnabled` (default false in
+# infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
+# loopzero-rag → `bao kv patch secret/loopzero/cloud rag_platform_admin_key=<new>`
+# → ESO refresh within 1h → `kubectl rollout restart deployment/loopzero-cloud`
+# → revoke old key via DELETE /v1/admin/keys/{id}.
+rag:
+  externalSecretEnabled: true
