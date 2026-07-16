@@ -11,9 +11,10 @@
 #     (name=loopzero-rag-admin-key, optional=true)
 #   - ExternalSecret template file exists in the chart
 #   - Rendered ExternalSecret targets Secret loopzero-rag-admin-key, remoteRef
-#     key=loopzero/cloud property=rag_platform_admin_key
+#     key=loopzero/cloud property=rag_platform_admin_key, creationPolicy=Owner
 #
 # Runs against `helmfile template` output — hermetic, no live cluster required.
+# Pure orchestration: helmfile + yq (canonical toolchain, per project deps).
 
 set -euo pipefail
 
@@ -32,97 +33,89 @@ LOOPZERO_HELMFILE_ENV=dev-public helmfile -e dev-public \
 
 fail=0
 
-# Multi-line asserts via python3 YAML parsing — robust vs regex fragility.
-python3 - "$TMP/rendered.yaml" <<'PY'
-import sys, yaml, pathlib
-p = pathlib.Path(sys.argv[1])
-docs = [d for d in yaml.safe_load_all(p.read_text()) if d]
+pass() { echo "PASS — $1"; }
+fail_() { echo "FAIL — $1"; fail=$((fail + 1)); }
 
-# Assertions
-fails = []
+# --- A1: RAG_BASE_URL env is a non-empty http(s):// URL on the Deployment ---
+BASE_URL=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
+  | .spec.template.spec.containers[]
+  | select(.name == "loopzero-cloud")
+  | .env[]
+  | select(.name == "RAG_BASE_URL")
+  | .value) // ""' "$TMP/rendered.yaml")
 
-def find_kind(kind, name=None):
-    for d in docs:
-        if d.get("kind") == kind and (name is None or d.get("metadata", {}).get("name") == name):
-            return d
-    return None
+case "$BASE_URL" in
+  http://*|https://*) pass "RAG_BASE_URL=$BASE_URL" ;;
+  "") fail_ "RAG_BASE_URL env absent from Deployment/loopzero-cloud (or empty)" ;;
+  *)  fail_ "RAG_BASE_URL value not http(s):// URL (got '$BASE_URL')" ;;
+esac
 
-def envs_of_deployment():
-    dep = find_kind("Deployment", "loopzero-cloud")
-    if not dep:
-        fails.append("FAIL — Deployment/loopzero-cloud not rendered")
-        return {}
-    containers = dep["spec"]["template"]["spec"]["containers"]
-    ct = next((c for c in containers if c["name"] == "loopzero-cloud"), None)
-    if not ct:
-        fails.append("FAIL — container loopzero-cloud not in Deployment spec")
-        return {}
-    return {e["name"]: e for e in ct.get("env", [])}
+# --- A2: RAG_PLATFORM_ADMIN_KEY via valueFrom.secretKeyRef name=loopzero-rag-admin-key ---
+SR_NAME=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
+  | .spec.template.spec.containers[]
+  | select(.name == "loopzero-cloud")
+  | .env[]
+  | select(.name == "RAG_PLATFORM_ADMIN_KEY")
+  | .valueFrom.secretKeyRef.name) // ""' "$TMP/rendered.yaml")
+SR_KEY=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
+  | .spec.template.spec.containers[]
+  | select(.name == "loopzero-cloud")
+  | .env[]
+  | select(.name == "RAG_PLATFORM_ADMIN_KEY")
+  | .valueFrom.secretKeyRef.key) // ""' "$TMP/rendered.yaml")
+SR_OPT=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
+  | .spec.template.spec.containers[]
+  | select(.name == "loopzero-cloud")
+  | .env[]
+  | select(.name == "RAG_PLATFORM_ADMIN_KEY")
+  | .valueFrom.secretKeyRef.optional) // false' "$TMP/rendered.yaml")
 
-envs = envs_of_deployment()
+if [ "$SR_NAME" = "loopzero-rag-admin-key" ] && [ "$SR_KEY" = "RAG_PLATFORM_ADMIN_KEY" ] && [ "$SR_OPT" = "true" ]; then
+  pass "RAG_PLATFORM_ADMIN_KEY sourced via secretKeyRef name=$SR_NAME key=$SR_KEY optional=true"
+else
+  fail_ "RAG_PLATFORM_ADMIN_KEY wiring mismatch (name='$SR_NAME' key='$SR_KEY' optional='$SR_OPT'; expected loopzero-rag-admin-key/RAG_PLATFORM_ADMIN_KEY/true)"
+fi
 
-# A1: RAG_BASE_URL literal env, non-empty http(s):// URL
-if "RAG_BASE_URL" not in envs:
-    fails.append("FAIL — RAG_BASE_URL env absent from Deployment")
-else:
-    val = envs["RAG_BASE_URL"].get("value", "")
-    if not val.startswith(("http://", "https://")):
-        fails.append(f"FAIL — RAG_BASE_URL value not http(s):// URL (got '{val}')")
-    else:
-        print(f"PASS — RAG_BASE_URL={val}")
+# --- A3: ExternalSecret template file present in chart ---
+TPL="infra/helm/loopzero-cloud/templates/externalsecret-rag-admin-key.yaml"
+if [ -f "$TPL" ]; then
+  pass "ExternalSecret template present at $TPL"
+else
+  fail_ "ExternalSecret template missing at $TPL"
+fi
 
-# A2: RAG_PLATFORM_ADMIN_KEY via valueFrom.secretKeyRef
-if "RAG_PLATFORM_ADMIN_KEY" not in envs:
-    fails.append("FAIL — RAG_PLATFORM_ADMIN_KEY env absent from Deployment")
-else:
-    ent = envs["RAG_PLATFORM_ADMIN_KEY"]
-    vf = ent.get("valueFrom", {}).get("secretKeyRef")
-    if not vf:
-        fails.append("FAIL — RAG_PLATFORM_ADMIN_KEY not sourced via valueFrom.secretKeyRef")
-    else:
-        if vf.get("name") != "loopzero-rag-admin-key":
-            fails.append(f"FAIL — secretKeyRef.name is '{vf.get('name')}', expected loopzero-rag-admin-key")
-        if vf.get("key") != "RAG_PLATFORM_ADMIN_KEY":
-            fails.append(f"FAIL — secretKeyRef.key is '{vf.get('key')}', expected RAG_PLATFORM_ADMIN_KEY")
-        if not vf.get("optional", False):
-            fails.append("FAIL — secretKeyRef.optional MUST be true (preserves boot on clusters without ESO)")
-        else:
-            print(f"PASS — RAG_PLATFORM_ADMIN_KEY sourced via secretKeyRef name={vf['name']} key={vf['key']} optional=true")
+# --- A4: Rendered ExternalSecret shape ---
+ES_TARGET=$(yq eval-all '(select(.kind == "ExternalSecret" and .metadata.name == "loopzero-rag-admin-key")
+  | .spec.target.name) // ""' "$TMP/rendered.yaml")
+ES_KEY_PATH=$(yq eval-all '(select(.kind == "ExternalSecret" and .metadata.name == "loopzero-rag-admin-key")
+  | .spec.data[]
+  | select(.secretKey == "RAG_PLATFORM_ADMIN_KEY")
+  | .remoteRef.key) // ""' "$TMP/rendered.yaml")
+ES_PROP=$(yq eval-all '(select(.kind == "ExternalSecret" and .metadata.name == "loopzero-rag-admin-key")
+  | .spec.data[]
+  | select(.secretKey == "RAG_PLATFORM_ADMIN_KEY")
+  | .remoteRef.property) // ""' "$TMP/rendered.yaml")
+ES_POLICY=$(yq eval-all '(select(.kind == "ExternalSecret" and .metadata.name == "loopzero-rag-admin-key")
+  | .spec.target.creationPolicy) // ""' "$TMP/rendered.yaml")
 
-# A3: ExternalSecret template file present in chart
-tpl = pathlib.Path("infra/helm/loopzero-cloud/templates/externalsecret-rag-admin-key.yaml")
-if not tpl.is_file():
-    fails.append(f"FAIL — ExternalSecret template missing at {tpl}")
-else:
-    print(f"PASS — ExternalSecret template present at {tpl}")
+if [ -z "$ES_TARGET" ]; then
+  fail_ "ExternalSecret/loopzero-rag-admin-key not rendered (rag.externalSecretEnabled off?)"
+else
+  [ "$ES_TARGET" = "loopzero-rag-admin-key" ] \
+    && pass "ExternalSecret target.name=loopzero-rag-admin-key" \
+    || fail_ "ExternalSecret target.name='$ES_TARGET' (expected loopzero-rag-admin-key)"
+  [ "$ES_KEY_PATH" = "loopzero/cloud" ] && [ "$ES_PROP" = "rag_platform_admin_key" ] \
+    && pass "ExternalSecret remoteRef key=loopzero/cloud property=rag_platform_admin_key" \
+    || fail_ "ExternalSecret remoteRef mismatch (key='$ES_KEY_PATH' property='$ES_PROP')"
+  [ "$ES_POLICY" = "Owner" ] \
+    && pass "ExternalSecret target.creationPolicy=Owner (anti-orphan)" \
+    || fail_ "ExternalSecret creationPolicy='$ES_POLICY' (expected Owner)"
+fi
 
-# A4: Rendered ExternalSecret targets Secret loopzero-rag-admin-key
-es = find_kind("ExternalSecret", "loopzero-rag-admin-key")
-if not es:
-    fails.append("FAIL — ExternalSecret/loopzero-rag-admin-key not rendered (rag.externalSecretEnabled?)")
-else:
-    tgt = es["spec"].get("target", {}).get("name")
-    if tgt != "loopzero-rag-admin-key":
-        fails.append(f"FAIL — ExternalSecret target.name is '{tgt}', expected loopzero-rag-admin-key")
-    data = es["spec"].get("data", [])
-    if not any(d.get("secretKey") == "RAG_PLATFORM_ADMIN_KEY"
-               and d.get("remoteRef", {}).get("key") == "loopzero/cloud"
-               and d.get("remoteRef", {}).get("property") == "rag_platform_admin_key"
-               for d in data):
-        fails.append("FAIL — ExternalSecret data entry mismatch (expected secretKey=RAG_PLATFORM_ADMIN_KEY, remoteRef.key=loopzero/cloud, property=rag_platform_admin_key)")
-    else:
-        print("PASS — ExternalSecret targets Secret loopzero-rag-admin-key from OpenBao loopzero/cloud.rag_platform_admin_key")
-
-# A5: ExternalSecret creationPolicy Owner (ESO takes ownership; delete ExternalSecret → deletes Secret; anti-orphan)
-if es and es["spec"].get("target", {}).get("creationPolicy") != "Owner":
-    fails.append("FAIL — ExternalSecret target.creationPolicy MUST be Owner (prevents orphan Secret on manifest deletion)")
-elif es:
-    print("PASS — ExternalSecret target.creationPolicy=Owner")
-
-if fails:
-    print()
-    for f in fails: print(f)
-    print(f"\n=== RED: {len(fails)} assertion(s) failed ===")
-    sys.exit(1)
-print("\n=== GREEN: loopzero-cloud dev-public wires RAG dashboard durably ===")
-PY
+if [ $fail -gt 0 ]; then
+  echo
+  echo "=== RED: $fail assertion(s) failed ==="
+  exit 1
+fi
+echo
+echo "=== GREEN: loopzero-cloud dev-public wires RAG dashboard durably ==="
