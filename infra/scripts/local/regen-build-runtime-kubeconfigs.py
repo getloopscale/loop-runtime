@@ -14,7 +14,8 @@ submission silently failed → builds marked FAILED with no logs.
 
 Canonical fix (this script, idempotent):
   1. Discover each peer cluster's docker-network IP (k3d container).
-  2. Mint a fresh `kube-system/default` SA token via kubectl (--duration=24h).
+  2. Mint a fresh SA token via kubectl (--duration=720h; #242 — 24h expired
+     unrotated on the always-on dev-public droplet and broke all deploys).
   3. Materialize a structurally-valid kubeconfig with the new token,
      using the cluster's published CA-data from `k3d kubeconfig get`.
   4. Patch `loopzero-system/loopzero-cluster-kubeconfigs` Secret in mgmt cluster
@@ -77,13 +78,22 @@ def discover_cluster_ip(container: str) -> str:
     return out
 
 
+# Long-lived token TTL. #242: the pre-#242 value was 24h, which expires on
+# the always-on dev-public droplet — this script is a one-shot re-seed, not a
+# rotation loop, so a token whose TTL is shorter than the re-seed interval dies
+# between runs and silently breaks every deploy at workflow submit (401). 720h
+# (30d) gives ~29-day margin; the build cluster accepts it (verified LIVE
+# 2026-07-19). Mirrors docs/operations/build-cluster-token-rotation.md (93e238d7).
+TOKEN_TTL = "720h"
+
+
 def mint_token(context: str, namespace: str, sa: str) -> str:
     # Sprint 7 T2.1: namespace + sa parameterized per cluster. Pre-Sprint-7
     # hardcoded `kube-system/default` which was wrong for the build cluster
     # (RBAC ties create-workflows to argo/loopzero-workflow-submitter).
     return subprocess.check_output(
         ["kubectl", "--context=" + context, "-n", namespace,
-         "create", "token", sa, "--duration=24h"],
+         "create", "token", sa, "--duration=" + TOKEN_TTL],
         text=True,
     ).strip()
 
