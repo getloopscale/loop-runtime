@@ -94,3 +94,28 @@ runtimeSecrets: {}
   #   SESSION_TOKEN_SECRET: "..."
   #   STRIPE_API_KEY: "rk_test_..."
   #   STRIPE_WEBHOOK_SECRET: "whsec_..."
+
+# ============================================================================
+# T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T1+T2). loopzero-rag
+# platform-admin key wiring for the /v1/dashboard/rag/* BFF surface. Only
+# dev-public opts in today (rag.externalSecretEnabled: true in the overlay).
+# Standalone-multi + prod default off (see rules for those envs); the chart
+# templates for ExternalSecret + envFrom rendering are gated on this flag.
+# ============================================================================
+rag:
+  # Renders infra/helm/loopzero-cloud/templates/externalsecret-rag-admin-key.yaml
+  # when true. Requires an ESO controller in the cluster + a ClusterSecretStore
+  # named `loopzero-vault-secrets` (dev-public canonical). Off by default so
+  # clusters without ESO still boot.
+  externalSecretEnabled: false
+  # ClusterSecretStore name — dev-public uses `loopzero-vault-secrets`.
+  secretStoreName: "loopzero-vault-secrets"
+  # OpenBao path (kv-v2 mount `secret/`) — canonical `loopzero/cloud` with
+  # property `rag_platform_admin_key` (matches the canonical eso-openbao
+  # example at charts/loopzero-cloud/examples/eso-openbao.yaml). Rotation:
+  # `bao kv patch secret/loopzero/cloud rag_platform_admin_key=<new-key>`.
+  openBaoPath: "loopzero/cloud"
+  openBaoProperty: "rag_platform_admin_key"
+  # ESO refresh cadence — 1h matches loopzero-cloud-secrets canonical (see
+  # charts/loopzero-cloud/examples/eso-openbao.yaml:37).
+  externalSecretRefreshInterval: "1h"

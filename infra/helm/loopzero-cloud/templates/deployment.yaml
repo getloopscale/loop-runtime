@@ -64,6 +64,24 @@ spec:
                   name: loopzero-service-auth-ed25519
                   key: private
                   optional: true
+            # T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md): loopzero-rag
+            # platform-admin key materialized into Secret `loopzero-rag-admin-key`
+            # by ESO ExternalSecret (see externalsecret-rag-admin-key.yaml.tpl)
+            # from OpenBao path `loopzero/cloud` property `rag_platform_admin_key`
+            # (canonical eso-openbao pattern per charts/loopzero-cloud/examples/
+            # eso-openbao.yaml). optional=true preserves boot on clusters
+            # without ESO wired (standalone-multi has no ESO controller by
+            # default). Rotates without redeploy via ExternalSecret refresh
+            # (StaKater reloader not wired here; kubelet volumeSubPath refresh
+            # + envFrom.optional keeps the running pod on the last-observed
+            # value until manual `kubectl rollout restart` — canonical for
+            # rare-rotation admin keys).
+            - name: RAG_PLATFORM_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-rag-admin-key
+                  key: RAG_PLATFORM_ADMIN_KEY
+                  optional: true
           envFrom:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}
