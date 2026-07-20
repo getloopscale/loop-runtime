@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.68.0] - 2026-07-20
+
+### Added
 - **M5 hermetic project-cap — deploy-flow HTTP-seam regression tests (closes a review coverage gap on the already-shipped #106 fix).** An adversarial re-review of M5 (released v0.29.0) found the deploy-submit → HTTP 422 surfacing was proven only by composition of isolated unit tests + store-level integration — the live seam where `SubmitBuild`'s typed error actually reaches `mapBuildError` had no end-to-end test, so a future refactor could reopen a silent-500 while all existing tests stayed green. Two tests close it, each exercising the REAL `PROJECTS_EXCEED_PLAN` error type: (1) `TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError` proves the orchestrator passes the typed `*LoopZeroError` through `wrapSubmitBuildError` unchanged (guards the passthrough half); (2) `TestBuildsRoute/…over the Account project cap returns 422 PROJECTS_EXCEED_PLAN` drives the real HTTP handler and asserts 422 + `code=PROJECTS_EXCEED_PLAN` (guards the `mapBuildError` seam half). Both `-race` GREEN. Fresh evidence: the full `project_cap_hermetic_m5_test.go` suite (7 scenarios incl. 8-way concurrent-deploy race + deploy-vs-API race + held-env-lock-no-deadlock + cross-tenant RLS count) re-run `-race` against real PostgreSQL — all PASS. (ROADMAP M5)
 - Dogfood journey J-26 (M7 tenant blob storage): `infra/tests/livetest/dogfood/journey_j26_storage_live_test.go` — Scenario A edge fail-closed (unauthenticated /v1/storage → 401) + Scenario B core chain (upload→stat→download bytes-equal→delete→404) with a real storage:read/write key. Hermetic-enumerable (Ginkgo dry-run 2/2 specs); LIVE run operator-gated.
 - Migration `000057_storage_objects` — engine-owned metadata table for the M7 tenant blob-storage vertical (consumed by loopzero-cloud): `storage_objects` (tenant_id + name path + size + mime + pending/committed status) with `UNIQUE(tenant_id, name)` tenant isolation + prefix-listing index + quota-SUM covering index. Additive, forward-only.
@@ -15,12 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Discovery plan for the customer-requested tenant blob-storage feature (managed file storage over S3, Vercel Blob / Supabase Storage shape) at `.claude/knowledge-base/discoveries/plans/tenant-blob-storage-plan.md` — 7 research questions across 4 coverage corners over 4 newly cloned OSS references (supabase/storage, nhost/hasura-storage, pocketbase, google/go-cloud; all Apache-2.0/MIT license-gated; MinIO/Garage AGPL explicitly excluded from source study)
 - v2 dogfood LIVE journey coverage completed to 25/25 (was 11/25): 14 new `//go:build live` Ginkgo specs at `infra/tests/livetest/dogfood/journey_j{01,04,05,07,08,09,10,11,19,20,21,22,23,25}_live_test.go`, each hitting a real engine route for its journey (`Scenario A`) with deeper mutation/streaming scenarios deferred (mirrors the j17 skeleton pattern). Part of canonical-tests-rewrite-v2 T3.2.
 
+
 ### Changed
 - `prod-image-tags` quality gate now also scans prod overlays (`infra/helmfile/values/prod/*.gotmpl`) and rejects bare split-form mutable tags (`tag: stable`/`develop`), closing a scan gap where the deployed `loopzero-cloud` prod tag `stable` was uncaught (#232). **Scope note (MEET-2026-07-12-001 C1):** the gate covers prod *overlays* only — `loopzero-api` and the 4 operators currently deploy `:latest` in prod via *empty* overlays inheriting the bootstrap default; that path is tracked separately as an operator digest task and is NOT closed by this change.
 
-### Deprecated
-
-### Removed
 
 ### Fixed
 - Promoting a preview to production could look like it **failed** in the dashboard even when it succeeded (release active, workload live, public URL serving). Root cause: the post-activation health check (`healthCheckActiveReleases`) discarded the ArgoCD `synced` signal and flagged a "false success" (WARN + `FalseSuccessTotal`/divergence metrics, which feed Prometheus alerts and the dashboard health card) whenever the app was `!healthy` — including the transient reconcile-rewrite window where ArgoCD's app status is empty/`Unknown` (`GetAppStatus` returns synced=false, healthy=false because no workload resources are visible yet). That window is a **still-converging** state, not a health regression. Fix A: only evaluate post-activation health when the status is determinate (`synced==true`); a non-Synced app is converging or drifting, neither of which is a "workload degraded" verdict. Genuine unhealth (synced + a matched workload reporting Degraded) still flags. Regression-locked by `release_convergence_healthcheck_falsepositive_test.go`. (loopzero-cloud#242 follow-up, CHG-2026-07-20-001)
@@ -31,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - v2 dogfood LIVE suite was a **false-green**: the package had `Describe` blocks but no `RunSpecs` bootstrap, so `go test -tags=live` ran **0 specs** (the "Suite skipped" trap). Added `dogfood_suite_test.go` — the suite now enumerates all 58 specs across 25 journeys. (Sibling `infra/tests/livetest/cleanroom` has the same missing-bootstrap gap — tracked separately.)
 - Moving a team between placement cells (`loopzero admin tenants pin`) was silently rejected in production: the placement-immutability admission policy did not exempt the platform's own control-plane identity, so the sanctioned move was blocked and the team's placement record and running location could disagree. The policy now recognizes the platform control plane as the trusted mover (humans editing the resource directly are still blocked, as intended). Found via the `operators`-vs-reference cross-validation; fixed by extending the existing admission policy rather than adding a redundant one (CHG-2026-07-12-002, MEET-2026-07-12-001).
 - Cell-move admin actions (`loopzero admin tenants pin`) now write an audit-log entry (who moved which team, from which cell to which), closing a forensic gap surfaced by the security review of the fix above — a successful move previously left no queryable trail (CHG-2026-07-12-002).
+
 
 ### Security
 - Release CI (`release-artifacts.yml`) pins its 3 GitHub Actions to immutable commit SHAs, matching the `build-publish.yml` sibling — removes the floating-tag re-point supply-chain vector (#233).
