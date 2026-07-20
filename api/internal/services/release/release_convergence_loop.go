@@ -610,10 +610,26 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 				fmt.Sprintf("%s-%s", rel.ProjectID, app.Name))
 		}
 
-		_, healthy, checkErr := r.checkSync(ctx, argoAppName, deployedAppNames)
+		synced, healthy, checkErr := r.checkSync(ctx, argoAppName, deployedAppNames)
 		if checkErr != nil {
 			r.logger.Warn("health check: ArgoCD status check error",
 				"release_id", rel.ID, "app", argoAppName, "error", checkErr)
+			continue
+		}
+
+		// loopzero-cloud#242 (Fix A): only evaluate post-activation health when the
+		// ArgoCD status is DETERMINATE (synced). During the controller's
+		// reconcile-rewrite window the app status is transiently empty/Unknown →
+		// GetAppStatus returns synced=false, healthy=false (no workload resources
+		// visible yet). That is a STILL-CONVERGING state, not a post-activation
+		// health regression. The pre-fix code flagged it as a false-success,
+		// making a live, healthy promotion look "sem sucesso" in the dashboard
+		// and firing spurious FalseSuccess/divergence Prometheus signals. A
+		// non-Synced app is converging or drifting — neither is a "healthy
+		// workload degraded" verdict — so skip and let a later synced poll
+		// set/clear the gauges. Genuine unhealth is synced==true, healthy==false
+		// (a matched workload reported Degraded), handled below.
+		if !synced {
 			continue
 		}
 
