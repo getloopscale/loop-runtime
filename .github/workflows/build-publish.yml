@@ -73,7 +73,11 @@ jobs:
           load: true
           tags: ${{ inputs.image }}:scan-target
           cache-from: type=gha,scope=${{ inputs.image }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+          # ignore-error: the GitHub Actions cache service (type=gha) intermittently 500s /
+          # returns BlobNotFound on export (esp. large mode=max exports on self-hosted
+          # runners). Cache is a build-time optimization, not a correctness input — a cache
+          # miss/failure must never fail the build. Warns and continues instead.
+          cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
 
@@ -120,7 +124,11 @@ jobs:
           sbom: ${{ inputs.sign }}
           provenance: ${{ inputs.sign && 'mode=max' || 'false' }}
           cache-from: type=gha,scope=${{ inputs.image }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+          # ignore-error: the GitHub Actions cache service (type=gha) intermittently 500s /
+          # returns BlobNotFound on export (esp. large mode=max exports on self-hosted
+          # runners). Cache is a build-time optimization, not a correctness input — a cache
+          # miss/failure must never fail the build. Warns and continues instead.
+          cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
 
