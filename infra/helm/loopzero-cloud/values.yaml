@@ -119,3 +119,16 @@ rag:
   # ESO refresh cadence — 1h matches loopzero-cloud-secrets canonical (see
   # charts/loopzero-cloud/examples/eso-openbao.yaml:37).
   externalSecretRefreshInterval: "1h"
+
+# loopzero-lens dashboard admin key wiring — mirror of `rag:` above (2026-07-20).
+# Renders infra/helm/loopzero-cloud/templates/externalsecret-lens-admin-key.yaml
+# when true. Off by default so clusters without ESO still boot; dev-public opts
+# in (lens.externalSecretEnabled: true in the overlay). Materializes Secret
+# `loopzero-lens-admin-key` from OpenBao `loopzero/cloud` property `lens_platform_admin_key`.
+# Rotation: `bao kv patch secret/loopzero/cloud lens_platform_admin_key=<new-key>`.
+lens:
+  externalSecretEnabled: false
+  secretStoreName: "loopzero-vault-secrets"
+  openBaoPath: "loopzero/cloud"
+  openBaoProperty: "lens_platform_admin_key"
+  externalSecretRefreshInterval: "1h"

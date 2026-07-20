@@ -82,6 +82,19 @@ spec:
                   name: loopzero-rag-admin-key
                   key: RAG_PLATFORM_ADMIN_KEY
                   optional: true
+            # 2026-07-20 — loopzero-lens platform-admin key, mirror of RAG above.
+            # Materialized into Secret `loopzero-lens-admin-key` by ESO ExternalSecret
+            # (externalsecret-lens-admin-key.yaml) from OpenBao path `loopzero/cloud`
+            # property `lens_platform_admin_key`. optional=true preserves boot on
+            # clusters without ESO. LENS_BASE_URL flows from the overlay env map;
+            # this key lets the loopzero-lens broker mint per-tenant keys for the
+            # /v1/dashboard/lens BFF (M41/M44).
+            - name: LENS_PLATFORM_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-lens-admin-key
+                  key: LENS_PLATFORM_ADMIN_KEY
+                  optional: true
           envFrom:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}

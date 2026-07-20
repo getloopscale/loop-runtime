@@ -81,6 +81,16 @@ env:
   # infra/helm/loopzero-cloud/templates/deployment.yaml env block).
   RAG_BASE_URL: "http://host.k3d.internal:18082"
 
+  # 2026-07-20 — same durable-wiring contract as RAG above, for loopzero-lens.
+  # Without LENS_BASE_URL the loopzero-lens Model-B broker in cmd/main.go stays nil
+  # and the read-only (M41) + management (M44) `/v1/dashboard/lens/*` BFF routes
+  # are skipped, so the dashboard lens surface (app-dev.loopzero.example/lens) breaks.
+  # `host.k3d.internal` resolves to the host running loopzero-lens on :18084 (per
+  # dev-public data-plane topology: loopzero-lens runs as a host process outside the
+  # k3d cluster — dev-credentials data_plane.lens.host_port). Companion Secret
+  # loopzero-lens-admin-key provides LENS_PLATFORM_ADMIN_KEY (deployment.yaml env block).
+  LENS_BASE_URL: "http://host.k3d.internal:18084"
+
 # T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
 # ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
 # OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
@@ -91,4 +101,16 @@ env:
 # → ESO refresh within 1h → `kubectl rollout restart deployment/loopzero-cloud`
 # → revoke old key via DELETE /v1/admin/keys/{id}.
 rag:
+  externalSecretEnabled: true
+
+# 2026-07-20 — loopzero-lens equivalent of the rag block above. Enables the
+# ExternalSecret that materializes k8s Secret `loopzero-lens-admin-key` from OpenBao
+# path `secret/loopzero/cloud` property `lens_platform_admin_key` via the same
+# `loopzero-vault-secrets` ClusterSecretStore. Chart template gates on
+# `.Values.lens.externalSecretEnabled` (default false in
+# infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
+# loopzero-lens → `bao kv patch secret/loopzero/cloud lens_platform_admin_key=<new>`
+# → ESO refresh within 1h → `kubectl rollout restart deployment/loopzero-cloud`
+# → revoke old key via loopzero-lens DELETE /v1/admin/keys/{id}.
+lens:
   externalSecretEnabled: true
