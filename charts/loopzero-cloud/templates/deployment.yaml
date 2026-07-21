@@ -59,6 +59,21 @@ spec:
                 name: {{ include "loopzero-common.fullname" . }}
             - secretRef:
                 name: {{ include "loopzero-common.fullname" . }}-admin
+            {{- if .Values.wiringConfigMap }}
+            # Cross-capability wiring (loopzero-cloud#249): a topology ConfigMap supplying
+            # data-plane base URLs (e.g. THEMORY_BASE_URL) resolved per-environment.
+            # Optional so a deployment that fronts no data plane omits it.
+            - configMapRef:
+                name: {{ .Values.wiringConfigMap }}
+                optional: true
+            {{- end }}
+            # loopzero-cloud#249: the Model B platform-admin key the broker uses to mint
+            # per-tenant memory credentials (THEMORY_PLATFORM_ADMIN_KEY). Optional —
+            # only needed when memory is fronted. Provisioned out-of-band (ESO /
+            # kubectl) like the other sensitive secrets; never in values.
+            - secretRef:
+                name: loopzero-memory-platform-admin
+                optional: true
             # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
             # Shared with loopzero-api — single source of truth for X-Service-Auth.
             - secretRef:

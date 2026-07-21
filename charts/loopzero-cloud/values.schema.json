@@ -13,6 +13,10 @@
       "type": "string",
       "description": "Name of a pre-existing K8s Secret supplying the cloud-API secret env (Stripe, session, service-auth, themory). When set, the chart references it via envFrom and skips the inline admin Secret. The operator populates it however they choose (ESO, CSI, sops, kubectl) \u2014 see SECRETS.md (install-config-contract Slice 1, ADR D1 existingSecret floor)."
     },
+    "wiringConfigMap": {
+      "type": "string",
+      "description": "Name of a pre-existing cross-capability wiring ConfigMap mounted via envFrom (loopzero-cloud#249). Supplies data-plane base URLs the cloud-API resolves per-environment, e.g. THEMORY_BASE_URL. Empty by default; when set (and present in-cluster) it enables the SDK + dashboard memory surfaces. Optional in the mount, so a missing ConfigMap is not fatal."
+    },
     "livenessProbe": {
       "type": "object"
     },

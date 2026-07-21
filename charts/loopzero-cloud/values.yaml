@@ -16,6 +16,11 @@ image:
 # See SECRETS.md.
 existingSecret: ""
 
+# Cross-capability wiring ConfigMap (loopzero-cloud#249) mounted via envFrom. Supplies
+# data-plane base URLs (e.g. THEMORY_BASE_URL) resolved per-environment. Empty by
+# default; set to a ConfigMap name (e.g. "loopzero-platform-topology") to front memory.
+wiringConfigMap: ""
+
 # install-config-contract Slice 2 (ADR D1 — day-2 rotation-aware, opt-in).
 # When true (and the Stakater Reloader controller is installed in the cluster),
 # the Deployment gets reloader.stakater.com/auto so a rotated secret (re-synced

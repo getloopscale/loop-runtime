@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- loopzero-cloud chart mounts an optional cross-capability wiring ConfigMap (`wiringConfigMap`, e.g. `loopzero-platform-topology` supplying `THEMORY_BASE_URL`) and the optional `loopzero-memory-platform-admin` Secret, so the dashboard memory surface can be enabled declaratively (loopzero-cloud#249)
 
 ### Changed
 
