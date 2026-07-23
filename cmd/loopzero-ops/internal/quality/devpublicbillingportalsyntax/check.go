@@ -23,12 +23,12 @@ package devpublicbillingportalsyntax
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 )
 
 const (
@@ -38,12 +38,12 @@ const (
 )
 
 var (
-	strictModeRE   = regexp.MustCompile(`(?m)^set -euo pipefail`)
-	logFuncRE      = regexp.MustCompile(`(?m)^log\(\) \{`)
-	assertFuncRE   = regexp.MustCompile(`(?m)^assert\(\) \{`)
-	billingRE      = regexp.MustCompile(`billing|/v1/billing|stripe`)
-	exitCodeRE     = regexp.MustCompile(`(?m)^exit ([0-9]+)`)
-	allowedExits   = map[string]bool{"0": true, "1": true, "2": true}
+	strictModeRE = regexp.MustCompile(`(?m)^set -euo pipefail`)
+	logFuncRE    = regexp.MustCompile(`(?m)^log\(\) \{`)
+	assertFuncRE = regexp.MustCompile(`(?m)^assert\(\) \{`)
+	billingRE    = regexp.MustCompile(`billing|/v1/billing|stripe`)
+	exitCodeRE   = regexp.MustCompile(`(?m)^exit ([0-9]+)`)
+	allowedExits = map[string]bool{"0": true, "1": true, "2": true}
 )
 
 // Config controls the check.
@@ -74,14 +74,14 @@ func Check(cfg Config) (Outcome, error) {
 	var failures []string
 
 	// 1. file exists + read content
-	scriptBytes, existsErr := statAndRead(script)
+	scriptBytes, existsErr := qgshell.StatAndRead(script)
 	if existsErr != nil {
 		failures = append(failures, fmt.Sprintf("file exists: %s missing", scriptRel))
 	}
 
 	// 2. bash -n syntax OK
 	if existsErr == nil {
-		if err := runQuiet("bash", "-n", script); err != nil {
+		if err := qgshell.RunQuiet("bash", "-n", script); err != nil {
 			failures = append(failures, fmt.Sprintf("bash -n %s: %v", scriptRel, err))
 		}
 	}
@@ -115,7 +115,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// 8. Script name allowlisted
-	allowBytes, err := statAndRead(allowlist)
+	allowBytes, err := qgshell.StatAndRead(allowlist)
 	if err != nil {
 		failures = append(failures, fmt.Sprintf("allowlist file exists: %s missing", allowlistRel))
 	} else if !strings.Contains(string(allowBytes), allowlistTag) {
@@ -127,18 +127,4 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{Failures: failures}, ErrViolations
 	}
 	return Outcome{}, nil
-}
-
-func statAndRead(path string) ([]byte, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, err
-	}
-	return os.ReadFile(path)
-}
-
-func runQuiet(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run()
 }

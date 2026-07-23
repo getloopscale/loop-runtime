@@ -14,6 +14,7 @@
 //  7. JSON report has "pass": 6           (bytes.Contains)
 //  8. JSON report preserves spaced detail (bytes.Contains)
 //  9. JSON report results[0]==[c1,PASS,OK] (json.Unmarshal + typed assertion)
+//
 // 10. allowlist file exists               (os.Stat)
 // 11. script allowlisted                  (bytes.Contains)
 //
@@ -26,11 +27,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 )
 
 const (
@@ -82,14 +84,14 @@ func Check(cfg Config) (Outcome, error) {
 	var failures []string
 
 	// 1. script exists
-	scriptBytes, existsErr := statAndRead(script)
+	scriptBytes, existsErr := qgshell.StatAndRead(script)
 	if existsErr != nil {
 		failures = append(failures, fmt.Sprintf("script exists: %s missing", scriptRel))
 	}
 
 	// 2. bash -n ok
 	if existsErr == nil {
-		if err := runQuiet("bash", "-n", script); err != nil {
+		if err := qgshell.RunQuiet("bash", "-n", script); err != nil {
 			failures = append(failures, fmt.Sprintf("bash -n %s: %v", scriptRel, err))
 		}
 	}
@@ -100,7 +102,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// 4. helper compiles
-	if err := runQuiet("python3", "-m", "py_compile", helper); err != nil {
+	if err := qgshell.RunQuiet("python3", "-m", "py_compile", helper); err != nil {
 		failures = append(failures, fmt.Sprintf("helper compiles (python3 -m py_compile): %v", err))
 	}
 
@@ -134,7 +136,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// 10. allowlist file exists
-	allowBytes, err := statAndRead(allowlist)
+	allowBytes, err := qgshell.StatAndRead(allowlist)
 	if err != nil {
 		failures = append(failures, fmt.Sprintf("allowlist file exists: %s missing", allowlistRel))
 	} else {
@@ -151,22 +153,6 @@ func Check(cfg Config) (Outcome, error) {
 }
 
 // statAndRead returns the file bytes on success. When missing, returns nil + os.PathError.
-func statAndRead(path string) ([]byte, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, err
-	}
-	return os.ReadFile(path)
-}
-
-// runQuiet executes the command with stdout/stderr discarded. Returns nil on exit 0,
-// error otherwise. Distinguishes "binary missing on PATH" (structural) from "non-zero
-// exit" (assertion).
-func runQuiet(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run()
-}
 
 // runHelperJSON reproduces the bash invocation:
 //

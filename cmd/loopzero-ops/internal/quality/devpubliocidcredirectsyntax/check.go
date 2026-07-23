@@ -8,12 +8,12 @@ package devpubliocidcredirectsyntax
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 )
 
 const (
@@ -56,13 +56,13 @@ func Check(cfg Config) (Outcome, error) {
 
 	var failures []string
 
-	scriptBytes, existsErr := statAndRead(script)
+	scriptBytes, existsErr := qgshell.StatAndRead(script)
 	if existsErr != nil {
 		failures = append(failures, fmt.Sprintf("file exists: %s missing", scriptRel))
 	}
 
 	if existsErr == nil {
-		if err := runQuiet("bash", "-n", script); err != nil {
+		if err := qgshell.RunQuiet("bash", "-n", script); err != nil {
 			failures = append(failures, fmt.Sprintf("bash -n %s: %v", scriptRel, err))
 		}
 	}
@@ -99,7 +99,7 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	allowBytes, err := statAndRead(allowlist)
+	allowBytes, err := qgshell.StatAndRead(allowlist)
 	if err != nil {
 		failures = append(failures, fmt.Sprintf("allowlist file exists: %s missing", allowlistRel))
 	} else if !strings.Contains(string(allowBytes), allowlistTag) {
@@ -111,18 +111,4 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{Failures: failures}, ErrViolations
 	}
 	return Outcome{}, nil
-}
-
-func statAndRead(path string) ([]byte, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, err
-	}
-	return os.ReadFile(path)
-}
-
-func runQuiet(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run()
 }
