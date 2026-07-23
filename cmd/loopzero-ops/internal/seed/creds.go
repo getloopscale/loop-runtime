@@ -81,10 +81,7 @@ func LoadCreds(path string) (*Creds, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	var c Creds
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.DisallowUnknownFields()
-	// Unknown fields are tolerated (the file may carry keys other seeds use);
-	// re-decode leniently if the strict pass only failed on unknown fields.
+	// Unknown fields are tolerated (the file may carry keys other seeds use).
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCredsMalformed, err)
 	}

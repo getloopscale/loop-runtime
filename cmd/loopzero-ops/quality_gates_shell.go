@@ -351,6 +351,12 @@ func runWebhookCanonicalPath(args []string) int {
 	}
 	outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: *root})
 	if err != nil {
+		// Distinguish a genuine violation from a real I/O error (fail-closed):
+		// reporting an I/O error as "detected in 0 place(s)" would mislead.
+		if !errors.Is(err, webhookcanonicalpath.ErrViolations) {
+			fmt.Fprintf(os.Stderr, "webhook-canonical-path: ERROR — could not complete scan: %v\n", err)
+			return 1
+		}
 		fmt.Fprintf(os.Stderr, "webhook-canonical-path: FAIL — /engine/api/v1/webhooks/github detected in %d place(s):\n", len(outcome.Violations))
 		for _, v := range outcome.Violations {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
