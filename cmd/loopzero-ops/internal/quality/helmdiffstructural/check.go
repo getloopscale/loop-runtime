@@ -24,14 +24,16 @@
 package helmdiffstructural
 
 import (
-	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
-	"strings"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
 // SensitiveKinds — resource kinds whose removal triggers STRUCT-1.
@@ -80,64 +82,34 @@ type Outcome struct {
 	Messages   []string
 }
 
-// extractTuples parses one rendered manifest file into a sorted slice
-// of (Kind, Name, Namespace) tuples. Mirrors the bash awk pass.
+// extractTuples parses one rendered manifest file into a sorted slice of
+// (Kind, Name, Namespace) tuples using a real multi-document YAML decoder —
+// robust to quoting/indentation the former hardcoded prefix-offset parser
+// could misread (Rule 9: don't reinvent a YAML parser).
 func extractTuples(path string) ([]Tuple, error) {
-	f, err := os.Open(path) //nolint:gosec // operator-controlled
+	data, err := os.ReadFile(path) //nolint:gosec // operator-controlled
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
 	var tuples []Tuple
-	curKind, curName, curNS := "", "", ""
-	inMeta := false
-	flush := func() {
-		if curKind != "" && curName != "" {
-			tuples = append(tuples, Tuple{Kind: curKind, Name: curName, Namespace: curNS})
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	for {
+		var doc struct {
+			Kind     string `yaml:"kind"`
+			Metadata struct {
+				Name      string `yaml:"name"`
+				Namespace string `yaml:"namespace"`
+			} `yaml:"metadata"`
 		}
-		curKind, curName, curNS = "", "", ""
-		inMeta = false
-	}
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "---" {
-			flush()
-			continue
-		}
-		if strings.HasPrefix(line, "kind:") && len(line) > 5 {
-			curKind = strings.TrimSpace(line[5:])
-			continue
-		}
-		if line == "metadata:" || strings.HasPrefix(line, "metadata:") && strings.TrimSpace(line[9:]) == "" {
-			inMeta = true
-			continue
-		}
-		if inMeta {
-			trimmed := strings.TrimLeft(line, " \t")
-			if strings.HasPrefix(trimmed, "name:") && curName == "" {
-				val := strings.TrimSpace(trimmed[5:])
-				val = strings.Trim(val, `"`)
-				curName = val
-				continue
+		if err := dec.Decode(&doc); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
 			}
-			if strings.HasPrefix(trimmed, "namespace:") {
-				val := strings.TrimSpace(trimmed[10:])
-				val = strings.Trim(val, `"`)
-				curNS = val
-				continue
-			}
+			return nil, err
 		}
-		// Exit metadata block when a top-level key (column-0 letter) appears.
-		if len(line) > 0 && isLetter(line[0]) && !strings.HasPrefix(line, "kind:") &&
-			!strings.HasPrefix(line, "metadata:") && !strings.HasPrefix(line, "---") {
-			inMeta = false
+		if doc.Kind != "" && doc.Metadata.Name != "" {
+			tuples = append(tuples, Tuple{Kind: doc.Kind, Name: doc.Metadata.Name, Namespace: doc.Metadata.Namespace})
 		}
-	}
-	flush()
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	sort.Slice(tuples, func(i, j int) bool {
 		if tuples[i].Kind != tuples[j].Kind {
@@ -149,10 +121,6 @@ func extractTuples(path string) ([]Tuple, error) {
 		return tuples[i].Namespace < tuples[j].Namespace
 	})
 	return tuples, nil
-}
-
-func isLetter(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 // countKind counts documents whose `kind: <kind>` appears at line start.

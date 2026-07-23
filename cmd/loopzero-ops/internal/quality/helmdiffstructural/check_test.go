@@ -360,9 +360,3 @@ func TestSensitiveKinds(t *testing.T) {
 	assert.Contains(t, SensitiveKinds, "PodSecurityPolicy")
 }
 
-func TestIsLetter(t *testing.T) {
-	assert.True(t, isLetter('a'))
-	assert.True(t, isLetter('Z'))
-	assert.False(t, isLetter('1'))
-	assert.False(t, isLetter(' '))
-}
