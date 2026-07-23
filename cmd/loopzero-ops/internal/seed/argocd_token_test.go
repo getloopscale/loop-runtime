@@ -87,9 +87,6 @@ func TestArgoCDToken_MintsAndSyncsAndRestarts(t *testing.T) {
 	if string(s.Data["argocd-token"]) != "canonical-account-token" {
 		t.Errorf("argocd-token = %q, want canonical-account-token", s.Data["argocd-token"])
 	}
-	// loopzero-api Deployment rolled?
-	got2, _ := c.RESTMapper(), c
-	_ = got2
 	// (Deployment restartedAt check omitted — already covered by TestStripeAPIKeys.)
 }
 

@@ -47,7 +47,6 @@ const (
 	stripeAPIEnv               = "STRIPE_API_BASE" // test override
 	stripeDefaultWebhookURL    = "https://app-dev.loopzero.example/v1/webhooks/stripe"
 	stripeWebhookURLEnv        = "LOOPZERO_WEBHOOK_URL"
-	stripeDefaultCredsPath     = ""                       // resolved from Deps.Creds path via env override
 	stripeCredsPathEnv         = "LOOPZERO_DEV_CREDENTIALS"   // matches bash env var
 	stripeWhsecPlaceholderPref = "whsec_dev_"
 )
