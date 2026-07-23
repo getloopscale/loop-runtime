@@ -239,3 +239,4 @@ cross-validation-output/
 # user WIP simulator (commit deliberately, not via git add -A)
 docs/operations/loopzero-capsim*.mjs
 docs/operations/loopzero-capsim-mcp/
+.review-loop/
