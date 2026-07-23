@@ -14,6 +14,7 @@
 package agplisolation
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,8 +79,16 @@ func Check(cfg Config) *Outcome {
 	out := &Outcome{Pass: true}
 	for _, dir := range scanDirs {
 		base := filepath.Join(root, dir)
-		_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+		if _, statErr := os.Stat(base); os.IsNotExist(statErr) {
+			continue // scan dir legitimately absent
+		}
+		// M25: fail-CLOSED — a walk/read error means the gate could not read files
+		// it must scan; recorded as a violation (Pass=false) below, not swallowed.
+		walkErr := filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
 				return nil
 			}
 			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -87,7 +96,7 @@ func Check(cfg Config) *Outcome {
 			}
 			data, rerr := os.ReadFile(path)
 			if rerr != nil {
-				return nil
+				return fmt.Errorf("%s: %w", path, rerr)
 			}
 			content := string(data)
 			rel, _ := filepath.Rel(root, path)
@@ -102,6 +111,11 @@ func Check(cfg Config) *Outcome {
 			}
 			return nil
 		})
+		if walkErr != nil {
+			out.Pass = false
+			out.Violations = append(out.Violations,
+				fmt.Sprintf("scan error under %s: %v (fail-closed)", dir, walkErr))
+		}
 	}
 	if len(out.Violations) > 0 {
 		out.Pass = false

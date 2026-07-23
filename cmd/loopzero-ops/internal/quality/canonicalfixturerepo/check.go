@@ -33,10 +33,13 @@ func Check(cfg Config) (Outcome, error) {
 	for _, d := range scanDirs {
 		full := filepath.Join(root, d)
 		if _, err := os.Stat(full); errors.Is(err, fs.ErrNotExist) { continue }
-		_ = filepath.WalkDir(full, func(path string, e fs.DirEntry, walkErr error) error {
-			if walkErr != nil || e.IsDir() { return nil }
+		// M25: fail-CLOSED — propagate the walk + read errors instead of
+		// swallowing them (a gate that cannot read files must not report clean).
+		if err := filepath.WalkDir(full, func(path string, e fs.DirEntry, walkErr error) error {
+			if walkErr != nil { return walkErr }
+			if e.IsDir() { return nil }
 			body, err := os.ReadFile(path)
-			if err != nil { return nil }
+			if err != nil { return fmt.Errorf("%s: %w", path, err) }
 			for i, line := range strings.Split(string(body), "\n") {
 				if !strings.Contains(line, legacy) { continue }
 				low := strings.ToLower(line)
@@ -46,7 +49,9 @@ func Check(cfg Config) (Outcome, error) {
 				violations = append(violations, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
 			}
 			return nil
-		})
+		}); err != nil {
+			return Outcome{}, fmt.Errorf("walk %s: %w", full, err)
+		}
 	}
 	if len(violations) > 0 { return Outcome{Violations: violations}, ErrViolations }
 	return Outcome{}, nil
