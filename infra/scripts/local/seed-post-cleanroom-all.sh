@@ -370,8 +370,8 @@ if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
   run_step "17c-data-plane-rag-host" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:18082/v1/health)\" = '401'"
   run_step "17d-data-plane-rag-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/rag/)\" = '401'"
 
-  # loopzero-lens (port 18084) — /health is public (returns 200)
-  run_step "17e-data-plane-lens-host" "curl -fsS --max-time 5 http://localhost:18084/health -o /dev/null"
+  # loopzero-lens (port 18084) — /v1/healthz is the public liveness probe (CD playbook Phase 5)
+  run_step "17e-data-plane-lens-host" "curl -fsS --max-time 5 http://localhost:18084/v1/healthz -o /dev/null"
   run_step "17f-data-plane-lens-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/lens/)\" = '401'"
 else
   skip_step "17a-data-plane-memory-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
