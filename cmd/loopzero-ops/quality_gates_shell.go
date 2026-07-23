@@ -457,13 +457,13 @@ func runVaultBootstrapUnsealLoop(args []string) int {
 	return 0
 }
 
-// runOptionBESO enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
+// runOptionBEsoDeployDoc enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
 // contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands
 // documented, rollback + decision matrix + cross-references present, ESO
 // version drift against runtime helmfile detected).
 // Migrated from infra/tests/check-option-b-eso-deploy-doc_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runOptionBESO(args []string) int {
+func runOptionBEsoDeployDoc(args []string) int {
 	fs := flag.NewFlagSet("option-b-eso-deploy-doc", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil { return 1 }
@@ -478,12 +478,12 @@ func runOptionBESO(args []string) int {
 	return 0
 }
 
-// runVaultBootstrapInMgmt enforces the `task k3d:vault:bootstrap-in-mgmt`
+// runVaultBootstrapInMgmtTask enforces the `task k3d:vault:bootstrap-in-mgmt`
 // shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
 // with exactly two well-known differences (context swap + pre-flight message).
 // Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runVaultBootstrapInMgmt(args []string) int {
+func runVaultBootstrapInMgmtTask(args []string) int {
 	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil { return 1 }
@@ -498,12 +498,12 @@ func runVaultBootstrapInMgmt(args []string) int {
 	return 0
 }
 
-// runESOOverlay enforces the dev-public loopzero-external-secrets overlay contract
+// runDevPublicLoopZeroExternalSecretsOverlay enforces the dev-public loopzero-external-secrets overlay contract
 // (post-T1.2 workload identity: enabled=false safe default, K8s-auth shape,
 // no legacy AppRole roleId/secretRef, canonical mgmt DNS, traceability).
 // Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runESOOverlay(args []string) int {
+func runDevPublicLoopZeroExternalSecretsOverlay(args []string) int {
 	fs := flag.NewFlagSet("dev-public-loopzero-external-secrets-overlay", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil { return 1 }
@@ -518,11 +518,11 @@ func runESOOverlay(args []string) int {
 	return 0
 }
 
-// runAllowlistSunsets is a hermetic contract test for the Python
+// runCheckAllowlistSunsets is a hermetic contract test for the Python
 // .claude/scripts/check-allowlist-sunsets.py gate (T5.2.a fixture verifier).
 // Migrated from infra/tests/check-allowlist-sunsets_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runAllowlistSunsets(args []string) int {
+func runCheckAllowlistSunsets(args []string) int {
 	fs := flag.NewFlagSet("check-allowlist-sunsets", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil { return 1 }
@@ -668,13 +668,13 @@ func runShellcheckAdvisory(args []string) int {
 	return 0
 }
 
-// runLoopZeroAPIOpenbao enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync:
+// runLoopZeroApiOpenbaoApproleEnvfrom enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync:
 // the loopzero-api chart unconditionally wires the AppRole secret_id via
 // envFrom.secretRef to K8s Secret loopzero-openbao-approle with optional=true,
 // with NO inline value: for OPENBAO_VAULT_SECRET_ID (anti-hardcode).
 // Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runLoopZeroAPIOpenbao(args []string) int {
+func runLoopZeroApiOpenbaoApproleEnvfrom(args []string) int {
 	fs := flag.NewFlagSet("loopzero-api-openbao-approle-envfrom", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil { return 1 }
@@ -964,11 +964,11 @@ func runDay30Day60CronJobs(args []string) int {
 	return 0
 }
 
-// runESOChartSanity enforces the iter 23 chart-sanity contract for
+// runLoopZeroExternalSecretsChartSanity enforces the iter 23 chart-sanity contract for
 // infra/helm/loopzero-external-secrets. 8 assertions across 5 canonical envs.
 // Migrated from infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.5 Wave 2).
-func runESOChartSanity(args []string) int {
+func runLoopZeroExternalSecretsChartSanity(args []string) int {
 	fs := flag.NewFlagSet("loopzero-external-secrets-chart-sanity", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil {
@@ -997,10 +997,10 @@ func runESOChartSanity(args []string) int {
 	return 0
 }
 
-// runESOCreationPolicy is the iter 20 P0 regression for creationPolicy: Orphan.
+// runLoopZeroExternalSecretsCreationPolicy is the iter 20 P0 regression for creationPolicy: Orphan.
 // Migrated from infra/tests/check-loopzero-external-secrets-creation-policy_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.6 Wave 2).
-func runESOCreationPolicy(args []string) int {
+func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
 	fs := flag.NewFlagSet("loopzero-external-secrets-creation-policy", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil {
@@ -1029,10 +1029,10 @@ func runESOCreationPolicy(args []string) int {
 	return 0
 }
 
-// runOpenbaoInitAuth enforces T5.1-T5.9 openbao-init auth mounts + per-binary roles.
+// runOpenbaoInitAuthMounts enforces T5.1-T5.9 openbao-init auth mounts + per-binary roles.
 // Migrated from infra/tests/check-openbao-init-auth-mounts_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.7 Wave 2 — Wave 2 COMPLETE).
-func runOpenbaoInitAuth(args []string) int {
+func runOpenbaoInitAuthMounts(args []string) int {
 	fs := flag.NewFlagSet("openbao-init-auth-mounts", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil {
