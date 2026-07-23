@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.70.0] - 2026-07-23
+
+### Added
 - loopzero-cloud chart mounts an optional cross-capability wiring ConfigMap (`wiringConfigMap`, e.g. `loopzero-platform-topology` supplying `THEMORY_BASE_URL`) and the optional `loopzero-memory-platform-admin` Secret, so the dashboard memory surface can be enabled declaratively (loopzero-cloud#249)
 - Roadmap amended: added M24–M27 (`/roadmap-feature`) — remediation milestones for the 311 non-blocking findings from the `review-cycle /review` of `cmd/loopzero-ops` (2026-07-23), grouped by theme: M24 Correctness & Robustness, M25 Test & Dead-code Hygiene, M26 Idiomaticity & Design Patterns, M27 Maintainability (Complexity Triage)
 

@@ -719,7 +719,7 @@ Wave C (4 highest-complexity gates):
 
 2. **`time.Sleep → PollWithBackoff` refactor changes test timing semantics (MEDIUM).** The 41 sleep sites are distributed across e2e/, chaos/, load/, capacity/ — some may have implicit ordering assumptions the polling helper won't preserve (e.g., "wait exactly 3s so the next assertion sees the mid-canary state"). Refactor may pass hermetically but fail in Cleanroom where timing is jittery. **Mitigation:** run full Ginkgo suite with `-race` + `-count=3` (repeated runs) before-and-after each sub-batch; keep sleep for benchmark/rate-limit/chaos-sync (documented survivals per PR #2 scope). If a polling refactor introduces a new order-dependency, revert that specific site and document the survival.
 
-### M24 — [ ] cmd/ Review Remediation: Correctness & Robustness
+### M24 — [x] cmd/ Review Remediation: Correctness & Robustness
 
 **Objective:** close the behavior-risk findings the `review-cycle /review` of `cmd/loopzero-ops` (2026-07-23) surfaced across security, system_design, code, architecture, and semantic_folders — the findings that can produce a wrong answer or a silent failure, not just a style smell.
 
