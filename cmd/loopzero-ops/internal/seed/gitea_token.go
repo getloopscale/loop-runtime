@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // GiteaTokenSeed is the Go port of
@@ -19,7 +21,7 @@ import (
 // 4-layer chain:
 //
 //  1. Authenticate to Gitea using gitea-admin.username + .password
-//  1b. Ensure Gitea org `loopzero` exists (GET /orgs/loopzero → 200 no-op; 404 → POST /orgs)
+//     1b. Ensure Gitea org `loopzero` exists (GET /orgs/loopzero → 200 no-op; 404 → POST /orgs)
 //  2. Delete legacy token(s) named `loopzero-api`/`loopzero-api-token` + mint fresh one
 //  3. Sync token to 3 consumer Secrets: gitea-admin.token, loopzero-api-tokens.gitea-token,
 //     loopzero-tenant-operator.GITEA_TOKEN
@@ -30,12 +32,12 @@ func NewGiteaTokenSeed() *GiteaTokenSeed { return &GiteaTokenSeed{} }
 func (s *GiteaTokenSeed) Name() string   { return "gitea-token" }
 
 const (
-	giteaTokenName            = "loopzero-api-token"
-	loopzeroTenantOperatorSecret  = "loopzero-tenant-operator"
-	loopzeroTenantOperatorKey     = "GITEA_TOKEN"
-	loopzeroAPITokensGiteaKey     = "gitea-token"
-	giteaAdminTokenSecretKey  = "token"
-	loopzeroTenantOperatorDeploy  = "loopzero-tenant-operator"
+	giteaTokenName           = "loopzero-api-token"
+	loopzeroTenantOperatorSecret = "loopzero-tenant-operator"
+	loopzeroTenantOperatorKey    = "GITEA_TOKEN"
+	loopzeroAPITokensGiteaKey    = "gitea-token"
+	giteaAdminTokenSecretKey = "token"
+	loopzeroTenantOperatorDeploy = "loopzero-tenant-operator"
 )
 
 func (s *GiteaTokenSeed) Run(d Deps) Result {
@@ -231,7 +233,7 @@ func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
 // giteaMintToken POSTs /users/{user}/tokens with the given name+scopes,
 // returns the sha1 (that's what Gitea calls the raw token).
 func giteaMintToken(ctx context.Context, base, user, pw, name string, scopes []string) (string, error) {
-	body, _ := json.Marshal(map[string]interface{}{"name": name, "scopes": scopes})
+	body, _ := json.Marshal(map[string]any{"name": name, "scopes": scopes})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("%s/api/v1/users/%s/tokens", base, user), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -261,19 +263,8 @@ func giteaMintToken(ctx context.Context, base, user, pw, name string, scopes []s
 // controller-runtime updates (the RolloutRestartDeployment does Get+Update, so
 // NotFound bubbles up as a wrapped apierrors.IsNotFound-shaped error).
 func isNotFoundErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	// The error string from `client.Client.Get` NotFound resembles:
-	//   "deployments.apps \"loopzero-api\" not found"
-	// Fragile but consistent — mirrors the bash `if kubectl get` guard.
-	return bytes.Contains([]byte(err.Error()), []byte("not found"))
+	// Typed check (apierrors.IsNotFound handles nil + unwrapping) — replaces the
+	// former fragile err.Error() substring match. The Get+Update path returns a
+	// proper *apierrors.StatusError.
+	return apierrors.IsNotFound(err)
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-

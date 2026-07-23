@@ -9,12 +9,13 @@
 // quality no-shell-wrap, quality pluto, quality opencost.
 //
 // Exit codes (CLAUDE.md Rule 4 — PERMANENT):
-//   0 — success
-//   1 — usage error
-//   2 — build failure (subcommand-emitted)
-//   3 — deploy failure (subcommand-emitted)
-//   4 — auth error (subcommand-emitted)
-//   5 — partial failure (subcommand-emitted)
+//
+//	0 — success
+//	1 — usage error
+//	2 — build failure (subcommand-emitted)
+//	3 — deploy failure (subcommand-emitted)
+//	4 — auth error (subcommand-emitted)
+//	5 — partial failure (subcommand-emitted)
 package main
 
 import (

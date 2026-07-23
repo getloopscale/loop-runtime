@@ -281,16 +281,16 @@ func TestLokiCrossClusterSeed_Name(t *testing.T) {
 }
 
 func TestContains(t *testing.T) {
-	if !contains("hello world", "world") {
-		t.Error("contains(hello world, world) = false")
+	if !strings.Contains("hello world", "world") {
+		t.Error("strings.Contains(hello world, world) = false")
 	}
-	if contains("abc", "xyz") {
-		t.Error("contains(abc, xyz) = true")
+	if strings.Contains("abc", "xyz") {
+		t.Error("strings.Contains(abc, xyz) = true")
 	}
-	if !contains("anything", "") {
-		t.Error("contains(anything, empty) = false")
+	if !strings.Contains("anything", "") {
+		t.Error("strings.Contains(anything, empty) = false")
 	}
-	if contains("short", "toolong") {
-		t.Error("contains(short, toolong) = true")
+	if strings.Contains("short", "toolong") {
+		t.Error("strings.Contains(short, toolong) = true")
 	}
 }

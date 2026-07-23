@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -117,7 +118,7 @@ func (s *LokiCrossClusterSeed) Verify(d Deps) Result {
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
-	if !contains(string(pt.Data[lokiPromtailKey]), lokiCanonicalPushURL) {
+	if !strings.Contains(string(pt.Data[lokiPromtailKey]), lokiCanonicalPushURL) {
 		return Result{Verdict: FAIL, Reason: "Promtail push URL not canonical"}
 	}
 	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", lokiLoopZeroAPILokiURLEnvVar)
@@ -202,21 +203,4 @@ func rolloutDaemonSetImpl(ctx context.Context, cli ctrlclient.Client, namespace,
 	}
 	ds.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().UTC().Format(time.RFC3339)
 	return cli.Update(ctx, &ds)
-}
-
-// contains is a small strings.Contains alias avoiding the need to import
-// strings in this file (already implicit via other seeds).
-func contains(s, sub string) bool {
-	if len(sub) == 0 {
-		return true
-	}
-	if len(sub) > len(s) {
-		return false
-	}
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

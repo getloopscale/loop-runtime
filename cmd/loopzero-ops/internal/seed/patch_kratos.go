@@ -6,12 +6,13 @@ package seed
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"gopkg.in/yaml.v3"
 )
 
 // PatchKratosSeed is the Go port of
@@ -36,10 +37,10 @@ func NewPatchKratosSeed() *PatchKratosSeed { return &PatchKratosSeed{} }
 func (s *PatchKratosSeed) Name() string    { return "patch-kratos" }
 
 const (
-	kratosNamespace         = "loopzero-auth"
-	kratosConfigMap         = "ory-kratos-config"
-	kratosConfigKey         = "kratos.yaml"
-	kratosDeployment        = "ory-kratos"
+	kratosNamespace          = "loopzero-auth"
+	kratosConfigMap          = "ory-kratos-config"
+	kratosConfigKey          = "kratos.yaml"
+	kratosDeployment         = "ory-kratos"
 	kratosCourierStatefulSet = "ory-kratos-courier"
 
 	kratosDefaultPublicURL    = "https://auth-dev.loopzero.example"
@@ -112,10 +113,10 @@ func (s *PatchKratosSeed) Verify(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	current := cm.Data[kratosConfigKey]
-	if !contains(current, cfg.PublicURL) {
+	if !strings.Contains(current, cfg.PublicURL) {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("kratos.yaml missing PublicURL %s", cfg.PublicURL)}
 	}
-	if !contains(current, cfg.DashboardURL) {
+	if !strings.Contains(current, cfg.DashboardURL) {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("kratos.yaml missing DashboardURL %s", cfg.DashboardURL)}
 	}
 	return Result{Verdict: PASS, Reason: "kratos.yaml carries canonical dev-public URLs"}

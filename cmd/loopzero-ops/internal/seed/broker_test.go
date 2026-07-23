@@ -5,6 +5,7 @@ package seed
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -123,7 +124,7 @@ func TestBrokerSeed_Verify_FailWhenCanonicalKeyMissing(t *testing.T) {
 // stringContainsAny returns true when any of subs is present in s.
 func stringContainsAny(s string, subs ...string) bool {
 	for _, sub := range subs {
-		if contains(s, sub) {
+		if strings.Contains(s, sub) {
 			return true
 		}
 	}

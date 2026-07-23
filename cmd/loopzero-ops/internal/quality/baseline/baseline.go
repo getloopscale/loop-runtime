@@ -46,12 +46,12 @@ var CriticalPackages = []string{
 
 // Default thresholds (bash defaults preserved).
 const (
-	DefaultMinRequired      = 80.0
-	DefaultSlackPP          = 3.0
-	CriticalMinRequired     = 90.0
-	NewPackageMinFloor      = 50.0
-	NewPackageMinCeiling    = 90.0
-	NewPackageSlackBelow    = 5.0 // floor(coverage - 5pp) for new pkgs
+	DefaultMinRequired   = 80.0
+	DefaultSlackPP       = 3.0
+	CriticalMinRequired  = 90.0
+	NewPackageMinFloor   = 50.0
+	NewPackageMinCeiling = 90.0
+	NewPackageSlackBelow = 5.0 // floor(coverage - 5pp) for new pkgs
 )
 
 // PackageBaseline is the per-package coverage row.
@@ -81,10 +81,10 @@ type PackageBaseline struct {
 // the baseline-update flow (T5.16); Load() preserves them on
 // round-trip. CompareOptions only consults Packages.
 type Baseline struct {
-	SchemaVersion         string                     `json:"schema_version,omitempty"`
-	GeneratedAt           string                     `json:"generated_at,omitempty"`
-	CriticalPackagesList  []string                   `json:"critical_packages,omitempty"`
-	Packages              map[string]PackageBaseline `json:"packages"`
+	SchemaVersion        string                     `json:"schema_version,omitempty"`
+	GeneratedAt          string                     `json:"generated_at,omitempty"`
+	CriticalPackagesList []string                   `json:"critical_packages,omitempty"`
+	Packages             map[string]PackageBaseline `json:"packages"`
 }
 
 // Load reads the baseline JSON file. Returns OPS_USAGE on missing
@@ -124,7 +124,7 @@ func Save(path string, b *Baseline) error {
 			Cause:   err,
 		}
 	}
-	out = append(out, '\n') // trailing newline for POSIX-friendly diffs
+	out = append(out, '\n')                                // trailing newline for POSIX-friendly diffs
 	if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // operator-readable
 		return &loopzeroerrors.LoopZeroError{
 			Code:    "OPS_DEPLOY_FAILURE",

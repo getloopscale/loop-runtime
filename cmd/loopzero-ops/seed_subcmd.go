@@ -22,7 +22,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
 )
@@ -193,10 +192,10 @@ func buildKubeClient(ctxName string) (seed.KubeClient, error) {
 }
 
 // buildKubeClientAndRest returns the KubeClient wrapper alongside the raw
-// *rest.Config + client.Client so the composition root can pass them to
+// *rest.Config + ctrlclient.Client so the composition root can pass them to
 // PortForwardCtor (port-forward needs the rest.Config; pod-listing for label
-// resolution needs the client.Client).
-func buildKubeClientAndRest(ctxName string) (seed.KubeClient, *rest.Config, client.Client, error) {
+// resolution needs the ctrlclient.Client).
+func buildKubeClientAndRest(ctxName string) (seed.KubeClient, *rest.Config, ctrlclient.Client, error) {
 	cfgFlags := genericclioptions.NewConfigFlags(true)
 	if ctxName != "" {
 		cfgFlags.Context = &ctxName
@@ -205,7 +204,7 @@ func buildKubeClientAndRest(ctxName string) (seed.KubeClient, *rest.Config, clie
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("kubeconfig context %q: %w", ctxName, err)
 	}
-	cli, err := client.New(restCfg, client.Options{})
+	cli, err := ctrlclient.New(restCfg, ctrlclient.Options{})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("kube client context %q: %w", ctxName, err)
 	}
