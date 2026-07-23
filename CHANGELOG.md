@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.71.0] - 2026-07-23
+
+### Removed
+- **`loopzero-ops` dead code removed (M25 Test & Dead-code Hygiene).** Deleted unused symbols the review + `golangci-lint unused` both flag: `adminExpandSessionPath`, `ghDelivery`, `stripeDefaultCredsPath`, dead test consts/vars (`minimalRouteFile`, `mgmtHelmfile`), a dead-speculative `metav1.ObjectMeta{}` placeholder, 3 dead-import-silencers (`var _ = base64/json/context.…`) + their orphan imports, and a dead no-op test statement.
+
+### Fixed
+- **`loopzero-ops` 2 more security quality gates fail-closed on unreadable files (M25).** `canonicalfixturerepo` + `agplisolation` swallowed `filepath.WalkDir` errors (same fail-open pattern as the M24 gates); now fail-closed, each with an I/O-error negative-case test. `portforward` gained `isPodReady`/`firstReadyPod` unit tests (happy + negative cases).
+
+### Security
+
 ## [0.70.0] - 2026-07-23
 
 ### Added

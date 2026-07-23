@@ -739,7 +739,7 @@ Wave C (4 highest-complexity gates):
 
 ---
 
-### M25 — [ ] cmd/ Review Remediation: Test & Dead-code Hygiene
+### M25 — [x] cmd/ Review Remediation: Test & Dead-code Hygiene
 
 **Objective:** remove the dead code and fix the test-hygiene findings from the 2026-07-23 `cmd/` review (`tests_deadcode_docs` pillar) — the leaked global transport, the orphan functions, and the dead constants/imports.
 
