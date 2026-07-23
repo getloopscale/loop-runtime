@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.73.0] - 2026-07-23
+
+### Changed
+- **`loopzero-ops` maintainability triage + fixes (M27, final cmd/ review milestone).** Replaced the hand-rolled prefix-offset YAML parser (`extractTuples`) with a real `gopkg.in/yaml.v3` multi-document decoder (robust to quoting/indentation; Rule 9). Removed an unused strict `json.Decoder` in `creds.go`. The migrated `webhook-canonical-path` gate handler now distinguishes a genuine violation from a real I/O error (fail-loud) instead of misreporting an error as "0 violations". The 144 `gocyclo` complexity findings are WONTFIX-with-rationale — the project's `.golangci.yml` deliberately omits `gocyclo`/`gocognit`/`cyclop`, and the gates are flat low-cognitive-complexity validation sequences (same class as the M24 `caddyfilecspgate` decision). DRY-knowledge duplications across independent gates are documented as conscious tradeoffs (extracting a shared helper would couple deliberately-independent gates). **The full `cmd/loopzero-ops` review-cycle is now 0 OPEN findings across all 10 pillars.**
+
 ## [0.72.0] - 2026-07-23
 
 ### Changed

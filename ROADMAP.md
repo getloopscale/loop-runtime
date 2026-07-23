@@ -777,7 +777,7 @@ Wave C (4 highest-complexity gates):
 
 ---
 
-### M27 — [ ] cmd/ Review Remediation: Maintainability (Complexity Triage)
+### M27 — [x] cmd/ Review Remediation: Maintainability (Complexity Triage)
 
 **Objective:** triage and reduce the 158 `maintainability_extensibility` findings from the 2026-07-23 `cmd/` review — high cyclomatic complexity and long methods, concentrated in the `internal/quality/*` gates and the seeds.
 
