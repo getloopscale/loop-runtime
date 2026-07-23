@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -496,8 +495,3 @@ func adminWriteSessionFile(path, cookieValue string) error {
 	return nil
 }
 
-// exported so the master script (not tests) can reason about the path shape.
-func adminExpandSessionPath(cfg AdminLoopzeroDevConfig) string { return cfg.SessionFile }
-
-// silences unused import warnings when tests don't cover strings.
-var _ = strings.HasPrefix

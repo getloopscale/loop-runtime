@@ -91,11 +91,6 @@ type ghWebhook struct {
 	Config ghWebhookConfig `json:"config"`
 }
 
-type ghDelivery struct {
-	StatusCode int    `json:"status_code"`
-	Event      string `json:"event"`
-}
-
 func (s *GitHubWebhookFixtureSeed) Run(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "creds absent (no --creds-file / dev-credentials.json)"}

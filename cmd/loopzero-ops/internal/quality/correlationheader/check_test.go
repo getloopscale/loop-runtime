@@ -21,17 +21,6 @@ func writeFile(t *testing.T, root, rel, content string) {
 	}
 }
 
-// minimalRouteFile is a valid Go file body that callers customize via
-// fmt.Sprintf-style substitution. Saves repetition across cases.
-const minimalRouteFile = `package routes
-
-import "net/http"
-
-func Handler(w http.ResponseWriter, r *http.Request) {
-	%s
-}
-`
-
 // TestCheck_FlagsLegacyHeader: file using r.Header.Get("X-Correlation-ID")
 // in routes/ → gate fails, error names the file + line + literal.
 func TestCheck_FlagsLegacyHeader(t *testing.T) {

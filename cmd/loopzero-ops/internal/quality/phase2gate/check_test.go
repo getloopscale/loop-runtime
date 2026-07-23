@@ -16,7 +16,6 @@ var (
 	taskfilePath = filepath.Join(repoRoot, "taskfiles/infra.yml")
 	kratosValues = filepath.Join(repoRoot, "infra/helm/ory-kratos/values.yaml.gotmpl")
 	hydraValues  = filepath.Join(repoRoot, "infra/helm/ory-hydra/values.yaml.gotmpl")
-	mgmtHelmfile = filepath.Join(repoRoot, "infra/helmfile/mgmt.helmfile.yaml.gotmpl")
 	mappingDoc   = filepath.Join(repoRoot, "docs/scripts-audit/2026-05-22-helmfile-mapping.md")
 )
 
