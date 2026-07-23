@@ -719,6 +719,83 @@ Wave C (4 highest-complexity gates):
 
 2. **`time.Sleep → PollWithBackoff` refactor changes test timing semantics (MEDIUM).** The 41 sleep sites are distributed across e2e/, chaos/, load/, capacity/ — some may have implicit ordering assumptions the polling helper won't preserve (e.g., "wait exactly 3s so the next assertion sees the mid-canary state"). Refactor may pass hermetically but fail in Cleanroom where timing is jittery. **Mitigation:** run full Ginkgo suite with `-race` + `-count=3` (repeated runs) before-and-after each sub-batch; keep sleep for benchmark/rate-limit/chaos-sync (documented survivals per PR #2 scope). If a polling refactor introduces a new order-dependency, revert that specific site and document the survival.
 
+### M24 — [ ] cmd/ Review Remediation: Correctness & Robustness
+
+**Objective:** close the behavior-risk findings the `review-cycle /review` of `cmd/loopzero-ops` (2026-07-23) surfaced across security, system_design, code, architecture, and semantic_folders — the findings that can produce a wrong answer or a silent failure, not just a style smell.
+
+**Definition of done:**
+
+- [ ] `system_design`: partial-success masking in `secrets_seed_dev.go` resolved — either fail-loud when any of the 6 kv-v2 writes fails, or an explicit documented best-effort contract with a non-PASS verdict on partial failure (25 system_design findings adjudicated)
+- [ ] `security`: 36 findings adjudicated (fix OR WONTFIX-with-rationale) — no real secret exposure, TLS/fail-open paths reviewed
+- [ ] `code` (15) + `architecture` (5) + `semantic_folders` (5) findings adjudicated — coupling, structural, and folder-organization observations closed or consciously deferred
+- [ ] `coverage_gate.py` on `knowledge-base/reviews/cmd/review-manifest.json` stays exit 0; zero new blocking findings introduced
+
+**Dependencies:** M23 (review infrastructure), review-cycle of `cmd/` READY_TO_MERGE (2026-07-23).
+
+**Top risks:**
+
+1. Refactoring the seed DB path (partial-success) risks a regression in a self-healing bootstrap seed — mitigate with the existing hermetic `stubPgConn` tests + a new failing test that reproduces the partial-write-returns-PASS masking before the fix.
+2. WONTFIX judgment scope-creep — a finding dismissed as "acceptable for a dev seed" must carry a written rationale + sunset, not a silent skip (mirror the license/gocyclo allowlist discipline from the 2026-07-23 run).
+
+---
+
+### M25 — [ ] cmd/ Review Remediation: Test & Dead-code Hygiene
+
+**Objective:** remove the dead code and fix the test-hygiene findings from the 2026-07-23 `cmd/` review (`tests_deadcode_docs` pillar) — the leaked global transport, the orphan functions, and the dead constants/imports.
+
+**Definition of done:**
+
+- [ ] `secrets_seed_dev_test.go:87` process-global `http.DefaultTransport` `InsecureSkipVerify` mutation gets a save-and-`defer`-restore (the sibling `vault_role_id_sync_test.go` pattern) so it stops leaking insecure TLS into later tests
+- [ ] Dead symbols removed: `adminExpandSessionPath` (+ its false "exported" doc), `stripeDefaultCredsPath`, the 4 dead-import silencers (`var _ = pkg.Sym`) — after verifying zero reflective/framework callers
+- [ ] 29 `tests_deadcode_docs` findings adjudicated (fix OR WONTFIX-with-rationale)
+
+**Dependencies:** M24 (or independent — no shared surface).
+
+**Top risks:**
+
+1. A "dead" symbol may be reachable via reflection or a build tag not seen by static analysis — grep + read each cited caller path before deleting (verify-then-delete, per the M23 skip-deletion discipline).
+2. Restoring the global transport with `defer` changes test isolation — run the seed suite with `-race -count=3` before/after to prove no ordering assumption broke.
+
+---
+
+### M26 — [ ] cmd/ Review Remediation: Idiomaticity & Design Patterns
+
+**Objective:** apply the idiomatic-Go and pattern cleanups from the 2026-07-23 `cmd/` review (`idiomaticity` + `design_patterns` pillars) — reinvented stdlib, hand-rolled helpers, and error-formatting.
+
+**Definition of done:**
+
+- [ ] `gitea_token.go:274` reinvented `min()` → Go 1.21 builtin `min()`; `isNotFoundErr` substring-matching → `apierrors.IsNotFound`
+- [ ] `loki_cross_cluster.go:209` hand-rolled `contains()` → `slices.Contains`; `broker.go:284` `%v`-on-error → `%w` (or `errors.Is`) where the error is meant to be inspectable
+- [ ] 38 findings (22 idiomaticity + 16 design_patterns) adjudicated (fix OR WONTFIX-with-rationale)
+
+**Dependencies:** independent.
+
+**Top risks:**
+
+1. Switching `%v` → `%w` changes error-wrapping semantics — only apply where a caller does `errors.Is/As`; a pure log-format `%v` may stay (document the survival).
+2. `slices.Contains`/`min` require the generics + Go 1.21 floor — the module is Go 1.26 so this is safe, but confirm no vendored consumer pins an older toolchain.
+
+---
+
+### M27 — [ ] cmd/ Review Remediation: Maintainability (Complexity Triage)
+
+**Objective:** triage and reduce the 158 `maintainability_extensibility` findings from the 2026-07-23 `cmd/` review — high cyclomatic complexity and long methods, concentrated in the `internal/quality/*` gates and the seeds.
+
+**Definition of done:**
+
+- [ ] Genuinely harmful complexity (deeply-nested / multi-responsibility functions) extracted into behavior-preserving helpers with tests staying green
+- [ ] Flat-sequence "complexity" that is NOT a real defect per the project bar is WONTFIX-with-rationale — the project `.golangci.yml` deliberately does NOT enable `gocyclo`/`gocognit`/`cyclop`, so a large fraction of these are the same tooling-threshold-mismatch class as the `caddyfilecspgate.Check` WONTFIX (2026-07-23); each such dismissal cites the project lint config
+- [ ] All 158 findings adjudicated (fixed OR WONTFIX-with-rationale); `go test ./cmd/loopzero-ops/...` stays GREEN
+
+**Dependencies:** independent (largest scope — schedule last).
+
+**Top risks:**
+
+1. Refactoring working, well-tested quality gates to satisfy a threshold the project never adopted is net-negative risk — the DoD explicitly gates on "genuinely harmful" vs "flat-sequence noise" (KISS/YAGNI + parsimony ladder), not on a raw CC number.
+2. 158 findings is a large batch — split into per-file sub-PRs and keep each behind a green `go test` + the coverage gate to bound blast radius.
+
+---
+
 ## Post-M23 backlog (deferred findings tracker per T7.1)
 
 The following findings from the 2026-07-10 `infra/tests/` code-review audit were explicitly deferred out of M23 scope (per plan v1.1 § Coverage Matrix EC-4 absorption). All are LOW/MEDIUM severity — none block the M23 goal metric (11 HIGH → 0 HIGH).
