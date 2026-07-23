@@ -3,6 +3,8 @@
 
 package tenantpredicate
 
+import "strings"
+
 // TenantOwnedTables is the canonical list of tables that REQUIRE a
 // `tenant_id = $N` predicate (or equivalent JOIN-based filter) in every
 // SELECT / UPDATE / DELETE, AND a `tenant_id` column in every INSERT.
@@ -29,7 +31,7 @@ package tenantpredicate
 //   - api/internal/db/schema.gen.sql (CI-rendered source of truth for
 //     what tables actually exist)
 var TenantOwnedTables = []string{
-	"tenants",                  // self-table, exempted from tenant_id predicate (uses id = $N)
+	"tenants", // self-table, exempted from tenant_id predicate (uses id = $N)
 	"projects",
 	"environments",
 	"environment_targets",
@@ -44,7 +46,7 @@ var TenantOwnedTables = []string{
 	"idempotency_keys",
 	"memberships",
 	"tenant_members",
-	"project_repositories",     // T2.1 #3 add (project ↔ GitHub repo link; UNIQUE on repo_full_name, partitioned by tenant_id)
+	"project_repositories", // T2.1 #3 add (project ↔ GitHub repo link; UNIQUE on repo_full_name, partitioned by tenant_id)
 	"repositories",
 	"preview_environments",
 	"teams",
@@ -52,8 +54,8 @@ var TenantOwnedTables = []string{
 	"tenants_pending_deletion", // T1.4 add (PostgresTenantDeletionStore); replaces obsolete `tenant_deletion` stub
 	"tenant_tombstones",        // T1.4 add (terminal-state audit record; keyed by tenant_id)
 	"cost_counters",
-	"subscriptions",            // T2.2 #3 add (PostgresBootstrapStore + billing flows; PRIMARY KEY tenant_id, single-row-per-tenant)
-	"users",                    // tenant-scoped via owner_id / active_tenant_id
+	"subscriptions", // T2.2 #3 add (PostgresBootstrapStore + billing flows; PRIMARY KEY tenant_id, single-row-per-tenant)
+	"users",         // tenant-scoped via owner_id / active_tenant_id
 }
 
 // TenantSelfTable is the table that IS the tenant identity. Queries on
@@ -65,7 +67,7 @@ const TenantSelfTable = "tenants"
 // is in the tenant-owned list.
 func IsTenantOwned(table string) bool {
 	for _, t := range TenantOwnedTables {
-		if eqIgnoreCase(t, table) {
+		if strings.EqualFold(t, table) {
 			return true
 		}
 	}
@@ -75,24 +77,5 @@ func IsTenantOwned(table string) bool {
 // IsTenantSelfTable returns true if the table is the `tenants` table
 // itself.
 func IsTenantSelfTable(table string) bool {
-	return eqIgnoreCase(table, TenantSelfTable)
-}
-
-func eqIgnoreCase(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'Z' {
-			ca += 32
-		}
-		if cb >= 'A' && cb <= 'Z' {
-			cb += 32
-		}
-		if ca != cb {
-			return false
-		}
-	}
-	return true
+	return strings.EqualFold(table, TenantSelfTable)
 }

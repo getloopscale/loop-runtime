@@ -281,7 +281,7 @@ func defaultHelmUpgrade(chartPath, apiURL string) error {
 		"--set", "broker.cellID="+brokerCellID,
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("helm upgrade: %v: %s", err, snippet(out))
+		return fmt.Errorf("helm upgrade: %w: %s", err, snippet(out))
 	}
 	return nil
 }

@@ -80,12 +80,12 @@ type Outcome struct {
 type rawCRD struct {
 	Kind     string                 `yaml:"kind"`
 	Metadata rawCRDMeta             `yaml:"metadata"`
-	Spec     map[string]interface{} `yaml:"spec"`
+	Spec     map[string]any `yaml:"spec"`
 }
 
 type rawCRDMeta struct {
 	Name        string                 `yaml:"name"`
-	Annotations map[string]interface{} `yaml:"annotations,omitempty"`
+	Annotations map[string]any `yaml:"annotations,omitempty"`
 }
 
 // parseSourceCRD loads ONE `loopzero.io_<X>.yaml` source file.
@@ -132,7 +132,7 @@ func parseHelmRender(raw string) (map[string]*rawCRD, error) {
 // normalizeSpec strips controller-gen build-tool noise that doesn't
 // affect API semantic. Mirrors bash `yq eval 'del(.. | select(has(
 // "controller-gen.kubebuilder.io/version")))'`.
-func normalizeSpec(spec map[string]interface{}) string {
+func normalizeSpec(spec map[string]any) string {
 	walkAndStrip(spec)
 	out, err := yaml.Marshal(spec)
 	if err != nil {
@@ -143,9 +143,9 @@ func normalizeSpec(spec map[string]interface{}) string {
 
 // walkAndStrip recursively removes any map keyed by
 // `controller-gen.kubebuilder.io/version`.
-func walkAndStrip(node interface{}) {
+func walkAndStrip(node any) {
 	switch v := node.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		// If this map ITSELF has the noise key, clear all keys (bash's
 		// `select(has(...))` matches the map; `del(...)` removes IT).
 		if _, ok := v["controller-gen.kubebuilder.io/version"]; ok {
@@ -157,7 +157,7 @@ func walkAndStrip(node interface{}) {
 		for _, child := range v {
 			walkAndStrip(child)
 		}
-	case []interface{}:
+	case []any:
 		for _, child := range v {
 			walkAndStrip(child)
 		}

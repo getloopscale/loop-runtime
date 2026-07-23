@@ -159,7 +159,7 @@ func (s *GitHubWebhookFixtureSeed) Verify(d Deps) Result {
 func ghAssertAdmin(owner, repo string) error {
 	out, err := ghAPIFn(fmt.Sprintf("/repos/%s/%s", owner, repo))
 	if err != nil {
-		return fmt.Errorf("cannot read /repos/%s/%s — check gh auth + repo access: %v", owner, repo, err)
+		return fmt.Errorf("cannot read /repos/%s/%s — check gh auth + repo access: %w", owner, repo, err)
 	}
 	var got ghRepoPermissions
 	if err := json.Unmarshal(out, &got); err != nil {

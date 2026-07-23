@@ -36,15 +36,15 @@ import (
 )
 
 const (
-	pgImage                = "postgres:16"
-	dbName                 = "loopzero"
-	dbUser                 = "loopzero"
-	readyBudgetSec         = 30
-	golangMigrateVersion   = "v4.18.1"
-	migrationsSubdir       = "api/internal/db/migrations"
-	schemaOutSubdir        = "api/internal/db/schema.gen.sql"
-	sqlcConfigSubdir       = "api/internal/db/sqlc.yaml"
-	probeQuerySubdir       = "api/internal/db/queries/_phase0_render_probe.sql"
+	pgImage              = "postgres:16"
+	dbName               = "loopzero"
+	dbUser               = "loopzero"
+	readyBudgetSec       = 30
+	golangMigrateVersion = "v4.18.1"
+	migrationsSubdir     = "api/internal/db/migrations"
+	schemaOutSubdir      = "api/internal/db/schema.gen.sql"
+	sqlcConfigSubdir     = "api/internal/db/sqlc.yaml"
+	probeQuerySubdir     = "api/internal/db/queries/_phase0_render_probe.sql"
 )
 
 // Config controls the render.
@@ -194,7 +194,6 @@ func Check(cfg Config) (Outcome, error) {
 
 // ephemeralPassword generates a random password like the bash `${RANDOM}` interpolation.
 func ephemeralPassword() string {
-	rand.Seed(time.Now().UnixNano())
 	return fmt.Sprintf("rendertest-%d", rand.Intn(32767))
 }
 

@@ -10,10 +10,11 @@
 // Per platform-security-engineer condition 1 (VETO-backed) + M-1 + M-2.
 //
 // Why this gate exists:
-//   Pre-T0.5, the burden of "every query has tenant_id" was on code review.
-//   Multi-tenant isolation is a CVSS 9.x class — a single missing predicate
-//   on a single query leaks cross-tenant data. sqlc moves this from
-//   review-time to compile-time-adjacent (CI gate at every PR).
+//
+//	Pre-T0.5, the burden of "every query has tenant_id" was on code review.
+//	Multi-tenant isolation is a CVSS 9.x class — a single missing predicate
+//	on a single query leaks cross-tenant data. sqlc moves this from
+//	review-time to compile-time-adjacent (CI gate at every PR).
 //
 // Phase 0 baseline: queries/ only has .gitkeep → trivially passes.
 package tenantpredicate
@@ -202,7 +203,7 @@ func scanRawSubpackage(rawDir string) ([]Violation, int, error) {
 
 func isRawSensitive(table string) bool {
 	for _, t := range rawSensitiveTables {
-		if eqIgnoreCase(t, table) {
+		if strings.EqualFold(t, table) {
 			return true
 		}
 	}
@@ -232,11 +233,11 @@ var insertTablePattern = regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+([a-z_][a-z0-
 // Heuristic: per-query check.
 //   - Identify all tables referenced (FROM / JOIN / INSERT / UPDATE / DELETE).
 //   - For each tenant-owned table:
-//       - INSERT must mention `tenant_id` as a column.
-//       - SELECT/UPDATE/DELETE must contain `tenant_id` somewhere in the
-//         text (best-effort: real WHERE-clause parsing is overkill;
-//         presence of `tenant_id` in the query body satisfies the
-//         predicate check for now).
+//   - INSERT must mention `tenant_id` as a column.
+//   - SELECT/UPDATE/DELETE must contain `tenant_id` somewhere in the
+//     text (best-effort: real WHERE-clause parsing is overkill;
+//     presence of `tenant_id` in the query body satisfies the
+//     predicate check for now).
 //   - The `tenants` table itself is exempt (queries use `id = $N`).
 //   - Queries with `-- tenantpredicate:exempt` comment immediately above
 //     the `-- name:` line are allowlisted.
@@ -296,7 +297,7 @@ type query struct {
 func (q *query) IsInsert(table string) bool {
 	matches := insertTablePattern.FindAllStringSubmatch(q.Body, -1)
 	for _, m := range matches {
-		if len(m) > 1 && eqIgnoreCase(m[1], table) {
+		if len(m) > 1 && strings.EqualFold(m[1], table) {
 			return true
 		}
 	}
