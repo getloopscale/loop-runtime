@@ -400,8 +400,25 @@ func kratosWhoami(ctx context.Context, publicKratosURL, cookieValue string) (str
 
 // --- Phase 2: PG state ---
 
-// adminEnsurePGState runs the canonical 6-statement upsert cluster in a
-// SERIALIZABLE transaction. Statements are the same as bash SQL block.
+// adminEnsurePGState runs the canonical 7-statement upsert cluster (the same
+// statements as the bash SQL block) as a sequence of idempotent autocommit
+// statements — NOT a single transaction (the pgConn seam is Exec-only; it
+// exposes no Begin/Commit).
+//
+// Atomicity is provided by IDEMPOTENCY + SELF-HEALING, not by a transaction:
+// every statement is an ON-CONFLICT-DO-NOTHING upsert (or a NOT-EXISTS-guarded
+// INSERT ... SELECT), and the statements are cross-referential in dependency
+// order (users -> accounts -> tenants -> tenant_members/user_identity_map ->
+// users.active_tenant_id -> subscriptions). A mid-chain failure therefore
+// leaves a partial-but-recoverable state that the NEXT run completes: the
+// already-written rows become no-ops and the failed tail is retried. The first
+// statement failing leaves no rows at all (clean failure). This is acceptable
+// for a dev-bootstrap seed and needs no transaction machinery (KISS/YAGNI).
+//
+// If cross-user isolation ever becomes a requirement, wrapping this in an
+// explicit SERIALIZABLE transaction is a T2 change: it requires extending the
+// shared pgConn seam (tenant_fixture.go) with Begin/Commit + a pgTx interface,
+// implemented in pgConnAdapter and the test stub.
 func adminEnsurePGState(ctx context.Context, cfg AdminLoopzeroDevConfig, kratosID string) error {
 	conn, err := pgConnectFn(ctx, cfg.PGConn)
 	if err != nil {
