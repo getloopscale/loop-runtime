@@ -10,7 +10,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -341,6 +340,3 @@ func applyUnstructured(ctx context.Context, cli ctrlclient.Client, obj *unstruct
 	return cli.Update(ctx, obj)
 }
 
-// unused import guard — json is used only if we later serialize the payload;
-// keep for the encoder-based path.
-var _ = json.Marshal

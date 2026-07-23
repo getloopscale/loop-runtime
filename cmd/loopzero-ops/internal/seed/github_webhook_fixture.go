@@ -4,7 +4,6 @@
 package seed
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -229,7 +228,3 @@ func ghHookMutateArgs(path, verb, targetURL, whsec string) []string {
 	}
 }
 
-// unused import guard — context is here because run.go / registry may hand
-// a context.Context in future extensions (gh -H) and go vet whines if we
-// forget it. Kept to keep the seed template consistent.
-var _ = context.Background

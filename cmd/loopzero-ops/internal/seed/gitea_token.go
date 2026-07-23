@@ -6,7 +6,6 @@ package seed
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -278,7 +277,3 @@ func min(a, b int) int {
 	return b
 }
 
-// b64 is a tiny helper reserved for future adjacent helpers (secrets that
-// need explicit base64 encoding at the API surface, e.g. Kratos identity
-// import). Not used by gitea-token; kept to sidestep unused-import churn.
-var _ = base64.StdEncoding
