@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/migrationtestcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nomigrateforce"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlcsync"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlctxprop"
 )
@@ -283,5 +284,48 @@ func runMa7StatusLocality(args []string) int {
 		return 1
 	}
 	fmt.Printf("ma7-status-locality: PASS \u2014 %d .go files scanned; status machinery confined to db/store/ (MA-7 Gates B+C)\n", outcome.Scanned)
+	return 0
+}
+
+// runRenderSchemaGenSQL renders api/internal/db/schema.gen.sql via
+// an ephemeral PG 16 container + golang-migrate replay + pg_dump + sqlc
+// compile pre-flight. Use --render for the full destructive pipeline; the
+// default check-only mode validates toolchain + config presence.
+// Migrated from infra/scripts/ci/render-schema-gen-sql.sh (M-Migrate2 continuation 2026-07-07).
+func runRenderSchemaGenSQL(args []string) int {
+	fs := flag.NewFlagSet("render-schema-gen-sql", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	render := fs.Bool("render", false, "run the destructive render pipeline (spins docker + rewrites schema.gen.sql); default is check-only")
+	advisoryOnly := fs.Bool("advisory-only", false, "return Warn instead of failure when a required tool is missing")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	cfg := renderschemagensql.Config{RepoRoot: *root, AdvisoryOnly: *advisoryOnly}
+	if !*render {
+		outcome, err := renderschemagensql.Check(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "render-schema-gen-sql: FAIL — %v\n", err)
+			return 1
+		}
+		if outcome.Warn {
+			fmt.Printf("render-schema-gen-sql: WARN (%s) — pass --advisory-only=false to convert to hard fail once toolchain lands\n", outcome.WarnReason)
+			return 0
+		}
+		fmt.Println("render-schema-gen-sql: PASS — toolchain + migrations + sqlc.yaml present; pass --render to execute the pipeline")
+		return 0
+	}
+	outcome, err := renderschemagensql.Render(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "render-schema-gen-sql: FAIL — %v\n%s\n", err, outcome.Diagnostic)
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Printf("render-schema-gen-sql: WARN (%s)\n", outcome.WarnReason)
+		return 0
+	}
+	fmt.Printf("render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
 	return 0
 }

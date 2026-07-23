@@ -4,54 +4,155 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingdata"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingrefs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nonewbash"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/quarantineprotect"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptcount"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptsaudit"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellhygiene"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/webhookcanonicalpath"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellcheckadvisory"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellhygiene"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sprintsyntax"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
 )
 
 // M9 Step 7: quality gate entry points for the "shell" theme, decomposed out of the
 // former quality_subcmd.go god file. Each func is referenced as a Run in
 // gateRegistry (quality_registry.go) — the single source of truth
 // (ADR 2026-07-03-m9-step7-gate-registration-mechanism).
+
+// runArchiveScriptRepoRoot enforces T1.2 of plan m1-commit-canonical-30-fixes —
+// no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT
+// via 3-dirs-up ($(dirname "$0")/../../..); canonical post-quarantine 289cf9d6
+// is 4-dirs-up.
+// Migrated from infra/tests/check-archive-script-repo-root_test.sh
+// (M-Migrate2 2026-07-10 M16 T2.2 Wave 1).
+func runArchiveScriptRepoRoot(args []string) int {
+	fs := flag.NewFlagSet("archive-script-repo-root", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := archivescriptrepo.Check(archivescriptrepo.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "archive-script-repo-root: FAIL — %d 3-dirs-up violation(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		fmt.Fprintln(os.Stderr, "Fix: replace `$(dirname \"$0\")/../../..` with `$(dirname \"$0\")/../../../..` (canonical post-quarantine 289cf9d6).")
+		return 1
+	}
+	fmt.Println("archive-script-repo-root: PASS — no 3-dirs-up REPO_ROOT resolution in archive/canonical-tests-v1/scripts/local/")
+	return 0
+}
+
+// runDanglingDataRefs is the mirror backstop: fail if a deleted config/data
+// file is still referenced (live) by an executable caller. Closes the
+// data-orphan class (the 2026-05-11 consolidation deleted maturity-scoring data
+// but left the governance scripts dangling). Requires fetch-depth: 0.
+func runDanglingDataRefs(args []string) int {
+	fs := flag.NewFlagSet("dangling-data-refs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
+	headRef := fs.String("head-ref", "HEAD", "head git ref")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := danglingdata.Check(danglingdata.Config{
+		RepoRoot: *root,
+		BaseRef:  *baseRef,
+		HeadRef:  *headRef,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dangling-data-refs: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "dangling-data-refs: FAIL — deleted config/data files still referenced by live callers:")
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "When deleting a config/data tree, remove or rewire the scripts that read it in")
+		fmt.Fprintln(os.Stderr, "the SAME change. See finding-2026-05-23-governance-subsystem-orphaned.md")
+		return 1
+	}
+	fmt.Println("dangling-data-refs: PASS — no deleted data file left with live references")
+	return 0
+}
+
+// runDanglingScriptRefs is the T0.1 backstop gate: fail if a deleted .sh is
+// still referenced (live) by any caller surface. Requires fetch-depth: 0.
+func runDanglingScriptRefs(args []string) int {
+	fs := flag.NewFlagSet("dangling-script-refs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
+	headRef := fs.String("head-ref", "HEAD", "head git ref")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := danglingrefs.Check(danglingrefs.Config{
+		RepoRoot: *root,
+		BaseRef:  *baseRef,
+		HeadRef:  *headRef,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dangling-script-refs: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "dangling-script-refs: FAIL — deleted scripts still referenced by live callers:")
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
+		fmt.Fprintln(os.Stderr, "same PR that deletes the script. See docs/plans/completed/2026-05-23-incremental-bash-to-go-migration-plan.md")
+		return 1
+	}
+	fmt.Println("dangling-script-refs: PASS — no deleted script left with live references")
+	return 0
+}
+
+// runInstallGitHooks validates the M8 1.5 pre-push hook + installer.
+// Migrated from infra/tests/check-install-git-hooks_test.sh (M-Migrate2 2026-07-07).
+func runInstallGitHooks(args []string) int {
+	fs := flag.NewFlagSet("install-git-hooks", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := installgithooks.Check(installgithooks.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
+	return 0
+}
 
 func runNoNewBash(args []string) int {
 	fs := flag.NewFlagSet("no-new-bash", flag.ContinueOnError)
@@ -133,114 +234,6 @@ func runQuarantineProtect(args []string) int {
 		return 1
 	}
 	fmt.Println("quarantine-protect: PASS — no quarantine violations")
-	return 0
-}
-
-// runDanglingScriptRefs is the T0.1 backstop gate: fail if a deleted .sh is
-// still referenced (live) by any caller surface. Requires fetch-depth: 0.
-func runDanglingScriptRefs(args []string) int {
-	fs := flag.NewFlagSet("dangling-script-refs", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
-	headRef := fs.String("head-ref", "HEAD", "head git ref")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-
-	outcome, err := danglingrefs.Check(danglingrefs.Config{
-		RepoRoot: *root,
-		BaseRef:  *baseRef,
-		HeadRef:  *headRef,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "dangling-script-refs: %v\n", err)
-		return 5
-	}
-	if !outcome.Pass {
-		fmt.Fprintln(os.Stderr, "dangling-script-refs: FAIL — deleted scripts still referenced by live callers:")
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  - %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
-		fmt.Fprintln(os.Stderr, "same PR that deletes the script. See docs/plans/completed/2026-05-23-incremental-bash-to-go-migration-plan.md")
-		return 1
-	}
-	fmt.Println("dangling-script-refs: PASS — no deleted script left with live references")
-	return 0
-}
-
-// runDanglingDataRefs is the mirror backstop: fail if a deleted config/data
-// file is still referenced (live) by an executable caller. Closes the
-// data-orphan class (the 2026-05-11 consolidation deleted maturity-scoring data
-// but left the governance scripts dangling). Requires fetch-depth: 0.
-func runDanglingDataRefs(args []string) int {
-	fs := flag.NewFlagSet("dangling-data-refs", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
-	headRef := fs.String("head-ref", "HEAD", "head git ref")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-
-	outcome, err := danglingdata.Check(danglingdata.Config{
-		RepoRoot: *root,
-		BaseRef:  *baseRef,
-		HeadRef:  *headRef,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "dangling-data-refs: %v\n", err)
-		return 5
-	}
-	if !outcome.Pass {
-		fmt.Fprintln(os.Stderr, "dangling-data-refs: FAIL — deleted config/data files still referenced by live callers:")
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  - %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "When deleting a config/data tree, remove or rewire the scripts that read it in")
-		fmt.Fprintln(os.Stderr, "the SAME change. See finding-2026-05-23-governance-subsystem-orphaned.md")
-		return 1
-	}
-	fmt.Println("dangling-data-refs: PASS — no deleted data file left with live references")
-	return 0
-}
-
-// runShellHygiene is the Go home for the shell-hygiene gate (migrated from
-// infra/tests/scripts/check-shell-hygiene_test.sh). Every non-lib .sh under
-// infra/scripts, infra/helmfile/scripts, infra/tests must set a `set -euo
-// pipefail` variant in its top 60 lines.
-func runShellHygiene(args []string) int {
-	fs := flag.NewFlagSet("shell-hygiene", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-
-	outcome, err := shellhygiene.Check(shellhygiene.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "shell-hygiene: %v\n", err)
-		return 5
-	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "shell-hygiene: FAIL — %d / %d scripts missing set -euo pipefail in top 60 lines:\n", len(outcome.Violations), outcome.Total)
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Add 'set -euo pipefail' near the top. Sourced libs in **/lib/*.sh are exempt.")
-		return 1
-	}
-	fmt.Printf("shell-hygiene: PASS — %d scripts have set -euo pipefail (libs in **/lib/*.sh exempt)\n", outcome.Total)
 	return 0
 }
 
@@ -336,12 +329,12 @@ func runScriptsAudit(args []string) int {
 	return 0
 }
 
-// runWebhookCanonicalPath enforces that no test/seed script references the
-// wrong /engine/api/v1/webhooks/github URL (Caddy 301-redirect + 404 trap).
-// The canonical is /api/v1/webhooks/github (handler-direct).
-// Migrated from infra/tests/check-webhook-canonical-path_test.sh (M-Migrate2, 2026-07-07).
-func runWebhookCanonicalPath(args []string) int {
-	fs := flag.NewFlagSet("webhook-canonical-path", flag.ContinueOnError)
+// runShellHygiene is the Go home for the shell-hygiene gate (migrated from
+// infra/tests/scripts/check-shell-hygiene_test.sh). Every non-lib .sh under
+// infra/scripts, infra/helmfile/scripts, infra/tests must set a `set -euo
+// pipefail` variant in its top 60 lines.
+func runShellHygiene(args []string) int {
+	fs := flag.NewFlagSet("shell-hygiene", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -349,303 +342,22 @@ func runWebhookCanonicalPath(args []string) int {
 	if absRoot, err := os.Getwd(); err == nil && *root == "." {
 		*root = absRoot
 	}
-	outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: *root})
+
+	outcome, err := shellhygiene.Check(shellhygiene.Config{RepoRoot: *root})
 	if err != nil {
-		// Distinguish a genuine violation from a real I/O error (fail-closed):
-		// reporting an I/O error as "detected in 0 place(s)" would mislead.
-		if !errors.Is(err, webhookcanonicalpath.ErrViolations) {
-			fmt.Fprintf(os.Stderr, "webhook-canonical-path: ERROR — could not complete scan: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(os.Stderr, "webhook-canonical-path: FAIL — /engine/api/v1/webhooks/github detected in %d place(s):\n", len(outcome.Violations))
+		fmt.Fprintf(os.Stderr, "shell-hygiene: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "shell-hygiene: FAIL — %d / %d scripts missing set -euo pipefail in top 60 lines:\n", len(outcome.Violations), outcome.Total)
 		for _, v := range outcome.Violations {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Add 'set -euo pipefail' near the top. Sourced libs in **/lib/*.sh are exempt.")
 		return 1
 	}
-	fmt.Println("webhook-canonical-path: PASS — no forbidden /engine/api/v1/webhooks/github references")
-	return 0
-}
-
-// runOIDCCredAdminLoopzero enforces the canonical admin@loopzero.example / loopzero-dev-password
-// credential — rejects fabricated paulo@loopzero.test / LoopZeroDev2026!.
-// Migrated from infra/tests/check-oidc-cred-admin-loopzero_test.sh (M-Migrate2 2026-07-07).
-func runOIDCCredAdminLoopzero(args []string) int {
-	fs := flag.NewFlagSet("oidc-cred-admin-loopzero", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "oidc-cred-admin-loopzero: FAIL — %d fabricated credential reference(s):\n", len(outcome.Violations))
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  %s\n", v)
-		}
-		return 1
-	}
-	fmt.Println("oidc-cred-admin-loopzero: PASS — no fabricated paulo@loopzero.test/LoopZeroDev2026! (canonical: admin@loopzero.example)")
-	return 0
-}
-
-// runCanonicalFixtureRepo enforces canonical getloopscale/loopzerokit-example fixture.
-// Migrated from infra/tests/check-canonical-fixture-repo_test.sh (M-Migrate2 2026-07-07).
-func runCanonicalFixtureRepo(args []string) int {
-	fs := flag.NewFlagSet("canonical-fixture-repo", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := canonicalfixturerepo.Check(canonicalfixturerepo.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  %s\n", v)
-		}
-		return 1
-	}
-	fmt.Println("canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
-	return 0
-}
-
-// runInstallGitHooks validates the M8 1.5 pre-push hook + installer.
-// Migrated from infra/tests/check-install-git-hooks_test.sh (M-Migrate2 2026-07-07).
-func runInstallGitHooks(args []string) int {
-	fs := flag.NewFlagSet("install-git-hooks", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := installgithooks.Check(installgithooks.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
-	return 0
-}
-
-// runCaddyfileNoDockerIP enforces that the canonical infra/local/Caddyfile does
-// NOT hardcode Docker network IPs (172.18.x.x) in non-comment lines and that
-// both wildcard blocks reverse_proxy to the stable https://127.0.0.1:8443.
-// Migrated from infra/tests/check-caddyfile-no-docker-network-ip_test.sh
-// (M-Migrate2 continuation 2026-07-07 — closes Red Team loopzero-cloud#127 guard).
-func runCaddyfileNoDockerIP(args []string) int {
-	fs := flag.NewFlagSet("caddyfile-no-docker-ip", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := caddyfilenodockerip.Check(caddyfilenodockerip.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
-		for _, v := range outcome.Violations { fmt.Fprintf(os.Stderr, "  %s\n", v) }
-		return 1
-	}
-	fmt.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
-	return 0
-}
-
-// runVaultBootstrapUnsealLoop enforces the 2026-06-15 canonical fix of
-// infra/scripts/local/vault-bootstrap-dev.sh Steps 2 + 3 (rc-independent
-// bao-status parse, capitalized "True" compare, no lowercase fallback trap).
-// Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runVaultBootstrapUnsealLoop(args []string) int {
-	fs := flag.NewFlagSet("vault-bootstrap-unseal-loop", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "vault-bootstrap-unseal-loop: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("vault-bootstrap-unseal-loop: PASS — canonical fix preserved (rc-independent parse, capitalized True compare, anti-patterns absent)")
-	return 0
-}
-
-// runOptionBEsoDeployDoc enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
-// contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands
-// documented, rollback + decision matrix + cross-references present, ESO
-// version drift against runtime helmfile detected).
-// Migrated from infra/tests/check-option-b-eso-deploy-doc_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runOptionBEsoDeployDoc(args []string) int {
-	fs := flag.NewFlagSet("option-b-eso-deploy-doc", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
-	return 0
-}
-
-// runVaultBootstrapInMgmtTask enforces the `task k3d:vault:bootstrap-in-mgmt`
-// shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
-// with exactly two well-known differences (context swap + pre-flight message).
-// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runVaultBootstrapInMgmtTask(args []string) int {
-	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
-	return 0
-}
-
-// runDevPublicLoopZeroExternalSecretsOverlay enforces the dev-public loopzero-external-secrets overlay contract
-// (post-T1.2 workload identity: enabled=false safe default, K8s-auth shape,
-// no legacy AppRole roleId/secretRef, canonical mgmt DNS, traceability).
-// Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runDevPublicLoopZeroExternalSecretsOverlay(args []string) int {
-	fs := flag.NewFlagSet("dev-public-loopzero-external-secrets-overlay", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "dev-public-loopzero-external-secrets-overlay: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("dev-public-loopzero-external-secrets-overlay: PASS — post-T1.2 workload-identity contract preserved (K8s-auth, no legacy AppRole)")
-	return 0
-}
-
-// runCheckAllowlistSunsets is a hermetic contract test for the Python
-// .claude/scripts/check-allowlist-sunsets.py gate (T5.2.a fixture verifier).
-// Migrated from infra/tests/check-allowlist-sunsets_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runCheckAllowlistSunsets(args []string) int {
-	fs := flag.NewFlagSet("check-allowlist-sunsets", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := allowlistsunsets.Check(allowlistsunsets.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("check-allowlist-sunsets: PASS — 7 fixture cases + live check GREEN (future/today/past/malformed/bad-date/missing/live)")
-	return 0
-}
-
-// runRouteAuthCoverage enforces R2-F8 (HIGH): every user-facing router.go route
-// MUST be inside middleware.Auth group OR registerProtectedRoutes OR appear in
-// the explicit public-allowlist.
-// Migrated from infra/tests/check-route-auth-coverage_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runRouteAuthCoverage(args []string) int {
-	fs := flag.NewFlagSet("route-auth-coverage", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := routeauthcoverage.Check(routeauthcoverage.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "route-auth-coverage: FAIL — %v\n", err)
-		if len(outcome.Violations) > 0 {
-			fmt.Fprintf(os.Stderr, "  Auth group spans lines %d..%d\n", outcome.AuthStart, outcome.AuthEnd)
-			fmt.Fprintf(os.Stderr, "  registerProtectedRoutes spans lines %d..%d\n", outcome.ProtStart, outcome.ProtEnd)
-			for _, v := range outcome.Violations { fmt.Fprintf(os.Stderr, "  %s\n", v) }
-			fmt.Fprintln(os.Stderr, "Fix: move the route inside middleware.Auth group OR add explicit allowlist entry with rationale.")
-		}
-		return 1
-	}
-	fmt.Printf("route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
-		outcome.PassCount, outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
-	return 0
-}
-
-// runK6LoadRigor enforces the k6 load-harness rigor fixes (dropped_iterations
-// threshold in base + L5 distributed manifest shape + README per-level doc).
-// Migrated from infra/tests/check-k6-load-rigor_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runK6LoadRigor(args []string) int {
-	fs := flag.NewFlagSet("k6-load-rigor", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := k6loadrigor.Check(k6loadrigor.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
-	return 0
-}
-
-// runSkillPaths enforces T0.1 EC D5 — every infra/scripts/ path AND every
-// `task <name>` invocation referenced in any .claude/skills/*/SKILL.md
-// MUST resolve on disk (or be an allow-listed generic skill).
-// Migrated from infra/tests/skills/skill-paths_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runSkillPaths(args []string) int {
-	fs := flag.NewFlagSet("skill-paths", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
-		outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
-	return 0
-}
-
-// runDevPublicEnv enforces the canonical shape of
-// infra/helmfile/environments/dev-public.yaml (dev URLs, cookieDomain,
-// CORS + allowedReturnUrls, no localhost/legacy leaks, D5 OAuth reuse).
-// Migrated from infra/tests/helm/dev-public-env_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runDevPublicEnv(args []string) int {
-	fs := flag.NewFlagSet("dev-public-env", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := devpublicenv.Check(devpublicenv.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "dev-public-env: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("dev-public-env: PASS — dev-public.yaml canonical shape preserved (dev URLs, cookieDomain, CORS, D5 OAuth reuse)")
-	return 0
-}
-
-// runOryKratosLifespan enforces canonical self-service flow lifespans in
-// infra/helm/ory-kratos/values.yaml.gotmpl (login=10m, registration=10m,
-// recovery=15m — defense pair with edge rate_limit for Red Team #89).
-// Migrated from infra/tests/helm/ory-kratos-lifespan_test.sh
-// (M-Migrate2 continuation 2026-07-07).
-func runOryKratosLifespan(args []string) int {
-	fs := flag.NewFlagSet("ory-kratos-lifespan", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := orykratoslifespan.Check(orykratoslifespan.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
+	fmt.Printf("shell-hygiene: PASS — %d scripts have set -euo pipefail (libs in **/lib/*.sh exempt)\n", outcome.Total)
 	return 0
 }
 
@@ -658,8 +370,12 @@ func runOryKratosLifespan(args []string) int {
 func runShellcheckAdvisory(args []string) int {
 	fs := flag.NewFlagSet("shellcheck-advisory", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
 	outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
@@ -674,110 +390,30 @@ func runShellcheckAdvisory(args []string) int {
 	return 0
 }
 
-// runLoopZeroApiOpenbaoApproleEnvfrom enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync:
-// the loopzero-api chart unconditionally wires the AppRole secret_id via
-// envFrom.secretRef to K8s Secret loopzero-openbao-approle with optional=true,
-// with NO inline value: for OPENBAO_VAULT_SECRET_ID (anti-hardcode).
-// Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
+// runSkillPaths enforces T0.1 EC D5 — every infra/scripts/ path AND every
+// `task <name>` invocation referenced in any .claude/skills/*/SKILL.md
+// MUST resolve on disk (or be an allow-listed generic skill).
+// Migrated from infra/tests/skills/skill-paths_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runLoopZeroApiOpenbaoApproleEnvfrom(args []string) int {
-	fs := flag.NewFlagSet("loopzero-api-openbao-approle-envfrom", flag.ContinueOnError)
+func runSkillPaths(args []string) int {
+	fs := flag.NewFlagSet("skill-paths", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
+	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if outcome.Warn {
-		fmt.Println("[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
-		return 0
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
 	}
-	fmt.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
-	return 0
-}
-
-// runRenderSchemaGenSQL renders api/internal/db/schema.gen.sql via
-// an ephemeral PG 16 container + golang-migrate replay + pg_dump + sqlc
-// compile pre-flight. Use --render for the full destructive pipeline; the
-// default check-only mode validates toolchain + config presence.
-// Migrated from infra/scripts/ci/render-schema-gen-sql.sh (M-Migrate2 continuation 2026-07-07).
-func runRenderSchemaGenSQL(args []string) int {
-	fs := flag.NewFlagSet("render-schema-gen-sql", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	render := fs.Bool("render", false, "run the destructive render pipeline (spins docker + rewrites schema.gen.sql); default is check-only")
-	advisoryOnly := fs.Bool("advisory-only", false, "return Warn instead of failure when a required tool is missing")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	cfg := renderschemagensql.Config{RepoRoot: *root, AdvisoryOnly: *advisoryOnly}
-	if !*render {
-		outcome, err := renderschemagensql.Check(cfg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "render-schema-gen-sql: FAIL — %v\n", err)
-			return 1
-		}
-		if outcome.Warn {
-			fmt.Printf("render-schema-gen-sql: WARN (%s) — pass --advisory-only=false to convert to hard fail once toolchain lands\n", outcome.WarnReason)
-			return 0
-		}
-		fmt.Println("render-schema-gen-sql: PASS — toolchain + migrations + sqlc.yaml present; pass --render to execute the pipeline")
-		return 0
-	}
-	outcome, err := renderschemagensql.Render(cfg)
+	outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: *root})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "render-schema-gen-sql: FAIL — %v\n%s\n", err, outcome.Diagnostic)
-		return 1
-	}
-	if outcome.Warn {
-		fmt.Printf("render-schema-gen-sql: WARN (%s)\n", outcome.WarnReason)
-		return 0
-	}
-	fmt.Printf("render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
-	return 0
-}
-
-// runCredentialsSot enforces T1.1 SoT drift audit — every Secret created by
-// canonical generator scripts is enumerated in docs/operations/credentials-required.md.
-// Migrated from infra/tests/docs/credentials-sot_test.sh
-// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
-func runCredentialsSot(args []string) int {
-	fs := flag.NewFlagSet("credentials-sot", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := credentialssot.Check(credentialssot.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		if len(outcome.Discovered) > 0 {
-			fmt.Fprintln(os.Stderr, "Discovered Secret names:")
-			for _, s := range outcome.Discovered { fmt.Fprintf(os.Stderr, "  - %s\n", s) }
+		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
 		}
 		return 1
 	}
-	fmt.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations/credentials-required.md\n", len(outcome.Discovered))
-	return 0
-}
-
-// runPulumiRequiredSecrets enforces T1.5 — every Pulumi.<env>.yaml enumerates
-// the required secret keys for that environment (either as `secure:` entry
-// or as a comment). Cross-checks the same keys appear in the SoT doc.
-// Migrated from infra/tests/docs/pulumi-required-secrets_test.sh
-// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
-func runPulumiRequiredSecrets(args []string) int {
-	fs := flag.NewFlagSet("pulumi-required-secrets", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil { return 1 }
-	if absRoot, err := os.Getwd(); err == nil && *root == "." { *root = absRoot }
-	outcome, err := pulumirequiredsecrets.Check(pulumirequiredsecrets.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures { fmt.Fprintf(os.Stderr, "  %s\n", f) }
-		return 1
-	}
-	fmt.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
+	fmt.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
+		outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
 	return 0
 }
 
@@ -804,265 +440,5 @@ func runSprintSyntax(args []string) int {
 		return 1
 	}
 	fmt.Println("sprint-syntax: PASS — 11 hermetic contract assertions clean (script + bash-n + helper + no-heredoc + json-shape + allowlist)")
-	return 0
-}
-
-// runArchiveScriptRepoRoot enforces T1.2 of plan m1-commit-canonical-30-fixes —
-// no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT
-// via 3-dirs-up ($(dirname "$0")/../../..); canonical post-quarantine 289cf9d6
-// is 4-dirs-up.
-// Migrated from infra/tests/check-archive-script-repo-root_test.sh
-// (M-Migrate2 2026-07-10 M16 T2.2 Wave 1).
-func runArchiveScriptRepoRoot(args []string) int {
-	fs := flag.NewFlagSet("archive-script-repo-root", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := archivescriptrepo.Check(archivescriptrepo.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "archive-script-repo-root: FAIL — %d 3-dirs-up violation(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		fmt.Fprintln(os.Stderr, "Fix: replace `$(dirname \"$0\")/../../..` with `$(dirname \"$0\")/../../../..` (canonical post-quarantine 289cf9d6).")
-		return 1
-	}
-	fmt.Println("archive-script-repo-root: PASS — no 3-dirs-up REPO_ROOT resolution in archive/canonical-tests-v1/scripts/local/")
-	return 0
-}
-
-// runNoCloudDevDefault enforces T1.1 of plan m1-commit-canonical-30-fixes —
-// no test/seed script may declare a default env-var value pointing at
-// `cloud-dev.loopzero.example` (Caddy 301 redirect trap). Webhook handler is
-// the single exception (EC-1 absorption).
-// Migrated from infra/tests/check-no-cloud-dev-default_test.sh
-// (M-Migrate2 2026-07-10 M16 T2.3 Wave 1).
-func runNoCloudDevDefault(args []string) int {
-	fs := flag.NewFlagSet("no-cloud-dev-default", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := nocloud.Check(nocloud.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		fmt.Fprintln(os.Stderr, "Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
-		return 1
-	}
-	fmt.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
-	return 0
-}
-
-// runLokiVaultRetention enforces T8.2 + T8.5 of plan 2026-06-02-openbao-adoption:
-// Loki per-NS retention config + archive CronJob hardening. 14 assertions.
-// Migrated from infra/tests/check-loki-vault-retention_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.1 Wave 2).
-func runLokiVaultRetention(args []string) int {
-	fs := flag.NewFlagSet("loki-vault-retention", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	fmt.Println("loki-vault-retention: PASS — 14 hermetic assertions (T8.2 retention_stream + T8.5 archive CronJob hardening) clean")
-	return 0
-}
-
-// runLokiRetentionSchema is the trio-compat regression for the retention_stream
-// schema in infra/helm/loki/values.yaml. 7 assertions.
-// Migrated from infra/tests/check-loki-retention-schema_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.2 Wave 2).
-func runLokiRetentionSchema(args []string) int {
-	fs := flag.NewFlagSet("loki-retention-schema", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream vault-system + priority int + defaults) clean")
-	return 0
-}
-
-// runVaultPromAlerts enforces T8.4 PrometheusRule vault-audit-alerts contract.
-// Migrated from infra/tests/check-vault-prom-alerts_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.3 Wave 2).
-func runVaultPromAlerts(args []string) int {
-	fs := flag.NewFlagSet("vault-prom-alerts", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	fmt.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
-	return 0
-}
-
-// runDay30Day60CronJobs enforces T10.1-T10.4 Day 30 verify + Day 60 AES delete
-// CronJob contracts. Renders loopzero-api chart with 3 --set overrides.
-// Migrated from infra/tests/check-day30-day60-cronjobs_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.4 Wave 2).
-func runDay30Day60CronJobs(args []string) int {
-	fs := flag.NewFlagSet("day30-day60-cronjobs", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := day30day60cronjobs.Check(day30day60cronjobs.Config{RepoRoot: *root})
-	if errors.Is(err, day30day60cronjobs.ErrChartMissing) {
-		fmt.Fprintln(os.Stderr, "day30-day60-cronjobs: FAIL — loopzero-api chart missing")
-		return 1
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "day30-day60-cronjobs: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	if outcome.Warn {
-		fmt.Println("day30-day60-cronjobs: WARN (advisory-only: helm not on PATH — LIVE render skipped)")
-		return 0
-	}
-	fmt.Println("day30-day60-cronjobs: PASS — T10.1-T10.4 CronJob contracts (disabled-by-default + Day 30 schedule/EC-12/Forbid + Day 60 safety defaults/migrate-to-transit + hardening) clean")
-	return 0
-}
-
-// runLoopZeroExternalSecretsChartSanity enforces the iter 23 chart-sanity contract for
-// infra/helm/loopzero-external-secrets. 8 assertions across 5 canonical envs.
-// Migrated from infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.5 Wave 2).
-func runLoopZeroExternalSecretsChartSanity(args []string) int {
-	fs := flag.NewFlagSet("loopzero-external-secrets-chart-sanity", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: *root})
-	if errors.Is(err, esochartsanity.ErrChartMissing) {
-		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
-		return 1
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	if outcome.Warn {
-		fmt.Println("loopzero-external-secrets-chart-sanity: WARN (advisory-only: helm not on PATH)")
-		return 0
-	}
-	fmt.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
-	return 0
-}
-
-// runLoopZeroExternalSecretsCreationPolicy is the iter 20 P0 regression for creationPolicy: Orphan.
-// Migrated from infra/tests/check-loopzero-external-secrets-creation-policy_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.6 Wave 2).
-func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
-	fs := flag.NewFlagSet("loopzero-external-secrets-creation-policy", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: *root})
-	if errors.Is(err, esocreationpolicy.ErrChartMissing) {
-		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — chart missing")
-		return 1
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	if outcome.Warn {
-		fmt.Println("loopzero-external-secrets-creation-policy: WARN (advisory-only: helm not on PATH)")
-		return 0
-	}
-	fmt.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
-	return 0
-}
-
-// runOpenbaoInitAuthMounts enforces T5.1-T5.9 openbao-init auth mounts + per-binary roles.
-// Migrated from infra/tests/check-openbao-init-auth-mounts_test.sh
-// (M-Migrate2 2026-07-10 M16 T3.7 Wave 2 — Wave 2 COMPLETE).
-func runOpenbaoInitAuthMounts(args []string) int {
-	fs := flag.NewFlagSet("openbao-init-auth-mounts", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-	outcome, err := openbaoinitauth.Check(openbaoinitauth.Config{RepoRoot: *root})
-	if errors.Is(err, openbaoinitauth.ErrChartMissing) {
-		fmt.Fprintln(os.Stderr, "openbao-init-auth-mounts: FAIL — openbao-init chart missing")
-		return 1
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "openbao-init-auth-mounts: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		return 1
-	}
-	if outcome.Warn {
-		fmt.Println("openbao-init-auth-mounts: WARN (advisory-only: helm not on PATH)")
-		return 0
-	}
-	fmt.Println("openbao-init-auth-mounts: PASS — T5.1-T5.9 auth mounts + per-binary roles + isolation invariants clean")
 	return 0
 }

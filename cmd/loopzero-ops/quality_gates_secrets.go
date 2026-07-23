@@ -4,15 +4,26 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drillcredisolation"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noenvvaultsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 )
 
 // M9 Step 7: quality gate entry points for the "secrets" theme, decomposed out of the
@@ -133,4 +144,294 @@ func runDrillCredsIsolation(_ []string) int {
 		fmt.Fprintf(os.Stderr, "[drill-creds-isolation] %s\n", m)
 	}
 	return r.ExitCode
+}
+
+// runCredentialsSot enforces T1.1 SoT drift audit — every Secret created by
+// canonical generator scripts is enumerated in docs/operations/credentials-required.md.
+// Migrated from infra/tests/docs/credentials-sot_test.sh
+// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
+func runCredentialsSot(args []string) int {
+	fs := flag.NewFlagSet("credentials-sot", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := credentialssot.Check(credentialssot.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		if len(outcome.Discovered) > 0 {
+			fmt.Fprintln(os.Stderr, "Discovered Secret names:")
+			for _, s := range outcome.Discovered {
+				fmt.Fprintf(os.Stderr, "  - %s\n", s)
+			}
+		}
+		return 1
+	}
+	fmt.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations/credentials-required.md\n", len(outcome.Discovered))
+	return 0
+}
+
+// runDevPublicLoopZeroExternalSecretsOverlay enforces the dev-public loopzero-external-secrets overlay contract
+// (post-T1.2 workload identity: enabled=false safe default, K8s-auth shape,
+// no legacy AppRole roleId/secretRef, canonical mgmt DNS, traceability).
+// Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runDevPublicLoopZeroExternalSecretsOverlay(args []string) int {
+	fs := flag.NewFlagSet("dev-public-loopzero-external-secrets-overlay", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dev-public-loopzero-external-secrets-overlay: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("dev-public-loopzero-external-secrets-overlay: PASS — post-T1.2 workload-identity contract preserved (K8s-auth, no legacy AppRole)")
+	return 0
+}
+
+// runOpenbaoInitAuthMounts enforces T5.1-T5.9 openbao-init auth mounts + per-binary roles.
+// Migrated from infra/tests/check-openbao-init-auth-mounts_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.7 Wave 2 — Wave 2 COMPLETE).
+func runOpenbaoInitAuthMounts(args []string) int {
+	fs := flag.NewFlagSet("openbao-init-auth-mounts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := openbaoinitauth.Check(openbaoinitauth.Config{RepoRoot: *root})
+	if errors.Is(err, openbaoinitauth.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "openbao-init-auth-mounts: FAIL — openbao-init chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "openbao-init-auth-mounts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("openbao-init-auth-mounts: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("openbao-init-auth-mounts: PASS — T5.1-T5.9 auth mounts + per-binary roles + isolation invariants clean")
+	return 0
+}
+
+// runOptionBEsoDeployDoc enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
+// contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands
+// documented, rollback + decision matrix + cross-references present, ESO
+// version drift against runtime helmfile detected).
+// Migrated from infra/tests/check-option-b-eso-deploy-doc_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runOptionBEsoDeployDoc(args []string) int {
+	fs := flag.NewFlagSet("option-b-eso-deploy-doc", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
+	return 0
+}
+
+// runPulumiRequiredSecrets enforces T1.5 — every Pulumi.<env>.yaml enumerates
+// the required secret keys for that environment (either as `secure:` entry
+// or as a comment). Cross-checks the same keys appear in the SoT doc.
+// Migrated from infra/tests/docs/pulumi-required-secrets_test.sh
+// (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
+func runPulumiRequiredSecrets(args []string) int {
+	fs := flag.NewFlagSet("pulumi-required-secrets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := pulumirequiredsecrets.Check(pulumirequiredsecrets.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
+	return 0
+}
+
+// runLoopZeroApiOpenbaoApproleEnvfrom enforces T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync:
+// the loopzero-api chart unconditionally wires the AppRole secret_id via
+// envFrom.secretRef to K8s Secret loopzero-openbao-approle with optional=true,
+// with NO inline value: for OPENBAO_VAULT_SECRET_ID (anti-hardcode).
+// Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runLoopZeroApiOpenbaoApproleEnvfrom(args []string) int {
+	fs := flag.NewFlagSet("loopzero-api-openbao-approle-envfrom", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
+		return 0
+	}
+	fmt.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
+	return 0
+}
+
+// runLoopZeroExternalSecretsChartSanity enforces the iter 23 chart-sanity contract for
+// infra/helm/loopzero-external-secrets. 8 assertions across 5 canonical envs.
+// Migrated from infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.5 Wave 2).
+func runLoopZeroExternalSecretsChartSanity(args []string) int {
+	fs := flag.NewFlagSet("loopzero-external-secrets-chart-sanity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: *root})
+	if errors.Is(err, esochartsanity.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("loopzero-external-secrets-chart-sanity: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
+	return 0
+}
+
+// runLoopZeroExternalSecretsCreationPolicy is the iter 20 P0 regression for creationPolicy: Orphan.
+// Migrated from infra/tests/check-loopzero-external-secrets-creation-policy_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.6 Wave 2).
+func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
+	fs := flag.NewFlagSet("loopzero-external-secrets-creation-policy", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: *root})
+	if errors.Is(err, esocreationpolicy.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("loopzero-external-secrets-creation-policy: WARN (advisory-only: helm not on PATH)")
+		return 0
+	}
+	fmt.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
+	return 0
+}
+
+// runVaultBootstrapInMgmtTask enforces the `task k3d:vault:bootstrap-in-mgmt`
+// shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
+// with exactly two well-known differences (context swap + pre-flight message).
+// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runVaultBootstrapInMgmtTask(args []string) int {
+	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
+	return 0
+}
+
+// runVaultBootstrapUnsealLoop enforces the 2026-06-15 canonical fix of
+// infra/scripts/local/vault-bootstrap-dev.sh Steps 2 + 3 (rc-independent
+// bao-status parse, capitalized "True" compare, no lowercase fallback trap).
+// Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runVaultBootstrapUnsealLoop(args []string) int {
+	fs := flag.NewFlagSet("vault-bootstrap-unseal-loop", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-bootstrap-unseal-loop: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("vault-bootstrap-unseal-loop: PASS — canonical fix preserved (rc-independent parse, capitalized True compare, anti-patterns absent)")
+	return 0
 }

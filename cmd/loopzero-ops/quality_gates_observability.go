@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -12,8 +13,13 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/alertrunbooks"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correlationheader"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardpromtool"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/day30day60cronjobs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orphanalerts"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runtimeslo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
 )
 
 // M9 Step 7: quality gate entry points for the "observability" theme, decomposed out of the
@@ -158,5 +164,137 @@ func runCorrelationHeader(args []string) int {
 		return 1
 	}
 	fmt.Println("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/")
+	return 0
+}
+
+// runDay30Day60CronJobs enforces T10.1-T10.4 Day 30 verify + Day 60 AES delete
+// CronJob contracts. Renders loopzero-api chart with 3 --set overrides.
+// Migrated from infra/tests/check-day30-day60-cronjobs_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.4 Wave 2).
+func runDay30Day60CronJobs(args []string) int {
+	fs := flag.NewFlagSet("day30-day60-cronjobs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := day30day60cronjobs.Check(day30day60cronjobs.Config{RepoRoot: *root})
+	if errors.Is(err, day30day60cronjobs.ErrChartMissing) {
+		fmt.Fprintln(os.Stderr, "day30-day60-cronjobs: FAIL — loopzero-api chart missing")
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "day30-day60-cronjobs: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	if outcome.Warn {
+		fmt.Println("day30-day60-cronjobs: WARN (advisory-only: helm not on PATH — LIVE render skipped)")
+		return 0
+	}
+	fmt.Println("day30-day60-cronjobs: PASS — T10.1-T10.4 CronJob contracts (disabled-by-default + Day 30 schedule/EC-12/Forbid + Day 60 safety defaults/migrate-to-transit + hardening) clean")
+	return 0
+}
+
+// runK6LoadRigor enforces the k6 load-harness rigor fixes (dropped_iterations
+// threshold in base + L5 distributed manifest shape + README per-level doc).
+// Migrated from infra/tests/check-k6-load-rigor_test.sh
+// (M-Migrate2 continuation 2026-07-07).
+func runK6LoadRigor(args []string) int {
+	fs := flag.NewFlagSet("k6-load-rigor", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := k6loadrigor.Check(k6loadrigor.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
+	return 0
+}
+
+// runLokiRetentionSchema is the trio-compat regression for the retention_stream
+// schema in infra/helm/loki/values.yaml. 7 assertions.
+// Migrated from infra/tests/check-loki-retention-schema_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.2 Wave 2).
+func runLokiRetentionSchema(args []string) int {
+	fs := flag.NewFlagSet("loki-retention-schema", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream vault-system + priority int + defaults) clean")
+	return 0
+}
+
+// runLokiVaultRetention enforces T8.2 + T8.5 of plan 2026-06-02-openbao-adoption:
+// Loki per-NS retention config + archive CronJob hardening. 14 assertions.
+// Migrated from infra/tests/check-loki-vault-retention_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.1 Wave 2).
+func runLokiVaultRetention(args []string) int {
+	fs := flag.NewFlagSet("loki-vault-retention", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("loki-vault-retention: PASS — 14 hermetic assertions (T8.2 retention_stream + T8.5 archive CronJob hardening) clean")
+	return 0
+}
+
+// runVaultPromAlerts enforces T8.4 PrometheusRule vault-audit-alerts contract.
+// Migrated from infra/tests/check-vault-prom-alerts_test.sh
+// (M-Migrate2 2026-07-10 M16 T3.3 Wave 2).
+func runVaultPromAlerts(args []string) int {
+	fs := flag.NewFlagSet("vault-prom-alerts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		for _, f := range outcome.Failures {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		return 1
+	}
+	fmt.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
 	return 0
 }
