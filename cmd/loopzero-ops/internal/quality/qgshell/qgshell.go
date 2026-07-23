@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 )
 
 // StatAndRead stats then reads a file, distinguishing "missing" from a read error.
@@ -27,4 +28,30 @@ func RunQuiet(name string, args ...string) error {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	return cmd.Run()
+}
+
+// ExtractBraceBlock returns the body between the `{` matched by openRe and its
+// balanced closing `}`. Returns ("", false) if openRe does not match or the
+// braces are unbalanced. Extracted from the brace-balanced Caddyfile host-block
+// extractor copy-pasted across the caddy gates (M27 DRY:
+// dry-knowledge-caddy-block-extractor).
+func ExtractBraceBlock(content string, openRe *regexp.Regexp) (string, bool) {
+	loc := openRe.FindStringIndex(content)
+	if loc == nil {
+		return "", false
+	}
+	depth := 1
+	start := loc[1]
+	for i := start; i < len(content); i++ {
+		switch content[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return content[start:i], true
+			}
+		}
+	}
+	return "", false
 }

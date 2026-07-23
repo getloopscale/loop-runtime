@@ -8,18 +8,18 @@
 // Asserts the operator-local-edge `app-dev.loopzero.example { ... }` block of
 // `infra/local/Caddyfile`:
 //
-//   1. Does NOT emit a Content-Security-Policy directive (ADR D1 — let the
-//      upstream <meta> CSP in dashboard/index.html rule; browsers enforce the
-//      STRICTER intersection of header CSP vs <meta> CSP).
-//   2. Does NOT contain `handle /src/*`, `handle /@vite/*`, or
-//      `handle /node_modules/.vite/*` 404 blocks (ADR D2 — those break Vite
-//      HMR module resolution; prod info-disclosure is handled by
-//      `dashboard/nginx.conf:try_files`).
-//   3. Preserves `X-Frame-Options "DENY"`, `X-Content-Type-Options "nosniff"`,
-//      `Referrer-Policy "strict-origin-when-cross-origin"`, HSTS (ADR D3 —
-//      these don't intersect with <meta> CSP and close real attack surface;
-//      #44/#45/#47 stay closed).
-//   4. Preserves `reverse_proxy @ws localhost:5173` (the Vite dev upstream).
+//  1. Does NOT emit a Content-Security-Policy directive (ADR D1 — let the
+//     upstream <meta> CSP in dashboard/index.html rule; browsers enforce the
+//     STRICTER intersection of header CSP vs <meta> CSP).
+//  2. Does NOT contain `handle /src/*`, `handle /@vite/*`, or
+//     `handle /node_modules/.vite/*` 404 blocks (ADR D2 — those break Vite
+//     HMR module resolution; prod info-disclosure is handled by
+//     `dashboard/nginx.conf:try_files`).
+//  3. Preserves `X-Frame-Options "DENY"`, `X-Content-Type-Options "nosniff"`,
+//     `Referrer-Policy "strict-origin-when-cross-origin"`, HSTS (ADR D3 —
+//     these don't intersect with <meta> CSP and close real attack surface;
+//     #44/#45/#47 stay closed).
+//  4. Preserves `reverse_proxy @ws localhost:5173` (the Vite dev upstream).
 package caddyfilecspgate
 
 import (
@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 )
 
 // Config tells Check which repo to scan.
@@ -186,8 +188,8 @@ func Check(cfg Config) (*Outcome, error) {
 	// 'unsafe-inline' for the PWA inline script-register. Caught LIVE
 	// 2026-06-26 by Red Team Chrome devtools when prior shape stripped them.
 	cspMustContain := []struct {
-		token  string
-		why    string
+		token string
+		why   string
 	}{
 		{"https://fonts.googleapis.com", "Google Fonts CSS (style-src)"},
 		{"https://fonts.gstatic.com", "Google Fonts binaries (font-src)"},
@@ -484,24 +486,7 @@ func indexNonSpace(s string) int {
 // plan kratos-self-service-rate-limit-systemic v1.1. Returns (body, true) on
 // success, ("", false) when the opening directive is missing or unbalanced.
 func extractAuthDevBlock(content string) (string, bool) {
-	openLoc := authDevBlockOpenRe.FindStringIndex(content)
-	if openLoc == nil {
-		return "", false
-	}
-	depth := 1
-	start := openLoc[1]
-	for i := start; i < len(content); i++ {
-		switch content[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return content[start:i], true
-			}
-		}
-	}
-	return "", false
+	return qgshell.ExtractBraceBlock(content, authDevBlockOpenRe)
 }
 
 // extractAppDevBlock returns the body of the `app-dev.loopzero.example { ... }`
@@ -509,25 +494,5 @@ func extractAuthDevBlock(content string) (string, bool) {
 // (body, true) on success, ("", false) when the opening directive is missing
 // or the braces are unbalanced.
 func extractAppDevBlock(content string) (string, bool) {
-	openLoc := blockOpenRe.FindStringIndex(content)
-	if openLoc == nil {
-		return "", false
-	}
-
-	// Start scanning right after the opening `{`.
-	depth := 1
-	start := openLoc[1]
-	for i := start; i < len(content); i++ {
-		switch content[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return content[start:i], true
-			}
-		}
-	}
-	// Unbalanced braces.
-	return "", false
+	return qgshell.ExtractBraceBlock(content, blockOpenRe)
 }

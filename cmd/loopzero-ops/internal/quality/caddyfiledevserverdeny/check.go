@@ -13,13 +13,13 @@
 // against future regressions.
 //
 // Invariants:
-//   1. `@dev_server_only` named matcher is defined in the app-dev block.
-//   2. It covers, at minimum: /src/*, /@vite/*, /node_modules/*, /.env,
-//      /vite.config.*, /package.json.
-//   3. The block explicitly responds 404 for the matcher via
-//      `respond @dev_server_only 404`.
-//   4. The matcher is declared BEFORE any /assets/ or catch-all handler so
-//      the deny cannot be bypassed via `try_files` fallback to index.html.
+//  1. `@dev_server_only` named matcher is defined in the app-dev block.
+//  2. It covers, at minimum: /src/*, /@vite/*, /node_modules/*, /.env,
+//     /vite.config.*, /package.json.
+//  3. The block explicitly responds 404 for the matcher via
+//     `respond @dev_server_only 404`.
+//  4. The matcher is declared BEFORE any /assets/ or catch-all handler so
+//     the deny cannot be bypassed via `try_files` fallback to index.html.
 package caddyfiledevserverdeny
 
 import (
@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 )
 
 // Config tells Check which repo to scan.
@@ -136,24 +138,7 @@ func Check(cfg Config) (*Outcome, error) {
 // extractAppDevBlock returns the body between the opening
 // `app-dev.loopzero.example {` and its matching closing brace.
 func extractAppDevBlock(content string) (string, bool) {
-	loc := blockOpenRe.FindStringIndex(content)
-	if loc == nil {
-		return "", false
-	}
-	start := loc[1]
-	depth := 1
-	for i := start; i < len(content); i++ {
-		switch content[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return content[start:i], true
-			}
-		}
-	}
-	return "", false
+	return qgshell.ExtractBraceBlock(content, blockOpenRe)
 }
 
 // extractMatcherBody returns the body between `@dev_server_only {` and its
