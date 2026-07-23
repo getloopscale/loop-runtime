@@ -42,13 +42,18 @@ func Check(cfg Config) (Outcome, error) {
 		if _, err := os.Stat(full); errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		_ = filepath.WalkDir(full, func(path string, e fs.DirEntry, walkErr error) error {
-			if walkErr != nil || e.IsDir() {
+		// FIX-2 (M24, ADR-M24-3): fail-CLOSED — capture + propagate the walk error
+		// instead of discarding it (`_ =`) and swallowing per-entry/read errors.
+		if err := filepath.WalkDir(full, func(path string, e fs.DirEntry, entryErr error) error {
+			if entryErr != nil {
+				return entryErr
+			}
+			if e.IsDir() {
 				return nil
 			}
 			body, err := os.ReadFile(path)
 			if err != nil {
-				return nil
+				return fmt.Errorf("%s: %w", path, err)
 			}
 			for i, line := range splitLines(body) {
 				if forbiddenPattern.MatchString(line) {
@@ -57,7 +62,9 @@ func Check(cfg Config) (Outcome, error) {
 				}
 			}
 			return nil
-		})
+		}); err != nil {
+			return Outcome{}, fmt.Errorf("walk %s: %w", full, err)
+		}
 	}
 	if len(violations) > 0 {
 		return Outcome{Violations: violations}, ErrViolations

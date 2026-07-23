@@ -60,12 +60,18 @@ func Check(cfg Config) (Outcome, error) {
 			continue // tolerate missing dirs (deleted in strangler waves)
 		}
 		if err := filepath.WalkDir(full, func(path string, e fs.DirEntry, walkErr error) error {
-			if walkErr != nil || e.IsDir() {
+			// FIX-2 (M24, ADR-M24-3): fail-CLOSED — propagate the per-entry walk
+			// error + read error instead of swallowing them (`return nil`). Outer
+			// WalkDir error was already propagated below.
+			if walkErr != nil {
+				return walkErr
+			}
+			if e.IsDir() {
 				return nil
 			}
 			body, err := os.ReadFile(path)
 			if err != nil {
-				return nil
+				return fmt.Errorf("%s: %w", path, err)
 			}
 			for i, line := range strings.Split(string(body), "\n") {
 				if !strings.Contains(line, forbiddenPattern) {

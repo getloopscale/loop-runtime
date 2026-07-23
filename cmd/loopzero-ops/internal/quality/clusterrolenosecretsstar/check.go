@@ -73,8 +73,15 @@ func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 	for _, dir := range scanDirs {
 		abs := filepath.Join(cfg.RepoRoot, dir)
-		_ = filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
+		if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
+			continue // scan dir legitimately absent — nothing to scan
+		}
+		// FIX-2 (M24, ADR-M24-3): fail-CLOSED — capture + propagate the walk error.
+		walkErr := filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
 				return nil
 			}
 			if filepath.Base(path) != "clusterrole.yaml" {
@@ -93,6 +100,9 @@ func Check(cfg Config) (Outcome, error) {
 			out.Hits = append(out.Hits, hits...)
 			return nil
 		})
+		if walkErr != nil {
+			return out, fmt.Errorf("scan %s: %w", dir, walkErr)
+		}
 	}
 	out.Pass = len(out.Hits) == 0
 	return out, nil

@@ -59,8 +59,17 @@ func Check(cfg Config) (Outcome, error) {
 
 	var out Outcome
 	abs := filepath.Join(cfg.RepoRoot, scanDir)
-	_ = filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+	if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
+		return Outcome{Pass: true}, nil // scan dir absent — nothing to scan
+	}
+	// FIX-2 (M24, ADR-M24-3): fail-CLOSED — capture + propagate the walk error
+	// instead of discarding it (`_ =`) and swallowing per-entry errors. A gate
+	// that cannot read the files it scans must NOT report clean.
+	walkErr := filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
 			return nil
 		}
 		base := filepath.Base(path)
@@ -81,6 +90,9 @@ func Check(cfg Config) (Outcome, error) {
 		out.Hits = append(out.Hits, hits...)
 		return nil
 	})
+	if walkErr != nil {
+		return out, fmt.Errorf("scan %s: %w", scanDir, walkErr)
+	}
 	out.Pass = len(out.Hits) == 0
 	return out, nil
 }
