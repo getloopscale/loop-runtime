@@ -135,11 +135,16 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 	}
 
 	// Layer 2 — GitHub webhook replay (skip-graceful when creds absent).
+	var webhookWarn string
 	if d.Creds != nil && !IsPlaceholder(d.Creds.GitHub.WebhookSecret) {
 		if err := replayGitHubInstallationWebhook(d.Ctx, d.Creds.GitHub.WebhookSecret); err != nil {
-			// Non-fatal — chain may not be ready. Bash pattern.
-			// Log via reason but continue.
-			_ = err
+			// Non-fatal — the deploy chain may not be ready yet (bash parity).
+			// FIX-4 (M24): surface the error in the result reason instead of
+			// dropping it with `_ = err` — a silent swallow hid a real webhook
+			// failure (.claude/rules/error-handling.md: no silent swallowing).
+			// Still non-fatal (warning, not FAIL) — the intent the stale comment
+			// documented but never implemented.
+			webhookWarn = fmt.Sprintf(" (webhook replay warning: %v)", err)
 		}
 	}
 
@@ -152,7 +157,7 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3b AppProject: %v", err)}
 		}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("tenant fixture seeded (tenant=%s plan=%s)", tenantID, planTier)}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("tenant fixture seeded (tenant=%s plan=%s)%s", tenantID, planTier, webhookWarn)}
 }
 
 // Verify probes that Tenant CR + AppProject exist for the target tenant.

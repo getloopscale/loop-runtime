@@ -214,6 +214,34 @@ func TestTenantFixture_ReplaysWebhookWithSHA256HMAC(t *testing.T) {
 	}
 }
 
+// TestTenantFixture_SurfacesWebhookWarningOnFailure (FIX-4, M24): a failed webhook
+// replay is non-fatal (still PASS) but MUST surface in the reason, not be silently
+// swallowed (was `_ = err`). error-handling.md: no silent swallowing.
+func TestTenantFixture_SurfacesWebhookWarningOnFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	defer stubHTTPClient(t, server)()
+	defer stubEnv(t, map[string]string{
+		tenantFixtureHelmfileEnvKey: "dev-public",
+		tenantFixtureTenantIDEnv:    "tn-abc",
+		tenantFixtureCloudBaseEnv:   server.URL,
+	})()
+
+	creds := &Creds{}
+	creds.GitHub.WebhookSecret = "whsec_test_abc"
+
+	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: creds})
+
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS (webhook failure is non-fatal)", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "webhook replay warning") {
+		t.Errorf("Reason must surface the swallowed webhook error, got: %s", got.Reason)
+	}
+}
+
 func TestTenantFixture_CreatesTenantCRAndAppProject(t *testing.T) {
 	defer stubEnv(t, map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
