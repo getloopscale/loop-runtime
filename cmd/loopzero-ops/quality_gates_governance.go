@@ -17,21 +17,21 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselineupdate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfiledevserverdeny"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpubliocidcredirectsyntax"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/decisionsdeletion"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicbillingportalsyntax"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpubliocidcredirectsyntax"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/divergencematrix"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drilloutputs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitdiff"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skiplink"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/templatecompliance"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
 )
 
 // M9 Step 7: quality gate entry points for the "governance" theme, decomposed out of the
@@ -48,9 +48,7 @@ func runCLIExitCodes(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := cliexitcodes.Check(cliexitcodes.Config{RepoRoot: *root})
 	if err != nil {
@@ -83,9 +81,7 @@ func runCorrectionsTxtClosed(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := correctionstxt.Check(filepath.Join(*root, "infra", "tests", "performance", "load", "CORRECTIONS.txt"))
 	if err != nil {
@@ -457,9 +453,7 @@ func runCaddyfileCSP(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := caddyfilecspgate.Check(caddyfilecspgate.Config{RepoRoot: *root})
 	if err != nil {
@@ -498,9 +492,7 @@ func runCaddyfileDevServerDeny(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := caddyfiledevserverdeny.Check(caddyfiledevserverdeny.Config{RepoRoot: *root})
 	if err != nil {
@@ -536,9 +528,7 @@ func runDevPublicBillingPortalSyntax(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := devpublicbillingportalsyntax.Check(devpublicbillingportalsyntax.Config{RepoRoot: *root})
 	if err != nil {
@@ -564,9 +554,7 @@ func runDevPublicOIDCRedirectSyntax(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := devpubliocidcredirectsyntax.Check(devpubliocidcredirectsyntax.Config{RepoRoot: *root})
 	if err != nil {
 		if len(outcome.Failures) == 0 {
@@ -594,9 +582,7 @@ func runOryKratosPublicURLs(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := orykratospublicurls.Check(orykratospublicurls.Config{RepoRoot: *root})
 	if err != nil {
 		if len(outcome.Failures) == 0 {
@@ -629,9 +615,7 @@ func runTestCoverageReport(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := testcoveragereport.Check(testcoveragereport.Config{
 		RepoRoot:          *root,
 		CoverageThreshold: *threshold,

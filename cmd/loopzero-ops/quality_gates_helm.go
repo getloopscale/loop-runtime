@@ -31,9 +31,7 @@ func runPostgresqlPDBConfig(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := pgpdb.Check(filepath.Join(*root, "infra", "helm", "postgresql", "values.yaml"))
 	if err != nil {
@@ -59,9 +57,7 @@ func runHelmOverlapParity(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := helmoverlapparity.Check(helmoverlapparity.Config{RepoRoot: *root})
 	if err != nil {

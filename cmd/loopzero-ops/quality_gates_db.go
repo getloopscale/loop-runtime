@@ -33,9 +33,7 @@ func runAdvisoryLockScope(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := advisorylock.Check(advisorylock.Config{RepoRoot: *root})
 	if err != nil {
@@ -65,9 +63,7 @@ func runMigrationTestCoverage(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := migrationtestcoverage.Check(migrationtestcoverage.Config{
 		Root:          *root,
@@ -99,9 +95,7 @@ func runCRDSemanticDiff(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := crdsemanticdiff.Check(crdsemanticdiff.Config{
 		Root:      *root,
@@ -167,9 +161,7 @@ func runSqlcSync(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := sqlcsync.Check(sqlcsync.Config{RepoRoot: *root})
 	if err != nil {
@@ -203,9 +195,7 @@ func runSqlcTxProp(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := sqlctxprop.Check(sqlctxprop.Config{RepoRoot: *root})
 	if err != nil {
@@ -234,9 +224,7 @@ func runDbGeneratedBoundary(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := dbgeneratedboundary.Check(dbgeneratedboundary.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "db-generated-boundary: %v\n", err)
@@ -267,9 +255,7 @@ func runMa7StatusLocality(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := ma7statuslocality.Check(ma7statuslocality.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ma7-status-locality: %v\n", err)
@@ -300,9 +286,7 @@ func runRenderSchemaGenSQL(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	cfg := renderschemagensql.Config{RepoRoot: *root, AdvisoryOnly: *advisoryOnly}
 	if !*render {
 		outcome, err := renderschemagensql.Check(cfg)

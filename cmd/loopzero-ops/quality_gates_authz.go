@@ -37,9 +37,7 @@ func runClusterRoleNoSecretsStar(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	cfg := clusterrolenosecretsstar.Config{
 		RepoRoot: *root,
@@ -71,9 +69,7 @@ func runNoLegacySATokenSecret(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	cfg := nolegacysatoken.Config{RepoRoot: *root}
 	if *allowlist != "" {
 		for _, p := range strings.Split(*allowlist, ",") {
@@ -104,9 +100,7 @@ func runAnonymousAuth(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := anonymousauth.Check(anonymousauth.Config{RepoRoot: *root})
 	if err != nil {
@@ -239,9 +233,7 @@ func runTenantPredicate(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := tenantpredicate.Check(tenantpredicate.Config{RepoRoot: *root})
 	if err != nil {
@@ -270,9 +262,7 @@ func runOIDCCredAdminLoopzero(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "oidc-cred-admin-loopzero: FAIL — %d fabricated credential reference(s):\n", len(outcome.Violations))
@@ -296,9 +286,7 @@ func runOryKratosLifespan(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := orykratoslifespan.Check(orykratoslifespan.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -322,9 +310,7 @@ func runRouteAuthCoverage(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := routeauthcoverage.Check(routeauthcoverage.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "route-auth-coverage: FAIL — %v\n", err)

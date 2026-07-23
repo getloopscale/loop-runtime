@@ -39,9 +39,7 @@ func runArchiveScriptRepoRoot(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := archivescriptrepo.Check(archivescriptrepo.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "archive-script-repo-root: FAIL — %d 3-dirs-up violation(s):\n", len(outcome.Failures))
@@ -67,9 +65,7 @@ func runDanglingDataRefs(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := danglingdata.Check(danglingdata.Config{
 		RepoRoot: *root,
@@ -104,9 +100,7 @@ func runDanglingScriptRefs(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := danglingrefs.Check(danglingrefs.Config{
 		RepoRoot: *root,
@@ -139,9 +133,7 @@ func runInstallGitHooks(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := installgithooks.Check(installgithooks.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -208,9 +200,7 @@ func runQuarantineProtect(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := quarantineprotect.Check(quarantineprotect.Config{
 		RepoRoot:        *root,
@@ -248,9 +238,7 @@ func runScriptCount(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	data, err := os.ReadFile(*baselinePath) // #nosec G304 -- repo-internal baseline path
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "script-count: read baseline: %v\n", err)
@@ -339,9 +327,7 @@ func runShellHygiene(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := shellhygiene.Check(shellhygiene.Config{RepoRoot: *root})
 	if err != nil {
@@ -373,9 +359,7 @@ func runShellcheckAdvisory(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
@@ -401,9 +385,7 @@ func runSkillPaths(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
@@ -428,9 +410,7 @@ func runSprintSyntax(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := sprintsyntax.Check(sprintsyntax.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sprint-syntax: FAIL — %d assertion(s):\n", len(outcome.Failures))

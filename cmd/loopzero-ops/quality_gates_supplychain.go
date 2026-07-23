@@ -36,9 +36,7 @@ func runDockerfileNoDockerHub(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := dockerfilemirror.Check(dockerfilemirror.Config{
 		ImagesDir: filepath.Join(*root, "infra", "images"),
@@ -67,9 +65,7 @@ func runNoPulumiInlineSecrets(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	cfg := nopulumiinlinesecrets.Config{RepoRoot: *root}
 	if *allowlist != "" {
 		for _, p := range strings.Split(*allowlist, ",") {
@@ -100,9 +96,7 @@ func runProdImageDigests(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := prodimagedigests.Check(prodimagedigests.Config{Root: *root, EnforceMode: *enforce})
 	if err != nil {
@@ -143,9 +137,7 @@ func runTrivyScan(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := trivyscan.Check(context.Background(), trivyscan.Config{
 		RepoRoot:   *root,
 		Severities: *severities,
@@ -175,9 +167,7 @@ func runTrufflehogScan(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := trufflehogscan.Check(context.Background(), trufflehogscan.Config{
 		RepoRoot:     *root,
 		OnlyVerified: *verified,

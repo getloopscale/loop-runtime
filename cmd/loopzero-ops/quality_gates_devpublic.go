@@ -28,9 +28,7 @@ func runCaddyfileNoDockerIP(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := caddyfilenodockerip.Check(caddyfilenodockerip.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
@@ -51,9 +49,7 @@ func runCanonicalFixtureRepo(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := canonicalfixturerepo.Check(canonicalfixturerepo.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
@@ -76,9 +72,7 @@ func runCheckAllowlistSunsets(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := allowlistsunsets.Check(allowlistsunsets.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -102,9 +96,7 @@ func runDevPublicEnv(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := devpublicenv.Check(devpublicenv.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "dev-public-env: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -129,9 +121,7 @@ func runNoCloudDevDefault(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := nocloud.Check(nocloud.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
@@ -155,9 +145,7 @@ func runWebhookCanonicalPath(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: *root})
 	if err != nil {
 		// Distinguish a genuine violation from a real I/O error (fail-closed):

@@ -40,9 +40,7 @@ func runContractConsumers(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := contractconsumers.Check(contractconsumers.Config{
 		RepoRoot: *root,
@@ -85,9 +83,7 @@ func runAcyclicGraph(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := acyclicgraph.Check(acyclicgraph.Config{RepoRoot: *root})
 	if err != nil {
@@ -123,9 +119,7 @@ func runPkgUsageMatrix(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	mode := pkgusagematrix.ModeCheck
 	if *write {
 		mode = pkgusagematrix.ModeWrite
@@ -317,9 +311,7 @@ func runServicesAcyclic(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := servicesacyclic.Check(servicesacyclic.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "services-acyclic: %v\n", err)

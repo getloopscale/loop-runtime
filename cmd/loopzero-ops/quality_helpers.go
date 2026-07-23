@@ -93,3 +93,12 @@ func runRatchet(name string, spec deadlineratchet.Spec, args []string, lbl ratch
 		return 0
 	}
 }
+
+// resolveDotRoot expands a "." repo-root flag to the absolute cwd so gate error
+// messages show a concrete path; no-op for an explicit root. Extracted from the
+// ~70 gate handlers that repeated this idiom (M27 DRY: dry-gate-cli-scaffold).
+func resolveDotRoot(root *string) {
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+}

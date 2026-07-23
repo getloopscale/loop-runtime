@@ -41,9 +41,7 @@ func runTransitCoverage(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := transitcoverage.Check(transitcoverage.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "transit-coverage: %v\n", err)
@@ -67,9 +65,7 @@ func runNoEnvVaultSecrets(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	cfg := noenvvaultsecrets.Config{
 		RepoRoot: *root,
@@ -103,9 +99,7 @@ func runNoAESRemaining(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	cfg := noaesremaining.Config{RepoRoot: *root}
 	if *allowlist != "" {
 		for _, p := range strings.Split(*allowlist, ",") {
@@ -156,9 +150,7 @@ func runCredentialsSot(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := credentialssot.Check(credentialssot.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
@@ -188,9 +180,7 @@ func runDevPublicLoopZeroExternalSecretsOverlay(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "dev-public-loopzero-external-secrets-overlay: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -212,9 +202,7 @@ func runOpenbaoInitAuthMounts(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := openbaoinitauth.Check(openbaoinitauth.Config{RepoRoot: *root})
 	if errors.Is(err, openbaoinitauth.ErrChartMissing) {
 		fmt.Fprintln(os.Stderr, "openbao-init-auth-mounts: FAIL — openbao-init chart missing")
@@ -247,9 +235,7 @@ func runOptionBEsoDeployDoc(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -273,9 +259,7 @@ func runPulumiRequiredSecrets(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := pulumirequiredsecrets.Check(pulumirequiredsecrets.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
@@ -300,9 +284,7 @@ func runLoopZeroApiOpenbaoApproleEnvfrom(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
@@ -329,9 +311,7 @@ func runLoopZeroExternalSecretsChartSanity(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: *root})
 	if errors.Is(err, esochartsanity.ErrChartMissing) {
 		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
@@ -361,9 +341,7 @@ func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: *root})
 	if errors.Is(err, esocreationpolicy.ErrChartMissing) {
 		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — chart missing")
@@ -395,9 +373,7 @@ func runVaultBootstrapInMgmtTask(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -421,9 +397,7 @@ func runVaultBootstrapUnsealLoop(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vault-bootstrap-unseal-loop: FAIL — %d assertion(s):\n", len(outcome.Failures))

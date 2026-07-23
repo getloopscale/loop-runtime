@@ -144,9 +144,7 @@ func runCorrelationHeader(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 
 	outcome, err := correlationheader.Check(correlationheader.Config{RepoRoot: *root})
 	if err != nil {
@@ -177,9 +175,7 @@ func runDay30Day60CronJobs(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := day30day60cronjobs.Check(day30day60cronjobs.Config{RepoRoot: *root})
 	if errors.Is(err, day30day60cronjobs.ErrChartMissing) {
 		fmt.Fprintln(os.Stderr, "day30-day60-cronjobs: FAIL — loopzero-api chart missing")
@@ -210,9 +206,7 @@ func runK6LoadRigor(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := k6loadrigor.Check(k6loadrigor.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -235,9 +229,7 @@ func runLokiRetentionSchema(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -260,9 +252,7 @@ func runLokiVaultRetention(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
@@ -284,9 +274,7 @@ func runVaultPromAlerts(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
+	resolveDotRoot(root)
 	outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: *root})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
