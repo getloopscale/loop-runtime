@@ -55,8 +55,8 @@ func TestRunQuality_MetaBehaviorUnchanged(t *testing.T) {
 		if out != "" {
 			t.Errorf("empty args wrote to stdout: %q", out)
 		}
-		if err != qualityHelp {
-			t.Errorf("empty args stderr != qualityHelp (len err=%d want=%d)", len(err), len(qualityHelp))
+		if err != qualityHelpText() {
+			t.Errorf("empty args stderr != qualityHelpText() (len err=%d want=%d)", len(err), len(qualityHelpText()))
 		}
 	})
 	for _, flag := range []string{"--help", "-h", "help"} {
@@ -68,8 +68,8 @@ func TestRunQuality_MetaBehaviorUnchanged(t *testing.T) {
 			if err != "" {
 				t.Errorf("%s wrote to stderr: %q", flag, err)
 			}
-			if out != qualityHelp {
-				t.Errorf("%s stdout != qualityHelp (len out=%d want=%d)", flag, len(out), len(qualityHelp))
+			if out != qualityHelpText() {
+				t.Errorf("%s stdout != qualityHelpText() (len out=%d want=%d)", flag, len(out), len(qualityHelpText()))
 			}
 		})
 	}
@@ -94,8 +94,8 @@ func TestRunQuality_MetaBehaviorUnchanged(t *testing.T) {
 		if !strings.HasPrefix(err, "unknown gate: definitely-not-a-gate\n") {
 			t.Errorf("unknown gate stderr missing the 'unknown gate: <name>' line; got prefix %.40q", err)
 		}
-		if !strings.Contains(err, qualityHelp) {
-			t.Error("unknown gate stderr must also include qualityHelp")
+		if !strings.Contains(err, qualityHelpText()) {
+			t.Error("unknown gate stderr must also include qualityHelpText()")
 		}
 	})
 }
