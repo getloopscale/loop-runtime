@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -108,29 +109,29 @@ func (s *SecretsSeedDevSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would write %d kv-v2 paths", count)}
 	}
 
-	writtenPaths, failedPaths := 0, 0
-	var firstErr string
+	writtenPaths := 0
+	var writeErrs []error
 	for _, w := range writes {
 		if !w.when {
 			continue
 		}
 		if err := openBaoKVPut(d.Ctx, base, rootToken, w.path, w.data); err != nil {
-			failedPaths++
-			if firstErr == "" {
-				firstErr = fmt.Sprintf("%s: %v", w.path, err)
-			}
+			writeErrs = append(writeErrs, fmt.Errorf("%s: %w", w.path, err))
 			continue
 		}
 		writtenPaths++
 	}
-	if writtenPaths == 0 && failedPaths == 0 {
+	if writtenPaths == 0 && len(writeErrs) == 0 {
 		return Result{Verdict: SKIP, Reason: "no canonical creds populated in dev-credentials.json"}
 	}
-	if writtenPaths == 0 {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("all %d writes failed; first: %s", failedPaths, firstErr)}
-	}
-	if failedPaths > 0 {
-		return Result{Verdict: PASS, Reason: fmt.Sprintf("wrote %d canonical paths (%d skipped-on-error, bash parity; first err: %s)", writtenPaths, failedPaths, firstErr)}
+	// FIX-1 (M24, ADR-M24-1): fail-loud on ANY write failure. The previous
+	// `failedPaths>0 → PASS` branch masked partial failure — an operator gating on
+	// Verdict saw green while security secrets (stripe/resend/…) silently did not
+	// land. errors.Join surfaces every failed path; recovery is by idempotent
+	// re-run (no transaction — the writes are independent OpenBao HTTP calls, not
+	// SQL; blueprint ADR-M24-2). Per .claude/rules/error-handling.md (fail-loud).
+	if len(writeErrs) > 0 {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("wrote %d, %d failed: %v", writtenPaths, len(writeErrs), errors.Join(writeErrs...))}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("wrote %d canonical kv-v2 paths", writtenPaths)}
 }

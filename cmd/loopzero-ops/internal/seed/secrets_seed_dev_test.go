@@ -5,13 +5,13 @@ package seed
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -83,8 +83,10 @@ func writeSecretsSeedCreds(t *testing.T, unsealDir string) (credsPath, unsealPat
 func TestOpenBaoKVPut_Writes(t *testing.T) {
 	server, state := newOpenBaoStubServer(t, "s.tok")
 	defer server.Close()
-	// Use InsecureSkipVerify for httptest TLS.
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	// FIX-3 (M24): no http.DefaultTransport mutation. openBaoKVPut carries its
+	// own #nosec-annotated InsecureSkipVerify transport, so the global mutation
+	// was both unnecessary AND leaked insecure TLS into every later test that
+	// used the default client. Removed — test isolation restored.
 
 	err := openBaoKVPut(context.Background(), server.URL, "s.tok",
 		"secret/data/loopzero/dev/api/secrets/github",
@@ -212,5 +214,56 @@ func TestSecretsSeedDev_SkipsMissingFields(t *testing.T) {
 func TestSecretsSeedDev_Name(t *testing.T) {
 	if got := NewSecretsSeedDevSeed().Name(); got != "secrets-seed-dev" {
 		t.Errorf("Name = %q", got)
+	}
+}
+
+// TestSecretsSeedDev_FailsLoudOnPartialWrite (FIX-1, M24): when a subset of the
+// canonical writes fails, Run MUST return FAIL with every failed path named in a
+// joined error — never PASS (partial-success masking would hide missing security
+// secrets). Blueprint ADR-M24-1 + error-handling.md fail-loud.
+func TestSecretsSeedDev_FailsLoudOnPartialWrite(t *testing.T) {
+	// stub that 500s any path containing "stripe", 200 for the rest.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Vault-Token") != "s.stub-root" {
+			http.Error(w, "unauth", http.StatusForbidden)
+			return
+		}
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "stripe") {
+			http.Error(w, "injected failure", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	credsPath, unsealPath := writeSecretsSeedCreds(t, dir)
+	origGetenv := osGetenv
+	defer func() { osGetenv = origGetenv }()
+	osGetenv = func(k string) string {
+		if k == vaultUnsealFileEnv {
+			return unsealPath
+		}
+		return ""
+	}
+	creds, err := LoadCreds(credsPath)
+	if err != nil {
+		t.Fatalf("LoadCreds: %v", err)
+	}
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	deps := Deps{
+		Ctx:             context.Background(),
+		Kube:            NewKubeClient(c),
+		Creds:           creds,
+		PortForwardCtor: pfCtorPointingAtTLS(server),
+	}
+
+	got := NewSecretsSeedDevSeed().Run(deps)
+
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL on partial write", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "stripe") {
+		t.Errorf("Reason must name the failed path 'stripe', got: %s", got.Reason)
 	}
 }
