@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.72.0] - 2026-07-23
+
+### Changed
+- **`loopzero-ops` idiomatic-Go cleanups (M26 Idiomaticity & Design Patterns).** Replaced hand-rolled reinventions with the standard library / language builtins: `min()` → Go 1.21 builtin; hand-rolled `contains()` → `strings.Contains`; `eqIgnoreCase()` → `strings.EqualFold`; `isNotFoundErr()`'s fragile error-string substring match → typed `apierrors.IsNotFound`; `map[string]interface{}` → `map[string]any`; subprocess/API errors wrapped with `%w` (was `%v`) so callers can `errors.Is/As`; removed the deprecated `rand.Seed`; removed a duplicate controller-runtime import (staticcheck ST1019); renamed a `context`-shadowing parameter; `gofmt`. Remaining marginal stylistic nits (legacy-but-not-deprecated `filepath.Walk` spelling, `fmt.Sscanf` single-value parses) documented as conscious deferrals.
+
 ## [0.71.0] - 2026-07-23
 
 ### Removed

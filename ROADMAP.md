@@ -758,7 +758,7 @@ Wave C (4 highest-complexity gates):
 
 ---
 
-### M26 — [ ] cmd/ Review Remediation: Idiomaticity & Design Patterns
+### M26 — [x] cmd/ Review Remediation: Idiomaticity & Design Patterns
 
 **Objective:** apply the idiomatic-Go and pattern cleanups from the 2026-07-23 `cmd/` review (`idiomaticity` + `design_patterns` pillars) — reinvented stdlib, hand-rolled helpers, and error-formatting.
 
