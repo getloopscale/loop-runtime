@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- **`loopzero-ops` gate-registry guard tests were RED on develop — restored the safety net.** `TestRegisteredRunFuncMatchesName` failed because 8 quality gates were bound to abbreviated run-funcs (e.g. `runOptionBESO` for gate `option-b-eso-deploy-doc`) that did not case-fold-match the naming convention; renamed all 8 to their full form (internal rename only — no gate name, CLI token, or `--list` output change). `TestOracle_MatchesFrozenBaseline` failed because live `quality --list` emits 108 gates but the frozen baseline listed 73 (35 M-Migrate2/M16 Wave-2 gate migrations were added without re-freezing); re-froze the baseline to 108 via the test's own sanctioned path. Both guards + the orphan guard are GREEN again (surfaced by review-cycle `/review` of `cmd/`).
+- **`loopzero-ops` `adminEnsurePGState` doc-comment falsely claimed a SERIALIZABLE transaction.** The 7-statement upsert cluster actually runs as idempotent `ON CONFLICT DO NOTHING` autocommit statements (the `pgConn` seam is Exec-only). Corrected the doc to describe the real self-healing-on-re-run contract; no behavior change (the code was already correct for a dev-bootstrap seed) (review-cycle `/review` of `cmd/`).
 
 ### Security
 
