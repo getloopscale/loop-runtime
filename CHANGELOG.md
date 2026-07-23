@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 ### Changed
+- **`loopzero-ops` maintainability refactors (M27 DRY follow-up).** Split the `quality_gates_shell.go` god-file (37 funcs / 1068 LOC) into its themed siblings — shell file now 12 funcs / 444 LOC (behavior-preserving move; `--list` still 108 gates, all guards GREEN). Generated `quality --help`'s gate list from the registry (was a drifted hand-maintained duplicate). Extracted shared helpers: `resolveDotRoot` (the resolve-`.`-root idiom, 70 call sites → 1 helper); a new `internal/quality/qgshell` package holding `StatAndRead`/`RunQuiet` (3 byte-identical copies) and `ExtractBraceBlock` (the Caddyfile brace-scan, 3 copies). No behavior change; all affected test suites GREEN.
 
 ### Deprecated
 
