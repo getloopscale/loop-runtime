@@ -99,24 +99,24 @@ type Deps struct {
 // The empty string returns the default (mgmt) client. Missing entries are
 // lazily constructed via ClientCtor; a nil ClientCtor + missing entry is a
 // FAIL-shaped error (the operator forgot to wire the second cluster).
-func (d *Deps) ClientFor(context string) (KubeClient, error) {
-	if context == "" {
+func (d *Deps) ClientFor(ctxName string) (KubeClient, error) {
+	if ctxName == "" {
 		return d.Kube, nil
 	}
-	if k, ok := d.Clients[context]; ok && k != nil {
+	if k, ok := d.Clients[ctxName]; ok && k != nil {
 		return k, nil
 	}
 	if d.ClientCtor == nil {
 		return nil, ErrNoClientCtor
 	}
-	k, err := d.ClientCtor(context)
+	k, err := d.ClientCtor(ctxName)
 	if err != nil {
 		return nil, err
 	}
 	if d.Clients == nil {
 		d.Clients = map[string]KubeClient{}
 	}
-	d.Clients[context] = k
+	d.Clients[ctxName] = k
 	return k, nil
 }
 
