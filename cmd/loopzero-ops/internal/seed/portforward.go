@@ -11,7 +11,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
@@ -165,7 +164,3 @@ type PodLabels = map[string]string
 func PodMetaLabels(name string) PodLabels {
 	return PodLabels{"app.kubernetes.io/name": name}
 }
-
-// asObjectMeta is unused but reserved for future adjacent helpers (avoids
-// import-cycle temptation to import metav1 in seed .go files directly).
-var _ = metav1.ObjectMeta{}
