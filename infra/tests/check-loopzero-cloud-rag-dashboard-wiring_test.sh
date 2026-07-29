@@ -50,6 +50,29 @@ case "$BASE_URL" in
   *)  fail_ "RAG_BASE_URL value not http(s):// URL (got '$BASE_URL')" ;;
 esac
 
+# --- A1b: a URL aponta para o ARTEFATO DA PIPELINE, nao para um processo solto ---
+#
+# O gate A1 acima nasceu em 2026-07-15 porque RAG_BASE_URL vinha VAZIA, e por isso
+# so verifica presenca e esquema. Uma coordenada ERRADA passa por ele.
+#
+# Foi o que aconteceu ate 2026-07-29: a URL apontava para :18082, um processo
+# `node` iniciado a mao no host, enquanto o container da pipeline
+# (ghcr.io/getloopscale/loopzero-rag:develop) servia :8787. O gate ficava verde, o
+# endpoint respondia 200, e o unico sintoma era a coluna de versao do painel M21
+# vindo vazia — porque o processo solto emite `built_at: "unknown"`.
+#
+# Um alvo que responde 200 nao prova que e o alvo CERTO. Esta checagem trava a
+# porta, que e o que distingue os dois.
+case "$BASE_URL" in
+  *:18082*)
+    fail_ "RAG_BASE_URL aponta para :18082 — o processo host solto, nao o container da pipeline.
+       O container publicado pelo CI serve :8787 e reporta version/built_at reais;
+       o processo solto reporta 'dev'/'unknown'. Ver o comentario em
+       infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl." ;;
+  *:8787*) pass "RAG_BASE_URL aponta para o container da pipeline (:8787)" ;;
+  *) pass "RAG_BASE_URL=$BASE_URL (porta nao reconhecida — revise se e intencional)" ;;
+esac
+
 # --- A2: RAG_PLATFORM_ADMIN_KEY via valueFrom.secretKeyRef name=loopzero-rag-admin-key ---
 SR_NAME=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
