@@ -74,12 +74,29 @@ env:
   # Without RAG_BASE_URL the loopzero-rag broker in cmd/main.go stays nil and the
   # `mountRagDashboard(...)` call at cmd/main.go:998 is skipped, so
   # `/v1/dashboard/rag/*` returns 404 (breaks app-dev.loopzero.example/rag/analytics).
-  # `host.k3d.internal` is the k3d hostAlias that resolves to the host running
-  # loopzero-rag on :18082 (per dev-public data-plane topology: loopzero-rag runs as a
-  # host process outside the k3d cluster; per DELEGATION brief § Repos § loopzero-rag).
+  # `host.k3d.internal` e o hostAlias do k3d que resolve para o host.
+  #
+  # 2026-07-29 — A PORTA MUDOU DE :18082 PARA :8787, e a razao importa mais que a
+  # troca. Quando este valor foi fixado (2026-07-16) o loopzero-rag rodava APENAS como
+  # processo do host, iniciado a mao. Hoje convivem DOIS:
+  #
+  #   :18082  processo `node` solto no host  — version "dev", built_at "unknown",
+  #                                            Node v22.12
+  #   :8787   container ghcr.io/getloopscale/loopzero-rag:develop — version
+  #                                            "develop-3dc878c", built_at real,
+  #                                            Node v22.23  <- ARTEFATO DA PIPELINE
+  #
+  # O gateway lia o processo solto. O sintoma so ficou visivel quando o painel de
+  # versoes (M21) passou a exibir o que cada servico reporta: a coluna do rag vinha
+  # VAZIA, porque o processo solto emite a sentinela "unknown" e o decodificador a
+  # normaliza (ADR D8) em vez de importa-la para o nosso contrato.
+  #
+  # A pagina estava certa. O ALVO e que era a instancia errada — e nada ficava
+  # vermelho, porque um processo solto responde 200 igual.
+  #
   # Companion Secret loopzero-rag-admin-key provides RAG_PLATFORM_ADMIN_KEY (see
   # infra/helm/loopzero-cloud/templates/deployment.yaml env block).
-  RAG_BASE_URL: "http://host.k3d.internal:18082"
+  RAG_BASE_URL: "http://host.k3d.internal:8787"
 
   # 2026-07-20 — same durable-wiring contract as RAG above, for loopzero-lens.
   # Without LENS_BASE_URL the loopzero-lens Model-B broker in cmd/main.go stays nil
