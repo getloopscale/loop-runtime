@@ -54,6 +54,15 @@ tasks:
       # invoked manually: `/tmp/loopzero-ops quality no-pulumi-inline-secrets`.
       # Pre-migration FAIL is INTENTIONAL forcing-function (operator visibility).
       - /tmp/loopzero-ops quality no-aes-remaining             # openbao-adoption T10.2 — calendar-gated; WARN until T+60d then FAIL on remaining AES code paths
+      # Higiene dos workflows (#233 action sem SHA / #250 `${{ }}` dentro de `run:`). Nao e um gate
+      # do loopzero-ops de proposito: o alvo e YAML do `.github/`, nao codigo Go, e o registry do
+      # loopzero-ops tem uma contagem travada em `gate-list`.
+      #
+      # Ele TAMBEM roda como workflow (`.github/workflows/workflow-hygiene.yml`), mas hoje nenhum
+      # workflow deste repo consegue runner — a conta `getloopscale` esta bloqueada por billing e
+      # todo job morre antes do primeiro step. Enquanto isso, esta linha e o unico consumidor vivo
+      # da guarda; sem ela, a guarda existiria sem nunca rodar, que e o defeito que ela combate.
+      - bash .github/scripts/check-workflow-hygiene.sh
       - /tmp/loopzero-ops quality anonymous-auth
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity
