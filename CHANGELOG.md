@@ -13,9 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
 - Guard de wiring de gates: todo gate registrado passa a exigir wiring em `taskfiles/quality.yml` ou
   entrada num ledger com motivo. Um gate novo não nasce mais órfão em silêncio (#255)
-- 9 gates que existiam sem nunca rodar passam a ser executados por `task quality:gates` —
+- 10 gates que existiam sem nunca rodar passam a ser executados por `task quality:gates` —
   `agpl-isolation`, `contract-consumers`, `decisions-deletion`, `no-migrate-force`, `no-shell-wrap`,
-  `orphan-alerts`, `test-deletion`, `test-pyramid`, `test-targets`. Os 14 restantes do backlog do
+  `orphan-alerts`, `test-deletion`, `test-pyramid`, `test-targets`, `taskfile-interface`. Os 13 restantes do backlog do
   #255 ficaram de fora com motivo medido e registrado por gate: 9 reprovam com achado real, 2
   estouram 25s, 3 passam vacuamente (`cli-bundle-size` guarda `cli/dist`, que saiu no M2) (#255)
 - `docs/README.md`: índice de `docs/`, separando explicitamente referência viva de trilha de
