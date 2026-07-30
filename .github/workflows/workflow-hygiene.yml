@@ -1,0 +1,28 @@
+# workflow-hygiene — as duas propriedades de #233 e #250, verificadas antes do merge.
+#
+# Este repo hospeda `build-publish.yml`, o reusable que CINCO repos consumidores chamam. Um defeito
+# nele nao fica nele: propaga no proximo build de todos. Os dois defeitos que este gate cobre ja
+# foram corrigidos a mao uma vez, e nada impedia a reintroducao.
+#
+# Os DOIS gatilhos tem escopos diferentes, nao sao redundancia: o de PR mata o defeito antes de
+# entrar no trunk; o de push pega o que so existe depois do merge (dois PRs verdes isoladamente que
+# se quebram juntos).
+name: workflow-hygiene
+on:
+  pull_request:
+    branches: [develop, main]
+    paths: [".github/**"]
+  push:
+    branches: [develop]
+    paths: [".github/**"]
+permissions:
+  contents: read
+jobs:
+  hygiene:
+    # Aspas obrigatorias: um `name:` terminado em `run:` o YAML le como mapping aninhado e o workflow
+    # morre em `startup_failure` — sem job algum, portanto sem sinal vermelho util.
+    name: "workflows — SHA-pin + sem interpolacao em run:"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: bash .github/scripts/check-workflow-hygiene.sh

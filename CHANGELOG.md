@@ -9,15 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Gate `workflow-hygiene`: reprova antes do merge qualquer action de terceiro sem SHA fixo e qualquer
+  `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
+
 ### Changed
 
 ### Deprecated
 
 ### Removed
 
+- `infra/tests/livetest`: 9 funções exportadas sem nenhum chamador — a camada paralela de caos que
+  duplicava a suíte que de fato roda (`infra/tests/chaos/`), três Camadas nunca invocadas da
+  contra-prova e dois helpers de dogfood citados só em comentário (#228, #230)
+
 ### Fixed
 
+- `TestMetricCheckConstraint_MatchesContractsConstants` deixa de reprovar por falso-positivo: o guard
+  lia o CHECK de `metric` de **outra tabela** (`lens_alert_rules`/`lens_fired_alerts`, cujas migrations
+  vêm depois) em vez do de `cost_counters`. A suíte de `api/internal/db` volta ao verde (#241)
+
 ### Security
+
+- `build-publish.yml`: os dois passos do cosign deixam de interpolar `${{ inputs.* }}` dentro de
+  `run:` — os valores passam pelo `env:` do step, então nenhum conteúdo vindo do caller vira sintaxe
+  de shell com acesso aos segredos do job. Como este reusable é chamado por cinco repos, a correção
+  vale para todos eles (#250)
+- `release-artifacts.yml`: o login do GHCR deixa de passar o token pela linha de comando (#250)
 
 ## [0.74.0] - 2026-07-23
 

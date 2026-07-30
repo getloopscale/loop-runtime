@@ -18,7 +18,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -103,25 +102,6 @@ func HealthcheckCloud(ctx context.Context, env Env) error {
 		return fmt.Errorf("healthcheck cloud /health/deep: HTTP %d (want 200)", status)
 	}
 	return nil
-}
-
-// KubectlGetJSON runs `kubectl get <kind> <name> -n <ns> -o json` returning parsed JSON.
-func KubectlGetJSON(ctx context.Context, kubeContext, ns, kind, name string) (map[string]any, error) {
-	args := []string{}
-	if kubeContext != "" {
-		args = append(args, "--context", kubeContext)
-	}
-	args = append(args, "get", kind, name, "-n", ns, "-o", "json")
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("kubectl %s: %w", strings.Join(args, " "), err)
-	}
-	var parsed map[string]any
-	if err := json.Unmarshal(out, &parsed); err != nil {
-		return nil, fmt.Errorf("parse kubectl json: %w", err)
-	}
-	return parsed, nil
 }
 
 // Pause waits for d, honoring context cancellation.

@@ -56,59 +56,6 @@ type DataPlaneEndpoint struct {
 // about the seed location does not silently accept a stale env override.
 const devCredsPath = ".loopzero/dev-credentials.json"
 
-// LoadDataPlaneKey extracts a data-plane platform-admin credential from the
-// operator's dev-credentials.json. Fails fast + actionable when the file is
-// absent, unreadable, or the § data_plane.<product> section is missing —
-// never returns "" (silent) per Rule 8.
-//
-// NOTE the platform-admin key is the CONTROL-PLANE credential the loopzero-cloud
-// broker uses to mint per-tenant customer keys — it is NOT the bearer a
-// consumer sends on /v1/{product}/*. Callers exercising Model B customer
-// paths MUST mint via the host-process bootstrap chain first; this helper is
-// the single lookup point for the credential the broker requires.
-func LoadDataPlaneKey(env Env, product string) (string, error) {
-	home := os.Getenv("HOME")
-	if home == "" {
-		return "", fmt.Errorf("data-plane: HOME not set — cannot resolve ~/%s (run seed-post-cleanroom-all.sh --verify)", devCredsPath)
-	}
-	path := filepath.Join(home, devCredsPath)
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("data-plane: read %s: %w (run seed-post-cleanroom-all.sh --verify)", path, err)
-	}
-	// The § data_plane map is heterogeneous — the operator-owned seed puts
-	// scalar bookkeeping keys (note, rotated_at, fixed_at, fix_summary,
-	// admin_bootstrap_token) alongside the per-product objects (memory / rag /
-	// lens). Decode into RawMessage first + skip scalars silently so a new
-	// housekeeping key added by DP8 does not silently fail an unrelated
-	// journey (Rule 8 — fail-fast on the value that actually matters).
-	var top struct {
-		DataPlane map[string]json.RawMessage `json:"data_plane"`
-	}
-	if err := json.Unmarshal(raw, &top); err != nil {
-		return "", fmt.Errorf("data-plane: parse %s: %w", path, err)
-	}
-	prodRaw, ok := top.DataPlane[product]
-	if !ok {
-		return "", fmt.Errorf("data-plane: %s § data_plane.%s not found — expected memory|rag|lens (run seed-post-cleanroom-all.sh --verify)", path, product)
-	}
-	// The product entry MUST be an object; if the operator seeded a scalar in
-	// its slot (regression), fail-fast + clear.
-	if len(prodRaw) == 0 || prodRaw[0] != '{' {
-		return "", fmt.Errorf("data-plane: %s § data_plane.%s is not an object — regression in the operator seed", path, product)
-	}
-	var prod struct {
-		PlatformAdminKey string `json:"platform_admin_key"`
-	}
-	if err := json.Unmarshal(prodRaw, &prod); err != nil {
-		return "", fmt.Errorf("data-plane: parse %s § data_plane.%s: %w", path, product, err)
-	}
-	if prod.PlatformAdminKey == "" {
-		return "", fmt.Errorf("data-plane: %s § data_plane.%s.platform_admin_key is empty (rotate via dev/%s-up.sh)", path, product, product)
-	}
-	return prod.PlatformAdminKey, nil
-}
-
 // LoadDataPlaneEndpoint returns the full { key, host_port, edge_path } tuple
 // for one product. Used by DP-memory/DP-rag/DP-lens journeys to (a) probe the
 // edge fail-closed contract on env.AppBaseURL + EdgePath and (b) exercise the

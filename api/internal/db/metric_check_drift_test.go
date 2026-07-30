@@ -6,7 +6,6 @@ package db
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"testing"
 
@@ -48,9 +47,15 @@ func TestMetricCheckConstraint_MatchesContractsConstants(t *testing.T) {
 	}
 }
 
-// effectiveMetricCheckSet parses the migration files in ascending order and
-// returns the metric values from the LAST `metric IN (...)` CHECK — i.e. the
-// constraint that is in effect after all migrations apply.
+// effectiveMetricCheckSet reads the migration files in ascending order and returns the metric
+// values admitted by the EFFECTIVE `cost_counters.metric` CHECK — the one in force after every
+// migration applies.
+//
+// The table is passed EXPLICITLY (#241). This helper used to keep the last `metric IN (...)` it
+// found anywhere, regardless of table; once `lens_alert_rules` / `lens_fired_alerts` got a `metric`
+// column of their own in later migrations, "the last one" stopped being this table's. The guard was
+// not detecting drift — it was reading the wrong table, and stayed red with no reachable green.
+// Parsing lives in metric_check_parse.go, where it is exercised by fixtures directly.
 func effectiveMetricCheckSet(t *testing.T) map[string]bool {
 	t.Helper()
 	dir := "migrations"
@@ -60,26 +65,18 @@ func effectiveMetricCheckSet(t *testing.T) map[string]bool {
 	}
 	sort.Strings(ups) // zero-padded numeric prefixes sort chronologically
 
-	// Match: metric ... CHECK (metric IN ('a', 'b', ...))  — capture the list.
-	reCheck := regexp.MustCompile(`(?is)metric[^)]*?IN\s*\(([^)]*)\)`)
-	reVal := regexp.MustCompile(`'([^']+)'`)
-
-	var lastList string
+	sqls := make([]string, 0, len(ups))
 	for _, f := range ups {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		for _, m := range reCheck.FindAllStringSubmatch(string(b), -1) {
-			lastList = m[1] // keep overwriting → ends on the highest-numbered migration's CHECK
-		}
+		sqls = append(sqls, string(b))
 	}
-	if lastList == "" {
-		t.Fatal("no `metric IN (...)` CHECK found in any migration")
-	}
-	set := map[string]bool{}
-	for _, v := range reVal.FindAllStringSubmatch(lastList, -1) {
-		set[v[1]] = true
+
+	set := metricCheckSetFor("cost_counters", sqls)
+	if len(set) == 0 {
+		t.Fatal("no `CHECK (metric IN (...))` found for cost_counters in any migration")
 	}
 	return set
 }
