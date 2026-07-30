@@ -45,16 +45,24 @@ jobs:
         run: |
           set -euo pipefail
           ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."}]'
+          # Bloco agrupado em vez de tres `>>` (SC2129): um unico redirect abre o
+          # arquivo uma vez so'. Alem do estilo, evita a classe de bug em que um
+          # dos redirects e' escrito `>` por engano e trunca o que os anteriores
+          # gravaram — em `$GITHUB_OUTPUT` isso apaga saidas silenciosamente.
           if [ "$IS_TAG" = "true" ] || [ "$IS_DISPATCH" = "true" ]; then
-            echo "images=$ALL" >> "$GITHUB_OUTPUT"
-            echo "charts=true" >> "$GITHUB_OUTPUT"
-            echo "sign=$IS_TAG" >> "$GITHUB_OUTPUT"        # sign ONLY on a real release tag
+            {
+              echo "images=$ALL"
+              echo "charts=true"
+              echo "sign=$IS_TAG"        # sign ONLY on a real release tag
+            } >> "$GITHUB_OUTPUT"
           else
             CH="${CHANGES:-[]}"
             SEL=$(printf '%s' "$ALL" | jq -c --argjson ch "$CH" '[.[] | select(.image as $i | $ch | index($i))]')
-            echo "images=$SEL" >> "$GITHUB_OUTPUT"
-            echo "charts=$(printf '%s' "$CH" | jq 'index("charts") != null')" >> "$GITHUB_OUTPUT"
-            echo "sign=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "images=$SEL"
+              echo "charts=$(printf '%s' "$CH" | jq 'index("charts") != null')"
+              echo "sign=false"
+            } >> "$GITHUB_OUTPUT"
           fi
   images:
     needs: plan

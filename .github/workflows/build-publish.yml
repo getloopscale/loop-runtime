@@ -61,8 +61,13 @@ jobs:
       # para uma organizacao troca o namespace, e o valor fixo passa a produzir 403
       # no push — falha tardia, e no CI de outro repositorio.
       #
-      # `tr A-Z a-z` porque nomes de repositorio no GitHub preservam maiusculas e
+      # Minusculas porque nomes de repositorio no GitHub preservam maiusculas e
       # referencias OCI nao as aceitam.
+      #
+      # `[:upper:]`/`[:lower:]` em vez de `A-Z`/`a-z` (SC2018/SC2019): as faixas
+      # literais dependem do locale — em locales nao-C a ordem de colacao pode
+      # nao ser a ASCII, e a traducao sai errada para caracteres fora do
+      # esperado. As classes POSIX nao tem essa dependencia.
       - name: Resolve registry namespace
         id: resolve-registry
         env:
@@ -72,7 +77,7 @@ jobs:
           if [ -n "$EXPLICIT" ]; then
             echo "registry=$EXPLICIT" >> "$GITHUB_OUTPUT"
           else
-            echo "registry=ghcr.io/$(printf '%s' "$OWNER" | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
+            echo "registry=ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Compute tags (community-standard channels)
