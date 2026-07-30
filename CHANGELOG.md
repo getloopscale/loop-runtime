@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- `infra/tests/livetest`: 9 funções exportadas sem nenhum chamador — a camada paralela de caos que
+  duplicava a suíte que de fato roda (`infra/tests/chaos/`), três Camadas nunca invocadas da
+  contra-prova e dois helpers de dogfood citados só em comentário (#228, #230)
+
 ### Fixed
 
 - `TestMetricCheckConstraint_MatchesContractsConstants` deixa de reprovar por falso-positivo: o guard

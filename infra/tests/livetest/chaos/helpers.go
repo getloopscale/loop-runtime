@@ -18,9 +18,6 @@ package chaos
 
 import (
 	"context"
-	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 )
 
@@ -43,76 +40,6 @@ type ChaosResult struct {
 	Verdict       string // PASS / FAIL / INCONCLUSIVE
 	SLODegradation string
 	RecoveryTime  time.Duration
-}
-
-// ApplyChaos kubectl apply's the manifest and records inject timestamp.
-func ApplyChaos(ctx context.Context, kubeContext string, m Manifest) error {
-	args := []string{}
-	if kubeContext != "" {
-		args = append(args, "--context", kubeContext)
-	}
-	args = append(args, "apply", "-f", m.Path)
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("kubectl apply chaos %s: %w", m.ID, err)
-	}
-	return nil
-}
-
-// WaitForFinished polls chaos resource status.experiment.phase until "Finished" or context cancellation.
-func WaitForFinished(ctx context.Context, kubeContext, kind, name, ns string) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(5 * time.Second):
-		}
-		args := []string{}
-		if kubeContext != "" {
-			args = append(args, "--context", kubeContext)
-		}
-		args = append(args, "get", kind, name, "-n", ns,
-			"-o", "jsonpath={.status.experiment.phase}")
-		cmd := exec.CommandContext(ctx, "kubectl", args...)
-		out, _ := cmd.Output()
-		phase := strings.TrimSpace(string(out))
-		if phase == "Finished" {
-			return nil
-		}
-	}
-}
-
-// CleanupChaos deletes ALL chaos-mesh resources from the context.
-// Per cycle-chaos cleanup mandatory rule (chaos-test SKILL Rule Suprema).
-func CleanupChaos(ctx context.Context, kubeContext string) error {
-	args := []string{}
-	if kubeContext != "" {
-		args = append(args, "--context", kubeContext)
-	}
-	args = append(args, "delete", "podchaos,networkchaos,iochaos,stresschaos", "--all", "-A")
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
-	return cmd.Run()
-}
-
-// AssertSLOHeld invokes the preserved Go helper at cmd/loopzero-ops/chaos_subcmd.go
-// (per ADR-T3 D8: chaos_subcmd.go preserved verbatim).
-func AssertSLOHeld(ctx context.Context, opsBinary, baselineJSON, duringJSON, postJSON string) (verdict string, err error) {
-	cmd := exec.CommandContext(ctx, opsBinary, "chaos", "slo-compare",
-		baselineJSON, duringJSON, postJSON)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		// Exit codes: 0=PASS, 2=FAIL, 5=INCONCLUSIVE per chaos_subcmd.go
-		if cmd.ProcessState != nil {
-			switch cmd.ProcessState.ExitCode() {
-			case 2:
-				return "FAIL", nil
-			case 5:
-				return "INCONCLUSIVE", nil
-			}
-		}
-		return "", fmt.Errorf("loopzero-ops chaos slo-compare: %w (output: %s)", err, out)
-	}
-	return "PASS", nil
 }
 
 // TempoTraceQuery represents a query to the Tempo backend.
