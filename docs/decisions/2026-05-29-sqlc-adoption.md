@@ -7,6 +7,12 @@
 **Meeting:** MEET-2026-05-29-001 (12 specialists; both VETO holders APPROVE conditional)
 **Coupled ADRs:** [`2026-05-29-schema-gen-sql-render.md`](./2026-05-29-schema-gen-sql-render.md) · [`2026-05-29-sqlc-migration-rollback.md`](./2026-05-29-sqlc-migration-rollback.md)
 
+> **Path note (added 2026-07-30, body unchanged).** This ADR refers to quality gates under
+> `pkg/quality/…`. That package was relocated to **`cmd/loopzero-ops/internal/quality/…`** at M9
+> (ROADMAP steps 3+4) — the gate names are unchanged, only the import path moved. The body below is
+> preserved as written on its date; do not rewrite it to match the present tree.
+
+
 ---
 
 ## 1. Context

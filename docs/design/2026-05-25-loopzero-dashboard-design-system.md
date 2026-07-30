@@ -699,7 +699,7 @@ OR via Tailwind utilities (when motion duration utility is added — Phase 5 fol
 |------|--------|----------|----------|
 | **1. Active** | `Stable` | Token rendered as documented; consumers use freely | Indefinite |
 | **2. Deprecated** | `Soft warn` | Token still rendered + functional; `@deprecated` annotation em DSS doc; CHANGELOG entry "Will be removed in v{N+1}.0" | Min 1 minor version |
-| **3. Removed-Next-Minor** | `Hard warn` | Token rendered with console.warn em dev mode; CI gate `pkg/quality/deprecated-tokens` lança `warning` (não-blocker); CHANGELOG "Removed in v{this+1}.0" | 1 minor version |
+| **3. Removed-Next-Minor** | `Hard warn` | Token rendered with console.warn em dev mode; CI gate `cmd/loopzero-ops/internal/quality/deprecated-tokens` lança `warning` (não-blocker); CHANGELOG "Removed in v{this+1}.0" | 1 minor version |
 | **4. Removed** | `Gone` | Token classe Tailwind / CSS var não existe mais; consumer build fail; CHANGELOG "Removed v{N}" | Permanent |
 
 ### Semver alignment
@@ -712,7 +712,7 @@ OR via Tailwind utilities (when motion duration utility is added — Phase 5 fol
 
 - DSS doc § change log mark `[DEPRECATED]` next to token name + target version
 - `@loopzero/ui` upstream CHANGELOG.md per release
-- Consumer projects: `pkg/quality/deprecated-tokens` CI gate (future task; not yet implemented)
+- Consumer projects: `cmd/loopzero-ops/internal/quality/deprecated-tokens` CI gate (future task; not yet implemented)
 
 ### Example (hypothetical)
 
@@ -729,7 +729,7 @@ None. DSS v1.0/v1.1/v1.2 was first formal version stack — no deprecations yet.
 
 - **Author responsibility:** any DSS PR adding/renaming/removing token MUST update Change log + § 11 if Tier transition
 - **Consumer responsibility:** read CHANGELOG.md + DSS § 11 before bumping @loopzero/ui version
-- **CI (future):** `pkg/quality/deprecated-tokens` scans consumer code for Tier 3 tokens, emits warning
+- **CI (future):** `cmd/loopzero-ops/internal/quality/deprecated-tokens` scans consumer code for Tier 3 tokens, emits warning
 
 ## 12. Versioning
 

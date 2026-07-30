@@ -285,7 +285,7 @@ $ loopzero login                         # deploy CLI: auth
 $ loopzero deploy                        # deploy CLI: lê services.json, POST upload
 ```
 
-The two-CLI sequence is the architectural seam mandated by CLAUDE.md `LoopZeroCloud-first re-lock (2026-05-27)`: the OSS framework cannot depend on proprietary code. A follow-up plan ([`loopzero-cli-vercel-like-ux-plan.md`](../../../../loopzerokit-tools/.claude/knowledge-base/plans/loopzero-cli-vercel-like-ux-plan.md)) makes `loopzero deploy` invoke `loopzerokit build` as a subprocess automatically — preserving the seam while removing the manual step.
+The two-CLI sequence is the architectural seam mandated by CLAUDE.md `LoopZeroCloud-first re-lock (2026-05-27)`: the OSS framework cannot depend on proprietary code. A follow-up plan (`loopzero-cli-vercel-like-ux-plan.md`, formerly under `loopzerokit-tools/.claude/knowledge-base/plans/` — **not present in any current checkout**) makes `loopzero deploy` invoke `loopzerokit build` as a subprocess automatically, preserving the seam while removing the manual step.
 
 ## Hardening invariants (Plan v1.2 — 2026-06-06)
 
@@ -333,7 +333,7 @@ Plan v1.2 closed 22 findings on the integration seam. The invariants that MUST h
 - **T3.1 callers audit:** `loopzerokit-tools/.claude/knowledge-base/audits/t3-1-render-callers-2026-06-06.md`
 - **Architecture baseline (pre-Plan v1.2):** `loopzerokit-tools/.claude/knowledge-base/architecture/cutover/`
 - **Phase 8 dogfood substitute:** `loopzerokit-tools/.claude/knowledge-base/audits/phase-8-dogfood-substitute-2026-06-06.md`
-- **Vercel-like UX follow-up plan:** `loopzerokit-tools/.claude/knowledge-base/plans/loopzero-cli-vercel-like-ux-plan.md`
+- **Vercel-like UX follow-up plan:** `loopzero-cli-vercel-like-ux-plan.md` — formerly under `loopzerokit-tools/.claude/knowledge-base/plans/`; **not present in any current checkout**
 
 ## When to update this doc
 

@@ -42,7 +42,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 | Category | Constraint |
 |---|---|
-| Stack | Go 1.25 + chi (API), TypeScript + React + Vite (dashboard), PostgreSQL 16, K8s + ArgoCD, @loopzero/ui (Violet Forge) |
+| Stack | Go 1.26 + chi (API, this repo), TypeScript + React + Vite (dashboard, `../loopzero-cloud`), PostgreSQL 16, K8s + ArgoCD, @loopzero/ui (Violet Forge) |
 | Compliance / legal | Pre-release governance per `.claude/rules/pre-release-governance.md`; T2/T3 changes require meeting |
 | Deadline | None hard; sprint plan tracks cadence |
 | Team | 1 developer (sponsor) + LLM pair (Claude); pre-release phase |

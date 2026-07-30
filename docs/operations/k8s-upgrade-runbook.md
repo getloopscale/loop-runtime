@@ -7,16 +7,24 @@ Adopted via plan `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md
 
 ## Pre-flight: Pluto deprecated API check
 
-Before approving any DOKS minor upgrade, run the Pluto CI gate to confirm
-that all current Helm charts compile to manifests using APIs available in
-the target K8s version.
+Before approving any DOKS minor upgrade, confirm that all current Helm charts
+compile to manifests using APIs available in the target K8s version.
 
-### Automated (CI)
+> **The automated gate no longer exists.** `.github/workflows/pluto-deprecated-apis.yml` and the
+> `plutogate` Go check were both removed on 2026-05-23 with the GitHub Actions retirement — the gate
+> only validated that workflow, so it went with it. **This check is now manual**, and running it is a
+> hard pre-condition of any minor upgrade. Re-homing it as a `task quality:*` gate before the next
+> DOKS minor bump is open work; the fixtures at `infra/tests/pluto/fixtures/` were kept for that.
 
-The workflow `.github/workflows/pluto-deprecated-apis.yml` runs:
-- On every PR touching `charts/**`, `infra/helm/**`, or the workflow itself
-- Weekly via cron (Mon 06:30 UTC) — catches new deprecations announced upstream
-- On `workflow_dispatch` — operator can trigger before planning an upgrade
+### Manual run
+
+```bash
+# Render every chart, then scan the output for APIs removed in the target version.
+task validate:helmfile-templates          # renders all releases
+pluto detect-files -d /tmp/rendered --target-versions k8s=v1.33.0
+```
+
+Install Pluto from https://pluto.docs.fairwinds.com/ if it is not on PATH.
 
 The gate fails CI if any rendered manifest contains:
 - An API **REMOVED** in the target K8s version (FATAL)
@@ -102,7 +110,7 @@ DOKS does **NOT** support minor-version rollback in-place. The recovery path:
 ## Reference
 
 - Pluto upstream: https://pluto.docs.fairwinds.com/
-- Workflow file: `.github/workflows/pluto-deprecated-apis.yml`
-- Hermetic tests: `pkg/quality/plutogate/check_test.go`
-- Test fixtures: `infra/tests/pluto/fixtures/{deprecated,current}.yaml`
+- Workflow file: `.github/workflows/pluto-deprecated-apis.yml` — **deleted 2026-05-23**
+- Hermetic tests: `cmd/loopzero-ops/internal/quality/plutogate/` — **deleted 2026-05-23** (the gate only validated the workflow above)
+- Test fixtures: `infra/tests/pluto/fixtures/{deprecated,current}.yaml` — **retained**, ready for a re-homed gate
 - Plan section: `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` Phase 7 T7.1

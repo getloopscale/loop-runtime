@@ -12,7 +12,7 @@ Enterprise custom) based on per-tenant project caps. **Without cost attribution
 per tenant, we cannot validate** whether the cap-de-plano covers actual cluster
 cost — a Sprint 9 GA gate.
 
-OpenCost was adopted (not reimplemented as `pkg/quality/costattribution/`) per
+OpenCost was adopted (not reimplemented as `cmd/loopzero-ops/internal/quality/costattribution/`) per
 Anti-Pattern #8 of the plan ("adopt > reinvent" for mature external tools).
 
 ---
@@ -143,5 +143,5 @@ from `infra/helm/monitoring/dashboards/opencost.json` (operator may custom).
 - LoopZero wrapper chart: `infra/helm/opencost/`
 - Helmfile entry: `infra/helmfile/mgmt.helmfile.yaml.gotmpl` (look for `name: opencost`)
 - ServiceMonitor: `infra/helm/monitoring/manifests/servicemonitor-opencost.yaml`
-- Hermetic tests: `pkg/quality/opencostgate/check_test.go`
+- Hermetic tests: `cmd/loopzero-ops/internal/quality/opencostgate/check_test.go`
 - Plan section: `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` Phase 7 T7.2

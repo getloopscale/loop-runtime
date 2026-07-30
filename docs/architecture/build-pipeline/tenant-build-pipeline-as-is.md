@@ -126,7 +126,7 @@ These MUST continue to hold:
 - `infra/helm/argo-workflows/values.yaml` — Argo Workflows release config
 - `infra/scripts/security/check-cosign-cutover-deadline.sh` — deadline enforcer (T-30d/T-15d/T-7d warnings 2026-05-27)
 - `infra/pulumi-platform/src/services/sigstore.ts` — Sigstore ComponentResource (offline TUF required)
-- `pkg/quality/prodimagedigests/check.go` — digest enforcement gate
+- `cmd/loopzero-ops/internal/quality/prodimagedigests/check.go` — digest enforcement gate
 
 ## Related
 

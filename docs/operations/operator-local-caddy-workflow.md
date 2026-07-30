@@ -57,7 +57,7 @@ When iterating on the dashboard locally:
 
 ## Anti-patterns (do NOT do)
 
-- ❌ Re-introduce `reverse_proxy @ws localhost:5173` in the `app-dev.loopzero.example` block — caught by `pkg/quality/caddyfilecspgate` Go gate, fails `task quality:gates`.
+- ❌ Re-introduce `reverse_proxy @ws localhost:5173` in the `app-dev.loopzero.example` block — caught by `cmd/loopzero-ops/internal/quality/caddyfilecspgate` Go gate, fails `task quality:gates`.
 - ❌ Skip `npm run build` and hope `dashboard-dist/` from a previous run still works — operator runbook explicitly requires the build step pre-Caddy-up.
 - ❌ Remove the canonical CSP from the `header { ... }` block (D2 invariant; caught by the gate).
 - ❌ Use Vite dev as the public Caddy upstream "because HMR is convenient" — Red Team #66 was filed for exactly this regression.
@@ -65,7 +65,7 @@ When iterating on the dashboard locally:
 ## Cross-references
 
 - Plan: `.claude/knowledge-base/plans/caddyfile-app-dev-prod-bundle-file-server-canonical-plan.md`
-- Go gate: `pkg/quality/caddyfilecspgate/` (asserts the canonical shape)
+- Go gate: `cmd/loopzero-ops/internal/quality/caddyfilecspgate/` (asserts the canonical shape)
 - Caddyfile: `infra/local/Caddyfile § app-dev.loopzero.example`
 - Red Team issue: getloopscale/loopzero-cloud#66
 - Prior plan superseded: `.claude/knowledge-base/plans/caddyfile-csp-vite-dev-vs-prod-bundle-plan.md` v1.1 (ADR D2 was wrong)

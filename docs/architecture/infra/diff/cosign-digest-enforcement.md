@@ -105,7 +105,7 @@ Pre-release — break tag references after migration. Per plan ADR D1 (pre-relea
 
 1. ✅ `loopzero-common.image` helper updated to prefer `image.digest` over `image.tag` when set (`charts/loopzero-common/templates/_helpers.tpl`)
 2. ✅ ValidatingAdmissionPolicy `loopzero-require-image-digest` created in warn-mode (`infra/helm/admission-policies/templates/vap-require-image-digest.yaml` + `charts/loopzero-admission-policies/templates/vap-require-image-digest.yaml`)
-3. ✅ Quality gate `pkg/quality/prodimagedigests` (warn-mode default, `--enforce` flag for post-soak flip)
+3. ✅ Quality gate `cmd/loopzero-ops/internal/quality/prodimagedigests` (warn-mode default, `--enforce` flag for post-soak flip)
 4. ✅ Wired into `task quality:gates` orchestrator (`taskfiles/quality.yml`)
 5. ✅ Prometheus alert `LoopZeroImageDigestWarnRatePresent` (info severity, surfaces warn-mode violations for 7-day soak audit)
 6. ✅ values.yaml flags `requireImageDigest: true` + `requireImageDigestEnforce: false` in both chart systems

@@ -45,7 +45,6 @@ Runtime: **15-25min** on cold start (Linux), longer on Mac due to Docker Desktop
 `tilt up` is the **hot-reload** loop:
 
 - Watches Go source in `api/`, `operators/*` — rebuilds + reloads on change
-- Watches TypeScript in `cli/` — auto-rebuilds binary
 - Port-forwards API to `localhost:13001`
 - Port-forwards Postgres to `localhost:15432`
 - Tails logs from loopzero-system pods
@@ -118,7 +117,7 @@ task db:migrate
 ## When NOT to use `task setup`
 
 - **Just changing Go code:** `tilt up` already running? Save and watch. No need to re-setup.
-- **Just changing TS in CLI:** save → tilt rebuilds binary → use `./cli/bin/loopzero` directly.
+- **Changing the CLI:** the CLI lives in the sibling repo `../loopzero-cli` since M2 — build and run it there (`npm run build`), pointing it at this stack via `LOOPZERO_API_URL=http://localhost:13001`.
 - **Want to test a specific Helm chart:** use targeted helmfile sync (see above).
 
 `task setup` is for: cold start, recovery from broken state, fresh cleanroom validation.
@@ -141,7 +140,7 @@ go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
 
 ```bash
 task db:generate                # regenerate api/internal/db/generated/*.go from queries/*.sql
-task db:verify-sync             # pkg/quality/sqlcsync gate: assert committed generated/ matches a fresh regen (CI runs this too)
+task db:verify-sync             # cmd/loopzero-ops/internal/quality/sqlcsync gate: assert committed generated/ matches a fresh regen (CI runs this too)
 ```
 
 **Re-render schema after applying a new migration:**

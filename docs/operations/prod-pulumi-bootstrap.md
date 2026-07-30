@@ -154,6 +154,6 @@ suggestion pointing back to this runbook.
 ## Related
 
 - `infra/pulumi/src/components/vault-iac.ts` — `VaultSecretReader` impl.
-- `pkg/quality/nopulumiinlinesecrets` — enforcement gate (T9.6).
+- `cmd/loopzero-ops/internal/quality/nopulumiinlinesecrets` — enforcement gate (T9.6).
 - `infra/scripts/openbao/migrate-pulumi-secrets-to-vault.sh` — orchestrator.
 - Plan: `.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md`.
