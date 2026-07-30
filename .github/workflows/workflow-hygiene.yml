@@ -15,6 +15,12 @@ on:
   push:
     branches: [develop]
     paths: [".github/**"]
+  # Disparo manual: e' o gate mais barato do repo (segundos), entao e' com ele
+  # que se valida a frota apos uma migracao — o runbook do umbrella e' explicito
+  # em nao usar a suite longa para isso. Sem `workflow_dispatch` nao ha como
+  # exercitar um runner sem antes mergear em `develop`, o que inverte a ordem:
+  # validar-se-ia a frota DEPOIS de confiar nela.
+  workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
