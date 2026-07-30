@@ -14,18 +14,23 @@ image:
   # tags (e.g., commit-sha, release-tag), not `:latest`. Pinned to the
   # tag last published to DO Registry. In production, Pulumi (or a
   # GitOps-managed values overlay) sets this from CI build metadata.
-  # Issue #232 — deliberately EMPTY, not `latest`.
+  # Issue #232 — an immutable SENTINEL, not `latest` and not a pinned version.
   #
   # This default is only ever consulted on the path where somebody forgot to
   # override it, which is the path that most needs a loud failure. `latest` gave
-  # it the quietest one: the deploy either shipped a non-deterministic image, or
-  # was rejected by this repo's own `vap-disallow-latest-tag` VAP with an error
-  # pointing at admission rather than at the missing override. An empty tag fails
-  # immediately and says what is actually wrong.
+  # it the quietest one: a non-deterministic deploy, or a VAP rejection pointing
+  # at admission rather than at the missing override.
   #
-  # CI / Pulumi / the GitOps values overlay set this from build metadata; nothing
-  # in the normal path relies on the default.
-  tag: ""
+  # Three candidates were considered. An EMPTY tag violates this chart's own
+  # values.schema.json (`minLength: 1`) — a default a chart rejects is incoherent,
+  # and it broke `helm template` for every tool that renders with pure defaults.
+  # A PINNED SEMVER renders fine but silently ships a frozen image forever once
+  # nobody remembers to bump it. The sentinel is immutable, schema-valid, renders,
+  # and if it ever reaches a cluster the pod fails with ImagePullBackOff naming
+  # `SET-BY-CI` — which says exactly what went wrong.
+  #
+  # CI / Pulumi / the GitOps values overlay set this from build metadata.
+  tag: "SET-BY-CI"
   pullPolicy: Always
 
 imagePullSecrets:
