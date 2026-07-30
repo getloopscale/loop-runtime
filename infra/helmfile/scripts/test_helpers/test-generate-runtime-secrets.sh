@@ -23,6 +23,19 @@ export LOOPZERO_DB_HOST="db.example.com"
 export LOOPZERO_DB_USER="loopzero"
 export LOOPZERO_DB_PASSWORD="secret"
 
+# Issue #117 — generate-runtime-secrets.sh now REFUSES to run without an
+# explicit KUBECONFIG, because it must never inherit an ambient kubecontext
+# when writing runtime Secrets. This harness is a caller, so it honours the
+# same contract a real caller does (taskfiles/infra.yml pins via
+# `KUBECONFIG=$(k3d kubeconfig write loopzero-workload)`).
+#
+# The file is a throwaway: kubectl is shimmed by mock-kubectl.sh on PATH and
+# never reads it. Pointing at a real cluster here would be wrong — the value
+# exists to satisfy, and therefore exercise, the pinning contract itself.
+MOCK_KUBECONFIG=$(mktemp)
+export KUBECONFIG="$MOCK_KUBECONFIG"
+trap "rm -rf $MOCK_LOG $MOCK_BIN $MOCK_KUBECONFIG" EXIT
+
 log "Running generate-runtime-secrets.sh dev runtime..."
 bash "$RUNTIME_SCRIPT" dev runtime 2>/dev/null
 

@@ -39,8 +39,26 @@ LOG="${MOCK_KUBECTL_LOG:-/tmp/mock-kubectl.log}"
 STATE_DIR="${MOCK_KUBECTL_STATE:-/tmp/mock-state}"
 mkdir -p "$STATE_DIR"
 
-# Log every invocation
+# Log every invocation — BEFORE stripping global flags, so assertions can
+# still see the context this was called with.
 { echo "----"; echo "args: $*"; } >> "$LOG"
+
+# Real kubectl accepts global flags BEFORE the verb; this mock dispatches
+# positionally on "$1"/"$2", so it must model that or it misreads the verb.
+#
+# Concretely: since the #115 context-pin fix, the callers wrap kubectl as
+#   kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+# which makes $1="--context=..." and $2="get". The dispatch below then never
+# matched, the mock returned nothing, and `set -euo pipefail` in the harness
+# turned the resulting broken pipe into SIGPIPE (exit 141) mid-"Run 1" — the
+# `secrets idempotency` FAIL that has been red in `task validate:helmfile-scripts`
+# ever since, with no output explaining why. Strip the leading global flags.
+while [[ "${1:-}" == --context=* || "${1:-}" == --kubeconfig=* || "${1:-}" == --namespace=* ]]; do
+  shift
+done
+if [[ "${1:-}" == "--context" || "${1:-}" == "--kubeconfig" || "${1:-}" == "--namespace" ]]; then
+  shift 2
+fi
 
 # Simulate: kubectl get secret X -n NS -o jsonpath='{.data.KEY}'
 # Returns base64 of stored value or empty

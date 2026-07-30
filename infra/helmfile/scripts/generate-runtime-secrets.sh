@@ -18,6 +18,21 @@ set -euo pipefail
 ENV="${1:?usage: $0 <env> <cluster-id>}"
 CLUSTER_ID="${2:?usage: $0 <env> <cluster-id>}"
 
+# Issue #117 (generalizing #115) — caller-pinned cluster contract, asserted.
+#
+# Unlike its mgmt-bound siblings, this script has no single fixed target: the
+# runtime cluster varies with <cluster-id> (workload, runtime-2, ...). The
+# established contract is that the CALLER pins it, e.g.
+#   KUBECONFIG=$(k3d kubeconfig write loopzero-workload) bash $0 standalone-multi workload
+# (see taskfiles/infra.yml, which deliberately pins via KUBECONFIG rather than
+# mutating the global current-context).
+#
+# Inheriting the caller's choice is fine. Inheriting it SILENTLY is the #117
+# bug: with KUBECONFIG unset we fall through to whatever kubecontext happens to
+# be active and write runtime Secrets — cloudflared tunnel token, ESO source —
+# into the wrong cluster, succeeding quietly. Fail loud instead.
+: "${KUBECONFIG:?issue #117: refusing to run without an explicit KUBECONFIG. This script writes Secrets to the RUNTIME cluster and will not inherit an ambient kubecontext. Invoke as: KUBECONFIG=\$(k3d kubeconfig write loopzero-<cluster>) $0 <env> <cluster-id>}"
+
 log() { printf '[generate-runtime-secrets] %s\n' "$*" >&2; }
 
 ensure_namespace() {

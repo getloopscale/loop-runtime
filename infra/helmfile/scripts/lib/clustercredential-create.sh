@@ -54,6 +54,19 @@ CELL_ID="${1:-}"
 CLUSTER_NAME="${2:-}"
 KUBECONFIG_PATH="${3:-}"
 
+# Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
+#
+# Same asymmetry as argocd-register.sh: $KUBECONFIG_PATH is the credential FOR
+# the cell being registered, while the ClusterCredential CR + its Secret must
+# be created on MGMT, where the operators that consume them run. The header of
+# this script used to merely *document* "KUBECONFIG must point at the MGMT
+# cluster" and trust the caller — which is precisely the #117 shape: correct on
+# a clean machine, silently wrong on a box carrying context residue. A
+# ClusterCredential written to the wrong cluster is invisible to the operator
+# reconcile loop, so the cell simply never comes up and nothing reports why.
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+
 LOOPZERO_NS="${LOOPZERO_NS:-loopzero-system}"
 INGRESS_DOMAIN="${INGRESS_DOMAIN:-}"
 ARGOCD_SCOPE="${ARGOCD_SCOPE:-true}"
