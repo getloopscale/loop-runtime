@@ -97,6 +97,11 @@ tasks:
       - /tmp/loopzero-ops quality test-deletion
       - /tmp/loopzero-ops quality test-pyramid
       - /tmp/loopzero-ops quality test-targets
+      # Wired 2026-07-30 after its finding was fixed: it reprovava exigindo
+      # `cli:link`/`cli:build`, removidas no #254 porque `cli/` saiu no M2. O
+      # contrato declarava uma capacidade que o repo perdeu dois milestones
+      # atrás — corrigido no ExpectedCommands, não reintroduzindo as tasks.
+      - /tmp/loopzero-ops quality taskfile-interface
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
       # migration v1.2). Phase 0 baseline: each gate trivially passes
       # (empty queries/, no sqlc imports). Real exercise begins T1.1+.

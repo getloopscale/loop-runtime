@@ -12,6 +12,9 @@
 #   adicionado ou removido — a contagem segue 108; só a coluna TASKS mudou, em 9 linhas.
 #   Gates ligados: agpl-isolation, contract-consumers, decisions-deletion, no-migrate-force,
 #   no-shell-wrap, orphan-alerts, test-deletion, test-pyramid, test-targets.
+# RE-FREEZE 2026-07-30 (b): taskfile-interface '-' -> 'gates'. Reprovava exigindo
+#   cli:link/cli:build, removidas no #254 (cli/ saiu no M2); o contrato foi corrigido
+#   no ExpectedCommands em vez de reintroduzir as tasks. Contagem segue 108.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -102,7 +105,7 @@ sprint-syntax	gates	Hermetic contract test for infra/scripts/local/check-sprint.
 sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
 stack-coverage	-	Verifies the tool-inventory stack-coverage claims via grep.
-taskfile-interface	-	Validates the Taskfile public-interface contract.
+taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security veto-backed).
 test-coverage-report	-	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).

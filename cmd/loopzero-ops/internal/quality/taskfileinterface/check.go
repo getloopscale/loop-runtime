@@ -34,8 +34,18 @@ var ExpectedCommands = []string{
 	"db:reset",
 	"validate:matrix",
 	"parity:preflight",
-	"cli:link",
-	"cli:build",
+
+	// `cli:link` and `cli:build` were removed here on 2026-07-30 (issue #254).
+	// They ran `cd cli && npm …`, but `cli/` left this repository at M2 of the
+	// monorepo decomposition, so they had been failing for anyone who invoked
+	// them. Building the CLI is the responsibility of the repo that owns it
+	// (`loopzero-cli`); it is no longer part of THIS Taskfile's public contract.
+	//
+	// Per the comment above, removing an entry is a breaking change to the
+	// contract — deliberate here, because the contract was asserting a
+	// capability this repository stopped having two milestones ago. Keeping
+	// the entries would have forced the tasks back into existence to satisfy
+	// a promise nobody could keep.
 }
 
 // Config tells Check where the repo root is.

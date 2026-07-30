@@ -119,7 +119,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	"no-pulumi-inline-secrets": failingGate, // inline secret literal in Pulumi code
 	"skip-link":                failingGate, // 115 grandfathered a11y violations in the baseline
 	"stack-coverage":           failingGate, // a declared strategy has no fixtures
-	"taskfile-interface":       failingGate, // Taskfile public-interface contract drift
 	"template-compliance":      failingGate, // empty PR body vs the canonical template
 
 	// --- exceed the per-push time budget ----------------------------------
