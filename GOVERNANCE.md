@@ -1,110 +1,115 @@
 # LoopZero Project Governance
 
-This document describes the governance model for the LoopZero project.
+How changes are proposed, reviewed, and landed in this repository.
 
-## Principles
+> **This is a proprietary, commercially-operated project** — see [LICENSE](LICENSE). LoopZero is the
+> managed runtime operated by loopzero.example. It is **not** a vendor-neutral foundation project: there
+> is no CNCF affiliation, no external TOC to escalate to, and no open contributor ladder. This
+> document describes the governance that actually applies, not an open-source template.
 
-1. **Transparency** — All decisions are made in public channels (GitHub issues, PRs, discussions).
-2. **Merit-based** — Contributions and demonstrated expertise determine roles, not affiliation.
-3. **Vendor-neutral** — No single organization controls the project direction.
-4. **Lazy consensus** — Proposals are accepted if no maintainer objects within 7 days.
+## Phase: pre-release
 
-## Roles
+The platform runs in production for loopzero customers, but the product is **not released to
+external users**. Two consequences drive every rule below:
 
-### Contributors
+- **Backward compatibility is NOT required.** Refactoring, substitution and redesign are preferred
+  when they yield a cleaner system.
+- **Legacy code is an error — delete it.** There is no obligation to maintain, adapt, or work around
+  code from a previous approach. Replace it; never patch it. The tests are the safety net, not the
+  old code.
 
-Anyone who contributes to the project — code, documentation, issues, reviews, or community support. No formal approval needed.
+"Keep it as-is" requires justification. Inertia is not a valid reason to preserve a bad design.
 
-**Responsibilities:**
-- Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
-- Follow the [Contributing Guide](CONTRIBUTING.md)
-- Sign commits with DCO
+## Change tiers — classify BEFORE writing code
 
-### Reviewers
+Every change is classified first. The full contract is
+[`.claude/rules/pre-release-governance.md`](.claude/rules/pre-release-governance.md).
 
-Experienced contributors who review pull requests in specific areas. Nominated by maintainers.
+| Tier | Description | Meeting required? | ADR required? |
+|------|-------------|-------------------|---------------|
+| **T0** | Trivial — typo, comment, doc, test-only | No | No |
+| **T1** | Local implementation — single-component bug fix, minor refactor | No | No |
+| **T2** | Contracts, state, pipeline, or operations impact | **Yes** | Recommended |
+| **T3** | Architecture, stack, or critical-flow change | **Yes** | **Yes** |
 
-**Requirements:**
-- Sustained contributions over 3+ months
-- Demonstrated expertise in at least one component
-- History of quality reviews
+**Always T2 or higher, regardless of diff size:** database schema/migrations · state-machine
+transitions (`pkg/statemachine/`) · API contracts and `--json` shapes · CLI-visible output ·
+controller reconcile logic · Helm charts · infrastructure-as-code · shared libraries (`pkg/`) ·
+multi-cluster communication · credential and secret handling.
 
-**Responsibilities:**
-- Review PRs in their area of expertise
-- Provide constructive, timely feedback
-- Mentor new contributors
+For T2/T3 the implementer **stops before coding**, produces a diagnosis (what, why, blast radius,
+alternatives), and convenes a technical meeting. Implementation begins only after an APPROVED
+decision. `.claude/hooks/governance-gate.py` blocks edits to production files that lack an approved
+gate record.
 
-**Becoming a reviewer:** Nominated by a maintainer, approved by lazy consensus among maintainers.
+## Decision records
 
-### Maintainers
+| Where | What | Count |
+|---|---|---|
+| [`docs/decisions/`](docs/decisions/) | Product- and platform-level ADRs | 15 |
+| [`.claude/knowledge-base/decisions/`](.claude/knowledge-base/decisions/) | Engineering ADRs produced by the cycle pipeline | 61 |
+| [`docs/meetings/records/`](docs/meetings/records/) | `MEET-*` technical meeting records | 15 |
 
-Core team members with write access and decision-making authority. See [MAINTAINERS.md](MAINTAINERS.md) for the current list.
+An ADR must compare alternatives and state the trade-off explicitly. A decision whose rationale is
+only "it is how we already do it" is not a decision record.
 
-**Requirements:**
-- Sustained, significant contributions over 6+ months
-- Deep understanding of project architecture and design principles
-- History of quality reviews and mentorship
-- Commitment to the project's long-term health
+Cross-repo and workspace-level decisions live in the umbrella at
+[`../decisions/`](../decisions/) — for example the monorepo decomposition (2026-06-16) and the
+AWS/Terraform infrastructure re-platform (2026-06-17). Do not duplicate them here.
 
-**Responsibilities:**
-- Set technical direction
-- Review and merge PRs
-- Triage issues
-- Manage releases
-- Ensure project quality and security
-- Mentor reviewers and contributors
+## Plan amendments
 
-**Becoming a maintainer:** Nominated by an existing maintainer, requires approval from 2/3 of current maintainers.
+Plans registered under `docs/plans/` cannot be amended silently mid-execution.
 
-**Removing a maintainer:** Voluntary resignation (notify other maintainers) or removal for sustained inactivity (12+ months without contribution) or Code of Conduct violations. Removal requires 2/3 maintainer vote.
+| Amendment | Trigger | Approval |
+|---|---|---|
+| Trivial | Typo / comment / clarification inside a task | Direct edit + commit |
+| Scope refinement | Task split into sub-tasks; same DoD | New lightweight `MEET` record |
+| DoD redefinition | Acceptance criteria change within a task | Meeting + ADR + plan version bump |
+| Task deferral | Task moved to a future plan | Meeting + ADR explaining the blocker |
+| Plan abandon | Plan declared infeasible | Full T3 meeting + sponsor revoke |
 
-## Decision Making
+Forbidden: self-amendment justified only in a commit message; silent task removal; deleting a DoD
+bullet without a version bump.
 
-### Day-to-Day Decisions
+## Branching and releases
 
-- **Lazy consensus** with a 7-day window.
-- Any maintainer can propose a decision via GitHub issue or PR.
-- If no maintainer objects within 7 days, the proposal is accepted.
-- Silence is consent.
+```
+workspace ──PR──> develop ──PR + semver tag──> main
+ (work)          (integration)                (release)
+```
 
-### Significant Decisions
+- All work is born on `workspace`. `develop` integrates but never originates. `main` is
+  release-only and receives merges from `develop` alone.
+- Forbidden everywhere: `git checkout`, `git revert`, `git push --force` on a shared branch,
+  `git reset --hard`. Use `git switch` / `git restore` / `git stash`. Enforced by
+  `.claude/hooks/validate-command.sh`; full contract in
+  [`.claude/rules/git-safety.md`](.claude/rules/git-safety.md).
+- Releases follow [Semantic Versioning](https://semver.org/) and are cut through the release cycle
+  (`develop → main` PR + annotated tag). Changes are tracked in [CHANGELOG.md](CHANGELOG.md) — the
+  `[Unreleased]` section is updated by **every** change, not at release time.
 
-Significant decisions require explicit approval:
+Review is enforced by branch protection plus [`.github/CODEOWNERS`](.github/CODEOWNERS); the PR
+checklist lives in [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
-- **Architecture changes** — Require at least 2 maintainer approvals and an ADR (Architecture Decision Record) in `docs/adr/`.
-- **New dependencies** — Require 1 maintainer approval with justification against the dependency evaluation criteria in the project principles.
-- **Breaking changes** — Require all active maintainer approvals and a migration path.
-- **New maintainers/reviewers** — See role requirements above.
+## Quality bar
 
-### Dispute Resolution
+- **Tests before code.** No production code without a failing test written first.
+- `task test` · `task lint` · `task validate:manifests` · `task quality:gates` must pass.
+- Any claim that affects a maturity score needs **three independent evidence sources** (commit+test,
+  LIVE log, pipeline run). Confidence in such claims is capped at 90-95%.
+- Tool adoption is verified by grep against the filesystem, never asserted from memory.
 
-1. Discussion on the relevant GitHub issue/PR.
-2. If unresolved, escalate to a maintainer vote (simple majority).
-3. If still unresolved, escalate to the CNCF Technical Oversight Committee.
+Engineering conventions live in [`.claude/rules/`](.claude/rules/) —
+`workflow.md`, `tdd-workflow.md`, `loopzero-design.md`, `design-principles.md`, `testing.md`,
+`error-handling.md`, `cli-output.md`, `git-safety.md`.
 
-## Subprojects
+## Security
 
-| Subproject | Scope | Lead |
-|------------|-------|------|
-| `cli/` | CLI (TypeScript + Commander) | See MAINTAINERS.md |
-| `api/` | API server (Go + chi + pgx) | See MAINTAINERS.md |
-| `operators/` | Kubernetes operators (kubebuilder) | See MAINTAINERS.md |
-| `pkg/` | Shared Go libraries | See MAINTAINERS.md |
-| `infra/` | Infrastructure (Pulumi, Helm, k3d) | See MAINTAINERS.md |
+Vulnerability reporting and the disclosure process are in [SECURITY.md](SECURITY.md). Security and
+blast-radius review carry an absolute veto on T2/T3 changes.
 
-Each subproject follows the same governance model. Subproject leads are maintainers with primary responsibility for that area.
+## Amendments to this document
 
-## Releases
-
-- Release process is documented in [RELEASES.md](RELEASES.md).
-- Any maintainer can cut a release.
-- Releases follow [Semantic Versioning](https://semver.org/).
-- Changes are tracked in [CHANGELOG.md](CHANGELOG.md).
-
-## Code of Conduct
-
-This project follows the [CNCF Code of Conduct](CODE_OF_CONDUCT.md). Violations can be reported to [conduct@cncf.io](mailto:conduct@cncf.io) or to the project maintainers.
-
-## Amendments
-
-This governance document can be amended by a 2/3 majority vote of active maintainers. Proposed changes must be open for comment for at least 14 days before voting.
+This document is amended by the project owner. Material changes to the tier table, the branching
+model, or the quality bar require an ADR under `docs/decisions/`.
