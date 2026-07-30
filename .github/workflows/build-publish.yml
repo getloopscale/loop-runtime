@@ -19,7 +19,12 @@ on:
       image:           { required: true,  type: string }
       dockerfile:      { required: true,  type: string }
       context:         { required: false, type: string,  default: "." }
-      registry:        { required: false, type: string,  default: "ghcr.io/getloopscale" }
+      # Vazio por default = derivado do dono do repositorio em runtime (ver o step
+      # `resolve-registry`). Fixar o dono em texto e' o passo que o runbook de
+      # migracao lista como o mais esquecido: uma transferencia de conta para
+      # organizacao troca o namespace do GHCR e um valor fixo passa a dar 403 no
+      # push — falha tardia, no CI de outro repositorio.
+      registry:        { required: false, type: string,  default: "" }
       sign:            { required: false, type: boolean, default: false }   # SBOM+provenance(mode=max)+cosign — release only
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
@@ -47,6 +52,26 @@ jobs:
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
+      # Deriva o namespace do GHCR do dono do repositorio quando o chamador nao o
+      # passa. Substitui um default fixado em texto (`ghcr.io/getloopscale`), que o
+      # runbook de migracao lista entre os pontos que se esquece: transferir o repo
+      # para uma organizacao troca o namespace, e o valor fixo passa a produzir 403
+      # no push — falha tardia, e no CI de outro repositorio.
+      #
+      # `tr A-Z a-z` porque nomes de repositorio no GitHub preservam maiusculas e
+      # referencias OCI nao as aceitam.
+      - name: Resolve registry namespace
+        id: resolve-registry
+        env:
+          EXPLICIT: ${{ inputs.registry }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ -n "$EXPLICIT" ]; then
+            echo "registry=$EXPLICIT" >> "$GITHUB_OUTPUT"
+          else
+            echo "registry=ghcr.io/$(printf '%s' "$OWNER" | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Compute tags (community-standard channels)
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
@@ -54,7 +79,7 @@ jobs:
           # Docker Hub image is added ONLY when both the input and the token are present,
           # so a missing secret never produces an un-pushable docker.io tag.
           images: |
-            ${{ inputs.registry }}/${{ inputs.image }}
+            ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}
             ${{ (inputs.dockerhub_image != '' && env.DOCKERHUB_TOKEN != '') && format('docker.io/{0}', inputs.dockerhub_image) || '' }}
           tags: |
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
@@ -148,7 +173,7 @@ jobs:
       - name: Keyless sign by digest (release only)
         if: ${{ inputs.sign }}
         env:
-          IMAGE_REF: ${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE_REF}"
 
       # Confused-deputy guard (EC-2): accept ONLY signatures produced by THIS reusable
@@ -157,8 +182,13 @@ jobs:
       - name: Verify the signature (identity-pinned)
         if: ${{ inputs.sign && inputs.verify }}
         env:
-          IMAGE_REF: ${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          # A identidade keyless deriva de repo + caminho do workflow. Fixar o dono
+          # em texto quebra a verificacao numa transferencia — e, pior, um dono
+          # ERRADO aqui aceitaria assinatura produzida por OUTRO workflow. Este e' o
+          # guard de confused-deputy, entao ele acompanha o repo que de fato roda.
+          IDENTITY_REPO: ${{ github.repository }}
         run: |
           cosign verify "${IMAGE_REF}" \
-            --certificate-identity-regexp '^https://github\.com/getloopscale/loopzero/\.github/workflows/build-publish\.yml@' \
+            --certificate-identity-regexp "^https://github\.com/${IDENTITY_REPO}/\.github/workflows/build-publish\.yml@" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
