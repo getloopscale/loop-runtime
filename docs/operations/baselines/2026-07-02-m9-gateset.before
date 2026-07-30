@@ -25,6 +25,9 @@
 # RE-FREEZE 2026-07-30 (e): +1 gate — `chart-default-tags` (#232), a forma executavel
 #   do achado de tag mutavel em default de chart loopzero-owned. Registrado e NAO wired:
 #   RED hoje, fix em infra/helm/ (gated, T2). 110 -> 111.
+# RE-FREEZE 2026-07-30 (f): worker-csp e chart-default-tags '-' -> 'gates'. Os achados de
+#   #235 e #232 foram corrigidos sob CHG-2026-07-30-002 (override do sponsor), entao os dois
+#   RED tests viraram verdes e saem de failingGate. Contagem segue 111.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -38,7 +41,7 @@ caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev,
 caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
-chart-default-tags	-	loopzero-owned charts must not default their image tag to a mutable ref (#232).
+chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
 check-allowlist-sunsets	gates	Hermetic contract test for .claude/scripts/check-allowlist-sunsets.py (T5.2.a): 5 fixture cases + missing-file + LIVE rules/code-review-allowlist.txt check. Exits 0 for future/today/missing/live-clean; catches past-sunset (exit 1) and malformed/bad-date (exit 2). Requires python3. M-Migrate2 2026-07-07 replaces infra/tests/check-allowlist-sunsets_test.sh.
 cli-bundle-size	-	Guards the CLI published bundle size against regression.
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
@@ -135,4 +138,4 @@ vault-bootstrap-in-mgmt-task	gates	Locks task k3d:vault:bootstrap-in-mgmt shortc
 vault-bootstrap-unseal-loop	gates	Regression guard for the 2026-06-15 canonical fix of vault-bootstrap-dev.sh Steps 2+3 (rc-independent bao-status parse, capitalized 'True' compare, no lowercase 'true' fallback). M-Migrate2 2026-07-07 replaces infra/tests/check-vault-bootstrap-unseal-loop_test.sh.
 vault-prom-alerts	gates	T8.4 hermetic contract for PrometheusRule vault-audit-alerts: YAML parses + all 4 P1 alerts declared (VaultAuthFailureRateHigh + VaultPolicyDenialRateHigh + VaultSealedOrDown + VaultAuditLogStalled) + all severity=critical + all runbook_url annotations + all team=platform-security + all domain=vault + VaultAuditLogStalled carries invariant "audit-log-must-flow" (high-confidence adversary signal). M-Migrate2 2026-07-10 M16 T3.3 Wave 2 replaces infra/tests/check-vault-prom-alerts_test.sh.
 webhook-canonical-path	gates	Blocks the /engine/api/v1/webhooks/github 301 trap; enforces the canonical /api/v1/webhooks/github (M-Migrate2 2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh).
-worker-csp	-	Cloudflare static worker CSP must not permit inline/eval script (#235).
+worker-csp	gates	Cloudflare static worker CSP must not permit inline/eval script (#235).

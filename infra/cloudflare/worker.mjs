@@ -5,7 +5,24 @@ const SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.dev.loopzero.example",
+  // Issue #232/#235 — `script-src` no longer carries 'unsafe-inline'.
+  //
+  // This worker fronts tenant static content on *.dev.loopzero.example, so this CSP is
+  // the last header those users receive. With 'unsafe-inline' any injected inline
+  // <script> in the served HTML executed, which negated most of what the policy
+  // was there to buy; the blast radius was every tenant's static surface.
+  //
+  // A nonce is not an option here: the worker proxies bytes from object storage
+  // and never parses the HTML, so it has nothing to stamp. The fix is therefore
+  // to require external scripts — which is what the bundlers in use already emit
+  // (hashed filenames, no inline bootstrap).
+  //
+  // 'unsafe-inline' is KEPT on style-src, deliberately. Inline styles do not
+  // execute code, and bundling the two would have let the urgent problem be
+  // deferred alongside the cosmetic one. Hardening it is its own change.
+  //
+  // Guarded by `loopzero-ops quality worker-csp`.
+  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.dev.loopzero.example",
 };
 
 function getCacheControl(pathname) {

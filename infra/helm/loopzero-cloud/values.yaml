@@ -10,7 +10,11 @@ replicaCount: 1
 # `:develop` + `:develop-<sha>` on develop branch pushes (per AM6).
 image:
   repository: ghcr.io/getloopscale/loopzero-cloud
-  tag: latest
+  # Issue #232 — deliberately EMPTY, not `latest`. Same reasoning as the
+  # loopzero-api chart: the default is only reached when an override was forgotten,
+  # so it must fail loudly rather than ship whatever `latest` points at today.
+  # CI publishes `:develop` + `:develop-<sha>` and sets the tag explicitly.
+  tag: ""
   pullPolicy: Always
 
 imagePullSecrets:

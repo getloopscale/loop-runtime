@@ -23,7 +23,6 @@ tasks:
       # Pillar 1 (caller): exercises `loopzero-ops quality --list` end-to-end.
       - /tmp/loopzero-ops quality --list
       # Pillar 2 (assertion): the inventory must enumerate every registered gate.
-      # Pillar 2 (assertion): the inventory must enumerate every registered gate.
       #
       # The expected count is DERIVED from the frozen baseline, not hardcoded.
       # It used to be a literal `-eq 70`, and by 2026-07-30 the registry held
@@ -44,7 +43,6 @@ tasks:
           echo "  Re-freeze with: /tmp/loopzero-ops quality --list  (keeping the header comments)" >&2
           exit 1
         }
-      # Pillar 3 (runtime signal): the operator-visible split.
       # Pillar 3 (runtime signal): the operator-visible split.
       #
       # This used to grep for the literal words `wired` / `unwired`, from an
@@ -134,6 +132,9 @@ tasks:
       # anexado a rota de tenant — clobbaria o nonce por request do LoopZeroKit e
       # mataria todo script inline em silêncio. Verde hoje; wired para continuar assim.
       - /tmp/loopzero-ops quality tenant-csp-passthrough
+      # Wired 2026-07-30 assim que os achados foram corrigidos (CHG-2026-07-30-002).
+      - /tmp/loopzero-ops quality worker-csp          # #35 — CSP do CF Worker sem script inline
+      - /tmp/loopzero-ops quality chart-default-tags  # #232 — chart loopzero-owned sem tag mutável no default
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
       # migration v1.2). Phase 0 baseline: each gate trivially passes
       # (empty queries/, no sqlc imports). Real exercise begins T1.1+.

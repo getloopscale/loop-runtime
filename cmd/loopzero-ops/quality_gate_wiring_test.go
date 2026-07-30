@@ -120,17 +120,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	"skip-link":                failingGate, // 115 grandfathered a11y violations in the baseline
 	"stack-coverage":           failingGate, // a declared strategy has no fixtures
 	"template-compliance":      failingGate, // empty PR body vs the canonical template
-	// Added 2026-07-30 as the executable form of issue #235: the CF static
-	// worker's CSP permits script-src 'unsafe-inline'. The gate is RED on
-	// purpose — the fix lives in infra/cloudflare/, a governance-gated path,
-	// and is a T2 change (security surface). Wire it the moment #235 lands.
-	"worker-csp": failingGate,
-	// Added 2026-07-30 as the executable form of issue #232: two loopzero-owned
-	// charts default their image tag to `latest`, which the repo's own
-	// vap-disallow-latest-tag VAP forbids in-cluster. RED on purpose — the fix
-	// edits infra/helm/, a governance-gated path, and is a T2 change (Helm
-	// charts + deploy determinism). Wire it the moment #232 lands.
-	"chart-default-tags": failingGate,
 
 	// --- exceed the per-push time budget ----------------------------------
 	"mock-budget":      slowGate, // >25s

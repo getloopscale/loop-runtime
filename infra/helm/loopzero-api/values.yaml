@@ -14,7 +14,18 @@ image:
   # tags (e.g., commit-sha, release-tag), not `:latest`. Pinned to the
   # tag last published to DO Registry. In production, Pulumi (or a
   # GitOps-managed values overlay) sets this from CI build metadata.
-  tag: latest
+  # Issue #232 — deliberately EMPTY, not `latest`.
+  #
+  # This default is only ever consulted on the path where somebody forgot to
+  # override it, which is the path that most needs a loud failure. `latest` gave
+  # it the quietest one: the deploy either shipped a non-deterministic image, or
+  # was rejected by this repo's own `vap-disallow-latest-tag` VAP with an error
+  # pointing at admission rather than at the missing override. An empty tag fails
+  # immediately and says what is actually wrong.
+  #
+  # CI / Pulumi / the GitOps values overlay set this from build metadata; nothing
+  # in the normal path relies on the default.
+  tag: ""
   pullPolicy: Always
 
 imagePullSecrets:
