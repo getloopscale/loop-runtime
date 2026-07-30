@@ -31,6 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/templatecompliance"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantcsppassthrough"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/workercsp"
 )
@@ -674,5 +675,32 @@ func runWorkerCSP(args []string) int {
 		fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", workercsp.DefaultWorkerPath, f.Line, f.Detail)
 	}
 	fmt.Fprintln(os.Stderr, "Fix: drop 'unsafe-inline' from script-src; use a per-request nonce or external+hashed scripts (issue #235).")
+	return 1
+}
+
+// runTenantCSPPassthrough is the #59 regression lock: a static-CSP Traefik
+// middleware must never be attached to tenant IngressRoutes, or LoopZeroKit's
+// per-request nonce stops matching the body and every inline script dies.
+func runTenantCSPPassthrough(args []string) int {
+	fs := flag.NewFlagSet("tenant-csp-passthrough", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	out, err := tenantcsppassthrough.Check(tenantcsppassthrough.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tenant-csp-passthrough: %v\n", err)
+		return 2
+	}
+	if out.Skipped {
+		fmt.Printf("tenant-csp-passthrough: SKIP — %s\n", out.Reason)
+		return 0
+	}
+	if out.Pass {
+		fmt.Printf("tenant-csp-passthrough: PASS — %s\n", out.Reason)
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "tenant-csp-passthrough: FAIL — static-CSP middleware attached to tenant routes: %v\n", out.Attached)
+	fmt.Fprintln(os.Stderr, "Every LoopZeroKit per-request nonce is replaced by that fixed policy; inline scripts are blocked silently in the browser (issue #59).")
 	return 1
 }

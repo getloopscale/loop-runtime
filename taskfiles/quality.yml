@@ -23,11 +23,39 @@ tasks:
       # Pillar 1 (caller): exercises `loopzero-ops quality --list` end-to-end.
       - /tmp/loopzero-ops quality --list
       # Pillar 2 (assertion): the inventory must enumerate every registered gate.
+      # Pillar 2 (assertion): the inventory must enumerate every registered gate.
+      #
+      # The expected count is DERIVED from the frozen baseline, not hardcoded.
+      # It used to be a literal `-eq 70`, and by 2026-07-30 the registry held
+      # 108 — the assertion had been unable to detect drift for as long as it
+      # had been drifting, in a task nothing invokes. A number frozen by hand
+      # protects only until the first change nobody remembers to mirror.
+      #
+      # The baseline is re-frozen deliberately (see its header), so deriving
+      # from it keeps ONE place to update and makes an un-mirrored registry
+      # change fail here instead of passing silently.
       - |
+        BASE=docs/operations/baselines/2026-07-02-m9-gateset.before
+        want=$(grep -vcE '^#|^$' "$BASE")
         n=$(/tmp/loopzero-ops quality --list --names | wc -l)
-        [ "$n" -eq 70 ] || { echo "FAIL gate-list: --names emitted $n gates, want 70 (registry drift?)" >&2; exit 1; }
+        [ "$n" -eq "$want" ] || {
+          echo "FAIL gate-list: --names emitted $n gates, baseline $BASE has $want." >&2
+          echo "  A gate was added or removed without re-freezing the baseline — or vice versa." >&2
+          echo "  Re-freeze with: /tmp/loopzero-ops quality --list  (keeping the header comments)" >&2
+          exit 1
+        }
       # Pillar 3 (runtime signal): the operator-visible split.
-      - 'echo "registered=$(/tmp/loopzero-ops quality --list --names | wc -l) wired=$(/tmp/loopzero-ops quality --list | grep -cP ''\twired\t'') unwired=$(/tmp/loopzero-ops quality --list | grep -cP ''\tunwired\t'')"'
+      # Pillar 3 (runtime signal): the operator-visible split.
+      #
+      # This used to grep for the literal words `wired` / `unwired`, from an
+      # older boolean column. Column 2 now carries the invoking task name (or
+      # `-`), so both greps matched nothing and the line reported
+      # `wired=0 unwired=0` on every run — a number that was not merely stale
+      # but structurally unable to be anything else. Split on the column value.
+      - |
+        total=$(/tmp/loopzero-ops quality --list --names | wc -l)
+        unwired=$(/tmp/loopzero-ops quality --list | awk -F'\t' '$2=="-"' | wc -l)
+        echo "registered=$total wired=$((total - unwired)) unwired=$unwired"
 
   hermetic:
     desc: Run quality-gate hermetic Go tests + verify both modules build
@@ -102,6 +130,10 @@ tasks:
       # contrato declarava uma capacidade que o repo perdeu dois milestones
       # atrás — corrigido no ExpectedCommands, não reintroduzindo as tasks.
       - /tmp/loopzero-ops quality taskfile-interface
+      # Regression lock do #59: middleware Traefik com CSP estático nunca pode ser
+      # anexado a rota de tenant — clobbaria o nonce por request do LoopZeroKit e
+      # mataria todo script inline em silêncio. Verde hoje; wired para continuar assim.
+      - /tmp/loopzero-ops quality tenant-csp-passthrough
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
       # migration v1.2). Phase 0 baseline: each gate trivially passes
       # (empty queries/, no sqlc imports). Real exercise begins T1.1+.

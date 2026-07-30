@@ -19,6 +19,9 @@
 #   achado de CSP no CF Worker. Registrado e NAO wired de proposito: e' RED hoje e o
 #   fix vive em infra/cloudflare/, caminho gated (T2 — superficie de seguranca).
 #   108 -> 109 linhas.
+# RE-FREEZE 2026-07-30 (d): +1 gate — `tenant-csp-passthrough` (#59), WIRED. Regression
+#   lock: verde hoje porque o renderer nao anexa middleware algum; o defeito do #59 e' que
+#   esse estado correto estava indefeso e documentado ao contrario. 109 -> 110.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -111,6 +114,7 @@ sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside with
 stack-coverage	-	Verifies the tool-inventory stack-coverage claims via grep.
 taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
+tenant-csp-passthrough	gates	Static-CSP Traefik middleware must not be attached to tenant routes (#59).
 tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security veto-backed).
 test-coverage-report	-	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
 test-deletion	gates	Guards deletion of test files against coverage loss.
