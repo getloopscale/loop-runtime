@@ -6,9 +6,15 @@
 # RE-FREEZE 2026-07-23 (review-cycle /review of cmd/): 73 -> 108 gate lines. The 35 added gates are the
 #   M-Migrate2/M16 Wave-2 gate migrations (bash check-*_test.sh -> internal/quality/* pure-logic gates),
 #   all bound + naming-guard GREEN + orphan-guard GREEN. TestOracle_MatchesFrozenBaseline was RED (108 vs 73).
+# RE-FREEZE 2026-07-30 (issue #255): 9 gates saíram de '-' para 'gates'. Eram gates
+#   implementados, registrados e testados que nunca eram invocados; cada um foi executado
+#   individualmente (rc=0) antes de ser ligado em taskfiles/quality.yml. Nenhum gate foi
+#   adicionado ou removido — a contagem segue 108; só a coluna TASKS mudou, em 9 linhas.
+#   Gates ligados: agpl-isolation, contract-consumers, decisions-deletion, no-migrate-force,
+#   no-shell-wrap, orphan-alerts, test-deletion, test-pyramid, test-targets.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
-agpl-isolation	-	Verifies AGPL-licensed code stays isolated from proprietary import paths.
+agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
 anonymous-auth	gates	Forbids anonymous/unauthenticated access on protected API surfaces.
 archive-script-repo-root	gates	T1.2 hermetic guard of plan m1-commit-canonical-30-fixes: no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT with 3-dirs-up ($(dirname "$0")/../../..) — canonical post-quarantine 289cf9d6 is 4-dirs-up. Pure filepath.Walk + regex; missing scan dir treated as no-content. M-Migrate2 2026-07-10 M16 T2.2 Wave 1 replaces infra/tests/check-archive-script-repo-root_test.sh.
@@ -24,7 +30,7 @@ cli-bundle-size	-	Guards the CLI published bundle size against regression.
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-role-no-secrets-star	gates	Forbids unconditional cluster-wide secrets/configmaps RBAC grants.
 clusterimagepolicy-mode	-	Validates the sigstore ClusterImagePolicy enforcement mode.
-contract-consumers	-	Verifies cross-repo contract consumers stay in sync with the contract.
+contract-consumers	gates	Verifies cross-repo contract consumers stay in sync with the contract.
 corrections-txt-closed	gates	Asserts CORRECTIONS.txt items are all closed.
 correlation-header	gates	Correlation-ID header is forwarded across the request path.
 cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
@@ -37,7 +43,7 @@ dangling-script-refs	diff	Detects shell-script references that no longer resolve
 dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
 day30-day60-cronjobs	gates	T10.1-T10.4 hermetic contract for Day 30 verify + Day 60 AES delete CronJobs. Renders infra/helm/loopzero-api with 3 --set overrides (off/day30/day60). Asserts: disabled-by-default + Day 30 (schedule + EC-12 filter + Forbid + hardening) + Day 60 (safety defaults --dry-run=true + --shred-aes-key=false + migrate-to-transit subcmd + hardening). Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.4 Wave 2 replaces infra/tests/check-day30-day60-cronjobs_test.sh.
 db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
-decisions-deletion	-	Guards deletion of decision/ADR records.
+decisions-deletion	gates	Guards deletion of decision/ADR records.
 dev-public-billing-portal-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.
 dev-public-env	gates	Locks dev-public.yaml canonical shape: publicAuthUrl/publicCloudUrl/uiBaseUrl/dashboardOrigin point to *-dev.loopzero.example, cookieDomain=loopzero.example, CORS + allowedReturnUrls cover both dev hosts with trailing-slash variants, no localhost or legacy non-dev URLs leak, D5 OAuth reuse (no _DEV env var override), Stripe webhook per-env split documented. M-Migrate2 2026-07-07 replaces infra/tests/helm/dev-public-env_test.sh.
 dev-public-oidc-redirect-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-oidc-redirect_test.sh — 9 assertions (bash -n / strict-mode / log+assert+test_provider / OIDC provider ref / Kratos browser flow path / exit-code / allowlisted). M22 T2.1 Wave A gate 2/17.
@@ -61,14 +67,14 @@ no-aes-remaining	gates	Calendar-gated: fails on remaining AES code paths post-tr
 no-cloud-dev-default	gates	T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.loopzero.example (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.
 no-env-vault-secrets	gates	Forbids secrets-as-env-var regression after the ESO/OpenBao migration.
 no-legacy-sa-token-secret	gates	Forbids legacy kubernetes.io/service-account-token Secrets.
-no-migrate-force	-	Forbids forced/destructive DB migration operations.
+no-migrate-force	gates	Forbids forced/destructive DB migration operations.
 no-new-bash	diff	Blocks new .sh files not in the shell-scripts allowlist.
 no-pulumi-inline-secrets	-	Forbids inline secret literals in Pulumi code.
-no-shell-wrap	-	Forbids thin shell wrappers around pure-logic that belongs in Go.
+no-shell-wrap	gates	Forbids thin shell wrappers around pure-logic that belongs in Go.
 oidc-cred-admin-loopzero	gates	Rejects fabricated paulo@loopzero.test/LoopZeroDev2026! credentials; canonical is admin@loopzero.example/loopzero-dev-password (M-Migrate2 2026-07-07 replaces infra/tests/check-oidc-cred-admin-loopzero_test.sh).
 openbao-init-auth-mounts	gates	T5.1-T5.9 openbao-init auth mounts + per-binary roles: 5 mounts (k8s-mgmt/k8s-build/k8s-cell-default/k8s-cell-1/k8s-cell-2) + loopzero-api TTL 1h on k8s-mgmt + loopzero-tenant/app/preview/platform-operator roles on k8s-mgmt + argo-workflows on k8s-build + external-secrets-broker on each cell + isolation invariants (loopzero-api NOT on cells, ESO-broker NOT on mgmt). Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.7 Wave 2 replaces infra/tests/check-openbao-init-auth-mounts_test.sh (Wave 2 COMPLETE).
 option-b-eso-deploy-doc	gates	Locks docs/operations/option-b-mgmt-helmfile-eso-deploy.md contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands + rollback + decision matrix + cross-references present, ESO version drift check against runtime helmfile). M-Migrate2 2026-07-07 replaces infra/tests/check-option-b-eso-deploy-doc_test.sh.
-orphan-alerts	-	Detects Prometheus alerts with no owning dashboard/runbook.
+orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
 pkg-usage-matrix	-	Verifies the pkg/ cross-component usage matrix is current.
@@ -100,9 +106,9 @@ taskfile-interface	-	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security veto-backed).
 test-coverage-report	-	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
-test-deletion	-	Guards deletion of test files against coverage loss.
-test-pyramid	-	Validates the unit/integration/e2e test-pyramid balance.
-test-targets	-	Verifies Taskfile test targets exist and are wired.
+test-deletion	gates	Guards deletion of test files against coverage loss.
+test-pyramid	gates	Validates the unit/integration/e2e test-pyramid balance.
+test-targets	gates	Verifies Taskfile test targets exist and are wired.
 loopzero-api-openbao-approle-envfrom	gates	T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync: loopzero-api chart unconditionally wires AppRole secret_id via envFrom.secretRef to K8s Secret loopzero-openbao-approle (optional=true). Anti-hardcode gate — NO inline value: for OPENBAO_VAULT_SECRET_ID. Renders chart via helm template subprocess (Anti-Pattern #8 legitimate); advisory fallthrough when helm absent. M-Migrate2 2026-07-07 replaces infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh.
 loopzero-external-secrets-chart-sanity	gates	iter 23 chart-sanity contract for infra/helm/loopzero-external-secrets: renders 5 canonical envs (vault-local/standalone-multi/dev/drill/prod) + inventory-based ExternalSecret count parity + metadata.name uniqueness + refreshInterval + loopzero-vault-secrets ClusterSecretStore refs + vaultBinaryOverride api/secrets/* resolution (≥3) + envName empty fail-fast + no operators/gitea path leak. 8 assertions. Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.5 Wave 2 replaces infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh.
 loopzero-external-secrets-creation-policy	gates	iter 20 P0 regression: infra/helm/loopzero-external-secrets renders ExternalSecret CRs with creationPolicy: Orphan (NEVER Owner — Owner+blockOwnerDeletion cascade-deletes K8s Secrets on chart uninstall). 4 assertions: ≥1 ES CR + zero Owner + deletionPolicy Retain ≥ Orphan + Orphan==ES CR count. Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.6 Wave 2 replaces infra/tests/check-loopzero-external-secrets-creation-policy_test.sh.
