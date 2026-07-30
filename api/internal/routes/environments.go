@@ -252,9 +252,36 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// Issue #142 — the legacy empty-Project entry is a FALLBACK for an
+		// env name, not an addition to it.
+		//
+		// The original `e.Project == projectFilter || e.Project == ""` was
+		// correct when written: before the #124 backfill the legacy row was
+		// the ONLY row a tenant had, and dropping it hid a live environment.
+		// After the backfill both rows exist for the same name, so the clause
+		// that guaranteed visibility started guaranteeing a duplicate —
+		// `production, preview, production, preview`.
+		//
+		// Deleting the legacy clause is NOT the fix: a tenant whose backfill
+		// has not run carries only empty-Project rows and would get an empty
+		// list. So: take the project-scoped row when it exists, fall back to
+		// the legacy row for names that have no scoped row yet. Order of the
+		// underlying list is preserved (the CR order is meaningful to the
+		// dashboard); only the redundant legacy entries are dropped.
+		scoped := make(map[string]bool, len(envs))
+		for _, e := range envs {
+			if e.Project == projectFilter {
+				scoped[e.Name] = true
+			}
+		}
 		filtered := envs[:0]
 		for _, e := range envs {
-			if e.Project == projectFilter || e.Project == "" {
+			switch {
+			case e.Project == projectFilter:
+				filtered = append(filtered, e)
+			case e.Project == "" && !scoped[e.Name]:
+				// Legacy shared entry (ADR D2), and no backfilled row has
+				// superseded it for this name.
 				filtered = append(filtered, e)
 			}
 		}
