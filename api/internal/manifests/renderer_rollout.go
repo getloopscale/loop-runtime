@@ -396,6 +396,35 @@ func buildAppContainer(ri RenderInput, app AppManifestInput, port int) k8sContai
 func buildAppPodSpec(container k8sContainer) k8sPodSpec {
 	falseVal := false
 	trueVal := true
+
+	// #61 — close the endpoint-removal race before SIGTERM.
+	//
+	// Deleting a pod does two things CONCURRENTLY: SIGTERM to the container,
+	// and endpoint removal from Services. The second is asynchronous — kube-proxy
+	// and Traefik take a moment to observe it — so without a hook the app begins
+	// shutting down while new connections are still being routed to it. On a
+	// canary step that scales the old ReplicaSet down, that is what severs
+	// long-lived connections mid-flight.
+	//
+	// `terminationGracePeriodSeconds` does NOT address this: it bounds the time
+	// AFTER SIGTERM, and the race happens before. The fix is to make the pod wait
+	// so endpoint removal wins.
+	//
+	// preStopDrainSeconds is 5: endpoint propagation is typically 1-3s, so this
+	// leaves margin while staying far below the 30s grace period — the sleep and
+	// the app's own shutdown share that budget, and a sleep that consumed it
+	// would get the app SIGKILLed the instant it finally received SIGTERM.
+	//
+	// This is the half of #61 that is NOT a product decision: the race harms
+	// every rollout, WebSocket or not. How long a WebSocket should be allowed to
+	// outlive a deploy — whether LoopZero promises survival or reconnection —
+	// remains open on that issue.
+	const preStopDrainSeconds = 5
+	if container.Lifecycle == nil {
+		container.Lifecycle = &k8sLifecycle{
+			PreStop: &k8sLifecycleHandler{Sleep: &k8sSleepAction{Seconds: preStopDrainSeconds}},
+		}
+	}
 	return k8sPodSpec{
 		ServiceAccountName:           "loopzero-app",
 		AutomountServiceAccountToken: &falseVal,

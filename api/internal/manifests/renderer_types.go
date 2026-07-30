@@ -24,17 +24,17 @@ type k8sDeployment struct {
 }
 
 type k8sDeploymentSpec struct {
-	Replicas                int                 `json:"replicas"`
-	ProgressDeadlineSeconds int                 `json:"progressDeadlineSeconds,omitempty"`
-	MinReadySeconds         int                 `json:"minReadySeconds,omitempty"`
-	Strategy                *k8sDeployStrategy  `json:"strategy,omitempty"`
-	Selector                k8sLabelSelector    `json:"selector"`
-	Template                k8sPodTemplateSpec  `json:"template"`
+	Replicas                int                `json:"replicas"`
+	ProgressDeadlineSeconds int                `json:"progressDeadlineSeconds,omitempty"`
+	MinReadySeconds         int                `json:"minReadySeconds,omitempty"`
+	Strategy                *k8sDeployStrategy `json:"strategy,omitempty"`
+	Selector                k8sLabelSelector   `json:"selector"`
+	Template                k8sPodTemplateSpec `json:"template"`
 }
 
 type k8sDeployStrategy struct {
-	Type          string             `json:"type"`
-	RollingUpdate *k8sRollingUpdate  `json:"rollingUpdate,omitempty"`
+	Type          string            `json:"type"`
+	RollingUpdate *k8sRollingUpdate `json:"rollingUpdate,omitempty"`
 }
 
 type k8sRollingUpdate struct {
@@ -56,12 +56,36 @@ type k8sPodMeta struct {
 }
 
 type k8sPodSpec struct {
-	ServiceAccountName            string                  `json:"serviceAccountName,omitempty"`
-	AutomountServiceAccountToken  *bool                   `json:"automountServiceAccountToken,omitempty"`
-	SecurityContext               *k8sPodSecurityContext   `json:"securityContext,omitempty"`
-	Volumes                       []k8sVolume             `json:"volumes,omitempty"`
-	Containers                    []k8sContainer           `json:"containers"`
-	TerminationGracePeriodSeconds int                      `json:"terminationGracePeriodSeconds,omitempty"`
+	ServiceAccountName            string                 `json:"serviceAccountName,omitempty"`
+	AutomountServiceAccountToken  *bool                  `json:"automountServiceAccountToken,omitempty"`
+	SecurityContext               *k8sPodSecurityContext `json:"securityContext,omitempty"`
+	Volumes                       []k8sVolume            `json:"volumes,omitempty"`
+	Containers                    []k8sContainer         `json:"containers"`
+	TerminationGracePeriodSeconds int                    `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+// k8sLifecycle carries the container lifecycle hooks (#61).
+type k8sLifecycle struct {
+	PreStop *k8sLifecycleHandler `json:"preStop,omitempty"`
+}
+
+// k8sLifecycleHandler intentionally exposes ONLY the native `sleep` action.
+//
+// `exec` is deliberately absent rather than merely unused: tenant images are
+// arbitrary, and a distroless base has no /bin/sh (this repo already documents
+// that trap for crane — see argo/harbor_mirror.go). A shell-based hook fails on
+// exactly the most hardened images, and it fails at teardown, where the symptom
+// is an abrupt connection drop rather than an error anyone reads. Leaving the
+// field out means the mistake cannot be made here at all.
+//
+// The `sleep` action is GA since Kubernetes 1.30; the clusters run v1.32.13
+// (infra/k3d/*.yaml).
+type k8sLifecycleHandler struct {
+	Sleep *k8sSleepAction `json:"sleep,omitempty"`
+}
+
+type k8sSleepAction struct {
+	Seconds int `json:"seconds"`
 }
 
 type k8sPodSecurityContext struct {
@@ -77,17 +101,18 @@ type k8sSeccompProfile struct {
 }
 
 type k8sContainer struct {
-	Name            string                      `json:"name"`
-	Image           string                      `json:"image"`
-	Ports           []k8sContainerPort          `json:"ports,omitempty"`
-	Resources       k8sResources                `json:"resources"`
-	Env             []k8sEnvVar                 `json:"env,omitempty"`
-	EnvFrom         []k8sEnvFromSource          `json:"envFrom,omitempty"`
+	Name            string                       `json:"name"`
+	Image           string                       `json:"image"`
+	Ports           []k8sContainerPort           `json:"ports,omitempty"`
+	Resources       k8sResources                 `json:"resources"`
+	Lifecycle       *k8sLifecycle                `json:"lifecycle,omitempty"`
+	Env             []k8sEnvVar                  `json:"env,omitempty"`
+	EnvFrom         []k8sEnvFromSource           `json:"envFrom,omitempty"`
 	SecurityContext *k8sContainerSecurityContext `json:"securityContext,omitempty"`
-	VolumeMounts    []k8sVolumeMount            `json:"volumeMounts,omitempty"`
-	StartupProbe    *k8sProbe                   `json:"startupProbe,omitempty"`
-	ReadinessProbe  *k8sProbe                   `json:"readinessProbe,omitempty"`
-	LivenessProbe   *k8sProbe                   `json:"livenessProbe,omitempty"`
+	VolumeMounts    []k8sVolumeMount             `json:"volumeMounts,omitempty"`
+	StartupProbe    *k8sProbe                    `json:"startupProbe,omitempty"`
+	ReadinessProbe  *k8sProbe                    `json:"readinessProbe,omitempty"`
+	LivenessProbe   *k8sProbe                    `json:"livenessProbe,omitempty"`
 }
 
 type k8sVolumeMount struct {
@@ -96,16 +121,16 @@ type k8sVolumeMount struct {
 }
 
 type k8sVolume struct {
-	Name     string        `json:"name"`
-	EmptyDir *k8sEmptyDir  `json:"emptyDir,omitempty"`
+	Name     string       `json:"name"`
+	EmptyDir *k8sEmptyDir `json:"emptyDir,omitempty"`
 }
 
 type k8sEmptyDir struct{}
 
 type k8sContainerSecurityContext struct {
-	AllowPrivilegeEscalation *bool              `json:"allowPrivilegeEscalation,omitempty"`
-	ReadOnlyRootFilesystem   *bool              `json:"readOnlyRootFilesystem,omitempty"`
-	Capabilities             *k8sCapabilities   `json:"capabilities,omitempty"`
+	AllowPrivilegeEscalation *bool            `json:"allowPrivilegeEscalation,omitempty"`
+	ReadOnlyRootFilesystem   *bool            `json:"readOnlyRootFilesystem,omitempty"`
+	Capabilities             *k8sCapabilities `json:"capabilities,omitempty"`
 }
 
 type k8sCapabilities struct {
@@ -192,9 +217,9 @@ type k8sServicePort struct {
 // Traefik IngressRoute types (CRD)
 
 type traefikIngressRoute struct {
-	APIVersion string                 `json:"apiVersion"`
-	Kind       string                 `json:"kind"`
-	Metadata   k8sMetadata            `json:"metadata"`
+	APIVersion string                  `json:"apiVersion"`
+	Kind       string                  `json:"kind"`
+	Metadata   k8sMetadata             `json:"metadata"`
 	Spec       traefikIngressRouteSpec `json:"spec"`
 }
 
@@ -207,7 +232,7 @@ type traefikIngressRouteSpec struct {
 type traefikRoute struct {
 	Match       string                   `json:"match"`
 	Kind        string                   `json:"kind"`
-	Middlewares []traefikRouteMiddleware  `json:"middlewares,omitempty"`
+	Middlewares []traefikRouteMiddleware `json:"middlewares,omitempty"`
 	Services    []traefikRouteService    `json:"services"`
 }
 
@@ -237,9 +262,9 @@ type certManagerCertificate struct {
 }
 
 type certManagerCertificateSpec struct {
-	SecretName string           `json:"secretName"`
-	IssuerRef  certIssuerRef    `json:"issuerRef"`
-	DNSNames   []string         `json:"dnsNames"`
+	SecretName string        `json:"secretName"`
+	IssuerRef  certIssuerRef `json:"issuerRef"`
+	DNSNames   []string      `json:"dnsNames"`
 }
 
 type certIssuerRef struct {
@@ -287,10 +312,10 @@ type k8sMetricTargetSpec struct {
 // --- Traefik Middleware types (for static frontend) ---
 
 type traefikMiddleware struct {
-	APIVersion string                 `json:"apiVersion"`
-	Kind       string                 `json:"kind"`
-	Metadata   k8sMetadata            `json:"metadata"`
-	Spec       traefikMiddlewareSpec   `json:"spec"`
+	APIVersion string                `json:"apiVersion"`
+	Kind       string                `json:"kind"`
+	Metadata   k8sMetadata           `json:"metadata"`
+	Spec       traefikMiddlewareSpec `json:"spec"`
 }
 
 type traefikMiddlewareSpec struct {
@@ -318,9 +343,9 @@ type traefikRouteMiddleware struct {
 // kedaScaledObject represents a KEDA ScaledObject CRD.
 // Generated instead of HPA when AutoscalingConfig.MinReplicas == 0.
 type kedaScaledObject struct {
-	APIVersion string              `json:"apiVersion"` // keda.sh/v1alpha1
-	Kind       string              `json:"kind"`       // ScaledObject
-	Metadata   k8sMetadata         `json:"metadata"`
+	APIVersion string               `json:"apiVersion"` // keda.sh/v1alpha1
+	Kind       string               `json:"kind"`       // ScaledObject
+	Metadata   k8sMetadata          `json:"metadata"`
 	Spec       kedaScaledObjectSpec `json:"spec"`
 }
 
@@ -353,15 +378,15 @@ type kedaHTTPScaledObject struct {
 	APIVersion string                   `json:"apiVersion"` // http.keda.sh/v1alpha1
 	Kind       string                   `json:"kind"`       // HTTPScaledObject
 	Metadata   k8sMetadata              `json:"metadata"`
-	Spec       kedaHTTPScaledObjectSpec  `json:"spec"`
+	Spec       kedaHTTPScaledObjectSpec `json:"spec"`
 }
 
 type kedaHTTPScaledObjectSpec struct {
-	Hosts                []string               `json:"hosts"`
+	Hosts                 []string               `json:"hosts"`
 	TargetPendingRequests int                    `json:"targetPendingRequests,omitempty"`
-	ScaleTargetRef       kedaHTTPScaleTargetRef  `json:"scaleTargetRef"`
-	Replicas             *kedaHTTPReplicas       `json:"replicas,omitempty"`
-	ScaledownPeriod      int                     `json:"scaledownPeriod,omitempty"`
+	ScaleTargetRef        kedaHTTPScaleTargetRef `json:"scaleTargetRef"`
+	Replicas              *kedaHTTPReplicas      `json:"replicas,omitempty"`
+	ScaledownPeriod       int                    `json:"scaledownPeriod,omitempty"`
 }
 
 type kedaHTTPScaleTargetRef struct {
@@ -505,16 +530,16 @@ type analysisTemplateArg struct {
 }
 
 type analysisTemplateMetric struct {
-	Name                  string                       `json:"name"`
-	Interval              string                       `json:"interval,omitempty"`
-	InitialDelay          string                       `json:"initialDelay,omitempty"`
-	Count                 int                          `json:"count,omitempty"`
-	SuccessCondition      string                       `json:"successCondition,omitempty"`
-	FailureCondition      string                       `json:"failureCondition,omitempty"`
-	Inconclusive          string                       `json:"inconclusive,omitempty"` // EC-3
-	FailureLimit          int                          `json:"failureLimit,omitempty"`
-	ConsecutiveErrorLimit int                          `json:"consecutiveErrorLimit,omitempty"` // EC-7
-	Provider              analysisTemplateProvider     `json:"provider"`
+	Name                  string                   `json:"name"`
+	Interval              string                   `json:"interval,omitempty"`
+	InitialDelay          string                   `json:"initialDelay,omitempty"`
+	Count                 int                      `json:"count,omitempty"`
+	SuccessCondition      string                   `json:"successCondition,omitempty"`
+	FailureCondition      string                   `json:"failureCondition,omitempty"`
+	Inconclusive          string                   `json:"inconclusive,omitempty"` // EC-3
+	FailureLimit          int                      `json:"failureLimit,omitempty"`
+	ConsecutiveErrorLimit int                      `json:"consecutiveErrorLimit,omitempty"` // EC-7
+	Provider              analysisTemplateProvider `json:"provider"`
 }
 
 type analysisTemplateProvider struct {
