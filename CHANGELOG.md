@@ -11,18 +11,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Gate `workflow-hygiene`: reprova antes do merge qualquer action de terceiro sem SHA fixo e qualquer
   `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
+- Guard de wiring de gates: todo gate registrado passa a exigir wiring em `taskfiles/quality.yml` ou
+  entrada num ledger com motivo. Um gate novo não nasce mais órfão em silêncio (#255)
+- 9 gates que existiam sem nunca rodar passam a ser executados por `task quality:gates` —
+  `agpl-isolation`, `contract-consumers`, `decisions-deletion`, `no-migrate-force`, `no-shell-wrap`,
+  `orphan-alerts`, `test-deletion`, `test-pyramid`, `test-targets`. Os 14 restantes do backlog do
+  #255 ficaram de fora com motivo medido e registrado por gate: 9 reprovam com achado real, 2
+  estouram 25s, 3 passam vacuamente (`cli-bundle-size` guarda `cli/dist`, que saiu no M2) (#255)
+- `docs/README.md`: índice de `docs/`, separando explicitamente referência viva de trilha de
+  auditoria datada — os 250 arquivos não tinham ponto de entrada (docs-audit 2026-07-30)
 
 ### Changed
+
+- Documentação alinhada ao estado real do repositório: `CLAUDE.md` reescrito (650 → ~310 linhas,
+  preservando as tabelas de armadilhas), mais `README.md`, `SECURITY.md`, `PITCH.md` e `ROADMAP.md`
+  — `cli/` e `cloud/` foram extraídos para os repos irmãos, o workspace é multi-módulo
+  (`go.work` + `../loopzero-contracts`), Go 1.26, e os gates vivem em `cmd/loopzero-ops/internal/quality/`
+  (docs-audit 2026-07-30)
+- `GOVERNANCE.md` reescrito: descrevia governança CNCF vendor-neutral, com os 5 documentos que
+  referenciava inexistentes, contradizendo o LICENSE proprietário. Passa a descrever a governança
+  real — tiers T0-T3, ADRs, política de emenda de plano, fluxo `workspace → develop → main`
+  (docs-audit 2026-07-30)
 
 ### Deprecated
 
 ### Removed
 
+- Tasks `cli:link` e `cli:build` do `Taskfile.yml`: rodavam `cd cli && npm …` contra um diretório que
+  saiu do repo no M2 (extração para `loopzero-cli`), sem nenhum chamador. Não foram repontadas para
+  `../loopzero-cli` — task atravessando fronteira de repo reintroduz o acoplamento que o M2 removeu e faz
+  no-op silencioso quando o irmão não está clonado. Guard de classe (qualquer `cd` para diretório
+  ausente) em `cmd/loopzero-ops/quality_taskfile_dead_dir_test.go` (#254, CHG-2026-07-30-001)
 - `infra/tests/livetest`: 9 funções exportadas sem nenhum chamador — a camada paralela de caos que
   duplicava a suíte que de fato roda (`infra/tests/chaos/`), três Camadas nunca invocadas da
   contra-prova e dois helpers de dogfood citados só em comentário (#228, #230)
 
 ### Fixed
+
+- `trivy-scan` reportava erro de execução como achado de vulnerabilidade. `trivy fs --exit-code 1`
+  gasta o mesmo código de saída em "vulnerabilidades encontradas" e "o scan não completou", então um
+  HTTP 429 do Maven Central virava `trivy-scan: FAIL — found vulnerabilities` com zero
+  vulnerabilidades, reprovava `quality:gates` e abortava todos os gates ligados depois dele. Agora
+  distingue pelo marcador `FATAL` do próprio trivy e reporta SKIP com a causa. Testes de mesa cobrem
+  os dois sentidos, inclusive um pacote chamado `FATALParser` que não pode rebaixar achado real (#255)
+- Seis scripts de `infra/helmfile/scripts/` invocavam `kubectl` sem fixar o cluster-alvo, herdando o
+  kubecontext ativo — `create-wiring-configmap`, `generate-build-secrets`, `generate-runtime-secrets`,
+  `regression-checks`, `lib/argocd-register` e `lib/clustercredential-create`. Fixados por construção
+  (wrapper `kubectl()`) ou, quando o alvo varia por argumento, por fail-fast em `KUBECONFIG`. Guard de
+  diretório inteiro com negative control em `infra/tests/charts/helmfile_scripts_context_pin_test.go`
+  (#117)
+- Gates do `loopzero-ops` mandavam o operador editar `pkg/quality/…` na própria dica de remediação impressa
+  ao falhar — pacote relocado para `cmd/loopzero-ops/internal/quality/` no M9. 14 ocorrências em 10 arquivos;
+  guard com negative control em `cmd/loopzero-ops/quality_stale_pkg_quality_path_test.go` (#255)
+- `task validate:helmfile-scripts` voltou a passar (4/4). As 6 asserções de idempotência de secrets
+  não falhavam — **nunca executavam**: o mock inline do harness despachava por `$1`/`$2` posicional e o
+  wrapper `kubectl()` do fix #115 injeta `--context=` na frente, matando o mock com SIGPIPE antes da
+  primeira asserção. O mock agora modela a CLI real e ignora flags globais anteriores ao verbo (#117)
+- README e SECURITY afirmavam enforcement de CI que não existe desde a retirada do GitHub Actions
+  em 2026-05-23 — duas tabelas inteiras marcadas "CI-enforced" citavam `build-images.yml`, `ci.yml`
+  e `helm-charts.yml`, os três deletados. Agora declaram como cada ferramenta de fato roda, e quais
+  ficaram sem runner (Polaris, chart-testing, helm-diff) (docs-audit 2026-07-30, #255)
+- `docs/operations/k8s-upgrade-runbook.md` mandava rodar um gate Pluto automatizado cujo workflow e
+  cujo pacote Go foram deletados em 2026-05-23; o passo é manual e agora está documentado como tal
+  (docs-audit 2026-07-30)
+- `docs/operations/dev-loop.md` afirmava que o Tilt observa `cli/` e que existe `./cli/bin/loopzero` —
+  falso desde a extração do CLI no M2 (docs-audit 2026-07-30, #254)
+- Links quebrados em documentos vivos: plano `live-ca-fetch-clustercredential` e plano de integração
+  Vault (movidos para `completed/`), `IDENTITY.md` e o espelho do seam doc do LoopZeroKit (ambos
+  inexistentes no workspace) (docs-audit 2026-07-30)
 
 - `TestMetricCheckConstraint_MatchesContractsConstants` deixa de reprovar por falso-positivo: o guard
   lia o CHECK de `metric` de **outra tabela** (`lens_alert_rules`/`lens_fired_alerts`, cujas migrations
