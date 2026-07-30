@@ -75,6 +75,30 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 		}
 	}
 
+	// #61 — the OLD ReplicaSet must outlive the promotion.
+	//
+	// DECISION (2026-07-30): LoopZero promises a WebSocket GRACEFUL RECONNECTION,
+	// not SURVIVAL. Survival would mean a connection outliving the process that
+	// owns it, which needs session handoff between pods — an architecture
+	// change, not a config value. Promising survival and delivering a severed
+	// socket is worse than promising reconnection and delivering it.
+	//
+	// The teardown budget on a pod is preStop 5s + grace 30s (28a66a5c). This
+	// field governs the generation ABOVE that: how long the old ReplicaSet
+	// survives once the canary is promoted. Left unset it is whatever the
+	// controller defaults to — and an unstated default is not a promise, because
+	// nobody can tell whether it may be changed.
+	//
+	// 60s covers the 35s teardown with margin while staying short enough that
+	// the NEXT rollout is not delayed. That matters most on the path nobody
+	// plans for: the rollback reached for while a canary is serving errors. A
+	// multi-minute window would buy a guarantee LoopZero does not make, and charge
+	// for it during an incident.
+	//
+	// Applied to BOTH shapes — a worker has no traffic to weight, but it can
+	// hold a long-running job, and the promise should not depend on app type.
+	canary.ScaleDownDelaySeconds = intPtr(60)
+
 	return k8sRollout{
 		APIVersion: "argoproj.io/v1alpha1",
 		Kind:       "Rollout",

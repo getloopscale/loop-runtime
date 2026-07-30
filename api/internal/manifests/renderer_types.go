@@ -434,6 +434,11 @@ type k8sCanaryStrategy struct {
 	Steps          []k8sCanaryStep    `json:"steps"`
 	MaxUnavailable int                `json:"maxUnavailable,omitempty"`
 	MaxSurge       string             `json:"maxSurge,omitempty"`
+	// ScaleDownDelaySeconds (#61) — how long the OLD ReplicaSet survives after
+	// the canary is promoted. Pointer so 0 stays distinguishable from unset:
+	// the zero value is a legitimate (if unwise) choice, and omitempty on an
+	// int would silently drop it.
+	ScaleDownDelaySeconds *int `json:"scaleDownDelaySeconds,omitempty"`
 }
 
 type k8sTrafficRouting struct {

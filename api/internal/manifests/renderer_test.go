@@ -286,9 +286,9 @@ func TestRender_EnvVarsSortedByKey(t *testing.T) {
 			Type:     "worker",
 			ImageRef: "reg:5000/acme/webapp:abc123",
 			Env: map[string]string{
-				"ZEBRA":    "z",
-				"ALPHA":    "a",
-				"MIDDLE":   "m",
+				"ZEBRA":  "z",
+				"ALPHA":  "a",
+				"MIDDLE": "m",
 			},
 		},
 	}
@@ -822,9 +822,9 @@ func TestRender_CustomDomain_NoCustomDomains_NoExtraDocs(t *testing.T) {
 
 func TestDomainResourceNames_Short(t *testing.T) {
 	cases := []struct {
-		domain       string
-		wantIngress  string
-		wantCert     string
+		domain      string
+		wantIngress string
+		wantCert    string
 	}{
 		{"api.mycompany.com", "cd-api-mycompany-com", "tls-cd-api-mycompany-com"},
 		{"www.example.io", "cd-www-example-io", "tls-cd-www-example-io"},

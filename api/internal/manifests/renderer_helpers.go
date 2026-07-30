@@ -69,6 +69,10 @@ func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {
 // namespace returns the Kubernetes namespace for a tenant environment.
 func int64Ptr(v int64) *int64 { return &v }
 
+// intPtr returns a pointer to v. Used where 0 must stay distinguishable from
+// unset — e.g. Rollout scaleDownDelaySeconds (#61).
+func intPtr(v int) *int { return &v }
+
 // namespace returns the canonical Kubernetes namespace for a render
 // target. ONE formula for ALL environments (production, staging,
 // preview-pr-N, ...) — `loopzero-<tenant>-<project>-<env>`. The isolation
