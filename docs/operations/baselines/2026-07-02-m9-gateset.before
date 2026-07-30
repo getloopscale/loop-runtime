@@ -22,6 +22,9 @@
 # RE-FREEZE 2026-07-30 (d): +1 gate — `tenant-csp-passthrough` (#59), WIRED. Regression
 #   lock: verde hoje porque o renderer nao anexa middleware algum; o defeito do #59 e' que
 #   esse estado correto estava indefeso e documentado ao contrario. 109 -> 110.
+# RE-FREEZE 2026-07-30 (e): +1 gate — `chart-default-tags` (#232), a forma executavel
+#   do achado de tag mutavel em default de chart loopzero-owned. Registrado e NAO wired:
+#   RED hoje, fix em infra/helm/ (gated, T2). 110 -> 111.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -35,6 +38,7 @@ caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev,
 caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
+chart-default-tags	-	loopzero-owned charts must not default their image tag to a mutable ref (#232).
 check-allowlist-sunsets	gates	Hermetic contract test for .claude/scripts/check-allowlist-sunsets.py (T5.2.a): 5 fixture cases + missing-file + LIVE rules/code-review-allowlist.txt check. Exits 0 for future/today/missing/live-clean; catches past-sunset (exit 1) and malformed/bad-date (exit 2). Requires python3. M-Migrate2 2026-07-07 replaces infra/tests/check-allowlist-sunsets_test.sh.
 cli-bundle-size	-	Guards the CLI published bundle size against regression.
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
