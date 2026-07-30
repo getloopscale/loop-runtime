@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -25,12 +26,12 @@ import (
 // create (web, production). The legacy production env (per ADR D2) is
 // provisioned by tenant bootstrap, not via this handler.
 var reservedEnvironmentNames = map[string]bool{
-	"default":     true,
-	"kube-system": true,
-	"loopzero-system": true,
-	"argocd":      true,
-	"monitoring":  true,
-	pkgdomain.DefaultPermanentEnv:  true, // M2 v1.2 — EC-8 cross-project reserved
+	"default":                     true,
+	"kube-system":                 true,
+	"loopzero-system":                 true,
+	"argocd":                      true,
+	"monitoring":                  true,
+	pkgdomain.DefaultPermanentEnv: true, // M2 v1.2 — EC-8 cross-project reserved
 }
 
 // envDeleteCleanupWarning is the user-facing warning emitted when the
@@ -527,6 +528,21 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	project := r.URL.Query().Get("project")
 	detail, err := h.envMgr.GetEnvironmentDetail(ctx, uc.TenantID, project, name)
 	if err != nil {
+		// Issue #139 — an ambiguous project-less lookup is a CALLER problem,
+		// not a server fault: the same env name exists in several projects and
+		// none was named. Collapsing it into a 500 would tell the operator
+		// nothing and page whoever owns the API. Answer 400 with the candidate
+		// projects so the next command can succeed.
+		var amb *domain.ErrAmbiguousEnvironment
+		if errors.As(err, &amb) {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"ENVIRONMENT_AMBIGUOUS",
+				fmt.Sprintf("environment '%s' exists in more than one project (%s); specify the project",
+					name, strings.Join(amb.Projects, ", ")),
+				400,
+			))
+			return
+		}
 		slog.Error("failed to get environment detail",
 			"tenant_id", uc.TenantID,
 			"environment", name,
