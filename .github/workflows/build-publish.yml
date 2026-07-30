@@ -29,7 +29,10 @@ on:
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
       dockerhub_image: { required: false, type: string,  default: "" }      # e.g. "loopzero/themory" — also push to Docker Hub when DOCKERHUB_TOKEN is set
-      runner:          { required: false, type: string,  default: '["ubuntu-latest"]' }   # JSON array; billing-blocked callers pass '["self-hosted","linux","x64"]'
+      # Default = frota Blacksmith da org `getloopscale` (2026-07-30). Consumidores
+      # fora da org devem passar a propria label; um default GitHub-hosted aqui
+      # gastaria minutos da conta de quem chama, em silencio.
+      runner:          { required: false, type: string,  default: '["blacksmith-8vcpu-ubuntu-2404"]' }
     secrets:
       GOMOD_TOKEN:        { required: false }   # cross-repo read for the pinned private loopzero-contracts module
       DOCKERHUB_USERNAME: { required: false }
@@ -40,7 +43,7 @@ permissions:
   id-token: write   # consumed only when sign=true (keyless cosign); harmless otherwise
 jobs:
   build-publish:
-    runs-on: ${{ fromJSON(inputs.runner) }} # default ubuntu-latest; callers may pass a self-hosted label set
+    runs-on: ${{ fromJSON(inputs.runner) }} # default = frota Blacksmith da org; ver o input `runner`
     env:
       # `secrets` is NOT allowed in step `if:` — lift the token to a job-level env so the
       # Docker Hub guards below can use `env.*` (valid in if/with). Stays masked in logs.

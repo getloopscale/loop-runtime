@@ -64,18 +64,21 @@ concurrency:
 
 jobs:
   build-and-test:
-    # RUNNER: `ubuntu-latest` ate' a transferencia para a org `getloopscale`.
+    # RUNNER: frota Blacksmith, habilitada em 2026-07-30 com a transferencia
+    # deste repositorio para a org `getloopscale`.
     #
-    # A Blacksmith SO' serve repositorio de ORGANIZACAO — pre-condicao dela, nao
-    # escolha nossa. O runbook do umbrella registra o custo de ignorar isso:
-    # aplicar `runs-on: blacksmith-*` antes da transferencia deixa o job
-    # `queued` com `runner_name` VAZIO, indefinidamente, SEM erro. O canario do
-    # loopzero-traefik-mcp ficou assim por mais de 24h.
+    # A label e' LITERAL de proposito. O runbook do umbrella mediu que
+    # `vars.CI_RUNNER` NAO resolve no repo (`LABELS=[self-hosted,linux,x64]`,
+    # mesmo com `visibility=all`) e o fallback `||` devolve a frota antiga EM
+    # SILENCIO — o CI fica verde na frota errada. Verificar `runner_name`, nunca
+    # `conclusion`.
     #
-    # Trocar para `blacksmith-8vcpu-ubuntu-2404` e' o passo 5 da migracao, DEPOIS
-    # de (1) transferir e (2) instalar o GitHub App na org.
-    # `.github/actionlint.yaml` ja' declara a label, entao a troca e' de uma linha.
-    runs-on: ubuntu-latest
+    # Duas pre-condicoes encadeadas, ambas satisfeitas antes desta linha existir:
+    #   1. o repo pertence a uma ORGANIZACAO (`owner.type=Organization`)
+    #   2. o GitHub App `blacksmith-sh` esta instalado NA ORG que dona o repo
+    # A segunda so' fica visivel depois de resolver a primeira, e foi o que
+    # custou tres tentativas na migracao do loopzero-memory.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 20
 
     env:

@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}   # cancel superseded DEV runs only; never release
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     outputs:
       images: ${{ steps.set.outputs.images }}
       charts: ${{ steps.set.outputs.charts }}
@@ -73,7 +73,7 @@ jobs:
   charts:
     needs: plan
     if: ${{ needs.plan.outputs.charts == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: write
