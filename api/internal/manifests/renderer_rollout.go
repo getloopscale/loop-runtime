@@ -42,6 +42,34 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 
 	container := buildAppContainer(ri, app, port)
 	podSpec := buildAppPodSpec(container)
+
+	// #61 — how long the OLD ReplicaSet survives promotion.
+	//
+	// DECISION: LoopZero promises a long-lived connection GRACEFUL RECONNECTION,
+	// not SURVIVAL.
+	//
+	// Survival would mean a connection outlives the process that owns it, which
+	// requires handing session state between pods. LoopZero does not do that, and
+	// building it is an architecture change, not a config value. Promising
+	// survival and delivering a severed socket is worse than promising
+	// reconnection and delivering it.
+	//
+	// Three settings implement that contract and no more:
+	//   preStop 5s        endpoint removal wins the race (buildAppPodSpec)
+	//   grace   30s       the app sends a close frame and drains (buildAppPodSpec)
+	//   scaleDownDelay    the old generation is not torn down the instant the
+	//                     canary is promoted — here
+	//
+	// 60s covers the pod's own teardown budget (5 + 30) with margin, so the
+	// ReplicaSet is never removed while its pods are still draining. It is
+	// deliberately NOT minutes: the old ReplicaSet holds quota and delays the
+	// NEXT rollout — including the rollback reached for when a canary is
+	// actively serving errors. Buying a guarantee LoopZero does not make, at cost
+	// on the incident path, is the wrong trade.
+	//
+	// Stated explicitly rather than left to the controller default: an unstated
+	// default is not a promise, because nobody can tell whether it may change.
+	scaleDownDelay := 60
 	replicas := replicasForApp(app)
 
 	// EC-5 fix: when progressive delivery + scale-to-zero, Rollout starts
@@ -56,12 +84,14 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 	var canary *k8sCanaryStrategy
 	if app.Type == "worker" {
 		canary = &k8sCanaryStrategy{
-			Steps: workerCanarySteps(),
+			Steps:                 workerCanarySteps(),
+			ScaleDownDelaySeconds: &scaleDownDelay,
 		}
 	} else {
 		canary = &k8sCanaryStrategy{
-			StableService: resName + "-stable",
-			CanaryService: resName + "-canary",
+			ScaleDownDelaySeconds: &scaleDownDelay,
+			StableService:         resName + "-stable",
+			CanaryService:         resName + "-canary",
 			TrafficRouting: &k8sTrafficRouting{
 				// F-16 reverted (2026-05-07): use native Argo Rollouts
 				// Traefik integration. Per docs/features/traffic-management/traefik.md
