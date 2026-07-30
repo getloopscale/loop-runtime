@@ -577,6 +577,31 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 			"error", err)
 		return
 	}
+
+	// Issue #242 fix 3 — pick up a rotated build-cluster credential without a
+	// pod restart.
+	//
+	// The token resolved above is a VALUE captured at process start. When the
+	// operator rotates `loopzero-cluster-kubeconfigs.build.kubeconfig`, the mounted
+	// file changes and this client does not: every poll keeps authenticating
+	// with a credential that was already replaced, and the only recovery is
+	// deleting the pod. The watcher already noticed (`ReportWatchError` → the
+	// 401/403 log + ArgoWatcherTokenExpiredTotal); it had no way to act on it.
+	//
+	// Wired ONLY when the kubeconfig is a real file. In-cluster (empty path)
+	// client-go already refreshes the projected SA token natively — wrapping
+	// there would replace a working mechanism with a weaker one.
+	if cfg.BuildKubeconfig != "" {
+		restCfg.WrapTransport = build.NewReloadingTransportWrapper(cfg.BuildKubeconfig, cfg.BuildKubeContext)
+		// The wrapper owns the Authorization header. Left set, client-go also
+		// installs its own bearer round-tripper carrying the STARTUP token, and
+		// whichever writes the header last wins — reintroducing exactly the
+		// staleness this removes.
+		restCfg.BearerToken = ""
+		restCfg.BearerTokenFile = ""
+		logger.Info("argo step watcher: build-cluster token reloads on auth failure",
+			"kubeconfig", cfg.BuildKubeconfig)
+	}
 	dyn, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		logger.Warn("argo step watcher: dynamic.NewForConfig failed, watcher disabled",
