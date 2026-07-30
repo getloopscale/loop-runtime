@@ -261,7 +261,7 @@ func runBaseImageDigest(args []string) int {
 		fmt.Fprintf(os.Stderr, "\nFAIL — %d tag-only base image(s).\n", len(o.Violations))
 		fmt.Fprintln(os.Stderr, "Fix: replace 'tag' with 'tag@sha256:<digest>' (Renovate pinDigests: true),")
 		fmt.Fprintln(os.Stderr, "OR add '# pragma: allow-tag-pin' on the line above the FROM, OR refresh the")
-		fmt.Fprintln(os.Stderr, "baseline in pkg/quality/baseimagedigest if the bump is intentional + grandfathered.")
+		fmt.Fprintln(os.Stderr, "baseline in cmd/loopzero-ops/internal/quality/baseimagedigest if the bump is intentional + grandfathered.")
 		return 1
 	}
 	fmt.Printf("PASS — %d FROM directive(s); every base image is digest-pinned, baselined, or pragma'd.\n", o.Scanned)

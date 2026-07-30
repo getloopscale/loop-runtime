@@ -80,6 +80,23 @@ tasks:
       - task: contract   # M10 T3.1 — spec-based consumer contract (engine conformance + cli↔engine + dashboard↔engine); in-repo, no sibling needed, so it gates every pre-push deterministically
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
+      # Issue #255 — gates that were implemented, registered and unit-tested but
+      # never actually run. Each of the nine below was executed on 2026-07-30 and
+      # exits 0 against the current tree, so wiring them costs nothing today and
+      # makes them enforce from here on. The rest of the #255 backlog stays out on
+      # purpose: nine more report real findings (wiring them would turn this task
+      # red for reasons unrelated to the change under test), two exceed a 25s
+      # budget, and three pass vacuously. Their status is recorded per-gate in
+      # cmd/loopzero-ops/quality_gate_wiring_test.go rather than left as a silent `-`.
+      - /tmp/loopzero-ops quality agpl-isolation
+      - /tmp/loopzero-ops quality contract-consumers
+      - /tmp/loopzero-ops quality decisions-deletion
+      - /tmp/loopzero-ops quality no-migrate-force
+      - /tmp/loopzero-ops quality no-shell-wrap
+      - /tmp/loopzero-ops quality orphan-alerts
+      - /tmp/loopzero-ops quality test-deletion
+      - /tmp/loopzero-ops quality test-pyramid
+      - /tmp/loopzero-ops quality test-targets
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
       # migration v1.2). Phase 0 baseline: each gate trivially passes
       # (empty queries/, no sqlc imports). Real exercise begins T1.1+.

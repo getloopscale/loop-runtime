@@ -131,7 +131,7 @@ func runSpotcheckDimension(args []string) int {
 
 // runGitDiffToLines replaces git-diff-to-lines.sh (a bash+Python wrapper):
 // runs `git diff --unified=0 base...head` and emits one `path:line` per
-// touched line. Parse logic lives in the tested pkg/quality/gitdiff.
+// touched line. Parse logic lives in the tested cmd/loopzero-ops/internal/quality/gitdiff.
 func runGitDiffToLines(args []string) int {
 	fs := flag.NewFlagSet("git-diff-to-lines", flag.ContinueOnError)
 	base := fs.String("base", "", "base ref (falls back to $BASE_REF, then origin/main)")
@@ -291,7 +291,7 @@ func runTaskfileInterface(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Action: define these in Taskfile.yml or an included taskfiles/*.yml.")
 		fmt.Fprintln(os.Stderr, "If intentionally renamed/removed, update ExpectedCommands in")
-		fmt.Fprintln(os.Stderr, "pkg/quality/taskfileinterface/check.go AND CI consumers.")
+		fmt.Fprintln(os.Stderr, "cmd/loopzero-ops/internal/quality/taskfileinterface/check.go AND CI consumers.")
 		return 1
 	}
 	fmt.Printf("taskfile-interface: PASS — all %d public commands resolve\n", len(taskfileinterface.ExpectedCommands))
@@ -372,7 +372,7 @@ func runCLIBundleSize(args []string) int {
 		fmt.Fprintf(os.Stderr, "[cli-bundle-size] FAIL — cli/dist %.1f MB > cap %.1f MB (T9.3 governance).\n",
 			mb(o.TotalBytes), mb(o.MaxBytes))
 		fmt.Fprintln(os.Stderr, "Options: (1) remove/lazy-load the heavy dependency, OR")
-		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in pkg/quality/clibundlesize + add an ADR justifying the growth.")
+		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in cmd/loopzero-ops/internal/quality/clibundlesize + add an ADR justifying the growth.")
 		return 1
 	}
 	fmt.Printf("[cli-bundle-size] PASS — cli/dist %.1f MB <= cap %.1f MB.\n", mb(o.TotalBytes), mb(o.MaxBytes))

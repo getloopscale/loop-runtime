@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package danglingdata is the mirror of pkg/quality/danglingrefs. Where
+// Package danglingdata is the mirror of cmd/loopzero-ops/internal/quality/danglingrefs. Where
 // danglingrefs catches a DELETED SCRIPT still referenced by a live caller, this
 // gate catches a DELETED DATA FILE (config/catalog .yaml/.yml/.json) still
 // referenced by a live executable caller (.sh script or workflow/Taskfile YAML).

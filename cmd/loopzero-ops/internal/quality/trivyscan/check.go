@@ -77,6 +77,20 @@ func Check(ctx context.Context, cfg Config) (*Outcome, error) {
 	if runErr != nil {
 		// exit 1 means findings present; any other exit means trivy itself failed
 		if exitErr, ok := runErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			// ...except that trivy ALSO spends exit 1 on a FATAL, so the exit
+			// code alone cannot carry the distinction this branch depends on.
+			// Observed: a Maven Central HTTP 429 surfaced as "found
+			// vulnerabilities", failing the gate and aborting every gate wired
+			// after it — while zero vulnerabilities had been found. Inspect the
+			// output for the FATAL marker and route it to the execution-error
+			// branch below, which is where Check already intended it to go.
+			if execErr, detail := classifyExitOne(string(out)); execErr {
+				return &Outcome{
+					Skipped: true,
+					Reason: fmt.Sprintf("trivy could not complete the scan (severity=%s) — NOT a vulnerability finding: %s",
+						severities, detail),
+				}, nil
+			}
 			return &Outcome{
 				Pass:   false,
 				Reason: fmt.Sprintf("trivy fs found vulnerabilities (severity=%s):\n%s", severities, string(out)),
