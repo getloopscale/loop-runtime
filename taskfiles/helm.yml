@@ -55,6 +55,23 @@ tasks:
 
   helm:sync-crds:
     desc: Sync CRDs from operators/config/crd/bases/ to charts/loopzero-crds/templates/
+    # NOTE ON THE ESCAPES BELOW — do not "simplify" them away.
+    #
+    # go-task renders every command as a Go template BEFORE the shell sees it.
+    # This body emits HELM templates, which use the same `{{ }}` delimiters, so
+    # an unescaped `{{- if .Values.crds.${short}.enabled }}` is parsed by go-task
+    # as its OWN action and dies with `bad character U+0024 '$'`.
+    #
+    # That is exactly what happened: this task — the remediation the
+    # `crd-semantic-diff` gate prescribes — could not run at all, so the CRD
+    # chart silently drifted three features behind kubebuilder (`project` on
+    # environments, `cellId` on previewenvironments, the `Cleaned` terminal
+    # state on loopzeroapplications). The gate reported drift correctly and the fix
+    # it pointed at was unavailable.
+    #
+    # `{{ "{{" }}` renders to a literal `{{` for the shell. Only the OPENING
+    # braces need escaping — a bare `}}` starts no action.
+    # Guarded by cmd/loopzero-ops/quality_taskfile_renders_test.go (`task --dry`).
     cmds:
       - |
         SRC="operators/config/crd/bases"
@@ -67,18 +84,18 @@ tasks:
           crd_name=$(grep "^  name:" "$crd_file" | head -1 | awk '{print $2}')
           spec_content=$(sed -n '/^spec:/,$p' "$crd_file")
           cat > "$template_file" << TMPL_EOF
-        {{- if .Values.crds.${short}.enabled }}
+        {{ "{{" }}- if .Values.crds.${short}.enabled }}
         apiVersion: apiextensions.k8s.io/v1
         kind: CustomResourceDefinition
         metadata:
           name: ${crd_name}
           labels:
-            {{- include "loopzero-common.labels" . | nindent 4 }}
+            {{ "{{" }}- include "loopzero-common.labels" . | nindent 4 }}
           annotations:
             "helm.sh/resource-policy": keep
-            controller-gen.kubebuilder.io/version: {{ .Values.controllerGenVersion | default "v0.17.2" }}
+            controller-gen.kubebuilder.io/version: {{ "{{" }} .Values.controllerGenVersion | default "v0.17.2" }}
         ${spec_content}
-        {{- end }}
+        {{ "{{" }}- end }}
         TMPL_EOF
           COUNT=$((COUNT + 1))
         done

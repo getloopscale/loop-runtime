@@ -178,6 +178,7 @@ spec:
                 - Reachable
                 - Degraded
                 - Down
+                - Cleaned
                 type: string
               reachable:
                 description: Reachable indicates whether the route probe succeeded.
