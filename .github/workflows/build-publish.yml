@@ -136,16 +136,29 @@ jobs:
         if: ${{ inputs.sign }}
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
+      # `${{ }}` dentro de `run:` e substituido NO TEXTO do script antes do shell existir: um valor com
+      # aspas, `;` ou `$(...)` deixa de ser argumento e vira comando, com acesso aos segredos do job
+      # (#250). Passar pelo `env:` do step nao tem essa propriedade — o valor chega como variavel de
+      # ambiente, e `"${VAR}"` e um argumento, aconteca o que acontecer dentro dele.
+      #
+      # Isto NAO e teatro para o semgrep: um input de `workflow_call` e, por definicao, controlado pelo
+      # CALLER, e o conjunto de callers muda sem que este arquivo mude. Hoje os valores vem de
+      # `publish.yml` versionado; a garantia estava na disciplina de quem chama, e agora esta na
+      # estrutura do workflow.
       - name: Keyless sign by digest (release only)
         if: ${{ inputs.sign }}
-        run: cosign sign --yes "${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}"
+        env:
+          IMAGE_REF: ${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_REF}"
 
       # Confused-deputy guard (EC-2): accept ONLY signatures produced by THIS reusable
       # workflow (path-pinned) via the GitHub OIDC issuer. One signing identity for every
       # org image — pinned in one place.
       - name: Verify the signature (identity-pinned)
         if: ${{ inputs.sign && inputs.verify }}
+        env:
+          IMAGE_REF: ${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
         run: |
-          cosign verify "${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}" \
+          cosign verify "${IMAGE_REF}" \
             --certificate-identity-regexp '^https://github\.com/getloopscale/loopzero/\.github/workflows/build-publish\.yml@' \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com

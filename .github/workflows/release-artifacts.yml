@@ -80,7 +80,13 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
       - name: Login GHCR (helm)
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+        # Mesma classe do #250: nada de `${{ }}` dentro de `run:`. Aqui o segredo tambem deixa de
+        # transitar pela LINHA DE COMANDO — `printenv` nao aparece em `ps`, ao contrario de um `echo`
+        # com o valor ja substituido no texto do script.
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: printenv GHCR_TOKEN | helm registry login ghcr.io -u "${GHCR_USER}" --password-stdin
       - name: Package + push the 13 charts (OCI)
         run: |
           set -euo pipefail
