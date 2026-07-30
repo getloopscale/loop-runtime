@@ -1,0 +1,24 @@
+# Labels de runner que o actionlint deve aceitar em `runs-on`.
+#
+# O DEFEITO QUE ISTO PREVINE: o actionlint valida `runs-on` contra a lista de
+# labels GitHub-hosted que conhece e REJEITA qualquer outra
+# (`label "..." is unknown`). Sem esta declaracao, no instante em que um workflow
+# passar a usar a label literal da Blacksmith, o gate de workflows falha em
+# TODOS os arquivos — nao so' no que mudou.
+#
+# Passava despercebido enquanto o runner saia de uma expressao
+# (`fromJSON(vars.CI_RUNNER)`): actionlint nao avalia expressao estaticamente,
+# entao a label nunca era vista. Fixar a label literal — que e' o que o runbook
+# do umbrella manda fazer, porque `vars.CI_RUNNER` NAO resolve e cai em silencio
+# na frota antiga — torna a label visivel, e sem este arquivo o gate quebra.
+#
+# Por isso o runbook lista este arquivo como PRE-REQUISITO da migracao, nao como
+# zelo: ele entra ANTES da label, nunca depois.
+#
+# `self-hosted-runner.labels` e' a chave prevista para exatamente isto: labels
+# servidas por uma frota que nao e' a do GitHub. As da Blacksmith entram aqui
+# apesar do nome da chave — do ponto de vista do actionlint, qualquer runner
+# nao-GitHub-hosted e' "self-hosted".
+self-hosted-runner:
+  labels:
+    - blacksmith-8vcpu-ubuntu-2404

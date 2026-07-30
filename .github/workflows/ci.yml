@@ -1,0 +1,181 @@
+# Gate rapido de compilacao + testes hermeticos dos modulos Go.
+#
+# O DEFEITO QUE ISTO PREVINE: ate aqui este repositorio NAO tinha gate algum no
+# GitHub. As Actions foram removidas como pipeline em 2026-05-23 e substituidas
+# por `task quality:gates` no hook de pre-push — que roda na maquina de quem
+# empurra, e so' nela. Consequencias medidas nesta mesma semana:
+#
+#   - um push que morre em SIGPIPE (#256) nao distingue "gate reprovou" de
+#     "conexao caiu", e quem estiver com o hook desinstalado nao roda nada;
+#   - `LOOPZERO_SKIP_PREPUSH` existe e nada registra o seu uso;
+#   - a maquina do operador tem Go 1.26, helmfile, kubeconform, trivy e
+#     golangci-lint instalados. Um contribuidor novo nao tem, e descobre isso
+#     depois do merge.
+#
+# ESCOPO — honestamente limitado, e a limitacao e' deliberada.
+#
+# Roda build + vet + os testes que NAO precisam de cluster. NAO roda
+# `task quality:gates` (os 111 gates) nem a suite dos operators. Motivos
+# concretos, nao falta de vontade:
+#
+#   quality:gates  exige helmfile, kubeconform, actionlint, trivy e
+#                  golangci-lint no PATH, e FALHA ALTO se faltarem — por
+#                  desenho, para nao passar em silencio. Provisionar isso e'
+#                  trabalho proprio; ate' la' o conjunto continua no pre-push.
+#   operators/     usa envtest (Ginkgo + binarios do kube-apiserver via
+#                  setup-envtest). Baixa ~100MB e leva minutos; entra quando o
+#                  gate tiver orcamento de tempo para isso.
+#
+# Um gate que cobre menos e diz o que nao cobre e' util. Um gate que promete
+# cobertura total e roda metade e' pior que nenhum — foi o que motivou o #255.
+name: CI
+
+# GATILHOS: PR para `develop` OU `main`, mais push em `develop`.
+#
+# Todo commit que entra no trunk e' verificado — e' a definicao de CI. Aqui o
+# trunk e' `develop`, entao e' ELE que precisa de gate; gate so' em `main`
+# protegeria apenas o instante do release, com o estrago ja' feito e diluido num
+# diff grande.
+#
+# Os DOIS gatilhos, e nao um: o de PR mata o defeito antes de entrar no trunk;
+# o de push (pos-merge) pega o que so' existe DEPOIS do merge — dois PRs verdes
+# isoladamente que se quebram juntos. Escopos diferentes, nao redundancia.
+on:
+  workflow_call:
+  pull_request:
+    branches: [develop, main]
+    paths-ignore:
+      - '.claude/**'
+      - '**/*.md'
+      - 'docs/**'
+  push:
+    branches: [develop]
+    paths-ignore:
+      - '.claude/**'
+      - '**/*.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # RUNNER: `ubuntu-latest` ate' a transferencia para a org `getloopscale`.
+    #
+    # A Blacksmith SO' serve repositorio de ORGANIZACAO — pre-condicao dela, nao
+    # escolha nossa. O runbook do umbrella registra o custo de ignorar isso:
+    # aplicar `runs-on: blacksmith-*` antes da transferencia deixa o job
+    # `queued` com `runner_name` VAZIO, indefinidamente, SEM erro. O canario do
+    # loopzero-traefik-mcp ficou assim por mais de 24h.
+    #
+    # Trocar para `blacksmith-8vcpu-ubuntu-2404` e' o passo 5 da migracao, DEPOIS
+    # de (1) transferir e (2) instalar o GitHub App na org.
+    # `.github/actionlint.yaml` ja' declara a label, entao a troca e' de uma linha.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      GOPRIVATE: github.com/getloopscale/*
+
+    steps:
+      # DOIS checkouts, e o segundo nao e' opcional.
+      #
+      # Tentei primeiro `GOWORK=off` com um checkout so' — e' o que api/Dockerfile
+      # faz. NAO funciona para o repositorio inteiro, e a medicao foi esta:
+      #
+      #   cmd/loopzero-ops  `go.mod` nao declara `jackc/pgx/v5` de forma alguma;
+      #                 a dependencia so' resolve pelo workspace.
+      #   api           `go.sum` tem o hash do modulo pgx mas NAO a linha
+      #                 `/go.mod` dele — a forma exata que o go.work supre.
+      #   infra/scripts mesma lacuna.
+      #
+      # O Dockerfile escapa disso porque compila SO' `api/./cmd/`, um
+      # subconjunto cujas dependencias estao completas. Um gate que compila tudo
+      # nao tem essa sorte.
+      #
+      # A alternativa seria `go mod tidy` nos 6 modulos. Rejeitada aqui: mexer na
+      # resolucao de dependencia de todo o repo para acomodar um gate novo e'
+      # deixar o gate ditar a arquitetura — e arrisca quebrar builds de imagem
+      # que hoje funcionam. Preservar o workspace faz o CI exercitar a MESMA
+      # resolucao que o desenvolvedor exercita localmente, que e' a propriedade
+      # que se quer de um gate.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
+        with:
+          path: loopzero
+
+      # `loopzero-contracts` e' privado; o checkout precisa do mesmo token do modulo.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          repository: getloopscale/loopzero-contracts
+          path: loopzero-contracts
+          token: ${{ secrets.GOMOD_TOKEN }}
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
+        with:
+          go-version-file: loopzero/api/go.mod
+          cache-dependency-path: |
+            loopzero/api/go.sum
+            loopzero/operators/go.sum
+
+      # `loopzero-contracts` e' privado. Sem esta reescrita, `go mod download` recebe
+      # 404 do proxy e o erro nao diz que o problema e' autenticacao.
+      #
+      # O segredo entra por `env:` e sai por `printenv`, NUNCA interpolado dentro
+      # do `run:` — `${{ }}` em `run:` monta o script por substituicao textual, o
+      # que expoe o valor ao shell e aos logs. E' o defeito do #250, travado pelo
+      # gate `workflow-hygiene`.
+      - name: Authenticate to the private module
+        env:
+          GOMOD_TOKEN: ${{ secrets.GOMOD_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOMOD_TOKEN:-}" ]; then
+            echo "::error::GOMOD_TOKEN ausente — api/go.mod requer github.com/getloopscale/loopzero-contracts, que e privado. Sem o token o download falha com 404 e a mensagem nao diz que o problema e autenticacao."
+            exit 1
+          fi
+          tok="$(printenv GOMOD_TOKEN)"
+          git config --global \
+            "url.https://x-access-token:${tok}@github.com/getloopscale/.insteadOf" \
+            "https://github.com/getloopscale/"
+
+      # Este repositorio e' MULTI-MODULO e nao tem `go.mod` na raiz: um
+      # `go build ./...` na raiz nao cobre NADA. Cada modulo e' compilado
+      # explicitamente. A lista e' a do `go.work` menos `../loopzero-contracts`, que
+      # tem CI proprio no repositorio dele — este gate valida o consumo, nao a
+      # producao.
+      - name: Build every module
+        run: |
+          set -euo pipefail
+          cd loopzero
+          for m in pkg api operators operators/api cmd/loopzero-ops infra/scripts; do
+            echo "::group::build $m"
+            (cd "$m" && go build ./...)
+            echo "::endgroup::"
+          done
+
+      - name: Vet every module
+        run: |
+          set -euo pipefail
+          cd loopzero
+          for m in pkg api operators operators/api cmd/loopzero-ops infra/scripts; do
+            echo "::group::vet $m"
+            (cd "$m" && go vet ./...)
+            echo "::endgroup::"
+          done
+
+      # `operators` fica de fora: a suite dele e' Ginkgo + envtest e precisa dos
+      # binarios do kube-apiserver. Excluido EXPLICITAMENTE em vez de
+      # silenciosamente omitido — quem le' o gate ve' o que ele nao cobre.
+      - name: Test the hermetic modules
+        run: |
+          set -euo pipefail
+          cd loopzero
+          for m in pkg api cmd/loopzero-ops; do
+            echo "::group::test $m"
+            (cd "$m" && go test ./... -count=1)
+            echo "::endgroup::"
+          done
