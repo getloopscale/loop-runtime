@@ -89,12 +89,31 @@ jobs:
           images: |
             ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}
             ${{ (inputs.dockerhub_image != '' && env.DOCKERHUB_TOKEN != '') && format('docker.io/{0}', inputs.dockerhub_image) || '' }}
+          # As duas ultimas regras cobrem o disparo MANUAL, e existem porque a
+          # ausencia delas tornava esse caminho impossivel.
+          #
+          # `release-artifacts.yml` anuncia `workflow_dispatch` e o job `plan`
+          # trata `IS_DISPATCH` explicitamente construindo TODAS as imagens. Mas
+          # nenhuma regra de tag disparava fora de `develop` e de tags `v*`,
+          # entao um dispatch a partir de qualquer outro branch gerava ZERO tags
+          # e o buildx morria com `tag is needed when pushing to registry` —
+          # medido no run 30583134483, cinco imagens de uma vez.
+          #
+          # Um gatilho anunciado que nunca pode funcionar e' pior que gatilho
+          # ausente: quem o usa conclui que a imagem esta quebrada, nao o
+          # workflow.
+          #
+          # Branch + sha curto (e nao um `latest` qualquer): o artefato de um
+          # dispatch precisa ser rastreavel ate' o commit exato, e nao pode
+          # colidir com o canal `develop` que a CI publica.
           tags: |
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
             type=sha,prefix=develop-,format=short,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/develop' }}
+            type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/develop' }}
 
       # --- Optional Trivy gate (build locally, scan, THEN push the cache-identical image) ---
       - name: Build for scan (Trivy gate)

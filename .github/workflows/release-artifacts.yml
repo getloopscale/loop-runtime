@@ -96,8 +96,23 @@ jobs:
           GHCR_USER: ${{ github.actor }}
         run: printenv GHCR_TOKEN | helm registry login ghcr.io -u "${GHCR_USER}" --password-stdin
       - name: Package + push the 13 charts (OCI)
+        # O namespace vem do DONO DO REPOSITORIO, nao de texto fixo.
+        #
+        # Estava `oci://ghcr.io/getloopscale/charts`. Com o repo transferido para a
+        # org `getloopscale`, o run passou a nao ter permissao de push naquele
+        # namespace e os 13 charts morreram com
+        # `403: Forbidden` no primeiro `HEAD` — medido no run 30583134483.
+        #
+        # E' o mesmo defeito que o `registry` das imagens ja' tinha, e o runbook do
+        # umbrella lista essa cascata entre os pontos que se esquece numa
+        # transferencia. Derivar em vez de fixar faz o proximo movimento de dono
+        # ser inerte aqui.
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          # minusculas: nomes de conta preservam maiusculas, referencias OCI nao.
+          NS="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           mkdir -p /tmp/charts
           # loopzero-common is a library chart that image-backed charts depend on; resolve
           # local (file://) deps into charts/<chart>/charts/ before packaging.
@@ -107,5 +122,5 @@ jobs:
             helm package "$c" -d /tmp/charts
           done
           for tgz in /tmp/charts/*.tgz; do
-            helm push "$tgz" oci://ghcr.io/getloopscale/charts
+            helm push "$tgz" "oci://ghcr.io/${NS}/charts"
           done
