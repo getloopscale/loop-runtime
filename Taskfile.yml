@@ -444,17 +444,18 @@ tasks:
     cmds:
       - bash infra/scripts/local/k3d-cross-cluster-heal.sh
 
-  cli:link:
-    desc: Symlink 'loopzero' CLI to PATH (makes `loopzero` available globally)
-    cmds:
-      - cd cli && npm link
-    status:
-      - which loopzero
-
-  cli:build:
-    desc: Build CLI from TypeScript source
-    cmds:
-      - cd cli && npm run build
+  # `cli:link` and `cli:build` lived here until 2026-07-30 (issue #254, CHG-2026-07-30-001).
+  # Both ran `cd cli && npm …`, but `cli/` left this repository at M2 of the monorepo
+  # decomposition (ADR ../decisions/2026-06-16-monorepo-decomposition.md) — so they had been
+  # failing with a raw `cd: cli: No such file or directory` for anyone who typed them. Nothing
+  # invoked them, so nothing ever went red.
+  #
+  # Deliberately NOT repointed at `../loopzero-cli`: a task here reaching across a repository
+  # boundary reintroduces exactly the coupling M2 removed, and would silently no-op when the
+  # sibling is not cloned. Build the CLI in the repo that owns it.
+  #
+  # Guarded by cmd/loopzero-ops/quality_taskfile_dead_dir_test.go so the next `cd` into an
+  # extracted directory fails at test time instead of in an operator's terminal.
 
   fulcio:diagnose:
     desc: "Diagnose Fulcio K8s OIDC trust chain (M07 keyless — plan 2026-05-28)"
