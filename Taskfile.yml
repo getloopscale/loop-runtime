@@ -284,10 +284,15 @@ tasks:
       # Run order matters — each script depends on its predecessor.
       - bash infra/helmfile/scripts/bootstrap-patch-argocd-gitea-creds.sh
       - bash infra/helmfile/scripts/bootstrap-patch-argocd-repo-server-restart.sh
-      - |
-        kubectl config use-context k3d-loopzero-build >/dev/null 2>&1
-        bash infra/helmfile/scripts/generate-build-secrets.sh standalone
-        kubectl config use-context k3d-loopzero-mgmt >/dev/null 2>&1
+      # Issue #117 — the switch-and-restore dance that used to wrap this call was
+      # a ROOT CAUSE of the bug it was meant to serve. Under `set -e`, a failure
+      # in the script skipped the restore line and left the operator pinned to
+      # k3d-loopzero-build; every later step in the chain then ran against the build
+      # cluster. That is verbatim the "residue from a prior session" repro of
+      # #117 — `task setup` manufactured the condition that broke its own next
+      # run. generate-build-secrets.sh now pins its own context by construction
+      # (KUBECTL_CONTEXT + a kubectl() wrapper), so no global mutation is needed.
+      - bash infra/helmfile/scripts/generate-build-secrets.sh standalone
       - bash infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh
       - bash infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
       # M07 LIVE keyless GREEN (Ralph iter 5 2026-05-28): Sigstore local stack

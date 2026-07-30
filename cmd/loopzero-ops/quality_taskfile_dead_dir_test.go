@@ -150,3 +150,52 @@ func TestTaskfilesDeadCd_NegativeControl(t *testing.T) {
 		}
 	}
 }
+
+// reGlobalContextSwitch matches a mutation of the operator's GLOBAL kubecontext.
+var reGlobalContextSwitch = regexp.MustCompile(`kubectl\s+config\s+use-context`)
+
+// TestTaskfilesDoNotMutateGlobalKubecontext locks the #117 root cause out.
+//
+// `task setup` used to wrap one script in
+//
+//	kubectl config use-context k3d-loopzero-build
+//	bash …/generate-build-secrets.sh standalone
+//	kubectl config use-context k3d-loopzero-mgmt
+//
+// Under `set -e` a failure in the middle line skips the restore, leaving the
+// operator pinned to the build cluster. Every later step then runs against the
+// wrong target — which is verbatim the "residue from a prior session" repro of
+// issue #117. The bootstrap chain manufactured the condition that broke its own
+// next run.
+//
+// The durable fix is that scripts pin their own context (see
+// infra/tests/charts/helmfile_scripts_context_pin_test.go); once they do, a
+// global switch is never needed, and reintroducing one silently re-arms the
+// trap. Pass `--context` per invocation, or set KUBECONFIG for the child —
+// both scope to the command instead of mutating shared operator state.
+func TestTaskfilesDoNotMutateGlobalKubecontext(t *testing.T) {
+	scanned := 0
+	for _, rel := range taskfilesToScan {
+		b, err := os.ReadFile(rel)
+		if err != nil {
+			t.Errorf("cannot read %s: %v — the scan list is stale, so this file is silently unguarded", rel, err)
+			continue
+		}
+		scanned++
+		for i, line := range strings.Split(string(b), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "#") {
+				continue
+			}
+			if reGlobalContextSwitch.MatchString(line) {
+				t.Errorf("%s:%d mutates the operator's GLOBAL kubecontext.\n"+
+					"    Under `set -e` a failure before the restore leaves the operator pinned to the wrong\n"+
+					"    cluster, and every later step runs against it — the root cause of issue #117.\n"+
+					"    Scope it instead: `--context` per invocation, or KUBECONFIG for the child process.",
+					rel, i+1)
+			}
+		}
+	}
+	if scanned == 0 {
+		t.Fatalf("scanned 0 taskfiles — guard would pass vacuously")
+	}
+}
