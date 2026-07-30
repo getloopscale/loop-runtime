@@ -63,6 +63,13 @@ func TestDevPublicLoopZeroApiImageOverlayUsesCanonicalDOCR(t *testing.T) {
 	// T3 (audit 2026-07-10): overlay must reference a canonical registry —
 	// either the pre-#142 DOCR path (`registry.digitalocean.com/loopzero-system/
 	// loopzero-api`) OR the post-#142 GHCR path (`ghcr.io/getloopscale/loopzero-api`).
+	//
+	// NAMESPACE VIRADO 2026-07-30: era `ghcr.io/getloopscale`. O repo foi
+	// transferido para a org `getloopscale` e a CI passou a publicar la'. O
+	// pacote antigo NAO some — ele apenas para de receber builds, entao um
+	// overlay apontando para ele deixaria o dev-public rodando congelado na
+	// ultima imagem pre-transferencia, sem erro algum. E' esse silencio que
+	// este guard existe para impedir.
 	// Canonical migrated 2026-06-22 to GHCR :develop (rolling) per
 	// [[feedback_close_issue_update_live_dev_public_2026_06_22]] — CI
 	// build-publish workflow auto-refreshes on every push to develop.
