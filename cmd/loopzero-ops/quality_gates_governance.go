@@ -32,6 +32,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/templatecompliance"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/workercsp"
 )
 
 // M9 Step 7: quality gate entry points for the "governance" theme, decomposed out of the
@@ -642,4 +643,36 @@ func runTestCoverageReport(args []string) int {
 	}
 	fmt.Printf("test-coverage-report: PASS — coverage=%.2f%% (threshold=%.2f%%)\n", outcome.CoveragePct, *threshold)
 	return 0
+}
+
+// runWorkerCSP is the #235 gate: the Cloudflare static worker's CSP must not
+// permit arbitrary inline/eval'd script. Registered but NOT wired into
+// quality:gates — the finding is real and its fix lives in a
+// governance-gated path; see the failingGate entry in quality_gate_wiring_test.go.
+func runWorkerCSP(args []string) int {
+	fs := flag.NewFlagSet("worker-csp", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	worker := fs.String("worker", "", "worker source path relative to root")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	out, err := workercsp.Check(workercsp.Config{RepoRoot: *root, WorkerPath: *worker})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "worker-csp: %v\n", err)
+		return 2
+	}
+	if out.Skipped {
+		fmt.Printf("worker-csp: SKIP — %s\n", out.Reason)
+		return 0
+	}
+	if out.Pass {
+		fmt.Printf("worker-csp: PASS — %s\n", out.Reason)
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "worker-csp: FAIL")
+	for _, f := range out.Findings {
+		fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", workercsp.DefaultWorkerPath, f.Line, f.Detail)
+	}
+	fmt.Fprintln(os.Stderr, "Fix: drop 'unsafe-inline' from script-src; use a per-request nonce or external+hashed scripts (issue #235).")
+	return 1
 }

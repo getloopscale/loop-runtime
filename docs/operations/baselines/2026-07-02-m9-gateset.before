@@ -15,6 +15,10 @@
 # RE-FREEZE 2026-07-30 (b): taskfile-interface '-' -> 'gates'. Reprovava exigindo
 #   cli:link/cli:build, removidas no #254 (cli/ saiu no M2); o contrato foi corrigido
 #   no ExpectedCommands em vez de reintroduzir as tasks. Contagem segue 108.
+# RE-FREEZE 2026-07-30 (c): +1 gate — `worker-csp` (#235), a forma executavel do
+#   achado de CSP no CF Worker. Registrado e NAO wired de proposito: e' RED hoje e o
+#   fix vive em infra/cloudflare/, caminho gated (T2 — superficie de seguranca).
+#   108 -> 109 linhas.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -123,3 +127,4 @@ vault-bootstrap-in-mgmt-task	gates	Locks task k3d:vault:bootstrap-in-mgmt shortc
 vault-bootstrap-unseal-loop	gates	Regression guard for the 2026-06-15 canonical fix of vault-bootstrap-dev.sh Steps 2+3 (rc-independent bao-status parse, capitalized 'True' compare, no lowercase 'true' fallback). M-Migrate2 2026-07-07 replaces infra/tests/check-vault-bootstrap-unseal-loop_test.sh.
 vault-prom-alerts	gates	T8.4 hermetic contract for PrometheusRule vault-audit-alerts: YAML parses + all 4 P1 alerts declared (VaultAuthFailureRateHigh + VaultPolicyDenialRateHigh + VaultSealedOrDown + VaultAuditLogStalled) + all severity=critical + all runbook_url annotations + all team=platform-security + all domain=vault + VaultAuditLogStalled carries invariant "audit-log-must-flow" (high-confidence adversary signal). M-Migrate2 2026-07-10 M16 T3.3 Wave 2 replaces infra/tests/check-vault-prom-alerts_test.sh.
 webhook-canonical-path	gates	Blocks the /engine/api/v1/webhooks/github 301 trap; enforces the canonical /api/v1/webhooks/github (M-Migrate2 2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh).
+worker-csp	-	Cloudflare static worker CSP must not permit inline/eval script (#235).
