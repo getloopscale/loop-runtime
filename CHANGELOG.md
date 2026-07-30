@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `TestMetricCheckConstraint_MatchesContractsConstants` deixa de reprovar por falso-positivo: o guard
+  lia o CHECK de `metric` de **outra tabela** (`lens_alert_rules`/`lens_fired_alerts`, cujas migrations
+  vêm depois) em vez do de `cost_counters`. A suíte de `api/internal/db` volta ao verde (#241)
+
 ### Security
 
 - `build-publish.yml`: os dois passos do cosign deixam de interpolar `${{ inputs.* }}` dentro de
