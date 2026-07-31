@@ -110,9 +110,15 @@ run_category() {
     RESULTS+=("$cat_id:FAIL:see logs")
     if [[ "$FAIL_FAST" -eq 1 ]]; then
       log "[FAIL-FAST] aborting after $cat_id failure"
-      break
+      # `return 2`, e nao `break`: nao ha loop DENTRO desta funcao. O `break`
+      # anterior quebrava o loop do CHAMADOR — o bash permite, e por isso o
+      # --fail-fast funcionava, mas por acidente: chamar run_category fora de um
+      # loop tornaria o break um erro em runtime. SC2104 (severidade error).
+      # 2 e' o codigo de "abortar"; quem decide parar e' o loop chamador.
+      return 2
     fi
   fi
+  return 0
 }
 
 # === Main execution ===
@@ -121,7 +127,11 @@ START=$(date +%s)
 for spec in "${CATEGORIES[@]}"; do
   IFS=: read -r cat_id cat_name cat_kind cat_desc <<< "$spec"
   if [[ -n "$ONLY_CATEGORY" && "$ONLY_CATEGORY" != "$cat_id" ]]; then continue; fi
-  run_category "$cat_id" "$cat_name" "$cat_kind" "$cat_desc"
+  # rc 2 = run_category pediu abortar (--fail-fast). Sem este teste o
+  # --fail-fast deixaria de funcionar EM SILENCIO ao trocar o break por return —
+  # o loop seguiria para a proxima categoria e a flag viraria decoracao.
+  run_category "$cat_id" "$cat_name" "$cat_kind" "$cat_desc" && rc=0 || rc=$?
+  if [[ "$rc" -eq 2 ]]; then break; fi
 done
 
 END=$(date +%s)

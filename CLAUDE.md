@@ -38,6 +38,7 @@ There is **no `go.mod` at the repo root**. `go build ./...` / `go test ./...` fr
 task doctor              # environment health check — run this FIRST
 task setup               # ONE-SHOT cold start: 4 k3d clusters + Helmfile sync (~30-45min)
 tilt up                  # DEV LOOP: hot reload of API/operators (canonical day-to-day)
+                         # ONE-SHOT vs DEV LOOP em detalhe: docs/operations/dev-loop.md
 task status              # clusters, pods, DB, API at a glance
 ```
 
