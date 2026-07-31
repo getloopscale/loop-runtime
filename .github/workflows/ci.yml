@@ -110,9 +110,13 @@ jobs:
         with:
           path: loopzero
 
-      # `loopzero-contracts` e' PRIVADO e ficou em `getloopscale` quando este repo migrou
-      # para `getloopscale`. O acesso vem de uma DEPLOY KEY read-only registrada
-      # naquele repositorio (id 158891596), com a chave privada em GOMOD_SSH_KEY.
+      # `loopzero-contracts` e' PRIVADO e foi transferido para `getloopscale` junto com
+      # este repo. O acesso vem de uma DEPLOY KEY read-only registrada nele
+      # (id 158891596), com a chave privada em GOMOD_SSH_KEY.
+      #
+      # O import path em go.mod continua `github.com/getloopscale/loopzero-contracts`:
+      # o redirect do GitHub resolve, e reescrever o path seria uma mudanca de
+      # modulo em cascata por uma transferencia que o proprio GitHub absorve.
       #
       # Por que deploy key e nao PAT: a necessidade e' `Contents: read` em UM
       # repositorio. Um PAT de conta alcanca tudo que a conta alcanca; a deploy
@@ -148,9 +152,43 @@ jobs:
           git ls-remote git@github.com:getloopscale/loopzero-contracts.git refs/tags/v0.3.0 >/dev/null
           echo "deploy key OK — loopzero-contracts acessivel."
 
+      # QUAL versao de loopzero-contracts fazer checkout — derivada do `go.mod`, nunca
+      # fixada aqui.
+      #
+      # O DEFEITO QUE ISTO CORRIGE (medido no run 30627506396): o checkout sem
+      # `ref:` traz o branch DEFAULT do repositorio, que e' `main` — 12 commits
+      # atras de `develop` e sem `plan.MetricCPUCoreSeconds`. O build morria em
+      # `undefined: plan.MetricCPUCoreSeconds`, e a mensagem sugeria codigo
+      # quebrado quando o quebrado era a VERSAO que o gate escolhia sozinho.
+      #
+      # A tag `v0.3.0` que os go.mod exigem TEM os simbolos — a dependencia
+      # declarada estava correta o tempo todo. Fixar a versao no workflow
+      # resolveria hoje e mentiria no proximo bump; derivar do go.mod faz o gate
+      # exercitar exatamente a versao que o repositorio declara.
+      - name: Resolver a versao de loopzero-contracts exigida pelo go.mod
+        id: contracts
+        run: |
+          set -euo pipefail
+          pkg_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          if [ -z "$pkg_v" ]; then
+            echo "::error::loopzero/pkg/go.mod nao declara loopzero-contracts — o gate nao tem versao para exercitar."
+            exit 1
+          fi
+          # Divergencia entre modulos e' drift real: o go.work esconde qual das
+          # duas vence, e o consumidor externo de cada modulo veria versoes
+          # diferentes. Falha alto em vez de escolher uma em silencio.
+          if [ "$pkg_v" != "$api_v" ]; then
+            echo "::error::pkg/go.mod pede $pkg_v e api/go.mod pede $api_v — alinhe os dois antes de seguir."
+            exit 1
+          fi
+          echo "loopzero-contracts: $pkg_v"
+          echo "ref=$pkg_v" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
           repository: getloopscale/loopzero-contracts
+          ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
           ssh-key: ${{ secrets.GOMOD_SSH_KEY }}
 
