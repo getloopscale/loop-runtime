@@ -55,10 +55,26 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 COPY pkg/ ./pkg/
 COPY api/ ./api/
 
+# Proveniencia do binario. Sem estas tres o endpoint de versao reporta os
+# defaults declarados no codigo (`dev` / `unknown`) — honesto, mas inutil: o
+# painel /status mostrava "dev" como versao de producao, que nao demonstra versao
+# alguma. O CI as passa via `build_args` do reusable build-publish.
+#
+# Defaults preservados de proposito: um build local sem args continua compilando,
+# e o endpoint reporta `unknown` em vez de um sha plausivel-porem-falso, que um
+# verificador externo leria como "em dia".
+ARG LOOPZERO_VERSION=dev
+ARG LOOPZERO_COMMIT=unknown
+ARG LOOPZERO_BUILD_DATE=unknown
+
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    cd api && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-api ./cmd/ \
-    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-controller ./cmd/controller/
+    LDFLAGS="-s -w \
+      -X github.com/getloopscale/loopzero/api/internal/routes.versionTag=${LOOPZERO_VERSION} \
+      -X github.com/getloopscale/loopzero/api/internal/routes.versionCommit=${LOOPZERO_COMMIT} \
+      -X github.com/getloopscale/loopzero/api/internal/routes.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
+    && cd api && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-api ./cmd/ \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-controller ./cmd/controller/
 
 # Build migrate from source (same Go toolchain) to avoid CVEs in pre-compiled binary.
 FROM golang:1.26.1-alpine3.22 AS migrate-builder
