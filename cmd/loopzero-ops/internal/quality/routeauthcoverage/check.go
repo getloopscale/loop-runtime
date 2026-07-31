@@ -32,6 +32,13 @@ var allowlist = []string{
 	"/api/v1/health",
 	"/api/v1/health/deep",
 	"/api/v1/version",
+	// Contrato da frota de status. PUBLICO pelo mesmo motivo que o
+	// /api/v1/version logo acima — serve o MESMO metadado de build, que nao e'
+	// segredo — e por um motivo proprio: o coletor do painel /status sonda o alvo
+	// sem sessao alguma. Atras do Auth, o painel leria 401 como "servico
+	// indisponivel", que e' precisamente a mentira que ele existe para evitar.
+	// Nao expoe nada alem de {version, built_at}.
+	"/v1/version",
 	"/internal/bootstrap",
 	"/internal/argocd-callback",
 	"/internal/v1/secret-fetch",

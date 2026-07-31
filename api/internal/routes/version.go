@@ -37,6 +37,47 @@ type VersionResponse struct {
 	Platform  string `json:"platform"`
 }
 
+// fleetVersionResponse e' o schema que o painel de status do dashboard consome.
+//
+// Os nomes dos campos NAO sao escolha nossa: sao o contrato que
+// loopzero-cloud/internal/serviceversions/probe.go ja' fala com cinco servicos
+// (`version` + `built_at`). O engine ficava fora do painel por divergir dele em
+// path E em nome de campo.
+type fleetVersionResponse struct {
+	Version string `json:"version"`
+	BuiltAt string `json:"built_at"`
+}
+
+// FleetVersionHandler serve GET /v1/version — o contrato da frota de status.
+//
+// Coexiste com VersionHandler de proposito. `/api/v1/version` e' contrato publico
+// estavel do CLI (Rule 5): renomear `build_date` para `built_at` ali quebraria
+// consumidores sem bump maior. Os dois leem os MESMOS globais, entao servem a
+// mesma verdade — um teste trava essa igualdade, porque duas fontes que PODEM
+// divergir acabam divergindo.
+//
+// Sem autenticacao, como o /api/v1/version: metadado de build nao e' segredo, e o
+// coletor sonda o alvo sem qualquer sessao.
+func FleetVersionHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Fallback explicito: celula vazia no painel sobre um servico que respondeu
+		// `ok` sugere ausencia de dado, quando o que houve foi build sem ldflags.
+		_ = json.NewEncoder(w).Encode(fleetVersionResponse{
+			Version: orUnknown(versionTag),
+			BuiltAt: orUnknown(versionBuildDate),
+		})
+	}
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
 // VersionHandler returns a chi.HandlerFunc for /api/v1/version.
 // No authentication required. Stable schema (per Rule 5 — JSON contract).
 func VersionHandler() http.HandlerFunc {
