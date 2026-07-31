@@ -77,6 +77,22 @@ jobs:
       dockerfile: ${{ matrix.dockerfile }}
       context: ${{ matrix.context }}
       sign: ${{ needs.plan.outputs.sign == 'true' }}
+      # Proveniencia injetada no binario. Sem isto o endpoint de versao serve os
+      # defaults do codigo e o painel /status exibia `dev` como versao de
+      # producao — pior que celula vazia, porque parece um dado.
+      #
+      # Passado a TODAS as imagens da matriz: so' o Dockerfile do engine declara
+      # as ARGs hoje, e um Dockerfile que nao as declara ignora a arg (aviso de
+      # "unused build arg", nao erro). Condicionar por imagem exigiria um ramo na
+      # matriz que quebraria no dia em que os operators ganhassem o mesmo
+      # endpoint.
+      #
+      # `ref_name` e' o CANAL (develop / vX.Y.Z) — o que o leitor do painel
+      # reconhece; o sha exato vai em LOOPZERO_COMMIT, ao lado.
+      build_args: |
+        LOOPZERO_VERSION=${{ github.ref_name }}
+        LOOPZERO_COMMIT=${{ github.sha }}
+        LOOPZERO_BUILD_DATE=${{ github.event.repository.pushed_at }}
     secrets: inherit
   charts:
     needs: plan

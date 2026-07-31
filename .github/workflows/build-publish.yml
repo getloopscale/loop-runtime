@@ -25,6 +25,17 @@ on:
       # organizacao troca o namespace do GHCR e um valor fixo passa a dar 403 no
       # push — falha tardia, no CI de outro repositorio.
       registry:        { required: false, type: string,  default: "" }
+      # Build-args extras, uma por linha (`NOME=valor`). Opcional de proposito:
+      # este reusable serve CINCO repositorios, e passar uma arg que o Dockerfile
+      # do consumidor nao declara produz aviso de "unused build arg" em todos
+      # eles. Quem precisa, declara.
+      #
+      # O caso que a motivou: o binario do engine embutia `version=dev` e
+      # `built_at=unknown` porque o build nunca injetou ldflags. O endpoint era
+      # honesto — dizia "unknown" em vez de um sha plausivel-porem-falso — mas o
+      # painel de status mostrava "dev" como versao de producao, o que nao
+      # demonstra versao alguma.
+      build_args:      { required: false, type: string,  default: "" }
       sign:            { required: false, type: boolean, default: false }   # SBOM+provenance(mode=max)+cosign — release only
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
@@ -136,6 +147,10 @@ jobs:
           file: ${{ inputs.dockerfile }}
           load: true
           tags: ${{ inputs.image }}:scan-target
+          # As MESMAS build-args do push abaixo. Divergir aqui faria o Trivy
+          # escanear uma imagem diferente da publicada — o gate passaria sobre um
+          # artefato que nao e' o que vai para o registry.
+          build-args: ${{ inputs.build_args }}
           cache-from: type=gha,scope=${{ inputs.image }}
           # ignore-error: the GitHub Actions cache service (type=gha) intermittently 500s /
           # returns BlobNotFound on export (esp. large mode=max exports on self-hosted
@@ -195,6 +210,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
           push: true
+          build-args: ${{ inputs.build_args }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: ${{ inputs.sign }}
