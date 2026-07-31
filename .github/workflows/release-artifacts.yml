@@ -24,6 +24,7 @@ jobs:
       charts: ${{ steps.set.outputs.charts }}
       sign: ${{ steps.set.outputs.sign }}
       built_at: ${{ steps.provenance.outputs.built_at }}
+      version: ${{ steps.provenance.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; matches build-publish.yml; issue #233)
         with: { fetch-depth: 0 }   # full history for accurate paths-filter diff on push
@@ -37,7 +38,23 @@ jobs:
       # espera; `repository.pushed_at` do evento push vem como epoch inteiro e a
       # coluna "Built" exibiria o numero cru.
       - id: provenance
-        run: echo "built_at=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+        # REF_NAME vem do evento por `env`, e nao de `git rev-parse
+        # --abbrev-ref HEAD`: o checkout do Actions fica DETACHED no sha, entao
+        # o git devolveria "HEAD" e a versao sairia `HEAD-abc1234`. Nada
+        # falharia — apenas ficaria errado na tela, para sempre.
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # `develop-<sha7>`, nao apenas `develop`: e' a convencao que os cinco
+          # servicos vizinhos ja' exibem no painel e o que torna a coluna
+          # "Version" util. So' o canal nao distingue dois builds — a tela
+          # mostraria `develop` inclusive depois de um deploy novo. Espelha a tag
+          # que o metadata-action produz para a imagem.
+          {
+            echo "built_at=$(git log -1 --format=%cI)"
+            echo "version=${REF_NAME}-$(git rev-parse --short=7 HEAD)"
+          } >> "$GITHUB_OUTPUT"
       - id: filter
         if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
         uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3 (SHA-pin; issue #233)
@@ -102,7 +119,7 @@ jobs:
       # `ref_name` e' o CANAL (develop / vX.Y.Z) — o que o leitor do painel
       # reconhece; o sha exato vai em LOOPZERO_COMMIT, ao lado.
       build_args: |
-        LOOPZERO_VERSION=${{ github.ref_name }}
+        LOOPZERO_VERSION=${{ needs.plan.outputs.version }}
         LOOPZERO_COMMIT=${{ github.sha }}
         LOOPZERO_BUILD_DATE=${{ needs.plan.outputs.built_at }}
     secrets: inherit
