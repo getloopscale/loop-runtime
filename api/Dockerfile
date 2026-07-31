@@ -15,12 +15,19 @@ COPY operators/api/go.mod operators/api/go.sum ./operators/api/
 COPY operators/api/v1 ./operators/api/v1
 COPY api/go.mod api/go.sum ./api/
 
+# `awk 1` e nao `cp` ao gravar a chave: OpenSSH exige newline FINAL no PEM, e o
+# transporte por `secret-envs` (variavel de ambiente) o remove. Sem esse unico
+# byte a chave chega sintaticamente invalida e o erro e
+# `Load key: error in libcrypto` — que soa como chave corrompida, nao como um
+# terminador faltando. Reproduzido localmente: `printf %s "$(cat chave)"` produz
+# exatamente esse erro. `awk 1` reemite cada linha com terminador, normalizando
+# para um unico newline final seja qual for a forma de chegada.
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=secret,id=gomod_token \
     --mount=type=secret,id=gomod_ssh_key \
     sh -c 'if [ -s /run/secrets/gomod_ssh_key ]; then \
       mkdir -p /root/.ssh && chmod 700 /root/.ssh; \
-      cp /run/secrets/gomod_ssh_key /root/.ssh/gomod_key && chmod 600 /root/.ssh/gomod_key; \
+      awk 1 /run/secrets/gomod_ssh_key > /root/.ssh/gomod_key && chmod 600 /root/.ssh/gomod_key; \
       ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null; \
       printf "Host github.com\n  IdentityFile /root/.ssh/gomod_key\n  IdentitiesOnly yes\n  IdentityAgent none\n" > /root/.ssh/config; \
       git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
