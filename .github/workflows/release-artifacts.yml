@@ -23,9 +23,21 @@ jobs:
       images: ${{ steps.set.outputs.images }}
       charts: ${{ steps.set.outputs.charts }}
       sign: ${{ steps.set.outputs.sign }}
+      built_at: ${{ steps.provenance.outputs.built_at }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; matches build-publish.yml; issue #233)
         with: { fetch-depth: 0 }   # full history for accurate paths-filter diff on push
+      # Data do COMMIT, nao a hora do build. Duas razoes, e a segunda e' a que
+      # decide: um timestamp de build muda a cada run e o valor entra na chave de
+      # cache da camada (a ARG e' usada no RUN), entao TODO build recompilaria do
+      # zero; e a data do commit e' a proveniencia que interessa a quem le' o
+      # painel — "o codigo e' deste momento", nao "a esteira rodou agora".
+      #
+      # `%cI` e' ISO-8601 estrito, que e' o que o formatInstant do dashboard
+      # espera; `repository.pushed_at` do evento push vem como epoch inteiro e a
+      # coluna "Built" exibiria o numero cru.
+      - id: provenance
+        run: echo "built_at=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
       - id: filter
         if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
         uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3 (SHA-pin; issue #233)
@@ -92,7 +104,7 @@ jobs:
       build_args: |
         LOOPZERO_VERSION=${{ github.ref_name }}
         LOOPZERO_COMMIT=${{ github.sha }}
-        LOOPZERO_BUILD_DATE=${{ github.event.repository.pushed_at }}
+        LOOPZERO_BUILD_DATE=${{ needs.plan.outputs.built_at }}
     secrets: inherit
   charts:
     needs: plan
