@@ -56,6 +56,10 @@ jobs:
       # `secrets` is NOT allowed in step `if:` — lift the token to a job-level env so the
       # Docker Hub guards below can use `env.*` (valid in if/with). Stays masked in logs.
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Exposta no ambiente do job porque `secret-envs:` referencia o NOME de uma
+      # variavel, nao um valor — e' o que permite carregar a chave privada
+      # multilinha intacta. O Actions mascara o valor nos logs normalmente.
+      GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -140,7 +144,18 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
-            gomod_ssh_key=${{ secrets.GOMOD_SSH_KEY }}
+          # A chave SSH vai por `secret-envs`, NAO por `secrets`.
+          #
+          # O formato `chave=valor` de `secrets:` e' de UMA LINHA. Uma chave
+          # privada tem varias, e o buildx rejeita com `*** is not a valid
+          # secret` — medido no run 30626856096. `secret-envs` referencia uma
+          # variavel de ambiente e por isso carrega multilinha intacta.
+          #
+          # O build local passava com `--secret id=...,src=arquivo`, que tambem
+          # aceita multilinha. Foi essa diferenca de FORMA — nao de conteudo —
+          # que fez o teste local aprovar o que a CI reprovou.
+          secret-envs: |
+            gomod_ssh_key=GOMOD_SSH_KEY
 
       - name: Trivy vulnerability scan (CRITICAL + HIGH gate)
         if: ${{ inputs.trivy }}
@@ -192,7 +207,18 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
-            gomod_ssh_key=${{ secrets.GOMOD_SSH_KEY }}
+          # A chave SSH vai por `secret-envs`, NAO por `secrets`.
+          #
+          # O formato `chave=valor` de `secrets:` e' de UMA LINHA. Uma chave
+          # privada tem varias, e o buildx rejeita com `*** is not a valid
+          # secret` — medido no run 30626856096. `secret-envs` referencia uma
+          # variavel de ambiente e por isso carrega multilinha intacta.
+          #
+          # O build local passava com `--secret id=...,src=arquivo`, que tambem
+          # aceita multilinha. Foi essa diferenca de FORMA — nao de conteudo —
+          # que fez o teste local aprovar o que a CI reprovou.
+          secret-envs: |
+            gomod_ssh_key=GOMOD_SSH_KEY
 
       - name: Install cosign
         if: ${{ inputs.sign }}
