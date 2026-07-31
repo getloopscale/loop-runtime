@@ -20,7 +20,23 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     sh -c 'if [ -s /run/secrets/gomod_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     fi' \
-    && cd api && go mod download
+    && cd api && { go mod download || { \
+      echo "" >&2; \
+      echo "FATAL: go mod download falhou." >&2; \
+      if [ ! -s /run/secrets/gomod_token ]; then \
+        echo "  CAUSA PROVAVEL: o secret gomod_token chegou VAZIO, entao a reescrita de URL acima foi" >&2; \
+        echo "  PULADA (o if e silencioso por desenho) e o git buscou loopzero-contracts SEM autenticacao." >&2; \
+        echo "  O GitHub responde a repo PRIVADO sem auth com Repository-not-found — a MESMA mensagem" >&2; \
+        echo "  de repo inexistente. Por isso o erro manda procurar um repositorio que EXISTE, e este" >&2; \
+        echo "  build falhou 10 vezes seguidas sem a causa aparecer." >&2; \
+        echo "  ACAO: GOMOD_TOKEN precisa de um PAT com Contents:read em getloopscale/loopzero-contracts" >&2; \
+        echo "  (o modulo NAO migrou junto com este repositorio)." >&2; \
+      else \
+        echo "  O token esta presente e nao-vazio, entao NAO e ausencia de credencial." >&2; \
+        echo "  Verifique Contents:read em getloopscale/loopzero-contracts e se o PAT nao expirou." >&2; \
+      fi; \
+      exit 1; \
+    }; }
 
 COPY pkg/ ./pkg/
 COPY api/ ./api/
