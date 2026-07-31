@@ -108,6 +108,23 @@ env:
   # loopzero-lens-admin-key provides LENS_PLATFORM_ADMIN_KEY (deployment.yaml env block).
   LENS_BASE_URL: "http://host.k3d.internal:18084"
 
+  # 2026-07-31 — alvo do painel /status para o loopzero-traefik-mcp.
+  #
+  # Aponta para a RAIZ do processo, e NAO para a borda `/mcp` do Traefik. Aquele
+  # roteador nao remove o prefixo, e isso e' deliberado: o gateway precisa do path
+  # completo para rotear MCP. Medido de dentro do cluster antes de escolher a URL:
+  #
+  #   http://host.k3d.internal:8092/mcp    -> 404  (chega como /mcp/v1/version e
+  #                                                 cai no catch-all do proxy)
+  #   http://host.k3d.internal:18090/...   -> 000  (porta nao era publicada)
+  #
+  # A porta passou a ser publicada no compose do umbrella, como ja' faziam
+  # loopzero-rag (:8787), loopzero-lens (:18084) e loopzero-storage (:18086).
+  #
+  # Sem credencial companheira, ao contrario de RAG/LENS acima: o painel consome
+  # apenas `GET /v1/version`, auth-exempt por contrato do gateway.
+  TRAEFIK_MCP_BASE_URL: "http://host.k3d.internal:18090"
+
 # T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
 # ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
 # OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
