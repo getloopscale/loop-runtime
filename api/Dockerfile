@@ -8,7 +8,7 @@ ENV GOPRIVATE=github.com/getloopscale/*
 # requires github.com/getloopscale/loopzero-contracts v0.3.0, NO replace). The private module
 # is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
 # token is NEVER written to an image layer. git is required for the module VCS fetch.
-RUN apk add --no-cache git
+RUN apk add --no-cache git openssh-client
 
 COPY pkg/go.mod ./pkg/go.mod
 COPY operators/api/go.mod operators/api/go.sum ./operators/api/
@@ -17,7 +17,14 @@ COPY api/go.mod api/go.sum ./api/
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=secret,id=gomod_token \
-    sh -c 'if [ -s /run/secrets/gomod_token ]; then \
+    --mount=type=secret,id=gomod_ssh_key \
+    sh -c 'if [ -s /run/secrets/gomod_ssh_key ]; then \
+      mkdir -p /root/.ssh && chmod 700 /root/.ssh; \
+      cp /run/secrets/gomod_ssh_key /root/.ssh/gomod_key && chmod 600 /root/.ssh/gomod_key; \
+      ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null; \
+      printf "Host github.com\n  IdentityFile /root/.ssh/gomod_key\n  IdentitiesOnly yes\n  IdentityAgent none\n" > /root/.ssh/config; \
+      git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
+    elif [ -s /run/secrets/gomod_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     fi' \
     && cd api && { go mod download || { \

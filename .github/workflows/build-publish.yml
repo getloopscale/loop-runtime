@@ -132,6 +132,7 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
+            gomod_ssh_key=${{ secrets.GOMOD_SSH_KEY }}
 
       - name: Trivy vulnerability scan (CRITICAL + HIGH gate)
         if: ${{ inputs.trivy }}
@@ -183,6 +184,7 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
+            gomod_ssh_key=${{ secrets.GOMOD_SSH_KEY }}
 
       - name: Install cosign
         if: ${{ inputs.sign }}
