@@ -54,7 +54,11 @@ mkdir -p "$PROBE_OUT_DIR"
 
 # ─── Trap cleanup (idempotent) ─────────────────────────────────────
 cleanup_done=0
-# shellcheck disable=SC2329 # invoked via trap (indirect)
+# Invocada via `trap on_exit EXIT INT TERM` — o shellcheck nao ve' invocacao por
+# trap. Os DOIS codigos porque o diagnostico mudou de numero entre versoes:
+# SC2317 no 0.9.x (o que o Ubuntu 24.04 do runner embarca) e SC2329 no 0.10+.
+# Suprimir so' um deixa o outro ambiente vermelho.
+# shellcheck disable=SC2317,SC2329
 on_exit() {
   if [[ "$cleanup_done" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
     cleanup_done=1

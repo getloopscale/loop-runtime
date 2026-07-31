@@ -53,7 +53,6 @@ TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
 # Backwards-compat alias preserved for inline log lines + helmfile sync
 # selectors that pre-date the T1.1 split. New code MUST use one of the
 # two split variables above.
-CONTEXT="$OPENBAO_CONTEXT"
 NS="${OPENBAO_NAMESPACE:-vault-system}"
 POD="${OPENBAO_POD:-openbao-0}"
 UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
@@ -450,7 +449,11 @@ fi
 # === Step 8+9: extract role_id + secret_id ===
 log "Step 8+9: capture role_id + secret_id"
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  ROLE_ID=$(bao_auth read -format=json auth/approle/role/loopzero-api/role-id 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['role_id'])" 2>/dev/null || true)
+  # O role_id NAO e' capturado aqui: quem o sincroniza e' o passo 7b do
+  # seed-post-cleanroom-all.sh (`loopzero-ops seed vault-role-id-sync`), que roda
+  # DEPOIS deste script e escreve o valor onde o loopzero-api o le'. A captura que
+  # existia aqui era atribuida e descartada — dava a impressao de que este
+  # script era o dono do artefato quando nao e'.
   SECRET_ID=$(bao_auth write -f -format=json auth/approle/role/loopzero-api/secret-id 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])" 2>/dev/null || true)
 fi
 

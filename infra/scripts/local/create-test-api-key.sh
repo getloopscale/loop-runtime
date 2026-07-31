@@ -21,7 +21,6 @@
 
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly ADMIN_JWT_FILE="${ADMIN_JWT_FILE:-${HOME}/.loopzero/local-dogfood-token.txt}"
 readonly OUTPUT_FILE="${OUTPUT_FILE:-${HOME}/.loopzero/local-test-memory-bearer.txt}"
 readonly CLOUD_BASE_URL="${CLOUD_BASE_URL:-http://localhost:13002}"

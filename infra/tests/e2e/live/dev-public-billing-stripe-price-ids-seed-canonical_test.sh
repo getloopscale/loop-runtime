@@ -187,7 +187,6 @@ try:
     print(d.get("code",""))
 except Exception:
     print("")' 2>/dev/null || echo "")
-        body_head=$(head -c 200 /tmp/scC.json | tr -d '\n' | tr -d '\r')
         if [ "$code" = "503" ] && [ "$err_code" = "BILLING_NOT_CONFIGURED" ] ; then
             record_fail C "HTTP 503 BILLING_NOT_CONFIGURED — #155 pre-fix state (STRIPE_PRICE_PRO unset)"
         elif [ "$code" = "200" ] ; then

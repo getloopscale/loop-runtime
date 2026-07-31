@@ -51,7 +51,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-log()  { [ "$JSON_OUTPUT" = "0" ] && printf '[redteam-canonical] %s\n' "$*" >&2 || true ; }
+log()  { if [ "$JSON_OUTPUT" = "0" ]; then printf '[redteam-canonical] %s\n' "$*" >&2; fi ; }
 emit() {
   local verdict="$1" reason="${2:-}"
   if [ "$JSON_OUTPUT" = "1" ]; then
@@ -80,7 +80,7 @@ scenario_a() {
     emit "BLOCKED" "scenario-a-flow-init-failed"
     return 2
   fi
-  local hits_429=0 code last_code
+  local hits_429=0 code
   for i in $(seq 1 12); do
     code="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' \
             -X POST "$TARGET_HOST/self-service/login?flow=$flow_id" \
@@ -89,7 +89,6 @@ scenario_a() {
             -H 'Accept: application/json' \
             -d '{"identifier":"admin@loopzero.example","password":"wrong-pwd","method":"password"}' \
             2>&1 || true)"
-    last_code="$code"
     [ "$code" = "429" ] && hits_429=$((hits_429 + 1))
     log "  req $i (canonical /self-service/login) → $code"
   done

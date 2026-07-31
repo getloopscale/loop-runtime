@@ -66,7 +66,10 @@ fi
 # script exit. Result: every invocation leaked 2 temps per cell. Fix landed
 # 2026-05-14 iter-16 (corrections-sprint Ralph loop).
 TMP_FILES=()
-# shellcheck disable=SC2329  # invoked via `trap cleanup_temps EXIT` below
+# Invocada via `trap cleanup_temps EXIT` logo abaixo. Os DOIS codigos porque o
+# diagnostico mudou de numero entre versoes do shellcheck: SC2317 no 0.9.x (o do
+# runner) e SC2329 no 0.10+.
+# shellcheck disable=SC2317,SC2329
 cleanup_temps() {
   rm -f "$LOCK_FILE" 2>/dev/null || true
   if [[ ${#TMP_FILES[@]} -gt 0 ]]; then

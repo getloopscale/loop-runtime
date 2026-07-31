@@ -461,9 +461,11 @@ fi
 # Application stuck at hostname despite H10 patch + new pod with IP env.
 kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart "$TC_DEPLOY" >/dev/null 2>&1
 log "  $TC_DEPLOY: rolled, waiting for new pod ready..."
-kubectl --context "$MGMT_CTX" -n loopzero-system rollout status "$TC_DEPLOY" --timeout=60s >/dev/null 2>&1 \
-  && log "  $TC_DEPLOY: rollout complete (old pod terminated)" \
-  || warn "  $TC_DEPLOY: rollout status timeout (60s) — proceeding"
+if kubectl --context "$MGMT_CTX" -n loopzero-system rollout status "$TC_DEPLOY" --timeout=60s >/dev/null 2>&1; then
+  log "  $TC_DEPLOY: rollout complete (old pod terminated)"
+else
+  warn "  $TC_DEPLOY: rollout status timeout (60s) — proceeding"
+fi
 
 # Force the tenant-operator to re-emit Application destination on existing
 # tenants by triggering a reconcile via touch annotation. ONLY the new pod
@@ -546,9 +548,11 @@ else
   log "  argocd-token invalid/expired (exp=${EXP:-missing}); regenerating via provision-api-tokens.sh"
   REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   if [[ -x "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" ]]; then
-    bash "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" >/dev/null 2>&1 \
-      && log "  argocd-token regenerated (loopzero-api:apiKey, non-expiring)" \
-      || warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
+    if bash "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" >/dev/null 2>&1; then
+      log "  argocd-token regenerated (loopzero-api:apiKey, non-expiring)"
+    else
+      warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
+    fi
   else
     warn "provision-api-tokens.sh missing — manual regen required"
   fi
@@ -596,11 +600,13 @@ else
   REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   BOOTSTRAP="$REPO_ROOT/infra/helmfile/scripts/bootstrap-cell-cc.sh"
   if [[ -x "$BOOTSTRAP" ]]; then
-    KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
+    if KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
       INGRESS_DOMAIN="loopzero.local" \
-      bash "$BOOTSTRAP" --cell 1 --env standalone-multi >/dev/null 2>&1 \
-      && log "  ClusterCredential cell-1 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh" \
-      || warn "bootstrap-cell-cc.sh --cell 1 failed — see matrix entry 153 fix path (b)"
+      bash "$BOOTSTRAP" --cell 1 --env standalone-multi >/dev/null 2>&1; then
+      log "  ClusterCredential cell-1 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
+    else
+      warn "bootstrap-cell-cc.sh --cell 1 failed — see matrix entry 153 fix path (b)"
+    fi
   else
     warn "bootstrap-cell-cc.sh missing — cannot heal H12"
   fi
@@ -685,10 +691,12 @@ users:
     token: $H13_NEW_TOKEN
 EOF
       )
-      kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-default-kubeconfig \
-        --type=merge -p "{\"data\":{\"kubeconfig\":\"$H13_KUBECONFIG_B64\"}}" >/dev/null 2>&1 \
-        && log "  cell-default-kubeconfig Secret patched with fresh 24h SA token" \
-        || warn "Secret patch failed — see matrix entry 154"
+      if kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-default-kubeconfig \
+        --type=merge -p "{\"data\":{\"kubeconfig\":\"$H13_KUBECONFIG_B64\"}}" >/dev/null 2>&1; then
+        log "  cell-default-kubeconfig Secret patched with fresh 24h SA token"
+      else
+        warn "Secret patch failed — see matrix entry 154"
+      fi
     fi
   fi
 fi
@@ -778,10 +786,12 @@ users:
     token: $H14_NEW_TOKEN
 EOF
             )
-            kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-2-kubeconfig \
-              --type=merge -p "{\"data\":{\"kubeconfig\":\"$H14_KUBECONFIG_B64\"}}" >/dev/null 2>&1 \
-              && log "  cell-2-kubeconfig Secret patched with fresh 24h SA token (TLS: ${H14_CA:+strict}${H14_INSECURE:+insecure})" \
-              || warn "  Secret patch failed — see matrix entry 155 fix path (a) refresh"
+            if kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-2-kubeconfig \
+              --type=merge -p "{\"data\":{\"kubeconfig\":\"$H14_KUBECONFIG_B64\"}}" >/dev/null 2>&1; then
+              log "  cell-2-kubeconfig Secret patched with fresh 24h SA token (TLS: ${H14_CA:+strict}${H14_INSECURE:+insecure})"
+            else
+              warn "  Secret patch failed — see matrix entry 155 fix path (a) refresh"
+            fi
           fi
         fi
       fi
@@ -797,11 +807,13 @@ EOF
     REPO_ROOT_H14=$(cd "$(dirname "$0")/../../.." && pwd)
     BOOTSTRAP_H14="$REPO_ROOT_H14/infra/helmfile/scripts/bootstrap-cell-cc.sh"
     if [[ -x "$BOOTSTRAP_H14" ]]; then
-      KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
+      if KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
         INGRESS_DOMAIN="loopzero.local" \
-        bash "$BOOTSTRAP_H14" --cell 2 --env standalone-multi >/dev/null 2>&1 \
-        && log "  ClusterCredential cell-2 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh" \
-        || warn "  bootstrap-cell-cc.sh --cell 2 failed — see matrix entry 155 fix path (b)"
+        bash "$BOOTSTRAP_H14" --cell 2 --env standalone-multi >/dev/null 2>&1; then
+        log "  ClusterCredential cell-2 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
+      else
+        warn "  bootstrap-cell-cc.sh --cell 2 failed — see matrix entry 155 fix path (b)"
+      fi
     else
       warn "  bootstrap-cell-cc.sh missing — cannot heal H14 mode B (runtime-2 cluster running?)"
     fi
@@ -845,10 +857,12 @@ else
     else
       H15_NEW_CONFIG=$(printf '{"bearerToken":"%s","tlsClientConfig":{"insecure":true}}' "$H15_FRESH_TOKEN")
       H15_NEW_CONFIG_B64=$(echo -n "$H15_NEW_CONFIG" | base64 -w0)
-      kubectl --context "$MGMT_CTX" -n argocd patch secret cell-2-argocd-cluster \
-        --type=merge -p "{\"data\":{\"config\":\"$H15_NEW_CONFIG_B64\"}}" >/dev/null 2>&1 \
-        && log "  cell-2-argocd-cluster Secret patched with fresh token (matches cell-2-kubeconfig)" \
-        || warn "  ArgoCD secret patch failed — see matrix entry 158"
+      if kubectl --context "$MGMT_CTX" -n argocd patch secret cell-2-argocd-cluster \
+        --type=merge -p "{\"data\":{\"config\":\"$H15_NEW_CONFIG_B64\"}}" >/dev/null 2>&1; then
+        log "  cell-2-argocd-cluster Secret patched with fresh token (matches cell-2-kubeconfig)"
+      else
+        warn "  ArgoCD secret patch failed — see matrix entry 158"
+      fi
     fi
   fi
 fi
@@ -875,16 +889,17 @@ fi
 # CR itself so the operator's next reconcile WRITES insecure:true into the
 # Secret instead of overwriting our patch.
 log "H19a: hardening ClusterCredential CRs (spec.tls.insecure=true — declarative source of truth)"
-H19A_PATCHED=0
 for H19A_CR in $(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredentials -o name 2>/dev/null \
   | sed 's#clustercredential.loopzero.io/##'); do
   H19A_CURRENT=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$H19A_CR" \
     -o jsonpath='{.spec.tls.insecure}' 2>/dev/null || echo "")
   if [[ "$H19A_CURRENT" == "true" ]]; then continue; fi
-  kubectl --context "$MGMT_CTX" -n loopzero-system patch clustercredential "$H19A_CR" \
-    --type=merge -p '{"spec":{"tls":{"insecure":true}}}' >/dev/null 2>&1 \
-    && { log "  $H19A_CR → spec.tls.insecure=true"; H19A_PATCHED=1; } \
-    || warn "  $H19A_CR patch failed"
+  if kubectl --context "$MGMT_CTX" -n loopzero-system patch clustercredential "$H19A_CR" \
+    --type=merge -p '{"spec":{"tls":{"insecure":true}}}' >/dev/null 2>&1; then
+    log "  $H19A_CR → spec.tls.insecure=true"
+  else
+    warn "  $H19A_CR patch failed"
+  fi
 done
 
 log "H19: hardening ArgoCD cell cluster Secrets against stale CA (insecure for local k3d)"
@@ -901,14 +916,17 @@ for H19_SECRET in $(kubectl --context "$MGMT_CTX" -n argocd get secrets \
     | python3 -c 'import sys,json; c=json.load(sys.stdin); c["tlsClientConfig"]={"insecure":True}; print(json.dumps(c))' 2>/dev/null || echo "")
   if [[ -z "$H19_NEW" ]]; then continue; fi
   H19_NEW_B64=$(printf '%s' "$H19_NEW" | base64 -w0)
-  kubectl --context "$MGMT_CTX" -n argocd patch secret "$H19_SECRET" \
-    --type=json -p "[{\"op\":\"replace\",\"path\":\"/data/config\",\"value\":\"$H19_NEW_B64\"}]" >/dev/null 2>&1 \
-    && { log "  $H19_SECRET → tlsClientConfig.insecure=true (stale caData dropped)"; H19_PATCHED=1; } \
-    || warn "  $H19_SECRET patch failed"
+  if kubectl --context "$MGMT_CTX" -n argocd patch secret "$H19_SECRET" \
+    --type=json -p "[{\"op\":\"replace\",\"path\":\"/data/config\",\"value\":\"$H19_NEW_B64\"}]" >/dev/null 2>&1; then
+    { log "  $H19_SECRET → tlsClientConfig.insecure=true (stale caData dropped)"; H19_PATCHED=1; }
+  else
+    warn "  $H19_SECRET patch failed"
+  fi
 done
 if [[ "$H19_PATCHED" -eq 1 ]]; then
-  kubectl --context "$MGMT_CTX" -n argocd rollout restart statefulset/argocd-application-controller >/dev/null 2>&1 \
-    && log "  argocd-application-controller restarted to reload cluster Secrets" || true
+  if kubectl --context "$MGMT_CTX" -n argocd rollout restart statefulset/argocd-application-controller >/dev/null 2>&1; then
+    log "  argocd-application-controller restarted to reload cluster Secrets"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -922,16 +940,20 @@ if ! kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api >/
   log "  loopzero-api deployment absent — skipping rollout (tilt-owned in standalone)"
 else
   kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart deploy/loopzero-api >/dev/null 2>&1
-  kubectl --context "$MGMT_CTX" -n loopzero-system rollout status deploy/loopzero-api --timeout=90s >/dev/null 2>&1 \
-    && log "  loopzero-api Ready" \
-    || warn "loopzero-api rollout did not complete cleanly"
+  if kubectl --context "$MGMT_CTX" -n loopzero-system rollout status deploy/loopzero-api --timeout=90s >/dev/null 2>&1; then
+    log "  loopzero-api Ready"
+  else
+    warn "loopzero-api rollout did not complete cleanly"
+  fi
 fi
 
 # Also restart argocd-application-controller for the cluster secret refresh.
 kubectl --context "$MGMT_CTX" -n argocd rollout restart statefulset argocd-application-controller >/dev/null 2>&1
-kubectl --context "$MGMT_CTX" -n argocd rollout status statefulset argocd-application-controller --timeout=90s >/dev/null 2>&1 \
-  && log "  argocd-application-controller Ready" \
-  || warn "argocd controller rollout did not complete"
+if kubectl --context "$MGMT_CTX" -n argocd rollout status statefulset argocd-application-controller --timeout=90s >/dev/null 2>&1; then
+  log "  argocd-application-controller Ready"
+else
+  warn "argocd controller rollout did not complete"
+fi
 
 
 # ---------------------------------------------------------------------------

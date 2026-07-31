@@ -13,7 +13,7 @@
 # only the script shape via the hermetic companion test.
 
 set -uo pipefail
-cd "$(dirname "$0")/../../../.."
+cd "$(dirname "$0")/../../../.." || exit 1
 
 # === Flag parsing ===
 SKIP_LIVE=0
@@ -135,6 +135,10 @@ run_scenario() {
 }
 
 # === Cleanup trap (EC-14 from edge-case review) ===
+# Invocada via `trap cleanup EXIT INT TERM` logo abaixo. Os DOIS codigos porque o
+# diagnostico mudou de numero entre versoes do shellcheck: SC2317 no 0.9.x (o do
+# runner) e SC2329 no 0.10+.
+# shellcheck disable=SC2317,SC2329
 cleanup() {
   if [ $SKIP_LIVE -eq 1 ]; then return; fi
   # Best-effort: delete the probe secret + ExternalSecret CR + K8s Secret
@@ -387,8 +391,10 @@ fi
 
 # === Scenario D: kubectl logs -A | grep sentinel → 0 matches ===
 if run_scenario D; then
+  # `grep -c` sai com 1 quando nao ha match; o script roda sem `set -e`, e o
+  # `|| true` deixa isso explicito em vez de depender disso.
   MATCHES="$(kubectl --context="$KUBE_CONTEXT" logs --all-containers=true --since=2m -A 2>/dev/null | \
-    grep -F "$SENTINEL_VALUE" | wc -l)"
+    grep -cF "$SENTINEL_VALUE" || true)"
   if [ "$MATCHES" -eq 0 ]; then
     record D PASS
   else
@@ -400,7 +406,7 @@ fi
 # === Scenario E: kubectl describe pods | grep ENV_KEY shows KEY only ===
 if run_scenario E; then
   DESCRIBE_MATCHES="$(kubectl --context="$WORKLOAD_CONTEXT" describe pods -A 2>/dev/null | \
-    grep -F "$SENTINEL_VALUE" | wc -l)"
+    grep -cF "$SENTINEL_VALUE" || true)"
   if [ "$DESCRIBE_MATCHES" -eq 0 ]; then
     record E PASS
   else

@@ -51,7 +51,6 @@ CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loopzero-mgmt}"
 CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopzero-workload}"
 
 MAX_DURATION_SECONDS="${MAX_DURATION_SECONDS:-1200}"  # 20 min hard ceiling
-LINK_BUILD_BUDGET=$((5 * 60))    # workflow Succeeded
 LINK_RELEASE_BUDGET=$((10 * 60)) # release ACTIVE
 LINK_FINAL_BUDGET=$((20 * 60))   # pods Running + ArgoCD Healthy
 

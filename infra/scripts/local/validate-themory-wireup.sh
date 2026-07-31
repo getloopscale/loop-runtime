@@ -16,7 +16,6 @@
 
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly K8S_NAMESPACE="${K8S_NAMESPACE:-loopzero-system}"
 readonly K8S_SECRET_NAME="${K8S_SECRET_NAME:-themory-dev-key}"
 readonly POD_LABEL="${POD_LABEL:-app=loopzero-cloud}"

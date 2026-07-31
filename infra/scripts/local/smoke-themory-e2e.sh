@@ -20,7 +20,6 @@
 
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
 readonly CLOUD_URL="${CLOUD_URL:-http://localhost:13002}"
 readonly BEARER_FILE="${BEARER_FILE:-${HOME}/.loopzero/local-test-memory-bearer.txt}"

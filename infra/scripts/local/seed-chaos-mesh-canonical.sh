@@ -18,7 +18,6 @@
 # Hermetic: NO network beyond helm + kubectl. Idempotent on warm cluster.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 MGMT_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
 VERIFY=0
