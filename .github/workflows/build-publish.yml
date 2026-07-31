@@ -34,6 +34,14 @@ on:
       # gastaria minutos da conta de quem chama, em silencio.
       runner:          { required: false, type: string,  default: '["blacksmith-8vcpu-ubuntu-2404"]' }
     secrets:
+      # Deploy key read-only de loopzero-contracts — via PREFERIDA desde 2026-07-31.
+      # Alcanca exatamente um repositorio, so' leitura, revogavel sozinha. O PAT
+      # anterior morreu (`Bad credentials`) e derrubou 10 builds sem nomear a
+      # causa, porque a mesma credencial morta aparecia como `Repository not
+      # found` no build da imagem.
+      GOMOD_SSH_KEY:      { required: false }
+      # Fallback legado. Mantido para consumidores do reusable que ainda o usem —
+      # a troca e' aditiva, nao uma quebra de contrato.
       GOMOD_TOKEN:        { required: false }   # cross-repo read for the pinned private loopzero-contracts module
       DOCKERHUB_USERNAME: { required: false }
       DOCKERHUB_TOKEN:    { required: false }
