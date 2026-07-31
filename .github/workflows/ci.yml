@@ -110,7 +110,39 @@ jobs:
         with:
           path: loopzero
 
-      # `loopzero-contracts` e' privado; o checkout precisa do mesmo token do modulo.
+      # Pre-flight do token ANTES do checkout que depende dele.
+      #
+      # `actions/checkout` falha com `Bad credentials` — literalmente essas duas
+      # palavras, sem dizer QUAL credencial nem para QUE repositorio. Medido no
+      # run 30621505439. A mesma causa derruba o build da imagem loopzero-api, onde
+      # ela se disfarca de `Repository not found` (o GitHub responde assim a repo
+      # privado sem auth, deliberadamente igual a repo inexistente).
+      #
+      # Uma credencial morta produzindo duas mensagens diferentes, nenhuma
+      # nomeando o token, e' o motivo de este pipeline ter acumulado 10 falhas
+      # sem ninguem achar a causa. Este passo custa uma chamada de API e nomeia
+      # o problema.
+      - name: Pre-flight — GOMOD_TOKEN alcanca loopzero-contracts?
+        env:
+          GOMOD_TOKEN: ${{ secrets.GOMOD_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${GOMOD_TOKEN:-}" ]; then
+            echo "::error::GOMOD_TOKEN vazio. api/go.mod requer github.com/getloopscale/loopzero-contracts (privado)."
+            exit 1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${GOMOD_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/getloopscale/loopzero-contracts)
+          case "$code" in
+            200) echo "GOMOD_TOKEN OK — loopzero-contracts acessivel." ;;
+            401) echo "::error::GOMOD_TOKEN INVALIDO (401 Bad credentials) — expirado ou revogado, nao apenas sem escopo. Emita um PAT novo com Contents:read em getloopscale/loopzero-contracts."; exit 1 ;;
+            403) echo "::error::GOMOD_TOKEN sem PERMISSAO (403) — o token vive, mas nao tem Contents:read em getloopscale/loopzero-contracts."; exit 1 ;;
+            404) echo "::error::GOMOD_TOKEN nao ENXERGA getloopscale/loopzero-contracts (404). Em repo privado o GitHub responde 404 a quem nao tem acesso — o repositorio existe."; exit 1 ;;
+            *)   echo "::error::Pre-flight inconclusivo (HTTP ${code}) ao consultar getloopscale/loopzero-contracts."; exit 1 ;;
+          esac
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
           repository: getloopscale/loopzero-contracts
