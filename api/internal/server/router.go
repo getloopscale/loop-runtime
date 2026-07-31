@@ -99,6 +99,12 @@ func NewRouter(cfg Config) *chi.Mux {
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
 	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
 	r.Get("/api/v1/version", routes.VersionHandler())
+	// Contrato da FROTA de status: o coletor do dashboard sonda `/v1/version` e
+	// le' `{version, built_at}`. Mesma verdade do endpoint acima, no formato que
+	// os outros servicos da plataforma ja' falam — sem o qual o engine nao
+	// aparece no painel /status. Publico pelo mesmo motivo: metadado de build nao
+	// e' segredo e o coletor sonda sem sessao.
+	r.Get("/v1/version", routes.FleetVersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {
