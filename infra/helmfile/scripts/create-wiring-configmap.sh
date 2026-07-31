@@ -15,6 +15,16 @@
 set -euo pipefail
 ENV="${1:?usage: $0 <env>}"
 
+# Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
+# The loopzero-platform-topology ConfigMap is consumed by loopzero-api via envFrom, so
+# it belongs to MGMT. Without this pin the script wrote it to whatever
+# kubecontext was active: on a dev box carrying residue (e.g. k3d-loopzero-build
+# left over from an earlier bootstrap step) loopzero-api silently never sees its
+# topology. The kubectl() override makes every bare call downstream carry the
+# right --context. Override KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+
 log() { printf '[wiring-configmap] %s\n' "$*" >&2; }
 
 # Internal in-cluster URLs (constants from K8s service-DNS naming convention).

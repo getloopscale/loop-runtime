@@ -135,6 +135,10 @@ mint_app_jwt() {
   # the pod (caught LIVE during dev-public Cleanroom-fresh seed --verify,
   # Step 11 was the only FAIL out of 17). Regression-locked by
   # infra/tests/charts/connect_canonical_fixture_container_name_test.go.
+  # Aspas simples sao o ponto: a expansao de $GITHUB_APP_ID tem de acontecer
+  # DENTRO do pod, no ambiente do loopzero-api. Expandi-la aqui leria a variavel da
+  # maquina do operador, que nao a tem.
+  # shellcheck disable=SC2016
   app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c loopzero-api -- \
     sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
   if [ -z "$app_id" ]; then

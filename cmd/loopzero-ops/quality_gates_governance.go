@@ -31,7 +31,9 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/templatecompliance"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantcsppassthrough"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/workercsp"
 )
 
 // M9 Step 7: quality gate entry points for the "governance" theme, decomposed out of the
@@ -131,7 +133,7 @@ func runSpotcheckDimension(args []string) int {
 
 // runGitDiffToLines replaces git-diff-to-lines.sh (a bash+Python wrapper):
 // runs `git diff --unified=0 base...head` and emits one `path:line` per
-// touched line. Parse logic lives in the tested pkg/quality/gitdiff.
+// touched line. Parse logic lives in the tested cmd/loopzero-ops/internal/quality/gitdiff.
 func runGitDiffToLines(args []string) int {
 	fs := flag.NewFlagSet("git-diff-to-lines", flag.ContinueOnError)
 	base := fs.String("base", "", "base ref (falls back to $BASE_REF, then origin/main)")
@@ -291,7 +293,7 @@ func runTaskfileInterface(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Action: define these in Taskfile.yml or an included taskfiles/*.yml.")
 		fmt.Fprintln(os.Stderr, "If intentionally renamed/removed, update ExpectedCommands in")
-		fmt.Fprintln(os.Stderr, "pkg/quality/taskfileinterface/check.go AND CI consumers.")
+		fmt.Fprintln(os.Stderr, "cmd/loopzero-ops/internal/quality/taskfileinterface/check.go AND CI consumers.")
 		return 1
 	}
 	fmt.Printf("taskfile-interface: PASS — all %d public commands resolve\n", len(taskfileinterface.ExpectedCommands))
@@ -372,7 +374,7 @@ func runCLIBundleSize(args []string) int {
 		fmt.Fprintf(os.Stderr, "[cli-bundle-size] FAIL — cli/dist %.1f MB > cap %.1f MB (T9.3 governance).\n",
 			mb(o.TotalBytes), mb(o.MaxBytes))
 		fmt.Fprintln(os.Stderr, "Options: (1) remove/lazy-load the heavy dependency, OR")
-		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in pkg/quality/clibundlesize + add an ADR justifying the growth.")
+		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in cmd/loopzero-ops/internal/quality/clibundlesize + add an ADR justifying the growth.")
 		return 1
 	}
 	fmt.Printf("[cli-bundle-size] PASS — cli/dist %.1f MB <= cap %.1f MB.\n", mb(o.TotalBytes), mb(o.MaxBytes))
@@ -642,4 +644,63 @@ func runTestCoverageReport(args []string) int {
 	}
 	fmt.Printf("test-coverage-report: PASS — coverage=%.2f%% (threshold=%.2f%%)\n", outcome.CoveragePct, *threshold)
 	return 0
+}
+
+// runWorkerCSP is the #235 gate: the Cloudflare static worker's CSP must not
+// permit arbitrary inline/eval'd script. Registered but NOT wired into
+// quality:gates — the finding is real and its fix lives in a
+// governance-gated path; see the failingGate entry in quality_gate_wiring_test.go.
+func runWorkerCSP(args []string) int {
+	fs := flag.NewFlagSet("worker-csp", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	worker := fs.String("worker", "", "worker source path relative to root")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	out, err := workercsp.Check(workercsp.Config{RepoRoot: *root, WorkerPath: *worker})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "worker-csp: %v\n", err)
+		return 2
+	}
+	if out.Skipped {
+		fmt.Printf("worker-csp: SKIP — %s\n", out.Reason)
+		return 0
+	}
+	if out.Pass {
+		fmt.Printf("worker-csp: PASS — %s\n", out.Reason)
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "worker-csp: FAIL")
+	for _, f := range out.Findings {
+		fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", workercsp.DefaultWorkerPath, f.Line, f.Detail)
+	}
+	fmt.Fprintln(os.Stderr, "Fix: drop 'unsafe-inline' from script-src; use a per-request nonce or external+hashed scripts (issue #235).")
+	return 1
+}
+
+// runTenantCSPPassthrough is the #59 regression lock: a static-CSP Traefik
+// middleware must never be attached to tenant IngressRoutes, or LoopZeroKit's
+// per-request nonce stops matching the body and every inline script dies.
+func runTenantCSPPassthrough(args []string) int {
+	fs := flag.NewFlagSet("tenant-csp-passthrough", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	out, err := tenantcsppassthrough.Check(tenantcsppassthrough.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tenant-csp-passthrough: %v\n", err)
+		return 2
+	}
+	if out.Skipped {
+		fmt.Printf("tenant-csp-passthrough: SKIP — %s\n", out.Reason)
+		return 0
+	}
+	if out.Pass {
+		fmt.Printf("tenant-csp-passthrough: PASS — %s\n", out.Reason)
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "tenant-csp-passthrough: FAIL — static-CSP middleware attached to tenant routes: %v\n", out.Attached)
+	fmt.Fprintln(os.Stderr, "Every LoopZeroKit per-request nonce is replaced by that fixed policy; inline scripts are blocked silently in the browser (issue #59).")
+	return 1
 }

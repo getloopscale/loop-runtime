@@ -32,7 +32,19 @@ code-review-output-infra-tests/
 # --------------------------------------------
 node_modules/
 dist/
-build/
+
+# `build/` used to live here, unanchored. A git pattern without a leading slash
+# matches at EVERY depth, so it also hid the Go package
+# `api/internal/services/build/`: the 42 files already tracked kept working, but
+# every NEW file there was ignored — `git add -A` skipped it silently and a
+# commit could land a caller wired to code absent from the repository.
+#
+# It was protecting nothing. This section targets `cli/`, which moved to the
+# sibling repo at M2, and no `build/` artifact directory exists in this worktree
+# at all. The pattern outlived its subject and kept only its side effect.
+#
+# Guarded by cmd/loopzero-ops/quality_gitignore_shadows_source_test.go, which asks
+# git which files it ignores and fails on any that look like source.
 
 # Dashboard build artifacts + vendored references (355MB, do not commit)
 cloud/dashboard/storybook-static/

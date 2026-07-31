@@ -157,7 +157,7 @@ Per route in `api/internal/server/router.go`:
 
 1. **Every env-scope mutation MUST acquire `lock.WithEnvironmentLock` BEFORE any state read or write.**
 2. **Concurrent-build check MUST be inside the lock** (race condition outside — CLAUDE.md Rule 6).
-3. **`pg_advisory_xact_lock` only** — transaction-scoped (CLAUDE.md Rule 7; enforced by `pkg/quality/advisorylock`).
+3. **`pg_advisory_xact_lock` only** — transaction-scoped (CLAUDE.md Rule 7; enforced by `cmd/loopzero-ops/internal/quality/advisorylock`).
 4. **DI via `EnvironmentLocker` interface** — services accept the abstraction, not the concrete pool.
 5. **5-second lock timeout** — enforced by `WithEnvironmentLock` config (per CLAUDE.md § Concurrency).
 
@@ -180,7 +180,7 @@ grep -rn "EnvironmentLocker" api/internal/services/ | grep -v "_test.go" | sort 
 
 - CLAUDE.md Rule 6 (Every mutation uses the environment lock)
 - CLAUDE.md Rule 7 (pg_advisory_xact_lock only)
-- `pkg/quality/advisorylock/` (Go gate enforcing session-scope ban)
+- `cmd/loopzero-ops/internal/quality/advisorylock/` (Go gate enforcing session-scope ban)
 - `api/internal/lock/environment_lock.go` (implementation)
 - `api/internal/adapters/pgx_adapter.go:81` (concrete locker)
 - ADR-0033 (DIP refactor for EnvironmentLocker interface)

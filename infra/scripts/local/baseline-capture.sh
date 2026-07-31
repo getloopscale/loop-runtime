@@ -108,9 +108,9 @@ capture_runtime_state() {
 capture_config_state() {
   local pg_max plan_limits_present cosign_mode
   if [ -n "$FIXTURE_DIR" ] ; then
-    pg_max="$(cat "$FIXTURE_DIR/pg_max_migration.txt" 2>/dev/null | tr -d '[:space:]' || echo "0")"
-    plan_limits_present="$(cat "$FIXTURE_DIR/plan_limits_present.txt" 2>/dev/null | tr -d '[:space:]' || echo "false")"
-    cosign_mode="$(cat "$FIXTURE_DIR/cosign_mode.txt" 2>/dev/null | tr -d '[:space:]' || echo "keyed")"
+    pg_max="$(tr -d '[:space:]' < "$FIXTURE_DIR/pg_max_migration.txt" 2>/dev/null || echo "0")"
+    plan_limits_present="$(tr -d '[:space:]' < "$FIXTURE_DIR/plan_limits_present.txt" 2>/dev/null || echo "false")"
+    cosign_mode="$(tr -d '[:space:]' < "$FIXTURE_DIR/cosign_mode.txt" 2>/dev/null || echo "keyed")"
   else
     pg_max="$(kubectl --context="$CONTEXT" -n loopzero-system exec -i postgresql-0 -c postgresql -- \
                 env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \

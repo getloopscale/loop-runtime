@@ -10,6 +10,15 @@
 set -euo pipefail
 DOMAIN="${1:-${LOOPZERO_DOMAIN:-dev.loopzero.example}}"
 
+# Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
+# These checks assert platform invariants on MGMT. Reading them from whatever
+# kubecontext is active is worse here than in a provisioning script: a check
+# suite pointed at the wrong cluster does not fail, it reports PASS about a
+# cluster nobody asked about — a green light with no meaning. Override
+# KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+
 PASS=0
 FAIL=0
 SKIP=0

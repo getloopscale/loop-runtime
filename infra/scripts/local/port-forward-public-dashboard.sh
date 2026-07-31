@@ -54,8 +54,11 @@ run_forever() {
   local sleeps=(2 4 8 16 30 30 30 30)
   local i=0
   while true; do
-    kubectl --context="$CONTEXT" -n "$ns" port-forward \
-      "$resource" "$lport:$rport" >>"$logfile" 2>&1 && i=0 || true
+    # `if/then`, e nao `&& i=0 || true`: o port-forward saindo com sucesso
+    # zera o backoff; o `||` faria o `true` correr tambem quando a atribuicao
+    # falhasse, mascarando a distincao entre os dois desfechos.
+    if kubectl --context="$CONTEXT" -n "$ns" port-forward \
+      "$resource" "$lport:$rport" >>"$logfile" 2>&1; then i=0; fi
     local sl="${sleeps[$i]}"
     [ "$i" -lt $(( ${#sleeps[@]} - 1 )) ] && i=$((i+1))
     echo "[port-fwd] $resource exited; sleeping ${sl}s before retry" >>"$logfile"

@@ -49,14 +49,44 @@ ensure_deps() {
 ensure_deps charts/loopzero-api
 ensure_deps infra/helm/loopzero-api
 
+# render_or_die — captura o `helm template` DISTINGUINDO falha de render de
+# campo ausente.
+#
+# O DEFEITO QUE ISTO CONSERTA: as quatro capturas abaixo usavam
+#
+#     RENDER_X=$(helm template ... 2>&1 || true)
+#
+# O `2>&1` joga o erro do helm DENTRO da variavel e o `|| true` descarta o exit
+# code. Quando o render falha — e ele falha de forma transitoria, por contencao
+# de `helm dependency` quando varios gates rodam juntos — a variavel passa a
+# conter a mensagem de erro em vez de YAML, e TODO `grep` seguinte reporta
+# `MISSING`. O gate acusa "env LOOPZERO_VAULT_K8S_AUTH_PATH MISSING" quando o campo
+# esta la' e o que quebrou foi o helm.
+#
+# Medido: este teste barrou um push cujo diff continha SO' arquivos de workflow,
+# e passou verde no mesmo commit ao ser rodado de novo. Teste intermitente e'
+# bug (rules/testing.md), e aqui a intermitencia ainda MENTIA sobre a causa —
+# manda o proximo a debugar um chart que nunca esteve quebrado.
+render_or_die() {
+  local label="$1"; shift
+  local out rc
+  out="$("$@" 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    fail "${label}: helm template FALHOU (exit ${rc}) — isto NAO e' campo ausente, e' render quebrado:"
+    printf '%s\n' "$out" | sed 's/^/      /' >&2
+    exit 1
+  fi
+  printf '%s' "$out"
+}
+
 # ----------------------------------------------------------------
 # Chart system 1: charts/loopzero-api (ArgoCD L3)
 # ----------------------------------------------------------------
 blue "== charts/loopzero-api: vault.enabled=true =="
 
-RENDER_PROD_ON=$(helm template loopzero-api ./charts/loopzero-api \
+RENDER_PROD_ON=$(render_or_die "charts/loopzero-api vault=on" helm template loopzero-api ./charts/loopzero-api \
   --set vault.enabled=true \
-  --show-only templates/deployment.yaml 2>&1 || true)
+  --show-only templates/deployment.yaml )
 
 if echo "${RENDER_PROD_ON}" | grep -qE 'name: vault-sa-token'; then
   pass "charts/loopzero-api: vault-sa-token volume + volumeMount rendered"
@@ -84,8 +114,8 @@ fi
 
 blue "== charts/loopzero-api: vault.enabled=false (default) =="
 
-RENDER_PROD_OFF=$(helm template loopzero-api ./charts/loopzero-api \
-  --show-only templates/deployment.yaml 2>&1 || true)
+RENDER_PROD_OFF=$(render_or_die "charts/loopzero-api vault=off" helm template loopzero-api ./charts/loopzero-api \
+  --show-only templates/deployment.yaml )
 
 if echo "${RENDER_PROD_OFF}" | grep -qE 'name: vault-sa-token'; then
   fail "charts/loopzero-api: vault-sa-token RENDERED when vault.enabled=false (gate broken)"
@@ -98,9 +128,9 @@ fi
 # ----------------------------------------------------------------
 blue "== infra/helm/loopzero-api: vault.enabled=true =="
 
-RENDER_INFRA_ON=$(helm template loopzero-api ./infra/helm/loopzero-api \
+RENDER_INFRA_ON=$(render_or_die "infra/helm/loopzero-api vault=on" helm template loopzero-api ./infra/helm/loopzero-api \
   --set vault.enabled=true \
-  --show-only templates/deployment.yaml 2>&1 || true)
+  --show-only templates/deployment.yaml )
 
 if echo "${RENDER_INFRA_ON}" | grep -qE 'name: vault-sa-token'; then
   pass "infra/helm/loopzero-api: vault-sa-token volume + volumeMount rendered"
@@ -138,8 +168,8 @@ fi
 
 blue "== infra/helm/loopzero-api: vault.enabled=false (default) =="
 
-RENDER_INFRA_OFF=$(helm template loopzero-api ./infra/helm/loopzero-api \
-  --show-only templates/deployment.yaml 2>&1 || true)
+RENDER_INFRA_OFF=$(render_or_die "infra/helm/loopzero-api vault=off" helm template loopzero-api ./infra/helm/loopzero-api \
+  --show-only templates/deployment.yaml )
 
 if echo "${RENDER_INFRA_OFF}" | grep -qE 'name: vault-sa-token'; then
   fail "infra/helm/loopzero-api: vault-sa-token RENDERED when vault.enabled=false (gate broken)"

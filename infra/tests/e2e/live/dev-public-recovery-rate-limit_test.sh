@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-log()  { [ "$JSON_OUTPUT" = "0" ] && printf '[89-recovery-rate] %s\n' "$*" >&2 || true ; }
+log()  { if [ "$JSON_OUTPUT" = "0" ]; then printf '[89-recovery-rate] %s\n' "$*" >&2; fi ; }
 emit() {
   local verdict="$1" reason="${2:-}"
   if [ "$JSON_OUTPUT" = "1" ]; then

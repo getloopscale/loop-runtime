@@ -60,6 +60,19 @@ spec:
                 description: Branch is the source branch for the preview.
                 minLength: 1
                 type: string
+              cellId:
+                description: |-
+                  CellID is the multi-cell routing target for this preview environment.
+                  T1.1 of deep-review-remediation-plan (closes find_arch_002 HIGH):
+                  previously absent, causing PreviewController to route ALL preview
+                  workloads to the static RUNTIME_KUBECONFIG cell, ignoring the
+                  tenant's pinned cell. Cell-2 tenants' previews silently landed on
+                  cell-default — multi-cell isolation breach.
+
+                  When CellID is empty (legacy CRs created pre-T1.1), the controller
+                  falls back to tenant.Spec.CellID via tenant lookup. Going forward,
+                  the API submitting the CR sets CellID at creation time.
+                type: string
               expiresAt:
                 description: ExpiresAt is the time at which this preview should be
                   automatically cleaned up.

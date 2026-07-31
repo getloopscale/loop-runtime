@@ -87,6 +87,10 @@ type ScaleHandler struct {
 	planTierStore   pkgdomain.PlanTierStore // J-20 T1.1 — resolves tenant's canonical plan
 	podCostPerHour  float64                 // J-20 T1.1 EC-2 — server-authoritative cost rate
 	replicasChecker ScaleReplicasChecker    // Red Team #101 — max-replica plan cap; nil disables
+	// Issue #137 — set by WaiveReplicaCapEnforcement so EnsureProductionWired
+	// can tell "deliberately without a cap" from "somebody dropped the wiring".
+	capEnforcementWaived bool
+	capWaiveReason       string
 }
 
 // NewScaleHandler creates a new ScaleHandler.
@@ -143,6 +147,33 @@ func (h *ScaleHandler) EnsureProductionWired() {
 	if h.apply == nil {
 		panic("ScaleHandler.apply is nil — production must wire a ScaleApplyFunc; scaling would silently no-op (audit M02 #14)")
 	}
+	// Issue #137 — the same failure shape, on the second thing that can
+	// silently vanish. The replica cap is nil-disabled by design, so production
+	// depends entirely on setup_orchestrator.go calling SetReplicasChecker.
+	// Drop that one line and every tenant may request any replica count with no
+	// error anywhere: the cap does not fail, it evaporates.
+	//
+	// Enforcement genuinely cannot run in some boots — with no database there is
+	// no PlanLimiter and therefore no plan to enforce. So the contract is not
+	// "the checker must exist"; it is "the caller must have DECIDED". Wire the
+	// checker, or waive it out loud. Silence is the only thing forbidden.
+	if h.replicasChecker == nil && !h.capEnforcementWaived {
+		panic("ScaleHandler.replicasChecker is nil and enforcement was not explicitly waived — " +
+			"call SetReplicasChecker, or WaiveReplicaCapEnforcement(reason) if this boot genuinely " +
+			"cannot enforce; otherwise the per-plan replica cap disables silently (issue #137)")
+	}
+}
+
+// WaiveReplicaCapEnforcement records that this handler runs WITHOUT the
+// per-plan replica cap, and why. It exists so that "no enforcement" is a
+// statement someone made rather than a line someone forgot.
+//
+// The legitimate case is a boot with no database: no PlanLimiter can be built,
+// so there is no plan to enforce. Reaching for this to silence the guard in a
+// boot that could enforce is the regression the guard exists to catch.
+func (h *ScaleHandler) WaiveReplicaCapEnforcement(reason string) {
+	h.capEnforcementWaived = true
+	h.capWaiveReason = reason
 }
 
 // scaleRequest is the JSON body for POST /api/v1/projects/{name}/scale.

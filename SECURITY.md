@@ -49,12 +49,20 @@ Instead, please report them via one of the following channels:
 
 LoopZero implements the following security practices:
 
-### Build Pipeline
-- **govulncheck** on all Go modules in every CI run
-- **npm audit** with `--audit-level=high` on CLI
-- **Trivy** filesystem, IaC, and Dockerfile scanning (CRITICAL + HIGH severity)
-- **TruffleHog** secret detection in every commit
-- **kubeconform --strict** on all Kubernetes manifests
+### Build and quality gates
+
+GitHub Actions was retired as the pipeline in 2026-05-23. The scanners below run through
+`task` — locally, on the operator machine, or from whichever CI a deployment wires up. They are
+**not** enforced automatically on every push to this repository.
+
+- **Trivy** — CVE scanning (CRITICAL + HIGH). `loopzero-ops quality trivy-scan`, wired into `task quality:gates`.
+- **TruffleHog** — verified-secret detection. `loopzero-ops quality trufflehog-scan`, wired into `task quality:gates`.
+- **govulncheck** — Go stdlib + module CVEs across `api`, `operators`, `pkg`. `task vuln-scan`; `task vuln-scan:strict` fails on MEDIUM+.
+- **kubeconform --strict** — Kubernetes manifest schema validation. `task validate:manifests`.
+- **cosign + syft** — image signing and CycloneDX SBOM on publish (`.github/workflows/build-publish.yml`).
+- **108 pure-logic gates** in `cmd/loopzero-ops` — `task quality:gates`; after `task quality:build`, `/tmp/loopzero-ops quality --list` is the authoritative inventory, including which gates are wired and which are registered-but-unrun. A stray `./loopzero-ops` at the repo root is a gitignored local artifact and can be badly stale.
+
+The CLI moved to the `loopzero-cli` repository at M2; its `npm audit` runs there.
 
 ### Runtime
 - Non-root containers (UID 1000)
@@ -63,11 +71,17 @@ LoopZero implements the following security practices:
 - Transaction-scoped advisory locks (`pg_advisory_xact_lock`) for concurrency control
 - GitHub token validation with caching
 
+### Secrets
+- **OpenBao (Transit)** holds tenant secrets; values are stored encrypted (`vault:v1:` prefixed) and never persisted in plaintext.
+- **External Secrets Operator** projects them into workload namespaces; the plaintext value exists only in the tenant's Kubernetes Secret.
+- OpenBao runs in its **own `loopzero-vault` cluster**, separate from mgmt — a deliberate blast-radius boundary. Installing it into mgmt is forbidden.
+- Secrets are never exposed in CLI output, logs, or audit entries.
+- Unseal is Shamir 5-share / 3-threshold. For persistent and production vaults the ceremony is witnessed and the shares are distributed across independent custody; the ephemeral dev tier is automated (see `docs/operations/openbao-init-runbook.md`).
+
 ### Dependencies
-- All Go dependencies pinned via `go.sum`
-- All npm dependencies locked via `package-lock.json`
-- All Helm chart versions pinned
-- Security overrides applied for known vulnerabilities (e.g., `tar` CVE)
+- All Go dependencies pinned via `go.sum`; the workspace is a multi-module `go.work`.
+- All Helm chart versions pinned; container base images pinned by digest.
+- Renovate (`.github/renovate.json`) manages upgrades with `pinDigests: true`.
 
 ## Disclosure Policy
 
@@ -80,8 +94,9 @@ LoopZero implements the following security practices:
 
 For production deployments, ensure:
 
-1. **TLS everywhere**: All endpoints must use HTTPS (cert-manager + Let's Encrypt)
-2. **Network policies**: Enable Kubernetes NetworkPolicies to restrict pod-to-pod traffic
-3. **RBAC**: Use minimal permissions for service accounts
-4. **Secrets**: Use Kubernetes Secrets (encrypted at rest) for sensitive configuration
-5. **Image provenance**: Verify container image signatures (when available, Sprint 6+)
+1. **TLS everywhere**: All endpoints must use HTTPS (cert-manager + Let's Encrypt, or Cloudflare-managed TLS)
+2. **Network policies**: deny-all baseline plus explicit allow rules (`infra/helm/network-policies/`)
+3. **RBAC**: minimal permissions for service accounts; no unconditional cluster-wide `secrets`/`configmaps` grants (enforced by the `cluster-role-no-secrets-star` gate)
+4. **Secrets**: OpenBao Transit + External Secrets Operator — see § Secrets. Storing secrets as plain environment variables is refused by the `no-env-vault-secrets` gate
+5. **Image provenance**: images are cosign-signed on publish; admission runs sigstore policy-controller (deny-by-default, with a warn-mode policy during the keyed→keyless cutover)
+6. **Pod hardening**: `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem`, PodSecurity `restricted` on tenant namespaces

@@ -5,6 +5,9 @@ metadata:
   name: tenants.loopzero.io
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/resource-policy": keep
+    controller-gen.kubebuilder.io/version: {{ .Values.controllerGenVersion | default "v0.17.2" }}
 spec:
   group: loopzero.io
   names:

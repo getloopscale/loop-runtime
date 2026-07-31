@@ -216,7 +216,7 @@ func runAGPLIsolation(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "AGPL-3.0 has copyleft network-distribution requirements. Either re-implement")
 		fmt.Fprintln(os.Stderr, "with an Apache-2.0 alternative, OR add the import to DefaultAllowlist in")
-		fmt.Fprintln(os.Stderr, "pkg/quality/agplisolation with a NEW ADR + legal sign-off.")
+		fmt.Fprintln(os.Stderr, "cmd/loopzero-ops/internal/quality/agplisolation with a NEW ADR + legal sign-off.")
 		return 1
 	}
 	fmt.Println("PASS — no AGPL imports outside the ADR-0048 allow-list.")

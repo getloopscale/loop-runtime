@@ -686,6 +686,22 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// #138 — a secrets backend that cannot encrypt is NOT a generic
+		// server fault. It has a distinct cause, owner and remedy, and
+		// collapsing it into INTERNAL_ERROR is what forced the issue author
+		// to guess at the subsystem from which project happened to work.
+		// 503, not 500: the request was valid and a dependency was down.
+		if errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+			slog.Error("secrets backend unavailable on set",
+				"error", err.Error(),
+				"tenant_id", uc.TenantID,
+				"project", project,
+				"environment", req.Environment,
+				"secret_name", req.Name,
+			)
+			writeLoopZeroError(w, loopzeroerrors.ErrSecretsBackendUnavailable)
+			return
+		}
 		// V9 L18: mirror mapBuildError + promote.go pattern — log unexpected
 		// errors for diagnosis. The silent-swallow pre-L18 made every
 		// secret-set failure indistinguishable from any other 5xx.

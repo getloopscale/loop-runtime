@@ -252,16 +252,23 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, pr
 		return nil, fmt.Errorf("k8s: get tenant CR %q for GetEnvironmentDetail: %w", tenantID, err)
 	}
 
-	for _, e := range t.Spec.Environments {
-		if isEnvMatch(e, envName, project) {
-			return &domain.EnvironmentDetail{
-				Name:     e.Name,
-				Status:   "active",
-				Projects: []domain.EnvProjectInfo{},
-			}, nil
-		}
+	// Issue #139 — a project-less lookup (the CLI's `loopzero env inspect <name>`
+	// has no --project flag) used to require entry.Project == "", which the
+	// #124 backfill made unsatisfiable. resolveEnvEntry documents the full
+	// order; it returns an error only for the genuinely ambiguous case.
+	idx, _, rerr := resolveEnvEntry(t.Spec.Environments, envName, project)
+	if rerr != nil {
+		return nil, rerr
 	}
-	return nil, nil // not found
+	if idx < 0 {
+		return nil, nil // not found
+	}
+	e := t.Spec.Environments[idx]
+	return &domain.EnvironmentDetail{
+		Name:     e.Name,
+		Status:   "active",
+		Projects: []domain.EnvProjectInfo{},
+	}, nil
 }
 
 // buildTenant constructs a typed Tenant CR matching the CRD schema defined in

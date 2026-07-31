@@ -20,6 +20,18 @@ set -euo pipefail
 
 ENV="${1:?usage: $0 <env>}"
 
+# Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
+# This script writes Secrets to the BUILD cluster. Before this pin, it relied
+# on the caller having mutated the global kubecontext (`kubectl config
+# use-context k3d-loopzero-build` in Taskfile.yml). That is fragile in two ways:
+# a caller that forgets provisions build Secrets into whatever cluster is
+# active, and mutating the operator's global context as a side effect leaks
+# out of the task when it fails mid-way. The `kubectl()` override below makes
+# every bare invocation downstream carry the right --context, so neither can
+# happen. Override KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-build}"
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+
 log() { printf '[generate-build-secrets] %s\n' "$*" >&2; }
 
 ensure_namespace() {

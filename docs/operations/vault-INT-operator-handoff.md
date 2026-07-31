@@ -8,7 +8,7 @@ LoopZero migrated from env-var-as-secret to OpenBao Vault as canonical Source of
 
 ## Authoritative References
 
-- **Plan**: [`.claude/knowledge-base/plans/2026-06-02-loopzero-api-vault-integration-plan.md`](../../.claude/knowledge-base/plans/2026-06-02-loopzero-api-vault-integration-plan.md) v1.8
+- **Plan**: [`.claude/knowledge-base/plans/completed/2026-06-02-loopzero-api-vault-integration-plan.md`](../../.claude/knowledge-base/plans/completed/2026-06-02-loopzero-api-vault-integration-plan.md) v1.8
 - **LIVE evidence**: [`.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md`](../../.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md)
 - **Runbook**: [`vault-secret-migration-runbook.md`](vault-secret-migration-runbook.md) (P1-P6 procedures)
 - **ADR**: [`.claude/knowledge-base/decisions/2026-06-02-vault-secrets-sot.md`](../../.claude/knowledge-base/decisions/2026-06-02-vault-secrets-sot.md) D1-D12

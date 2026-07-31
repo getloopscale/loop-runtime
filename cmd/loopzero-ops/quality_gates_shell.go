@@ -179,7 +179,7 @@ func runNoNewBash(args []string) int {
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintf(os.Stderr, "To fix: add the script to %s with justificativa per D4 criteria,\n", *allowlist)
-		fmt.Fprintln(os.Stderr, "OR migrate the function to: helmfile (D2), pkg/quality/X Go gate (D5),")
+		fmt.Fprintln(os.Stderr, "OR migrate the function to: helmfile (D2), cmd/loopzero-ops/internal/quality/X Go gate (D5),")
 		fmt.Fprintln(os.Stderr, "Ginkgo (T4), go:generate (T5.2). See docs/plans/completed/2026-05-22-shell-script-strategic-plan.md")
 		return 1
 	}

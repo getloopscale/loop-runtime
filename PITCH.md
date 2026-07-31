@@ -14,7 +14,7 @@ Status: Production / GA — confirmed by founder 2026-05-16 (PITCH Audit). See l
 
 *Real backends, real stacks — not generated previews.*
 
-**~4 min deploy · ~3s rollback · 30 frameworks · 35 CLI commands · signed images by default · multi-cell isolation**
+**~4 min deploy · ~3s rollback · LoopZeroKit-native (Python + Node) · signed images by default · multi-cell isolation**
 
 ---
 
@@ -29,7 +29,7 @@ Four commands. Then just `git push`.
 ## What you get
 
 - **Type an idea. Watch it ship.** LoopZeroCode drafts the change. LoopZeroCreate scaffolds the project. LoopZeroKit shapes the app. `loopzero deploy` puts it on a live URL — in ~4 minutes from prompt to production.
-- **Every backend shape.** API servers (Express, Fastify, NestJS, FastAPI, Axum, Spring, Sinatra, Slim, Go stdlib), background workers, frontends, static sites — all from the same monorepo. **30 frameworks auto-detected.**
+- **Every backend shape.** API servers, background workers, frontends, static sites — all from the same monorepo, on the **LoopZeroKit stack (Python + Node)**. One curated, hardened path instead of a long tail of guesses.
 - **The whole monorepo, one deploy.** `loopzero init` reads your repo, generates `loopzero.yaml`, and every service ships together. Workers + API + frontend, one push.
 - **Rollback in seconds.** `loopzero rollback` reverts to the previous release in ~3s. Cross-environment promote (`loopzero promote --from staging --to production`) ships the same artifact without rebuild.
 - **Canary by tier.** Starter gets automatic canary. Pro adds analysis hooks. Team and Enterprise get full step control with auto-abort on failure. Every plan ships zero-downtime deploys and instant rollback.
@@ -87,7 +87,7 @@ Mastra is the closest comparable in the agent framework space — the difference
 |---|---|---|---|---|---|
 | **Frame** | Type an idea. Get a real backend. | "Build and deploy on the AI Cloud." | "Railway for AI Agents." | "Build fast. Run any code fearlessly." | (you) |
 | Frontends (React, Vite, Next.js, static) | ✓ (CDN) | ✓ (leader) | ✓ | ✓ | DIY |
-| API servers (any framework) | **✓ — 30 frameworks** | Serverless only | Yes | Yes | DIY |
+| API servers | **✓ — LoopZeroKit stack (Python + Node)** | Serverless only | Yes | Yes | DIY |
 | Background workers | **✓** | — | Yes | Yes | DIY |
 | Monorepo-native (multiple services per repo) | **✓** | Limited | Partial | Limited | DIY |
 | Auto-deploy on `git push` (~4 min) | **✓** | ✓ | Yes | Yes | DIY |
@@ -144,7 +144,7 @@ git push           # every push deploys automatically
 
 ```bash
 cd my-monorepo
-loopzero init                      # detects 30 frameworks across monorepo layouts
+loopzero init                      # reads your monorepo, generates loopzero.yaml
 loopzero connect                   # GitHub App, auto-deploy on push
 loopzero deploy                    # first deploy: ~4 min E2E
 loopzero promote --from staging --to production  # no rebuild
@@ -157,7 +157,7 @@ Every command supports `--json` for CI/CD. **JSON field names are a stability co
 
 ### CLI surface
 
-**35 commands** organized into core workflow + resources:
+**40 command groups** organized into core workflow + resources:
 
 | Category | Commands |
 |---|---|
@@ -229,7 +229,8 @@ The OSS funnel is free. LoopZeroCloud is the commercial product. Self-host of th
 
 **LoopZeroCloud's vision.** The deploy destination every AI agent and modern application ships to — where `git push` becomes production for the next generation of software.
 
-> The full identity (mission, vision, values) lives in [`/IDENTITY.md`](../IDENTITY.md).
+> Mission and vision as stated above are the canonical wording; there is no separate identity
+> document. Voice and banned framings are governed by [`.claude/rules/public-copy.md`](.claude/rules/public-copy.md).
 
 ## Common questions
 
@@ -241,9 +242,9 @@ The OSS funnel is free. LoopZeroCloud is the commercial product. Self-host of th
 
 ## Status
 
-- **Generally Available.** Production runtime, multi-cell architecture, managed Postgres, Cloudflare-managed TLS. CLI shipped: 35 commands with `--json` stability contract, exit codes 0-5 permanent.
+- **Generally Available.** Production runtime, multi-cell architecture, managed Postgres, Cloudflare-managed TLS. CLI shipped: 40 command groups with a `--json` stability contract and permanent exit codes 0-5.
 - **Pricing live across all tiers.** Starter Free, Pro $29/mo, Team $99/mo self-serve. Enterprise (custom) is sales-led — no public pricing, no signup form, contact for terms.
-- **What ships today** — full deploy / rollback / promote pipeline, preview environments per PR, custom domains with auto-TLS and WAF/DDoS, signed container images on every plan, audit log, plan enforcement, encrypted secrets, monorepo support for 30 frameworks, observability (105+ metrics, dashboards, SLO alerts).
+- **What ships today** — full deploy / rollback / promote pipeline, preview environments per PR, custom domains with auto-TLS and WAF/DDoS, signed container images on every plan, audit log, plan enforcement, encrypted secrets, monorepo support on the LoopZeroKit stack (Python + Node, server and worker), observability (126 metrics, dashboards, SLO alerts).
 - **On the roadmap (v1.x).** Keyless image signing, cross-cluster log streaming, expanded SSO/SAML providers.
 
 ## License

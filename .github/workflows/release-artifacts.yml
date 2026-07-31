@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}   # cancel superseded DEV runs only; never release
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     outputs:
       images: ${{ steps.set.outputs.images }}
       charts: ${{ steps.set.outputs.charts }}
@@ -45,16 +45,24 @@ jobs:
         run: |
           set -euo pipefail
           ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."}]'
+          # Bloco agrupado em vez de tres `>>` (SC2129): um unico redirect abre o
+          # arquivo uma vez so'. Alem do estilo, evita a classe de bug em que um
+          # dos redirects e' escrito `>` por engano e trunca o que os anteriores
+          # gravaram — em `$GITHUB_OUTPUT` isso apaga saidas silenciosamente.
           if [ "$IS_TAG" = "true" ] || [ "$IS_DISPATCH" = "true" ]; then
-            echo "images=$ALL" >> "$GITHUB_OUTPUT"
-            echo "charts=true" >> "$GITHUB_OUTPUT"
-            echo "sign=$IS_TAG" >> "$GITHUB_OUTPUT"        # sign ONLY on a real release tag
+            {
+              echo "images=$ALL"
+              echo "charts=true"
+              echo "sign=$IS_TAG"        # sign ONLY on a real release tag
+            } >> "$GITHUB_OUTPUT"
           else
             CH="${CHANGES:-[]}"
             SEL=$(printf '%s' "$ALL" | jq -c --argjson ch "$CH" '[.[] | select(.image as $i | $ch | index($i))]')
-            echo "images=$SEL" >> "$GITHUB_OUTPUT"
-            echo "charts=$(printf '%s' "$CH" | jq 'index("charts") != null')" >> "$GITHUB_OUTPUT"
-            echo "sign=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "images=$SEL"
+              echo "charts=$(printf '%s' "$CH" | jq 'index("charts") != null')"
+              echo "sign=false"
+            } >> "$GITHUB_OUTPUT"
           fi
   images:
     needs: plan
@@ -73,7 +81,7 @@ jobs:
   charts:
     needs: plan
     if: ${{ needs.plan.outputs.charts == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: write
@@ -88,8 +96,23 @@ jobs:
           GHCR_USER: ${{ github.actor }}
         run: printenv GHCR_TOKEN | helm registry login ghcr.io -u "${GHCR_USER}" --password-stdin
       - name: Package + push the 13 charts (OCI)
+        # O namespace vem do DONO DO REPOSITORIO, nao de texto fixo.
+        #
+        # Estava `oci://ghcr.io/getloopscale/charts`. Com o repo transferido para a
+        # org `getloopscale`, o run passou a nao ter permissao de push naquele
+        # namespace e os 13 charts morreram com
+        # `403: Forbidden` no primeiro `HEAD` — medido no run 30583134483.
+        #
+        # E' o mesmo defeito que o `registry` das imagens ja' tinha, e o runbook do
+        # umbrella lista essa cascata entre os pontos que se esquece numa
+        # transferencia. Derivar em vez de fixar faz o proximo movimento de dono
+        # ser inerte aqui.
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          # minusculas: nomes de conta preservam maiusculas, referencias OCI nao.
+          NS="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           mkdir -p /tmp/charts
           # loopzero-common is a library chart that image-backed charts depend on; resolve
           # local (file://) deps into charts/<chart>/charts/ before packaging.
@@ -99,5 +122,5 @@ jobs:
             helm package "$c" -d /tmp/charts
           done
           for tgz in /tmp/charts/*.tgz; do
-            helm push "$tgz" oci://ghcr.io/getloopscale/charts
+            helm push "$tgz" "oci://ghcr.io/${NS}/charts"
           done

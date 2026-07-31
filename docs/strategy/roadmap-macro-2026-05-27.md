@@ -97,7 +97,7 @@ Os itens abaixo NÃO são novos trabalhos eng. São pipelines onde a primeira et
 |-----|-----------|--------|------|
 | R3.a | VAP `loopzero-require-image-digest` warn-mode (2 chart systems) | ✅ DONE `af0fb32c` | Eng autonomous |
 | R3.b | `loopzero-common.image` helper digest preference | ✅ DONE `af0fb32c` | Eng autonomous |
-| R3.c | `pkg/quality/prodimagedigests` gate (warn-mode default, `--enforce` flag) wired em `task quality:gates` | ✅ DONE `af0fb32c` | Eng autonomous |
+| R3.c | `cmd/loopzero-ops/internal/quality/prodimagedigests` gate (warn-mode default, `--enforce` flag) wired em `task quality:gates` | ✅ DONE `af0fb32c` | Eng autonomous |
 | R3.d | Prometheus alert `LoopZeroImageDigestWarnRatePresent` (info severity) | ✅ DONE `af0fb32c` | Eng autonomous |
 | R3.e | Deploy updated admission-policies + loopzero-common via ArgoCD | ⏳ PENDENTE | Operator |
 | R3.f | 7-day Phase 1 warn-mode soak (audit Prometheus + Grafana policy-controller dashboard) | ⏳ PENDENTE | Time |
@@ -212,7 +212,7 @@ DIA 16+:
 - Maturity baseline: `.claude/knowledge-base/audits/2026-05-26/SUMMARY.md`
 - Stripe Portal SDK: `api/internal/services/stripe_portal.go`
 - Sigstore component: `infra/pulumi-platform/src/services/sigstore.ts`
-- Digest enforcement gate: `pkg/quality/prodimagedigests/check.go`
+- Digest enforcement gate: `cmd/loopzero-ops/internal/quality/prodimagedigests/check.go`
 - VAP digest warn-mode: `infra/helm/admission-policies/templates/vap-require-image-digest.yaml`
 - POC Gitea Actions: `infra/helm/gitea/values-actions-poc.yaml.disabled` + `.gitea/workflows/quality.yml.example`
 - Cosign deadline script: `infra/scripts/security/check-cosign-cutover-deadline.sh`

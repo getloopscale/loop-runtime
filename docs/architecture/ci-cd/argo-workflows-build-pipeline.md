@@ -70,7 +70,7 @@ updated_by: T0.2 plan pre-implementation snapshot
 
 ## Why this gap exists
 
-- **2026-05-23 operator decision:** removed GitHub Actions entirely. 56 `pkg/quality/*` gates re-homed to `task quality:gates` orchestrator running operator-driven locally.
+- **2026-05-23 operator decision:** removed GitHub Actions entirely. 56 `cmd/loopzero-ops/internal/quality/*` gates re-homed to `task quality:gates` orchestrator running operator-driven locally.
 - **Zero PR-time enforcement:** PRs can merge without `task quality:gates` running (branch protection has no required checks).
 - **Scheduled crons orphaned:** drill watchdog (every 6h), weekly soak Sunday, coverage Monday, deadline check daily — all operator-mediated.
 
@@ -95,7 +95,7 @@ These MUST continue to hold after CI is added:
 
 ## Related
 
-- AS-IS state of CI gates: `pkg/quality/` (56+ gates) + `taskfiles/quality.yml` orchestrator
+- AS-IS state of CI gates: `cmd/loopzero-ops/internal/quality/` (56+ gates) + `taskfiles/quality.yml` orchestrator
 - Companion PROPOSED: `docs/architecture/ci-cd/diff/real-ci-active.md`
 - ADR ratified: `.claude/knowledge-base/decisions/2026-05-27-T0.2-cenario-b-ratified.md`
 - Meeting: `.claude/knowledge-base/meetings/MEET-2026-05-27-batch-sponsor-approvals.md`

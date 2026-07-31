@@ -95,7 +95,7 @@ func TestLeanResources_FitsHundredAppsInCurrentRuntime(t *testing.T) {
 	// memory. 100 apps × lean memory request must fit with headroom.
 	// Default 128Mi × 100 = 12.8Gi (cuts it close, fragmentation fails);
 	// lean 64Mi × 100 = 6.4Gi (comfortable headroom).
-	const lean = 64                    // MiB per app
+	const lean = 64 // MiB per app
 	const appCount = 100
 	const runtimeAllocatableMiB = 18 * 1024 // rough — see L3 v14 postmortem
 	const systemReservedMiB = 4 * 1024      // platform pods + DaemonSets

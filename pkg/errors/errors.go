@@ -182,46 +182,46 @@ var (
 	// ErrLockTimeout is returned when an environment lock cannot be acquired
 	// within the 5-second timeout (spec §4.2).
 	ErrLockTimeout = &LoopZeroError{
-		Code:       "LOCK_TIMEOUT",
-		Message:    "could not acquire environment lock within timeout",
+		Code:    "LOCK_TIMEOUT",
+		Message: "could not acquire environment lock within timeout",
 	}
 
 	// ErrInvalidTransition is returned when a state machine transition is
 	// attempted that violates the defined state machine (spec §5).
 	ErrInvalidTransition = &LoopZeroError{
-		Code:       "INVALID_TRANSITION",
-		Message:    "invalid state transition",
+		Code:    "INVALID_TRANSITION",
+		Message: "invalid state transition",
 	}
 
 	// ErrTenantNotFound is returned when a referenced tenant does not exist.
 	ErrTenantNotFound = &LoopZeroError{
-		Code:       "TENANT_NOT_FOUND",
-		Message:    "tenant not found",
+		Code:    "TENANT_NOT_FOUND",
+		Message: "tenant not found",
 	}
 
 	// ErrProjectNotFound is returned when a referenced project does not exist.
 	ErrProjectNotFound = &LoopZeroError{
-		Code:       "PROJECT_NOT_FOUND",
-		Message:    "project not found",
+		Code:    "PROJECT_NOT_FOUND",
+		Message: "project not found",
 	}
 
 	// ErrBuildNotFound is returned when a referenced build does not exist.
 	ErrBuildNotFound = &LoopZeroError{
-		Code:       "BUILD_NOT_FOUND",
-		Message:    "build not found",
+		Code:    "BUILD_NOT_FOUND",
+		Message: "build not found",
 	}
 
 	// ErrReleaseNotFound is returned when a referenced release does not exist.
 	ErrReleaseNotFound = &LoopZeroError{
-		Code:       "RELEASE_NOT_FOUND",
-		Message:    "release not found",
+		Code:    "RELEASE_NOT_FOUND",
+		Message: "release not found",
 	}
 
 	// ErrPreviewNotFound is returned when a referenced preview environment
 	// does not exist or has been soft-deleted (Sprint 5).
 	ErrPreviewNotFound = &LoopZeroError{
-		Code:       "PREVIEW_NOT_FOUND",
-		Message:    "preview environment not found",
+		Code:    "PREVIEW_NOT_FOUND",
+		Message: "preview environment not found",
 	}
 
 	// ErrNoActiveRelease is returned when rollback or promote is attempted but
@@ -231,99 +231,99 @@ var (
 	// promote-flavored wording during a rollback path and mis-diagnosed the
 	// upstream cause. Test pin: TestErrNoActiveRelease_MessageIsOperationNeutral.
 	ErrNoActiveRelease = &LoopZeroError{
-		Code:       "NO_ACTIVE_RELEASE",
-		Message:    "No active release found for this environment. Deploy at least once before running this operation.",
+		Code:    "NO_ACTIVE_RELEASE",
+		Message: "No active release found for this environment. Deploy at least once before running this operation.",
 	}
 
 	// ErrNoPreviousRelease is returned when rollback is attempted but no previous release exists.
 	ErrNoPreviousRelease = &LoopZeroError{
-		Code:       "NO_PREVIOUS_RELEASE",
-		Message:    "No previous release found to rollback to. Deploy at least twice before rolling back.",
+		Code:    "NO_PREVIOUS_RELEASE",
+		Message: "No previous release found to rollback to. Deploy at least twice before rolling back.",
 	}
 
 	// ErrBuildAlreadyCompleted is returned when attempting to cancel a build
 	// that is already in a terminal state (SUCCEEDED, FAILED, or CANCELLED).
 	ErrBuildAlreadyCompleted = &LoopZeroError{
-		Code:       "BUILD_ALREADY_COMPLETED",
-		Message:    "Build already completed.",
+		Code:    "BUILD_ALREADY_COMPLETED",
+		Message: "Build already completed.",
 	}
 
 	// ErrDeployInProgress is returned when a deploy is already in progress
 	// for the same (tenant, project, environment).
 	ErrDeployInProgress = &LoopZeroError{
-		Code:       "DEPLOY_IN_PROGRESS",
-		Message:    "a deploy is already in progress for this environment",
+		Code:    "DEPLOY_IN_PROGRESS",
+		Message: "a deploy is already in progress for this environment",
 	}
 
 	// ErrInvalidName is returned when a resource name does not conform to
 	// Kubernetes naming rules (RFC 1123).
 	ErrInvalidName = &LoopZeroError{
-		Code:       "INVALID_NAME",
-		Message:    "resource name does not conform to RFC 1123",
+		Code:    "INVALID_NAME",
+		Message: "resource name does not conform to RFC 1123",
 	}
 
 	// ErrIdempotencyConflict is returned when an idempotency key was already
 	// used with a different request payload.
 	ErrIdempotencyConflict = &LoopZeroError{
-		Code:       "IDEMPOTENCY_CONFLICT",
-		Message:    "idempotency key was already used with a different request payload",
+		Code:    "IDEMPOTENCY_CONFLICT",
+		Message: "idempotency key was already used with a different request payload",
 	}
 
 	// ErrUnauthorized is returned when a request lacks valid authentication.
 	ErrUnauthorized = &LoopZeroError{
-		Code:       "UNAUTHORIZED",
-		Message:    "not authenticated",
+		Code:    "UNAUTHORIZED",
+		Message: "not authenticated",
 	}
 
 	// ErrInvalidRequest is returned when the request body cannot be parsed.
 	ErrInvalidRequest = &LoopZeroError{
-		Code:       "INVALID_REQUEST",
-		Message:    "invalid request body",
+		Code:    "INVALID_REQUEST",
+		Message: "invalid request body",
 	}
 
 	// ErrProjectExists is returned when a project with the same name
 	// already exists within a tenant.
 	ErrProjectExists = &LoopZeroError{
-		Code:       "PROJECT_EXISTS",
-		Message:    "a project with this name already exists in your team",
+		Code:    "PROJECT_EXISTS",
+		Message: "a project with this name already exists in your team",
 	}
 
 	// ErrInternalError is returned for unexpected server-side failures.
 	ErrInternalError = &LoopZeroError{
-		Code:       "INTERNAL_ERROR",
-		Message:    "Something went wrong. Try again, or check `loopzero status` for details. If the problem persists, contact support.",
+		Code:    "INTERNAL_ERROR",
+		Message: "Something went wrong. Try again, or check `loopzero status` for details. If the problem persists, contact support.",
 	}
 
 	// ErrPayloadTooLarge is returned when the request body exceeds the size limit.
 	ErrPayloadTooLarge = &LoopZeroError{
-		Code:       "PAYLOAD_TOO_LARGE",
-		Message:    "request body exceeds the maximum allowed size",
+		Code:    "PAYLOAD_TOO_LARGE",
+		Message: "request body exceeds the maximum allowed size",
 	}
 
 	// ErrValidationFailed is returned when input validation fails with field-specific details.
 	ErrValidationFailed = &LoopZeroError{
-		Code:       "VALIDATION_FAILED",
-		Message:    "validation failed",
+		Code:    "VALIDATION_FAILED",
+		Message: "validation failed",
 	}
 
 	// ErrFrontendMustBeStatic is returned when a frontend app doesn't use render: static.
 	// MEET-2026-03-29-016: All frontends are served from CDN, zero pods.
 	ErrFrontendMustBeStatic = &LoopZeroError{
-		Code:       "FRONTEND_MUST_BE_STATIC",
-		Message:    "frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml",
+		Code:    "FRONTEND_MUST_BE_STATIC",
+		Message: "frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml",
 	}
 
 	// ErrPodLimitExceeded is returned when a project has more than 1 server or 1 worker.
 	// MEET-2026-03-29-016: Max 1 API service + 1 background worker per project.
 	ErrPodLimitExceeded = &LoopZeroError{
-		Code:       "POD_LIMIT_EXCEEDED",
-		Message:    "project exceeds the maximum of 1 API service and 1 background worker",
+		Code:    "POD_LIMIT_EXCEEDED",
+		Message: "project exceeds the maximum of 1 API service and 1 background worker",
 	}
 
 	// ErrMissingField is returned when a required field is missing from the request.
 	ErrMissingField = &LoopZeroError{
-		Code:       "MISSING_FIELD",
-		Message:    "a required field is missing",
+		Code:    "MISSING_FIELD",
+		Message: "a required field is missing",
 	}
 
 	// ErrSourceUploadFailed is the neutral fallback returned when pushing the
@@ -336,8 +336,8 @@ var (
 	// with a neutral fallback. Specific actionable text is now emitted by
 	// reason-specific messages keyed off PushBundleError.Reason.
 	ErrSourceUploadFailed = &LoopZeroError{
-		Code:       "SOURCE_UPLOAD_FAILED",
-		Message:    "The source upload failed. Please retry; if the issue persists, contact support.",
+		Code:    "SOURCE_UPLOAD_FAILED",
+		Message: "The source upload failed. Please retry; if the issue persists, contact support.",
 	}
 
 	// ErrInvalidTenantOrProject is returned when tenantID or projectID fails
@@ -351,16 +351,16 @@ var (
 	// ErrPlatformDegraded is returned when the deploy service circuit breaker is open.
 	// The platform is temporarily unable to process sync requests (DA-7).
 	ErrPlatformDegraded = &LoopZeroError{
-		Code:       "PLATFORM_DEGRADED",
-		Message:    "deploy service is temporarily unavailable",
+		Code:    "PLATFORM_DEGRADED",
+		Message: "deploy service is temporarily unavailable",
 	}
 
 	// ErrDeployServiceAuthFailed is returned when the deploy service rejects its credentials (401/403).
 	// This is NOT a transient failure — the credentials are invalid and must be renewed.
 	// The circuit breaker MUST NOT count this toward the open threshold (MEET-013).
 	ErrDeployServiceAuthFailed = &LoopZeroError{
-		Code:       "DEPLOY_SERVICE_AUTH_FAILED",
-		Message:    "deploy service credentials rejected — contact your platform administrator",
+		Code:    "DEPLOY_SERVICE_AUTH_FAILED",
+		Message: "deploy service credentials rejected — contact your platform administrator",
 	}
 
 	// ErrSyncOperationInProgress is returned when the deploy service has a sync already running (409).
@@ -368,8 +368,8 @@ var (
 	// be terminated before a new sync can start. The circuit breaker MUST NOT count this
 	// toward the open threshold (same exclusion pattern as ErrDeployServiceAuthFailed).
 	ErrSyncOperationInProgress = &LoopZeroError{
-		Code:       "SYNC_OPERATION_IN_PROGRESS",
-		Message:    "another sync operation is already in progress",
+		Code:    "SYNC_OPERATION_IN_PROGRESS",
+		Message: "another sync operation is already in progress",
 	}
 
 	// ErrCellAtCapacity is returned when the cell's concurrent build budget
@@ -377,8 +377,8 @@ var (
 	// know to retry after a bounded wait. The response MUST include a
 	// `Retry-After` header with a sensible duration.
 	ErrCellAtCapacity = &LoopZeroError{
-		Code:       "CELL_AT_CAPACITY",
-		Message:    "the platform is currently busy — retry in a few seconds",
+		Code:    "CELL_AT_CAPACITY",
+		Message: "the platform is currently busy — retry in a few seconds",
 	}
 
 	// ErrTenantBuildQuota is returned when a single tenant already has the
@@ -386,15 +386,15 @@ var (
 	// fairness so one noisy tenant cannot starve others even when the cell
 	// has free capacity. Same Retry-After semantics as ErrCellAtCapacity.
 	ErrTenantBuildQuota = &LoopZeroError{
-		Code:       "TENANT_BUILD_QUOTA",
-		Message:    "your team has too many builds in progress — wait for one to finish",
+		Code:    "TENANT_BUILD_QUOTA",
+		Message: "your team has too many builds in progress — wait for one to finish",
 	}
 
 	// ErrSameEnvironment is returned when a promote request specifies the same
 	// source and target environment.
 	ErrSameEnvironment = &LoopZeroError{
-		Code:       "SAME_ENVIRONMENT",
-		Message:    "source and target environments must be different",
+		Code:    "SAME_ENVIRONMENT",
+		Message: "source and target environments must be different",
 	}
 
 	// ErrReplicasExceedPlan is returned when an app requests more replicas (or
@@ -402,16 +402,16 @@ var (
 	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
 	// Factory NewReplicasExceedPlan adds plan + cap + requested + app context.
 	ErrReplicasExceedPlan = &LoopZeroError{
-		Code:       "REPLICAS_EXCEED_PLAN",
-		Message:    "requested replicas exceed your plan's limit",
+		Code:    "REPLICAS_EXCEED_PLAN",
+		Message: "requested replicas exceed your plan's limit",
 	}
 
 	// ErrScalingAmbiguous is returned when both `replicas` and `autoscaling`
 	// are set on the same app. The two are mutually exclusive — pick one.
 	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
 	ErrScalingAmbiguous = &LoopZeroError{
-		Code:       "SCALING_AMBIGUOUS",
-		Message:    "'replicas' and 'autoscaling' are mutually exclusive — choose one",
+		Code:    "SCALING_AMBIGUOUS",
+		Message: "'replicas' and 'autoscaling' are mutually exclusive — choose one",
 	}
 
 	// ErrProjectsExceedPlan is returned at project creation when the Account
@@ -480,48 +480,48 @@ func NewLockTimeout(detail string) *LoopZeroError {
 // NewInvalidTransition creates an INVALID_TRANSITION error with state context.
 func NewInvalidTransition(from, event string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "INVALID_TRANSITION",
-		Message:    fmt.Sprintf("invalid state transition: cannot apply '%s' in state '%s'", event, from),
+		Code:    "INVALID_TRANSITION",
+		Message: fmt.Sprintf("invalid state transition: cannot apply '%s' in state '%s'", event, from),
 	}
 }
 
 // NewTenantNotFound creates a TENANT_NOT_FOUND error with tenant ID context.
 func NewTenantNotFound(tenantID string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "TENANT_NOT_FOUND",
-		Message:    fmt.Sprintf("tenant '%s' not found", tenantID),
+		Code:    "TENANT_NOT_FOUND",
+		Message: fmt.Sprintf("tenant '%s' not found", tenantID),
 	}
 }
 
 // NewBuildNotFound creates a BUILD_NOT_FOUND error with build ID context.
 func NewBuildNotFound(buildID string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "BUILD_NOT_FOUND",
-		Message:    fmt.Sprintf("build '%s' not found", buildID),
+		Code:    "BUILD_NOT_FOUND",
+		Message: fmt.Sprintf("build '%s' not found", buildID),
 	}
 }
 
 // NewReleaseNotFound creates a RELEASE_NOT_FOUND error with release ID context.
 func NewReleaseNotFound(releaseID string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "RELEASE_NOT_FOUND",
-		Message:    fmt.Sprintf("release '%s' not found", releaseID),
+		Code:    "RELEASE_NOT_FOUND",
+		Message: fmt.Sprintf("release '%s' not found", releaseID),
 	}
 }
 
 // NewProjectNotFound creates a PROJECT_NOT_FOUND error with project name context.
 func NewProjectNotFound(name string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "PROJECT_NOT_FOUND",
-		Message:    fmt.Sprintf("project '%s' not found", name),
+		Code:    "PROJECT_NOT_FOUND",
+		Message: fmt.Sprintf("project '%s' not found", name),
 	}
 }
 
 // NewEnvironmentNotFound creates an ENVIRONMENT_NOT_FOUND error with environment name context.
 func NewEnvironmentNotFound(name string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "ENVIRONMENT_NOT_FOUND",
-		Message:    fmt.Sprintf("environment '%s' not found", name),
+		Code:    "ENVIRONMENT_NOT_FOUND",
+		Message: fmt.Sprintf("environment '%s' not found", name),
 	}
 }
 
@@ -530,8 +530,8 @@ func NewEnvironmentNotFound(name string) *LoopZeroError {
 // NewXNotFound factories (uniform JSON shape {code, message}).
 func NewDomainNotFound(domain string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "DOMAIN_NOT_FOUND",
-		Message:    fmt.Sprintf("domain '%s' not found", domain),
+		Code:    "DOMAIN_NOT_FOUND",
+		Message: fmt.Sprintf("domain '%s' not found", domain),
 	}
 }
 
@@ -543,22 +543,22 @@ func NewDomainNotFound(domain string) *LoopZeroError {
 // (environment delete).
 func NewRepositoryNotLinked(project string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "REPOSITORY_NOT_LINKED",
-		Message:    fmt.Sprintf("no repository linked to project '%s'", project),
+		Code:    "REPOSITORY_NOT_LINKED",
+		Message: fmt.Sprintf("no repository linked to project '%s'", project),
 	}
 }
 
 // ErrForbidden is returned when an operation is not permitted.
 var ErrForbidden = &LoopZeroError{
-	Code:       "FORBIDDEN",
-	Message:    "this operation is not permitted",
+	Code:    "FORBIDDEN",
+	Message: "this operation is not permitted",
 }
 
 // NewIdempotencyConflict creates an IDEMPOTENCY_CONFLICT error with key context.
 func NewIdempotencyConflict(key string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       "IDEMPOTENCY_CONFLICT",
-		Message:    fmt.Sprintf("idempotency key '%s' was already used with a different request payload", key),
+		Code:    "IDEMPOTENCY_CONFLICT",
+		Message: fmt.Sprintf("idempotency key '%s' was already used with a different request payload", key),
 	}
 }
 
@@ -802,4 +802,31 @@ var summaryByPushReason = map[string]string{
 	"SourceBackendAuthFailure": "Source backend rejected authentication",
 	"SourceBackendCapacity":    "Source backend is out of capacity",
 	"UnknownDownstream":        "Source upload failed (cause not classified)",
+}
+
+// ErrSecretsBackendUnavailable marks a failure of the encryption backend that
+// secret writes depend on — issue #138.
+//
+// Before this sentinel, a backend that could not encrypt surfaced as the same
+// generic INTERNAL_ERROR as a database outage or any other 5xx. `loopzero secret
+// set` answered "Something went wrong" and nothing persisted, while `loopzero
+// secret list` kept working (reads do not encrypt). The issue author had to
+// GUESS the cause from which project happened to work — their report offers a
+// hypothesis, not a diagnosis, because the API supplied nothing to diagnose.
+//
+// The message stays in product language deliberately (Rule 3): the operator
+// learns that the secrets backend refused, not which vendor implements it.
+// Naming the component here would leak an internal term into CLI output and
+// would also go stale the moment the implementation changes.
+//
+// Wrap it — do not return it bare — so the underlying cause survives for the
+// logs while `errors.Is` still matches at the HTTP boundary:
+//
+//	fmt.Errorf("secret_store: vault transit encrypt: %w", ErrSecretsBackendUnavailable)
+//
+// The 503 mapping lives in pkg/errors/http/mapping.go, not here — per ADR-0030
+// the transport boundary owns status resolution (gate PKG-G15).
+var ErrSecretsBackendUnavailable = &LoopZeroError{
+	Code:    "SECRETS_BACKEND_UNAVAILABLE",
+	Message: "The secrets backend is not available for this project right now, so the value was not saved. Nothing was partially written — retry, and if it persists ask an operator to check the secrets backend for this environment.",
 }

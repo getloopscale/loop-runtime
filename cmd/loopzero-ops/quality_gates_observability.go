@@ -106,7 +106,7 @@ func runAlertRunbooks(args []string) int {
 		}
 		fmt.Fprintf(os.Stderr, "\nFAIL — %d alert(s) without runbook annotation.\n", len(o.Violations))
 		fmt.Fprintln(os.Stderr, "To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
-		fmt.Fprintln(os.Stderr, "alert name to ExceptionList (pkg/quality/alertrunbooks) with an explanation.")
+		fmt.Fprintln(os.Stderr, "alert name to ExceptionList (cmd/loopzero-ops/internal/quality/alertrunbooks) with an explanation.")
 		return 1
 	}
 	fmt.Println("PASS — every alert has a runbook (or is in the exception list).")
@@ -127,7 +127,7 @@ func runOrphanAlerts(args []string) int {
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Either wire the real metric + rewrite the expr, OR add the alert name to")
-		fmt.Fprintln(os.Stderr, "ExceptionList (pkg/quality/orphanalerts) with a comment + linked work item.")
+		fmt.Fprintln(os.Stderr, "ExceptionList (cmd/loopzero-ops/internal/quality/orphanalerts) with a comment + linked work item.")
 		return 1
 	}
 	fmt.Println("PASS — no orphan alerts.")

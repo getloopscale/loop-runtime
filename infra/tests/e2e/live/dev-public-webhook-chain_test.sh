@@ -160,9 +160,6 @@ except Exception:
 " 2>/dev/null || true)"
   if [ "$failed_msg" = "TOO_MANY_CERTS" ] ; then
     log "WARN (EC-8): cert-manager hit LE prod rate-limit; will accept staging issuer cert (loopzero-staging-issuer) in chain link 9"
-    EXPECT_STAGING_CERT=1
-  else
-    EXPECT_STAGING_CERT=0
   fi
 }
 
@@ -178,7 +175,7 @@ assert_link() {
 chain_link_1_webhook_received() {
   assert_link 1 "loopzero-api receives webhook with HMAC verified"
 
-  local commit_sha event_type
+  local commit_sha
   if [ "$USE_PUSH_EVENT" = "1" ] ; then
     # EC-1 / ADR D7 fallback — synthetic commit via gh api PUT /contents/...
     # T6.1 of plan 2026-06-08-pre-release-test-rigor (2026-06-08): the prior
@@ -186,7 +183,6 @@ chain_link_1_webhook_received() {
     # event, so the webhook never fired. PUT /contents/<path> with sha=$old
     # atomically replaces a file → GitHub creates a commit on the default
     # branch → push event fires → webhook delivers.
-    event_type="push"
     log "(EC-1 / D7) dispatching via push-event fallback (synthetic commit)"
     local probe_path probe_get sha_in_file new_content content_b64
     probe_path=".loopzero-test-probe"
@@ -235,7 +231,6 @@ except Exception:
     fi
     log "synthetic commit pushed sha=${commit_sha:0:8}"
   else
-    event_type="repository_dispatch"
     log "Dispatching via /repos/.../dispatches (event_type=loopzero-rebuild)"
     gh api -X POST "/repos/${REPO_OWNER}/${REPO_NAME}/dispatches" \
       -F "event_type=loopzero-rebuild" > /dev/null 2>&1 || {

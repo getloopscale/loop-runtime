@@ -8,19 +8,49 @@ ENV GOPRIVATE=github.com/getloopscale/*
 # requires github.com/getloopscale/loopzero-contracts v0.3.0, NO replace). The private module
 # is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
 # token is NEVER written to an image layer. git is required for the module VCS fetch.
-RUN apk add --no-cache git
+RUN apk add --no-cache git openssh-client
 
 COPY pkg/go.mod ./pkg/go.mod
 COPY operators/api/go.mod operators/api/go.sum ./operators/api/
 COPY operators/api/v1 ./operators/api/v1
 COPY api/go.mod api/go.sum ./api/
 
+# `awk 1` e nao `cp` ao gravar a chave: OpenSSH exige newline FINAL no PEM, e o
+# transporte por `secret-envs` (variavel de ambiente) o remove. Sem esse unico
+# byte a chave chega sintaticamente invalida e o erro e
+# `Load key: error in libcrypto` — que soa como chave corrompida, nao como um
+# terminador faltando. Reproduzido localmente: `printf %s "$(cat chave)"` produz
+# exatamente esse erro. `awk 1` reemite cada linha com terminador, normalizando
+# para um unico newline final seja qual for a forma de chegada.
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=secret,id=gomod_token \
-    sh -c 'if [ -s /run/secrets/gomod_token ]; then \
+    --mount=type=secret,id=gomod_ssh_key \
+    sh -c 'if [ -s /run/secrets/gomod_ssh_key ]; then \
+      mkdir -p /root/.ssh && chmod 700 /root/.ssh; \
+      awk 1 /run/secrets/gomod_ssh_key > /root/.ssh/gomod_key && chmod 600 /root/.ssh/gomod_key; \
+      ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null; \
+      printf "Host github.com\n  IdentityFile /root/.ssh/gomod_key\n  IdentitiesOnly yes\n  IdentityAgent none\n" > /root/.ssh/config; \
+      git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
+    elif [ -s /run/secrets/gomod_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     fi' \
-    && cd api && go mod download
+    && cd api && { go mod download || { \
+      echo "" >&2; \
+      echo "FATAL: go mod download falhou." >&2; \
+      if [ ! -s /run/secrets/gomod_token ]; then \
+        echo "  CAUSA PROVAVEL: o secret gomod_token chegou VAZIO, entao a reescrita de URL acima foi" >&2; \
+        echo "  PULADA (o if e silencioso por desenho) e o git buscou loopzero-contracts SEM autenticacao." >&2; \
+        echo "  O GitHub responde a repo PRIVADO sem auth com Repository-not-found — a MESMA mensagem" >&2; \
+        echo "  de repo inexistente. Por isso o erro manda procurar um repositorio que EXISTE, e este" >&2; \
+        echo "  build falhou 10 vezes seguidas sem a causa aparecer." >&2; \
+        echo "  ACAO: GOMOD_TOKEN precisa de um PAT com Contents:read em getloopscale/loopzero-contracts" >&2; \
+        echo "  (o modulo NAO migrou junto com este repositorio)." >&2; \
+      else \
+        echo "  O token esta presente e nao-vazio, entao NAO e ausencia de credencial." >&2; \
+        echo "  Verifique Contents:read em getloopscale/loopzero-contracts e se o PAT nao expirou." >&2; \
+      fi; \
+      exit 1; \
+    }; }
 
 COPY pkg/ ./pkg/
 COPY api/ ./api/

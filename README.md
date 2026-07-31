@@ -82,12 +82,12 @@ No infrastructure to manage. No build config required. Just push.
 | Concurrent deploy protection | Exactly one deploy per environment — first gets 202, others get 409 |
 | Idempotency | Retry-safe via `Idempotency-Key` header |
 | Image signing (cosign) | Every container image signed post-build |
-| Scale-to-zero (KEDA) | Manifest generation + Helm charts + Pulumi bootstrap (cluster KEDA pending). KEDA HPA targets `Kind=Rollout` post-canary plan (T3.1) with `transfer-hpa-ownership` annotation so Argo Rollouts owns replica scaling during canary, KEDA after promotion. |
+| Scale-to-zero (KEDA) | Manifest generation + Helm charts + Helmfile L2 bootstrap (cluster KEDA pending). KEDA HPA targets `Kind=Rollout` post-canary plan (T3.1) with `transfer-hpa-ownership` annotation so Argo Rollouts owns replica scaling during canary, KEDA after promotion. |
 | Cell architecture (3 cells LIVE) | PlacementEngine, DynamicRouter (`loopzero_cell_discovery_count=3`), cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. **Cell-2 ACTIVATED 2026-05-03**: tenant pin via `loopzero admin tenants pin --cell cell-2` → CR MergePatch + ArgoCD destination flip → workload Pod Running on loopzero-runtime-2. 12/12 ADR gates LIVE GREEN persistente. Rollback SLO P50=648ms / P95=705ms (<<300s budget). EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` covers monolithic + split-binary builds. Heal H14+H15 codify cell-2 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync. Production stages 4-5 (1 customer 7-day → 10/50/100%) pending Sprint 9 readiness review. |
 | SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
 | PodSecurity Admission | `restricted` profile on all tenant namespaces |
 | NetworkPolicy | Mandatory deny-all + explicit allow rules |
-| Observability | 105 Prometheus metrics (incl. 6 cell metrics) + 21 Grafana dashboards + 7 SLO files (Sloth) |
+| Observability | 126 distinct `loopzero_*` Prometheus metrics + 28 Grafana dashboard JSONs + 7 Sloth SLO files (`infra/sloth/`) |
 | Auth hardened | UUID tenant IDs, RSA-only JWT, audience validation, secret rotation |
 | JSON contracts | 8/8 commands validated, 0 internal term leaks |
 
@@ -97,7 +97,7 @@ No infrastructure to manage. No build config required. Just push.
 |---------|--------|-------|
 | ~~Preview environments~~ | ~~High~~ | ✅ Shipped 2026-04-26 (Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL). All 14 plan tasks done, E2E validated against live k3d (12 specs pass: PR opened→preview, synchronize→UPSERT, concurrent PRs, PR closed→cleanup + 8 CLI specs). |
 | ~~Cell-2 activation (multi-cell dev)~~ | ~~Low~~ | ✅ Shipped 2026-05-03 (cell-2-activation-plan + fix-all-platform-issues-plan). 12/12 ADR gates LIVE GREEN persistente. T4.3 LIVE: `loopzero deploy` → Pod Running on loopzero-runtime-2, `/health` 200, cell-1 NotFound (isolation). |
-| Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `drill-prod-identical-soak.yml` armed for ADR-compliant 1h+24h Sunday runs. |
+| Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. The former `drill-prod-identical-soak.yml` Sunday cron went away with the Actions retirement — the drill itself survives and is operator-run via `task drill:l2-scale`. |
 | ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |
 | Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |
 | ~~`loopzero scale` end-to-end persistence~~ | ~~Medium~~ | ✅ Shipped — scaling config persisted and enforced end-to-end |
@@ -252,17 +252,21 @@ Every plan includes: GitHub auto-deploy on push, the fixed LoopZeroKit stack (Py
 
 ### Test Suite
 
-| Component | Count | Status |
-|-----------|------:|--------|
-| CLI (Jest) | 1,260 | 85 suites — 1,244 passing, 9 failing (4 suites: platform-status-drift, admin-tenants-pin + 2 minor), 7 skipped. |
-| API (35 subpacotes) + Shared libs (pkg/, 10 packages) | 2,283 + 388 test funcs | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability + canary: `TestBuildRollout_*` × 7 + `TestBuildRollout_ProgressDeadlineSeconds` × 4 plan tiers + `TestBuildHPA_TargetsRollout_Progressive` + `TestBuildScaledObject_TargetsRollout_Progressive` + `TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive` + `TestGetAppStatus_RolloutDegraded_BlocksHealthy`) |
-| Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
-| Pulumi (vitest) | 310+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
-| State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
-| CI pipeline | 48 workflows | Green (incl. drill prod-identical canary soak weekly Sunday 02:00 UTC + chaos-suite weekly Sunday 03:00 UTC) |
-| Regression matrix | 166 entries | 0 critical miss, audit GREEN |
-| Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** — fresh destroy/setup cycle validates all commands end-to-end (~33min) |
-| Ginkgo journey suite (Argo Rollouts) | 80 specs | **80/80 GREEN** — canary happy path, auto-abort on failure, promote/rollback over Rollouts, multi-server naming |
+Counts below are `Test*` function counts per Go module, measured from the tree — run `task test` for
+the live verdict. The **CLI (Jest) suite is no longer in this repo**; it moved to `../loopzero-cli` with
+the CLI itself.
+
+| Module | Test files | `Test*` funcs | Notes |
+|--------|-----------:|--------------:|-------|
+| `api/` | 421 | 3,009 | Routes, services, placement, gitops, manifests, metering |
+| `cmd/loopzero-ops/` | 153 | 1,313 | The 108 quality gates + seed/drill/pulumi/chaos subcommands |
+| `pkg/` | 70 | 778 | Shared libs — state machines, errors, naming, enforcement |
+| `operators/` | 67 | 310 | Ginkgo + envtest reconcile suites |
+| `infra/tests/` | 184 | 518 | E2E (Ginkgo), chaos, load (k6), hermetic infra checks |
+
+Ginkgo `It(`/`Entry(` blocks across `operators/` + `infra/tests/`: **484**.
+
+E2E and cleanroom journeys are **operator-run, not CI-run** — see `.claude/rules/cleanroom-up-live-test-mandate.md` for the mandatory chain (Cleanroom TOTAL → UP → seeds → dogfood → LIVE test).
 
 ---
 
@@ -438,11 +442,16 @@ Every command supports `--json` for CI/CD integration. JSON field names are a st
 Four-plane separation:
 
 ```
-Developer Plane     CLI (TypeScript) <-> API (Go)
+Developer Plane     CLI (TypeScript, ../loopzero-cli) <-> API (Go, this repo)
 Control Plane       Operators, Gitea, PostgreSQL, ArgoCD, Ory Kratos/Hydra
 Build Plane         Argo Workflows + BuildKit (rootless) + cosign signing
 Workload Plane      User applications managed by ArgoCD + KEDA autoscaling
+Secrets             OpenBao (Transit) + ESO — runs in its own `loopzero-vault` cluster
 ```
+
+> **This repository is the engine.** The CLI (`../loopzero-cli`), the control-plane/dashboard
+> (`../loopzero-cloud`) and the shared contracts (`../loopzero-contracts`) were extracted at M2-M4 of the
+> monorepo decomposition. Look for their source there, not here.
 
 ### Multi-Cell Routing
 
@@ -475,7 +484,7 @@ loopzero admin tenants pin --tenant X --cell Y    (operator override only)
 | Placement engine | `api/internal/placement/engine.go` | Bin-packing least-loaded; sticky reads |
 | Router cache | `api/internal/placement/dynamic_router.go` | Hash lookup `cellID -> CellConfig` |
 | Cell store | `api/internal/placement/k8s_cell_store.go` | Polls ClusterCredential CRs every 60s by `spec.cellID` |
-| Operator pin | `api/internal/services/cell_pinner.go` | DB UPDATE + Tenant CR MergePatch |
+| Operator pin | `api/internal/services/placement/cell_pinner.go` | DB UPDATE + Tenant CR MergePatch |
 | Self-healing | `infra/scripts/local/k3d-cross-cluster-heal.sh` (H12+H13) | Auto-recovers cell-1 missing CC + cell-default SA token rotation |
 
 **No automatic rebalancing.** Tenant assignment is sticky to preserve DNS continuity, ESO/MinIO state affinity, and ArgoCD App/Project bindings. Cell drain (`cells.status='draining'`) is operator-driven via `loopzero admin tenants pin --to cell-novo`. See ADR-0008 + ADR-0021 D3.
@@ -498,8 +507,8 @@ loopzero deploy (or git push)
 
 | Layer | Technology |
 |-------|-----------|
-| CLI | TypeScript + Commander (35 commands) |
-| API | Go 1.25 + chi + pgx (connection pool) |
+| CLI | TypeScript + Commander — **source lives in `../loopzero-cli`** (extracted at M2) |
+| API | Go 1.26 + chi + pgx (connection pool) |
 | Operators | Go + kubebuilder + controller-runtime (8 CRDs, all wired; 4 split binaries: tenant/app/preview/platform) |
 | Shared libs | Go -- errors, errors/http, logging, naming, conditions, statemachine, jwt, enforcement, circuitbreaker |
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
@@ -512,9 +521,11 @@ loopzero deploy (or git push)
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
-| IaC | 5 Pulumi projetos (TS): `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-drill/` (DR drill prod-identical stack), `pulumi-shared/` (cross-project type contracts). Nota: `pulumi-control-plane/` foi deletado em 2026-05-15 (close-all-gaps T2.1) — control-plane workloads agora vivem em L2 Helmfile, não Pulumi, per MEET-2026-05-12 D3. |
-| CI/CD | GitHub Actions (48 workflows — verified 2026-05-21) |
-| Helm charts | 34 bootstrap (`infra/helm/`) + 13 published (`charts/`) — verified 2026-05-22 |
+| IaC — L1 cloud primitives | **Being re-platformed DigitalOcean/Pulumi → AWS/Terraform** per the 2026-06-17 CTO mandate. Target: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). The 5 Pulumi projects under `infra/` are **AS-IS legacy, live until the AM8 cutover** — do not add new Pulumi for target infra. |
+| IaC — L2 platform workloads | Helmfile v1.0+ (`infra/helmfile/`) — the source of truth for platform releases, **not** Pulumi |
+| IaC — L3 tenant Day-2 | ArgoCD (manual sync, from Gitea) |
+| CI/CD | 3 workflows in `.github/workflows/` (`build-publish`, `release-artifacts`, `workflow-hygiene`). Actions was retired as the pipeline 2026-05-23; gates run via `task quality:*` |
+| Helm charts | 44 bootstrap (`infra/helm/`) + 13 published (`charts/`) |
 
 ### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
 
@@ -575,24 +586,27 @@ Internet → Caddy (host) → Traefik    Internet → CF Tunnel → Traefik
 Caddy local é decisão pragmática: VPS com 1 binário ao invés de provisionar
 CF Tunnel + cluster reachability. Mesmo trade-off do `task setup` k3d vs DOKS.
 
-### Helm Charts Inventory (`infra/helm/`, 34 dirs)
+### Helm Charts Inventory (`infra/helm/`, 44 dirs)
 
-Bootstrap charts installed via Helmfile L2. Counts and names verified 2026-05-22 via `ls infra/helm/`.
+Bootstrap charts installed via Helmfile L2. `ls infra/helm/` is the authoritative list — this table
+groups it. **Classifying a tool as adopted or missing from memory is forbidden**; grep first
+(`grep -ril "<tool>" infra/ charts/ taskfiles/`), because this table is a curated summary, not an inventory.
 
 | Domain | Charts |
 |--------|--------|
 | Identity / Auth | `ory-kratos`, `ory-hydra`, `redis` |
-| Build pipeline | `argo-workflows`, `harbor` (auxiliary registry; prod uses DOCR) |
+| Secrets | `openbao-cert`, `openbao-init`, `openbao-snapshot-agent`, `external-secrets`, `loopzero-external-secrets` |
+| Build pipeline | `argo-workflows`, `argo-events`, `argo-events-bus`, `argo-ci-namespace`, `loopzero-ci-workflows`, `harbor` (auxiliary registry; prod uses DOCR) |
 | GitOps | `argocd`, `gitea` |
 | Progressive delivery | `argo-rollouts`, `keda`, `keda-http-addon` |
 | Ingress / TLS | `traefik`, `cert-manager`, `cluster-issuer`, `cloudflared` |
-| Storage | `minio`, `nfs-server-provisioner` |
-| Admission control | `admission-policies` (custom VAPs), `policy-controller` (sigstore) |
+| Storage | `minio`, `nfs-server-provisioner`, `postgresql` |
+| Admission control | `admission-policies` (custom VAPs), `policy-controller` + `sigstore-extras` (sigstore) |
 | Network | `network-policies` (deny-all baseline) |
-| Observability | `monitoring` (Prom+Grafana), `loki`, `promtail`, `tempo`, `otel`, `blackbox-exporter` |
+| Observability | `monitoring` (Prom+Grafana), `loki`, `promtail`, `tempo`, `otel`, `blackbox-exporter`, `opencost` (cost attribution) |
 | Resilience | `chaos-mesh`, `velero` |
 | Load + smoke testing | `k6-operator`, `smoke-test` |
-| LoopZero platform | `loopzero-api`, `loopzero-cloud`, `static-assets`, `external-secrets`, `postgresql` |
+| LoopZero platform | `loopzero-api`, `loopzero-cloud`, `static-assets` |
 
 ### Published OCI Charts (`charts/`, 13 dirs)
 
@@ -600,34 +614,46 @@ For ArgoCD L3 + downstream consumers. Use `loopzero-common` library for consiste
 
 `loopzero-admission-policies` · `loopzero-api` · `loopzero-app-operator` · `loopzero-build-cwts` · `loopzero-cloud` · `loopzero-common` · `loopzero-crds` · `loopzero-dashboard` · `loopzero-monitoring` · `loopzero-platform` · `loopzero-platform-operator` · `loopzero-preview-operator` · `loopzero-tenant-operator`
 
-### Supply Chain Security (CI-enforced)
+### Supply Chain Security
 
-| Tool | Where | What it does |
-|------|-------|-----------|
-| **cosign** | `build-images.yml` + rotation drill + cutover deadline checks | Image signing (keyed today; keyless v1.1 with Fulcio committed for cutover) |
-| **syft** | `build-images.yml` | SBOM generation (CycloneDX) + per-build download endpoint (`GET /builds/{id}/sbom`) |
-| **Trivy** | `ci.yml` (filesystem scan) + `build-images.yml` (image scan) | CVE scanning, `CRITICAL,HIGH` severity, `exit-code: 1` — **auto-deletes vulnerable images from DOCR** on post-push failure |
-| **TruffleHog** | `ci.yml` | Secret scanner (`--only-verified`) |
+> **Where these run.** GitHub Actions was retired as the pipeline in 2026-05-23. Three workflows
+> remain (`.github/workflows/build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`); everything else is
+> run by `task` locally or by whichever CI a deployment wires up. The tool configs below are live —
+> their former workflow homes (`build-images.yml`, `ci.yml`, `helm-charts.yml`) are **gone**, so
+> treat the run column as "how to invoke", not "enforced on every PR".
+
+| Tool | How it runs | What it does |
+|------|-------------|-----------|
+| **cosign** | `.github/workflows/build-publish.yml`; rotation + cutover-deadline drills under `infra/scripts/security/` | Image signing (keyed today; keyless v1.1 with Fulcio committed for cutover) |
+| **syft** | `.github/workflows/build-publish.yml` | SBOM generation (CycloneDX) + per-build download endpoint (`GET /builds/{id}/sbom`) |
+| **Trivy** | `loopzero-ops quality trivy-scan`, wired into `task quality:gates`; `.trivyignore` at repo root | CVE scanning, `CRITICAL,HIGH` severity |
+| **TruffleHog** | `loopzero-ops quality trufflehog-scan`, wired into `task quality:gates` | Verified-secret scanning (`--only-verified`) |
+| **govulncheck** | `task vuln-scan` (report) · `task vuln-scan:strict` (fails on MEDIUM+) | Go stdlib + module CVEs across `api`, `operators`, `pkg` |
 | **sigstore policy-controller** | `infra/helm/policy-controller/` | Admission deny-by-default; `loopzero-images-warn` warn-mode ClusterImagePolicy |
 
-> **Reusable image workflow.** Besides `build-images.yml` (loopzero's own images → DOCR/k8s), this repo
-> hosts a **reusable** `build-publish.yml` consumed cross-repo by sibling projects (e.g. `loopzero-cloud`
-> publishes its `loopzero-cloud` + `loopzero-dashboard` GHCR images through it — keyless cosign + SBOM + SLSA).
-> It exposes a `runner` input (default `ubuntu-latest`) so callers on the billing-blocked org can build
-> on a self-hosted runner: `runner: '["self-hosted","linux","x64"]'`.
+> **Reusable image workflow.** `.github/workflows/build-publish.yml` is **reusable** and consumed cross-repo by sibling
+> projects (e.g. `loopzero-cloud` publishes its `loopzero-cloud` + `loopzero-dashboard` GHCR images through it —
+> keyless cosign + SBOM + SLSA). It exposes a `runner` input (default `ubuntu-latest`) so callers on
+> a billing-blocked org can build on a self-hosted runner: `runner: '["self-hosted","linux","x64"]'`.
 
-### Quality & Validation Gates (CI-enforced)
+### Quality & Validation Gates
 
-| Tool | Where | What it does |
-|------|-------|-----------|
-| **kubeconform** | `task validate:manifests`, `helm-charts.yml` | K8s manifest schema validation (`--strict`) |
-| **Polaris (Fairwinds)** | `scripts/run-polaris.sh --severity=danger` | K8s best-practices linter (DANGER blocks merge) |
-| **chart-testing (ct)** | `helm-charts.yml` multi-K8s-version matrix | Helm chart lint + install test |
-| **helm-chartsnap** | `helm-charts.yml` | Snapshot testing to detect chart output drift |
-| **helm-diff** | `infra/scripts/helm-diff-structural.sh` + helmfile plugin | Pre-sync structural diff |
-| **golangci-lint v2.11+** | `ci.yml`, `task lint` | Go static analysis |
-| **18+ `pkg/quality/*` gates** | `cmd/loopzero-ops quality <gate>` wired in workflows | Pure-logic gates (prod-image-tags, no-migrate-force, dogfood-slo, etc.) |
+The gate layer is **108 pure-logic Go checks** in `cmd/loopzero-ops` — the substitute for the retired CI.
+Build it first with `task quality:build`, then `/tmp/loopzero-ops quality --list` is the authoritative inventory (name / wired-into-which-task / summary). A stray `./loopzero-ops` at the repo root is a gitignored local artifact and can be badly stale.
+
+| Tool | How it runs | What it does |
+|------|-------------|-----------|
+| **`loopzero-ops` quality gates (73)** | `task quality:gates` (full scan) · `task quality:diff` (PR-scoped) · `task quality:all` | Pure-logic gates: `unhomed-logic`, `no-new-bash`, `advisory-lock-scope`, `cli-exit-codes`, `prod-image-tags`, `no-migrate-force`, … |
+| **kubeconform** | `task validate:manifests` | K8s manifest schema validation (`--strict`) |
+| **golangci-lint v2.11+** | `task lint` · `task lint:strict` (baseline-tracked) | Go static analysis |
+| **helmfile template + kubeconform** | `task validate:helmfile-templates` · `task validate:matrix` | Renders every release and schema-checks the output |
+| **helm-diff / helm-drift** | `loopzero-ops quality helm-diff-structural` · `helm-drift` — **registered but not wired** into any task (`--list` shows `-`) | Structural pre-sync diff; rendered-vs-deployed drift |
+| **chart-testing (ct) / helm-chartsnap** | `ct.yaml` + `.chart-testing/` config retained; **no runner wired** | Chart lint / install test / output-drift snapshots |
+| **Polaris (Fairwinds)** | `.polaris.yaml` retained; **no runner wired** (`run-polaris.sh` no longer exists) | K8s best-practices linter |
 | **Renovate** | `.github/renovate.json` | Dependency mgmt with `pinDigests: true` (INF-G18 SHA pinning), weekly grouped PRs |
+
+Adding a new `.sh` file is refused by the `no-new-bash` gate — new logic belongs in Go
+(`cmd/loopzero-ops`), declarative Helmfile, or Ginkgo. Contract: `.claude/rules/shell-scripts-allowlist.md`.
 
 ### Production Infrastructure (DigitalOcean)
 
@@ -656,13 +682,18 @@ For ArgoCD L3 + downstream consumers. Use `loopzero-common` library for consiste
 
 ### Prerequisites
 
-Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+, kubectl, [kubeconform](https://github.com/yannh/kubeconform), [golangci-lint](https://golangci-lint.run) v2.11+
+Go 1.26+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+ with the [helm-diff](https://github.com/databus23/helm-diff) plugin, [Helmfile](https://helmfile.readthedocs.io) v1.0+, kubectl, [kubeconform](https://github.com/yannh/kubeconform), [golangci-lint](https://golangci-lint.run) v2.11+
+
+**This repo is a multi-module Go workspace.** `go.work` unions 8 modules and one of them is the
+sibling repo `../loopzero-contracts` — clone it alongside this one or the workspace will not build.
+There is no `go.mod` at the repo root, so `go build ./...` / `go test ./...` from the root do **not**
+cover the repo; run them per module or use `task`.
 
 ### Setup
 
 ```bash
 task setup       # ONE-SHOT: 4 k3d clusters + Helmfile-orchestrated infra + CRDs + tokens (15-25min)
-tilt up          # DEV LOOP: hot reload of API/operators/CLI on file save
+tilt up          # DEV LOOP: hot reload of API + operators on file save
 task doctor      # HEALTH CHECK: 38+ invariants across clusters/pods/tokens
 ```
 
@@ -674,12 +705,24 @@ task doctor      # HEALTH CHECK: 38+ invariants across clusters/pods/tokens
 ### Tests
 
 ```bash
-task test                     # All tests
-cd cli && npm test            # CLI tests (Jest, 1226+ tests)
-cd api && go test ./...       # API tests
-cd operators && go test ./... # Operator tests (Ginkgo + envtest)
-cd pkg && go test ./...       # Shared library tests
+task test                        # unit + lint + manifest validation
+task quality:gates               # the 108 pure-logic gates (full-repo scan)
+task test:e2e                    # Ginkgo E2E (needs running clusters + tilt up)
+
+cd api           && go test ./...   # API
+cd pkg           && go test ./...   # Shared libraries
+cd operators     && go test ./...   # Operators (Ginkgo + envtest)
+cd cmd/loopzero-ops  && go test ./...   # Ops + quality binary
+
+# One package / one test
+cd api && go test ./internal/services/... -run TestScalingResolver -v
+
+# One Ginkgo spec. `go test -timeout` alone does NOT raise Ginkgo's own 60min
+# suite timeout — pass -ginkgo.timeout too, or deploy-heavy suites hit TIMEDOUT:
+cd infra/tests && go test ./e2e/... -v -timeout 120m -args -ginkgo.timeout=2h
 ```
+
+CLI tests moved to `../loopzero-cli` (`npm test` there) when the CLI was extracted at M2.
 
 ---
 
@@ -718,7 +761,9 @@ Every PR starts with a failing test. See the [development commands](CLAUDE.md#de
 
 ## Links
 
+- [Documentation index](docs/README.md) — architecture, runbooks, and what in `docs/` is living reference vs audit trail
 - [Changelog](CHANGELOG.md)
+- [Governance](GOVERNANCE.md) · [Security policy](SECURITY.md) · [Roadmap](ROADMAP.md)
 
 ## Community
 

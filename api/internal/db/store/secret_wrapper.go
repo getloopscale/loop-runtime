@@ -23,6 +23,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"io"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -232,7 +233,14 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 	if s.vault != nil {
 		ct, err := s.vault.EncryptForTenant(ctx, tenantID, plaintext)
 		if err != nil {
-			return nil, fmt.Errorf("secret_store: vault transit encrypt: %w", err)
+			// #138 — tag the failure so the HTTP boundary can answer
+			// SECRETS_BACKEND_UNAVAILABLE (503) instead of a generic 500.
+			// Before this, an unreachable backend was indistinguishable from a
+			// database outage and `loopzero secret set` said only "Something went
+			// wrong", leaving the operator to guess which subsystem refused.
+			// The original error stays in the chain for the logs.
+			return nil, fmt.Errorf("secret_store: vault transit encrypt: %w: %w",
+				loopzeroerrors.ErrSecretsBackendUnavailable, err)
 		}
 		return []byte(ct), nil
 	}

@@ -281,14 +281,23 @@ func setupOrchestrator(
 		return changed, err
 	}
 	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
-	scaleHandler.EnsureProductionWired() // audit M02 #14: panic-on-regression guard
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
 	// Without this, the scale path silently bypassed the cap.
 	if planCap != nil {
 		scaleHandler.SetReplicasChecker(planCap)
+	} else {
+		// Issue #137 — planCap is nil only when there is no database, hence no
+		// PlanLimiter and no plan to enforce. Say so explicitly: the guard below
+		// must be able to tell this from a dropped SetReplicasChecker call.
+		scaleHandler.WaiveReplicaCapEnforcement("no database in this boot — no PlanLimiter, so no plan to enforce")
+		logger.Warn("scale: per-plan replica cap DISABLED — no PlanLimiter in this boot (no database); tenants may request any replica count")
 	}
+	// audit M02 #14 + issue #137: panic-on-regression guard. MUST run AFTER the
+	// wiring above — it asserts both the apply closure and a decision about cap
+	// enforcement, and neither exists before this point.
+	scaleHandler.EnsureProductionWired()
 
 	// Build list handler — lists builds for a project with optional env
 	// filter PLUS exposes GET /api/v1/projects/{name}/build-envs (T2.2).

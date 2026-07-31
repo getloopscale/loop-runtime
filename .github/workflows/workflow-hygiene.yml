@@ -15,14 +15,48 @@ on:
   push:
     branches: [develop]
     paths: [".github/**"]
+  # Disparo manual: e' o gate mais barato do repo (segundos), entao e' com ele
+  # que se valida a frota apos uma migracao — o runbook do umbrella e' explicito
+  # em nao usar a suite longa para isso. Sem `workflow_dispatch` nao ha como
+  # exercitar um runner sem antes mergear em `develop`, o que inverte a ordem:
+  # validar-se-ia a frota DEPOIS de confiar nela.
+  workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   hygiene:
     # Aspas obrigatorias: um `name:` terminado em `run:` o YAML le como mapping aninhado e o workflow
     # morre em `startup_failure` — sem job algum, portanto sem sinal vermelho util.
-    name: "workflows — SHA-pin + sem interpolacao em run:"
-    runs-on: ubuntu-latest
+    name: "workflows — actionlint + SHA-pin + sem interpolacao em run:"
+    # Frota Blacksmith, habilitada com a transferencia para a org `getloopscale`
+    # (2026-07-30). Label LITERAL: `vars.CI_RUNNER` nao resolve no repo e o
+    # fallback devolve a frota antiga em silencio (runbook do umbrella).
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # actionlint entra AQUI, e nao num workflow proprio como no loopzero-memory.
+      #
+      # Os dois checam a mesma coisa — correcao de workflow — e separa-los daria
+      # duas superficies com os mesmos gatilhos e os mesmos `paths: .github/**`,
+      # que divergem no dia em que alguem editar so' uma. O modelo os separa
+      # porque la' nasceram em momentos diferentes, nao por contrato.
+      #
+      # A cobertura e' COMPLEMENTAR, nao sobreposta:
+      #   actionlint                 sintaxe, expressoes, labels de runner, e
+      #                              shellcheck DENTRO dos blocos `run:`
+      #   check-workflow-hygiene.sh  SHA-pin das actions (#233) e ausencia de
+      #                              `${{ }}` dentro de `run:` (#250)
+      #
+      # Nenhum dos dois pega o que o outro pega. Rodar so' um deixa metade.
+      #
+      # Imagem fixada por DIGEST, mesmo padrao do loopzero-memory: um `:latest` num
+      # gate de qualidade e' a mesma classe de risco de supply-chain que o gate
+      # ao lado existe para impedir.
+      - name: actionlint (workflows + shellcheck dos blocos run:)
+        run: |
+          docker run --rm -v "$PWD:/repo" --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
+
       - run: bash .github/scripts/check-workflow-hygiene.sh

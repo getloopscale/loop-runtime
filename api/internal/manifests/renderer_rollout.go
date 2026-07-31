@@ -42,6 +42,34 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 
 	container := buildAppContainer(ri, app, port)
 	podSpec := buildAppPodSpec(container)
+
+	// #61 — how long the OLD ReplicaSet survives promotion.
+	//
+	// DECISION: LoopZero promises a long-lived connection GRACEFUL RECONNECTION,
+	// not SURVIVAL.
+	//
+	// Survival would mean a connection outlives the process that owns it, which
+	// requires handing session state between pods. LoopZero does not do that, and
+	// building it is an architecture change, not a config value. Promising
+	// survival and delivering a severed socket is worse than promising
+	// reconnection and delivering it.
+	//
+	// Three settings implement that contract and no more:
+	//   preStop 5s        endpoint removal wins the race (buildAppPodSpec)
+	//   grace   30s       the app sends a close frame and drains (buildAppPodSpec)
+	//   scaleDownDelay    the old generation is not torn down the instant the
+	//                     canary is promoted — here
+	//
+	// 60s covers the pod's own teardown budget (5 + 30) with margin, so the
+	// ReplicaSet is never removed while its pods are still draining. It is
+	// deliberately NOT minutes: the old ReplicaSet holds quota and delays the
+	// NEXT rollout — including the rollback reached for when a canary is
+	// actively serving errors. Buying a guarantee LoopZero does not make, at cost
+	// on the incident path, is the wrong trade.
+	//
+	// Stated explicitly rather than left to the controller default: an unstated
+	// default is not a promise, because nobody can tell whether it may change.
+	scaleDownDelay := 60
 	replicas := replicasForApp(app)
 
 	// EC-5 fix: when progressive delivery + scale-to-zero, Rollout starts
@@ -56,12 +84,14 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 	var canary *k8sCanaryStrategy
 	if app.Type == "worker" {
 		canary = &k8sCanaryStrategy{
-			Steps: workerCanarySteps(),
+			Steps:                 workerCanarySteps(),
+			ScaleDownDelaySeconds: &scaleDownDelay,
 		}
 	} else {
 		canary = &k8sCanaryStrategy{
-			StableService: resName + "-stable",
-			CanaryService: resName + "-canary",
+			ScaleDownDelaySeconds: &scaleDownDelay,
+			StableService:         resName + "-stable",
+			CanaryService:         resName + "-canary",
 			TrafficRouting: &k8sTrafficRouting{
 				// F-16 reverted (2026-05-07): use native Argo Rollouts
 				// Traefik integration. Per docs/features/traffic-management/traefik.md
@@ -74,6 +104,30 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 			Steps: canaryStepsForPlan(ri.Plan, ri.PrometheusAddress != ""),
 		}
 	}
+
+	// #61 — the OLD ReplicaSet must outlive the promotion.
+	//
+	// DECISION (2026-07-30): LoopZero promises a WebSocket GRACEFUL RECONNECTION,
+	// not SURVIVAL. Survival would mean a connection outliving the process that
+	// owns it, which needs session handoff between pods — an architecture
+	// change, not a config value. Promising survival and delivering a severed
+	// socket is worse than promising reconnection and delivering it.
+	//
+	// The teardown budget on a pod is preStop 5s + grace 30s (28a66a5c). This
+	// field governs the generation ABOVE that: how long the old ReplicaSet
+	// survives once the canary is promoted. Left unset it is whatever the
+	// controller defaults to — and an unstated default is not a promise, because
+	// nobody can tell whether it may be changed.
+	//
+	// 60s covers the 35s teardown with margin while staying short enough that
+	// the NEXT rollout is not delayed. That matters most on the path nobody
+	// plans for: the rollback reached for while a canary is serving errors. A
+	// multi-minute window would buy a guarantee LoopZero does not make, and charge
+	// for it during an incident.
+	//
+	// Applied to BOTH shapes — a worker has no traffic to weight, but it can
+	// hold a long-running job, and the promise should not depend on app type.
+	canary.ScaleDownDelaySeconds = intPtr(60)
 
 	return k8sRollout{
 		APIVersion: "argoproj.io/v1alpha1",
@@ -396,6 +450,35 @@ func buildAppContainer(ri RenderInput, app AppManifestInput, port int) k8sContai
 func buildAppPodSpec(container k8sContainer) k8sPodSpec {
 	falseVal := false
 	trueVal := true
+
+	// #61 — close the endpoint-removal race before SIGTERM.
+	//
+	// Deleting a pod does two things CONCURRENTLY: SIGTERM to the container,
+	// and endpoint removal from Services. The second is asynchronous — kube-proxy
+	// and Traefik take a moment to observe it — so without a hook the app begins
+	// shutting down while new connections are still being routed to it. On a
+	// canary step that scales the old ReplicaSet down, that is what severs
+	// long-lived connections mid-flight.
+	//
+	// `terminationGracePeriodSeconds` does NOT address this: it bounds the time
+	// AFTER SIGTERM, and the race happens before. The fix is to make the pod wait
+	// so endpoint removal wins.
+	//
+	// preStopDrainSeconds is 5: endpoint propagation is typically 1-3s, so this
+	// leaves margin while staying far below the 30s grace period — the sleep and
+	// the app's own shutdown share that budget, and a sleep that consumed it
+	// would get the app SIGKILLed the instant it finally received SIGTERM.
+	//
+	// This is the half of #61 that is NOT a product decision: the race harms
+	// every rollout, WebSocket or not. How long a WebSocket should be allowed to
+	// outlive a deploy — whether LoopZero promises survival or reconnection —
+	// remains open on that issue.
+	const preStopDrainSeconds = 5
+	if container.Lifecycle == nil {
+		container.Lifecycle = &k8sLifecycle{
+			PreStop: &k8sLifecycleHandler{Sleep: &k8sSleepAction{Seconds: preStopDrainSeconds}},
+		}
+	}
 	return k8sPodSpec{
 		ServiceAccountName:           "loopzero-app",
 		AutomountServiceAccountToken: &falseVal,

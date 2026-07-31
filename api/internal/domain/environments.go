@@ -8,6 +8,8 @@
 
 package domain
 
+import "fmt"
+
 // EnvironmentEntry is the summary representation of an environment.
 type EnvironmentEntry struct {
 	Name   string `json:"name"`
@@ -38,4 +40,28 @@ type EnvProjectInfo struct {
 	Name          string `json:"name"`
 	ActiveRelease string `json:"active_release,omitempty"`
 	URL           string `json:"url,omitempty"`
+}
+
+// ErrAmbiguousEnvironment is returned when a project-less environment lookup
+// matches the same name in more than one project (issue #139).
+//
+// It lives in `domain` rather than beside the Kubernetes adapter that raises
+// it because both sides need it: the adapter constructs it, and the HTTP layer
+// maps it to a 400. Putting it in the adapter would force `routes` to import
+// `k8s` — an interface layer depending on infrastructure, which is the
+// dependency inversion `rules/architecture.md` forbids.
+//
+// It is deliberately an ERROR and not a "pick the first one". The caller asked
+// for `production` without saying whose; two projects have one; answering with
+// either returns a DIFFERENT project's environment under the requested name.
+// That failure is invisible — plausible data for the wrong thing — whereas an
+// error naming the candidates is something the caller can act on.
+type ErrAmbiguousEnvironment struct {
+	EnvName  string
+	Projects []string
+}
+
+func (e *ErrAmbiguousEnvironment) Error() string {
+	return fmt.Sprintf("environment %q exists in %d projects (%v); specify which one",
+		e.EnvName, len(e.Projects), e.Projects)
 }

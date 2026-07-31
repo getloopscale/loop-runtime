@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartdefaulttags"
 	"os"
 	"path/filepath"
 	"strings"
@@ -261,9 +262,40 @@ func runBaseImageDigest(args []string) int {
 		fmt.Fprintf(os.Stderr, "\nFAIL — %d tag-only base image(s).\n", len(o.Violations))
 		fmt.Fprintln(os.Stderr, "Fix: replace 'tag' with 'tag@sha256:<digest>' (Renovate pinDigests: true),")
 		fmt.Fprintln(os.Stderr, "OR add '# pragma: allow-tag-pin' on the line above the FROM, OR refresh the")
-		fmt.Fprintln(os.Stderr, "baseline in pkg/quality/baseimagedigest if the bump is intentional + grandfathered.")
+		fmt.Fprintln(os.Stderr, "baseline in cmd/loopzero-ops/internal/quality/baseimagedigest if the bump is intentional + grandfathered.")
 		return 1
 	}
 	fmt.Printf("PASS — %d FROM directive(s); every base image is digest-pinned, baselined, or pragma'd.\n", o.Scanned)
 	return 0
+}
+
+// runChartDefaultTags is the #232 sibling gate: loopzero-owned Helm charts must not
+// DEFAULT their image tag to a mutable ref. prod-image-tags scans the deployed
+// values and cannot see chart defaults. Registered but NOT wired — RED today,
+// fix lives in infra/helm/ (governance-gated).
+func runChartDefaultTags(args []string) int {
+	fs := flag.NewFlagSet("chart-default-tags", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	out, err := chartdefaulttags.Check(chartdefaulttags.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chart-default-tags: %v\n", err)
+		return 2
+	}
+	if out.Skipped {
+		fmt.Printf("chart-default-tags: SKIP — %s\n", out.Reason)
+		return 0
+	}
+	if out.Pass {
+		fmt.Printf("chart-default-tags: PASS — %s\n", out.Reason)
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "chart-default-tags: FAIL")
+	for _, f := range out.Findings {
+		fmt.Fprintf(os.Stderr, "  %s:%d — chart %s defaults to mutable tag %q\n", f.File, f.Line, f.Chart, f.Tag)
+	}
+	fmt.Fprintln(os.Stderr, "Fix: prefer `tag: \"\"` — an empty default fails loudly if nothing overrides it, where `latest` fails silently (#232).")
+	return 1
 }

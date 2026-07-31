@@ -1,5 +1,12 @@
 replicaCount: 1
 
+# NAMESPACE VIRADO 2026-07-30: o repositorio `loopzero` foi transferido para a org
+# `getloopscale` e a CI passou a publicar em `ghcr.io/getloopscale`. O pacote antigo
+# NAO some — ele apenas deixa de receber builds. Um default apontando para ele
+# deixaria o deploy rodando congelado na ultima imagem pre-transferencia, sem
+# erro algum; o runbook do umbrella lista essa cascata entre os pontos que se
+# esquece, justamente porque falha em silencio.
+#
 # CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
 # `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images
 # are published EXCLUSIVELY to GHCR by the AM6 reusable workflow at
@@ -10,7 +17,11 @@ replicaCount: 1
 # `:develop` + `:develop-<sha>` on develop branch pushes (per AM6).
 image:
   repository: ghcr.io/getloopscale/loopzero-cloud
-  tag: latest
+  # Issue #232 — an immutable SENTINEL, not `latest` and not a pinned version. Same reasoning as the
+  # loopzero-api chart: the default is only reached when an override was forgotten,
+  # so it must fail loudly rather than ship whatever `latest` points at today.
+  # CI publishes `:develop` + `:develop-<sha>` and sets the tag explicitly.
+  tag: "SET-BY-CI"
   pullPolicy: Always
 
 imagePullSecrets:

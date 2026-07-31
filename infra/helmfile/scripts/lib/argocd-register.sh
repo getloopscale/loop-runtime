@@ -15,6 +15,19 @@ set -euo pipefail
 CLUSTER_NAME="${1:?usage: $0 <cluster-name> <kubeconfig-path>}"
 KUBECONFIG_PATH="${2:?usage: $0 <cluster-name> <kubeconfig-path>}"
 
+# Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
+#
+# Note the asymmetry, it is the whole point of this script: $KUBECONFIG_PATH
+# describes the cluster being REGISTERED (read as a file, parsed for server +
+# CA), while the ArgoCD cluster Secret this script APPLIES must land on MGMT,
+# where ArgoCD runs. Those are two different clusters. Before this pin the
+# apply inherited the ambient kubecontext, so registering a runtime cluster
+# while that context pointed at the runtime cluster wrote the Secret into the
+# workload cluster — ArgoCD never saw it, and the failure surfaced much later
+# as a cluster missing from `argocd cluster list`.
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
+
 log() { printf '[argocd-register] %s\n' "$*" >&2; }
 
 # yq is preferred; fall back to Python PyYAML if absent.

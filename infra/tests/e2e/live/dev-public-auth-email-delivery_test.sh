@@ -132,8 +132,6 @@ except Exception:
 # a courier message (Kratos logs "Account recovery was requested for
 # an unknown address" + was_notified:false).
 scenario_a() {
-  local before_ts after_ts
-  before_ts=$(date -u +%s)
 
   local flow_id
   flow_id=$(curl -ks -X GET "${TARGET_HOST}/self-service/recovery/api" \
@@ -150,7 +148,6 @@ scenario_a() {
     >/dev/null 2>&1
 
   sleep 3
-  after_ts=$(date -u +%s)
 
   # Assert NO courier message enqueued for unknown
   local new_msgs

@@ -362,10 +362,15 @@ func TestScaleHandler_EnsureProductionWired_NoPanicOnRealApply(t *testing.T) {
 	projects := &fakeScaleProjectStore{}
 	apply := func(_ context.Context, _ ScaleConfigInput) (bool, error) { return false, nil }
 	h := NewScaleHandler(projects, apply, false)
+	// Issue #137 — "production-wired" now means BOTH the apply closure and the
+	// replica-cap checker. This test's model of production was as incomplete as
+	// the guard it exercises; wiring only apply no longer represents a
+	// production handler.
+	h.SetReplicasChecker(&fakeScaleReplicasChecker{cap: 2, plan: "starter"})
 
 	defer func() {
 		if r := recover(); r != nil {
-			t.Fatalf("EnsureProductionWired must NOT panic with real apply; got panic=%v", r)
+			t.Fatalf("EnsureProductionWired must NOT panic when apply AND replicasChecker are wired; got panic=%v", r)
 		}
 	}()
 
@@ -500,8 +505,8 @@ func TestScale_ResponseCarriesMonthlyCostAndPlanTier(t *testing.T) {
 // could set replicas:999.
 
 type fakeScaleReplicasChecker struct {
-	cap   int
-	plan  string
+	cap  int
+	plan string
 }
 
 func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ string, requested int) (bool, string, int) {
@@ -706,4 +711,55 @@ func TestScaleHandler_AutoscalingMaxZero_Returns400InvalidReplicas_RedTeam103(t 
 	if !strings.Contains(w.Body.String(), "INVALID_REPLICAS") {
 		t.Errorf("Red Team #103: body must include INVALID_REPLICAS, got %s", w.Body.String())
 	}
+}
+
+// TestScaleHandler_EnsureProductionWired_PanicsOnNilReplicasChecker closes the
+// residual half of issue #137.
+//
+// The plan replica cap IS enforced today — Scale() calls enforceReplicaCap,
+// which consults h.replicasChecker and returns REPLICAS_EXCEED_PLAN. But the
+// checker is nil-disabled by design ("nil disables enforcement (tests + legacy
+// callsites)"), and production only gets it because setup_orchestrator.go calls
+// SetReplicasChecker. Delete that one line and every tenant may request any
+// number of replicas, with no error anywhere — the cap does not fail, it
+// evaporates.
+//
+// That is precisely the failure mode EnsureProductionWired already exists to
+// prevent for the apply closure ("scaling would silently no-op", audit M02 #14).
+// The guard simply never grew to cover the second thing that can silently
+// vanish. #137 was reported as "cap not enforced"; the enforcement landed later
+// via Red Team #101, and this is what was left undefended.
+func TestScaleHandler_EnsureProductionWired_PanicsOnNilReplicasChecker(t *testing.T) {
+	h := NewScaleHandler(&fakeScaleProjectStore{}, func(context.Context, ScaleConfigInput) (bool, error) { return true, nil }, false)
+	// apply is wired; the checker deliberately is not.
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("EnsureProductionWired must panic when replicasChecker is nil — otherwise a dropped " +
+				"SetReplicasChecker call disables the plan cap silently, which is the exact regression " +
+				"class this guard exists for (issue #137)")
+		}
+		msg, _ := r.(string)
+		if !strings.Contains(msg, "replicasChecker") {
+			t.Errorf("panic message %q must name replicasChecker so the operator knows WHICH wiring is missing", msg)
+		}
+	}()
+	h.EnsureProductionWired()
+}
+
+// TestScaleHandler_EnsureProductionWired_WaiveIsAccepted proves the escape
+// hatch works — a boot that genuinely cannot enforce (no database, hence no
+// PlanLimiter) must be able to say so and pass, or the guard would force
+// callers to fake a checker just to boot, which is worse than no guard.
+func TestScaleHandler_EnsureProductionWired_WaiveIsAccepted(t *testing.T) {
+	h := NewScaleHandler(&fakeScaleProjectStore{},
+		func(context.Context, ScaleConfigInput) (bool, error) { return true, nil }, false)
+	h.WaiveReplicaCapEnforcement("no database in this boot")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("an explicit waive must satisfy the guard; got panic=%v", r)
+		}
+	}()
+	h.EnsureProductionWired()
 }

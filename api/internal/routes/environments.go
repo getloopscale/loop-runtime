@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -25,12 +26,12 @@ import (
 // create (web, production). The legacy production env (per ADR D2) is
 // provisioned by tenant bootstrap, not via this handler.
 var reservedEnvironmentNames = map[string]bool{
-	"default":     true,
-	"kube-system": true,
-	"loopzero-system": true,
-	"argocd":      true,
-	"monitoring":  true,
-	pkgdomain.DefaultPermanentEnv:  true, // M2 v1.2 — EC-8 cross-project reserved
+	"default":                     true,
+	"kube-system":                 true,
+	"loopzero-system":                 true,
+	"argocd":                      true,
+	"monitoring":                  true,
+	pkgdomain.DefaultPermanentEnv: true, // M2 v1.2 — EC-8 cross-project reserved
 }
 
 // envDeleteCleanupWarning is the user-facing warning emitted when the
@@ -252,9 +253,36 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// Issue #142 — the legacy empty-Project entry is a FALLBACK for an
+		// env name, not an addition to it.
+		//
+		// The original `e.Project == projectFilter || e.Project == ""` was
+		// correct when written: before the #124 backfill the legacy row was
+		// the ONLY row a tenant had, and dropping it hid a live environment.
+		// After the backfill both rows exist for the same name, so the clause
+		// that guaranteed visibility started guaranteeing a duplicate —
+		// `production, preview, production, preview`.
+		//
+		// Deleting the legacy clause is NOT the fix: a tenant whose backfill
+		// has not run carries only empty-Project rows and would get an empty
+		// list. So: take the project-scoped row when it exists, fall back to
+		// the legacy row for names that have no scoped row yet. Order of the
+		// underlying list is preserved (the CR order is meaningful to the
+		// dashboard); only the redundant legacy entries are dropped.
+		scoped := make(map[string]bool, len(envs))
+		for _, e := range envs {
+			if e.Project == projectFilter {
+				scoped[e.Name] = true
+			}
+		}
 		filtered := envs[:0]
 		for _, e := range envs {
-			if e.Project == projectFilter || e.Project == "" {
+			switch {
+			case e.Project == projectFilter:
+				filtered = append(filtered, e)
+			case e.Project == "" && !scoped[e.Name]:
+				// Legacy shared entry (ADR D2), and no backfilled row has
+				// superseded it for this name.
 				filtered = append(filtered, e)
 			}
 		}
@@ -500,6 +528,21 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	project := r.URL.Query().Get("project")
 	detail, err := h.envMgr.GetEnvironmentDetail(ctx, uc.TenantID, project, name)
 	if err != nil {
+		// Issue #139 — an ambiguous project-less lookup is a CALLER problem,
+		// not a server fault: the same env name exists in several projects and
+		// none was named. Collapsing it into a 500 would tell the operator
+		// nothing and page whoever owns the API. Answer 400 with the candidate
+		// projects so the next command can succeed.
+		var amb *domain.ErrAmbiguousEnvironment
+		if errors.As(err, &amb) {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"ENVIRONMENT_AMBIGUOUS",
+				fmt.Sprintf("environment '%s' exists in more than one project (%s); specify the project",
+					name, strings.Join(amb.Projects, ", ")),
+				400,
+			))
+			return
+		}
 		slog.Error("failed to get environment detail",
 			"tenant_id", uc.TenantID,
 			"environment", name,

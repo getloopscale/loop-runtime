@@ -21,7 +21,6 @@
 
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
 readonly CLOUD_URL="${CLOUD_URL:-http://localhost:13002}"
 readonly KRATOS_URL="${KRATOS_URL:-http://localhost:14433}"
@@ -100,7 +99,7 @@ for n in d.get('ui',{}).get('nodes',[]):
     || log_fatal "kratos login POST failed"
   # Verify cookie jar now has ory_kratos_session
   if ! grep -q "ory_kratos_session" "$COOKIE_JAR"; then
-    log_fatal "Kratos did not set ory_kratos_session cookie (jar contents: $(cat "$COOKIE_JAR" | grep -v '^#'))"
+    log_fatal "Kratos did not set ory_kratos_session cookie (jar contents: $(grep -v '^#' "$COOKIE_JAR"))"
   fi
   log_info "Kratos browser-flow login OK (session cookie set)"
 }

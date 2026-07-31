@@ -96,7 +96,7 @@ func TestQuarantineProtect_RejectsArchiveDeleteWithoutMarker(t *testing.T) {
 func TestQuarantineProtect_AllowsNonArchiveChange(t *testing.T) {
 	cfg := mockCfg(
 		[]string{"infra/tests/livetest/cleanroom_test.go", "internal/livetest/cleanroom/helpers.go"},
-		[]string{"pkg/quality/legacy/old.go"},
+		[]string{"cmd/loopzero-ops/internal/quality/legacy/old.go"},
 		"feat(test): T3.1 cleanroom v2 helpers",
 	)
 	outcome, err := Check(cfg)

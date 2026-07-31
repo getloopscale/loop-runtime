@@ -123,7 +123,7 @@ func Check(cfg Config) (Outcome, error) {
 
 // rawSensitiveTables mirrors api/internal/db/raw/sensitive_tables.go
 // SensitiveTables. Kept in sync via TestRawSensitiveTablesAlignment
-// (pkg/quality/tenantpredicate/raw_check_test.go).
+// (cmd/loopzero-ops/internal/quality/tenantpredicate/raw_check_test.go).
 var rawSensitiveTables = []string{
 	"secrets",
 	"audit_log",

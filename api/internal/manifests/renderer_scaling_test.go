@@ -101,9 +101,9 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 			Port:     8080,
 			ImageRef: "reg:5000/acme/webapp:abc123",
 			Autoscaling: &AutoscalingConfig{
-				MinReplicas:  2,
-				MaxReplicas:  5,
-				TargetCPU:    75,
+				MinReplicas: 2,
+				MaxReplicas: 5,
+				TargetCPU:   75,
 			},
 		},
 	}
@@ -184,10 +184,10 @@ func TestRenderDeployment_HPA_DefaultValues(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
 		{
-			Name:     "api",
-			Type:     "server",
-			Port:     8080,
-			ImageRef: "reg:5000/acme/webapp:abc123",
+			Name:        "api",
+			Type:        "server",
+			Port:        8080,
+			ImageRef:    "reg:5000/acme/webapp:abc123",
 			Autoscaling: &AutoscalingConfig{},
 		},
 	}

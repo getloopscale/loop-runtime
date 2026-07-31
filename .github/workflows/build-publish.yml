@@ -19,13 +19,29 @@ on:
       image:           { required: true,  type: string }
       dockerfile:      { required: true,  type: string }
       context:         { required: false, type: string,  default: "." }
-      registry:        { required: false, type: string,  default: "ghcr.io/getloopscale" }
+      # Vazio por default = derivado do dono do repositorio em runtime (ver o step
+      # `resolve-registry`). Fixar o dono em texto e' o passo que o runbook de
+      # migracao lista como o mais esquecido: uma transferencia de conta para
+      # organizacao troca o namespace do GHCR e um valor fixo passa a dar 403 no
+      # push — falha tardia, no CI de outro repositorio.
+      registry:        { required: false, type: string,  default: "" }
       sign:            { required: false, type: boolean, default: false }   # SBOM+provenance(mode=max)+cosign — release only
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
       dockerhub_image: { required: false, type: string,  default: "" }      # e.g. "loopzero/themory" — also push to Docker Hub when DOCKERHUB_TOKEN is set
-      runner:          { required: false, type: string,  default: '["ubuntu-latest"]' }   # JSON array; billing-blocked callers pass '["self-hosted","linux","x64"]'
+      # Default = frota Blacksmith da org `getloopscale` (2026-07-30). Consumidores
+      # fora da org devem passar a propria label; um default GitHub-hosted aqui
+      # gastaria minutos da conta de quem chama, em silencio.
+      runner:          { required: false, type: string,  default: '["blacksmith-8vcpu-ubuntu-2404"]' }
     secrets:
+      # Deploy key read-only de loopzero-contracts — via PREFERIDA desde 2026-07-31.
+      # Alcanca exatamente um repositorio, so' leitura, revogavel sozinha. O PAT
+      # anterior morreu (`Bad credentials`) e derrubou 10 builds sem nomear a
+      # causa, porque a mesma credencial morta aparecia como `Repository not
+      # found` no build da imagem.
+      GOMOD_SSH_KEY:      { required: false }
+      # Fallback legado. Mantido para consumidores do reusable que ainda o usem —
+      # a troca e' aditiva, nao uma quebra de contrato.
       GOMOD_TOKEN:        { required: false }   # cross-repo read for the pinned private loopzero-contracts module
       DOCKERHUB_USERNAME: { required: false }
       DOCKERHUB_TOKEN:    { required: false }
@@ -35,17 +51,46 @@ permissions:
   id-token: write   # consumed only when sign=true (keyless cosign); harmless otherwise
 jobs:
   build-publish:
-    runs-on: ${{ fromJSON(inputs.runner) }} # default ubuntu-latest; callers may pass a self-hosted label set
+    runs-on: ${{ fromJSON(inputs.runner) }} # default = frota Blacksmith da org; ver o input `runner`
     env:
       # `secrets` is NOT allowed in step `if:` — lift the token to a job-level env so the
       # Docker Hub guards below can use `env.*` (valid in if/with). Stays masked in logs.
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Exposta no ambiente do job porque `secret-envs:` referencia o NOME de uma
+      # variavel, nao um valor — e' o que permite carregar a chave privada
+      # multilinha intacta. O Actions mascara o valor nos logs normalmente.
+      GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      # Deriva o namespace do GHCR do dono do repositorio quando o chamador nao o
+      # passa. Substitui um default fixado em texto (`ghcr.io/getloopscale`), que o
+      # runbook de migracao lista entre os pontos que se esquece: transferir o repo
+      # para uma organizacao troca o namespace, e o valor fixo passa a produzir 403
+      # no push — falha tardia, e no CI de outro repositorio.
+      #
+      # Minusculas porque nomes de repositorio no GitHub preservam maiusculas e
+      # referencias OCI nao as aceitam.
+      #
+      # `[:upper:]`/`[:lower:]` em vez de `A-Z`/`a-z` (SC2018/SC2019): as faixas
+      # literais dependem do locale — em locales nao-C a ordem de colacao pode
+      # nao ser a ASCII, e a traducao sai errada para caracteres fora do
+      # esperado. As classes POSIX nao tem essa dependencia.
+      - name: Resolve registry namespace
+        id: resolve-registry
+        env:
+          EXPLICIT: ${{ inputs.registry }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ -n "$EXPLICIT" ]; then
+            echo "registry=$EXPLICIT" >> "$GITHUB_OUTPUT"
+          else
+            echo "registry=ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Compute tags (community-standard channels)
         id: meta
@@ -54,14 +99,33 @@ jobs:
           # Docker Hub image is added ONLY when both the input and the token are present,
           # so a missing secret never produces an un-pushable docker.io tag.
           images: |
-            ${{ inputs.registry }}/${{ inputs.image }}
+            ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}
             ${{ (inputs.dockerhub_image != '' && env.DOCKERHUB_TOKEN != '') && format('docker.io/{0}', inputs.dockerhub_image) || '' }}
+          # As duas ultimas regras cobrem o disparo MANUAL, e existem porque a
+          # ausencia delas tornava esse caminho impossivel.
+          #
+          # `release-artifacts.yml` anuncia `workflow_dispatch` e o job `plan`
+          # trata `IS_DISPATCH` explicitamente construindo TODAS as imagens. Mas
+          # nenhuma regra de tag disparava fora de `develop` e de tags `v*`,
+          # entao um dispatch a partir de qualquer outro branch gerava ZERO tags
+          # e o buildx morria com `tag is needed when pushing to registry` —
+          # medido no run 30583134483, cinco imagens de uma vez.
+          #
+          # Um gatilho anunciado que nunca pode funcionar e' pior que gatilho
+          # ausente: quem o usa conclui que a imagem esta quebrada, nao o
+          # workflow.
+          #
+          # Branch + sha curto (e nao um `latest` qualquer): o artefato de um
+          # dispatch precisa ser rastreavel ate' o commit exato, e nao pode
+          # colidir com o canal `develop` que a CI publica.
           tags: |
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
             type=sha,prefix=develop-,format=short,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/develop' }}
+            type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/develop' }}
 
       # --- Optional Trivy gate (build locally, scan, THEN push the cache-identical image) ---
       - name: Build for scan (Trivy gate)
@@ -80,6 +144,18 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
+          # A chave SSH vai por `secret-envs`, NAO por `secrets`.
+          #
+          # O formato `chave=valor` de `secrets:` e' de UMA LINHA. Uma chave
+          # privada tem varias, e o buildx rejeita com `*** is not a valid
+          # secret` — medido no run 30626856096. `secret-envs` referencia uma
+          # variavel de ambiente e por isso carrega multilinha intacta.
+          #
+          # O build local passava com `--secret id=...,src=arquivo`, que tambem
+          # aceita multilinha. Foi essa diferenca de FORMA — nao de conteudo —
+          # que fez o teste local aprovar o que a CI reprovou.
+          secret-envs: |
+            gomod_ssh_key=GOMOD_SSH_KEY
 
       - name: Trivy vulnerability scan (CRITICAL + HIGH gate)
         if: ${{ inputs.trivy }}
@@ -131,6 +207,18 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ inputs.image }}
           secrets: |
             gomod_token=${{ secrets.GOMOD_TOKEN }}
+          # A chave SSH vai por `secret-envs`, NAO por `secrets`.
+          #
+          # O formato `chave=valor` de `secrets:` e' de UMA LINHA. Uma chave
+          # privada tem varias, e o buildx rejeita com `*** is not a valid
+          # secret` — medido no run 30626856096. `secret-envs` referencia uma
+          # variavel de ambiente e por isso carrega multilinha intacta.
+          #
+          # O build local passava com `--secret id=...,src=arquivo`, que tambem
+          # aceita multilinha. Foi essa diferenca de FORMA — nao de conteudo —
+          # que fez o teste local aprovar o que a CI reprovou.
+          secret-envs: |
+            gomod_ssh_key=GOMOD_SSH_KEY
 
       - name: Install cosign
         if: ${{ inputs.sign }}
@@ -148,7 +236,7 @@ jobs:
       - name: Keyless sign by digest (release only)
         if: ${{ inputs.sign }}
         env:
-          IMAGE_REF: ${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE_REF}"
 
       # Confused-deputy guard (EC-2): accept ONLY signatures produced by THIS reusable
@@ -157,8 +245,13 @@ jobs:
       - name: Verify the signature (identity-pinned)
         if: ${{ inputs.sign && inputs.verify }}
         env:
-          IMAGE_REF: ${{ inputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          # A identidade keyless deriva de repo + caminho do workflow. Fixar o dono
+          # em texto quebra a verificacao numa transferencia — e, pior, um dono
+          # ERRADO aqui aceitaria assinatura produzida por OUTRO workflow. Este e' o
+          # guard de confused-deputy, entao ele acompanha o repo que de fato roda.
+          IDENTITY_REPO: ${{ github.repository }}
         run: |
           cosign verify "${IMAGE_REF}" \
-            --certificate-identity-regexp '^https://github\.com/getloopscale/loopzero/\.github/workflows/build-publish\.yml@' \
+            --certificate-identity-regexp "^https://github\.com/${IDENTITY_REPO}/\.github/workflows/build-publish\.yml@" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com

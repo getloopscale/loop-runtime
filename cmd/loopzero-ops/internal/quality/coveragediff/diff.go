@@ -11,7 +11,7 @@
 //
 // Gate semantics (matches bash):
 //   - Read PR-touched lines from a file in "path:line" format
-//     (= output of pkg/quality/gitdiff.FormatLines).
+//     (= output of cmd/loopzero-ops/internal/quality/gitdiff.FormatLines).
 //   - Read merged lcov to get per-line hit counts.
 //   - Filter touched lines to SOURCE files only (*.go *.ts *.tsx;
 //     test files excluded).
@@ -38,7 +38,7 @@ const DefaultThreshold = 80.0
 // Config holds the gate inputs.
 type Config struct {
 	// DiffPath is a text file with one "path:line" per touched line
-	// (= output of pkg/quality/gitdiff.FormatLines).
+	// (= output of cmd/loopzero-ops/internal/quality/gitdiff.FormatLines).
 	// Required.
 	DiffPath string
 

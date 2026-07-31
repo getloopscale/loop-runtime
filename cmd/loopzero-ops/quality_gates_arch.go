@@ -28,7 +28,7 @@ import (
 // runContractConsumers detects backend response shape narrowing (Go struct
 // field with `json:"<tag>"` REMOVED in the PR diff) when at least one
 // consumer in cloud/dashboard/src/, cli/src/, or api/internal/ still reads
-// that field. See pkg/quality/contractconsumers/check.go package doc for
+// that field. See cmd/loopzero-ops/internal/quality/contractconsumers/check.go package doc for
 // scope + non-scope + plan rationale. Sponsor mandate 2026-06-08: this
 // gate REDUCES the bug rate that reaches the sponsor walkthrough; sponsor
 // walkthrough remains the final visual gate.
