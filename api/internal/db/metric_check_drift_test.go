@@ -33,7 +33,7 @@ func TestMetricCheckConstraint_MatchesContractsConstants(t *testing.T) {
 		string(enforcement.MetricMemGBSeconds):   true,
 	}
 
-	checkSet := effectiveMetricCheckSet(t)
+	checkSet := effectiveMetricCheckSet(t, "cost_counters")
 
 	for m := range constSet {
 		if !checkSet[m] {
@@ -56,7 +56,9 @@ func TestMetricCheckConstraint_MatchesContractsConstants(t *testing.T) {
 // column of their own in later migrations, "the last one" stopped being this table's. The guard was
 // not detecting drift — it was reading the wrong table, and stayed red with no reachable green.
 // Parsing lives in metric_check_parse.go, where it is exercised by fixtures directly.
-func effectiveMetricCheckSet(t *testing.T) map[string]bool {
+// The table is a PARAMETER (not hardcoded) because more than one table now carries a `metric`
+// column with a CHECK of its own, and each needs its own effective set read independently.
+func effectiveMetricCheckSet(t *testing.T, table string) map[string]bool {
 	t.Helper()
 	dir := "migrations"
 	ups, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
@@ -74,9 +76,9 @@ func effectiveMetricCheckSet(t *testing.T) map[string]bool {
 		sqls = append(sqls, string(b))
 	}
 
-	set := metricCheckSetFor("cost_counters", sqls)
+	set := metricCheckSetFor(table, sqls)
 	if len(set) == 0 {
-		t.Fatal("no `CHECK (metric IN (...))` found for cost_counters in any migration")
+		t.Fatalf("no `CHECK (metric IN (...))` found for %s in any migration", table)
 	}
 	return set
 }
