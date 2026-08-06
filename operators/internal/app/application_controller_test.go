@@ -14,6 +14,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 func newLoopZeroApplicationCR(name, tenantRef, project, env, serviceName string) *loopzerov1.LoopZeroApplication {
@@ -102,8 +103,9 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// Also clean up the ExposedRoute (which now has a finalizer too)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+					route.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, route)
 			}
 		})
@@ -142,8 +144,9 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// Also clean up the ExposedRoute (which now has a finalizer too)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+					route.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, route)
 			}
 		})
@@ -329,8 +332,9 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// Also clean up the ExposedRoute (which now has a finalizer too)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+					route.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, route)
 			}
 		})
@@ -348,13 +352,13 @@ var _ = Describe("ApplicationController", Ordered, func() {
 	// `loopzero.io/tenant` silently returned empty.
 	Context("tenant scope propagation to child ExposedRoute (audit §6.E.4b)", func() {
 		const (
-			appA  = "xt-app-a"
-			appB  = "xt-app-b"
-			tnA   = "tn-tenant-a"
-			tnB   = "tn-tenant-b"
-			proj  = "shared-project"
-			envP  = "production"
-			svcN  = "shared-svc"
+			appA = "xt-app-a"
+			appB = "xt-app-b"
+			tnA  = "tn-tenant-a"
+			tnB  = "tn-tenant-b"
+			proj = "shared-project"
+			envP = "production"
+			svcN = "shared-svc"
 		)
 
 		BeforeAll(func() {
@@ -415,15 +419,17 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			Expect(k8sClient.Get(ctx, routeKey, &route)).To(Succeed())
 
 			// Strip the tenant label and update.
-			delete(route.Labels, "loopzero.io/tenant")
-			Expect(k8sClient.Update(ctx, &route)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &route, func() {
+				delete(route.Labels, "loopzero.io/tenant")
+			})).To(Succeed())
 
 			// Trigger reconcile by touching the parent (bump replicas).
 			var parent loopzerov1.LoopZeroApplication
 			parentKey := types.NamespacedName{Name: appA, Namespace: "default"}
 			Expect(k8sClient.Get(ctx, parentKey, &parent)).To(Succeed())
-			parent.Spec.Replicas = parent.Spec.Replicas + 1
-			Expect(k8sClient.Update(ctx, &parent)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &parent, func() {
+				parent.Spec.Replicas = parent.Spec.Replicas + 1
+			})).To(Succeed())
 
 			// Eventually, the controller restores the label.
 			Eventually(func(g Gomega) {
@@ -438,14 +444,16 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			for _, name := range []string{appA, appB} {
 				appObj := &loopzerov1.LoopZeroApplication{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, appObj); err == nil {
-					appObj.Finalizers = nil
-					_ = k8sClient.Update(ctx, appObj)
+					_ = operatortest.UpdateWithRetry(ctx, k8sClient, appObj, func() {
+						appObj.Finalizers = nil
+					})
 					_ = k8sClient.Delete(ctx, appObj)
 				}
 				route := &loopzerov1.ExposedRoute{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: name + "-route", Namespace: "default"}, route); err == nil {
-					route.Finalizers = nil
-					_ = k8sClient.Update(ctx, route)
+					_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+						route.Finalizers = nil
+					})
 					_ = k8sClient.Delete(ctx, route)
 				}
 			}

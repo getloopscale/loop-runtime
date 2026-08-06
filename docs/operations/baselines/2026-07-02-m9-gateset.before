@@ -28,6 +28,10 @@
 # RE-FREEZE 2026-07-30 (f): worker-csp e chart-default-tags '-' -> 'gates'. Os achados de
 #   #235 e #232 foram corrigidos sob CHG-2026-07-30-002 (override do sponsor), entao os dois
 #   RED tests viraram verdes e saem de failingGate. Contagem segue 111.
+# RE-FREEZE 2026-08-06: no-aes-remaining 'gates' -> '-'. O gate virou ENFORCED em 2026-08-01
+#   (prazo T+60d) com o branch AES legado ainda no dispatcher, entao passou a barrar todo push
+#   em vez de sinalizar. Segue registrado e invocavel a mao; declarado failingGate no ledger de
+#   wiring. A divida T10.3 (deletar o branch AES) segue aberta. Contagem segue 111.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -80,7 +84,7 @@ loki-vault-retention	gates	T8.2 Loki per-NS retention (retention_period 168h def
 ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.
 migration-test-coverage	-	Every DB migration has corresponding test coverage.
 mock-budget	-	Caps the number of mocks per test (SRP smell budget).
-no-aes-remaining	gates	Calendar-gated: fails on remaining AES code paths post-transit migration.
+no-aes-remaining	-	Calendar-gated: fails on remaining AES code paths post-transit migration.
 no-cloud-dev-default	gates	T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.loopzero.example (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.
 no-env-vault-secrets	gates	Forbids secrets-as-env-var regression after the ESO/OpenBao migration.
 no-legacy-sa-token-secret	gates	Forbids legacy kubernetes.io/service-account-token Secrets.

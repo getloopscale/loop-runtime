@@ -17,6 +17,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 func newExposedRouteCR(name, appRef, hostname, serviceName string, servicePort int32, tlsEnabled bool) *loopzerov1.ExposedRoute {
@@ -310,8 +311,9 @@ var _ = Describe("ExposureController", Ordered, func() {
 				server.Close()
 				route := &loopzerov1.ExposedRoute{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-					route.Finalizers = nil
-					_ = k8sClient.Update(ctx, route)
+					_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+						route.Finalizers = nil
+					})
 					_ = k8sClient.Delete(ctx, route)
 				}
 			})

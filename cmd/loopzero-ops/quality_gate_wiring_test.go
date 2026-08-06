@@ -112,10 +112,17 @@ var gateWiringExemptions = map[string]wiringReason{
 	// --- work, but FAIL on a real finding today ---------------------------
 	// Each was executed 2026-07-30 and exited 1 with a substantive message.
 	// The gate is right; the tree is not. Fix the finding, then wire.
-	"alert-runbooks":           failingGate, // a Prometheus alert has no runbook annotation
-	"base-image-digest":        failingGate, // a base image drifted off its pinned digest
-	"crd-semantic-diff":        failingGate, // chart CRD out of sync with kubebuilder output
-	"migration-test-coverage":  failingGate, // a migration has no matching test
+	"alert-runbooks":          failingGate, // a Prometheus alert has no runbook annotation
+	"base-image-digest":       failingGate, // a base image drifted off its pinned digest
+	"crd-semantic-diff":       failingGate, // chart CRD out of sync with kubebuilder output
+	"migration-test-coverage": failingGate, // a migration has no matching test
+	// Virou ENFORCED em 2026-08-01 (prazo T+60d) com o branch AES legado ainda no
+	// dispatcher — 4 achados em api/internal/db/store/secret_wrapper.go:{148,152,188,192}.
+	// Medido 2026-08-06. A divida T10.3 (deletar o branch) segue aberta: remover o
+	// caminho de leitura AES antes de provar que nenhum segredo persistido usa o
+	// prefixo antigo torna esses dados irrecuperaveis, entao a correcao exige
+	// evidencia de migracao que este repo nao carrega.
+	"no-aes-remaining":         failingGate,
 	"no-pulumi-inline-secrets": failingGate, // inline secret literal in Pulumi code
 	"skip-link":                failingGate, // 115 grandfathered a11y violations in the baseline
 	"stack-coverage":           failingGate, // a declared strategy has no fixtures

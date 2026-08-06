@@ -68,8 +68,9 @@ var _ = AfterSuite(func() {
 func deleteAppWithFinalizer(appName string) {
 	app := &loopzerov1.LoopZeroApplication{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
-		app.Finalizers = nil
-		_ = k8sClient.Update(ctx, app)
+		_ = operatortest.UpdateWithRetry(ctx, k8sClient, app, func() {
+			app.Finalizers = nil
+		})
 		_ = k8sClient.Delete(ctx, app)
 	}
 }
@@ -145,8 +146,9 @@ func withRoute(routeName string, assertions func(g Gomega, route *loopzerov1.Exp
 func deleteRouteWithFinalizer(routeName string) {
 	route := &loopzerov1.ExposedRoute{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-		route.Finalizers = nil
-		_ = k8sClient.Update(ctx, route)
+		_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+			route.Finalizers = nil
+		})
 		_ = k8sClient.Delete(ctx, route)
 	}
 }

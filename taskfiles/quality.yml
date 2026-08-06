@@ -65,8 +65,9 @@ tasks:
     desc: Full-repo-scan quality gates (no git diff required)
     deps: [build]
     cmds:
-      # unhomed-logic removido: lia `.claude/rules/shell-scripts-allowlist.md`, que saiu do repo
-      # junto com todo o `.claude/` — o gate abortava o pre-push em vez de medir algo.
+      # unhomed-logic voltou ao agregado: fora desligado porque `.claude/rules/shell-scripts-allowlist.md`
+      # tinha saido do repo, e o gate abortava o pre-push em vez de medir. O allowlist foi restaurado.
+      - /tmp/loopzero-ops quality unhomed-logic
       - /tmp/loopzero-ops quality script-count
       - /tmp/loopzero-ops quality regression-matrix
       - /tmp/loopzero-ops quality postgresql-pdb-config

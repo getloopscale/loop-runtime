@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 // newGoldenTenant creates a minimal Tenant CR for golden test use.
@@ -54,8 +55,9 @@ func cleanupGoldenTenant(tenantName string, envNames []string) {
 	// Remove finalizers so the Tenant can be garbage-collected.
 	t := &loopzerov1.Tenant{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-		t.Finalizers = nil
-		_ = k8sClient.Update(ctx, t)
+		_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
+			t.Finalizers = nil
+		})
 		_ = k8sClient.Delete(ctx, t)
 	}
 
@@ -64,8 +66,9 @@ func cleanupGoldenTenant(tenantName string, envNames []string) {
 		envCR := &loopzerov1.Environment{}
 		envKey := types.NamespacedName{Name: tenantName + "-" + env, Namespace: "default"}
 		if err := k8sClient.Get(ctx, envKey, envCR); err == nil {
-			envCR.Finalizers = nil
-			_ = k8sClient.Update(ctx, envCR)
+			_ = operatortest.UpdateWithRetry(ctx, k8sClient, envCR, func() {
+				envCR.Finalizers = nil
+			})
 			_ = k8sClient.Delete(ctx, envCR)
 		}
 	}
@@ -316,8 +319,9 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "Golden Idempotency Verified"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "Golden Idempotency Verified"
+			})).To(Succeed())
 
 			// Wait for the update to propagate.
 			withTenant(tenantName, func(g Gomega, updated *loopzerov1.Tenant) {
@@ -491,8 +495,9 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			t := &loopzerov1.Tenant{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "golden-empty-envs", Namespace: "default"}, t); err == nil {
 				if !errors.IsNotFound(err) {
-					t.Finalizers = nil
-					_ = k8sClient.Update(ctx, t)
+					_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
+						t.Finalizers = nil
+					})
 					_ = k8sClient.Delete(ctx, t)
 				}
 			}

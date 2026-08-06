@@ -48,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Suíte `operators` deixa de ser flaky. Os specs de envtest liam um CR e o atualizavam sem retry,
+  correndo contra o reconcile do controller e perdendo no `resourceVersion` — 3 de 4 execuções
+  consecutivas de `internal/tenant` falhavam, cada uma num spec DIFERENTE, com
+  `409 Conflict`. Os 18 `Update` de asserção passam por `operatortest.UpdateWithRetry`, o mesmo
+  retry que o caminho de produção já usa. Dois specs corriam também com o estado que esperavam
+  (namespace lido antes do reconcile cria-lo) e agora aguardam. `DefaultTimeout` 30s → 60s.
+  Medido depois: 5/5 execuções verdes de `internal/tenant`, 2/2 do módulo inteiro (#267)
+- Docs canônicos da raiz (`README.md`, `CLAUDE.md`, `ROADMAP.md`, `GOVERNANCE.md`, `SECURITY.md`,
+  `PITCH.md`) restaurados após saírem na limpeza de docs — o próprio `[Unreleased]` acima os
+  descreve como reescritos e presentes. A ausência quebrava 6 testes de `cmd/loopzero-ops` que os usam
+  como âncora da raiz do repo ou verificam seu conteúdo (#267)
+- Gate `unhomed-logic` religado em `quality:gates`: fora desligado porque lia o allowlist ausente;
+  com ele restaurado, mede de novo (63 ≤ baseline 82). `no-aes-remaining` — que reprova por achado
+  real — passa a ser declarado no ledger de wiring em vez de sumir em silêncio, e o baseline do
+  oráculo registra a mudança. A dívida T10.3 segue aberta e agora está escrita (#267)
 - Gate `decisions-deletion` protegia `.claude/knowledge-base/{decisions,meetings,concepts/operations}`,
   árvore que o corpus de governança deixou ao migrar para `docs/wiki/`. O guard passou a apontar para
   árvore vazia — reprovando o próprio rename como se fossem 116 deleções não-supersedidas, e deixando

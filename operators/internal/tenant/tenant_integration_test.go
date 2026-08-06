@@ -16,6 +16,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 // conditionStatus returns the condition status for a given type, or "" if not found.
@@ -128,8 +129,9 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				if err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName + "-" + env, Namespace: "default",
 				}, envCR); err == nil {
-					envCR.Finalizers = nil
-					_ = k8sClient.Update(ctx, envCR)
+					_ = operatortest.UpdateWithRetry(ctx, k8sClient, envCR, func() {
+						envCR.Finalizers = nil
+					})
 					_ = k8sClient.Delete(ctx, envCR)
 				}
 			}
@@ -374,9 +376,10 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			_ = k8sClient.List(ctx, &buildNsList, client.MatchingLabels{"loopzero.io/tenant": tenantName})
 			for i := range buildNsList.Items {
 				ns := &buildNsList.Items[i]
-				ns.Finalizers = nil
-				delete(ns.Labels, "loopzero.io/tenant")
-				_ = k8sClient.Update(ctx, ns)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, ns, func() {
+					ns.Finalizers = nil
+					delete(ns.Labels, "loopzero.io/tenant")
+				})
 			}
 
 			// Tenant should be fully deleted

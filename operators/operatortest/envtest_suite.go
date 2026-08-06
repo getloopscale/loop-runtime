@@ -375,9 +375,18 @@ func (h *EnvtestHandle) ResetFakes() {
 // corrigido ou removido imediatamente."
 //
 // Increasing timeout is the conservative fix — doesn't mask logic bugs
-// (a missing reconcile would still timeout at 30s) but absorbs CI/host
+// (a missing reconcile would still timeout) but absorbs CI/host
 // scheduling jitter that produced the 15s flakes.
-const DefaultTimeout = 30 * time.Second
+//
+// Raised again 30s -> 60s on 2026-08-06 for the same reason, measured: each
+// suite passes in isolation (internal/platform 3/3 green, 62-71s; the
+// preview->platform pair green) but `go test ./... -p 1` intermittently blows
+// one 30s Eventually — and a DIFFERENT spec each run (GitRepositoryBinding
+// "credential Secret missing" one run, TenantController "PriorityClass starter
+// plan idempotent" the next). A dependency regression would fail the same spec
+// deterministically; a spec that only fails when other envtest control planes
+// shared the host is scheduling jitter. 60s keeps a missing reconcile failing.
+const DefaultTimeout = 60 * time.Second
 
 // DefaultInterval is the standard Eventually polling interval.
 const DefaultInterval = 250 * time.Millisecond

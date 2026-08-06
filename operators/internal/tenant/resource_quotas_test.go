@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 // expectResourceQuotaField fetches a ResourceQuota by name+namespace and
@@ -260,8 +261,9 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "Quota Restore Trigger"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "Quota Restore Trigger"
+			})).To(Succeed())
 
 			// Quota must be re-created by the next reconcile loop.
 			Eventually(func(g Gomega) {

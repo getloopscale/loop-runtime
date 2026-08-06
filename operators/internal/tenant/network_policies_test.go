@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 var _ = Describe("Golden: Network Policies", Ordered, func() {
@@ -239,16 +240,18 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "deny-all", Namespace: ns,
 			}, &np)).To(Succeed())
-			np.Spec.PolicyTypes = []networkingv1.PolicyType{} // Remove all — now allows everything
-			Expect(k8sClient.Update(ctx, &np)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &np, func() {
+				np.Spec.PolicyTypes = []networkingv1.PolicyType{} // Remove all — now allows everything
+			})).To(Succeed())
 
 			// Trigger re-reconcile via spec update on the Tenant CR.
 			var t loopzerov1.Tenant
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "NetworkPolicy Restore Trigger"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "NetworkPolicy Restore Trigger"
+			})).To(Succeed())
 
 			// Controller must restore the deny-all policy to its desired state.
 			Eventually(func(g Gomega) {
