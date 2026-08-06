@@ -6,6 +6,8 @@ package testcoveragereport
 
 import (
 	"errors"
+	"io/fs"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -106,5 +108,40 @@ func TestCheck_advisoryFallthroughWhenGoMissing(t *testing.T) {
 func TestErrCoverageBelowThreshold_message(t *testing.T) {
 	if !errors.Is(ErrCoverageBelowThreshold, ErrCoverageBelowThreshold) {
 		t.Error("errors.Is failed on ErrCoverageBelowThreshold")
+	}
+}
+
+// DefaultScopes must point at packages that HAVE production statements.
+//
+// It used to point at ./infra/tests/{unit,charts}/..., which are test-only
+// packages: `go test -cover` reports "coverage: [no statements]" for them, the
+// gate averaged that to 0.00%, and then failed against its own 30% floor. The
+// verdict was red for a reason unrelated to any code under test, which is how
+// the gate ended up quarantined as "measured broken". Measured 2026-08-06.
+func TestDefaultScopesCoverProductionCode(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	for _, scope := range DefaultScopes {
+		dir := strings.TrimSuffix(strings.TrimPrefix(scope, "./"), "/...")
+		production := 0
+		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			if strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") {
+				production++
+			}
+			return nil
+		})
+		if err != nil {
+			t.Errorf("scope %q does not resolve on disk: %v", scope, err)
+			continue
+		}
+		if production == 0 {
+			t.Errorf("scope %q holds no non-test .go file — it measures the coverage OF tests, "+
+				"not of the code they exercise, and averages to 0.00%%", scope)
+		}
 	}
 }

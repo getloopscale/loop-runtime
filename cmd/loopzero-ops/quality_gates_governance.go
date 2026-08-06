@@ -327,17 +327,28 @@ func runSkipLink(args []string) int {
 	dir := fs.String("dir", ".", "target directory to scan")
 	baseline := fs.String("baseline", "infra/quality/skip-link-baseline.txt", "baseline file")
 	ignoreBaseline := fs.Bool("ignore-baseline", false, "treat all violations as new")
+	emitBaseline := fs.Bool("emit-baseline", false, "print baseline keys for every violation, one per line, and exit 0")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	o, err := skiplink.Check(skiplink.Config{
 		TargetDir:      *dir,
 		BaselineFile:   *baseline,
-		IgnoreBaseline: *ignoreBaseline,
+		IgnoreBaseline: *ignoreBaseline || *emitBaseline,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[skip-link] %v\n", err)
 		return 5
+	}
+	// A baseline nobody can regenerate is a baseline that decays. The keys are
+	// not derivable from the human-facing output (which carries absolute paths
+	// and line numbers), so emitting them is the only reproducible way to
+	// re-freeze after a deliberate sweep.
+	if *emitBaseline {
+		for _, k := range o.Keys {
+			fmt.Println(k)
+		}
+		return 0
 	}
 	if !o.Pass {
 		fmt.Fprintf(os.Stderr, "[skip-link] FAIL: %d NEW skip(s) without issue URL:\n", len(o.NewViolations))

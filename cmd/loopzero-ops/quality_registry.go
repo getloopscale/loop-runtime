@@ -134,7 +134,7 @@ var gateRegistry = []gateSpec{
 	{"security-context", "Enforces pod securityContext (non-root, limits, probes).", runSecurityContext},
 	{"service-auth-rotation", "Enforces the Ed25519 service-auth key rotation cadence.", runServiceAuthRotation},
 	{"shell-hygiene", "Lints shell scripts for strict-mode and hygiene rules.", runShellHygiene},
-	{"skip-link", "Verifies accessibility skip-link presence in the dashboard.", runSkipLink},
+	{"skip-link", "Every t.Skip/it.skip carries an issue URL (or lives in *_skip_test.go).", runSkipLink},
 	{"spotcheck-dimension", "Spot-checks a maturity-audit dimension against evidence.", runSpotcheckDimension},
 	{"sqlc-sync", "Committed sqlc generated/ is in sync with the schema codegen.", runSqlcSync},
 	{"sqlc-tx-prop", "Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.", runSqlcTxProp},

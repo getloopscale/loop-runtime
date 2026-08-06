@@ -107,10 +107,21 @@ func TestNonFromLinesIgnored(t *testing.T) {
 	}
 }
 
+// An individually absent Dockerfile is tolerated as long as something else was
+// read — the tolerance exists for optional images, not for a broken scan.
 func TestMissingDockerfileTolerated(t *testing.T) {
-	root := t.TempDir() // api/Dockerfile absent
-	if !Check(cfg(root, "api/Dockerfile", []string{})).Pass {
-		t.Error("missing Dockerfile should be tolerated")
+	root := t.TempDir()
+	write(t, root, "api/Dockerfile", "FROM golang:1.25"+digest+" AS builder\n")
+	o := Check(Config{
+		Root:               root,
+		Dockerfiles:        []string{"api/Dockerfile", "operators/Dockerfile.gone"},
+		ExceptionsBaseline: []string{},
+	})
+	if !o.Pass {
+		t.Errorf("an absent Dockerfile alongside a readable one should be tolerated, got %v", o.Violations)
+	}
+	if o.FilesRead != 1 {
+		t.Errorf("expected 1 file read, got %d", o.FilesRead)
 	}
 }
 
@@ -127,11 +138,74 @@ func TestMultipleFromMixed(t *testing.T) {
 	}
 }
 
+// Nil lists fall back to the defaults — DefaultDockerfiles picks api/Dockerfile
+// up, and the now-empty DefaultExceptionsBaseline grandfathers nothing, so a
+// tag-only FROM fails instead of being waved through. This assertion is the
+// inverse of what it used to be, and deliberately so: the baseline was emptied
+// on 2026-08-06 once every production base image was digest-pinned.
 func TestDefaultsApplied(t *testing.T) {
 	root := t.TempDir()
-	// A default-baseline entry (alpine:3.22 in api/Dockerfile) → passes via defaults.
 	write(t, root, "api/Dockerfile", "FROM alpine:3.22\n")
-	if !Check(Config{Root: root}).Pass { // nil lists → defaults (DefaultDockerfiles + baseline)
-		t.Error("default baseline should grandfather api/Dockerfile alpine:3.22")
+	o := Check(Config{Root: root}) // nil lists → DefaultDockerfiles + empty baseline
+	if o.Pass {
+		t.Error("a tag-only FROM must fail under the defaults — the baseline no longer grandfathers")
+	}
+	if len(o.Violations) != 1 || o.Violations[0] != "api/Dockerfile: FROM alpine:3.22" {
+		t.Errorf("expected the alpine:3.22 violation, got %v", o.Violations)
+	}
+}
+
+// The exception mechanism itself still works when a caller supplies one — what
+// changed is that the shipped default list is empty, not the feature.
+func TestExplicitBaselineStillGrandfathers(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "api/Dockerfile", "FROM alpine:3.22\n")
+	o := Check(cfg(root, "api/Dockerfile", []string{"api/Dockerfile:FROM alpine:3.22"}))
+	if !o.Pass {
+		t.Errorf("an explicit baseline entry must still except the line, got %v", o.Violations)
+	}
+}
+
+// TestExceptionsBaselineStaysEmpty locks the decision taken on 2026-08-06: the
+// grandfather list was emptied because every production FROM is digest-pinned.
+// A non-empty baseline means some image is un-pinned again and the exception is
+// carrying it — which is how this gate went red and got quarantined last time.
+func TestExceptionsBaselineStaysEmpty(t *testing.T) {
+	if len(DefaultExceptionsBaseline) != 0 {
+		t.Errorf("the exceptions baseline must stay empty; got %d entr(y|ies): %v\n"+
+			"    Pin the base image to its multi-arch index digest instead of grandfathering it.",
+			len(DefaultExceptionsBaseline), DefaultExceptionsBaseline)
+	}
+}
+
+// TestDefaultDockerfilesAllExist guards the #255 shape: a path that left the
+// repo is read as "missing Dockerfile tolerated" and scans to a vacuous pass,
+// so the list silently over-reports what the gate covers.
+func TestDefaultDockerfilesAllExist(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	for _, df := range DefaultDockerfiles {
+		if _, err := os.Stat(filepath.Join(root, df)); err != nil {
+			t.Errorf("DefaultDockerfiles lists %q, which does not exist: %v\n"+
+				"    Remove it — an absent path is scanned to a vacuous pass.", df, err)
+		}
+	}
+}
+
+// Negative case, and the sharpest one: scanning zero FROM directives is NOT a
+// pass. Run from the wrong working directory, every configured Dockerfile misses
+// the tolerant os.ReadFile branch and the gate reported
+// "PASS — 0 FROM directive(s)" — a green verdict asserting nothing, which is
+// precisely the failure mode issue #255 exists to remove.
+func TestZeroScannedIsNotAPass(t *testing.T) {
+	root := t.TempDir() // no Dockerfiles at all
+	o := Check(Config{Root: root})
+	if o.Pass {
+		t.Error("zero scanned FROM directives must fail closed, not pass vacuously")
+	}
+	if o.Scanned != 0 {
+		t.Errorf("expected 0 scanned, got %d", o.Scanned)
 	}
 }

@@ -7,7 +7,7 @@
 #
 # Size: ~50MB (Alpine base + mc binary + git)
 # Security: runs as non-root user 1000 (loopzero)
-FROM mirror.gcr.io/library/alpine:3.21.6
+FROM mirror.gcr.io/library/alpine:3.21.6@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-clone-runner"

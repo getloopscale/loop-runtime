@@ -9,32 +9,6 @@ import (
 	"testing"
 )
 
-// allTypes is a languages.go stub declaring every strategy type.
-const allTypes = `package argo
-type NodeStrategy struct{}
-type GoStrategy struct{}
-type PythonStrategy struct{}
-type RubyStrategy struct{}
-type JavaStrategy struct{}
-type PHPStrategy struct{}
-type RustStrategy struct{}
-type CustomStrategy struct{}
-type UserDockerfileStrategy struct{}
-`
-
-// fullFixtures lists a fixture per strategy.
-var fullFixtures = map[string]string{
-	"node-app":   "framework: node\n",
-	"go-app":     "framework: gin\n",
-	"py-app":     "framework: fastapi\n",
-	"ruby-app":   "framework: rails\n",
-	"java-app":   "framework: spring-boot\n",
-	"php-app":    "framework: laravel\n",
-	"rust-app":   "framework: axum\n",
-	"custom-app": "framework: custom\n",
-	"docker-app": "build: dockerfile\n",
-}
-
 func setup(t *testing.T, langSrc string, fixtures map[string]string) Config {
 	t.Helper()
 	root := t.TempDir()
@@ -58,43 +32,76 @@ func setup(t *testing.T, langSrc string, fixtures map[string]string) Config {
 	return Config{Root: root, LanguagesFile: langFile, FixturesDir: fixDir}
 }
 
-func TestFullCoverage_Pass(t *testing.T) {
-	cfg := setup(t, allTypes, fullFixtures)
+// registrySrc is a languages.go stub in the shape the real file has: the
+// strategy set is declared by runtimeRegistry, which languages.go itself calls
+// "the single source of truth for which runtimes resolve".
+const registrySrc = `package argo
+type NodeStrategy struct{}
+type PythonStrategy struct{}
+
+var runtimeRegistry = map[string]RuntimeDescriptor{
+	"node":   {Name: "node", Strategy: &NodeStrategy{}},
+	"python": {Name: "python", Strategy: &PythonStrategy{}},
+}
+`
+
+// The gate must read the strategy set OFF the registry rather than off a list
+// kept beside it. A duplicated list rots: when the product narrowed to the
+// fixed LoopZeroKit stack (node + python), the gate still asserted 9 languages and
+// reported 7 phantom violations against types nobody had deleted by mistake.
+func TestStrategiesDerivedFromRuntimeRegistry(t *testing.T) {
+	cfg := setup(t, registrySrc, map[string]string{
+		"node-app": "framework: node\n",
+		"py-app":   "framework: fastapi\n",
+	})
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
+	if o.StrategyCount != 2 {
+		t.Errorf("expected the 2 strategies the registry declares, got %d", o.StrategyCount)
+	}
 	if !o.Pass {
 		t.Errorf("expected Pass; typeErrors=%v missing=%v", o.TypeErrors, o.Missing)
 	}
-	if o.StrategyCount != 9 {
-		t.Errorf("expected 9 strategies, got %d", o.StrategyCount)
-	}
 }
 
-func TestMissingFixture_Fail(t *testing.T) {
-	fx := map[string]string{}
-	for k, v := range fullFixtures {
-		fx[k] = v
-	}
-	delete(fx, "rust-app") // drop rust coverage
-	cfg := setup(t, allTypes, fx)
+// Adding a runtime to the registry without a fixture must fail — that is the
+// assertion the gate exists for, and deriving the set must not weaken it.
+func TestRegistryRuntimeWithoutFixture_Fail(t *testing.T) {
+	src := registrySrc + `
+type RubyStrategy struct{}
+var _ = map[string]RuntimeDescriptor{"ruby": {Name: "ruby", Strategy: &RubyStrategy{}}}
+`
+	// Same registry block, now with ruby inside it.
+	src = replaceOnce(src,
+		`	"python": {Name: "python", Strategy: &PythonStrategy{}},`,
+		`	"python": {Name: "python", Strategy: &PythonStrategy{}},
+	"ruby":   {Name: "ruby", Strategy: &RubyStrategy{}},`)
+	cfg := setup(t, src, map[string]string{
+		"node-app": "framework: node\n",
+		"py-app":   "framework: fastapi\n",
+	})
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if o.Pass {
-		t.Error("expected Fail with rust uncovered")
+		t.Error("expected Fail — ruby is registered but has no fixture")
 	}
-	if len(o.Missing) != 1 || o.Missing[0] != "rust" {
-		t.Errorf("expected Missing=[rust], got %v", o.Missing)
+	if len(o.Missing) != 1 || o.Missing[0] != "ruby" {
+		t.Errorf("expected Missing=[ruby], got %v", o.Missing)
 	}
 }
 
-func TestMissingType_Fail(t *testing.T) {
-	langSrc := allTypes // remove RustStrategy declaration
-	langSrc = replaceOnce(langSrc, "type RustStrategy struct{}\n", "")
-	cfg := setup(t, langSrc, fullFixtures)
+// A registry entry pointing at a type nobody declared is the drift the gate
+// must still catch after the rewrite.
+func TestRegistryTypeMissing_Fail(t *testing.T) {
+	src := replaceOnce(registrySrc, "type PythonStrategy struct{}\n", "")
+	cfg := setup(t, src, map[string]string{
+		"node-app": "framework: node\n",
+		"py-app":   "framework: fastapi\n",
+	})
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -104,37 +111,24 @@ func TestMissingType_Fail(t *testing.T) {
 	}
 }
 
-func TestDockerfileBuildCoversUserDockerfile(t *testing.T) {
-	fx := map[string]string{}
-	for k, v := range fullFixtures {
-		fx[k] = v
-	}
-	// Replace the build:dockerfile fixture with a framework-only one; then
-	// user-dockerfile should be missing.
-	fx["docker-app"] = "framework: node\n"
-	cfg := setup(t, allTypes, fx)
-	o, _ := Check(cfg)
-	if o.Pass {
-		t.Error("expected Fail — user-dockerfile uncovered without build: dockerfile")
-	}
-	found := false
-	for _, m := range o.Missing {
-		if m == "user-dockerfile" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected user-dockerfile in Missing, got %v", o.Missing)
+// Negative case: a languages.go with no registry at all is a structural
+// failure, not a vacuous pass. A gate that silently asserts nothing is the
+// exact defect #255 is about.
+func TestNoRegistry_Error(t *testing.T) {
+	cfg := setup(t, "package argo\ntype NodeStrategy struct{}\n", map[string]string{
+		"node-app": "framework: node\n",
+	})
+	if _, err := Check(cfg); err == nil {
+		t.Error("expected an error when runtimeRegistry is absent, not a vacuous pass")
 	}
 }
 
+// A fixture whose framework value is quoted still maps to its language.
 func TestFrameworkQuotesStripped(t *testing.T) {
-	fx := map[string]string{}
-	for k, v := range fullFixtures {
-		fx[k] = v
-	}
-	fx["py-app"] = "framework: \"django\"\n" // quoted value
-	cfg := setup(t, allTypes, fx)
+	cfg := setup(t, registrySrc, map[string]string{
+		"node-app": "framework: node\n",
+		"py-app":   "framework: \"django\"\n",
+	})
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -145,7 +139,7 @@ func TestFrameworkQuotesStripped(t *testing.T) {
 }
 
 func TestMissingLanguagesFile_Error(t *testing.T) {
-	cfg := setup(t, allTypes, fullFixtures)
+	cfg := setup(t, registrySrc, map[string]string{"node-app": "framework: node\n"})
 	cfg.LanguagesFile = filepath.Join(cfg.Root, "nonexistent.go")
 	if _, err := Check(cfg); err == nil {
 		t.Error("expected error for missing languages.go")
@@ -153,7 +147,7 @@ func TestMissingLanguagesFile_Error(t *testing.T) {
 }
 
 func TestMissingFixturesDir_Error(t *testing.T) {
-	cfg := setup(t, allTypes, fullFixtures)
+	cfg := setup(t, registrySrc, map[string]string{"node-app": "framework: node\n"})
 	cfg.FixturesDir = filepath.Join(cfg.Root, "nope")
 	if _, err := Check(cfg); err == nil {
 		t.Error("expected error for missing fixtures dir")
@@ -161,8 +155,11 @@ func TestMissingFixturesDir_Error(t *testing.T) {
 }
 
 func TestFixtureWithoutLoopZeroYAMLIgnored(t *testing.T) {
-	cfg := setup(t, allTypes, fullFixtures)
-	// Add an empty dir with no loopzero.yaml — must not crash or affect result.
+	cfg := setup(t, registrySrc, map[string]string{
+		"node-app": "framework: node\n",
+		"py-app":   "framework: fastapi\n",
+	})
+	// A dir with no loopzero.yaml must neither crash nor affect the result.
 	if err := os.MkdirAll(filepath.Join(cfg.FixturesDir, "empty"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

@@ -48,6 +48,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Cinco gates saem do ledger de não-wired (#255) e passam a rodar de verdade em `quality:gates` —
+  cada um por ter o defeito corrigido, não por relaxamento:
+  `crd-semantic-diff` já passava e estava rotulado como falhando;
+  `stack-coverage` mantinha uma lista de 9 linguagens ao lado do `runtimeRegistry` e acusava 7
+  violações fantasma desde que o produto foi reduzido ao stack fixo (node + python) — agora deriva
+  as strategies do próprio registry, que se declara "single source of truth";
+  `base-image-digest` reprovava porque o grandfathering apontava para `golang:1.26.0` e o bump para
+  1.26.1 nunca foi acompanhado do pin — os 16 FROM foram pinados no digest do índice multi-arch e o
+  baseline de exceções ficou vazio;
+  `test-coverage-report` reportava 0.00% porque media `infra/tests/{unit,charts}`, pacotes só-de-teste
+  (`coverage: [no statements]`) — contra o código de produção mede 85.33%, e o piso subiu de 30% para 75%;
+  `skip-link` tinha baseline posicional (`file:LINE`), que qualquer edição acima de um skip invalidava:
+  145 entradas casavam quase nada e o gate reportava 189 falsos "NEW". A chave passou a ser arquivo +
+  texto do próprio skip (#267)
+- `base-image-digest` passava vacuamente quando rodado de outro diretório: todo Dockerfile caía no
+  ramo "missing tolerated" e o veredito era `PASS — 0 FROM directive(s)`. Passa a reprovar quando
+  nenhum arquivo é lido, e a lista deixou de citar três Dockerfiles que saíram do repo (#267)
+- Descrição do gate `skip-link` no registry dizia "accessibility skip-link presence in the dashboard";
+  ele valida `t.Skip`/`it.skip` sem issue URL. O ledger repetia o erro ("115 a11y violations") (#267)
+
 - Suíte `operators` deixa de ser flaky. Os specs de envtest liam um CR e o atualizavam sem retry,
   correndo contra o reconcile do controller e perdendo no `resourceVersion` — 3 de 4 execuções
   consecutivas de `internal/tenant` falhavam, cada uma num spec DIFERENTE, com

@@ -19,45 +19,38 @@ import (
 )
 
 // DefaultDockerfiles are the production Dockerfiles linted (test fixtures excluded).
+//
+// cloud/Dockerfile and cli/Dockerfile left with the M4/M2 extractions to
+// loopzero-cloud and loopzero-cli; infra/images/packs-runner/Dockerfile was deleted as
+// a dead image ref (896505fc). They are dropped rather than kept as absent
+// paths: a path that no longer exists is scanned to a vacuous pass, which reads
+// as coverage while asserting nothing (issue #255).
 var DefaultDockerfiles = []string{
 	"api/Dockerfile",
-	"cloud/Dockerfile",
 	"operators/Dockerfile.app-operator",
 	"operators/Dockerfile.tenant-operator",
 	"operators/Dockerfile.preview-operator",
 	"operators/Dockerfile.platform-operator",
 	"tools/loopzero-dockerfile-lint/Dockerfile",
-	"infra/images/packs-runner/Dockerfile",
 	"infra/images/clone-runner/Dockerfile",
 	"infra/images/syft-scanner/Dockerfile",
 	"infra/images/cosign-signer/Dockerfile",
-	"cli/Dockerfile",
 }
 
-// DefaultExceptionsBaseline grandfathers pre-T4.6 tag-only FROM lines (Renovate
-// digest-pins them on first bump). Format: "<dockerfile>:<cleaned FROM line>".
-var DefaultExceptionsBaseline = []string{
-	"api/Dockerfile:FROM golang:1.26.0-alpine3.22 AS builder",
-	"api/Dockerfile:FROM golang:1.26.0-alpine3.22 AS migrate-builder",
-	"api/Dockerfile:FROM alpine:3.22",
-	"cloud/Dockerfile:FROM golang:1.26.0-alpine3.22 AS builder",
-	"cloud/Dockerfile:FROM alpine:3.22",
-	"operators/Dockerfile.app-operator:FROM golang:1.26.0-alpine3.22 AS builder",
-	"operators/Dockerfile.app-operator:FROM gcr.io/distroless/static-debian12:nonroot",
-	"operators/Dockerfile.tenant-operator:FROM golang:1.26.0-alpine3.22 AS builder",
-	"operators/Dockerfile.tenant-operator:FROM gcr.io/distroless/static-debian12:nonroot",
-	"operators/Dockerfile.preview-operator:FROM golang:1.26.0-alpine3.22 AS builder",
-	"operators/Dockerfile.preview-operator:FROM gcr.io/distroless/static-debian12:nonroot",
-	"operators/Dockerfile.platform-operator:FROM golang:1.26.0-alpine3.22 AS builder",
-	"operators/Dockerfile.platform-operator:FROM gcr.io/distroless/static-debian12:nonroot",
-	"tools/loopzero-dockerfile-lint/Dockerfile:FROM golang:1.26.0-alpine3.22 AS build",
-	"tools/loopzero-dockerfile-lint/Dockerfile:FROM alpine:3.22",
-	"infra/images/packs-runner/Dockerfile:FROM mirror.gcr.io/library/golang:1.26.0-alpine3.22 AS build",
-	"infra/images/packs-runner/Dockerfile:FROM mirror.gcr.io/library/alpine:3.21.6",
-	"infra/images/syft-scanner/Dockerfile:FROM mirror.gcr.io/library/alpine:3.21.3",
-	"infra/images/cosign-signer/Dockerfile:FROM mirror.gcr.io/library/alpine:3.21.3",
-	"infra/images/clone-runner/Dockerfile:FROM mirror.gcr.io/library/alpine:3.21.6",
-}
+// DefaultExceptionsBaseline is EMPTY, and that is the point.
+//
+// It used to grandfather every pre-T4.6 tag-only FROM, on the premise that
+// "Renovate digest-pins them on first bump". The bump came (golang 1.26.0 ->
+// 1.26.1) and the pin did not: the baseline entries stopped matching, the gate
+// went red, and it was quarantined as a failing gate instead of being fixed.
+//
+// Every production FROM is now pinned to its multi-arch INDEX digest (not a
+// per-platform manifest digest, which would break arm64 builds), verified with
+// `docker buildx imagetools inspect` and by a real build on 2026-08-06. With
+// the list empty, un-pinning any base image fails the gate immediately rather
+// than falling through to a grandfather clause. Re-adding an entry needs a
+// reason in review — see TestExceptionsBaselineStaysEmpty.
+var DefaultExceptionsBaseline = []string{}
 
 const pragmaLookback = 2 // lines before a FROM scanned for the pragma
 
@@ -80,6 +73,7 @@ type Config struct {
 type Outcome struct {
 	Pass       bool
 	Scanned    int      // total FROM directives scanned
+	FilesRead  int      // configured Dockerfiles actually opened
 	Violations []string // "<dockerfile>: <cleaned FROM line>"
 }
 
@@ -106,8 +100,9 @@ func Check(cfg Config) *Outcome {
 	for _, df := range dockerfiles {
 		data, err := os.ReadFile(filepath.Join(root, df))
 		if err != nil {
-			continue // missing Dockerfile tolerated (bash: [ -e ] || continue)
+			continue // an individually missing Dockerfile is tolerated; all of them are not — see below
 		}
+		out.FilesRead++
 		lines := strings.Split(string(data), "\n")
 		for i, raw := range lines {
 			if !strings.HasPrefix(raw, "FROM ") {
@@ -130,6 +125,14 @@ func Check(cfg Config) *Outcome {
 			}
 			out.Violations = append(out.Violations, df+": "+clean)
 		}
+	}
+	// Fail closed when nothing was read. Tolerating one absent Dockerfile is
+	// reasonable; tolerating ALL of them turns a wrong working directory into
+	// "PASS — 0 FROM directive(s)", a green verdict that asserted nothing. That
+	// is the shape issue #255 exists to remove, so it is a failure, not a pass.
+	if out.FilesRead == 0 {
+		out.Violations = append(out.Violations,
+			"none of the configured Dockerfiles could be read — wrong working directory, or DefaultDockerfiles is stale")
 	}
 	if len(out.Violations) > 0 {
 		out.Pass = false

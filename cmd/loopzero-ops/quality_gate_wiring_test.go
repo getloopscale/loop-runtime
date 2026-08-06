@@ -100,21 +100,10 @@ var gateWiringExemptions = map[string]wiringReason{
 	"drill-outputs-consumers": operatorRun,
 	"runtime-slo":             operatorRun,
 
-	// --- measured broken -------------------------------------------------
-	// Reports coverage=0.00% against infra/tests/{unit,charts}, which have
-	// passing tests (`go test ./charts/` is green). Measured 2026-07-30:
-	//   $ loopzero-ops quality test-coverage-report
-	//   test-coverage-report: FAIL — coverage=0.00% (threshold=30.00%)
-	// Almost certainly measuring the test packages themselves (no non-test
-	// statements to cover) rather than the code they exercise.
-	"test-coverage-report": brokenGate,
-
 	// --- work, but FAIL on a real finding today ---------------------------
 	// Each was executed 2026-07-30 and exited 1 with a substantive message.
 	// The gate is right; the tree is not. Fix the finding, then wire.
 	"alert-runbooks":          failingGate, // a Prometheus alert has no runbook annotation
-	"base-image-digest":       failingGate, // a base image drifted off its pinned digest
-	"crd-semantic-diff":       failingGate, // chart CRD out of sync with kubebuilder output
 	"migration-test-coverage": failingGate, // a migration has no matching test
 	// Virou ENFORCED em 2026-08-01 (prazo T+60d) com o branch AES legado ainda no
 	// dispatcher — 4 achados em api/internal/db/store/secret_wrapper.go:{148,152,188,192}.
@@ -124,8 +113,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	// evidencia de migracao que este repo nao carrega.
 	"no-aes-remaining":         failingGate,
 	"no-pulumi-inline-secrets": failingGate, // inline secret literal in Pulumi code
-	"skip-link":                failingGate, // 115 grandfathered a11y violations in the baseline
-	"stack-coverage":           failingGate, // a declared strategy has no fixtures
 	"template-compliance":      failingGate, // empty PR body vs the canonical template
 
 	// --- exceed the per-push time budget ----------------------------------

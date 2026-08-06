@@ -39,6 +39,10 @@ type Outcome struct {
 	Pass          bool
 	NewViolations []string
 	BaselineCount int
+	// Keys are the baseline keys of the reported violations, in the same order
+	// as NewViolations. Regenerating the baseline is `Keys`, one per line — the
+	// display strings carry absolute paths and cannot be fed back in.
+	Keys []string
 }
 
 var excludedDirs = map[string]bool{
@@ -57,7 +61,15 @@ var (
 )
 
 type violation struct {
-	key     string // relpath:line (baseline key)
+	// key identifies the skip by FILE + its own text, not by line number.
+	//
+	// It used to be relpath:LINE, which made the baseline positional: adding a
+	// line anywhere above a grandfathered skip re-reported it as new. Measured
+	// 2026-08-06 — the 145-entry baseline matched almost nothing and the gate
+	// reported 189 "NEW" skips, most of them conditional environment skips it
+	// had already accepted. A key that a refactor invalidates is a baseline
+	// that decays into noise, and a noisy gate stops being read.
+	key     string
 	display string
 }
 
@@ -125,6 +137,7 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 		outcome.Pass = false
 		outcome.NewViolations = append(outcome.NewViolations, v.display)
+		outcome.Keys = append(outcome.Keys, v.key)
 	}
 	return outcome, nil
 }
@@ -167,11 +180,19 @@ func scanFile(path, targetDir string, skipRe, urlRe *regexp.Regexp) []violation 
 		}
 		lineNum := i + 1
 		out = append(out, violation{
-			key:     fmt.Sprintf("%s:%d", rel, lineNum),
+			key:     baselineKey(rel, line),
 			display: fmt.Sprintf("%s:%d: %s", path, lineNum, strings.TrimSpace(line)),
 		})
 	}
 	return out
+}
+
+// baselineKey identifies a skip by file plus the normalized text of the skip
+// line, so the entry survives the line moving. Whitespace is collapsed because
+// gofmt re-indents; the skip's own reason string still distinguishes it from a
+// different skip in the same file.
+func baselineKey(rel, line string) string {
+	return rel + "\t" + strings.Join(strings.Fields(line), " ")
 }
 
 // parseBaseline returns the set of baseline keys, stripping comments + blanks.

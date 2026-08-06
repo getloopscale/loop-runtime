@@ -32,13 +32,28 @@
 #   (prazo T+60d) com o branch AES legado ainda no dispatcher, entao passou a barrar todo push
 #   em vez de sinalizar. Segue registrado e invocavel a mao; declarado failingGate no ledger de
 #   wiring. A divida T10.3 (deletar o branch AES) segue aberta. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (b): base-image-digest, crd-semantic-diff e stack-coverage '-' -> 'gates'.
+#   Os tres saem do ledger de nao-wired (#255) porque passaram a medir de verdade:
+#   crd-semantic-diff ja passava e estava rotulado errado; stack-coverage passou a derivar as
+#   strategies do runtimeRegistry (a lista paralela apodreceu quando o produto reduziu para
+#   node+python e acusava 7 violacoes fantasma); base-image-digest passou depois de pinar os 16
+#   FROM no digest do index multi-arch, com o baseline de excecoes esvaziado. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (c): test-coverage-report '-' -> 'gates'. Sai do ledger de "measured
+#   broken": a media 0.00% vinha de medir ./infra/tests/{unit,charts}, pacotes so-de-teste
+#   ("coverage: [no statements]"). Contra o codigo de producao (pkg + gates) mede 85.33% em 9s;
+#   floor subido de 30% para 75%. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (d): skip-link '-' -> 'gates', e a descricao corrigida. O gate valida
+#   skips de TESTE (t.Skip/it.skip sem issue URL), nao skip-link de acessibilidade — a descricao
+#   antiga descrevia outra coisa e o ledger repetiu o erro ("115 a11y violations"). O baseline
+#   era posicional (file:LINE) e decaia a cada refactor; a chave passou a ser arquivo + texto do
+#   skip, e foi re-congelado com 205 entradas. Contagem segue 111.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
 anonymous-auth	gates	Forbids anonymous/unauthenticated access on protected API surfaces.
 archive-script-repo-root	gates	T1.2 hermetic guard of plan m1-commit-canonical-30-fixes: no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT with 3-dirs-up ($(dirname "$0")/../../..) — canonical post-quarantine 289cf9d6 is 4-dirs-up. Pure filepath.Walk + regex; missing scan dir treated as no-content. M-Migrate2 2026-07-10 M16 T2.2 Wave 1 replaces infra/tests/check-archive-script-repo-root_test.sh.
-base-image-digest	-	Base images are pinned by digest, not floating tags.
+base-image-digest	gates	Base images are pinned by digest, not floating tags.
 baseline-compare	-	Compares a captured steady-state baseline against the current state.
 baseline-update	-	Updates the committed steady-state baseline artifact.
 caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
@@ -57,7 +72,7 @@ correlation-header	gates	Correlation-ID header is forwarded across the request p
 cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
 coverage-diff	-	Diffs test coverage against a baseline to catch regressions.
 coverage-merge	-	Merges per-package coverage profiles into one report.
-crd-semantic-diff	-	Semantic diff of CRD schemas to catch breaking spec changes.
+crd-semantic-diff	gates	Semantic diff of CRD schemas to catch breaking spec changes.
 credentials-sot	gates	T1.1 SoT drift audit — every Secret created by canonical generator scripts (generate-secrets.sh, generate-build-secrets.sh, generate-runtime-secrets.sh, provision-api-tokens.sh) MUST be enumerated in docs/operations/credentials-required.md. Also asserts 4 mandatory drill env vars + Chart-hardcoded credentials section + Rotation playbook section. M-Migrate2 2026-07-07 replaces infra/tests/docs/credentials-sot_test.sh.
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
@@ -117,17 +132,17 @@ services-acyclic	gates	M9 Step 6: services bounded-context imports form the froz
 shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
 shellcheck-advisory	gates	Advisory shell-lint gate — runs shellcheck across infra/scripts/local + infra/tests/check-*-syntax_test + infra/tests/e2e/live/dev-public-*. Tolerates SC1091/SC2155/SC2086/SC2046. Advisory-only fallthrough when shellcheck not installed (WARN + exit 0). M-Migrate2 2026-07-07 replaces infra/scripts/local/shellcheck-advisory.sh.
 skill-paths	gates	T0.1 EC D5: every infra/scripts/ path AND every `task X` invocation cited in any .claude/skills/*/SKILL.md MUST resolve on disk. Ports the bash awk task-name extractor + flattened/namespaced include set walk into Go. Skips task-automation skill (generic third-party). Enforces dogfood no-GH_TOKEN/.env + to-plan no-`task teardown` anti-patterns. M-Migrate2 2026-07-07 replaces infra/tests/skills/skill-paths_test.sh.
-skip-link	-	Verifies accessibility skip-link presence in the dashboard.
+skip-link	gates	Every t.Skip/it.skip carries an issue URL (or lives in *_skip_test.go).
 spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.
 sprint-syntax	gates	Hermetic contract test for infra/scripts/local/check-sprint.sh + its homed helper check_sprint.py: script exists + bash -n clean + helper compiles (python3 -m py_compile) + no python3 heredoc (T3.2 de-costume gate) + JSON report shape (pass count + spaced-detail preservation + [id,status,detail] tuple layout) + allowlist entry present. Requires bash + python3 on PATH. M-Migrate2 2026-07-10 M16 T2.1 Wave 1 replaces infra/tests/check-sprint-syntax_test.sh.
 sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
-stack-coverage	-	Verifies the tool-inventory stack-coverage claims via grep.
+stack-coverage	gates	Verifies the tool-inventory stack-coverage claims via grep.
 taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-csp-passthrough	gates	Static-CSP Traefik middleware must not be attached to tenant routes (#59).
 tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security veto-backed).
-test-coverage-report	-	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
+test-coverage-report	gates	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
 test-deletion	gates	Guards deletion of test files against coverage loss.
 test-pyramid	gates	Validates the unit/integration/e2e test-pyramid balance.
 test-targets	gates	Verifies Taskfile test targets exist and are wired.
