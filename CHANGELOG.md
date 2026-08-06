@@ -86,6 +86,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- `golang.org/x/text` sobe de 0.37.0 para 0.39.0 nos 7 módulos que a declaravam (`api`, `pkg`,
+  `operators`, `operators/api`, `cmd/loopzero-ops`, `infra/scripts`, `infra/tests`): a versão anterior
+  permite negação de serviço via UTF-8 inválido (CVE-2026-56852, HIGH). Não desbloqueia
+  `task quality:gates` sozinha — restam 22 CVEs pré-existentes em dependências, inventariadas em
+  (#267)
+
 - `build-publish.yml`: os dois passos do cosign deixam de interpolar `${{ inputs.* }}` dentro de
   `run:` — os valores passam pelo `env:` do step, então nenhum conteúdo vindo do caller vira sintaxe
   de shell com acesso aos segredos do job. Como este reusable é chamado por cinco repos, a correção
