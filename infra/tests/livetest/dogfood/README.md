@@ -1,7 +1,7 @@
 # Dogfood 2026-04-29 Repro Suite
 
 Scripts e testes que reproduzem os 13 achados do dogfood
-[`docs/plans/dogfood-2026-04-29-remediation-plan.md`](../../../docs/plans/dogfood-2026-04-29-remediation-plan.md)
+``docs/plans/dogfood-2026-04-29-remediation-plan.md`` *(removido do versionamento)*
 contra k3d standalone-multi.
 
 ## Uso

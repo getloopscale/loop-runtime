@@ -16,8 +16,9 @@ not as current instruction.
 | **Audit trail** | `plans/completed/`, `operations/baselines/`, `meetings/records/`, `operations/findings/`, `operations/evidence/`, `reviews/`, `handoff/` | History. Preserved indefinitely per `.claude/rules/audit-trail-rotation.md`. Never edited to match present state. |
 | **In-flight plans** | `plans/` (not `completed/`) | Work agreed but not finished. |
 
-Engineering contracts that govern *how* work is done live in `.claude/rules/`, not here — see the
-"Locked rules" table in [`../CLAUDE.md`](../CLAUDE.md).
+Engineering contracts that govern *how* work is done are no longer versioned in this repo — the
+`.claude/` tree (rules, skills, agents) and the root `CLAUDE.md` were removed in the docs cleanup
+(`1c941b91`). The operator's global contract (`~/.claude/CLAUDE.md`) is the surviving source.
 
 ---
 

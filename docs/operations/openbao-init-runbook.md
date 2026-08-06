@@ -16,7 +16,7 @@ title: "Runbook: OpenBao Init Ceremony"
 >
 > **When this runbook is triggered:** este runbook é o conteúdo executável
 > do **Sub-step 2.5** do mandate canonical
-> [`/.claude/rules/cleanroom-up-live-test-mandate.md § Sub-step 2.5`](../../.claude/rules/cleanroom-up-live-test-mandate.md).
+> ``/.claude/rules/cleanroom-up-live-test-mandate.md § Sub-step 2.5`` *(removido do versionamento)*.
 > Disparado SEMPRE que `LOOPZERO_HELMFILE_ENV=dev-public` durante a chain
 > Cleanroom canonical. Standalone-multi usa o shortcut
 > `task k3d:vault:bootstrap-in-mgmt` (sem Shamir, sem sponsor JUNTOS) —

@@ -11,7 +11,7 @@ updated_by: T0.2 plan pre-implementation snapshot
 
 # Argo Workflows AS-IS — Build Pipeline Only
 
-> **Pre-T0.2 Cenário B baseline.** Captures the current Argo Workflows footprint before adding CI/PR-time `task quality:gates` enforcement per [ADR-2026-05-27-T0.2-RATIFIED](.claude/knowledge-base/decisions/2026-05-27-T0.2-cenario-b-ratified.md).
+> **Pre-T0.2 Cenário B baseline.** Captures the current Argo Workflows footprint before adding CI/PR-time `task quality:gates` enforcement per [ADR-2026-05-27-T0.2-RATIFIED](../../wiki/decisions/2026-05-27-T0.2-cenario-b-ratified.md).
 
 ## System context (AS-IS)
 

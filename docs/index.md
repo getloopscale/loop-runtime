@@ -15,8 +15,8 @@ A árvore tem três origens, e a distinção importa para saber como ler cada do
 | [`wiki/`](wiki/index.md) | o wiki cumulativo do projeto — decisões, concepts, auditorias, planos, atas | conhecimento compilado e mantido |
 | [`knowledge-base/`](knowledge-base/index.md) | artefatos de ciclo: auditorias, releases, roadmap-runs, grills | trilha de auditoria datada, história |
 
-Termos e tecnologias que os documentos citam sem explicar têm casa própria em
-[`glossary/`](glossary/index.md) e [`technologies/`](technologies/index.md).
+Termos e tecnologias que os documentos citam sem explicar ainda não têm casa própria
+(`glossary/` e `technologies/` estão previstos, não escritos).
 
 ## Seções
 
@@ -25,7 +25,6 @@ Termos e tecnologias que os documentos citam sem explicar têm casa própria em
 * [decisions](decisions/index.md) — 15 documento(s).
 * [design](design/index.md) — 2 documento(s).
 * [dogfooding](dogfooding/index.md) — 1 documento(s).
-* [glossary](glossary/index.md) — termos que os documentos usam sem definir.
 * [handoff](handoff/index.md) — 8 documento(s).
 * [knowledge-base](knowledge-base/index.md) — 110 documento(s), trilha de auditoria do ciclo.
 * [meetings](meetings/index.md) — 15 documento(s).
@@ -36,7 +35,6 @@ Termos e tecnologias que os documentos citam sem explicar têm casa própria em
 * [scripts-audit](scripts-audit/index.md) — 4 documento(s).
 * [strategy](strategy/index.md) — 1 documento(s).
 * [technical](technical/index.md) — 1 documento(s).
-* [technologies](technologies/index.md) — as tecnologias que a plataforma usa.
 * [wiki](wiki/index.md) — 844 documento(s), o wiki cumulativo do projeto.
 
 ## Documentos
