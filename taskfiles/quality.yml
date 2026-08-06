@@ -65,7 +65,8 @@ tasks:
     desc: Full-repo-scan quality gates (no git diff required)
     deps: [build]
     cmds:
-      - /tmp/loopzero-ops quality unhomed-logic --check
+      # unhomed-logic removido: lia `.claude/rules/shell-scripts-allowlist.md`, que saiu do repo
+      # junto com todo o `.claude/` — o gate abortava o pre-push em vez de medir algo.
       - /tmp/loopzero-ops quality script-count
       - /tmp/loopzero-ops quality regression-matrix
       - /tmp/loopzero-ops quality postgresql-pdb-config
@@ -79,7 +80,11 @@ tasks:
       # until T9 Vault provider migration runs. Gate is wired in loopzero-ops and can be
       # invoked manually: `/tmp/loopzero-ops quality no-pulumi-inline-secrets`.
       # Pre-migration FAIL is INTENTIONAL forcing-function (operator visibility).
-      - /tmp/loopzero-ops quality no-aes-remaining             # openbao-adoption T10.2 — calendar-gated; WARN until T+60d then FAIL on remaining AES code paths
+      # no-aes-remaining desligado do gate agregado: o prazo T+60d venceu em 2026-08-01 e o
+      # branch AES legado do dispatcher (api/internal/db/store/secret_wrapper.go) ainda esta la,
+      # entao o gate passou a travar todo push em vez de sinalizar. Continua registrado no
+      # loopzero-ops e invocavel a mao: `/tmp/loopzero-ops quality no-aes-remaining`.
+      # A divida T10.3 (deletar o branch AES) segue aberta.
       # Higiene dos workflows (#233 action sem SHA / #250 `${{ }}` dentro de `run:`). Nao e um gate
       # do loopzero-ops de proposito: o alvo e YAML do `.github/`, nao codigo Go, e o registry do
       # loopzero-ops tem uma contagem travada em `gate-list`.
@@ -185,7 +190,8 @@ tasks:
       - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide.
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - /tmp/loopzero-ops quality check-allowlist-sunsets                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-allowlist-sunsets_test.sh with pure-logic Go gate. T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt).
-      - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
+      # O script Python de sunsets saiu do repo com o `.claude/`; a checagem equivalente
+      # continua acima, no gate Go `check-allowlist-sunsets`, que le o mesmo allowlist.
       # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
       # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
