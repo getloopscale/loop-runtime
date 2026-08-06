@@ -1,0 +1,24 @@
+=== check-loki-retention-schema_test.sh baseline (2026-07-10 pre-migration) ===
+Repo HEAD: 9dc131fb24f73e40a1c9a668e5bdcf5152044a30
+
+--- stdout+stderr ---
+[34m== Loki values.yaml is structurally valid YAML ==[0m
+[32m  PASS: YAML parses cleanly[0m
+[34m== retention_stream array under limits_config ==[0m
+count: 1
+  selector: {namespace="vault-system"}
+  period: 2160h
+  priority: 1
+[32m  PASS: Exactly 1 retention_stream entry (vault-system)[0m
+[32m  PASS: Selector matches vault-system NS[0m
+[32m  PASS: period: 2160h (90 days)[0m
+[34m== Default retention_period: 168h preserved (non-vault NS = 7d) ==[0m
+[32m  PASS: Default retention_period: 168h (7 days for non-vault NS)[0m
+[34m== SingleBinary deploymentMode preserved (cleanroom default) ==[0m
+[32m  PASS: deploymentMode: SingleBinary (cleanroom-compatible)[0m
+[34m== retention_stream priority + selector format are Loki canonical ==[0m
+[32m  PASS: retention_stream[0].priority is int (Loki schema valid)[0m
+
+[34m================================================================[0m
+[32mALL PASS (7/7)[0m
+--- exit code: 0 ---
