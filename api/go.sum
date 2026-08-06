@@ -181,8 +181,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/stripe/stripe-go/v82 v82.5.1 h1:05q6ZDKoe8PLMpQV072obF74HCgP4XJeJYoNuRSX2+8=
 github.com/stripe/stripe-go/v82 v82.5.1/go.mod h1:majCQX6AfObAvJiHraPi/5udwHi4ojRvJnnxckvHrX8=
-github.com/getloopscale/loopzero-contracts v0.3.0 h1:PGzxpdAKjRSUrc+oy9rnffc7zcH8x7okY0+XDgHE0jw=
-github.com/getloopscale/loopzero-contracts v0.3.0/go.mod h1:M/szA4+93u1H1rHwZ7V1cDnmORSTv8dpsdtWcYO1Qek=
+github.com/getloopscale/loopzero-contracts v0.4.0 h1:8P0WFwtahCiIag+cnBtZBgBHQUZxjc5trERwZ4go0u8=
+github.com/getloopscale/loopzero-contracts v0.4.0/go.mod h1:2Swv5wfI1LKGDQO/X2RkWzNVkaRwDGgHqZU4e0AOYpg=
 github.com/getloopscale/loopzero-forge v0.6.0 h1:ZguDtTYBKiUR4VnU+1sA/7aT2KBysuRjTVOjpb0r4nk=
 github.com/getloopscale/loopzero-forge v0.6.0/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
