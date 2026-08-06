@@ -1,17 +1,23 @@
+---
+type: plan
+title: Dashboard FAANG Refactor Plan
+status: deprecated
+---
+
 # Dashboard FAANG Refactor Plan
 
 > **Version 1.2** — Refactor incremental do `cloud/dashboard/` em **6 phases (Phase 0 backend pre-flight + Phase 1-3 tier 3 differentiation + Phase 4 tier 4 personalization + Phase 5 FAANG-grade infra: Web Vitals + a11y CI + Storybook + bundle analyzer)** para atingir UX-tier "FAANG" alinhado a concorrentes top (Vercel/Linear/Stripe) com signature distintivo (LoopZero's own voice: CLI-first amplification + Vercel density + Linear keyboard). Cobre 25 findings documentados (2 P1 + 5 P2 + 4 P3 density + 8 V-gaps Vercel + 6 slop fails) + 23 edge cases incorporados + **15 FAANG best practices gaps (5 CRITICAL + 4 HIGH + 4 MEDIUM + 2 LOW)** identificados na revisão v1.2 (reverte ADR D3 skip-Tier-4, adiciona ADRs D7-D9 para Web Vitals / Observability / i18n primitives). Pre-release context. **STATUS: PROPOSED v1.2 — T3 governance gate pending sponsor approval + ADR D1-D9 ratification.**
 
 ## Source-of-truth references (consult ANTES de assumir API)
 
-- `docs/reviews/density-audit-2026-05-25/REPORT.md` — density audit DSS-based (2 P1 + 5 P2 + 4 P3 violations medidas em 13/13 rotas)
-- `docs/reviews/density-audit-2026-05-25/vercel-benchmark.md` — comparação 1:1 com Vercel real (8 V-gaps + validação de P1s)
-- `docs/design/2026-05-25-loopzero-dashboard-design-system.md` — DSS v1.0 (Violet Forge anchor, § 6.1 density targets, CC-3 empty state limit)
+- [`docs/reviews/density-audit-2026-05-25/REPORT.md`](../../reviews/density-audit-2026-05-25/REPORT.md) — density audit DSS-based (2 P1 + 5 P2 + 4 P3 violations medidas em 13/13 rotas)
+- [`docs/reviews/density-audit-2026-05-25/vercel-benchmark.md`](../../reviews/density-audit-2026-05-25/vercel-benchmark.md) — comparação 1:1 com Vercel real (8 V-gaps + validação de P1s)
+- [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../../design/2026-05-25-loopzero-dashboard-design-system.md) — DSS v1.0 (Violet Forge anchor, § 6.1 density targets, CC-3 empty state limit)
 - `cloud/dashboard/.llms.txt` — @loopzero/ui canonical component spec (v0.11.0-next.0 → upgrade-target 0.12.0-next.0)
 - `CLAUDE.md` Voice/Tone section + Cross-Project Rule 9 — CLI-first product abstraction
 - `.claude/rules/pre-release-governance.md` — T3 classification + Plan Amendment Policy
-- `docs/handoff/2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md` + `brief-6.md` — Brief #5 primitives consumption status
-- `docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md` — /edge-case-plan review (23 ECs) cujos findings foram incorporados nesta v1.1
+- [`docs/handoff/2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md`](../../handoff/2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md) + `brief-6.md` — Brief #5 primitives consumption status
+- [`docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md`](./2026-05-26-dashboard-faang-tier-3-edge-cases.md) — /edge-case-plan review (23 ECs) cujos findings foram incorporados nesta v1.1
 
 ## Changelog
 
@@ -26,7 +32,7 @@
 **Dashboard funcional, design-system shipped:**
 - 13 routes ativas (overview, projects, environments, domains, billing, team, settings, profile, login, register, recovery, verification, device-success)
 - @loopzero/ui@0.11.0-next.0 pinned (npm `next` agora em 0.12.0-next.0 — additive doc-only, bump independente)
-- DSS v1.0 anchored to Violet Forge (`docs/design/2026-05-25-loopzero-dashboard-design-system.md`)
+- DSS v1.0 anchored to Violet Forge ([`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../../design/2026-05-25-loopzero-dashboard-design-system.md))
 - T-MIG-1..4 shipped (PinInput verification, DataTable expandable/sortable, PageShell × 5 content pages)
 - 117/117 vitest tests GREEN
 - TOTAL bundle 145.63 KB / 180 KB hard gate (34.37 KB headroom)
@@ -239,7 +245,7 @@
 
 **Objetivo:** Verificar que 4 endpoints/features backend necessários para Phase 1+3 tasks EXISTEM antes de codar consumer. Decidir per-task: backend ready → executa, backend gap → negocia PR OR re-escopa para placeholder. 3-5 dias.
 
-**Methodology:** cada task = (1) `grep -rn` em `api/internal/routes` + `api/internal/services` por endpoint pattern, (2) `curl` smoke test contra `/api/v1/...` em k3d local, (3) registrar resultado em `docs/reviews/backend-preflight-2026-05-26.md` com verdict per task: READY / NEGOTIATE / RESCOPE.
+**Methodology:** cada task = (1) `grep -rn` em `api/internal/routes` + `api/internal/services` por endpoint pattern, (2) `curl` smoke test contra `/api/v1/...` em k3d local, (3) registrar resultado em [`docs/reviews/backend-preflight-2026-05-26.md`](../../reviews/backend-preflight-2026-05-26.md) com verdict per task: READY / NEGOTIATE / RESCOPE.
 
 ### T-DR-0.1 — Verify `/v1/billing` response shape inclui `payment_method.last4`
 
@@ -326,7 +332,7 @@ grep -rn "status.*sse\|application.status.*stream" api/internal/sse api/internal
 ### T-DR-0.6 — Phase 0 closure report
 
 **Files:**
-- `docs/reviews/backend-preflight-2026-05-26.md` (NEW) — consolidates 5 verdicts + decisions
+- [`docs/reviews/backend-preflight-2026-05-26.md`](../../reviews/backend-preflight-2026-05-26.md) (NEW) — consolidates 5 verdicts + decisions
 - Update plan v1.1 (this file) "Coverage Matrix" reflecting Phase 0 outcomes
 
 **DoD Phase 0:**
@@ -536,7 +542,7 @@ grep -rn "status.*sse\|application.status.*stream" api/internal/sse api/internal
 
 **Files to edit:**
 - `cloud/dashboard/src/styles/motion.css` (NEW) — motion tokens (timing + easing)
-- `docs/design/2026-05-25-loopzero-dashboard-design-system.md` — bump to v1.1, add § 10 Motion
+- [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../../design/2026-05-25-loopzero-dashboard-design-system.md) — bump to v1.1, add § 10 Motion
 - `cloud/dashboard/tailwind.config.ts` — extend with motion utilities
 
 **Motion tokens DSS v1.1:**
@@ -903,7 +909,7 @@ NUNCA copy raw state. Build command string strict from whitelist.
 - [ ] 7 SHOULD TEST tests added to TDD GREEN (EC-10..16)
 - [ ] 7 DOCUMENT items registrados em "Known risks" section
 - [ ] `.claude/hooks/internal-terms.py` passa em todos CodeBlock contents (Rule 3)
-- [ ] Backend pre-flight report (`docs/reviews/backend-preflight-2026-05-26.md`) commitado
+- [ ] Backend pre-flight report ([`docs/reviews/backend-preflight-2026-05-26.md`](../../reviews/backend-preflight-2026-05-26.md)) commitado
 - [ ] **Phase 4: 5 personalization features shipped + persisted (G11) — NEW v1.2**
 - [ ] **Phase 5: 7 FAANG-grade infra tasks shipped (G1+G2+G3+G4+G5+G9+G13) — NEW v1.2**
 - [ ] **RUM web-vitals reporter wired (G2, ADR D8) — NEW v1.2**
@@ -1131,7 +1137,7 @@ NUNCA copy raw state. Build command string strict from whitelist.
 ### T-DR-5.7 — Design tokens deprecation strategy (closes G13 MEDIUM)
 
 **Files to edit:**
-- `docs/design/2026-05-25-loopzero-dashboard-design-system.md` — add § 12 "Token Deprecation Policy"
+- [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../../design/2026-05-25-loopzero-dashboard-design-system.md) — add § 12 "Token Deprecation Policy"
 - Policy: 4-tier (current → deprecated → removed-next-minor → removed) com semver bumps
 
 **TDD:**
@@ -1218,7 +1224,7 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 ## Validation gates between phases
 
 **Phase 0 → Phase 1 gate (NEW v1.1):**
-- 5 backend verifications documented em `docs/reviews/backend-preflight-2026-05-26.md`
+- 5 backend verifications documented em [`docs/reviews/backend-preflight-2026-05-26.md`](../../reviews/backend-preflight-2026-05-26.md)
 - 0 NEGOTIATE PRs blocking (either merged OR escalated to backend team OR sponsor-decided RESCOPE)
 - T-DR-1.3, T-DR-1.4, T-DR-3.4, T-DR-3.9 scopes ratified
 - Sponsor explicit go-ahead
@@ -1296,7 +1302,7 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 
 ## Edge-case-plan review reference
 
-Este plan v1.2 incorpora os 23 edge cases identificados em `docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md`:
+Este plan v1.2 incorpora os 23 edge cases identificados em [`docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md`](./2026-05-26-dashboard-faang-tier-3-edge-cases.md):
 - **9 MUST FIX** → 6 sub-tasks explícitas (T-DR-2.1.1, 2.7.1, 3.1.1, 3.2.1, 3.5.1+3.5.2, 3.8.1) + Phase 0 (T-DR-0.1, 0.2, 0.3)
 - **7 SHOULD TEST** → testes obrigatórios em TDD sections (EC-10..16)
 - **7 DOCUMENT** → "Known risks (documented)" section (EC-17..23 + EC-?? native notifications)

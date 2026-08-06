@@ -1,6 +1,11 @@
+---
+type: operational-runbook
+title: Session Token Rotation Runbook
+---
+
 # Session Token Rotation Runbook
 
-> **Plan reference:** T3.2 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T3.2 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
 > **Closes:** M10 Auth/Billing MEDIUM gap — refresh_token support existed (HydraClient.RefreshToken + CLI auth refresh + API token cache TTL 5min) but rotation policy was UNDOCUMENTED.
 

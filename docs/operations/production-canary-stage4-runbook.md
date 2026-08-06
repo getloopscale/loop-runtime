@@ -1,8 +1,13 @@
+---
+type: operational-runbook
+title: Production Canary Stage 4 Runbook (Traffic Split via Argo Rollouts)
+---
+
 # Production Canary Stage 4 Runbook (Traffic Split via Argo Rollouts)
 
-> **Plan reference:** T0.3 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T0.3 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
-> **Status:** Stage 4 = traffic split. Stage 5 (customer trial) em `production-canary-stage5-runbook.md`.
+> **Status:** Stage 4 = traffic split. Stage 5 (customer trial) em [`production-canary-stage5-runbook.md`](./production-canary-stage5-runbook.md).
 >
 > **Infra existente:** Argo Rollouts shipped 2026-05-07 (CLAUDE.md) — TraefikService weighted routing + AnalysisTemplate hooks + auto-abort em `progressDeadlineSeconds=300`.
 
@@ -164,7 +169,7 @@ Every promote/abort writes audit_log:
 ## Stage 5 Gate
 
 After Phase D (100% promote) AND zero-incident window of 24h:
-- Proceed to `production-canary-stage5-runbook.md` (customer trial)
+- Proceed to [`production-canary-stage5-runbook.md`](./production-canary-stage5-runbook.md) (customer trial)
 - Update `docs/architecture/multi-cell/` if procedure refined
 
 ## Related

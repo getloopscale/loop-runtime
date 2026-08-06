@@ -1,3 +1,8 @@
+---
+type: implementation
+title: "READY_TO_READ_TEAM — dashboard-badge-data-plane-poller (#128)"
+---
+
 # READY_TO_READ_TEAM — dashboard-badge-data-plane-poller (#128)
 
 **Date:** 2026-07-02 (updated 16:07 UTC)

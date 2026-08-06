@@ -1,7 +1,12 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-28-M07-fulcio-oidc-trust-to-3-85"
+---
+
 # Edge Case Review — 2026-05-28-M07-fulcio-oidc-trust-to-3-85
 
 **Data:** 2026-05-28
-**Plano:** docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md
+**Plano:** [docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md](./2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md)
 **Tasks analisadas:** 9 (T0.1, T0.2, T0.3, T1.1, T2.1, T2.2, T3.1, T4.1, T4.2)
 **Edge cases encontrados:** 14 (MUST FIX: 7, SHOULD TEST: 4, DOCUMENT: 3)
 

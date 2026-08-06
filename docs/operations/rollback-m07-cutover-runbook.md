@@ -1,7 +1,12 @@
+---
+type: operational-runbook
+title: M07 Cutover Rollback Runbook
+---
+
 # M07 Cutover Rollback Runbook
 
 T4.5 of plan
-`docs/plans/2026-05-28-meet-001-engineering-closure-plan.md` (CR-10).
+[`docs/plans/2026-05-28-meet-001-engineering-closure-plan.md`](../plans/2026-05-28-meet-001-engineering-closure-plan.md) (CR-10).
 Companion to `infra/scripts/production/m07-cutover-rollback.sh`.
 
 Audience: operators triaging a failed M07 cutover (cosign keyed →

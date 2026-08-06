@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: OpenBao Transit Cutover Runbook
+---
+
 # OpenBao Transit Cutover Runbook
 
 > **Plan:** `2026-06-10-j22-openbao-transit-eso-sync` v1.2 § Phase 6 T6.1
@@ -582,4 +587,4 @@ After step 4.4 sponsor verbatim "Funcionou!":
 - **Sponsor scope-extension pattern:** memory `feedback_sponsor_scope_extension_pattern`
 - **Anti-hardcode gate:** memory `feedback_no_hardcode_gate_2026_06_09`
 - **Secret canonical pattern:** memory `feedback_secret_canonical_no_hardcode`
-- **Sibling cutover runbook (M07 keyless):** `docs/operations/m07-cutover-sequence.md`
+- **Sibling cutover runbook (M07 keyless):** [`docs/operations/m07-cutover-sequence.md`](./m07-cutover-sequence.md)

@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M3 (multi-region + failover)
+---
+
 # Review — LoopZero Bottleneck Simulator M3 (multi-region + failover)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m3`.

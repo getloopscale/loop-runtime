@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan 2026-05-26 Maturity 3.62→4.0 — Iter 9 Metadata/Schema Audit"
+status: deprecated
+---
+
 # Plan 2026-05-26 Maturity 3.62→4.0 — Iter 9 Metadata/Schema Audit
 
 **Date:** 2026-05-27
@@ -12,19 +18,19 @@
 |----------|-------------|
 | `.claude/knowledge-base/reviews/2026-05-27-errors-new-triage.md` | ✓ OK |
 | `.claude/knowledge-base/concepts/state-machines/terminal-helper-conventions.md` | ✓ OK |
-| `docs/architecture/api/withenvironmentlock-coverage.md` | ✓ OK |
-| `docs/architecture/observability/diff/loki-federation.md` | ✓ OK |
-| `docs/architecture/build-pipeline/diff/keyless-active.md` | ✓ OK |
-| `docs/architecture/ci-cd/diff/real-ci-active.md` | ✓ OK |
-| `docs/architecture/infra/diff/cosign-digest-enforcement.md` | ✓ OK |
-| `docs/architecture/auth/diff/stripe-portal-sdk.md` | ✓ OK |
+| [`docs/architecture/api/withenvironmentlock-coverage.md`](../../architecture/api/withenvironmentlock-coverage.md) | ✓ OK |
+| [`docs/architecture/observability/diff/loki-federation.md`](../../architecture/observability/diff/loki-federation.md) | ✓ OK |
+| [`docs/architecture/build-pipeline/diff/keyless-active.md`](../../architecture/build-pipeline/diff/keyless-active.md) | ✓ OK |
+| [`docs/architecture/ci-cd/diff/real-ci-active.md`](../../architecture/ci-cd/diff/real-ci-active.md) | ✓ OK |
+| [`docs/architecture/infra/diff/cosign-digest-enforcement.md`](../../architecture/infra/diff/cosign-digest-enforcement.md) | ✓ OK |
+| [`docs/architecture/auth/diff/stripe-portal-sdk.md`](../../architecture/auth/diff/stripe-portal-sdk.md) | ✓ OK |
 | `docs/architecture/index.md` | ✓ OK |
 
 **Result: 9/9 schema-compliant.** All artifacts have `name`, `description`, `type`, `created_at`, `updated_at`, `updated_by` per `.claude/rules/auto-docs.md` Rule 2.
 
 ### `docs/operations/` runbooks (7 files)
 
-Per `docs/operations/` convention (verified em pre-existing docs `cost-attribution.md`, `credentials-required.md`, `dev-loop.md`, `k8s-upgrade-runbook.md`): operational runbooks do NOT use YAML frontmatter. They are plain markdown with `> **Plan reference:**` header pattern. This is acceptable — auto-docs.md Rule 2 applies to `.claude/knowledge-base/` artifacts only.
+Per `docs/operations/` convention (verified em pre-existing docs [`cost-attribution.md`](../../operations/cost-attribution.md), [`credentials-required.md`](../../operations/credentials-required.md), [`dev-loop.md`](../../operations/dev-loop.md), [`k8s-upgrade-runbook.md`](../../operations/k8s-upgrade-runbook.md)): operational runbooks do NOT use YAML frontmatter. They are plain markdown with `> **Plan reference:**` header pattern. This is acceptable — auto-docs.md Rule 2 applies to `.claude/knowledge-base/` artifacts only.
 
 The 7 new runbooks (T0.3, T0.4, T3.1, T3.2, T3.3, T2.5, customer-trial-onboarding-plan) match existing convention.
 
@@ -35,12 +41,12 @@ The 7 new runbooks (T0.3, T0.4, T3.1, T3.2, T3.3, T2.5, customer-trial-onboardin
 | Ref | Resolves to | Status |
 |-----|-------------|--------|
 | `[[2026-05-26-op-b-live-evidence]]` | `reviews/2026-05-26-op-b-live-evidence.md` | ✓ |
-| `[[clustercredential]]` | NOT in knowledge-base (exists em `docs/architecture/platform/clustercredential.md` — outside `[[name]]` scope) | ✗ broken |
+| `[clustercredential](../../architecture/platform/clustercredential.md)` | NOT in knowledge-base (exists em [`docs/architecture/platform/clustercredential.md`](../../architecture/platform/clustercredential.md) — outside `[[name]]` scope) | ✗ broken |
 | `[[cosign-key-rotation]]` | `concepts/supply-chain/cosign-key-rotation.md` | ✓ |
 | `[[live-vs-snapshot-credentials]]` | `concepts/operations/live-vs-snapshot-credentials.md` | ✓ |
 | `[[state-machine-framework]]` | `concepts/state-machines/state-machine-framework.md` | ✓ |
 
-**Result: 4/5 resolve correctly.** The 1 broken ref (`[[clustercredential]]`) is em `docs/architecture/multi-cell/argocd-cluster-secret-flow.md:15+113` — pre-existing artifact NOT created by this plan. Scope-creep boundary respected (per CLAUDE.md design-principles tension resolution).
+**Result: 4/5 resolve correctly.** The 1 broken ref (`[clustercredential](../../architecture/platform/clustercredential.md)`) is em `docs/architecture/multi-cell/argocd-cluster-secret-flow.md:15+113` — pre-existing artifact NOT created by this plan. Scope-creep boundary respected (per CLAUDE.md design-principles tension resolution).
 
 ## Audit 3 — LIVE `task quality:diff` (PR-time gate suite)
 
@@ -90,7 +96,7 @@ credentials-sot: PASS (9 Secrets)
 
 ## Findings (not blocking)
 
-1. **`docs/architecture/multi-cell/argocd-cluster-secret-flow.md` has 2 broken `[[clustercredential]]` refs** — pre-existing artifact, NOT scope of this plan. Recommended follow-up: either add `concepts/multi-cell/clustercredential.md` placeholder OR change `[[clustercredential]]` to markdown link `[clustercredential](../platform/clustercredential.md)`.
+1. **[`docs/architecture/multi-cell/argocd-cluster-secret-flow.md`](../../architecture/multi-cell/argocd-cluster-secret-flow.md) has 2 broken `[clustercredential](../../architecture/platform/clustercredential.md)` refs** — pre-existing artifact, NOT scope of this plan. Recommended follow-up: either add [`concepts/multi-cell/clustercredential.md`](../../architecture/platform/clustercredential.md) placeholder OR change `[clustercredential](../../architecture/platform/clustercredential.md)` to markdown link `[clustercredential](../platform/clustercredential.md)`.
 
 2. **`docs/operations/` runbooks intentionally use no frontmatter** — matches existing convention (4/4 pre-existing checked). NOT a gap.
 
@@ -100,4 +106,4 @@ credentials-sot: PASS (9 Secrets)
 
 Plan 2026-05-26 artifacts are schema-compliant with `.claude/rules/auto-docs.md` for all artifacts created in scope (`.claude/knowledge-base/` + `docs/architecture/`). All wired quality gates execute correctly end-to-end via `task quality:gates` + `task quality:diff`. Engineering substrate is metadata-clean.
 
-Engineering deliverables remain ready for operator HARD STOP unlock per `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-iter4-status.md` § "Operator handoff".
+Engineering deliverables remain ready for operator HARD STOP unlock per [`docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-iter4-status.md`](./2026-05-26-maturity-3-62-to-4-0-roadmap-iter4-status.md) § "Operator handoff".

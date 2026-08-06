@@ -1,4 +1,7 @@
 ---
+type: discovery-plan
+title: "Discovery Plan: Hermetic Test Migration `infra/tests/check-*_test.sh` → Go Quality Gates"
+generated: { by: process:discover-plan, at: 2026-07-10 }
 version: 1.1
 slug: infra-tests-hermetic-to-quality-gates
 milestone_id: M16
@@ -185,7 +188,7 @@ Blueprint incomplete on any checkpoint → halt-loop continues; blueprint comple
 - Every citation resolves (Path.exists check at blueprint-write time)
 - All 4 coverage corners have ≥ 1 answered question
 - ≥ 1 ADR section preserved from this plan into the blueprint
-- Blueprint stored at `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`
+- Blueprint stored at [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md)
 - Blueprint size 1,500-3,000 words (not thin, not bloated)
 - Zero WebFetch invocations (per ADR D3)
 - Time budget ≤ 4h wall-clock (per ADR D2)
@@ -205,4 +208,4 @@ Discovery is DONE when `/discover-confidence` (subsequent phase) returns verdict
 - Golden rule (blueprint): `.claude/rules/discover-blueprint-golden-rule.md`
 - Downstream phase: `/discover-edge-cases infra-tests-hermetic-to-quality-gates`
 - Roadmap milestone: `ROADMAP.md § M16`
-- Milestone grill: `knowledge-base/grills/infra-tests-hermetic-to-quality-gates-feature-grill.md`
+- Milestone grill: [`knowledge-base/grills/infra-tests-hermetic-to-quality-gates-feature-grill.md`](../../grills/infra-tests-hermetic-to-quality-gates-feature-grill.md)

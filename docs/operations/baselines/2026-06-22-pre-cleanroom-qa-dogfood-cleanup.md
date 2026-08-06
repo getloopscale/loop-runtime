@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Pre-Cleanroom Baseline — 2026-06-22T20:35:17+00:00"
+---
+
 # Pre-Cleanroom Baseline — 2026-06-22T20:35:17+00:00
 
 ## Layer 1 — Code state

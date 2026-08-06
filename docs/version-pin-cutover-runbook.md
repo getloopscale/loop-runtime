@@ -1,3 +1,8 @@
+---
+type: runbook
+title: "Version-Pin Cutover Runbook — loopzero-contracts"
+---
+
 # Version-Pin Cutover Runbook — loopzero-contracts
 
 How to cut the consumers (`loopzero` engine + `loopzero-cloud`) over from the local
@@ -114,5 +119,5 @@ repo. Never bundle both bumps into a single change set.
 
 - Decomposition graph + acyclic invariant: `loopzero-contracts ◄── loopzero (engine) + loopzero-cloud + loopzero-cli`.
 - Acyclic gate: `loopzero/cmd/loopzero-ops/internal/quality/acyclicgraph/` (`loopzero-ops quality acyclic-graph`).
-- Cross-repo contract runner: `loopzero/docs/cross-repo-contract-matrix.md` (`task quality:contract:cross-repo`).
+- Cross-repo contract runner: [`loopzero/docs/cross-repo-contract-matrix.md`](cross-repo-contract-matrix.md) (`task quality:contract:cross-repo`).
 - Per-repo contracts: `loopzero-contracts/CLAUDE.md`, `loopzero-cloud/CLAUDE.md`, `loopzero-cli/CLAUDE.md`.

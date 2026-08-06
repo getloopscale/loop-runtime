@@ -1,3 +1,8 @@
+---
+type: audit
+title: M18 Code-Quality Audit (2026-07-10)
+---
+
 # M18 Code-Quality Audit (2026-07-10)
 
 **Cycle:** `cycle-code-quality`
@@ -44,7 +49,7 @@ M18 v0.62.0 delivers T2.1 Ginkgo migration (2 dogfood bash → 1 Ginkgo suite wi
 ## Cross-references
 
 - Plan: `knowledge-base/plans/m18-operator-glue-remainder-plan.md` v1.0
-- Blueprint: `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md` v1.0
+- Blueprint: [`knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`](../discoveries/blueprints/m18-operator-glue-remainder-blueprint.md) v1.0
 - T2.1+T2.2 commit: `b2b0a4c6`
 - Cycle rule: `.claude/rules/cycle-code-quality.md`
 

@@ -1,4 +1,7 @@
 ---
+type: discovery-plan
+title: "Discovery Plan: Operator Glue → Go — Allowlist ≤ 30 (M15 Final)"
+generated: { by: process:discover-plan, at: 2026-07-10 }
 version: 1.0
 slug: operator-glue-go-migration-final
 milestone_id: M15
@@ -39,7 +42,7 @@ Produce a blueprint that classifies every one of the 121 allowlist entries into 
 2. `cmd/loopzero-ops/internal/quality/` — 100+ Go source files — M-Migrate2 quality-gate migration pattern (M16 precedent)
 3. `.claude/rules/shell-scripts-allowlist.md` — the SoT with 121 rows to classify
 4. `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` — D4 taxonomy (Necessary + Simple + Operator-time + Allowlisted)
-5. `knowledge-base/grills/operator-glue-go-migration-feature-grill.md` — Q1-Q4 answered 2026-07-08 by sponsor
+5. [`knowledge-base/grills/operator-glue-go-migration-feature-grill.md`](../../grills/operator-glue-go-migration-feature-grill.md) — Q1-Q4 answered 2026-07-08 by sponsor
 
 ### In-scope directories to touch during blueprint research
 
@@ -141,9 +144,9 @@ Blueprint reaches `SHIPPABLE_WITH_CAVEATS` verdict on `/discover-confidence` re-
 
 ## Cross-references
 
-- Grill: `knowledge-base/grills/operator-glue-go-migration-feature-grill.md`
+- Grill: [`knowledge-base/grills/operator-glue-go-migration-feature-grill.md`](../../grills/operator-glue-go-migration-feature-grill.md)
 - Strategic plan: `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` (D4 taxonomy)
 - Rules: `.claude/rules/shell-scripts-allowlist.md` (SoT), `.claude/rules/parsimony-ladder.md`, `.claude/rules/cycle-discover.md`
-- Prior M15 milestone shipped in v0.59.0 (`knowledge-base/releases/v0.59.0-release.md`)
-- M16 precedent: `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`
+- Prior M15 milestone shipped in v0.59.0 ([`knowledge-base/releases/v0.59.0-release.md`](../../releases/v0.59.0-release.md))
+- M16 precedent: [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md)
 - Unbreakable Rules: 3 (honesty), 4 (git), 6 (CHANGELOG), 9 (Don't Reinvent), 10 (KISS), 11 (YAGNI)

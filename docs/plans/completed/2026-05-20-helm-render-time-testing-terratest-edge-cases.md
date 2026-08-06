@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-20-helm-render-time-testing-terratest"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-20-helm-render-time-testing-terratest
 
 **Data:** 2026-05-20
-**Plano:** `docs/plans/2026-05-20-helm-render-time-testing-terratest-plan.md`
+**Plano:** [`docs/plans/2026-05-20-helm-render-time-testing-terratest-plan.md`](./2026-05-20-helm-render-time-testing-terratest-plan.md)
 **Tasks analisadas:** 11 (T0.1, T1.1, T1.2, T2.1, T2.2, T3.1, T3.2, T4.1, T4.2, T5.1, T5.2)
 **Edge cases encontrados:** 8 (MUST FIX: 3, SHOULD TEST: 3, DOCUMENT: 2)
 

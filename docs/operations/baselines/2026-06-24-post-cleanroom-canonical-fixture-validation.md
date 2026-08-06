@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Baseline: Post-Cleanroom 2026-06-24 — canonical fixture validation chain GREEN"
+---
+
 # Baseline: Post-Cleanroom 2026-06-24 — canonical fixture validation chain GREEN
 
 **Date:** 2026-06-24T08:41:53Z

@@ -1,3 +1,8 @@
+---
+type: review
+title: M15 Review Report (2026-07-10)
+---
+
 # M15 Review Report (2026-07-10)
 
 **Cycle:** `cycle-review`
@@ -79,9 +84,9 @@ M15 v0.61.0 delivers a **minimal, honest, sponsor-approved slice** (Wave A: 1 fi
 ## Cross-references
 
 - Plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.2
-- Blueprint: `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0 SHIPPABLE 98.8
-- Code-quality audit: `knowledge-base/audits/M15-code-quality-audit-2026-07-10.md` PASS
-- Implementation summary: `knowledge-base/implementations/operator-glue-go-migration-final-implementation.md`
+- Blueprint: [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../discoveries/blueprints/operator-glue-go-migration-final-blueprint.md) v1.0 SHIPPABLE 98.8
+- Code-quality audit: [`knowledge-base/audits/M15-code-quality-audit-2026-07-10.md`](../audits/M15-code-quality-audit-2026-07-10.md) PASS
+- Implementation summary: [`knowledge-base/implementations/operator-glue-go-migration-final-implementation.md`](../implementations/operator-glue-go-migration-final-implementation.md)
 - Cycle rule: `.claude/rules/cycle-review.md`
 - Cycle-release next: `/release --bump minor` (v0.60.0 → v0.61.0)
 - Post-release: `/roadmap-feature operator-glue-go-migration-remainder --dependency M15` creates M18

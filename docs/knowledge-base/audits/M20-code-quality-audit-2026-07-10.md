@@ -1,3 +1,8 @@
+---
+type: audit
+title: M20 Code-Quality Audit (2026-07-10)
+---
+
 # M20 Code-Quality Audit (2026-07-10)
 
 **Verdict:** **PASS**

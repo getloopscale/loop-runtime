@@ -1,16 +1,22 @@
+---
+type: plan
+title: "Plan: Script Minimization Program (140 → ≤30) — Master Sequencing"
+status: deprecated
+---
+
 # Plan: Script Minimization Program (140 → ≤30) — Master Sequencing
 
 > **Version 1.0** — Master program plan that sequences three migration tracks to drive the canonical shell-script count from **140 → ≤30** WITHOUT destroying coverage or operational capability. Deletion of dead-weight is exhausted (36 scripts removed 2026-05-24, every remaining orphan candidate proved to be a false positive or regression-matrix-referenced). The only remaining lever is **migration**: move operational logic to its strategic home (helmfile declarative / Go gates / Ginkgo specs / loopzero-ops CLI), validate LIVE, then delete the bash. This master plan defines the order, the gates between tracks, and the program-level KPI; the three child plans (`*-parity-to-ginkgo-*`, `*-drill-consolidation-*`, `*-bootstrap-helmfile-eso-*`) hold the per-track tasks.
 
 ## Context
 
-After the 2026-05-24 necessity audit + trash-validate-delete cycle (commits `19d0171c`, `131091bb`, `4d7d4be3`, `61722a84`, `83fecb2e`), the repo is at **140 canonical `.sh` files** (excluding `.claude/worktrees/`). The `unhomed-logic` tracker reports **104 un-homed** scripts (`bootstrap=32, drill=20, chaos=5, test=46, other=1`). The team's documented target (`docs/plans/2026-05-22-shell-script-strategic-plan.md` D3) is **≤30**.
+After the 2026-05-24 necessity audit + trash-validate-delete cycle (commits `19d0171c`, `131091bb`, `4d7d4be3`, `61722a84`, `83fecb2e`), the repo is at **140 canonical `.sh` files** (excluding `.claude/worktrees/`). The `unhomed-logic` tracker reports **104 un-homed** scripts (`bootstrap=32, drill=20, chaos=5, test=46, other=1`). The team's documented target ([`docs/plans/2026-05-22-shell-script-strategic-plan.md`](./2026-05-22-shell-script-strategic-plan.md) D3) is **≤30**.
 
 **Evidence that deletion is exhausted:**
 - A repo-wide 0-execution-ref sweep flagged 67 candidates; per-script verification proved ALL were false positives: glob-sourced libs (`cell2-gate-c*.sh` via `source "$LIB_DIR/cell2-gate-${g}.sh"`), harness hooks (`.claude/hooks/loop-stop.sh`), Ginkgo-invoked (`velero-dr-drill.sh`), skill-invoked (`dr/*-orchestrator.sh`), KEEP-OPERATOR tools, and **regression-matrix-referenced** verification tokens (`cell2-canary-stage1.sh:91-95`, `audit-argocd-drift.sh` — the `audit-regression-matrix` gate blocked their deletion).
 - The 36 already-removed were genuinely dead: 1 superseded orchestrator, 33 unwired hermetic tests (no runner since GitHub Actions removal), 1 over-strict gate, plus reference cleanup.
 
-**The blocker the delegation map already surfaced** (`docs/operations/helmfile-delegation-map.md`, task #176): of the 5 `DELEGATE-HELMFILE` bootstrap scripts, **only 1 is a clean delegation**; 3 are secret-generators blocked on an **ESO-generator T2/T3 architecture decision** (must preserve the determinism contract that the 2026-05-22 cleanroom proved load-bearing). So "bootstrap → helmfile" is the SMALLEST and HIGHEST-RISK track, not the largest — this master plan corrects the initial ordering assumption with that evidence.
+**The blocker the delegation map already surfaced** ([`docs/operations/helmfile-delegation-map.md`](../../operations/helmfile-delegation-map.md), task #176): of the 5 `DELEGATE-HELMFILE` bootstrap scripts, **only 1 is a clean delegation**; 3 are secret-generators blocked on an **ESO-generator T2/T3 architecture decision** (must preserve the determinism contract that the 2026-05-22 cleanroom proved load-bearing). So "bootstrap → helmfile" is the SMALLEST and HIGHEST-RISK track, not the largest — this master plan corrects the initial ordering assumption with that evidence.
 
 ## Objective
 
@@ -45,7 +51,7 @@ Measurable goals:
   - *Consequences:* No parallelism across tracks. Within a track, independent scripts may batch.
 
 - **D5 — Regression-matrix + coverage are preserved across migration.**
-  - *Decision:* When a bash script referenced by `docs/runbooks/bootstrap-regression-matrix.md` is migrated, the matrix entry's verification token is updated to point at the new home (Ginkgo spec / Go gate) in the SAME PR. `audit-regression-matrix` must stay GREEN.
+  - *Decision:* When a bash script referenced by [`docs/runbooks/bootstrap-regression-matrix.md`](../../runbooks/bootstrap-regression-matrix.md) is migrated, the matrix entry's verification token is updated to point at the new home (Ginkgo spec / Go gate) in the SAME PR. `audit-regression-matrix` must stay GREEN.
   - *Rationale:* The matrix gate blocked deleting `cell2-canary-stage1.sh` / `audit-argocd-drift.sh` because they are documented verification methods. Migration must re-point, not orphan, those references.
   - *Consequences:* Matrix edits are part of each migration PR, not a follow-up.
 
@@ -177,7 +183,7 @@ VERIFY:  cd cmd/loopzero-ops && go test ./... && /tmp/loopzero-ops quality scrip
 
 **Objective:** Migrate the ~20 `infra/tests/parity/` LIVE prod-parity validation scripts to Ginkgo specs in `infra/tests/e2e/` (the existing home), re-pointing the regression matrix, deleting the bash after the parity suite passes LIVE. **Largest clean yield, lowest arch risk — runs FIRST.**
 
-> Full tasks in `docs/plans/2026-05-24-parity-to-ginkgo-migration-plan.md`. Starts immediately after Phase 0 T0.1. LIVE gate: the parity suite (k3d-virgin / doks-install / droplet-install / cell2-activation) must pass as Ginkgo specs with parity to the bash output BEFORE the bash is deleted.
+> Full tasks in [`docs/plans/2026-05-24-parity-to-ginkgo-migration-plan.md`](./2026-05-24-parity-to-ginkgo-migration-plan.md). Starts immediately after Phase 0 T0.1. LIVE gate: the parity suite (k3d-virgin / doks-install / droplet-install / cell2-activation) must pass as Ginkgo specs with parity to the bash output BEFORE the bash is deleted.
 
 ---
 
@@ -185,7 +191,7 @@ VERIFY:  cd cmd/loopzero-ops && go test ./... && /tmp/loopzero-ops quality scrip
 
 **Objective:** Consolidate the ~20 `infra/scripts/dr/` + `drill-*` + `chaos/` orchestrators — port pure-logic pieces to Go/loopzero-ops, consolidate duplicated orchestration, rewire the 4 drill skills, delete bash after a DOKS drill passes LIVE.
 
-> Full tasks in `docs/plans/2026-05-24-drill-consolidation-migration-plan.md`. Starts ONLY after Track B DoD + parity LIVE GREEN. LIVE gate: `task drill:l2-scale` (DOKS prod-identical) GREEN with the new orchestration BEFORE bash deletion. HARD STOP: real-money DOKS provisioning = operator-run.
+> Full tasks in [`docs/plans/2026-05-24-drill-consolidation-migration-plan.md`](./2026-05-24-drill-consolidation-migration-plan.md). Starts ONLY after Track B DoD + parity LIVE GREEN. LIVE gate: `task drill:l2-scale` (DOKS prod-identical) GREEN with the new orchestration BEFORE bash deletion. HARD STOP: real-money DOKS provisioning = operator-run.
 
 ---
 
@@ -193,7 +199,7 @@ VERIFY:  cd cmd/loopzero-ops && go test ./... && /tmp/loopzero-ops quality scrip
 
 **Objective:** Delegate the 1 clean bootstrap script (`bootstrap-patch-admission-policies` → chart values) and, gated on an ESO-generator T2/T3 MEET, migrate the 3 secret-generators to ESO `Password` generator CRDs preserving the determinism contract. Smallest yield, highest risk — runs LAST.
 
-> Full tasks in `docs/plans/2026-05-24-bootstrap-helmfile-eso-migration-plan.md`. Starts ONLY after Track C DoD + DOKS drill GREEN. Phase 3.1 (the 3 secret-generators) is BLOCKED until the ESO-generator MEET ratifies the determinism-preserving design. LIVE gate: `/cleanroom` + `/dogfood full` GREEN (credential determinism is the dominant cleanroom-regression theme).
+> Full tasks in [`docs/plans/2026-05-24-bootstrap-helmfile-eso-migration-plan.md`](./2026-05-24-bootstrap-helmfile-eso-migration-plan.md). Starts ONLY after Track C DoD + DOKS drill GREEN. Phase 3.1 (the 3 secret-generators) is BLOCKED until the ESO-generator MEET ratifies the determinism-preserving design. LIVE gate: `/cleanroom` + `/dogfood full` GREEN (credential determinism is the dominant cleanroom-regression theme).
 
 ---
 

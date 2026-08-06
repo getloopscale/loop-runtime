@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA pre-RED — Iteration 1 (resume) / Task T2.3 (return-contract redesign + wrapper)"
+---
+
 # SEPA pre-RED — Iteration 1 (resume) / Task T2.3 (return-contract redesign + wrapper)
 
 Date: 2026-07-01. MODE=TIGHT. Consulted before touching money code (driver step 1). This is the resume /implement (query layer committed ff76ec5f; wrapper + ~14 tests pending).

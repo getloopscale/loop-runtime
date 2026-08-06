@@ -1,3 +1,7 @@
+---
+type: review
+---
+
 
 ## Iteration 1 — review phase (in progress)
 - Tranche A (71 files: loopzero-ops root + internal/seed) first pass.

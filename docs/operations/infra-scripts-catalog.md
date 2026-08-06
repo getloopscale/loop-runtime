@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "infra/scripts — Catálogo de Scripts (utilidade + criticidade + impacto-PROD)"
+---
+
 # infra/scripts — Catálogo de Scripts (utilidade + criticidade + impacto-PROD)
 
 > Catálogo de referência dos **51 scripts** em `infra/scripts/` (recursivo).
@@ -6,7 +11,7 @@
 > Criado 2026-05-24. Colunas: utilidade, criticidade, ambiente/impacto-PROD,
 > LOC·última-mod, quem invoca, disposição allowlist.
 >
-> Fonte: header de cada script + `docs/operations/drill-migration-map.md` (Track C)
+> Fonte: header de cada script + [`docs/operations/drill-migration-map.md`](./drill-migration-map.md) (Track C)
 > + `git log` (mod) + grep de callers + grep de sinais de ambiente (prod/k3d/drill/test).
 
 ## Pergunta-chave: "deletar gera problema em PRODUÇÃO?"

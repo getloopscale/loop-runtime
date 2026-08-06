@@ -1,3 +1,8 @@
+---
+type: implementation
+title: M18 Implementation Summary (2026-07-10)
+---
+
 # M18 Implementation Summary (2026-07-10)
 
 **Cycle:** `cycle-implement`
@@ -12,7 +17,7 @@
 
 | Task | Deliverable | Wiring triad |
 |---|---|---|
-| T1.1 | Pre-M18 baseline audit (allowlist=120) | (a) Doc caller: `knowledge-base/audits/M18-pre-migration-baseline-2026-07-10.md`; (b) grep verification; (c) Committed `b2b0a4c6` |
+| T1.1 | Pre-M18 baseline audit (allowlist=120) | (a) Doc caller: [`knowledge-base/audits/M18-pre-migration-baseline-2026-07-10.md`](../audits/M18-pre-migration-baseline-2026-07-10.md); (b) grep verification; (c) Committed `b2b0a4c6` |
 | T2.1 | Ginkgo migration: 2 dogfood scripts → `dogfood_repro_test.go` | (a) Caller: `TestDeployHappyPath` runs the Describe blocks; task `test:dogfood:repro` swapped for `go test`; (b) `go test ./infra/tests/e2e/` PASS (156 specs skip hermetically); (c) Committed `b2b0a4c6` |
 | T2.2 | ADR-D2 reclassify `pulumi-output.sh` MIGRATE-GO-SDK → KEEP-OPERATOR | (a) Allowlist Justificativa updated inline; (b) grep-verified 5 downstream callers unchanged; (c) Committed `b2b0a4c6` |
 
@@ -55,5 +60,5 @@ Per `cycle-implement.md § Wiring triad`:
 ## Cross-references
 
 - Plan: `knowledge-base/plans/m18-operator-glue-remainder-plan.md`
-- Blueprint: `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`
-- Code-quality: `knowledge-base/audits/M18-code-quality-audit-2026-07-10.md`
+- Blueprint: [`knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`](../discoveries/blueprints/m18-operator-glue-remainder-blueprint.md)
+- Code-quality: [`knowledge-base/audits/M18-code-quality-audit-2026-07-10.md`](../audits/M18-code-quality-audit-2026-07-10.md)

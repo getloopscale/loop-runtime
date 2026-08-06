@@ -1,6 +1,12 @@
+---
+type: plan
+title: "Cross-System Refs Inventory — Old Helm Chart Paths (T1.0)"
+status: deprecated
+---
+
 # Cross-System Refs Inventory — Old Helm Chart Paths (T1.0)
 
-**Plan:** `docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md` v1.2
+**Plan:** [`docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md`](./2026-05-20-infra-standardization-and-secrets-plan.md) v1.2
 **Task:** T1.0 (Phase 1 gateway, EC-2 mitigation)
 **Date:** 2026-05-20
 **Status:** AUDIT COMPLETE — engineering side
@@ -63,7 +69,7 @@ These locations had NO matches in the grep audit:
 - `Taskfile.yml` + `taskfiles/*` — zero refs
 - `infra/tilt/*.yaml` + `Tiltfile` — zero refs
 - `infra/helmfile/scripts/*` — zero refs (helmfile/scripts is generic, drill is in infra/scripts/)
-- `README.md` — zero refs
+- [`README.md`](../../README.md) — zero refs
 
 **The audit confirms drift is contained.** Phase 1 migration only requires:
 - 9 path updates in `mgmt.helmfile.yaml.gotmpl` (atomic edit)
@@ -106,5 +112,5 @@ Per plan T1.0 DoD:
 ## References
 
 - Plan T1.0: `docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md:401`
-- EC-2 origin: `docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md` (edge case review Pass 1)
+- EC-2 origin: [`docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md`](./2026-05-20-infra-standardization-and-secrets-plan.md) (edge case review Pass 1)
 - ADR D8 (pre-release BC break allowed): `.claude/knowledge-base/decisions/2026-05-20-D8-pre-release-bc-break.md`

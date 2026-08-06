@@ -1,4 +1,6 @@
 ---
+title: "Cosign Keyless Active — Build Pipeline Diff"
+generated: { by: process:plan-t1.5-t2.2-design, at: 2026-05-27 }
 name: keyless-active
 description: PROPOSED — cosign keyless signing active (Fulcio + Rekor provisioned via Pulumi). T2.2 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
 type: decision
@@ -11,7 +13,7 @@ updated_by: plan T1.5 + T2.2 design
 
 # Cosign Keyless Active — Build Pipeline Diff
 
-> **Plan reference:** T2.2 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T2.2 + T1.5 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../../../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
 > **Depends on:** Sponsor sign-off em `.claude/governance-gate.local.md` for Fulcio + Rekor provisioning. ADR 2026-05-12 hard deadline T0+90d (2026-08-10).
 
@@ -65,7 +67,7 @@ Verification ConfigMap: `loopzero-system/loopzero-cosign-config` with `mode: key
 ## Operator actions (HARD STOP)
 
 1. Sponsor approves T2.2 via Change Governor meeting (T3)
-2. Operator implements Pulumi Fulcio + Rekor components per `production-canary-stage5-runbook.md` § cosign keyless
+2. Operator implements Pulumi Fulcio + Rekor components per [`production-canary-stage5-runbook.md`](../../../operations/production-canary-stage5-runbook.md) § cosign keyless
 3. Operator runs `pulumi up --stack drill` validating provisioning
 4. Operator runs `pulumi up --stack prod` (drill GREEN gate)
 5. Operator flips ConfigMap `mode: keyed` → `mode: keyless`
@@ -74,7 +76,7 @@ Verification ConfigMap: `loopzero-system/loopzero-cosign-config` with `mode: key
 
 ## Related
 
-- `docs/operations/cosign-signing-key-rotation-runbook.md` (T3.3 — keyed rotation + cutover-deadline script)
+- [`docs/operations/cosign-signing-key-rotation-runbook.md`](../../../operations/cosign-signing-key-rotation-runbook.md) (T3.3 — keyed rotation + cutover-deadline script)
 - `infra/scripts/security/check-cosign-cutover-deadline.sh` (deadline enforcement)
 - ADR 2026-05-12 (cosign keyless cutover commitment)
 - `[[cosign-key-rotation]]` (concept page)

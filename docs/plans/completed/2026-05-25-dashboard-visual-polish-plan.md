@@ -1,13 +1,19 @@
+---
+type: plan
+title: "Dashboard Visual Polish Plan — Post-Validation Findings"
+status: deprecated
+---
+
 # Dashboard Visual Polish Plan — Post-Validation Findings
 
 > **Slug:** `2026-05-25-dashboard-visual-polish`
 > **Status:** DRAFT (awaiting sponsor approval for Phase A bug fixes)
 > **Origin:** Visual validation tour 2026-05-25 (commit `2af9133c`,
 > mock-layer-enabled, 13/13 routes captured via headless Chrome)
-> **Companion to:** Plan `2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`
+> **Companion to:** Plan [`2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](./2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md)
 > v1.2 (whose T-H.1 visual smoke was deferred via MEET-ASYNC-001 and
 > partially closed by the mock layer this plan extends)
-> **Edge-case review:** `docs/plans/2026-05-25-dashboard-visual-polish-edge-cases.md`
+> **Edge-case review:** [`docs/plans/2026-05-25-dashboard-visual-polish-edge-cases.md`](./2026-05-25-dashboard-visual-polish-edge-cases.md)
 > (14 edges integrated below — EC-1..EC-14 inline in AC/TDD/Deep Dive)
 > **Plan version:** v1.1 (was v1.0 — bumped 2026-05-25 to integrate
 > edge-case review findings; commit `6b9f8a6e`)
@@ -821,7 +827,7 @@ NOT a `?logged_out=true` query string.
 ## Edge cases (v1.1 — integrated from `/edge-case-plan` review)
 
 `/edge-case-plan` analysis (commit `6b9f8a6e`) produced
-`docs/plans/2026-05-25-dashboard-visual-polish-edge-cases.md` with 14
+[`docs/plans/2026-05-25-dashboard-visual-polish-edge-cases.md`](./2026-05-25-dashboard-visual-polish-edge-cases.md) with 14
 NEW edges. v1.1 of this plan integrates each into the relevant task
 AC / TDD / Deep Dive sections above (see EC-N tags inline).
 
@@ -943,10 +949,10 @@ risk of EC-3 CI red + EC-1 dev tour break + EC-2 future-proofing.
 ## References
 
 - Visual validation tour: commit `2af9133c` + 13 screenshots in `/tmp/dashboard-screenshots/` (transient — re-run via mock layer)
-- Parent plan: `docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2
+- Parent plan: [`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](./2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md) v1.2
 - MEET amendments that this plan respects:
   - `MEET-ASYNC-AMENDMENT-2026-05-24-001-dashboard-visual-redesign-dod.md` (LOC + visual smoke deferral)
   - `MEET-ASYNC-AMENDMENT-2026-05-24-002-dashboard-bundle-gate-redefinition.md` v1.4 (bundle gates)
 - Mock layer source: `cloud/dashboard/src/lib/dev-mocks.ts` (commit `2af9133c`)
 - Design reference: `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html`
-- Design language doc: `docs/design/2026-05-24-dashboard-design-language.md`
+- Design language doc: [`docs/design/2026-05-24-dashboard-design-language.md`](../../design/2026-05-24-dashboard-design-language.md)

@@ -1,3 +1,8 @@
+---
+type: review
+title: "Edge Case Review — metering-compute-loop (v1.2)"
+---
+
 # Edge Case Review — metering-compute-loop (v1.2)
 
 Date: 2026-07-01

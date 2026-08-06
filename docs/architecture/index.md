@@ -1,12 +1,3 @@
----
-name: architecture-index
-description: Index of architecture documentation organized by domain. Current state (`.md` em domain root) + PROPOSED state diffs (`diff/` subdirs) per `/architecture-docs` skill conventions.
-type: index
-created_at: 2026-05-27
-updated_at: 2026-05-27
-updated_by: plan T1.5 (iter 8 — index doc)
----
-
 # Architecture Documentation Index
 
 Architecture docs organized per domain. Per `/architecture-docs` skill conventions:

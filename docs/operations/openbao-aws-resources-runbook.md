@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: OpenBao AWS Resources Runbook
+---
+
 # OpenBao AWS Resources Runbook
 
 **Owner**: Platform Security

@@ -1,3 +1,8 @@
+---
+type: discovery-blueprint
+title: "Blueprint: m18-operator-glue-remainder"
+---
+
 # Blueprint: m18-operator-glue-remainder
 
 **Slug:** `m18-operator-glue-remainder`
@@ -196,7 +201,7 @@ Prioritized for `/to-plan` M18:
 ## Cross-references
 
 - Discover-plan: `knowledge-base/discoveries/plans/m18-operator-glue-remainder-plan.md` v1.0 SHIPPABLE 99.7
-- M15 blueprint (Corners 1-3 canonical): `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`
+- M15 blueprint (Corners 1-3 canonical): [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](./operator-glue-go-migration-final-blueprint.md)
 - M16 hermetic reference: `cmd/loopzero-ops/internal/quality/sprintsyntax/check.go` (shipped 2026-07-10 v0.60.0)
 - Ginkgo hermetic reference: `infra/tests/e2e/deploy_suite_test.go`
 - LIVE mandate: `.claude/rules/cleanroom-up-live-test-mandate.md`

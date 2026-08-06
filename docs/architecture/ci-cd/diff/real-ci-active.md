@@ -1,4 +1,6 @@
 ---
+title: "Real CI Platform Active — CI/CD Diff (Engineering Complete)"
+generated: { by: process:t0.2-plan-implementation-2026-05-27, at: 2026-05-27 }
 name: real-ci-active
 description: PROPOSED — Cenário B Argo Workflows + Argo Events CI ratified per ADR-2026-05-27-T0.2-RATIFIED + engineering shipped 2026-05-27 (3 Helm charts + WorkflowTemplate + EventSource + Sensor + 4 CronWorkflows + operator runbook).
 type: decision
@@ -11,9 +13,9 @@ updated_by: T0.2 plan implementation 2026-05-27
 
 # Real CI Platform Active — CI/CD Diff (Engineering Complete)
 
-> **Plan reference:** `docs/plans/2026-05-27-t0.2-cenario-b-argo-workflows-ci-poc-plan.md`
+> **Plan reference:** [`docs/plans/2026-05-27-t0.2-cenario-b-argo-workflows-ci-poc-plan.md`](../../../plans/2026-05-27-t0.2-cenario-b-argo-workflows-ci-poc-plan.md)
 >
-> **Status:** Engineering shipped 2026-05-27 in 3 Helm charts. Activation HARD STOP = operator runs helmfile sync + configures Gitea webhook (~30min, runbook `docs/operations/ci-runbook.md`).
+> **Status:** Engineering shipped 2026-05-27 in 3 Helm charts. Activation HARD STOP = operator runs helmfile sync + configures Gitea webhook (~30min, runbook [`docs/operations/ci-runbook.md`](../../../operations/ci-runbook.md)).
 
 ## AS-IS (post-GitHub-Actions removal 2026-05-23)
 
@@ -113,12 +115,12 @@ narrows 6 historical options to 3 viable cenarios with FAANG-grade SOTA review:
 | `loopzero-ci-workflows` chart | `infra/helm/loopzero-ci-workflows/` | WorkflowTemplate `quality-gate` (parametrized per ADR D2) + EventSource Gitea webhook (HMAC SHA256 validation + PR event filter) + Sensor PR trigger (idempotent name via commit SHA) + ConfigMap status-posting script (retries with exponential backoff) + 4 CronWorkflows (drill watchdog 6h, weekly soak Sun 02:00, coverage Mon 09:00, cosign deadline daily 00:00) |
 | Helmfile releases | `infra/helmfile/build.helmfile.yaml.gotmpl` | 3 releases wired with explicit `needs:` ordering |
 | Hermetic render test | `infra/tests/helm/render-loopzero-ci-workflows_test.sh` | 30/30 PASS: lint + render + gate parity (values↔taskfile) + ADR D2/D3/D4/D5 compliance + 4 CronWorkflow schedules |
-| Operator runbook | `docs/operations/ci-runbook.md` | Activation, daily operation, troubleshooting, rollback to Cenário C |
+| Operator runbook | [`docs/operations/ci-runbook.md`](../../../operations/ci-runbook.md) | Activation, daily operation, troubleshooting, rollback to Cenário C |
 
 ## Operator HARD STOP (post-engineering activation)
 
 1. Sponsor approves T2.7 budget (already T3-ratified per `MEET-2026-05-27-batch-sponsor-approvals`)
-2. Operator creates `gitea-webhook-secret` + `gitea-api-token` Secrets (`docs/operations/ci-runbook.md` Step 2)
+2. Operator creates `gitea-webhook-secret` + `gitea-api-token` Secrets ([`docs/operations/ci-runbook.md`](../../../operations/ci-runbook.md) Step 2)
 3. Operator runs `helmfile -e standalone-multi sync --selector name=argo-ci-namespace,name=argo-events,name=loopzero-ci-workflows` (sequence per Step 3 of runbook)
 4. Operator configures Gitea webhook UI (Step 4)
 5. Operator updates branch protection: require `quality` status check (Step 5)
@@ -127,7 +129,7 @@ narrows 6 historical options to 3 viable cenarios with FAANG-grade SOTA review:
 
 ## Operator quick-fallback (if decision delayed > 4 weeks)
 
-Per `customer-trial-onboarding-plan.md` EC-15 (DOCUMENT) — default fallback after timeout: restore self-hosted GitHub Actions runners (status quo of pre-removal 2026-05-23). Tactical preservation; revisit at next quarter.
+Per [`customer-trial-onboarding-plan.md`](../../../operations/customer-trial-onboarding-plan.md) EC-15 (DOCUMENT) — default fallback after timeout: restore self-hosted GitHub Actions runners (status quo of pre-removal 2026-05-23). Tactical preservation; revisit at next quarter.
 
 ## Related
 

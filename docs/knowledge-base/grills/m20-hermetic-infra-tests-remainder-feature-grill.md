@@ -1,8 +1,12 @@
 ---
+type: grill
+title: "M20 grill — hermetic-infra-tests-remainder"
+generated: { by: process:roadmap-feature, at: 2026-07-10 }
+status: stable
 slug: m20-hermetic-infra-tests-remainder
 generated_by: roadmap-feature
 generated_at: 2026-07-10
-status: completed
+workflow_status: completed
 ---
 
 # M20 grill — hermetic-infra-tests-remainder

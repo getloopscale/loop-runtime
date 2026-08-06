@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "M7 Cleanroom validation + Sponsor JUNTOS — Operator Runbook"
+---
+
 # M7 Cleanroom validation + Sponsor JUNTOS — Operator Runbook
 
 > **Canonical operator playbook for M7 of `qa-readiness-roadmap-2026-06-23`.** Per ADR `2026-06-23-validation-milestone-sponsor-hard-stop.md` § Decision Step 3. Sponsor JUNTOS is **HARD STOP** per `.claude/rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL (sponsor verbatim 2026-06-10 + 2026-06-16) — operator runs Steps 0-6 alone (~3-4h), then sponsor sits down for Step 7 (~30min browser walkthrough).
@@ -160,7 +165,7 @@ After Step 7 GREEN:
 - Mandate INQUEBRÁVEL: `.claude/rules/cleanroom-up-live-test-mandate.md`
 - Steady-state baseline rule: `.claude/rules/steady-state-baseline.md`
 - Pre-flight gate: `infra/tests/charts/m7_preflight_test.go`
-- Baseline template: `docs/operations/baselines/M7-template-qa-readiness-complete.md`
+- Baseline template: [`docs/operations/baselines/M7-template-qa-readiness-complete.md`](./baselines/M7-template-qa-readiness-complete.md)
 - GH issue template: `.github/ISSUE_TEMPLATE/qa-readiness.md`
 - Sibling baselines (prior M-N): `docs/operations/baselines/` (10+ entries)
 - M7 run-file (audit trail): `.claude/knowledge-base/roadmap-runs/M7-2026-06-23.md`

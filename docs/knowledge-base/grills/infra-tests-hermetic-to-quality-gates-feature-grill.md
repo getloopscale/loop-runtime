@@ -1,8 +1,12 @@
 ---
+type: grill
+title: "Roadmap-feature grill — `infra-tests-hermetic-to-quality-gates`"
+generated: { by: process:roadmap-feature, at: 2026-07-10 }
+status: stable
 slug: infra-tests-hermetic-to-quality-gates
 generated_by: roadmap-feature
 generated_at: 2026-07-10
-status: completed
+workflow_status: completed
 target_milestone: M16
 ---
 

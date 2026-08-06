@@ -1,3 +1,8 @@
+---
+type: runbook
+title: "Runbook: LoopZeroCosignSignSlow"
+---
+
 # Runbook: LoopZeroCosignSignSlow
 
 Alert from `prometheusrule-sigstore.yaml` (T4.2 of plan

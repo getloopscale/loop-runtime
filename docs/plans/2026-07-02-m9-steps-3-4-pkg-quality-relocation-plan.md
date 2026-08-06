@@ -1,4 +1,6 @@
 ---
+type: plan
+title: "M9 Steps 3+4 — Relocate `pkg/quality` out of the shared-contracts base"
 slug: m9-steps-3-4-pkg-quality-relocation
 milestone_id: M9
 created_at: 2026-07-02

@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Helm Chart Render-Time Testing with Terratest"
+status: deprecated
+---
+
 # Plan: Helm Chart Render-Time Testing with Terratest
 
 > **Version 1.2** (2026-05-21 — DoD runtime target relaxed per
@@ -14,7 +20,7 @@
 
 ### O Que Existe Hoje
 
-Após o plano `2026-05-20-infra-standardization-and-secrets-plan.md` (37 commits, plan v1.2), o sistema tem **schema-side defense** strong:
+Após o plano [`2026-05-20-infra-standardization-and-secrets-plan.md`](./2026-05-20-infra-standardization-and-secrets-plan.md) (37 commits, plan v1.2), o sistema tem **schema-side defense** strong:
 
 | Gate | Cobertura | Status |
 |---|---|---|
@@ -1178,5 +1184,5 @@ Cloud cost: **$0** (zero LIVE cluster dependency).
 - Camunda 2022 article: "Advanced Test Practices For Helm Charts" — Terratest > Chart Testing comparison + golden files pattern
 - Gruntwork 2019 article: "Automated Testing for Kubernetes and Helm Charts using Terratest" — foundational render-and-assert pattern
 - `gruntwork-io/terratest` v0.46.16 — https://github.com/gruntwork-io/terratest
-- LoopZero plan v1.2 (parent): `docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md`
+- LoopZero plan v1.2 (parent): [`docs/plans/2026-05-20-infra-standardization-and-secrets-plan.md`](./2026-05-20-infra-standardization-and-secrets-plan.md)
 - LoopZero schema gates (this session): commit range `7b87117a..HEAD` (37 commits)

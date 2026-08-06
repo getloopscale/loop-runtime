@@ -1,3 +1,8 @@
+---
+type: baseline
+title: J-22 OpenBao Transit Engineering Side Closure Evidence
+---
+
 # Baseline — J-22 OpenBao Transit Engineering Side Closure Evidence
 
 > **Captured:** 2026-06-10T14:06Z
@@ -109,7 +114,7 @@ All 5 flagged scripts were added between **2026-06-04 and 2026-06-08** — **2-6
 | Are the 5 J-22 hermetic tests passing on the local cluster? | YES — 96/96 PASS in ~1s |
 | Is the J-22 engineering side complete? | YES — 18 plan tasks committed + 11 productive-idle commits |
 | Can the completion promise be emitted? | NO — 4 operator HARD STOPs pending (Unbreakable Rule 3) |
-| What does the operator need to do? | Follow `docs/operations/openbao-transit-cutover-runbook.md` steps 1-4 |
+| What does the operator need to do? | Follow [`docs/operations/openbao-transit-cutover-runbook.md`](../openbao-transit-cutover-runbook.md) steps 1-4 |
 | What does the sponsor need to do? | Authorize one of (a)/(b)/(c)/(d) for cross-cluster reachability per the runbook § Open Question, then walk through step 4.3 LIVE with verbatim "Funcionou!" |
 
 ## Recommendation for the pre-existing `unhomed-logic` failure
@@ -137,7 +142,7 @@ Until those happen, the halt-loop continues productive-idle iterations. Each add
 ## Cross-references
 
 - Plan: `.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md`
-- Operator runbook: `docs/operations/openbao-transit-cutover-runbook.md`
+- Operator runbook: [`docs/operations/openbao-transit-cutover-runbook.md`](../openbao-transit-cutover-runbook.md)
 - Steady-state baseline rule: `.claude/rules/steady-state-baseline.md`
 - Productive-idle mandate: memory `feedback_productive_idle_runbook_preauthor_2026_06_10`
 - Per-feature LIVE workflow: memory `feedback_post_feature_live_regression_workflow_2026_06_09`

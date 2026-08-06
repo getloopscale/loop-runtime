@@ -1,3 +1,8 @@
+---
+type: review
+title: "develop→main release readiness (v0.29.0 candidate)"
+---
+
 # Review — develop→main release readiness (v0.29.0 candidate)
 
 **Slug:** develop-main-release-readiness

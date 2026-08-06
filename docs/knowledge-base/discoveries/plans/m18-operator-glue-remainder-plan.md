@@ -1,10 +1,15 @@
+---
+type: discovery-plan
+title: "Discovery Plan: m18-operator-glue-remainder"
+---
+
 # Discovery Plan: m18-operator-glue-remainder
 
 **Slug:** `m18-operator-glue-remainder`
 **Created:** 2026-07-10
 **Plan version:** 1.0
 **Owner:** Claude (Opus 4.7)
-**Ancestor:** `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0 SHIPPABLE 98.8 (already covered 121-entry classification)
+**Ancestor:** [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../blueprints/operator-glue-go-migration-final-blueprint.md) v1.0 SHIPPABLE 98.8 (already covered 121-entry classification)
 
 <!-- DEFER-CORNER: tests | Deferred to M15 blueprint Q1-Q2 canonical (identical Go seed shape + hermetic test pattern; no new investigation needed). Ancestor cross-reference at bottom of plan. -->
 <!-- DEFER-CORNER: deps | Deferred to M15 blueprint Q3-Q4 canonical (identical dep envelope: stdlib + pgx/v5 + yaml.v3 + client-go; ADR-M15-D5 no new third-party deps). -->
@@ -108,7 +113,7 @@ Additional research topics folded into Q1/Q2/Q3 rather than separate questions p
 
 ## Cross-references
 
-- M15 blueprint (canonical Corners 1-3): `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`
+- M15 blueprint (canonical Corners 1-3): [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../blueprints/operator-glue-go-migration-final-blueprint.md)
 - M15 plan v1.2 (ADR-D6 scope boundary): `knowledge-base/plans/operator-glue-go-migration-final-plan.md`
 - M16 hermetic gate reference: `cmd/loopzero-ops/internal/quality/sprintsyntax/check.go`
 - Cycle rule: `.claude/rules/cycle-discover.md`

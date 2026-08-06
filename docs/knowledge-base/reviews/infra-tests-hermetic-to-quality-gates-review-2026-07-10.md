@@ -1,3 +1,8 @@
+---
+type: review
+title: "M16 cycle-review Consolidated Report — 2026-07-10"
+---
+
 # M16 cycle-review Consolidated Report — 2026-07-10
 
 **Verdict:** READY_TO_MERGE

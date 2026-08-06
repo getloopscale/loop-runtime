@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M4 (cost-coupled review)
+---
+
 # Review — LoopZero Bottleneck Simulator M4 (cost-coupled review)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m4`.

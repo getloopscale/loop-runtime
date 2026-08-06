@@ -1,3 +1,8 @@
+---
+type: audit
+title: "M16 Phase 5 — Integration Validation Report"
+---
+
 # M16 Phase 5 — Integration Validation Report
 
 Date: 2026-07-10

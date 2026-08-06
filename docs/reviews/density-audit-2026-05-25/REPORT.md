@@ -1,3 +1,8 @@
+---
+type: review
+title: "Dashboard Density Audit — Full Tour"
+---
+
 # Dashboard Density Audit — Full Tour
 
 **Data:** 2026-05-25
@@ -6,7 +11,7 @@
 **Browser:** Chrome 145.0.7632.159 headless
 **Mock layer:** `cloud/dashboard/src/lib/dev-mocks.ts` (VITE_USE_MOCKS=true; VITE_MOCK_LOGGED_OUT=true para auth routes)
 **Screenshots:** `docs/reviews/density-audit-2026-05-25/{route}-density.png` (13 PNGs)
-**DSS reference:** `docs/design/2026-05-25-loopzero-dashboard-design-system.md` § 6.1 (densidade) + § 4.7 (KPI strip) + § 5.2 (3 patterns) + CC-3 (cross-cutting: 1 empty-state max por página)
+**DSS reference:** [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../../design/2026-05-25-loopzero-dashboard-design-system.md) § 6.1 (densidade) + § 4.7 (KPI strip) + § 5.2 (3 patterns) + CC-3 (cross-cutting: 1 empty-state max por página)
 
 ---
 

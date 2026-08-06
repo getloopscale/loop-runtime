@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "M2 Runtime Envs — Operator Runbook"
+---
+
 # M2 Runtime Envs — Operator Runbook
 
 > Placeholder created 2026-06-07 to satisfy plan-confidence evidence gate.

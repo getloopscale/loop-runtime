@@ -1,7 +1,12 @@
+---
+type: review
+title: "Cross-Validation Report — Dashboard Visual Redesign"
+---
+
 # Cross-Validation Report — Dashboard Visual Redesign
 
 **Data:** 2026-05-24
-**Plano:** `docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2
+**Plano:** [`docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](../plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md) v1.2
 **Branch:** develop
 **Commits analisados:** 26+ (c18704c3..HEAD)
 
@@ -90,7 +95,7 @@ All unplanned changes have justification documented in commits. **CV-M-1**: vite
 
 #### T-B.1 — Design language doc
 
-- Files: `docs/design/2026-05-24-dashboard-design-language.md` ✅ (commit 162d37c1)
+- Files: [`docs/design/2026-05-24-dashboard-design-language.md`](../design/2026-05-24-dashboard-design-language.md) ✅ (commit 162d37c1)
 - TDD: N/A (doc artifact)
 - Acceptance: ✅ 283 LOC (≤300), 14 sections (≥8 patterns), mockup ref, .llms.txt ref
 - DoD: ✅ Commit made

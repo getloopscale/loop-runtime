@@ -1,3 +1,8 @@
+---
+type: audit
+title: M15 Pre-Migration Baseline (2026-07-10)
+---
+
 # M15 Pre-Migration Baseline (2026-07-10)
 
 **Purpose:** Empirical anchor for M15 DoD#1 verification. Per `.claude/rules/steady-state-baseline.md`.
@@ -46,6 +51,6 @@ Files sampled from allowlist for sanity:
 ## Cross-references
 
 - Plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.1 SHIPPABLE 93.2
-- Blueprint: `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0 SHIPPABLE 98.8
+- Blueprint: [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../discoveries/blueprints/operator-glue-go-migration-final-blueprint.md) v1.0 SHIPPABLE 98.8
 - ROADMAP.md M15 DoD (literal `≤ 30`)
 - Sponsor decision 2026-07-10 (Path A + ADR-D4 escape hatch)

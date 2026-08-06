@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA pre-COMMIT — iter 4 / T2.1 (+ T1.2 folded) / migration 000046"
+---
+
 # SEPA pre-COMMIT — iter 4 / T2.1 (+ T1.2 folded) / migration 000046
 MODE=VERBOSE. High-value schema task (SEPA initial brief flagged [MAJOR]: cursor PK no-period=SC-4, config seed false, RLS off).
 ## Findings (verified against the applied schema)

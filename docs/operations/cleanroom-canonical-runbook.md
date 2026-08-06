@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Cleanroom Canonical Runbook (T6.1 Phase 6)
+---
+
 # Cleanroom Canonical Runbook (T6.1 Phase 6)
 
 Per plan `2026-06-11-cleanroom-canonical-5-defense-layers` v1.2 SHIPPABLE

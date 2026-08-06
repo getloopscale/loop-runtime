@@ -1,3 +1,8 @@
+---
+type: review
+title: "M10-M13 LIVE Ceremony chain runs (Fase A) — 2026-07-07"
+---
+
 # Review — M10-M13 LIVE Ceremony chain runs (Fase A) — 2026-07-07
 
 **Verdict:** **BLOCKED — Fase A cannot achieve "3 chain runs literally green" autonomously**

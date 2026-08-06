@@ -1,4 +1,6 @@
 ---
+type: plan
+title: "Operator Glue → Go: Waves A + B + Split-Decision C (final plan)"
 slug: operator-glue-go-migration-final
 milestone_id: M15
 created_at: 2026-07-10
@@ -9,7 +11,7 @@ authored_by: claude-opus-4-7
 
 # M15 — Operator Glue → Go: Waves A + B + Split-Decision C (final plan)
 
-**Blueprint:** `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` (SHIPPABLE 98.8)
+**Blueprint:** [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../discoveries/blueprints/operator-glue-go-migration-final-blueprint.md) (SHIPPABLE 98.8)
 **Discover plan:** `knowledge-base/discoveries/plans/operator-glue-go-migration-final-plan.md` (SHIPPABLE 100.0)
 **ROADMAP.md M15:** literal DoD `grep -cE '^\| .*\.sh ' allowlist ≤ 30`
 **Sponsor decision 2026-07-10:** Path A (Waves A+B+C + Wave D → M18); M15 [ ] stays unchecked (DoD literal not met until Wave D closes in M18).
@@ -74,7 +76,7 @@ Total Wave A: 1 file DELETE. Total Wave B: 12 file migrations (6 helmfile hooks 
 
 ## Prior Art & Related Work
 
-- **Blueprint (SoT):** `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0 (Q1-Q8 answered, 121 entries classified, 5 ADRs, SHIPPABLE 98.8).
+- **Blueprint (SoT):** [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../discoveries/blueprints/operator-glue-go-migration-final-blueprint.md) v1.0 (Q1-Q8 answered, 121 entries classified, 5 ADRs, SHIPPABLE 98.8).
 - **M9 precedent:** `loopzero-ops quality <gate>` subcommand pattern (2026-05-23) — 40+ pure-logic gates shipped.
 - **M13 precedent:** `no-new-bash` gate invertido (Phase-5 ledger) + Phase-5 sponsor ratification of KEEP-OPERATOR entries (2026-05-23).
 - **M15 Waves 1+2+3 precedent (shipped in v0.59.0):** 20 seeds migrated to `loopzero-ops seed` pattern. Canonical Go shape = stdlib `flag` + `context` + `pgx/v5` OR `client-go` + `yaml.v3`. Zero third-party additions.
@@ -191,14 +193,14 @@ Phase 5 (Integration validation) — depends on: Phase 4 decided (proceed or spl
 
 ### T1.1 — Capture pre-migration allowlist baseline
 
-**Files to edit:** `knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md` (NEW)
+**Files to edit:** [`knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`](../audits/M15-pre-migration-baseline-2026-07-10.md) (NEW)
 
 **Deep file dependency analysis:** `.claude/rules/shell-scripts-allowlist.md` (read-only inventory). No downstream callers of the baseline audit — audit trail only.
 
 **Why this step:** Post-migration DoD verification requires the pre-state anchor. Without baseline count, we cannot prove "121 → ≤ 90" delta empirically. Steady-state-baseline mandate 2026-06-06.
 
 **#### TDD**
-- **RED**: `test_baseline_captured_before_wave_a` (hermetic) — assert `knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md` exists AND contains a line matching `entries_count:\s*\d+`.
+- **RED**: `test_baseline_captured_before_wave_a` (hermetic) — assert [`knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`](../audits/M15-pre-migration-baseline-2026-07-10.md) exists AND contains a line matching `entries_count:\s*\d+`.
 - **GREEN**: write audit file with `grep -c` output + wc -l summary + 20-file random sample check.
 - **REFACTOR**: N/A (audit doc).
 
@@ -206,13 +208,13 @@ Phase 5 (Integration validation) — depends on: Phase 4 decided (proceed or spl
 
 (none — single-threaded)
 
-**Acceptance criteria:** `test -f knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md && grep -q 'entries_count' $_`.
+**Acceptance criteria:** `test -f [knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md](../audits/M15-pre-migration-baseline-2026-07-10.md) && grep -q 'entries_count' $_`.
 
 **DoD:** File committed as `docs(audit): M15 pre-migration baseline`.
 
 ### T1.2 — Orphan bash sweep (already-shipped seeds without deleted .sh)
 
-**Files to edit:** `knowledge-base/audits/M15-orphan-bash-sweep-2026-07-10.md` (NEW)
+**Files to edit:** [`knowledge-base/audits/M15-orphan-bash-sweep-2026-07-10.md`](../audits/M15-orphan-bash-sweep-2026-07-10.md) (NEW)
 
 **Deep file dependency analysis:** Cross-reference `cmd/loopzero-ops/seed_registry.go` shipped seeds (20 entries) against `infra/scripts/local/seed-*.sh` files that still exist. Identify orphans (Go seed shipped + bash NOT deleted) → Wave A candidates.
 

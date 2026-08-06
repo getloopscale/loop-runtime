@@ -1,9 +1,15 @@
+---
+type: plan
+title: "Implementation Status — 2026-05-22 Shell Script Strategic Plan"
+status: deprecated
+---
+
 # Implementation Status — 2026-05-22 Shell Script Strategic Plan
 
 > **Live progress tracker for Ralph loop iterations.** Updated at end of each
 > iteration. Next iter reads this to pick up where previous left off.
 
-**Plan version:** v1.3 (`docs/plans/2026-05-22-shell-script-strategic-plan.md`)
+**Plan version:** v1.3 ([`docs/plans/2026-05-22-shell-script-strategic-plan.md`](./2026-05-22-shell-script-strategic-plan.md))
 **Branch:** `refactor/shell-scripts-strategic`
 **Promise:** "TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS CLEANROON, DOGFOOD E CHAOS-TEST FUNCIIONAIS"
 **Promise eligibility:** ❌ FALSE — Phases 2/4 + T5.1 + N(bash)≤30 still pending (3 LIVE gates now GREEN)
@@ -14,7 +20,7 @@
 
 ### Iter 42 (2026-05-22) — cleanup-plan Phase 0/T2.1/T3.1 + HONEST recalibration of N(bash) reduction
 
-Implemented `docs/plans/2026-05-22-script-cleanup-plan.md` autonomous slice. **4 commits.**
+Implemented [`docs/plans/2026-05-22-script-cleanup-plan.md`](./2026-05-22-script-cleanup-plan.md) autonomous slice. **4 commits.**
 
 **T0.1 (detector hardening) — DONE:** `pkg/quality/scriptsaudit` now recognizes 4
 false-positive classes (dynamic `source "$DIR/${v}.sh"`, CI glob-runners, Dockerfile
@@ -145,7 +151,7 @@ heuristic list.
   (false-positives on `.claude/hooks/*` harness hooks + dynamically-sourced
   `cell2-gate-c*.sh` + CI-runner `*_test.sh`). Did NOT mass-delete — confirmed
   e.g. `crd-semantic-diff.test.sh` is alive (parent in helm-charts.yml).
-- Wrote `docs/plans/2026-05-22-shell-script-strategic-operator-handoff.md`:
+- Wrote [`docs/plans/2026-05-22-shell-script-strategic-operator-handoff.md`](./2026-05-22-shell-script-strategic-operator-handoff.md):
   maps the remaining operator-gated work (Phase 2 helmfile, Phase 4 Ginkgo, T5.1
   pulumi SDK, T6.4 inventory, 4 LIVE HARD STOPs) + records the 2 dead-detection
   caveats + the tool-classification caveat (7 grep false-positives this campaign).
@@ -791,8 +797,8 @@ LIVE Pulumi stack validation (operator HARD STOP per plan T5.1 acceptance).
 **Commit:** (current)
 
 **Done:**
-- `docs/scripts-audit/2026-05-22-dead-set.md` (NEW) — T1.1 validation output.
-- `docs/scripts-audit/REVIEWED.md` — appended iter-11 finding.
+- [`docs/scripts-audit/2026-05-22-dead-set.md`](../../scripts-audit/2026-05-22-dead-set.md) (NEW) — T1.1 validation output.
+- [`docs/scripts-audit/REVIEWED.md`](../../scripts-audit/REVIEWED.md) — appended iter-11 finding.
 
 **Finding: validated dead-set = 0 scripts.** The 73 raw zero-caller scripts
 collapse to 0 safely-deletable:
@@ -895,14 +901,14 @@ not shellrun).
 
 **Done:**
 - `Taskfile.yml` (T3.2): setup target prepends `[NOTICE]` echoes pointing
-  to `docs/operations/dev-loop.md` + clarifies `tilt up` is the canonical
+  to [`docs/operations/dev-loop.md`](../../operations/dev-loop.md) + clarifies `tilt up` is the canonical
   dev loop. Setup desc rewritten to describe one-shot vs day-to-day distinction.
-- `docs/operations/dev-loop.md` (T3.1 NEW): canonical operator guide covering
+- [`docs/operations/dev-loop.md`](../../operations/dev-loop.md) (T3.1 NEW): canonical operator guide covering
   cold start sequence, dev loop semantics, common operations (mid-day changes,
   helm chart change, CRD/migration changes), when NOT to use task setup,
   troubleshooting table cross-referencing T2.3/T2.2/T2.3.b fixes.
-- `README.md` (T3.1): Setup section now explicitly distinguishes ONE-SHOT vs
-  DEV LOOP; links to docs/operations/dev-loop.md.
+- [`README.md`](../../README.md) (T3.1): Setup section now explicitly distinguishes ONE-SHOT vs
+  DEV LOOP; links to [docs/operations/dev-loop.md](../../operations/dev-loop.md).
 - `CLAUDE.md` (T3.1): development commands section reflects same distinction;
   task dev:up marked as legacy alias.
 - `pkg/quality/phase3gate/` — 4 hermetic Go tests GREEN validating Phase 3
@@ -918,7 +924,7 @@ not requiring LIVE validation).
 **Commit:** (current)
 
 **Done (engineering side — T2.4 LIVE remains HARD STOP):**
-- `docs/scripts-audit/2026-05-22-helmfile-mapping.md` (T2.1) — full bare-helm
+- [`docs/scripts-audit/2026-05-22-helmfile-mapping.md`](../../scripts-audit/2026-05-22-helmfile-mapping.md) (T2.1) — full bare-helm
   → helmfile release mapping; identified gaps (network-policies chart not in
   helmfile, kratos/hydra namespace migration loopzero-system → loopzero-auth);
   documents EC-01 + EC-02 compliance plan
@@ -1002,7 +1008,7 @@ validation) pending — requires Phases 1-5 complete to validate inventory ≤ 3
   scrape config for :9003/metrics, interval 60s
 - `pkg/quality/opencostgate/` — 9 hermetic Go tests GREEN validating YAML
   structure (per Anti-Pattern #8: NO production Go code)
-- `docs/operations/cost-attribution.md` — operator runbook with DO pricing
+- [`docs/operations/cost-attribution.md`](../../operations/cost-attribution.md) — operator runbook with DO pricing
   values, Prometheus queries, validation sequence
 - CLAUDE.md updated: OpenCost moved from "P0 gap" / "v1.x deferred" → "ADOPTED 2026-05-22"
 
@@ -1026,7 +1032,7 @@ validation) pending — requires Phases 1-5 complete to validate inventory ≤ 3
 - `infra/tests/pluto/fixtures/current.yaml` — fixture with current stable APIs
 - `pkg/quality/plutogate/` — hermetic Go tests (7/7 GREEN) validating workflow YAML
   structure (SHA-pin, target-versions set, only-show-removed: false)
-- `docs/operations/k8s-upgrade-runbook.md` — operator runbook for DOKS minor upgrade
+- [`docs/operations/k8s-upgrade-runbook.md`](../../operations/k8s-upgrade-runbook.md) — operator runbook for DOKS minor upgrade
   with Pluto check sequence + rollback strategy
 - CLAUDE.md updated: Pluto moved from "P0 gap" → "ADOPTED 2026-05-22 via plan T7.1"
 
@@ -1069,12 +1075,12 @@ Regression locked NOW.
 - `pkg/quality/scriptsaudit/check_test.go` — 21 tests GREEN, coverage 91.8%
 - `cmd/loopzero-ops/` minimal — `quality scripts-audit` subcommand wired
 - `docs/scripts-audit/2026-05-22.csv` — baseline 257 scripts / 42,793 LOC
-- `docs/scripts-audit/REVIEWED.md` — operator review template + disposition distribution
+- [`docs/scripts-audit/REVIEWED.md`](../../scripts-audit/REVIEWED.md) — operator review template + disposition distribution
 - `.gitignore` exception for `/cmd/` (prior catastrophic block — same lesson as `/scripts` 2026-05-20)
 - `go.work` adds `./cmd/loopzero-ops` module
 
 **Pending (operator HUMAN GATE):**
-- Operator signature in `REVIEWED.md` confirming baseline review before Phase 1 destructive actions
+- Operator signature in [`REVIEWED.md`](../../scripts-audit/REVIEWED.md) confirming baseline review before Phase 1 destructive actions
 
 ---
 

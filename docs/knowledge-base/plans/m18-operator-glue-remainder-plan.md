@@ -1,4 +1,6 @@
 ---
+type: plan
+title: "Operator Glue → Go: Waves B+C+D Hermetic Slice"
 slug: m18-operator-glue-remainder
 milestone_id: M18
 created_at: 2026-07-10
@@ -9,7 +11,7 @@ authored_by: claude-opus-4-7
 
 # M18 — Operator Glue → Go: Waves B+C+D Hermetic Slice
 
-**Blueprint:** `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md` v1.0 SHIPPABLE 99.7
+**Blueprint:** [`knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`](../discoveries/blueprints/m18-operator-glue-remainder-blueprint.md) v1.0 SHIPPABLE 99.7
 **Discover plan:** `knowledge-base/discoveries/plans/m18-operator-glue-remainder-plan.md` v1.0 SHIPPABLE 99.7
 **ROADMAP.md M18:** Waves B+C+D scope; DoD includes `allowlist ≤ 30` (inherited from M15 original literal DoD)
 **Blueprint ADR-D1 decision:** M18 v0.62.0 ships T3.4 hermetic slice only (2 files); rest → M19.
@@ -60,7 +62,7 @@ Total: 3 script files affected (2 deleted + 1 reclassified), 1 Ginkgo suite adde
 
 ## Prior Art & Related Work
 
-- **Blueprint (SoT):** `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md` v1.0 SHIPPABLE 99.7.
+- **Blueprint (SoT):** [`knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`](../discoveries/blueprints/m18-operator-glue-remainder-blueprint.md) v1.0 SHIPPABLE 99.7.
 - **M15 plan v1.2 (parent):** established scope-split pattern; M18 inherits the M15 strangler ADR but only for hermetic-verifiable slice.
 - **M16 hermetic pattern precedent:** `cmd/loopzero-ops/internal/quality/sprintsyntax/check.go` (10 gates shipped v0.60.0 2026-07-10).
 - **Ginkgo reference:** `infra/tests/e2e/deploy_suite_test.go` BeforeSuite pattern.
@@ -144,7 +146,7 @@ Phase 3 (Integration validation + M18 checkbox amendment) — depends on Phase 2
 
 ### T1.1 — Capture pre-M18 baseline
 
-**Files to edit:** `knowledge-base/audits/M18-pre-migration-baseline-2026-07-10.md` (NEW)
+**Files to edit:** [`knowledge-base/audits/M18-pre-migration-baseline-2026-07-10.md`](../audits/M18-pre-migration-baseline-2026-07-10.md) (NEW)
 
 **Deep file dependency analysis:** allowlist grep `-c` output; wc -l summary.
 
@@ -264,7 +266,7 @@ Phase 3 (Integration validation + M18 checkbox amendment) — depends on Phase 2
 
 ### T3.2 — CHANGELOG audit + M18 checkbox amendment per ADR-D4
 
-**Files to edit:** `CHANGELOG.md` (audit), `ROADMAP.md` (M18 [ ] → [x] with amended DoD), `knowledge-base/roadmap-runs/M18-2026-07-10.md` (NEW audit trail).
+**Files to edit:** `CHANGELOG.md` (audit), `ROADMAP.md` (M18 [ ] → [x] with amended DoD), [`knowledge-base/roadmap-runs/M18-2026-07-10.md`](../roadmap-runs/M18-2026-07-10.md) (NEW audit trail).
 
 **Deep file dependency analysis:** DoD amendment following M15 precedent (sponsor AskUserQuestion authorization).
 
@@ -285,7 +287,7 @@ Phase 3 (Integration validation + M18 checkbox amendment) — depends on Phase 2
 
 **Acceptance criteria:**
 - ROADMAP.md M18 line [ ] → [x] with amended DoD header note.
-- roadmap-runs/M18-2026-07-10.md exists with frontmatter status: completed + dod_amended: true.
+- [roadmap-runs/M18-2026-07-10.md](../roadmap-runs/M18-2026-07-10.md) exists with frontmatter status: completed + dod_amended: true.
 
 **DoD:** `chore(roadmap): mark M18 done (v0.62.0) — DoD amended per M15 precedent`.
 

@@ -1,7 +1,12 @@
+---
+type: review
+title: "Edge Case Review — J-25 Live URL Discoverability"
+---
+
 # Edge Case Review — J-25 Live URL Discoverability
 
 Date: 2026-06-12
-Plan: `knowledge-base/plans/2026-06-12-dashboard-journey-j25-live-url-discoverability-plan.md` v1.0
+Plan: [`knowledge-base/plans/2026-06-12-dashboard-journey-j25-live-url-discoverability-plan.md`](../plans/2026-06-12-dashboard-journey-j25-live-url-discoverability-plan.md) v1.0
 Tasks analyzed: 6 (T0.1, T1.1, T2.1, T3.1, T4.1, T5.1)
 Edge cases found: **10** (MUST FIX: 3, SHOULD TEST: 4, DOCUMENT: 3)
 

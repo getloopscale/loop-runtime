@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "System Design Playground — Roadmap de implementação"
+---
+
 # System Design Playground — Roadmap de implementação
 
 > Do protótipo HTML (`system-design-playground.html`) a um produto com feature paga.

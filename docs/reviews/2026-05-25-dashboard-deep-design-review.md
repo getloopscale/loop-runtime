@@ -1,9 +1,14 @@
+---
+type: review
+title: "Dashboard Deep Design Review — All 13 Pages"
+---
+
 # Dashboard Deep Design Review — All 13 Pages
 
 > **Slug:** `2026-05-25-dashboard-deep-design-review`
 > **Status:** DRAFT (review output; not an action plan — see follow-up plan)
 > **Scope:** all 13 routes of `cloud/dashboard/`
-> **Anchored to:** `docs/design/2026-05-25-loopzero-dashboard-design-system.md` v1.0
+> **Anchored to:** [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../design/2026-05-25-loopzero-dashboard-design-system.md) v1.0
 > **Reference frameworks:**
 >   - Refactoring UI (Adam Wathan, Steve Schoger)
 >   - Laws of UX (Jon Yablonski)
@@ -579,9 +584,9 @@ To verify each fix in this review:
 
 ### LoopZero internal
 
-- `docs/design/2026-05-25-loopzero-dashboard-design-system.md` (companion DSS)
-- `docs/plans/completed/2026-05-25-dashboard-visual-polish-plan.md` v1.1 (executed)
-- `docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2 (parent)
+- [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../design/2026-05-25-loopzero-dashboard-design-system.md) (companion DSS)
+- [`docs/plans/completed/2026-05-25-dashboard-visual-polish-plan.md`](../plans/completed/2026-05-25-dashboard-visual-polish-plan.md) v1.1 (executed)
+- [`docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](../plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md) v1.2 (parent)
 - MEET-ASYNC-AMENDMENT-2026-05-24-001 (DoD relaxation, T-H.1 visual smoke evidence)
 - MEET-ASYNC-AMENDMENT-2026-05-24-002 v1.4 (bundle gates)
 

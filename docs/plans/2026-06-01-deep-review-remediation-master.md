@@ -1,3 +1,8 @@
+---
+type: plan
+title: "Master Plan: Deep Review Remediation — 2026-06-01"
+---
+
 # Master Plan: Deep Review Remediation — 2026-06-01
 
 > **Version 1.0** — Master tracking document for remediation of the 83 findings discovered by the Deep Review Loop (`./review-output/final_report.md`, commit `098b6846` baseline). Groups findings into 3 sub-plans ordered by priority (P1 → P3) with separate sponsors, governance tiers, and delivery windows. NOT an implementation plan itself — references `/to-plan`-generated documents for each sub-plan.

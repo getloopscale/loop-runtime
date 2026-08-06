@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M4 (cost-coupled review)
+---
+
 # Plan — LoopZero Bottleneck Simulator M4 (cost-coupled review)
 
 > Slug: `loopzero-bottleneck-simulator-m4`. Builds on M0-M3 engine. FAANG-level, no fabrication.

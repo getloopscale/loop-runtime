@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Baseline: pre preview-as-category refactor (2026-06-07)"
+---
+
 # Baseline: pre preview-as-category refactor (2026-06-07)
 
 **Context:** Capture state immediately before Phase 0 T0.2 cleanup + Phase 1 migration begin per plan `.claude/knowledge-base/plans/2026-06-07-preview-as-category-single-slot-plan.md`.

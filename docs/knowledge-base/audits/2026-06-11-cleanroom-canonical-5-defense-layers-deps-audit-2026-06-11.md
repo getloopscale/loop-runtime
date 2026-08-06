@@ -1,3 +1,8 @@
+---
+type: audit
+title: "Deps Audit: 2026-06-11-cleanroom-canonical-5-defense-layers"
+---
+
 # Deps Audit: 2026-06-11-cleanroom-canonical-5-defense-layers
 
 **Date:** 2026-06-11
@@ -190,8 +195,8 @@ Both caps stack at 49 (INVALID). Either fix alone moves verdict to FAIL_MEDIUM (
 
 ## Cross-references
 
-- Plan v1.1: `knowledge-base/plans/2026-06-11-cleanroom-canonical-5-defense-layers-plan.md`
-- Edge case review: `knowledge-base/reviews/2026-06-11-cleanroom-canonical-5-defense-layers-edge-cases-2026-06-11.md`
+- Plan v1.1: [`knowledge-base/plans/2026-06-11-cleanroom-canonical-5-defense-layers-plan.md`](../plans/2026-06-11-cleanroom-canonical-5-defense-layers-plan.md)
+- Edge case review: [`knowledge-base/reviews/2026-06-11-cleanroom-canonical-5-defense-layers-edge-cases-2026-06-11.md`](../reviews/2026-06-11-cleanroom-canonical-5-defense-layers-edge-cases-2026-06-11.md)
 - Memory `t62-aprendizado-go-toolchain-dockerfile-drift` — toolchain bump pattern canonical (covers Dockerfile FROM bump invariants)
 - Memory `reference_t62_cleanroom_session_2026_06_11` — session reference
 - Golden rule: `rules/deps-audit-golden-rule.md`

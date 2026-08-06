@@ -1,3 +1,8 @@
+---
+type: audit
+title: M22 Empirical Allowlist Finding (2026-07-10)
+---
+
 # M22 Empirical Allowlist Finding (2026-07-10)
 
 ## Discovery

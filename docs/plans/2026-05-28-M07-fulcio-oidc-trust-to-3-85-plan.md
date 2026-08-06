@@ -1,8 +1,13 @@
+---
+type: plan
+title: "Plan: M07 → 3.85 — Fulcio K8s OIDC Trust Setup (LIVE Keyless GREEN)"
+---
+
 # Plan: M07 → 3.85 — Fulcio K8s OIDC Trust Setup (LIVE Keyless GREEN)
 
-> **Version 1.2** — Continuação direta do plan derivado `2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1. Após Path 1 Research-first (commits `860a8397` + `74d537d8`) ter unificado o root cause sign+attest no MESMO gap Fulcio K8s OIDC, este plano codifica a diagnose como script automatizado, aplica o fix correspondente como **values declarativos** (Pulumi sigstore.ts OU Helm values fragment), valida LIVE end-to-end (sign + attest + Rekor URL populated), e registra M07 3.80 → 3.85 com Evidence Bar §1 (T1+T2+T3). Outcome esperado: cosign keyless flow GREEN no k3d local; cap 3.85 atingido per ADR D1 do plan derivado; 3.9 cap remanescente fica gated apenas em prod DNS (plano separado).
+> **Version 1.2** — Continuação direta do plan derivado [`2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) v1.1. Após Path 1 Research-first (commits `860a8397` + `74d537d8`) ter unificado o root cause sign+attest no MESMO gap Fulcio K8s OIDC, este plano codifica a diagnose como script automatizado, aplica o fix correspondente como **values declarativos** (Pulumi sigstore.ts OU Helm values fragment), valida LIVE end-to-end (sign + attest + Rekor URL populated), e registra M07 3.80 → 3.85 com Evidence Bar §1 (T1+T2+T3). Outcome esperado: cosign keyless flow GREEN no k3d local; cap 3.85 atingido per ADR D1 do plan derivado; 3.9 cap remanescente fica gated apenas em prod DNS (plano separado).
 >
-> **v1.1 amendment (2026-05-28):** Absorve 8 MUST FIX edge cases de `2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md`. Categoria: Scope refinement (per `.claude/rules/pre-release-governance.md` § Plan Amendment Policy). Mudanças críticas: (a) EC-1 — corrige acceptance criteria T3.1+T4.1 para usar `releases.image_attestation_rekor_url` (schema real, NÃO `builds.attestation_url` que não existe); (b) EC-5 — força vitest assertion via `helm template` real para detectar chart contract drift; (c) EC-6 — Phase 2 guard para verdict=GREEN; (d) EC-8 — diferenciar pre-sign vs sign failure. Demais MUST FIX (EC-2/3/4/7) absorved inline em T0.1/T0.2 Deep Dives.
+> **v1.1 amendment (2026-05-28):** Absorve 8 MUST FIX edge cases de [`2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md`](./2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md). Categoria: Scope refinement (per `.claude/rules/pre-release-governance.md` § Plan Amendment Policy). Mudanças críticas: (a) EC-1 — corrige acceptance criteria T3.1+T4.1 para usar `releases.image_attestation_rekor_url` (schema real, NÃO `builds.attestation_url` que não existe); (b) EC-5 — força vitest assertion via `helm template` real para detectar chart contract drift; (c) EC-6 — Phase 2 guard para verdict=GREEN; (d) EC-8 — diferenciar pre-sign vs sign failure. Demais MUST FIX (EC-2/3/4/7) absorved inline em T0.1/T0.2 Deep Dives.
 >
 > **v1.2 amendment (2026-05-28, Ralph iter 3 proactive EC-5 LIVE validation):** Investigação Claude-side pré-Phase 2 descobriu que: (a) chart pinado em `sigstore.ts` (`scaffold 0.7.16`) **NÃO EXISTE** no upstream (latest disponível: 0.6.108); (b) LIVE deployment é `sigstore/fulcio 2.9.1` standalone + `sigstore/rekor 1.7.10` standalone (NÃO via scaffold umbrella); (c) schema correto é `config.contents.OIDCIssuers` (TOP-LEVEL, NÃO `fulcio.server.config.OIDCIssuers`); (d) chart `fulcio 2.9.1` NÃO expõe `extraVolumes`/`extraVolumeMounts`/`extraEnv` → Cenário D requer fallback path complexo (postRenderer, custom image, OR chart upgrade). **Pre-criados:** `infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml` (ready-to-apply via `helm upgrade --reuse-values -f`) + `cenario-d-tls-ca-investigation.md` (4 fix paths documentados, operator decision required). T2.1 e T2.2 atualizados abaixo. ADR D2 não invalidado (declarativo via Helm values mantém idempotency); apenas path corrigido.
 >
@@ -80,13 +85,13 @@ Fulcio recebe SA token JWT mas falha em validar via OIDC discovery. Possíveis c
 ### Por que NOW
 
 - M07 plan derivado v1.1 explicitamente lista 3.85 como cap atingível com ~30min operator (Step 5 do plan)
-- Maturity 3.62→4.0 roadmap (plan `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md` v1.1) tem M07 como pulmão (gain +0.05 contribui ~+0.003 ao aggregate)
+- Maturity 3.62→4.0 roadmap (plan [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](./completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md) v1.1) tem M07 como pulmão (gain +0.05 contribui ~+0.003 ao aggregate)
 - Sem 3.85 LIVE GREEN, prod DOKS canary stage 4 (CTO Rule 5 evidence) não tem precedent comprovado de keyless funcionar
 
 ### Referências
 
 - Audit doc atual: `.claude/knowledge-base/audits/2026-05-27-keyless-LIVE/07-build-pipeline.md` (3.80)
-- Plan derivado: `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1 § Step 5
+- Plan derivado: [`docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) v1.1 § Step 5
 - Memory: `~/.claude/projects/-home-paulo-loopzero/memory/reference_m07_path1_signimage_threading_2026_05_28.md`
 - Commits Path 1: `860a8397` (fix) + `74d537d8` (audit + log.md)
 - LIVE evidence captured: `/tmp/sign-pod-v11.yaml` + Fulcio config inspected
@@ -823,7 +828,7 @@ N/A (doc-only changes; pattern já testado em prior audits)
 Sincronizar plan v1.1 status com realidade.
 
 #### Evidence
-- Plan derivado `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1 lista Step 5 (Fulcio config + Phase 9 retry) + Step 6 (Re-audit 3.85) como pending
+- Plan derivado [`docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) v1.1 lista Step 5 (Fulcio config + Phase 9 retry) + Step 6 (Re-audit 3.85) como pending
 - Per `.claude/rules/pre-release-governance.md` § Plan Amendment Policy: scope refinement / DoD completion → version bump + amendment note
 
 #### Files to edit
@@ -877,7 +882,7 @@ N/A
 | EC-7 | Mock kubectl subcommand coverage | T0.2 Deep Dives mock coverage assertion |
 | EC-8 | Pre-sign vs sign failure differentiation | T3.1 Failure handling |
 
-Restantes 6 edge cases (4 SHOULD TEST + 2 DOCUMENT) referenciados em `docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md` — não bloqueiam implementação mas inform vigilância durante execução.
+Restantes 6 edge cases (4 SHOULD TEST + 2 DOCUMENT) referenciados em [`docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md`](./2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md) — não bloqueiam implementação mas inform vigilância durante execução.
 
 ## Global Definition of Done
 

@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — Post J-22 OpenBao Transit + ESO Sync (engineering-side)"
+---
+
 # Steady-State Baseline — Post J-22 OpenBao Transit + ESO Sync (engineering-side)
 
 **Date:** 2026-06-10
@@ -127,8 +132,8 @@ This is the canonical CI gate. The 4th suite (T4.1 LIVE) is gated by operator HA
 
 - Rule: [`.claude/rules/steady-state-baseline.md`](../../../.claude/rules/steady-state-baseline.md)
 - Plan: [`.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md`](../../../.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md) v1.2 § T6.1
-- Edge-case review: [`.claude/knowledge-base/reviews/2026-06-10-j22-openbao-transit-eso-sync-edge-cases-2026-06-10.md`](../../../.claude/knowledge-base/reviews/2026-06-10-j22-openbao-transit-eso-sync-edge-cases-2026-06-10.md)
-- Deps audit: [`.claude/knowledge-base/audits/2026-06-10-j22-openbao-transit-eso-sync-deps-audit-2026-06-10.md`](../../../.claude/knowledge-base/audits/2026-06-10-j22-openbao-transit-eso-sync-deps-audit-2026-06-10.md)
+- Edge-case review: [`.claude/knowledge-base/reviews/2026-06-10-j22-openbao-transit-eso-sync-edge-cases-2026-06-10.md`](../../wiki/reviews/2026-06-10-j22-openbao-transit-eso-sync-edge-cases-2026-06-10.md)
+- Deps audit: [`.claude/knowledge-base/audits/2026-06-10-j22-openbao-transit-eso-sync-deps-audit-2026-06-10.md`](../../wiki/audits/2026-06-10-j22-openbao-transit-eso-sync-deps-audit-2026-06-10.md)
 - Pre-fix baseline: [`2026-06-10-pre-j22-openbao-transit.md`](./2026-06-10-pre-j22-openbao-transit.md)
 - Companion JSON: [`2026-06-10-post-j22-openbao-transit.json`](./2026-06-10-post-j22-openbao-transit.json)
 - Index: [`index.md`](./index.md)

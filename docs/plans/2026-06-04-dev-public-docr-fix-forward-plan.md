@@ -1,9 +1,13 @@
 ---
+type: plan
+title: "Plan: Dev-Public DOCR Fix-Forward (2026-06-04)"
+generated: { by: human:paulo, at: 2026-06-04 }
+status: draft
 plan_id: 2026-06-04-dev-public-docr-fix-forward
 created_at: 2026-06-04
 created_by: paulo
 version: v1.0
-status: PROPOSED
+workflow_status: PROPOSED
 change_tier: T2  # infra (helmfile env), Helm values, Taskfile, K8s Secret provisioning
 predecessors:
   - 2026-06-04-dev-public-domain-canonicalization-plan.md  # established dev-public env originally for Harbor local

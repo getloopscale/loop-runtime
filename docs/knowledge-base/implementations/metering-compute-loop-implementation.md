@@ -1,8 +1,13 @@
+---
+type: implementation
+title: "Implementation contract — metering-compute-loop (v1.10)"
+---
+
 # Implementation contract — metering-compute-loop (v1.10)
 
-Halt-loop working contract. Plan: `knowledge-base/plans/metering-compute-loop-plan.md` (v1.10).
+Halt-loop working contract. Plan: [`knowledge-base/plans/metering-compute-loop-plan.md`](../plans/metering-compute-loop-plan.md) (v1.10).
 Resume: query layer of T2.3 committed (`ff76ec5f`) + PG-REAL validated; wrapper + tests pending.
-Full resolved spec for the remaining T2.3: `knowledge-base/implementations/metering-compute-loop/sepa-iterations/T2.3-query-layer-validated.md`.
+Full resolved spec for the remaining T2.3: [`knowledge-base/implementations/metering-compute-loop/sepa-iterations/T2.3-query-layer-validated.md`](./metering-compute-loop/sepa-iterations/T2.3-query-layer-validated.md).
 
 ## Task status (from .progress-metering-compute-loop.json)
 
@@ -40,7 +45,7 @@ TDD RED-first; parsimony ladder in GREEN; SOLID/Clean-Code/DRY in REFACTOR; wiri
 
 ## Iteration-2 starting context (SEPA pre-RED iter 1 + harness map — START HERE)
 
-Full SEPA brief: `sepa-iterations/iteration-1-resume-T2.3-pre-red.md`. Two CRITICAL guardrails:
+Full SEPA brief: [`sepa-iterations/iteration-1-resume-T2.3-pre-red.md`](./metering-compute-loop/sepa-iterations/iteration-1-resume-T2.3-pre-red.md). Two CRITICAL guardrails:
 
 1. **[CRITICAL] Do NOT connect the MeteringStore pool / RLS tests as OWNER.** The existing `loopzeroWorkerDBURL()` (`internal/db/loopzero_worker_role_test.go:43`) is MISLEADINGLY named — it returns `secretL19DBURL()` = the OWNER DSN, which bypasses RLS unconditionally (FORCE RLS off, mig 000010). Using it makes `WithoutRLSBypass_WritesZeroRows` theatre (passes for the wrong reason). The MeteringStore pool uses `config.EffectiveWorkerDatabaseURL()` (`internal/config/config.go:782`, env `LOOPZERO_WORKER_DATABASE_URL`) = a genuine `loopzero_worker` connection. RLS tests need a real `loopzero_worker` DSN (or `SET ROLE loopzero_worker` in-session) + a skip-if-owner guard. Grep-guard: no worker-write test reuses `secretL19DBURL()`.
 

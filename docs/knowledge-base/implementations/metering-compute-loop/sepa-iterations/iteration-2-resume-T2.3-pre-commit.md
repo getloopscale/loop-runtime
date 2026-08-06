@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA pre-COMMIT (VERBOSE) — Iteration 2 (resume) / Task T2.3 return-contract redesign"
+---
+
 # SEPA pre-COMMIT (VERBOSE) — Iteration 2 (resume) / Task T2.3 return-contract redesign
 
 Date: 2026-07-01. Commit: **b3b23573** `feat(metering): MeterCompute/Split return per-period cost + boundaries`.

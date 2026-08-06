@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Infra Standardization + Secrets Posture Audit (incl. Infisical evaluation)"
+status: deprecated
+---
+
 # Plan: Infra Standardization + Secrets Posture Audit (incl. Infisical evaluation)
 
 > **Version 1.2** (2026-05-20) — Edge case review Pass 2 aplicado. 2 MUST
@@ -36,7 +42,7 @@
 ## Context
 
 A sessão drill 2026-05-20 produziu 36 Ginkgo FAILs + 117 SKIPs em 342
-specs (`.claude/knowledge-base/reviews/drill-2026-05-20/REPORT.md`) e
+specs ([`.claude/knowledge-base/reviews/drill-2026-05-20/REPORT.md`](../../reviews/density-audit-2026-05-25/REPORT.md)) e
 expôs 3 mecanismos de drift documentados em
 `.claude/knowledge-base/strategy/infra-reorganization-2026-05-20.md`:
 
@@ -2488,5 +2494,5 @@ CHANGELOG entry per phase + operator runbook update.
 
 ### Session evidence
 - `.claude/knowledge-base/strategy/infra-reorganization-2026-05-20.md` (deep research)
-- `.claude/knowledge-base/reviews/drill-2026-05-20/REPORT.md` (LIVE session)
+- [`.claude/knowledge-base/reviews/drill-2026-05-20/REPORT.md`](../../reviews/density-audit-2026-05-25/REPORT.md) (LIVE session)
 - `.claude/knowledge-base/concepts/operations/finding-2026-05-20-velero-bsl-schedules-drill-gap.md`

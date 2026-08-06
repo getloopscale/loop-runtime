@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — Maturity 3.62→4.0 Roadmap"
+status: deprecated
+---
+
 # Edge Case Review — Maturity 3.62→4.0 Roadmap
 
 **Data:** 2026-05-26
-**Plano:** docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md (v1.0, 1942 linhas)
+**Plano:** [docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md](./2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md) (v1.0, 1942 linhas)
 **Tasks analisadas:** 27 (T0.1 a T5.4 em 6 phases)
 **Edge cases encontrados:** 19 (MUST FIX: 8, SHOULD TEST: 6, DOCUMENT: 5)
 

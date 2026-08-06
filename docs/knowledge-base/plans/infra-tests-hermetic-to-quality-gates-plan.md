@@ -1,4 +1,7 @@
 ---
+type: plan
+title: "Plan: M16 Hermetic Test Migration — `infra/tests/check-*_test.sh` → Go Quality Gates"
+generated: { by: process:to-plan, at: 2026-07-10 }
 version: 1.1
 slug: infra-tests-hermetic-to-quality-gates
 milestone_id: M16
@@ -17,7 +20,7 @@ based_on: knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-
 
 **Prior art consumed:**
 
-- Discovery blueprint at `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md` v1.0 (SHIPPABLE 98.3) — codifies M-Migrate2 pattern, 5 blueprint-ADRs, 14-step Migration recipe, 8 recommendations
+- Discovery blueprint at [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md) v1.0 (SHIPPABLE 98.3) — codifies M-Migrate2 pattern, 5 blueprint-ADRs, 14-step Migration recipe, 8 recommendations
 - 12 M-Migrate2 precedent gates in `cmd/loopzero-ops/internal/quality/*/`
 - M-Migrate2 pattern established by M15 (20 seeds shipped in v0.59.0)
 - Registration precedent: `cmd/loopzero-ops/quality_registry.go`
@@ -94,7 +97,7 @@ Complete the M-Migrate2 strangler-fig migration of 27 hermetic bash tests to pur
 ## Prior Art & Related Work
 
 - **Internal:** M15 (12 M-Migrate2 gates shipped in v0.59.0 covering `infra/tests/check-*_test.sh` variants), M13 (`no-new-bash` gate inverted), M9 (`loopzero-ops quality` subcommand introduced), M8 1.5 (`install-git-hooks.sh` D4 hook).
-- **Discovery blueprint:** `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md` — 8 research questions answered with file:line evidence, 5 blueprint-ADRs codifying pattern, 14-step Migration recipe.
+- **Discovery blueprint:** [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md) — 8 research questions answered with file:line evidence, 5 blueprint-ADRs codifying pattern, 14-step Migration recipe.
 - **Rule inheritances:** `parsimony-ladder.md` GREEN-phase deliberation, `testing.md § 4.1` edge+negative case mandate.
 - **External SOTA:** none — this is an internal codebase migration. Blueprint's 12-gate precedent set is the reference.
 
@@ -892,7 +895,7 @@ Contract with cycle-release: plan frontmatter `milestone_id: M16` MUST match a R
 
 ## Cross-references
 
-- Discovery blueprint: `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`
+- Discovery blueprint: [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md)
 - Discovery plan (v1.1): `knowledge-base/discoveries/plans/infra-tests-hermetic-to-quality-gates-plan.md`
 - Confidence reports: `knowledge-base/reviews/infra-tests-hermetic-to-quality-gates-{discover-plan-confidence,discover-confidence,edge-cases}-2026-07-10.{json,md}`
 - Roadmap: `ROADMAP.md § M16`

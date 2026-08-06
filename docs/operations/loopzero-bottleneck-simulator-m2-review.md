@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M2 (AI Design Review via MCP)
+---
+
 # Review — LoopZero Bottleneck Simulator M2 (AI Design Review via MCP)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m2`.

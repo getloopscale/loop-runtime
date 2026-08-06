@@ -1,4 +1,6 @@
 ---
+title: "Architecture Diagrams — Eraser Workspace Index"
+generated: { by: process:architecture-diagram-cross-validation-session, at: 2026-07-01 }
 name: eraser-diagrams-index
 description: Index of the Eraser architecture diagrams (17 views, incl. a unified System Landscape entry point + multi-cell placement/routing + AWS-first target runtime & IaC decomposition + exposure surfaces). AWS-first target is the default frame. with per-view scope + code evidence; cross-validated 2026-07-01. Core deploy flow + supply-chain/observability/product-surface/memory/MCP-gateway/promptly + META Model B fabric + LoopZeroKit build-source seam + CI (Argo Events) + DR (Velero).
 type: index
@@ -95,7 +97,7 @@ Evidence verified during the 2026-07-01 cross-validation. Paths are relative to 
 - product: sibling repo `../loopzero-memory/` (TS, Postgres+pgvector, 4-verb API, REST+MCP+CLI surfaces; MCP OpenMemory-compat over SSE)
 
 ### 7 — View 6 (MCP Gateway)
-- sibling repo `../loopzero-traefik-mcp/` — "LoopZero MCP Gateway", Go reverse proxy behind Traefik OSS (`README.md`)
+- sibling repo `../loopzero-traefik-mcp/` — "LoopZero MCP Gateway", Go reverse proxy behind Traefik OSS ([`README.md`](../README.md))
 - flow: `MCP client → Traefik (routes /mcp/*) → Gateway [authenticate → inspect JSON-RPC → authorize per-tool/per-arg → filter tools/list] → upstream MCP servers`
 - reuses Model B credential fabric; `defaultAction = deny`; fail-closed; **pre-v1.0**
 
@@ -114,7 +116,7 @@ Evidence verified during the 2026-07-01 cross-validation. Paths are relative to 
 - schema: `api/internal/source/services.schema.json` (v2)
 - CLI producer: `../loopzero-cli/src/adapters/{services-json,source-bundle,source-upload,app-unit}.ts`
 - renderer: `api/internal/manifests/renderer.go` + `services_input_mapping.go`
-- canonical doc: `docs/architecture/loopzerokit-loopzerocloud-integration.md`
+- canonical doc: [`docs/architecture/loopzerokit-loopzerocloud-integration.md`](./loopzerokit-loopzerocloud-integration.md)
 
 ### 11 — View 10 (CI — Argo Events)
 - charts: `infra/helm/argo-events`, `infra/helm/loopzero-ci-workflows` (`Chart.yaml` — EventSource Gitea webhook + Sensor PR trigger + quality-gate WorkflowTemplate + 4 CronWorkflows; ADR-2026-05-27-T0.2)

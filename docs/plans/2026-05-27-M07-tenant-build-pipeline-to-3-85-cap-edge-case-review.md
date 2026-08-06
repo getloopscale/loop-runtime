@@ -1,7 +1,12 @@
+---
+type: plan
+title: "Edge Case Review — M07 Tenant Build Pipeline to 3.85 Cap"
+---
+
 # Edge Case Review — M07 Tenant Build Pipeline to 3.85 Cap
 
 **Data:** 2026-05-27
-**Plano:** `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`
+**Plano:** [`docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md)
 **Tasks analisadas:** 13 phases (M1: 5 phases, M2: 8 phases + Final Phase)
 **Edge cases encontrados:** 14 (MUST FIX: 7, SHOULD TEST: 4, DOCUMENT: 3)
 

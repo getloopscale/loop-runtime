@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M8 (mgmt / control-plane cluster capacity)
+---
+
 # Plan — LoopZero Bottleneck Simulator M8 (mgmt / control-plane cluster capacity)
 
 > Slug: `loopzero-bottleneck-simulator-m8`. Cycle: DISCOVER → PLAN → IMPLEMENT (TDD) → CODE-QUALITY → REVIEW.

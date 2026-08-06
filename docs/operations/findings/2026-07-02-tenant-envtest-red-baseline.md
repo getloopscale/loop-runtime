@@ -1,8 +1,13 @@
+---
+type: finding
+title: "tenant operator envtest suite is RED on branch `melhorias` (pre-existing)"
+---
+
 # FINDING — tenant operator envtest suite is RED on branch `melhorias` (pre-existing)
 
 - **Status:** ✅ **RESOLVED 2026-07-02** — deterministic failures fixed (`986b60b4`); the residual t31 status-write concurrency flake fixed under MEET-2026-07-02-002 (see § Resolution below).
 - **Date:** 2026-07-02
-- **Discovered during:** M9 Step 2 (extract environment) baseline capture — `docs/meetings/records/MEET-2026-07-02-001.md` MA-9.
+- **Discovered during:** M9 Step 2 (extract environment) baseline capture — [`docs/meetings/records/MEET-2026-07-02-001.md`](../../meetings/records/MEET-2026-07-02-001.md) MA-9.
 - **Severity:** HIGH (blocks any operators refactor that needs envtest as a behavior oracle — e.g. M9 Step 2).
 - **Build under test:** branch `melhorias`, engine sub-tree; `go build ./operators/...` OK.
 - **Filed to GitHub:** NOT filed — `gh` is unauthenticated for `getloopscale/loopzero` in this environment. This doc is the durable record until an operator files it.

@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "Iteration 3 (resume) — T2.3 MeteringStore wrapper (same-period)"
+---
+
 # Iteration 3 (resume) — T2.3 MeteringStore wrapper (same-period)
 
 Date: 2026-07-01. Commits this turn: **b3b23573** (return-contract), **83ecd959** (wrapper same-period).

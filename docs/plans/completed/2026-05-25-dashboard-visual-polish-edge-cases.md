@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-25-dashboard-visual-polish"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-25-dashboard-visual-polish
 
 **Data:** 2026-05-25
-**Plano:** `docs/plans/2026-05-25-dashboard-visual-polish-plan.md` v1.0
+**Plano:** [`docs/plans/2026-05-25-dashboard-visual-polish-plan.md`](./2026-05-25-dashboard-visual-polish-plan.md) v1.0
 **Tasks analisadas:** 11 (T-A.1, T-A.2, T-B.1, T-B.2, T-B.3, T-C.1, T-C.2, T-D.1, T-D.2, T-D.3, T-E.1)
 **Edge cases NOVOS encontrados:** 14 (MUST FIX: 3, SHOULD TEST: 8, DOCUMENT: 3)
 **Já triados inline no plano:** 7 (não duplicados aqui)

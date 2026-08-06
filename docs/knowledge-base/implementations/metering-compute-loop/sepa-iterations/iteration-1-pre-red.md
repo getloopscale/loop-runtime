@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA pre-RED — iter 1 / T0.1 / loopzero-contracts"
+---
+
 # SEPA pre-RED — iter 1 / T0.1 / loopzero-contracts
 MODE=TIGHT. Initial brief already covered T0.1 (the v0.2.0→v0.3.0 tag risk, folded into plan v1.7).
 ## Findings

@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Runbook: OpenBao Init Ceremony"
+---
+
 # Runbook: OpenBao Init Ceremony
 
 > **Scope:** F1.8 of plan 2026-06-02-openbao-adoption v1.2.
@@ -271,13 +276,13 @@ psql -h $LOOPZERO_DB_HOST -U loopzero -d loopzero -c "
 
 ## Recovery procedure references
 
-- AWS KMS unreachable + need to unseal → `docs/operations/break-glass-runbook.md`
+- AWS KMS unreachable + need to unseal → [`docs/operations/break-glass-runbook.md`](./break-glass-runbook.md)
 - Snapshot restore (cluster loss) → `docs/operations/openbao-disaster-recovery.md` (F1.10+)
 - Shard rotation (operator change) → run `bao operator rekey` per Q13
 
 ## References
 
-- Plan: `docs/plans/2026-06-02-openbao-adoption-plan.md` F1.8
+- Plan: [`docs/plans/2026-06-02-openbao-adoption-plan.md`](../plans/2026-06-02-openbao-adoption-plan.md) F1.8
 - ADR: `.claude/knowledge-base/decisions/2026-06-02-openbao-adoption.md` (Q13)
 - MEET-ASYNC: `MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md`
 - EC-05: edge review `.claude/knowledge-base/plans/2026-06-02-openbao-adoption-edge-review.md`

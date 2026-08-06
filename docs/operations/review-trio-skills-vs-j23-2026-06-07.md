@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Review: cleanroom + dogfood full + chaos-test + live-proof vs J-23 2026-06-07 LIVE catches"
+---
+
 # Review: cleanroom + dogfood full + chaos-test + live-proof vs J-23 2026-06-07 LIVE catches
 
 **Created:** 2026-06-07

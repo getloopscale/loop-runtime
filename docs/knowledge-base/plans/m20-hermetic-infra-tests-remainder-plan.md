@@ -1,4 +1,6 @@
 ---
+type: plan
+title: Hermetic Test Migration Remainder
 slug: m20-hermetic-infra-tests-remainder
 milestone_id: M20
 created_at: 2026-07-10
@@ -9,9 +11,9 @@ authored_by: claude-opus-4-7
 
 # M20 — Hermetic Test Migration Remainder
 
-**Blueprint:** `knowledge-base/discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md` v1.0 SHIPPABLE 100.0
+**Blueprint:** [`knowledge-base/discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md`](../discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md) v1.0 SHIPPABLE 100.0
 **Discover plan:** `knowledge-base/discoveries/plans/m20-hermetic-infra-tests-remainder-plan.md` v1.0 SHIPPABLE 100.0
-**M16 canonical parent:** `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md` (SHIPPABLE 98.3)
+**M16 canonical parent:** [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md) (SHIPPABLE 98.3)
 
 ## Goal
 
@@ -73,7 +75,7 @@ Total: 18 script files DELETED + 18 new Go packages CREATED (~200 LoC each Go + 
 
 ## Prior Art & Related Work
 
-- **Blueprint (SoT):** `knowledge-base/discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md` v1.0.
+- **Blueprint (SoT):** [`knowledge-base/discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md`](../discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md) v1.0.
 - **M16 canonical parent:** 10 gates shipped v0.60.0 2026-07-10 with M-Migrate2 pattern.
 - **Shell-script-strategic-plan v1.3 (2026-05-22):** established the M-Migrate2 pattern + D3 no-new-bash + D4 KEEP criteria.
 
@@ -133,7 +135,7 @@ Phase 5 (Integration validation + oracle re-freeze + M20 [x]) — depends on Pha
 
 ### T1.1 — Capture pre-M20 baseline
 
-**Files to edit:** `knowledge-base/audits/M20-pre-migration-baseline-2026-07-10.md` (NEW)
+**Files to edit:** [`knowledge-base/audits/M20-pre-migration-baseline-2026-07-10.md`](../audits/M20-pre-migration-baseline-2026-07-10.md) (NEW)
 
 **Deep file dependency analysis:** allowlist grep `-c` output; 18-target inventory verification.
 
@@ -308,7 +310,7 @@ Phase 5 (Integration validation + oracle re-freeze + M20 [x]) — depends on Pha
 
 ### T5.3 — M20 checkbox flip + CHANGELOG audit
 
-**Files to edit:** `CHANGELOG.md` (audit only), `ROADMAP.md` (M20 [ ] → [x]), `knowledge-base/roadmap-runs/M20-2026-07-10.md` (NEW).
+**Files to edit:** `CHANGELOG.md` (audit only), `ROADMAP.md` (M20 [ ] → [x]), [`knowledge-base/roadmap-runs/M20-2026-07-10.md`](../roadmap-runs/M20-2026-07-10.md) (NEW).
 
 **Deep file dependency analysis:** DoD literal `≤ 100` verification. Empirical DoD #1 met if allowlist count == 100.
 
@@ -327,7 +329,7 @@ Phase 5 (Integration validation + oracle re-freeze + M20 [x]) — depends on Pha
 
 **Acceptance criteria:**
 - ROADMAP.md M20 line `[ ]` → `[x]`.
-- roadmap-runs/M20-2026-07-10.md exists with `status: completed` + `dod_amended: false` (M20 literal DoD met).
+- [roadmap-runs/M20-2026-07-10.md](../roadmap-runs/M20-2026-07-10.md) exists with `status: completed` + `dod_amended: false` (M20 literal DoD met).
 
 **DoD:** `chore(roadmap): mark M20 done (v0.63.0)`.
 

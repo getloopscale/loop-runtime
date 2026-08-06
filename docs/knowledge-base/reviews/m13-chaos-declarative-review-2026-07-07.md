@@ -1,3 +1,8 @@
+---
+type: review
+title: M13 Chaos Declarative + Bash Strangler Completion
+---
+
 # Review — M13 Chaos Declarative + Bash Strangler Completion
 
 **Date:** 2026-07-07

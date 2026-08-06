@@ -1,3 +1,8 @@
+---
+type: technical-note
+title: Shared Packages Architecture
+---
+
 # Shared Packages Architecture
 
 ## Escopo

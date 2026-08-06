@@ -1,3 +1,8 @@
+---
+type: review
+title: "Edge Case Review — operator-glue-go-migration (M15)"
+---
+
 # Edge Case Review — operator-glue-go-migration (M15)
 
 Date: 2026-07-08

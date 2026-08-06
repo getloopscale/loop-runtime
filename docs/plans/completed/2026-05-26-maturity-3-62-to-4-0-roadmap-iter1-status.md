@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan 2026-05-26 Maturity 3.62→4.0 — Iteration 1 Status Report"
+status: deprecated
+---
+
 # Plan 2026-05-26 Maturity 3.62→4.0 — Iteration 1 Status Report
 
 **Date:** 2026-05-27
@@ -11,13 +17,13 @@
 |------|-------------|-----------|--------|
 | **T1.1** | Correlation-ID propagation in 7 reconcilers | 7 controller files + import injection | ✅ Build GREEN |
 | **T1.2** | Charts overlap parity CI gate | `pkg/quality/helmoverlapparity/` + loopzero-ops wire + taskfiles/quality.yml | ✅ 17 tests PASS, LIVE gate PASS |
-| **T1.3** | withEnvironmentLock visibility audit | `docs/architecture/api/withenvironmentlock-coverage.md` (34 routes classified) | ✅ Doc complete |
+| **T1.3** | withEnvironmentLock visibility audit | [`docs/architecture/api/withenvironmentlock-coverage.md`](../../architecture/api/withenvironmentlock-coverage.md) (34 routes classified) | ✅ Doc complete |
 | **T2.6** | Wire `doctor` CLI + standardize process.exitCode | `cli/src/register/diagnostics.ts` + index.ts wire + platform.ts refactor | ✅ tsc GREEN |
-| **T3.1** | Cell drain operational runbook | `docs/operations/cell-drain-runbook.md` | ✅ Doc complete |
-| **T3.2** | Session token rotation runbook | `docs/operations/session-token-rotation-runbook.md` | ✅ Doc complete |
-| **T3.3** | Cosign signing key rotation runbook + cutover script | `docs/operations/cosign-signing-key-rotation-runbook.md` + `infra/scripts/security/check-cosign-cutover-deadline.sh` (158 LOC, allowlisted) | ✅ Script 3/3 hermetic paths PASS |
-| **T0.3** | Production canary Stage 4 runbook | `docs/operations/production-canary-stage4-runbook.md` | ✅ Doc complete |
-| **T0.4** | Customer trial onboarding plan + Stage 5 runbook | `docs/operations/customer-trial-onboarding-plan.md` + `production-canary-stage5-runbook.md` | ✅ Docs complete |
+| **T3.1** | Cell drain operational runbook | [`docs/operations/cell-drain-runbook.md`](../../operations/cell-drain-runbook.md) | ✅ Doc complete |
+| **T3.2** | Session token rotation runbook | [`docs/operations/session-token-rotation-runbook.md`](../../operations/session-token-rotation-runbook.md) | ✅ Doc complete |
+| **T3.3** | Cosign signing key rotation runbook + cutover script | [`docs/operations/cosign-signing-key-rotation-runbook.md`](../../operations/cosign-signing-key-rotation-runbook.md) + `infra/scripts/security/check-cosign-cutover-deadline.sh` (158 LOC, allowlisted) | ✅ Script 3/3 hermetic paths PASS |
+| **T0.3** | Production canary Stage 4 runbook | [`docs/operations/production-canary-stage4-runbook.md`](../../operations/production-canary-stage4-runbook.md) | ✅ Doc complete |
+| **T0.4** | Customer trial onboarding plan + Stage 5 runbook | [`docs/operations/customer-trial-onboarding-plan.md`](../../operations/customer-trial-onboarding-plan.md) + [`production-canary-stage5-runbook.md`](../../operations/production-canary-stage5-runbook.md) | ✅ Docs complete |
 | **T4.1** | Property-based tests extension | `pkg/{errors,jwt,enforcement}/properties_test.go` (19 properties) | ✅ All 19 GREEN |
 | **T4.2** | shellrun signal/exit coverage | `pkg/shellrun/signal_test.go` (6 corner tests) | ✅ All 6 GREEN |
 | **T4.5** | Release ARCHIVED state machine integration | `pkg/statemachine/release.go` + `release_typed.go` + 5 new tests + DOT regen | ✅ Suite GREEN |
@@ -140,7 +146,7 @@ Per plan Global DoD:
    /audit-modular full  # Phase 5
    ```
 
-5. **Customer trial coordination:** Sponsor + Sales select Profile A (per `customer-trial-onboarding-plan.md`) + execute Stage 5 (per `production-canary-stage5-runbook.md`)
+5. **Customer trial coordination:** Sponsor + Sales select Profile A (per [`customer-trial-onboarding-plan.md`](../../operations/customer-trial-onboarding-plan.md)) + execute Stage 5 (per [`production-canary-stage5-runbook.md`](../../operations/production-canary-stage5-runbook.md))
 
 ## Honest closure
 

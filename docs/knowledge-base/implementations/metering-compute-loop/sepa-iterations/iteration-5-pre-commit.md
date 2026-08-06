@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA pre-COMMIT — iter 5 / T2.2 / migration 000047"
+---
+
 # SEPA pre-COMMIT — iter 5 / T2.2 / migration 000047
 MODE=TIGHT. usage_records.quantity INTEGER->BIGINT (overflow guard for compute counters).
 ## Findings

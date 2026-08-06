@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-state baseline — 2026-06-08 pre pre-release-test-rigor"
+---
+
 # Steady-state baseline — 2026-06-08 pre pre-release-test-rigor
 
 > 4-layer baseline per `.claude/rules/steady-state-baseline.md` captured
@@ -15,7 +20,7 @@ suites — closing the test-coverage gap that let 5 LIVE-only bugs slip
 past the previous gates in the dashboard-screens-review-fixes
 sponsor-walkthrough. Any regression that surfaces post-merge will be
 diff-bounded by this snapshot. The next baseline
-(`2026-06-08-post-test-rigor-cleanroom.md` — T6.1 evidence file) will
+([`2026-06-08-post-test-rigor-cleanroom.md`](./2026-06-08-post-test-rigor-cleanroom.md) — T6.1 evidence file) will
 capture the post-implementation state after the cleanroom-fresh
 `task test:pre-release-rigor` run completes.
 
@@ -33,7 +38,7 @@ working tree:         clean (the contract correction landed in 78099a73)
 ```
 
 The previous milestone baseline is
-`docs/operations/baselines/2026-06-08-pre-dashboard-screens-review-fixes.md`
+[`docs/operations/baselines/2026-06-08-pre-dashboard-screens-review-fixes.md`](./2026-06-08-pre-dashboard-screens-review-fixes.md)
 (15-task dashboard remediation). Intermediate work in
 `worktree-glowing-growing-babbage` delivered the 15-task dashboard
 plan + 5 iter-20 LIVE bug fixes + sponsor walkthrough sign-off + the
@@ -164,7 +169,7 @@ required). Cenário 1's chain test will sign payloads correctly.
 ## What changes between this baseline and the next (forward-looking)
 
 After `/implement 2026-06-08-pre-release-test-rigor` completes,
-the next baseline (`2026-06-08-post-test-rigor-cleanroom.md`) should show:
+the next baseline ([`2026-06-08-post-test-rigor-cleanroom.md`](./2026-06-08-post-test-rigor-cleanroom.md)) should show:
 
 - `infra/tests/e2e/dev-public-webhook-chain_test.sh` exists (Cenário 1 LIVE)
 - `infra/scripts/local/baseline-capture.sh` + `baseline-diff.sh` exist (Cenário 2 lib)
@@ -202,6 +207,6 @@ the next baseline (`2026-06-08-post-test-rigor-cleanroom.md`) should show:
 - Implementation contract: `.claude/knowledge-base/implementations/2026-06-08-pre-release-test-rigor-implementation.md`
 - SEPA initial brief: `.claude/knowledge-base/implementations/2026-06-08-pre-release-test-rigor/sepa-iterations/initial-brief-response.md`
 - Rule: `.claude/rules/steady-state-baseline.md`
-- Previous baseline: `docs/operations/baselines/2026-06-08-pre-dashboard-screens-review-fixes.md`
+- Previous baseline: [`docs/operations/baselines/2026-06-08-pre-dashboard-screens-review-fixes.md`](./2026-06-08-pre-dashboard-screens-review-fixes.md)
 - Sponsor mandate locking this plan ahead of priority chain: `CLAUDE.md § Dashboard Journeys — sponsor priority chain (locked 2026-06-08)`
 - Memory: `feedback_test_rigor_before_priority_chain` (sponsor verbatim 2026-06-08)

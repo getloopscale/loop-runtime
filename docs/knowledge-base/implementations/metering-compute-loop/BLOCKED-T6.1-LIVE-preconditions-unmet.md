@@ -1,3 +1,8 @@
+---
+type: implementation
+title: "T6.1 LIVE — engineering side advanced; deployment surface + sponsor still block"
+---
+
 # BLOCKED — T6.1 LIVE — engineering side advanced; deployment surface + sponsor still block
 
 **Status:** BLOCKED post-Cleanroom on the loopzero-controller deployment surface + sponsor JUNTOS. `<promise>IMPLEMENTATION_COMPLETE</promise>` NOT emitted (would be false — Rule 3, per HANDOFF § "Git / process" INQUEBRÁVEL).
@@ -20,7 +25,7 @@
 
 ## T0.1 workspace WIP restored — the pre-Cleanroom compile-blocker from the first BLOCKED report is now cleared
 
-The `initial-brief-response.md` warning was accurate: loopzero-contracts `v0.3.0` was never tagged, the local WIP that satisfied `loopzero/go.work`'s `use ../loopzero-contracts` at commit `loopzero:ea696abb` was lost (this clone's reflog only records clone + branch ops), and `pkg/enforcement/cost_cap.go:40-41` referenced undefined `plan.MetricCPUCoreSeconds` / `plan.MetricMemGBSeconds`. This session reconstructed the WIP state as an **additive, workspace-local, non-published** edit in loopzero-contracts.
+The [`initial-brief-response.md`](./sepa-iterations/initial-brief-response.md) warning was accurate: loopzero-contracts `v0.3.0` was never tagged, the local WIP that satisfied `loopzero/go.work`'s `use ../loopzero-contracts` at commit `loopzero:ea696abb` was lost (this clone's reflog only records clone + branch ops), and `pkg/enforcement/cost_cap.go:40-41` referenced undefined `plan.MetricCPUCoreSeconds` / `plan.MetricMemGBSeconds`. This session reconstructed the WIP state as an **additive, workspace-local, non-published** edit in loopzero-contracts.
 
 Concrete evidence:
 - `loopzero-contracts` commit `834d328` on local `develop` (NOT pushed; no tag cut) — adds `MetricCPUCoreSeconds CostMetric = "cpu_core_seconds"` and `MetricMemGBSeconds CostMetric = "mem_gb_seconds"` to `plan/plan.go`.
@@ -163,7 +168,7 @@ The HANDOFF-T6.1-LIVE.md protocol's terminal state for this session is:
 5. **Enable kill-switch** per HANDOFF Step 3 (`UPDATE metering_config SET enabled = true WHERE id = true;`).
 6. **LIVE assertion** per HANDOFF Step 4 — Prometheus `loopzero_metering_*` + money-side SQL.
 7. **Sponsor JUNTOS** presencial for Step 4 witness (HARD STOP).
-8. **Only then** update `metering-compute-loop-implementation.md`, capture post-baseline, emit the completion promise.
+8. **Only then** update [`metering-compute-loop-implementation.md`](../metering-compute-loop-implementation.md), capture post-baseline, emit the completion promise.
 
 ## What was NOT done (intentional; Rule 3)
 
@@ -175,11 +180,11 @@ The HANDOFF-T6.1-LIVE.md protocol's terminal state for this session is:
 
 ## References
 
-- HANDOFF: `knowledge-base/implementations/metering-compute-loop/HANDOFF-T6.1-LIVE.md`
-- Contract + task table: `knowledge-base/implementations/metering-compute-loop-implementation.md`
-- Plan (v1.10): `knowledge-base/plans/metering-compute-loop-plan.md`
+- HANDOFF: [`knowledge-base/implementations/metering-compute-loop/HANDOFF-T6.1-LIVE.md`](./HANDOFF-T6.1-LIVE.md)
+- Contract + task table: [`knowledge-base/implementations/metering-compute-loop-implementation.md`](../metering-compute-loop-implementation.md)
+- Plan (v1.10): [`knowledge-base/plans/metering-compute-loop-plan.md`](../../plans/metering-compute-loop-plan.md)
 - LIVE mandate: `.claude/rules/cleanroom-up-live-test-mandate.md`
 - Baseline rule: `.claude/rules/steady-state-baseline.md`
 - Governance (T2/T3): `.claude/rules/pre-release-governance.md`
-- Pre-flight brief that already flagged the T0.1 gap: `sepa-iterations/initial-brief-response.md`
-- Earlier upstream BLOCKER (independent — ADR-5 phantom `tenants.status`): `BLOCKER-adr5-tenant-status-source.md`
+- Pre-flight brief that already flagged the T0.1 gap: [`sepa-iterations/initial-brief-response.md`](./sepa-iterations/initial-brief-response.md)
+- Earlier upstream BLOCKER (independent — ADR-5 phantom `tenants.status`): [`BLOCKER-adr5-tenant-status-source.md`](./BLOCKER-adr5-tenant-status-source.md)

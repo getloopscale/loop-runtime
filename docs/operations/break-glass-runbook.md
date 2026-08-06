@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Runbook: OpenBao Break-Glass Recovery"
+---
+
 # Runbook: OpenBao Break-Glass Recovery
 
 > **CLASSIFIED — operator + sponsor only**
@@ -108,7 +113,7 @@ Once unsealed, restore normal AWS KMS auto-unseal path:
    should be considered exposed if any non-owner accessed during
    break-glass)
 5. Redistribute new shards per Q13 custody model (re-run
-   `docs/operations/openbao-init-runbook.md` steps 6-7.9)
+   [`docs/operations/openbao-init-runbook.md`](./openbao-init-runbook.md) steps 6-7.9)
 
 ### Phase 6 — Post-incident review (within 7 days)
 
@@ -155,9 +160,9 @@ Once per year:
 
 ## References
 
-- Plan: `docs/plans/2026-06-02-openbao-adoption-plan.md` F1.8 + Q13
+- Plan: [`docs/plans/2026-06-02-openbao-adoption-plan.md`](../plans/2026-06-02-openbao-adoption-plan.md) F1.8 + Q13
 - ADR: `.claude/knowledge-base/decisions/2026-06-02-openbao-adoption.md` (Q13)
-- Init runbook: `docs/operations/openbao-init-runbook.md`
+- Init runbook: [`docs/operations/openbao-init-runbook.md`](./openbao-init-runbook.md)
 - Disaster recovery: `docs/operations/openbao-disaster-recovery.md` (F1.10+)
 
 ## CLASSIFIED notice

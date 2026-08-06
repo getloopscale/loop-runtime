@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator (M0)
+---
+
 # Plan — LoopZero Bottleneck Simulator (M0)
 
 > Slug: `loopzero-bottleneck-simulator` · Cycle: DISCOVER→PLAN→IMPLEMENT→REVIEW · FAANG-level, no workarounds.

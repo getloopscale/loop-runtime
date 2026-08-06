@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Pulumi Vault Provider Bootstrap Runbook
+---
+
 # Pulumi Vault Provider Bootstrap Runbook
 
 > **T9.2-T9.5 of plan 2026-06-02-openbao-adoption v1.4**
@@ -156,4 +161,4 @@ suggestion pointing back to this runbook.
 - `infra/pulumi/src/components/vault-iac.ts` — `VaultSecretReader` impl.
 - `cmd/loopzero-ops/internal/quality/nopulumiinlinesecrets` — enforcement gate (T9.6).
 - `infra/scripts/openbao/migrate-pulumi-secrets-to-vault.sh` — orchestrator.
-- Plan: `.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md`.
+- Plan: [`.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md`](../plans/2026-06-02-openbao-adoption-plan.md).

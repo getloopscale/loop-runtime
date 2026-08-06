@@ -1,4 +1,6 @@
 ---
+title: "CI Runbook — T0.2 Cenário B (Argo Workflows + Argo Events)"
+generated: { by: process:t0.2-plan-implementation, at: 2026-05-27 }
 name: ci-runbook
 description: Operator runbook for activating + operating LoopZero CI (T0.2 Cenário B — Argo Workflows + Argo Events). Covers activation, daily operation, troubleshooting, rollback to Cenário C.
 type: operational-runbook
@@ -300,9 +302,9 @@ Cenário C (GHA SaaS): sponsor reverses 2026-05-23 operator decision
 
 - ADR: `.claude/knowledge-base/decisions/2026-05-27-T0.2-cenario-b-ratified.md`
 - Meeting: `.claude/knowledge-base/meetings/MEET-2026-05-27-batch-sponsor-approvals.md`
-- Plan: `docs/plans/2026-05-27-t0.2-cenario-b-argo-workflows-ci-poc-plan.md`
-- AS-IS architecture: `docs/architecture/ci-cd/argo-workflows-build-pipeline.md`
-- PROPOSED architecture: `docs/architecture/ci-cd/diff/real-ci-active.md`
+- Plan: [`docs/plans/2026-05-27-t0.2-cenario-b-argo-workflows-ci-poc-plan.md`](../plans/2026-05-27-t0.2-cenario-b-argo-workflows-ci-poc-plan.md)
+- AS-IS architecture: [`docs/architecture/ci-cd/argo-workflows-build-pipeline.md`](../architecture/ci-cd/argo-workflows-build-pipeline.md)
+- PROPOSED architecture: [`docs/architecture/ci-cd/diff/real-ci-active.md`](../architecture/ci-cd/diff/real-ci-active.md)
 - Cenário C fallback files (preserved):
   - `infra/helm/gitea/values-actions-poc.yaml.disabled`
   - `.gitea/workflows/quality.yml.example`

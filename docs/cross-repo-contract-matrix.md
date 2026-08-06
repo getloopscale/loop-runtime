@@ -1,3 +1,8 @@
+---
+type: contract-matrix
+title: Cross-Repo Contract Matrix (M5)
+---
+
 # Cross-Repo Contract Matrix (M5)
 
 The decomposition seams are HTTP/OpenAPI contracts. This matrix keeps them honest

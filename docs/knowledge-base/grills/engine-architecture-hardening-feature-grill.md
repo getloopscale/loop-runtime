@@ -1,9 +1,13 @@
 ---
+type: grill
+title: "Feature grill — Engine Architecture Hardening (M9)"
+generated: { by: process:roadmap-feature, at: 2026-07-02 }
+status: stable
 slug: engine-architecture-hardening
 generated_by: roadmap-feature
 new_milestone_id: M9
 date: 2026-07-02
-status: completed
+workflow_status: completed
 source_report: architect-output/architecture-report.md
 ---
 

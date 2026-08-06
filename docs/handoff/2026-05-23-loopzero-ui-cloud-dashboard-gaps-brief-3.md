@@ -1,10 +1,15 @@
+---
+type: handoff
+title: "Brief #3: Add 2 deferred primitives to @loopzero/ui (Alert + Pagination)"
+---
+
 # Brief #3: Add 2 deferred primitives to @loopzero/ui (Alert + Pagination)
 
 > **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
 > **Output:** 2 new primitives + tests + stories + barrel exports.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
 > **Priority:** LOWER than Briefs #1/#2 — **not blocking** Phase 0 of consumer plan. Ship when convenient OR defer until consumer demands empirically.
-> **Companion to:** Brief #1 (`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`) + Brief #2 (`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md`).
+> **Companion to:** Brief #1 ([`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md)) + Brief #2 ([`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md)).
 
 ---
 
@@ -354,9 +359,9 @@ This brief should ship as **`@loopzero/ui@0.9.0-next.0`** (minor bump from 0.8.0
 
 ## Cross-reference
 
-- Brief #1: `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (4 PaaS-shape primitives — shipped in 0.7.0)
-- Brief #2: `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md` (8 cross-cutting primitives — shipped in 0.8.0)
-- Consumer plan: `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1 (pending v1.2 bump for Tailwind v4 + Geist fonts + theme API findings from llms.txt)
+- Brief #1: [`loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md) (4 PaaS-shape primitives — shipped in 0.7.0)
+- Brief #2: [`loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md) (8 cross-cutting primitives — shipped in 0.8.0)
+- Consumer plan: [`loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](../plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md) v1.1 (pending v1.2 bump for Tailwind v4 + Geist fonts + theme API findings from llms.txt)
 - llms.txt source-of-truth: `https://docs.loopzero.example/llms.txt`
 - Existing siblings for API patterns:
   - `loopzero-ui/src/components/primitives/toast/toast.tsx` — Alert is the persistent counterpart

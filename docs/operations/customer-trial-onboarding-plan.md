@@ -1,8 +1,13 @@
+---
+type: operational-runbook
+title: Customer Trial Onboarding Plan
+---
+
 # Customer Trial Onboarding Plan
 
-> **Plan reference:** T0.4 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T0.4 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
-> **Status:** Planning document. Customer trial execution per `production-canary-stage5-runbook.md`.
+> **Status:** Planning document. Customer trial execution per [`production-canary-stage5-runbook.md`](./production-canary-stage5-runbook.md).
 
 ## Purpose
 
@@ -55,7 +60,7 @@ Document **what needs to be decided** by Sponsor + Sales before 1st customer tri
 
 ## SLA Template
 
-See `production-canary-stage5-runbook.md` § "SLA Template". Sponsor must:
+See [`production-canary-stage5-runbook.md`](./production-canary-stage5-runbook.md) § "SLA Template". Sponsor must:
 - Review template
 - Customize as needed (specific customer commitments)
 - Sign + obtain customer signature
@@ -140,6 +145,6 @@ Default: **quiet internal** for first trial. **Case study** for second trial (po
 
 ## Reference
 
-- `production-canary-stage5-runbook.md` (execution procedure)
+- [`production-canary-stage5-runbook.md`](./production-canary-stage5-runbook.md) (execution procedure)
 - CLAUDE.md "Path to maturity 4.0" gate (b)
 - MEET-2026-05-12 (pricing decisions D4 — Pro public, Team Early Access)

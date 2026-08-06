@@ -1,3 +1,8 @@
+---
+type: decision
+title: Render schema.gen.sql via golang-migrate replay against ephemeral PostgreSQL 16; preserve golang-migrate as canonical migrator
+---
+
 # ADR — Render schema.gen.sql via golang-migrate replay against ephemeral PostgreSQL 16; preserve golang-migrate as canonical migrator
 
 **Date:** 2026-05-29
@@ -73,7 +78,7 @@ For the render to be a useful CI gate, it must be **byte-identical** across runn
 
 1. **PostgreSQL version pinned to 16** (matches DOKS managed prod). Specific minor version pinned in CI workflow (e.g., `postgres:16.3-alpine`). When DOKS bumps minor, CI bump is a coordinated PR.
 2. **golang-migrate version pinned** in BOTH the CI render job AND `infra/scripts/production/run-migrations.sh` (per ADR-1 M-4). A version mismatch fails a dedicated CI gate (`pkg/quality/migrateversion/` or similar) — drift between CI render and production migrator is forbidden.
-3. **sqlc CLI version pinned** in CI + documented in `docs/operations/dev-loop.md` for local regeneration (per ADR-1 M-3).
+3. **sqlc CLI version pinned** in CI + documented in [`docs/operations/dev-loop.md`](../operations/dev-loop.md) for local regeneration (per ADR-1 M-3).
 4. **`pg_dump --no-owner --no-privileges --schema-only`** + post-process to strip:
    - serial / identity sequence generation artifacts (timestamps, current values)
    - ALTER ... OWNER statements (security hygiene; CI role differs from prod role)
@@ -114,7 +119,7 @@ For the render to be a useful CI gate, it must be **byte-identical** across runn
 | New ephemeral PG container required in CI | Reproducibility ratchet + ground-truth schema source | Container is alpine-based and lightweight; lifecycle is per-CI-run; cost is seconds, not minutes |
 | New shell script `infra/scripts/ci/render-schema-gen-sql.sh` | Must be in `shell-scripts-allowlist.md` per D3 of 2026-05-22 plan | Allowlist entry added in same PR; script is CI-orchestrator type (wraps `migrate` + `pg_dump`); justified under "Anti-Pattern #8 — CI orchestrators are acceptable shell" |
 | `task quality:gates` execution-time budget grows | Render + diff is single-digit seconds; gate counter moves to 11 (+ ADR-1 sqlcsync) → 12 | Pre/post measurement in ADR-1 M-20; budget delta ≤ +20s acceptable for both gates combined |
-| Developer onboarding adds one tool (sqlc CLI) | Don't-reinvent-the-wheel (Rule 9); same as ADR-1 | Documented in `docs/operations/dev-loop.md` per ADR-1 M-3 + M-22 |
+| Developer onboarding adds one tool (sqlc CLI) | Don't-reinvent-the-wheel (Rule 9); same as ADR-1 | Documented in [`docs/operations/dev-loop.md`](../operations/dev-loop.md) per ADR-1 M-3 + M-22 |
 | Version-pin coupling between CI render and `infra/scripts/production/run-migrations.sh` | Drift between them silently produces invalid CI schema | Dedicated CI gate enforces version match; mismatch fails fast |
 | `schema.gen.sql` lives in repo as committed artifact | Generated files in repos can become noisy in diffs | Headed with `DO NOT EDIT`; CI gate fails on hand-edits; sqlc-generated files follow the same convention |
 
@@ -176,13 +181,13 @@ ADR-2 does not introduce new mandatory actions beyond ADR-1's M-3, M-4, M-5, M-1
 
 | ID (from ADR-1) | Action |
 |---|---|
-| M-3 | Pin sqlc CLI version (v1.31.1+) in CI workflow and in `docs/operations/dev-loop.md` |
+| M-3 | Pin sqlc CLI version (v1.31.1+) in CI workflow and in [`docs/operations/dev-loop.md`](../operations/dev-loop.md) |
 | M-4 | Pin golang-migrate version in BOTH `infra/scripts/production/run-migrations.sh` AND the new CI render job |
 | M-5 | Pin PostgreSQL 16 in CI render container |
 | M-12 | Add `task db:render-schema` target wrapping the render script |
 | M-19 | CLAUDE.md updated with new "Stack" entry for sqlc + updated db/ structure note |
 | M-20 | Pre/post CI execution-time budget measurement for `task quality:gates`; delta ≤ +20s acceptable |
-| M-22 | Document the raw escape allowlist in `docs/operations/dev-loop.md` |
+| M-22 | Document the raw escape allowlist in [`docs/operations/dev-loop.md`](../operations/dev-loop.md) |
 | M-23 | Generated package header comment must include sqlc version, render timestamp, schema git-sha, and `DO NOT EDIT` marker |
 
 ADR-2-specific addendum action:
@@ -207,10 +212,10 @@ ADR-2-specific addendum action:
   - `infra/scripts/ci/render-schema-gen-sql.sh` (new render script; allowlist target per M-2A)
   - `api/internal/db/schema.gen.sql` (new committed artifact)
   - `api/internal/db/migrations/000001..000020` (schema source of truth — unchanged)
-  - `docs/operations/dev-loop.md` (developer documentation; updated per M-22)
+  - [`docs/operations/dev-loop.md`](../operations/dev-loop.md) (developer documentation; updated per M-22)
 - **Strategic plan precedent:**
-  - `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3 (D3 forbids new `.sh` files by default; M-2A is the explicit exception entry)
-  - `docs/decisions/2026-05-21-naming-conventions-adr.md` (precedent for ADR-driven CI gate ratification)
+  - [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md) v1.3 (D3 forbids new `.sh` files by default; M-2A is the explicit exception entry)
+  - [`docs/decisions/2026-05-21-naming-conventions-adr.md`](./2026-05-21-naming-conventions-adr.md) (precedent for ADR-driven CI gate ratification)
 
 ---
 

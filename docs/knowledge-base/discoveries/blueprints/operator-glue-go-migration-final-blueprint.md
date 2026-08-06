@@ -1,4 +1,7 @@
 ---
+type: discovery-blueprint
+title: "Blueprint: Operator Glue → Go — Allowlist ≤ 30 (M15 Final)"
+generated: { by: process:discover-execute, at: 2026-07-10 }
 version: 1.0
 slug: operator-glue-go-migration-final
 milestone_id: M15
@@ -314,8 +317,8 @@ Rule 3 honesty: Checkpoint 3 empirically fails; blueprint surfaces it clearly + 
 ## Cross-references
 
 - Plan: `knowledge-base/discoveries/plans/operator-glue-go-migration-final-plan.md` v1.0
-- Grill: `knowledge-base/grills/operator-glue-go-migration-feature-grill.md`
-- Prior release: `knowledge-base/releases/v0.59.0-release.md` (M15 W1+W2+W3 partial)
+- Grill: [`knowledge-base/grills/operator-glue-go-migration-feature-grill.md`](../../grills/operator-glue-go-migration-feature-grill.md)
+- Prior release: [`knowledge-base/releases/v0.59.0-release.md`](../../releases/v0.59.0-release.md) (M15 W1+W2+W3 partial)
 - M16 precedent (ADR D4 split protocol): `knowledge-base/plans/infra-tests-hermetic-to-quality-gates-plan.md`
 - Strategic plan (D4 taxonomy source): `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`
 - Allowlist SoT: `.claude/rules/shell-scripts-allowlist.md`

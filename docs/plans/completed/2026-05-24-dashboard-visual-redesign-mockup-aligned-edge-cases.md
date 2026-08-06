@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-24-dashboard-visual-redesign-mockup-aligned"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-24-dashboard-visual-redesign-mockup-aligned
 
 **Data:** 2026-05-24
-**Plano:** `docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.0
+**Plano:** [`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](./2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md) v1.0
 **Tasks analisadas:** 22 (T-A.1, T-B.1, T-B.2, T-B.3, T-C.1, T-C.2, T-C.3, T-D.1, T-E.1, T-E.2, T-E.3, T-E.4, T-E.5, T-F.1, T-F.2, T-F.3, T-G.1, T-G.2, T-G.3, T-G.4, T-G.5, T-H.1-4)
 **Edge cases encontrados:** 16 (MUST FIX: 7, SHOULD TEST: 6, DOCUMENT: 3)
 
@@ -198,6 +204,6 @@
 
 ### Próximo passo
 
-Plano principal (`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`) deve ser **bumped para v1.1** com os 7 MUST FIX incorporados antes de invocar `/implement` ou iniciar Phase A. Esta revisão citada no commit message do bump (`Co-discovered-by: /edge-case-plan EC-1 through EC-7`).
+Plano principal ([`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](./2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md)) deve ser **bumped para v1.1** com os 7 MUST FIX incorporados antes de invocar `/implement` ou iniciar Phase A. Esta revisão citada no commit message do bump (`Co-discovered-by: /edge-case-plan EC-1 through EC-7`).
 
 A boa notícia: dos 7 MUST FIX, 4 são "verify before assume" (EC-4, EC-5, EC-8, EC-11) — baratos de resolver. 2 são wiring decisions (EC-2, EC-3) — clarificação no plano resolve. 1 é refactor pattern (EC-6) — adicionar à validação. Nenhum é redesign fundamental.

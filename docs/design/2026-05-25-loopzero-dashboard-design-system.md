@@ -1,3 +1,8 @@
+---
+type: design
+title: "LoopZero Dashboard — Design System"
+---
+
 # LoopZero Dashboard — Design System
 
 > **Slug:** `2026-05-25-loopzero-dashboard-design-system`
@@ -7,7 +12,7 @@
 > Open Design `design-systems/{vercel,cal,linear-app,supabase}` DESIGN.md +
 > Refactoring UI (Wathan & Schoger) + Laws of UX (Yablonski) + WAI-ARIA APG
 > **Document version:** v1.0
-> **Audit companion:** `docs/reviews/2026-05-25-dashboard-deep-design-review.md`
+> **Audit companion:** [`docs/reviews/2026-05-25-dashboard-deep-design-review.md`](../reviews/2026-05-25-dashboard-deep-design-review.md)
 
 ---
 
@@ -653,8 +658,8 @@ Auto-dismisses when verification completes.
 - Nielsen Heuristics (10 usability principles) — esp. visibility of system status, recognition over recall
 - WAI-ARIA Authoring Practices Guide — Combobox, Listbox, Dialog patterns
 - Material Design density specs — `MaterialDensity.compact` vs `regular` vs `comfortable`
-- Prior plans/MEETs: `2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`,
-  `2026-05-25-dashboard-visual-polish-plan.md`, MEET-ASYNC-001/002
+- Prior plans/MEETs: [`2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](../plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md),
+  [`2026-05-25-dashboard-visual-polish-plan.md`](../plans/completed/2026-05-25-dashboard-visual-polish-plan.md), MEET-ASYNC-001/002
 
 ---
 

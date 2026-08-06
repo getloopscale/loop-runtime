@@ -1,4 +1,7 @@
 ---
+type: discovery-blueprint
+title: "Blueprint: Hermetic Test Migration `infra/tests/check-*_test.sh` → Go Quality Gates"
+generated: { by: process:discover-execute, at: 2026-07-10 }
 version: 1.0
 slug: infra-tests-hermetic-to-quality-gates
 milestone_id: M16
@@ -510,7 +513,7 @@ Emitting `<promise>BLUEPRINT_COMPLETE</promise>`.
 ## Cross-references
 
 - Plan: `knowledge-base/discoveries/plans/infra-tests-hermetic-to-quality-gates-plan.md` v1.1
-- Edge-case review: `knowledge-base/reviews/infra-tests-hermetic-to-quality-gates-edge-cases-2026-07-10.md`
+- Edge-case review: [`knowledge-base/reviews/infra-tests-hermetic-to-quality-gates-edge-cases-2026-07-10.md`](../../reviews/infra-tests-hermetic-to-quality-gates-edge-cases-2026-07-10.md)
 - Plan-confidence report: `knowledge-base/reviews/infra-tests-hermetic-to-quality-gates-discover-plan-confidence-2026-07-10.json`
 - ROADMAP: `ROADMAP.md § M16`
 - 12 precedent gates: `cmd/loopzero-ops/internal/quality/{allowlistsunsets,caddyfilenodockerip,optionbeso,vaultbootstrapinmgmt,canonicalfixturerepo,esooverlay,installgithooks,k6loadrigor,oidccredadminloopzero,routeauthcoverage,webhookcanonicalpath,vaultbootstrapunsealloop}/`

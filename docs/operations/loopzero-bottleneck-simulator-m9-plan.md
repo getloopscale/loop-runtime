@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M9 (intra-cell blast radius)
+---
+
 # Plan — LoopZero Bottleneck Simulator M9 (intra-cell blast radius)
 
 > Slug: `loopzero-bottleneck-simulator-m9`. Cycle: DISCOVER → PLAN → IMPLEMENT (TDD) → CODE-QUALITY → REVIEW.

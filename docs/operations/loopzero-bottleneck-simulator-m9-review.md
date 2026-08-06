@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M9 (intra-cell blast radius)
+---
+
 # Review — LoopZero Bottleneck Simulator M9 (intra-cell blast radius)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m9`.

@@ -1,4 +1,6 @@
 ---
+title: withEnvironmentLock Coverage Audit
+generated: { by: process:plan-t1.3, at: 2026-05-27 }
 name: withenvironmentlock-coverage
 description: Audit per mutating API route showing where withEnvironmentLock is acquired in the call chain. Documents M02 HIGH gap closure (T1.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap).
 type: audit
@@ -11,7 +13,7 @@ updated_by: plan T1.3
 
 # withEnvironmentLock Coverage Audit
 
-> **Plan reference:** T1.3 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T1.3 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
 > **Closes:** M02 API HIGH gap — "withEnvironmentLock opacity em routes. Only 2 grep matches em services/release_activator.go + services/domain_provisioner.go. Mutating routes (POST builds/secrets/teams) sem visibility de lock em middleware chain."
 

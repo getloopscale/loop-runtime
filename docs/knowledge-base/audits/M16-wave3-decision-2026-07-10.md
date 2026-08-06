@@ -1,3 +1,8 @@
+---
+type: audit
+title: "M16 Wave 3 Split Decision — 2026-07-10"
+---
+
 # M16 Wave 3 Split Decision — 2026-07-10
 
 **Plan reference:** `knowledge-base/plans/infra-tests-hermetic-to-quality-gates-plan.md § ADR D4`

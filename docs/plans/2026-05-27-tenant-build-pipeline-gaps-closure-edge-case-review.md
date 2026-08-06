@@ -1,4 +1,6 @@
 ---
+title: "Edge Case Review — tenant-build-pipeline-gaps-closure-plan"
+generated: { by: process:edge-case-plan-skill-invocation, at: 2026-05-27 }
 name: tenant-build-pipeline-gaps-closure-edge-case-review
 description: Edge case review do plano 2026-05-27-tenant-build-pipeline-gaps-closure-plan.md via /edge-case-plan. Identifica 9 MUST FIX + 3 SHOULD TEST + 3 DOCUMENT que devem ser incorporados antes de implementação começar.
 type: review
@@ -10,7 +12,7 @@ updated_by: /edge-case-plan skill invocation
 # Edge Case Review — tenant-build-pipeline-gaps-closure-plan
 
 **Data:** 2026-05-27
-**Plano:** `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md` v1.0
+**Plano:** [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-plan.md) v1.0
 **Tasks analisadas:** 9 (T1.1-T1.5 + T2.1-T2.3 + T3.1 + T4.1)
 **Edge cases encontrados:** 15 (**MUST FIX: 9, SHOULD TEST: 3, DOCUMENT: 3**)
 **Veredicto:** **PLANO PRECISA DE AJUSTE** — 9 MUST FIX deve ser absorvido antes de Phase 1 começar.
@@ -181,8 +183,8 @@ Antes de implementar Phase 1-4, **incorporar as 9 MUST FIX no plano v1.1**:
 
 ## Referências
 
-- Plano analisado: `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`
-- AS-IS arch: `docs/architecture/build-pipeline/tenant-build-pipeline-as-is.md`
+- Plano analisado: [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-plan.md)
+- AS-IS arch: [`docs/architecture/build-pipeline/tenant-build-pipeline-as-is.md`](../architecture/build-pipeline/tenant-build-pipeline-as-is.md)
 - M07 audit: `.claude/knowledge-base/audits/2026-05-26/07-build-pipeline.md`
 - Sigstore metric naming: https://github.com/sigstore/fulcio/blob/main/pkg/server/metrics.go
 - Pushgateway TTL: https://github.com/prometheus/pushgateway/blob/master/README.md#push-acks

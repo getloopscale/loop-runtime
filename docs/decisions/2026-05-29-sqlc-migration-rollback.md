@@ -1,3 +1,8 @@
+---
+type: decision
+title: sqlc migration rollback playbook (operator-witnessed criteria + atomic rollback mechanism)
+---
+
 # ADR — sqlc migration rollback playbook (operator-witnessed criteria + atomic rollback mechanism)
 
 **Date:** 2026-05-29

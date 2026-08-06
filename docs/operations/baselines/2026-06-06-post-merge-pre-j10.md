@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-06 post-merge / pre-J-10"
+---
+
 # Steady-State Baseline — 2026-06-06 post-merge / pre-J-10
 
 **Captured at**: 2026-06-06T16:15:32Z
@@ -13,7 +18,7 @@ before the validation chain `/cleanroom → /dogfood full → /chaos-test →
 surfaces in J-10 (next journey) or later.
 
 Cross-referenced from:
-- Roadmap: `docs/handoff/2026-06-05-dashboard-vercel-like-integration-roadmap.md`
+- Roadmap: [`docs/handoff/2026-06-05-dashboard-vercel-like-integration-roadmap.md`](../../handoff/2026-06-05-dashboard-vercel-like-integration-roadmap.md)
 - J-17 plan: `.claude/knowledge-base/plans/2026-06-06-dashboard-journey-j17-deployments-realtime-plan.md`
 - Merge commit: `4519d8f2`
 

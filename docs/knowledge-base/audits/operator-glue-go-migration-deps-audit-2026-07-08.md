@@ -1,3 +1,8 @@
+---
+type: audit
+title: "Deps Audit: operator-glue-go-migration (M15)"
+---
+
 # Deps Audit: operator-glue-go-migration (M15)
 
 **Date:** 2026-07-08

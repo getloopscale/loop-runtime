@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Vault Integration Operator Handoff Guide
+---
+
 # Vault Integration Operator Handoff Guide
 
 Per Plan 2026-06-02-loopzero-api-vault-integration v1.8. Created iter 24 of Ralph loop session 2026-06-03.
@@ -8,10 +13,10 @@ LoopZero migrated from env-var-as-secret to OpenBao Vault as canonical Source of
 
 ## Authoritative References
 
-- **Plan**: [`.claude/knowledge-base/plans/completed/2026-06-02-loopzero-api-vault-integration-plan.md`](../../.claude/knowledge-base/plans/completed/2026-06-02-loopzero-api-vault-integration-plan.md) v1.8
-- **LIVE evidence**: [`.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md`](../../.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md)
+- **Plan**: [`.claude/knowledge-base/plans/completed/2026-06-02-loopzero-api-vault-integration-plan.md`](../wiki/plans/completed/2026-06-02-loopzero-api-vault-integration-plan.md) v1.8
+- **LIVE evidence**: [`.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md`](../wiki/audits/2026-06-03-vault-INT-LIVE-evidence.md)
 - **Runbook**: [`vault-secret-migration-runbook.md`](vault-secret-migration-runbook.md) (P1-P6 procedures)
-- **ADR**: [`.claude/knowledge-base/decisions/2026-06-02-vault-secrets-sot.md`](../../.claude/knowledge-base/decisions/2026-06-02-vault-secrets-sot.md) D1-D12
+- **ADR**: [`.claude/knowledge-base/decisions/2026-06-02-vault-secrets-sot.md`](../wiki/decisions/2026-06-02-vault-secrets-sot.md) D1-D12
 
 ## Architecture (D11 ESO)
 

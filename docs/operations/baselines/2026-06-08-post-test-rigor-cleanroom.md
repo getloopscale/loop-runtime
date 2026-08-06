@@ -1,10 +1,15 @@
+---
+type: baseline
+title: "Steady-State Baseline — Post T6.1 Cleanroom-Fresh (PARTIAL)"
+---
+
 # Steady-State Baseline — Post T6.1 Cleanroom-Fresh (PARTIAL)
 
 **Date:** 2026-06-08
 **Context:** T6.1 of plan `2026-06-08-pre-release-test-rigor` — cleanroom-fresh execution after sponsor /goal verbatim mandate "Voce deve executar o T6.1 — Cleanroom-fresh task teardown && task setup && tilt up && task test:pre-release-rigor (~105min wall-clock) encontrou um erro corrija SEM WORKAROUNDS, CORRIJA EM LEVEL FAANG e continue so pare quando tudo estiver executando sem erros"
 **Status:** PARTIAL — engineering-side fix-forward complete; LIVE umbrella execution HARD-BLOCKED on operator-only GitHub App install on `getloopscale/loopzero-repotest`.
 
-Cross-ref: [[2026-06-08-pre-test-rigor.md]] (pre-rebuild baseline)
+Cross-ref: [2026-06-08-pre-test-rigor.md](./2026-06-08-pre-test-rigor.md) (pre-rebuild baseline)
 
 ---
 

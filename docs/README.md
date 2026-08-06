@@ -1,3 +1,8 @@
+---
+type: overview
+title: "LoopZero docs — index"
+---
+
 # LoopZero docs — index
 
 Entry point for `docs/`. Start here rather than browsing the tree: about two thirds of the files

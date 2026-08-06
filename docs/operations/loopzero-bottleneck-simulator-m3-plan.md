@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M3 (multi-region + failover)
+---
+
 # Plan — LoopZero Bottleneck Simulator M3 (multi-region + failover)
 
 > Slug: `loopzero-bottleneck-simulator-m3`. Builds on M0/M1/M2 engine. FAANG-level, no fabrication.

@@ -1,3 +1,9 @@
+---
+type: sepa-iteration
+title: "SEPA pre-COMMIT — iter 1 / T0.1 / loopzero-contracts"
+description: "Diff: 2 CostMetric constants + 5 explicit Unlimited cap entries + 1 test."
+---
+
 # SEPA pre-COMMIT — iter 1 / T0.1 / loopzero-contracts
 Diff: 2 CostMetric constants + 5 explicit Unlimited cap entries + 1 test. No money-write, no 402, observe-only preserved.
 ## Findings

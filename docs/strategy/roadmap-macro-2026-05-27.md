@@ -1,4 +1,6 @@
 ---
+title: "Roadmap Macro — LoopZero (2026-05-27)"
+generated: { by: process:post-t2.7-t2.3-t2.2-t0.2-t5.2-sponsor-direct-synthesis, at: 2026-05-27 }
 name: roadmap-macro-2026-05-27
 description: Roadmap macro do LoopZero — 28 itens enumerados (R1-R28) com decomposição engineering vs operator/sponsor residuals, priorizados P0/P1/P2/P3, refletindo estado pós-execução do plano 2026-05-26 maturity-roadmap.
 type: strategy
@@ -128,7 +130,7 @@ Os itens abaixo NÃO são novos trabalhos eng. São pipelines onde a primeira et
 |-----|-----------|--------|------|
 | R5.a | ADR-2026-05-27-T0.2 (3 cenários A/B/C com adoption + cost analysis) | ✅ DONE `728b1865` | Eng autonomous |
 | R5.b | Gitea Actions POC: Helm overlay `.disabled` + workflow `.example` (Cenário A) | ✅ DONE `728b1865` | Eng autonomous |
-| R5.c | Architecture diff `real-ci-active.md` atualizado | ✅ DONE `728b1865` | Eng autonomous |
+| R5.c | Architecture diff [`real-ci-active.md`](../architecture/ci-cd/diff/real-ci-active.md) atualizado | ✅ DONE `728b1865` | Eng autonomous |
 | R5.d | Sponsor T3 meeting (Production Design + Security + SRE) escolhe cenário | ⏳ PENDENTE | Sponsor |
 | R5.e | Operator activates POC: rename `.disabled→.yaml` + `.example→.yml` + helmfile add | ⏳ PENDENTE | Operator ~1h |
 | R5.f | Branch protection update required check `quality` | ⏳ PENDENTE | Operator |
@@ -206,7 +208,7 @@ DIA 16+:
 
 ## Related
 
-- Plan principal: `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md` v1.1
+- Plan principal: [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md) v1.1
 - Diagnostic packages: `docs/plans/completed/2026-05-26-T*-change-governor-diagnostic.md` (4 docs)
 - ADR-2026-05-27-T0.2: `.claude/knowledge-base/decisions/2026-05-27-T0.2-ci-platform-choice.md`
 - Maturity baseline: `.claude/knowledge-base/audits/2026-05-26/SUMMARY.md`

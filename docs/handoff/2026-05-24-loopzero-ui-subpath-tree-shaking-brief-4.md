@@ -1,10 +1,15 @@
+---
+type: handoff
+title: "Brief #4: Fix subpath exports so tree-shaking actually works (build pipeline defect)"
+---
+
 # Brief #4: Fix subpath exports so tree-shaking actually works (build pipeline defect)
 
 > **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
 > **Output:** tsup config update + `package.json#exports` migration + 1 ADR + bundle-delta evidence.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-24.
 > **Priority:** MEDIUM — not blocking Phase 0 (already shipped via MEET-ASYNC-AMENDMENT-002 with a 240 KB brotli hard gate that current 178 KB brotli passes). Ship before LoopZeroCloud scales past **6-8 more pages** OR when any other consumer hits the same wall.
-> **Companion to:** Brief #1 (`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`) + Brief #2 (`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md`) + Brief #3 (`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-3.md`).
+> **Companion to:** Brief #1 ([`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md)) + Brief #2 ([`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md)) + Brief #3 ([`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-3.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-3.md)).
 > **Tracks:** LoopZeroCloud `MEET-ASYNC-AMENDMENT-2026-05-24-002` § Follow-up #2.
 
 ---

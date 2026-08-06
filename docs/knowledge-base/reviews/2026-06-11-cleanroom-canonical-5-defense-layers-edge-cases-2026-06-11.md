@@ -1,3 +1,8 @@
+---
+type: review
+title: "Edge Case Review — 2026-06-11-cleanroom-canonical-5-defense-layers"
+---
+
 # Edge Case Review — 2026-06-11-cleanroom-canonical-5-defense-layers
 
 Date: 2026-06-11
@@ -316,7 +321,7 @@ DOCUMENT items (7) become notes no plan body OR allowlist entries sem version bu
 
 ## Cross-references
 
-- Plan SoT: `knowledge-base/plans/2026-06-11-cleanroom-canonical-5-defense-layers-plan.md`
+- Plan SoT: [`knowledge-base/plans/2026-06-11-cleanroom-canonical-5-defense-layers-plan.md`](../plans/2026-06-11-cleanroom-canonical-5-defense-layers-plan.md)
 - Per `cycle-plan.md` § Plan amendment policy — MUST FIX items require MEET + new ADR per category
 - Memory cross-refs: `reference_t62_cleanroom_session_2026_06_11` (session reference) + 20 sibling memories
 - Mandate: `.claude/rules/cleanroom-up-live-test-mandate.md` (locked 2026-06-10 INQUEBRÁVEL)

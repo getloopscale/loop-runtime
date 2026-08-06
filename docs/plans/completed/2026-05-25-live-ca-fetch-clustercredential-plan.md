@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Live CA Fetch from `kube-root-ca.crt` on ClusterCredential Reconcile (Op B)"
+status: deprecated
+---
+
 # Plan: Live CA Fetch from `kube-root-ca.crt` on ClusterCredential Reconcile (Op B)
 
 > **Version 1.3** — Eliminates the entire class of "stale `caData` in ArgoCD cluster Secret" bugs (root cause behind closed issues #66 and #67) by making the `ClusterCredentialReconciler` fetch the live cluster CA from the target cluster's `kube-root-ca.crt` ConfigMap on every reconcile, instead of relying on the kubeconfig caData snapshot captured at bootstrap. Op (A) shipped in commit `40580a0b` is a local-only workaround (`spec.tls.insecure=true` for k3d cells); Op (B) makes both local AND prod share the same self-healing mechanism, achieves true CTO Rule 0 local↔prod parity, and unblocks future scenarios (DOKS CA rotation incidents, Enterprise multi-cell on-prem clusters with TLS verification required). Expected outcome: heal scripts H19/H19a become unnecessary; no manual operator intervention required when any target cluster rotates its CA.
@@ -14,7 +20,7 @@ Also: discovered + fixed pre-existing bug in `operators/internal/metrics/metrics
 
 ### v1.0 → v1.1 (2026-05-25, post `/edge-case-plan` review)
 
-Edge case review (`docs/plans/2026-05-25-live-ca-fetch-clustercredential-edge-review.md`) found 2 MUST FIX + 3 SHOULD TEST + 2 DOCUMENT items. Incorporated below:
+Edge case review ([`docs/plans/2026-05-25-live-ca-fetch-clustercredential-edge-review.md`](./2026-05-25-live-ca-fetch-clustercredential-edge-review.md)) found 2 MUST FIX + 3 SHOULD TEST + 2 DOCUMENT items. Incorporated below:
 
 | ID | Severity | Action taken in v1.1 |
 |---|---|---|
@@ -164,7 +170,7 @@ Sequential blockers throughout — each phase depends on the previous because th
 ### T0.1 — Architecture Docs Pre-Plan (AS-IS) for `platform` + `multi-cell` domains
 
 #### Objective
-Generate `docs/architecture/platform/clustercredential.md` + `docs/architecture/multi-cell/argocd-cluster-secret-flow.md` capturing the current state (snapshot caData → operator-written Secret).
+Generate [`docs/architecture/platform/clustercredential.md`](../../architecture/platform/clustercredential.md) + [`docs/architecture/multi-cell/argocd-cluster-secret-flow.md`](../../architecture/multi-cell/argocd-cluster-secret-flow.md) capturing the current state (snapshot caData → operator-written Secret).
 
 #### Evidence
 This skill (`/to-plan`) declares architecture-docs MANDATORY. Operator + reviewers need traceable "before" state to evaluate the proposed change. Issue #67's investigation uncovered the flow but it lives only in commit messages and issue comments — no canonical arch doc exists.
@@ -177,8 +183,8 @@ docs/architecture/diff/                                      — empty, will be 
 ```
 
 #### Deep file dependency analysis
-- `docs/architecture/platform/clustercredential.md` (NEW): C4 Container diagram + sequence (ClusterCredential CR → reconciler → ArgoCD Secret). References `operators/internal/platform/clustercredential_controller.go:284-376`.
-- `docs/architecture/multi-cell/argocd-cluster-secret-flow.md` (NEW): cross-cluster trust + how ArgoCD app-controller uses the Secret + failure mode when caData stale.
+- [`docs/architecture/platform/clustercredential.md`](../../architecture/platform/clustercredential.md) (NEW): C4 Container diagram + sequence (ClusterCredential CR → reconciler → ArgoCD Secret). References `operators/internal/platform/clustercredential_controller.go:284-376`.
+- [`docs/architecture/multi-cell/argocd-cluster-secret-flow.md`](../../architecture/multi-cell/argocd-cluster-secret-flow.md) (NEW): cross-cluster trust + how ArgoCD app-controller uses the Secret + failure mode when caData stale.
 - No downstream code depends on these files; they are read-only references for future PRs.
 
 #### Deep Dives
@@ -1176,7 +1182,7 @@ This plan was reviewed for edge cases inline during drafting. Items found:
 - [ ] T0.2 Change Governor + meeting + ADR ratified
 - [ ] `.claude/governance-gate.local.md` updated with APPROVED status
 - [ ] This plan acknowledged + version **1.1** committed
-- [ ] Edge case review (inline above + standalone `docs/plans/2026-05-25-live-ca-fetch-clustercredential-edge-review.md`) reviewed by sponsor
+- [ ] Edge case review (inline above + standalone [`docs/plans/2026-05-25-live-ca-fetch-clustercredential-edge-review.md`](./2026-05-25-live-ca-fetch-clustercredential-edge-review.md)) reviewed by sponsor
 - [ ] **EC-13 + EC-14 incorporated** (verified: ADR D1 has "insecure-fetch bootstrap" section, T1.1 Deep Dive has `rest.CopyConfig` + `Insecure:true`, T4.1 step 7 has `rm server-ca.{crt,key}` + PRE/POST hash assertion)
 - [ ] **EC-15/16/17 added as RED tests** (T1.1 TDD lists 10 tests not 7; T3.1 spec 1 asserts DIFFERS not EQUALS)
 - [ ] **EC-19 gated via T5.0** (`validate-op-b-soak.sh` exists + hermetic test passes)

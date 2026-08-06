@@ -1,10 +1,15 @@
+---
+type: handoff
+title: "Brief #2: Add 8 cross-cutting primitives to @loopzero/ui"
+---
+
 # Brief #2: Add 8 cross-cutting primitives to @loopzero/ui
 
 > **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent running in the `loopzero-ui` repo).
 > **Output:** 8 new primitives + tests + stories + barrel exports, following existing `@loopzero/ui` conventions.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
-> **Companion to:** `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (Brief #1 — PaaS-shape gaps: UsageMeter, Progress, PlanBadge, AccountMenu).
-> **Consumer plan:** `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1.
+> **Companion to:** [`loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md) (Brief #1 — PaaS-shape gaps: UsageMeter, Progress, PlanBadge, AccountMenu).
+> **Consumer plan:** [`loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](../plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md) v1.1.
 
 ---
 
@@ -924,8 +929,8 @@ Same as Brief #1. Names are PaaS-shape semantic (Table, StatTile, CodeBlock), av
 
 ## Cross-reference
 
-- Brief #1: `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (4 PaaS-shape primitives — read first)
-- Consumer plan: `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1
+- Brief #1: [`loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md) (4 PaaS-shape primitives — read first)
+- Consumer plan: [`loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](../plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md) v1.1
 - Consumer mockup: `loopzero/cloud/dashboard/design/loopzero_overview_dashboard_mockup.html`
 - Library README: `loopzero-ui/README.md` § Quality Gates
 - Library voice: `loopzero-ui/CLAUDE.md` § Voice and Tone

@@ -1,10 +1,15 @@
+---
+type: discovery-plan
+title: "Discovery Plan: m20-hermetic-infra-tests-remainder"
+---
+
 # Discovery Plan: m20-hermetic-infra-tests-remainder
 
 **Slug:** `m20-hermetic-infra-tests-remainder`
 **Created:** 2026-07-10
 **Plan version:** 1.0
 **Owner:** Claude (Opus 4.7)
-**Parent (canonical):** `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md` (M16 SHIPPABLE 98.3 — same M-Migrate2 pattern, same shape families, same dependency envelope; shipped 2026-07-10 v0.60.0)
+**Parent (canonical):** [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md) (M16 SHIPPABLE 98.3 — same M-Migrate2 pattern, same shape families, same dependency envelope; shipped 2026-07-10 v0.60.0)
 
 <!-- DEFER-CORNER: tests | Deferred to M16 blueprint canonical (identical Go gate hermetic test shape — testing.T + happy/parse-error/real-repo trio). -->
 <!-- DEFER-CORNER: deps | Deferred to M16 blueprint canonical (identical envelope: stdlib + yaml.v3; NO new third-party deps). -->
@@ -82,7 +87,7 @@ Total: 3 questions, all in Corner 4 (Techniques). Corners 1-3 explicitly deferre
 
 ## Cross-references
 
-- M16 blueprint (canonical parent): `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`
+- M16 blueprint (canonical parent): [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](../blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md)
 - M16 shipped gates (reference source): `cmd/loopzero-ops/internal/quality/{sprintsyntax,archivescriptrepo,nocloud,lokivaultretention,lokiretentionschema,vaultpromalerts,day30day60cronjobs,esochartsanity,esocreationpolicy,openbaoinitauth}/check.go`
-- Grill: `knowledge-base/grills/m20-hermetic-infra-tests-remainder-feature-grill.md`
+- Grill: [`knowledge-base/grills/m20-hermetic-infra-tests-remainder-feature-grill.md`](../../grills/m20-hermetic-infra-tests-remainder-feature-grill.md)
 - Cycle rule: `.claude/rules/cycle-discover.md`

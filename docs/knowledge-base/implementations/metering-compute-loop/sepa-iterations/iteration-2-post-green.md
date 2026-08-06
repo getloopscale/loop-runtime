@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA post-green — iter 2 / T1.1"
+---
+
 # SEPA post-green — iter 2 / T1.1
 MODE=TIGHT. Mechanical: 2 enforcement aliases (re-export plan.Metric*) + 3 .Issue test-arg fixes (v0.2.0 5th param) + go.work adds loopzero-contracts (workspace-dev, go.mod bump deferred to v0.3.0 publish).
 ## Findings

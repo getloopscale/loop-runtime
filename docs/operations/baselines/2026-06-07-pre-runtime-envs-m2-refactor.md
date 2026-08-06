@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-state baseline — pre M2 runtime envs per-project refactor"
+---
+
 # Steady-state baseline — pre M2 runtime envs per-project refactor
 
 **Captured:** 2026-06-07

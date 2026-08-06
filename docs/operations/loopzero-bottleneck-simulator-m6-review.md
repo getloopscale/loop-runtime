@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M6 (AWS region-posture decision memo)
+---
+
 # Review — LoopZero Bottleneck Simulator M6 (AWS region-posture decision memo)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m6`.
@@ -9,7 +14,7 @@
 
 | DoD | Evidence | Status |
 |---|---|---|
-| Memo exists, MADR-shaped | `docs/architecture/aws-region-posture-decision.md` — context/drivers/options/outcome/consequences/risks/revisit/reproduction/confirmation | ✅ |
+| Memo exists, MADR-shaped | [`docs/architecture/aws-region-posture-decision.md`](../architecture/aws-region-posture-decision.md) — context/drivers/options/outcome/consequences/risks/revisit/reproduction/confirmation | ✅ |
 | **No fabricated number** | reviewer independently re-ran the engine and reproduced ALL 7 capsim headline numbers exactly; the 2 wrong stats were derived prose (not capsim) — fixed | ✅ |
 | Options compared on objective criteria | one `capsim_compare` table: cost/mo · blast radius · SLA · review score · cost-of-resilience | ✅ |
 | Actionable recommendation | 4 ordered phases (levers → sharded → defer aa → request tier) with the $ deltas | ✅ |
@@ -43,6 +48,6 @@
 
 ## Deliverables (M6)
 
-- `docs/architecture/aws-region-posture-decision.md` — the MADR decision memo (LIVE-sourced, reproducible).
+- [`docs/architecture/aws-region-posture-decision.md`](../architecture/aws-region-posture-decision.md) — the MADR decision memo (LIVE-sourced, reproducible).
 - `docs/architecture/index.md` — memo linked.
 - `loopzero-bottleneck-simulator-m6-{plan,review}.md`.

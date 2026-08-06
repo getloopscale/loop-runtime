@@ -1,3 +1,8 @@
+---
+type: review
+title: M20 Review Report (2026-07-10)
+---
+
 # M20 Review Report (2026-07-10)
 
 **Verdict:** **READY_TO_MERGE**

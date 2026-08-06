@@ -1,10 +1,16 @@
+---
+type: plan
+title: "Plan: Track A — Bootstrap → Helmfile Values + ESO Generators"
+status: deprecated
+---
+
 # Plan: Track A — Bootstrap → Helmfile Values + ESO Generators
 
-> **Version 1.0** — The SMALLEST-yield, HIGHEST-risk track. Delegate the 1 clean bootstrap script (`bootstrap-patch-admission-policies.sh` → chart values) and — gated on an **ESO-generator T2/T3 governance MEET** — migrate the 3 credential-generator scripts (`generate-secrets.sh`, `generate-build-secrets.sh`, `generate-runtime-secrets.sh`) to ESO `Password` generator CRDs while PRESERVING the load-bearing determinism contract. All other bootstrap scripts (clustercredential-create, scoped-kubeconfig, hydra-mint, argocd-register, wire-clusters, etc.) are KEEP-OPERATOR (LIVE kubectl/API orchestration). **Track A of the Script Minimization Program** (`2026-05-24-script-minimization-program-plan.md`) — runs LAST (program D3). Starts ONLY after Track C DoD + DOKS drill GREEN.
+> **Version 1.0** — The SMALLEST-yield, HIGHEST-risk track. Delegate the 1 clean bootstrap script (`bootstrap-patch-admission-policies.sh` → chart values) and — gated on an **ESO-generator T2/T3 governance MEET** — migrate the 3 credential-generator scripts (`generate-secrets.sh`, `generate-build-secrets.sh`, `generate-runtime-secrets.sh`) to ESO `Password` generator CRDs while PRESERVING the load-bearing determinism contract. All other bootstrap scripts (clustercredential-create, scoped-kubeconfig, hydra-mint, argocd-register, wire-clusters, etc.) are KEEP-OPERATOR (LIVE kubectl/API orchestration). **Track A of the Script Minimization Program** ([`2026-05-24-script-minimization-program-plan.md`](./2026-05-24-script-minimization-program-plan.md)) — runs LAST (program D3). Starts ONLY after Track C DoD + DOKS drill GREEN.
 
 ## Context
 
-`infra/helmfile/scripts/` + `infra/scripts/bootstrap-*` hold 24 scripts (`unhomed-logic` bootstrap=32 incl. lib + tests). The `helmfile-delegation-map.md` (task #176, read-only audit) already proved the honest yield:
+`infra/helmfile/scripts/` + `infra/scripts/bootstrap-*` hold 24 scripts (`unhomed-logic` bootstrap=32 incl. lib + tests). The [`helmfile-delegation-map.md`](../../operations/helmfile-delegation-map.md) (task #176, read-only audit) already proved the honest yield:
 
 | Script | Delegatable? | Disposition |
 |---|---|---|

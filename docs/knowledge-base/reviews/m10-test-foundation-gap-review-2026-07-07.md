@@ -1,3 +1,8 @@
+---
+type: review
+title: m10-test-foundation-gap
+---
+
 # Review — m10-test-foundation-gap
 
 **Date:** 2026-07-07

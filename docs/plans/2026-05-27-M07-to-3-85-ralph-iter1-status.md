@@ -1,7 +1,12 @@
+---
+type: plan
+title: "Ralph Loop Iter 1 Status — M07 to 3.85 Plan"
+---
+
 # Ralph Loop Iter 1 Status — M07 to 3.85 Plan
 
 **Data:** 2026-05-27T20:10Z
-**Plano:** `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1
+**Plano:** [`docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) v1.1
 **Iter:** 1 (de N — Ralph loop continua até promise emit TRUE)
 
 ---
@@ -22,7 +27,7 @@ Promise NÃO emitida per memory `feedback_anti_lying_workaround_pattern`. Loop c
 
 | Phase | Status | Evidence |
 |-------|--------|----------|
-| Phase 0 — Inventário | ✓ | `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-status.md` (14/14 deliverables shipped) |
+| Phase 0 — Inventário | ✓ | [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-status.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-status.md) (14/14 deliverables shipped) |
 | Phase 1 — Cross-validation | ✓ APROVADO | `.claude/knowledge-base/reviews/cross-validation/2026-05-27-tenant-build-pipeline-gaps-closure-xval-2026-05-27.md` (zero CRITICO + zero GRAVE per v1.1 EC-8) |
 | Phase 2 — LIVE proof | ✓ | `/tmp/m07-evidence-2026-05-27.tar.gz` (doctor 41/0 + journey 105/106 + chaos 10/10 + 1 deploy real + quality gates 12/0/2) |
 | Phase 3 — Re-audit M07 | ✓ | `.claude/knowledge-base/audits/2026-05-27/07-build-pipeline.md` (3.7/4.0 conf 88%, Δ +0.3) |

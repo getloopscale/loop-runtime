@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "J-25 prod-dev wildcard — operator runbook"
+---
+
 # J-25 prod-dev wildcard — operator runbook
 
 **Plan:** `knowledge-base/plans/2026-06-12-dashboard-journey-j25-live-url-discoverability-plan.md` ADR D1

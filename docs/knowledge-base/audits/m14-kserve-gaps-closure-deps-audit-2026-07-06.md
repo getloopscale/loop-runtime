@@ -1,3 +1,8 @@
+---
+type: audit
+title: "Deps Audit: m14-kserve-gaps-closure"
+---
+
 # Deps Audit: m14-kserve-gaps-closure
 
 **Date:** 2026-07-06

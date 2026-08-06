@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — pre-Cleanroom post-promote-P0-fix"
+---
+
 # Steady-State Baseline — pre-Cleanroom post-promote-P0-fix
 
 **Captured**: 2026-06-18T21:36:32Z

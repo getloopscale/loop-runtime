@@ -1,3 +1,8 @@
+---
+type: review
+title: infra/tests taxonomy refactor
+---
+
 # Review — infra/tests taxonomy refactor
 
 **Date:** 2026-07-11

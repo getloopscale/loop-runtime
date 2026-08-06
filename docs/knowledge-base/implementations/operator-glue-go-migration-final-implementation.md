@@ -1,3 +1,8 @@
+---
+type: implementation
+title: M15 Implementation Summary (2026-07-10)
+---
+
 # M15 Implementation Summary (2026-07-10)
 
 **Cycle:** `cycle-implement`
@@ -12,8 +17,8 @@
 
 | Task | Deliverable | Wiring triad status |
 |---|---|---|
-| T1.1 | Pre-migration baseline audit | (a) Doc caller: `knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`; (b) Grep verification: `grep -cE '^\| .*\.sh ' allowlist == 121`; (c) Committed `08447a00` |
-| T1.2 | Orphan bash sweep audit (0 orphans found) | (a) Doc caller: `knowledge-base/audits/M15-orphan-bash-sweep-2026-07-10.md`; (b) Empirical sweep against 25 shipped Go seeds; (c) Committed `08447a00` |
+| T1.1 | Pre-migration baseline audit | (a) Doc caller: [`knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`](../audits/M15-pre-migration-baseline-2026-07-10.md); (b) Grep verification: `grep -cE '^\| .*\.sh ' allowlist == 121`; (c) Committed `08447a00` |
+| T1.2 | Orphan bash sweep audit (0 orphans found) | (a) Doc caller: [`knowledge-base/audits/M15-orphan-bash-sweep-2026-07-10.md`](../audits/M15-orphan-bash-sweep-2026-07-10.md); (b) Empirical sweep against 25 shipped Go seeds; (c) Committed `08447a00` |
 | T2.1 | `reset-for-e2e.sh` DELETED per sponsor mandate | (a) Caller `docs/operations/openbao-transit-cutover-runbook.md § 4.1` updated to canonical Cleanroom chain; (b) grep-verified 0 hits in `taskfiles/`; (c) Committed `9e1593fa` |
 
 **Allowlist reduction:** 121 → 120 (net -1, matching Wave A scope).
@@ -71,7 +76,7 @@ After `/review READY_TO_MERGE`:
 ## Cross-references
 
 - Plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.2
-- Blueprint: `knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md` v1.0
-- Code-quality audit: `knowledge-base/audits/M15-code-quality-audit-2026-07-10.md`
+- Blueprint: [`knowledge-base/discoveries/blueprints/operator-glue-go-migration-final-blueprint.md`](../discoveries/blueprints/operator-glue-go-migration-final-blueprint.md) v1.0
+- Code-quality audit: [`knowledge-base/audits/M15-code-quality-audit-2026-07-10.md`](../audits/M15-code-quality-audit-2026-07-10.md)
 - ROADMAP.md M15 § (checkbox stays `[ ]` per ADR-D6)
 - Cycle rule: `.claude/rules/cycle-implement.md`

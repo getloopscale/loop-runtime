@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-10 J-22 Layer 2 Code-Review Fixes (pre-fix)"
+---
+
 # Steady-State Baseline — 2026-06-10 J-22 Layer 2 Code-Review Fixes (pre-fix)
 
 > Snapshot of the system state BEFORE applying the 7-phase plan

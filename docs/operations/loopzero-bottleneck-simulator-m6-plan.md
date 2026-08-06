@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "LoopZero Bottleneck Simulator M6 (operationalize: AWS region-posture decision memo)"
+---
+
 # Plan — LoopZero Bottleneck Simulator M6 (operationalize: AWS region-posture decision memo)
 
 > Slug: `loopzero-bottleneck-simulator-m6`. Uses M0-M5. FAANG-level, NO fabricated numbers.
@@ -36,7 +41,7 @@ All numbers below are verbatim `capsim_*` tool outputs (in-session, 2026-07-02).
 4. **Address the BFF/Engine-API request tier** (review's next bottleneck) — add replicas.
 
 ## Tasks
-- **T1 — memo (MADR 3.0).** `docs/architecture/aws-region-posture-decision.md`: context, decision
+- **T1 — memo (MADR 3.0).** [`docs/architecture/aws-region-posture-decision.md`](../architecture/aws-region-posture-decision.md): context, decision
   drivers, options (single/sharded/active-active) with the LIVE comparison, the lever-ordering
   argument, decision + consequences + risks + revisit triggers + a Reproduction section listing every
   MCP call.
@@ -45,7 +50,7 @@ All numbers below are verbatim `capsim_*` tool outputs (in-session, 2026-07-02).
   fabrication), the recommendation follows from the data, MADR completeness.
 
 ## Acceptance Criteria / DoD (all evidenced 100%)
-1. Memo exists at `docs/architecture/aws-region-posture-decision.md`, MADR-shaped (context, drivers,
+1. Memo exists at [`docs/architecture/aws-region-posture-decision.md`](../architecture/aws-region-posture-decision.md), MADR-shaped (context, drivers,
    considered options, decision outcome, consequences, risks, revisit triggers).
 2. **No fabricated number** — every quantitative claim traces to a LIVE `capsim_*` call listed in the
    Reproduction section; an independent reviewer re-runs ≥3 of them and confirms they match.

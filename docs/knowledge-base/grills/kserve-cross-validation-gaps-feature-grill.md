@@ -1,8 +1,12 @@
 ---
+type: grill
+title: "Feature grill — kserve-cross-validation-gaps"
+generated: { by: process:roadmap-feature, at: 2026-07-06 }
+status: stable
 slug: kserve-cross-validation-gaps
 generated_by: roadmap-feature
 date: 2026-07-06
-status: completed
+workflow_status: completed
 milestone_id: M14
 ---
 

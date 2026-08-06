@@ -1,3 +1,8 @@
+---
+type: review
+title: M12 Dashboard Validation (Playwright + axe-core, kill bundle-grep)
+---
+
 # Review — M12 Dashboard Validation (Playwright + axe-core, kill bundle-grep)
 
 **Date:** 2026-07-07

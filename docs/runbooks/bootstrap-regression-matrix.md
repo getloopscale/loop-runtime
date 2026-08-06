@@ -1,3 +1,8 @@
+---
+type: runbook
+title: "Bootstrap Regression Matrix — 44/44 Permanent Protections"
+---
+
 # Bootstrap Regression Matrix — 44/44 Permanent Protections
 
 > CHG-2026-04-28-LAYERED-BOOTSTRAP — T8.2 (per ADR D10)

@@ -1,3 +1,8 @@
+---
+type: audit
+title: "M16 cycle-code-quality Audit — 2026-07-10"
+---
+
 # M16 cycle-code-quality Audit — 2026-07-10
 
 **Verdict:** PASS

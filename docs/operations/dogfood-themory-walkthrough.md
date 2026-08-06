@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Dogfood Walkthrough — Dashboard → Go proxy → TheMemory E2E"
+---
+
 # Dogfood Walkthrough — Dashboard → Go proxy → TheMemory E2E
 
 Manual step-by-step para testar o sistema end-to-end. Companion to `dev-loop.md § TheMemory native-process lifecycle`. Cobre 3 caminhos de uso:
@@ -392,7 +397,7 @@ Para que o próximo `tilt up` seja idempotente:
 ## Referências cruzadas
 
 - Operator runbook: [`docs/operations/dev-loop.md`](./dev-loop.md)
-- Plan E2E: [`.claude/knowledge-base/plans/loopzero-cloud-themory-e2e-finalize-plan.md`](../../.claude/knowledge-base/plans/loopzero-cloud-themory-e2e-finalize-plan.md) (v1.3, SHIPPABLE_WITH_CAVEATS 70.0)
-- Roadmap closed: [`.claude/knowledge-base/plans/2026-06-06-dashboard-memory-section-roadmap.md § Open items #6`](../../.claude/knowledge-base/plans/2026-06-06-dashboard-memory-section-roadmap.md)
+- Plan E2E: [`.claude/knowledge-base/plans/loopzero-cloud-themory-e2e-finalize-plan.md`](../wiki/plans/loopzero-cloud-themory-e2e-finalize-plan.md) (v1.3, SHIPPABLE_WITH_CAVEATS 70.0)
+- Roadmap closed: [`.claude/knowledge-base/plans/2026-06-06-dashboard-memory-section-roadmap.md § Open items #6`](../wiki/plans/2026-06-06-dashboard-memory-section-roadmap.md)
 - API contract upstream: TheMemory `/v1/openapi.json` (`curl localhost:8080/v1/openapi.json | jq '.paths | keys'`)
 - MCP tools spec: [loopzero-memory README § Agent tools (MCP)](../../../loopzero-memory/README.md)

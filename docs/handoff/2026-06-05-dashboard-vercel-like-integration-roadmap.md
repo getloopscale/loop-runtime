@@ -1,3 +1,8 @@
+---
+type: handoff
+title: Dashboard Vercel-Like Integration Roadmap
+---
+
 # Dashboard Vercel-Like Integration Roadmap
 
 **Data:** 2026-06-05
@@ -324,7 +329,7 @@ PFs gerenciados por: infra/scripts/local/port-forward-public-dashboard.sh
     body shape, D KPI shape, E 402 enforcement, F concurrent
     idempotent under K8s optimistic-CC)
   - Dogfood wrapper `task test:dogfood:environments` 4/4 PASS
-  - Baseline: `docs/operations/baselines/2026-06-06-j10-delivery-engineering.md`
+  - Baseline: [`docs/operations/baselines/2026-06-06-j10-delivery-engineering.md`](../operations/baselines/2026-06-06-j10-delivery-engineering.md)
 - **DoD remaining (operator/sponsor HARD STOP)**:
   - Sponsor manual browser end-to-end at `https://app-dev.loopzero.example`:
     criar env "qa" → deploy → promote → 402 → delete cycle.
@@ -544,7 +549,7 @@ WAVE 5 (cross-cutting validation)
 | **J-22 Secrets** | 🟡 página existe; bulk import pendente | **P0 — sem secrets, LoopZero é demo** |
 | **J-23 Previews** | 🟡 página existe; LIVE-test pendente | **P0 — Vercel parity** |
 | **J-24 Configuration** | 🔴 NOVA — não existe | **P0 — editor loopzero.yaml + commit** |
-| J-10 Environments | ✅ DELIVERED (eng) | engineering DoD complete 2026-06-06: PromoteDialog canonical {from,to} + DeleteEnvironmentDialog (cascade warning + type-to-confirm) + PlanLimitUpgradeModal (402 global) + EnvironmentKPIRow (3 signals). vitest 26/0 + Go promote handler 11+3 subtests + LIVE bash 6/6 (A create, B delete, C promote canonical body, D KPI shape, E 402 enforcement, F concurrent idempotent) + dogfood wrapper 4/4. Baseline `docs/operations/baselines/2026-06-06-j10-delivery-engineering.md`. Sponsor manual browser end-to-end = remaining HARD STOP. |
+| J-10 Environments | ✅ DELIVERED (eng) | engineering DoD complete 2026-06-06: PromoteDialog canonical {from,to} + DeleteEnvironmentDialog (cascade warning + type-to-confirm) + PlanLimitUpgradeModal (402 global) + EnvironmentKPIRow (3 signals). vitest 26/0 + Go promote handler 11+3 subtests + LIVE bash 6/6 (A create, B delete, C promote canonical body, D KPI shape, E 402 enforcement, F concurrent idempotent) + dogfood wrapper 4/4. Baseline [`docs/operations/baselines/2026-06-06-j10-delivery-engineering.md`](../operations/baselines/2026-06-06-j10-delivery-engineering.md). Sponsor manual browser end-to-end = remaining HARD STOP. |
 | J-11 Domains | ✅ funcional | polish (P1) |
 | J-12 Team | 🟡 lista existe | invites pendente (P1) |
 | J-13 Billing | 🟡 LIVE básico | revenue gate (P0) |

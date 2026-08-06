@@ -1,3 +1,8 @@
+---
+type: architecture
+title: AS-IS architecture (post Op B)
+---
+
 <!-- AS-IS STATE -->
 ---
 name: clustercredential-architecture
@@ -11,7 +16,7 @@ evidence_class: MEASURED
 
 # ClusterCredential — AS-IS architecture (post Op B)
 
-> Plan: `docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md` v1.2 — T0.1 Pre-Plan
+> Plan: [`docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md`](../../plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md) v1.2 — T0.1 Pre-Plan
 > Code references: `operators/internal/platform/clustercredential_controller.go` + `operators/internal/platform/ca_fetcher.go`
 > LIVE evidence: [[2026-05-26-op-b-live-evidence]]
 
@@ -107,7 +112,7 @@ ClusterCredentialReconciler.Reconcile(ctx, req)
 ## Cross-references
 
 - [[live-vs-snapshot-credentials]] — Concept page on the Op A vs Op B pattern
-- ADR: `docs/decisions/2026-05-25-live-ca-fetch-clustercredential-adr.md`
+- ADR: [`docs/decisions/2026-05-25-live-ca-fetch-clustercredential-adr.md`](../../decisions/2026-05-25-live-ca-fetch-clustercredential-adr.md)
 - Meeting: `.claude/knowledge-base/meetings/MEET-2026-05-25-op-b-live-ca-fetch.md`
 - LIVE evidence: `.claude/knowledge-base/reviews/2026-05-26-op-b-live-evidence.md`
 - Dogfood evidence: `.claude/knowledge-base/reviews/2026-05-26-dogfood-112-0-pass.md`

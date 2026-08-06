@@ -1,3 +1,8 @@
+---
+type: review
+title: "M11 API Validation (spec 100% + fuzzer spike + Fase-A migration)"
+---
+
 # Review — M11 API Validation (spec 100% + fuzzer spike + Fase-A migration)
 
 **Date:** 2026-07-07

@@ -1,3 +1,8 @@
+---
+type: plan
+title: "Plan: sqlc Migration — Big-Bang Replacement of Hand-Rolled SQL Layer"
+---
+
 # Plan: sqlc Migration — Big-Bang Replacement of Hand-Rolled SQL Layer
 
 > **Version 1.3** (sponsor mandate 2026-05-29 verbatim: *"AO FINAL DE TODO O PLANO DEVE RODAR O CLEANROON, DOGFOOD E CHAOS-TEST FUNCIIONAIS FULL. SEM ISSO NAO ACEITO A ENTREGA. QUANDO EXECUTAR CORRIGIR SEM WORAROUNDS POSSIVEIS PROBLEMAS QUE ENCONTRAR"* — V8/V9/V10 reframed from "operator HARD STOP" to **Ralph-executable** via multi-Bash-call sequence; only V11 (7-day wall-clock) remains operator-bound; no-workaround discipline binds the Final Phase: any failure during V8/V9/V10 must be fixed at root, no gate disable / spec skip / threshold relaxation; empirically grounded in MEET-001 closure precedent earlier this same session — audits `.claude/knowledge-base/audits/2026-05-29-dogfood-cleanroom-fresh-evidence.md` + `2026-05-29-chaos-test-full-cleanroom-fresh-evidence.md`. Memory `feedback_ralph_loop_engineering_completion_pattern.md` SELF-AMENDMENT 2026-05-29 documents the precedent reversal.) **Version 1.2** (sponsor-direct async amendment `.claude/knowledge-base/meetings/MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` 2026-05-29: D8 replaced by D8' — work direct on develop instead of `feat/sqlc-migration` feature branch + squash-merge; per-commit incremental with develop staying GREEN after every substantive commit; ADR-3 §"Mecanismo" sub-amendment pending separate commit) — Carries v1.1 folds (5 MUST FIX from `/edge-case-plan` 2026-05-29: EC-1 sqlc CLI in task doctor; EC-2 sqlc parse pre-flight against existing DDL; EC-3 sqlc emits snake_case JSON tags per Rule 5; EC-4 render script trap signals; EC-5 T4.2 explicit "green cycle" attestation criteria) — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
@@ -18,7 +23,7 @@
 
 **Motivating governance:**
 - MEET-2026-05-28-001 demonstrated that production-readiness now requires defensive consistency gates as a first-class deliverable (T2.2 schema-mirror test was a mandatory CR-9 closure).
-- ADR `docs/decisions/2026-05-29-sqlc-adoption.md` (and its 2 coupled ADRs) ratifies the architectural decision; this plan operationalizes it.
+- ADR [`docs/decisions/2026-05-29-sqlc-adoption.md`](../decisions/2026-05-29-sqlc-adoption.md) (and its 2 coupled ADRs) ratifies the architectural decision; this plan operationalizes it.
 
 **What evidence justifies the big-bang scope:**
 - Per pre-release-governance, incremental phased migration creates the exact "implemented but not wired" pattern documented in CLAUDE.md § Known Systemic Patterns.
@@ -26,9 +31,9 @@
 - 14-day branch lifetime cap (D3) creates a forced-completion constraint that prevents indefinite parallel-store divergence.
 
 **Links:**
-- ADR-1: `docs/decisions/2026-05-29-sqlc-adoption.md`
-- ADR-2: `docs/decisions/2026-05-29-schema-gen-sql-render.md`
-- ADR-3: `docs/decisions/2026-05-29-sqlc-migration-rollback.md`
+- ADR-1: [`docs/decisions/2026-05-29-sqlc-adoption.md`](../decisions/2026-05-29-sqlc-adoption.md)
+- ADR-2: [`docs/decisions/2026-05-29-schema-gen-sql-render.md`](../decisions/2026-05-29-schema-gen-sql-render.md)
+- ADR-3: [`docs/decisions/2026-05-29-sqlc-migration-rollback.md`](../decisions/2026-05-29-sqlc-migration-rollback.md)
 - Meeting record: MEET-2026-05-29-001 (12 specialists, APPROVED-CONDITIONAL)
 - Governance gate: `.claude/governance-gate.local.md` (expires 2026-06-12 23:59 UTC)
 - Motivating bug audit: `.claude/knowledge-base/audits/2026-05-28-keyless-GREEN/07-build-pipeline.md`
@@ -55,7 +60,7 @@
 > Plan-local ADRs (D1..D8). They cross-reference the 3 docs/decisions/ ADRs ratified by MEET-2026-05-29-001 but capture **plan-execution** decisions, not the meta architectural decisions.
 
 ### D1 — sqlc version pinning at v1.31.1
-- **Decision:** Pin sqlc CLI to `v1.31.1` (April 2026 release) in CI render job AND in `docs/operations/dev-loop.md` for local developer regeneration.
+- **Decision:** Pin sqlc CLI to `v1.31.1` (April 2026 release) in CI render job AND in [`docs/operations/dev-loop.md`](../operations/dev-loop.md) for local developer regeneration.
 - **Rationale:** Version drift between developer-local and CI = inconsistent generated code = schema.gen.sql diff false positives. Pinning forces synchronization.
 - **Consequences:** Enables: reproducible codegen. Constrains: sqlc upgrades become explicit T2 changes (config update + verify generated diff is empty after upgrade).
 
@@ -140,7 +145,7 @@ docs/operations/dev-loop.md — (EDIT) add "Local sqlc workflow" section: instal
 
 #### Deep file dependency analysis
 - `sqlc.yaml` is the codegen contract; its `gen.go.package` field determines the import path for generated code (`api/internal/db/generated`). Every Phase 1+ store conversion imports from this package.
-- `dev-loop.md` is the canonical operator runbook. Adding sqlc to it makes the local workflow self-documenting.
+- [`dev-loop.md`](../operations/dev-loop.md) is the canonical operator runbook. Adding sqlc to it makes the local workflow self-documenting.
 - The `.gitkeep` placeholders allow PRs to land empty directories under version control.
 
 #### Deep Dives
@@ -151,7 +156,7 @@ docs/operations/dev-loop.md — (EDIT) add "Local sqlc workflow" section: instal
 #### Tasks
 1. Create `api/internal/db/sqlc.yaml` with the v2 config locked per ADR-1 D2 + D3 + D6 + EC-3 (emit_json_tags + snake_case).
 2. Create `api/internal/db/queries/.gitkeep` + `api/internal/db/generated/.gitkeep`.
-3. Add "Local sqlc workflow" section to `docs/operations/dev-loop.md` with install + regenerate commands.
+3. Add "Local sqlc workflow" section to [`docs/operations/dev-loop.md`](../operations/dev-loop.md) with install + regenerate commands.
 4. Run `sqlc compile` (Phase 0 has no queries, so this is a syntax validation only).
 5. Verify `sqlc.yaml` matches the documented shape via JSON schema check (`sqlc compile --no-remote` exits 0).
 6. **EC-1:** Add sqlc CLI check to `taskfiles/dev.yml` § "=== Required Tools ===" — `cmd: command -v sqlc >/dev/null && [ "$(sqlc version)" = "v1.31.1" ] && echo "[PASS] sqlc v1.31.1" || echo "[FAIL] sqlc — install v1.31.1 from github.com/sqlc-dev/sqlc/releases"`. `task doctor` must fail (FAIL count >0) when sqlc absent or wrong version.
@@ -173,7 +178,7 @@ VERIFY:  cd api/internal/db && sqlc compile && go test ./internal/db/sqlc_config
 #### Acceptance Criteria
 - [ ] `api/internal/db/sqlc.yaml` exists and parses without error
 - [ ] `sqlc compile` exits 0 (no queries yet, but config is valid)
-- [ ] `docs/operations/dev-loop.md` has the sqlc workflow section
+- [ ] [`docs/operations/dev-loop.md`](../operations/dev-loop.md) has the sqlc workflow section
 - [ ] Pass: `/code-audit` size check (sqlc.yaml ≤ 100 lines)
 - [ ] Pass: `/code-audit` lint check (zero warnings)
 - [ ] sqlc.yaml v2 schema compliance verified
@@ -234,7 +239,7 @@ docs/operations/dev-loop.md — (EDIT) add "Re-rendering schema.gen.sql" section
 3. Add `task db:render-schema` to `taskfiles/db.yml`.
 4. Run `task db:render-schema` locally; verify output is non-empty + deterministic (run 3x, assert byte-identical).
 5. Commit the initial `api/internal/db/schema.gen.sql` to repo.
-6. Add `docs/operations/dev-loop.md` section explaining when to re-render.
+6. Add [`docs/operations/dev-loop.md`](../operations/dev-loop.md) section explaining when to re-render.
 7. **EC-2:** Execute `sqlc compile` against rendered schema.gen.sql + dummy queries; if any of 19 existing migrations' DDL fails to parse (TRIGGER, partial index, recursive CTE, custom types), document gap in ADR-1 §"Known sqlc limitations" with workaround (e.g., raw/ escape hatch for that table family). If 000020 trigger fails, mark as ADR-1 KSL-1 known limitation; raw/ subpackage will handle update-with-trigger paths.
 
 #### TDD

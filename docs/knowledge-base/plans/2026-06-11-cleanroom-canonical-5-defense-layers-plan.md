@@ -1,4 +1,6 @@
 ---
+type: plan
+title: "Plan: 2026-06-11 Cleanroom Canonical via 5 Defense Layers"
 slug: 2026-06-11-cleanroom-canonical-5-defense-layers
 created_at: 2026-06-11
 goal: Sistematizar 18 LIVE catches da sessão `T6.2` Cleanroom em 5 defense layers permanentes (Helmfile overlays + task chain extensions + hermetic gates + LIVE E2E + boot-time check sprint) garantindo que próximo Cleanroom execute ZERO manual step
@@ -8,9 +10,9 @@ goal: Sistematizar 18 LIVE catches da sessão `T6.2` Cleanroom em 5 defense laye
 
 > **Version 1.2** (2026-06-11) — Este plano sistematiza TODOS os 18 LIVE catches da sessão `T6.2` Cleanroom 2026-06-11 (memory `reference_t62_cleanroom_session_2026_06_11` + 20 sibling memory files) em 5 defense layers permanentes wired no fluxo canonical `task setup → tilt up → task check → LIVE walkthrough sponsor JUNTOS`. Saída esperada: próximo Cleanroom roda ZERO manual step + emite `<promise>IMPLEMENTATION_COMPLETE</promise>` quando `task check` sprint mostra PASS=N/FAIL=0 + LIVE E2E 9-journey test passa 9/9 GREEN.
 >
-> **v1.1 Amendment (2026-06-11)** — Absorveu 19 `MUST FIX` + 11 `SHOULD TEST` do edge case review (`knowledge-base/reviews/2026-06-11-cleanroom-canonical-5-defense-layers-edge-cases-2026-06-11.md`). Adicionou ADR D7 (sponsor walkthrough scheduling async per `feedback_post_feature_live_regression_workflow_2026_06_09`). Estendeu ADRs D1/D4/D6 com per-env coverage + fail behavior + auto/semi-auto journey distinction. Per `rules/pre-release-governance.md § Plan amendment policy` requires MEET-ASYNC-AMENDMENT registration.
+> **v1.1 Amendment (2026-06-11)** — Absorveu 19 `MUST FIX` + 11 `SHOULD TEST` do edge case review ([`knowledge-base/reviews/2026-06-11-cleanroom-canonical-5-defense-layers-edge-cases-2026-06-11.md`](../reviews/2026-06-11-cleanroom-canonical-5-defense-layers-edge-cases-2026-06-11.md)). Adicionou ADR D7 (sponsor walkthrough scheduling async per `feedback_post_feature_live_regression_workflow_2026_06_09`). Estendeu ADRs D1/D4/D6 com per-env coverage + fail behavior + auto/semi-auto journey distinction. Per `rules/pre-release-governance.md § Plan amendment policy` requires MEET-ASYNC-AMENDMENT registration.
 >
-> **v1.2 Amendment (2026-06-11)** — Absorveu deps audit verdict (`knowledge-base/audits/2026-06-11-cleanroom-canonical-5-defense-layers-deps-audit-2026-06-11.md` INVALID_PLAN_DEPS + FAIL_INSECURE). Added canonical `## Dependencies` section explicitly declaring "(none third-party)" — closes `plan_dependencies_section_missing` hard cap. Added 11 Go stdlib CVEs allowlist entries em `rules/deps-audit-allowlist.txt` com 2026-07-11 sunset (30 days) — closes `plan_dep_high_cve` hard cap via 1-level severity downgrade. Verdict expected pós-amendment: PASS_WITH_CAVEATS (89).
+> **v1.2 Amendment (2026-06-11)** — Absorveu deps audit verdict ([`knowledge-base/audits/2026-06-11-cleanroom-canonical-5-defense-layers-deps-audit-2026-06-11.md`](../audits/2026-06-11-cleanroom-canonical-5-defense-layers-deps-audit-2026-06-11.md) INVALID_PLAN_DEPS + FAIL_INSECURE). Added canonical `## Dependencies` section explicitly declaring "(none third-party)" — closes `plan_dependencies_section_missing` hard cap. Added 11 Go stdlib CVEs allowlist entries em `rules/deps-audit-allowlist.txt` com 2026-07-11 sunset (30 days) — closes `plan_dep_high_cve` hard cap via 1-level severity downgrade. Verdict expected pós-amendment: PASS_WITH_CAVEATS (89).
 
 ## Goal
 
@@ -1009,5 +1011,5 @@ These binaries are operator-workstation prerequisites already documented em `doc
 - 20 sibling memories: `j05/j09/j17/j22/j23/t62-aprendizado-*` em `~/.claude/projects/-home-paulo-loopzero/memory/`
 - 7 commits `T6.2` sessão: `07326c68`, `21c0fae1`, `f4ccb6c2`, `b76b9e9f`, `4e32e474`, `540bc70f`, `328b5e6a`
 - Steady-state baselines: `docs/operations/baselines/T6.2-2026-06-11/{pre,post}-rebuild.md`
-- Deps audit (v1.2 amendment evidence): `knowledge-base/audits/2026-06-11-cleanroom-canonical-5-defense-layers-deps-audit-2026-06-11.md`
+- Deps audit (v1.2 amendment evidence): [`knowledge-base/audits/2026-06-11-cleanroom-canonical-5-defense-layers-deps-audit-2026-06-11.md`](../audits/2026-06-11-cleanroom-canonical-5-defense-layers-deps-audit-2026-06-11.md)
 - CVE allowlist entries (v1.2): `.claude/rules/deps-audit-allowlist.txt` (11 GO-2026-* entries, sunset 2026-07-11)

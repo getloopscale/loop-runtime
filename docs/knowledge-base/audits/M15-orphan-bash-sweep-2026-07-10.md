@@ -1,3 +1,8 @@
+---
+type: audit
+title: M15 Orphan Bash Sweep (2026-07-10)
+---
+
 # M15 Orphan Bash Sweep (2026-07-10)
 
 **Purpose:** T1.2 — identify shipped `loopzero-ops seed <name>` Go subcommands whose bash counterparts still exist in `infra/scripts/local/` OR `infra/helmfile/scripts/` — those bash files are orphans (M15-W1+W2+W3 duplication debt) and Wave A candidates for immediate delete.
@@ -60,4 +65,4 @@ Plan estimated ~5 Wave A files; empirical Wave A count = 1. This tightens Wave A
 ## Cross-references
 
 - Plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.1
-- T1.1 baseline: `knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`
+- T1.1 baseline: [`knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`](./M15-pre-migration-baseline-2026-07-10.md)

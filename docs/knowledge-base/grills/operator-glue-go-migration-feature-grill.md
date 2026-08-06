@@ -1,8 +1,12 @@
 ---
+type: grill
+title: "Feature grill — operator-glue-go-migration (M15)"
+generated: { by: process:roadmap-feature, at: 2026-07-08 }
+status: stable
 slug: operator-glue-go-migration
 generated_by: roadmap-feature
 date: 2026-07-08
-status: completed
+workflow_status: completed
 answered_via: sponsor delegation — /goal 2026-07-08 ("Execute o CYCLE discover, plan, implement e review para M15 … máximo de rigor … TODOS OS DODS E CRITÉRIOS DE ACEITE VALIDADOS")
 original_slug_rejected: bash-strangler-residual-completion (colisão substring com M13 "Bash Strangler Completion" — re-slug per Step 1 opção a)
 out_of_scope_overlap: none (itens da seção: SSO/SAML, multi-cell auto-rebalance, multi-URL preview, CLI parity, LLM-judge/AIOps — zero keyword overlap)

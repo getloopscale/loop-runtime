@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — M7 QA-readiness complete (TEMPLATE)"
+---
+
 # Steady-State Baseline — M7 QA-readiness complete (TEMPLATE)
 
 > **TEMPLATE — do not commit filled.** Operator copies this file to `docs/operations/baselines/{date}-qa-readiness-complete.md` post-Step 6 of M7 runbook + fills the `<TODO operator>` markers from LIVE cluster state.
@@ -11,14 +16,14 @@
 - **Milestone:** M7 of `qa-readiness-roadmap-2026-06-23`
 - **Plan:** `.claude/knowledge-base/plans/m7-cleanroom-validation-readiness-plan.md`
 - **ADR:** `.claude/knowledge-base/decisions/2026-06-23-validation-milestone-sponsor-hard-stop.md`
-- **Runbook:** `docs/operations/m7-cleanroom-validation-runbook.md`
+- **Runbook:** [`docs/operations/m7-cleanroom-validation-runbook.md`](../m7-cleanroom-validation-runbook.md)
 
 ## Prior baseline cross-references (predecessors)
 
-- M6 closure baseline: `docs/operations/baselines/2026-06-22-pre-cleanroom-qa-dogfood-cleanup.md` (closest prior — qa-dogfood-cleanup-2026-06-21 baseline)
-- M3 baseline anchor: `docs/operations/baselines/2026-06-20-pre-cleanroom-t3-1.md`
-- M2 baseline anchor: `docs/operations/baselines/2026-06-18-pre-cleanroom-post-promote-p0.md`
-- Phase 4-5 baseline: `docs/operations/baselines/2026-06-15-cleanroom-phase4-5-green-100pct-coverage-roadmap.md`
+- M6 closure baseline: [`docs/operations/baselines/2026-06-22-pre-cleanroom-qa-dogfood-cleanup.md`](./2026-06-22-pre-cleanroom-qa-dogfood-cleanup.md) (closest prior — qa-dogfood-cleanup-2026-06-21 baseline)
+- M3 baseline anchor: [`docs/operations/baselines/2026-06-20-pre-cleanroom-t3-1.md`](./2026-06-20-pre-cleanroom-t3-1.md)
+- M2 baseline anchor: [`docs/operations/baselines/2026-06-18-pre-cleanroom-post-promote-p0.md`](./2026-06-18-pre-cleanroom-post-promote-p0.md)
+- Phase 4-5 baseline: [`docs/operations/baselines/2026-06-15-cleanroom-phase4-5-green-100pct-coverage-roadmap.md`](./2026-06-15-cleanroom-phase4-5-green-100pct-coverage-roadmap.md)
 - Index: `docs/operations/baselines/index.md`
 
 ## Layer 1 — Code state
@@ -118,6 +123,6 @@ The probes that ARE the regression detectors. Each is one line: command + expect
 
 - Mandate: `.claude/rules/cleanroom-up-live-test-mandate.md`
 - Steady-state rule: `.claude/rules/steady-state-baseline.md`
-- Runbook: `docs/operations/m7-cleanroom-validation-runbook.md`
+- Runbook: [`docs/operations/m7-cleanroom-validation-runbook.md`](../m7-cleanroom-validation-runbook.md)
 - Run-file: `.claude/knowledge-base/roadmap-runs/M7-2026-06-23.md`
 - Index: `docs/operations/baselines/index.md` (append a row pointing at this file post-fill)

@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Vault Secret Migration Runbook
+---
+
 # Vault Secret Migration Runbook
 
 **Owner**: Platform Security
@@ -296,7 +301,7 @@ bash infra/scripts/openbao/restore-vault-snapshot.sh \
 
 **POST-RESTORE (MANDATORY operator-time):**
 1. Vault will likely be RE-SEALED. Verify: `bao status`.
-2. Re-run Shamir unseal ceremony per `docs/operations/vault-cluster-local-runbook.md` P3.
+2. Re-run Shamir unseal ceremony per [`docs/operations/vault-cluster-local-runbook.md`](./vault-cluster-local-runbook.md) P3.
 3. Verify KV data integrity: `bash infra/scripts/openbao/vault-sync-check.sh --threshold 10`.
 
 **Manual procedure** (legacy — use for debugging or non-standard envs):
@@ -368,7 +373,7 @@ Each merits its own focused plan with TDD + cross-validation when prioritized.
 - `decisions/2026-06-02-openbao-adoption.md` (parent ADR Q1-Q16)
 - `decisions/2026-06-02-vault-secrets-sot.md` (D1-D12)
 - `plans/2026-06-02-loopzero-api-vault-integration-plan.md` v1.8
-- `docs/operations/vault-cluster-local-runbook.md` (Vault cluster setup + Shamir)
-- `docs/operations/openbao-aws-resources-runbook.md` (AWS KMS + DO Spaces)
-- `docs/operations/openbao-init-runbook.md` (Shamir init ceremony)
-- `docs/operations/break-glass-runbook.md` (recovery without quorum)
+- [`docs/operations/vault-cluster-local-runbook.md`](./vault-cluster-local-runbook.md) (Vault cluster setup + Shamir)
+- [`docs/operations/openbao-aws-resources-runbook.md`](./openbao-aws-resources-runbook.md) (AWS KMS + DO Spaces)
+- [`docs/operations/openbao-init-runbook.md`](./openbao-init-runbook.md) (Shamir init ceremony)
+- [`docs/operations/break-glass-runbook.md`](./break-glass-runbook.md) (recovery without quorum)

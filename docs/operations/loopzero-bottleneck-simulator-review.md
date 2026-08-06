@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator (M0)
+---
+
 # Review — LoopZero Bottleneck Simulator (M0)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator`.
@@ -41,7 +46,7 @@
 - `loopzero-capsim.mjs` — pure engine (5 exports, unit-tested).
 - `loopzero-capsim.test.mjs` — 14 tests (node:test).
 - `loopzero-bottleneck-simulator.html` — interactive UI (imports the engine).
-- `loopzero-bottleneck-simulator-plan.md` — plan + DoD.
+- [`loopzero-bottleneck-simulator-plan.md`](./loopzero-bottleneck-simulator-plan.md) — plan + DoD.
 - `loopzero-bottleneck-simulator-review.md` — this file.
 
 ## How to run

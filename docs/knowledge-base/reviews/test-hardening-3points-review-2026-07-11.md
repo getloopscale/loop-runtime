@@ -1,3 +1,8 @@
+---
+type: review
+title: test hardening (3 systemic points)
+---
+
 # Review — test hardening (3 systemic points)
 
 **Date:** 2026-07-11

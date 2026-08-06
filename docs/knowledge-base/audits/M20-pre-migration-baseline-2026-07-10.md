@@ -1,3 +1,8 @@
+---
+type: audit
+title: M20 Pre-Migration Baseline (2026-07-10)
+---
+
 # M20 Pre-Migration Baseline (2026-07-10)
 
 **entries_count:** 118
@@ -13,4 +18,4 @@ Output: `118`
 
 **Cross-references:**
 - Plan: `knowledge-base/plans/m20-hermetic-infra-tests-remainder-plan.md` v1.0
-- Blueprint: `knowledge-base/discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md` v1.0
+- Blueprint: [`knowledge-base/discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md`](../discoveries/blueprints/m20-hermetic-infra-tests-remainder-blueprint.md) v1.0

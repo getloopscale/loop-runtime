@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-state baseline — 2026-06-09 post M2 operator canonical fix"
+---
+
 # Steady-state baseline — 2026-06-09 post M2 operator canonical fix
 
 > 4-layer baseline per `.claude/rules/steady-state-baseline.md` captured at
@@ -32,7 +37,7 @@ Post-fix, the operator emits M2 canonical end-to-end:
   with ZERO manual workarounds (T6.1).
 
 The prior milestone baseline is
-`docs/operations/baselines/2026-06-09-pre-m2-operator-fix.md`. Any
+[`docs/operations/baselines/2026-06-09-pre-m2-operator-fix.md`](./2026-06-09-pre-m2-operator-fix.md). Any
 regression that surfaces post-merge is diff-bounded between these two
 snapshots.
 
@@ -189,7 +194,7 @@ Tracked in
 ## Cross-links
 
 - Plan: `.claude/knowledge-base/plans/2026-06-09-m2-operator-canonical-fix-plan.md` (v1.4 SHIPPABLE_WITH_CAVEATS 89.0)
-- Pre-fix baseline: `docs/operations/baselines/2026-06-09-pre-m2-operator-fix.md`
+- Pre-fix baseline: [`docs/operations/baselines/2026-06-09-pre-m2-operator-fix.md`](./2026-06-09-pre-m2-operator-fix.md)
 - Edge-case review: `.claude/knowledge-base/reviews/2026-06-09-m2-operator-canonical-fix-edge-cases-2026-06-09.md`
 - Deps audit: `.claude/knowledge-base/audits/2026-06-09-m2-operator-canonical-fix-deps-audit-2026-06-09-v1.2.md`
 - Implementation contract: `.claude/knowledge-base/implementations/2026-06-09-m2-operator-canonical-fix-implementation.md`

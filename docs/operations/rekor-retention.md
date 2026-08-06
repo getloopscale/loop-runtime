@@ -1,7 +1,12 @@
+---
+type: operational-runbook
+title: "Rekor Retention — Manual Archival Procedure"
+---
+
 # Rekor Retention — Manual Archival Procedure
 
 T4.6 of plan
-`docs/plans/2026-05-28-meet-001-engineering-closure-plan.md`. CR-11
+[`docs/plans/2026-05-28-meet-001-engineering-closure-plan.md`](../plans/2026-05-28-meet-001-engineering-closure-plan.md). CR-11
 (MEET-2026-05-28-001 Production Design Review): the Rekor archival
 script `infra/scripts/security/rekor-archive-old-entries.sh` ships as
 a STUB because the Trillian admin API integration is a separate

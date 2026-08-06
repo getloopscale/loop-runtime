@@ -1,10 +1,15 @@
+---
+type: handoff
+title: "Brief #6: Brief #5 primitives consumed — shipped evidence + measured deltas"
+---
+
 # Brief #6: Brief #5 primitives consumed — shipped evidence + measured deltas
 
 > **Audience:** the `@loopzero/ui` maintainer team.
 > **Output:** *none requested* — this brief reports back the consumer-side outcome of Brief #5.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-25.
 > **Priority:** INFORMATIONAL — no action required upstream.
-> **Companion to:** Brief #5 (`2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md`) — the source request.
+> **Companion to:** Brief #5 ([`2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md`](./2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md)) — the source request.
 > **Tracks:** consumer-side migration tasks T-MIG-1..4 committed on `develop`.
 
 ---

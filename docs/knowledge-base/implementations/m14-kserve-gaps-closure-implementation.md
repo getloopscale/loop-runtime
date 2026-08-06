@@ -1,3 +1,8 @@
+---
+type: implementation
+title: "Implementation Summary — m14-kserve-gaps-closure"
+---
+
 # Implementation Summary — m14-kserve-gaps-closure
 
 **Milestone:** M14 — KServe Cross-Validation Gaps Closure

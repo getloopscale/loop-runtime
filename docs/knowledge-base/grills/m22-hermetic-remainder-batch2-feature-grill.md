@@ -1,8 +1,12 @@
 ---
+type: grill
+title: "M22 grill — hermetic-remainder-batch2"
+generated: { by: process:roadmap-feature, at: 2026-07-10 }
+status: stable
 slug: m22-hermetic-remainder-batch2
 generated_by: roadmap-feature
 generated_at: 2026-07-10
-status: completed
+workflow_status: completed
 ---
 
 # M22 grill — hermetic-remainder-batch2

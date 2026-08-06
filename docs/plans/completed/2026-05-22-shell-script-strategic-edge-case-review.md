@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-22-shell-script-strategic-plan"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-22-shell-script-strategic-plan
 
 **Data:** 2026-05-22
-**Plano:** docs/plans/2026-05-22-shell-script-strategic-plan.md
+**Plano:** [docs/plans/2026-05-22-shell-script-strategic-plan.md](./2026-05-22-shell-script-strategic-plan.md)
 **Branch:** refactor/shell-scripts-strategic @ `893232c3`
 **Tasks analisadas:** 20 (T0.1, T1.1, T1.2, T2.1-T2.4, T3.1-T3.2, T4.1-T4.4, T5.1-T5.3, T6.1-T6.4)
 **Edge cases encontrados:** 10 (MUST FIX: 4, SHOULD TEST: 3, DOCUMENT: 3)
@@ -75,7 +81,7 @@
 
 ### EC-10: T4.2 JWT TTL=1h vs Ginkgo full journey ~30min
 
-- **Risco aceito:** Full Ginkgo suite roda 30+min; JWT TTL=1h dá margem mas builds lentos (CI cold cache) podem chegar perto. Não vale aumentar TTL globalmente (security). Documentar em `dev-loop.md`: "Re-mint JWT (`bash infra/helmfile/scripts/seed-local-user.sh`) antes de full Ginkgo run se sessão > 30min".
+- **Risco aceito:** Full Ginkgo suite roda 30+min; JWT TTL=1h dá margem mas builds lentos (CI cold cache) podem chegar perto. Não vale aumentar TTL globalmente (security). Documentar em [`dev-loop.md`](../../operations/dev-loop.md): "Re-mint JWT (`bash infra/helmfile/scripts/seed-local-user.sh`) antes de full Ginkgo run se sessão > 30min".
 
 ---
 
@@ -136,6 +142,6 @@ Os 3 SHOULD TEST são improvements de robustez. Os 3 DOCUMENT são riscos aceito
 4. **T0.1** — adicionar tests `TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead` e `TestScanRepo_HandlesSymlinks_NoCycle` ao TDD
 5. **T6.2** — adicionar acceptance criterion "CI job usa `actions/checkout@v4` com `fetch-depth: 0`" e test `TestCheck_ShallowClone_FailsWithClearError` + `TestCheck_RenamedBashOutsideAllowlist_Blocked`
 6. **T5.1** — adicionar test `TestAutoAPI_StackNotFound_TypedError`
-7. **DOCUMENT section** — adicionar nota EC-09 em `docs/operations/secret-rotation.md` (a criar) e EC-10 em `dev-loop.md` (a criar em T3.1)
+7. **DOCUMENT section** — adicionar nota EC-09 em `docs/operations/secret-rotation.md` (a criar) e EC-10 em [`dev-loop.md`](../../operations/dev-loop.md) (a criar em T3.1)
 
 Após esses ajustes, o plano deve ser bumped para v1.1 e re-revisar via `/cross-validation` no fim da implementação.

@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-21-deep-review-remediation-plan"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-21-deep-review-remediation-plan
 
 **Data:** 2026-05-21
-**Plano:** `docs/plans/2026-05-21-deep-review-remediation-plan.md`
+**Plano:** [`docs/plans/2026-05-21-deep-review-remediation-plan.md`](./2026-05-21-deep-review-remediation-plan.md)
 **Tasks analisadas:** 52
 **Edge cases encontrados:** 14 (MUST FIX: 5, SHOULD TEST: 6, DOCUMENT: 3)
 **Veredito:** PLANO PRECISA DE AJUSTE — 5 fixes aplicados no plano v1.1
@@ -56,7 +62,7 @@
 |---|---|
 | EC-12 | T2.1 sweep vai expor silent failures dormentes em ~110 scripts. Budget flex de +8-16h não contabilizado nas 80h. Documentar; aceitar. |
 | EC-13 | T4.6 stagger de cron cria adjacência decay-scan + watchdog. Risco baixo porque watchdog é idempotente + flock-protected. Sem mudança. |
-| EC-14 | T1.5 placeholder `secure:` exige `PULUMI_CONFIG_PASSPHRASE` para qualquer dev clonar e rodar prod preview. UX confuso (erro "failed to decrypt" em vez de fail-fast). Documentar em `docs/operations/credentials-required.md`. |
+| EC-14 | T1.5 placeholder `secure:` exige `PULUMI_CONFIG_PASSPHRASE` para qualquer dev clonar e rodar prod preview. UX confuso (erro "failed to decrypt" em vez de fail-fast). Documentar em [`docs/operations/credentials-required.md`](../../operations/credentials-required.md). |
 
 ---
 

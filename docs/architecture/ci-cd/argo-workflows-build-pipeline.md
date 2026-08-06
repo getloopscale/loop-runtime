@@ -1,4 +1,6 @@
 ---
+title: "Argo Workflows AS-IS — Build Pipeline Only"
+generated: { by: process:t0.2-plan-pre-implementation-snapshot, at: 2026-05-27 }
 name: argo-workflows-build-pipeline
 description: AS-IS state of Argo Workflows in LoopZero — used today exclusively for tenant build pipeline (BuildKit + cosign + syft + push to DOCR). Pre-T0.2 Cenário B baseline before adding CI/PR-time enforcement.
 type: architecture
@@ -96,6 +98,6 @@ These MUST continue to hold after CI is added:
 ## Related
 
 - AS-IS state of CI gates: `cmd/loopzero-ops/internal/quality/` (56+ gates) + `taskfiles/quality.yml` orchestrator
-- Companion PROPOSED: `docs/architecture/ci-cd/diff/real-ci-active.md`
+- Companion PROPOSED: [`docs/architecture/ci-cd/diff/real-ci-active.md`](./diff/real-ci-active.md)
 - ADR ratified: `.claude/knowledge-base/decisions/2026-05-27-T0.2-cenario-b-ratified.md`
 - Meeting: `.claude/knowledge-base/meetings/MEET-2026-05-27-batch-sponsor-approvals.md`

@@ -1,3 +1,8 @@
+---
+type: discovery-blueprint
+title: "Blueprint: m20-hermetic-infra-tests-remainder"
+---
+
 # Blueprint: m20-hermetic-infra-tests-remainder
 
 **Slug:** `m20-hermetic-infra-tests-remainder`
@@ -170,7 +175,7 @@ Prioritized for `/to-plan`:
 ## Cross-references
 
 - Discover-plan: `knowledge-base/discoveries/plans/m20-hermetic-infra-tests-remainder-plan.md` v1.0 SHIPPABLE 100.0
-- M16 blueprint (parent canonical): `knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`
+- M16 blueprint (parent canonical): [`knowledge-base/discoveries/blueprints/infra-tests-hermetic-to-quality-gates-blueprint.md`](./infra-tests-hermetic-to-quality-gates-blueprint.md)
 - M16 shipped gates: `cmd/loopzero-ops/internal/quality/{sprintsyntax,archivescriptrepo,nocloud,lokivaultretention,lokiretentionschema,vaultpromalerts,day30day60cronjobs,esochartsanity,esocreationpolicy,openbaoinitauth}/check.go`
-- Grill: `knowledge-base/grills/m20-hermetic-infra-tests-remainder-feature-grill.md`
+- Grill: [`knowledge-base/grills/m20-hermetic-infra-tests-remainder-feature-grill.md`](../../grills/m20-hermetic-infra-tests-remainder-feature-grill.md)
 - Cycle rule: `.claude/rules/cycle-discover.md`

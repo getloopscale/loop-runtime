@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Dashboard Visual Redesign — Mockup-Aligned (Overview literal + design language)"
+status: deprecated
+---
+
 # Plan: Dashboard Visual Redesign — Mockup-Aligned (Overview literal + design language)
 
 > **Version 1.2** — Redesign visual completo do `cloud/dashboard/` alinhado ao mockup canônico em `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html` E coerente com a documentação canônica de `@loopzero/ui` em `cloud/dashboard/.llms.txt` (espelho local de `https://docs.loopzero.example/llms.txt`, v0.9.0-next.0). Implementa OverviewPage com **alta fidelidade ao mockup** (pixel-close), extrai design language em doc curado, e aplica o pattern nas outras 11 pages. Consome infraestrutura preparada pelo plano `2026-05-23-dashboard-loopzero-ui-migration v1.3` (Phase 0 ✅ DONE + Phase 1 mecânica próxima). **SUBSUME v1.3 Phases 2, 3, 4, 5**. Resultado: UX coerente com identidade visual Vercel-style + uso canônico das primitivas conforme `.llms.txt`.
@@ -29,7 +35,7 @@ Anti-pattern desta sessão (corrigido v1.2): grep + node REPL probes ad-hoc sem 
   - **D-9 Anti-pattern validation gate**: T-H.2 estendida com grep adicional para anti-patterns .llms.txt (raw hex, inline SVG, manual portals, eslint-disable sem WAI-ARIA justificativa).
   - **D-10 Quality gates note**: plan adiciona nota lateral em T-H sobre `pnpm quality:gates` (library-side, não roda no consumer, mas registry validation pode acontecer se publicarmos custom components futuro).
 
-- **v1.1 (2026-05-24)** — Incorpora 7 MUST FIX do `/edge-case-plan` review (`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-edge-cases.md`):
+- **v1.1 (2026-05-24)** — Incorpora 7 MUST FIX do `/edge-case-plan` review ([`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-edge-cases.md`](./2026-05-24-dashboard-visual-redesign-mockup-aligned-edge-cases.md)):
   - **EC-1** (T-C.1): Sidebar.Item polymorphism fallback documented — se `as={Component}` não funciona, wrap manual com react-router Link para preservar SPA navigation (D3 v1.3 JWT em memória)
   - **EC-2** (T-B.2 + T-C.3): pageTitle prop mechanism via Context provider `usePageMeta()` hook — DashboardLayout provê context, pages chamam `setPageTitle()` em useEffect
   - **EC-3** (T-C.2): novo `src/hooks/use-projects.ts` SWR-style cache (60s TTL) para evitar dupla chamada `/api/v1/projects` (TopBar + Overview)
@@ -133,7 +139,7 @@ Walkthrough confirmou ~95% das regions do mockup têm primitive/composite direto
 
 Metas mensuráveis:
 
-1. **Pattern language extraído**: `docs/design/2026-05-24-dashboard-design-language.md` doc curado (≤300 LOC) descrevendo 8 patterns reusable (Layout, Sidebar, TopBar, ActionBar, ContentGrid, Card, StatusDot, Timestamp).
+1. **Pattern language extraído**: [`docs/design/2026-05-24-dashboard-design-language.md`](../../design/2026-05-24-dashboard-design-language.md) doc curado (≤300 LOC) descrevendo 8 patterns reusable (Layout, Sidebar, TopBar, ActionBar, ContentGrid, Card, StatusDot, Timestamp).
 2. **OverviewPage fidelidade**: visual delta ≤5% vs mockup (verificável via screenshot diff + spec compliance checklist).
 3. **Cross-page coerência**: 100% das pages consomem `<DashboardLayout>` shell e seguem ActionBar/ContentGrid patterns onde aplicável.
 4. **LOC reduction**: dashboard atual 2.914 LOC → target ≤1.400 LOC (-52% revisado vs -49% de v1.3). Mockup aligned reduz mais porque elimina TODO o styling ad-hoc duplicado.
@@ -382,7 +388,7 @@ VERIFY:  Manual check via the 4 commands above
 ### T-B.1 — Write Design Language doc
 
 #### Objective
-Documentar 8 patterns reusable extraídos do mockup em `docs/design/2026-05-24-dashboard-design-language.md`. Doc é referência canônica para todas as 13 pages — qualquer divergência futura precisa de RFC.
+Documentar 8 patterns reusable extraídos do mockup em [`docs/design/2026-05-24-dashboard-design-language.md`](../../design/2026-05-24-dashboard-design-language.md). Doc é referência canônica para todas as 13 pages — qualquer divergência futura precisa de RFC.
 
 #### Evidence
 - Mockup tem patterns recorrentes (cards, action bar, sidebar shell, 2-col grid) que aparecerão em N pages
@@ -436,7 +442,7 @@ VERIFY:  wc -l docs/design/2026-05-24-dashboard-design-language.md (target ≤30
 ```
 
 #### Acceptance Criteria
-- [ ] `docs/design/2026-05-24-dashboard-design-language.md` existe
+- [ ] [`docs/design/2026-05-24-dashboard-design-language.md`](../../design/2026-05-24-dashboard-design-language.md) existe
 - [ ] 8 patterns documentados (Layout, Sidebar, TopBar, ActionBar, ContentGrid, Card, StatusDot, Typography)
 - [ ] LOC ≤300
 - [ ] Reference ao mockup file: `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html`
@@ -1558,7 +1564,7 @@ VERIFY:  npm test -- device-success
 ### T-H.4 — Reconcile with v1.3 plan
 
 #### Objective
-Atualizar `docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md` para marcar Phases 2/3/4/5 como SUBSUMED por este plano. Garantir que Phase 6 (cleanup) ainda roda apropriadamente.
+Atualizar [`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](./2026-05-23-dashboard-loopzero-ui-migration-plan.md) para marcar Phases 2/3/4/5 como SUBSUMED por este plano. Garantir que Phase 6 (cleanup) ainda roda apropriadamente.
 
 #### Tasks
 1. Edit v1.3 plan: add note in Phases 2/3/4/5 headers marcando "SUBSUMED by 2026-05-24-dashboard-visual-redesign-mockup-aligned-plan"
@@ -1729,6 +1735,6 @@ S0/S1 → fix → re-run smoke. S2-S4 documented em `docs/reviews/2026-05-24-das
 **Tier**: T3 (refactor visual + estrutural + novos layout components locais)
 **Estimated effort**: 7-12 sessões de trabalho (Phase A: 0.5h; Phase B: 2-3h; Phase C: 3-4h; Phase D: 2-3h; Phase E: 4-6h; Phase F: 2-3h; Phase G: 3-4h; Phase H: 1-2h)
 **Dependencies**: v1.3 Phase 1 (mecânico, 1-2 sessões) DEVE rodar antes
-**Edge-Case-Review**: PASSED v1.1 — `docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-edge-cases.md` (16 edges: 7 MUST FIX incorporados em v1.1, 6 SHOULD TEST adicionados aos TDD sections, 3 DOCUMENT como notas)
+**Edge-Case-Review**: PASSED v1.1 — [`docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-edge-cases.md`](./2026-05-24-dashboard-visual-redesign-mockup-aligned-edge-cases.md) (16 edges: 7 MUST FIX incorporados em v1.1, 6 SHOULD TEST adicionados aos TDD sections, 3 DOCUMENT como notas)
 **Source-of-truth alignment**: PASSED v1.2 — `.llms.txt` (`cloud/dashboard/.llms.txt`, sync 2026-05-24, v0.9.0-next.0) cross-checked; 10 divergências identificadas e corrigidas inline (D-1 a D-10 no changelog v1.2). Plan v1.2 explicitly references .llms.txt em cada seção relevante.
 **Próximo gate**: sponsor approval → v1.3 Phase 1 execution → este plano Phase A (com T-A.0 novo) start

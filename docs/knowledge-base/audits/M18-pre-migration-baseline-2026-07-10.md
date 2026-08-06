@@ -1,3 +1,8 @@
+---
+type: audit
+title: M18 Pre-Migration Baseline (2026-07-10)
+---
+
 # M18 Pre-Migration Baseline (2026-07-10)
 
 **Purpose:** Anchor for M18 DoD verification. Per `.claude/rules/steady-state-baseline.md`.
@@ -18,5 +23,5 @@ Output: `120` (post-M15 v0.61.0 release)
 ## Cross-references
 
 - Plan: `knowledge-base/plans/m18-operator-glue-remainder-plan.md` v1.0 SHIPPABLE 95.2
-- Blueprint: `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md` v1.0 SHIPPABLE 99.7
+- Blueprint: [`knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`](../discoveries/blueprints/m18-operator-glue-remainder-blueprint.md) v1.0 SHIPPABLE 99.7
 - ROADMAP.md M18 (from M15 remainder)

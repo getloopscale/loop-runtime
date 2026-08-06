@@ -1,4 +1,6 @@
 ---
+type: plan
+title: Live URL Discoverability
 slug: 2026-06-12-dashboard-journey-j25-live-url-discoverability
 milestone_id: J-25
 created_at: 2026-06-12
@@ -14,7 +16,7 @@ goal: Surface live deploy URL in 3 canonical dashboard slots (Project Overview h
 ## Changelog
 
 - **v1.2 (2026-06-12)** — parser-compliance cirurgia post `/plan-confidence` v1.1 INVALID 49.0. Fixes: (1) ADR headers `### ADR Dn` → `### Dn — Title (ADR)` so parser detects definitions; (2) Coverage Matrix `\| Gap \| Task \|` → 5-col `\| # \| Description \| Task \| Severity \| Owner \|` (parser requires ≥4 cols); (3) NEW `## Baseline Context` section with 4 canonical sub-sections (Files / Callers / Glossary / Boundaries) to close `soft_floor_baseline_context_incomplete`; (4) Unresolved Questions `- **(Q1)**` → `- Q1 —` (parser regex `[-*]\s+(Q\d|[A-Z])`); (5) stripped 2 phantom-number ADR token typos (the 4th and 5th IDs — non-existent — only the first 3 ADRs are real); (6) 6 spec smells closed (3 weak_imperatives + 2 subjective_adjectives + 1 vague_pronouns). Expected re-score: SHIPPABLE_WITH_CAVEATS 75-85.
-- **v1.1 (2026-06-12)** — absorbed 10 EC from edge-case review (`knowledge-base/reviews/2026-06-12-dashboard-journey-j25-live-url-discoverability-edge-cases-2026-06-12.md`): 3 MUST FIX (EC-1 fabricated URL example fixed via `status.go:252` canonical pattern; EC-2 shell allowlist sub-task added as T4.2; EC-3 T0.1 halt condition for null URL); 4 `SHOULD-TEST` (EC-4 multi-env coverage; EC-5 GET 200..399 not HEAD; EC-6 loading skeleton; EC-7 copy button TDD); 3 DOCUMENT (EC-8 polling gap consolidated; EC-9 pagination affordance; EC-10 dev/standalone hostname variation).
+- **v1.1 (2026-06-12)** — absorbed 10 EC from edge-case review ([`knowledge-base/reviews/2026-06-12-dashboard-journey-j25-live-url-discoverability-edge-cases-2026-06-12.md`](../reviews/2026-06-12-dashboard-journey-j25-live-url-discoverability-edge-cases-2026-06-12.md)): 3 MUST FIX (EC-1 fabricated URL example fixed via `status.go:252` canonical pattern; EC-2 shell allowlist sub-task added as T4.2; EC-3 T0.1 halt condition for null URL); 4 `SHOULD-TEST` (EC-4 multi-env coverage; EC-5 GET 200..399 not HEAD; EC-6 loading skeleton; EC-7 copy button TDD); 3 DOCUMENT (EC-8 polling gap consolidated; EC-9 pagination affordance; EC-10 dev/standalone hostname variation).
 - **v1.0 (2026-06-12)** — initial draft.
 
 ## Goal
@@ -320,7 +322,7 @@ This baseline locks "what exists today" so a junior reader does not have to spel
 
 ## Edge Cases
 
-> **Namespace note (v1.1):** the inline list below uses plan-internal numbering (EC-1..EC-6) describing **runtime edge cases the implementation must handle**. Note distinction from the review-numbered ECs in `knowledge-base/reviews/2026-06-12-dashboard-journey-j25-live-url-discoverability-edge-cases-2026-06-12.md` (which describe **plan-quality gaps** absorbed into v1.1 and tagged "EC-N v1.1" throughout this document). Same prefix, different namespaces; cross-references always specify which.
+> **Namespace note (v1.1):** the inline list below uses plan-internal numbering (EC-1..EC-6) describing **runtime edge cases the implementation must handle**. Note distinction from the review-numbered ECs in [`knowledge-base/reviews/2026-06-12-dashboard-journey-j25-live-url-discoverability-edge-cases-2026-06-12.md`](../reviews/2026-06-12-dashboard-journey-j25-live-url-discoverability-edge-cases-2026-06-12.md) (which describe **plan-quality gaps** absorbed into v1.1 and tagged "EC-N v1.1" throughout this document). Same prefix, different namespaces; cross-references always specify which.
 
 - **EC-1**: `status.url` retorna URL com path (`/v1/foo`) ao invés de só hostname → render canonical (URL.parse válido); link funciona normal.
 - **EC-2**: User clica Visit em `dev-public` mas dev tunnel está down → browser-level concern, fora do escopo. Tooltip pre-existe "URL can take ~60s on first deploy".

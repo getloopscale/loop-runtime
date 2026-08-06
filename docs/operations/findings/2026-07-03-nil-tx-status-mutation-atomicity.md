@@ -1,7 +1,12 @@
+---
+type: finding
+title: non-atomic status mutation via nil-tx pool fallback (pre-existing)
+---
+
 # FINDING — non-atomic status mutation via nil-tx pool fallback (pre-existing)
 
 - **Date:** 2026-07-03
-- **Discovered during:** M9 Step 5 db-split design review (`docs/meetings/records/MEET-2026-07-03-001.md`), distributed-systems-engineer ratification.
+- **Discovered during:** M9 Step 5 db-split design review ([`docs/meetings/records/MEET-2026-07-03-001.md`](../../meetings/records/MEET-2026-07-03-001.md)), distributed-systems-engineer ratification.
 - **Severity:** HIGH (state-machine status mutation without atomicity or advisory-lock scope).
 - **Filed to GitHub:** NOT filed — `gh` unauthenticated for `getloopscale/loopzero` in this environment. This doc is the durable record.
 - **Introduced by:** NOT M9. Pre-existing; surfaced by the design review.

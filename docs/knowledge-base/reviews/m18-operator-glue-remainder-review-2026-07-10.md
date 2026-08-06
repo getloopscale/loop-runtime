@@ -1,3 +1,8 @@
+---
+type: review
+title: M18 Review Report (2026-07-10)
+---
+
 # M18 Review Report (2026-07-10)
 
 **Cycle:** `cycle-review`
@@ -81,8 +86,8 @@ M18 v0.62.0 delivers Ginkgo migration of 2 dogfood bash scripts + `pulumi-output
 ## Cross-references
 
 - Plan: `knowledge-base/plans/m18-operator-glue-remainder-plan.md` v1.0
-- Blueprint: `knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md` v1.0 SHIPPABLE 99.7
-- Code-quality: `knowledge-base/audits/M18-code-quality-audit-2026-07-10.md` PASS
-- Implementation: `knowledge-base/implementations/m18-operator-glue-remainder-implementation.md`
+- Blueprint: [`knowledge-base/discoveries/blueprints/m18-operator-glue-remainder-blueprint.md`](../discoveries/blueprints/m18-operator-glue-remainder-blueprint.md) v1.0 SHIPPABLE 99.7
+- Code-quality: [`knowledge-base/audits/M18-code-quality-audit-2026-07-10.md`](../audits/M18-code-quality-audit-2026-07-10.md) PASS
+- Implementation: [`knowledge-base/implementations/m18-operator-glue-remainder-implementation.md`](../implementations/m18-operator-glue-remainder-implementation.md)
 - Cycle rule: `.claude/rules/cycle-review.md`
 - Next: `/release --bump minor` (v0.61.0 → v0.62.0)

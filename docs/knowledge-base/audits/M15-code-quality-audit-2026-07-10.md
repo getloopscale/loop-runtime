@@ -1,3 +1,8 @@
+---
+type: audit
+title: M15 Code-Quality Audit (2026-07-10)
+---
+
 # M15 Code-Quality Audit (2026-07-10)
 
 **Cycle:** `cycle-code-quality`
@@ -48,8 +53,8 @@ Audit scope: verify (D1) dead code, (D2) symbol fabrication, (D3) wiring gaps fo
 
 - Plan: `knowledge-base/plans/operator-glue-go-migration-final-plan.md` v1.2 (ADR-D6)
 - Wave A commit: `9e1593fa feat(cleanup): delete reset-for-e2e.sh (M15 Wave A T2.1)`
-- Pre-migration baseline: `knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`
-- Orphan sweep: `knowledge-base/audits/M15-orphan-bash-sweep-2026-07-10.md`
+- Pre-migration baseline: [`knowledge-base/audits/M15-pre-migration-baseline-2026-07-10.md`](./M15-pre-migration-baseline-2026-07-10.md)
+- Orphan sweep: [`knowledge-base/audits/M15-orphan-bash-sweep-2026-07-10.md`](./M15-orphan-bash-sweep-2026-07-10.md)
 - Cycle rule: `.claude/rules/cycle-code-quality.md`
 - Severity rubric: `.claude/rules/code-quality-golden-rule.md`
 

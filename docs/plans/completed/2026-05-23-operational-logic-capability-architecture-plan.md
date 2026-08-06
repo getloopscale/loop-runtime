@@ -1,10 +1,16 @@
+---
+type: plan
+title: "Plan: Operational-Logic Capability Architecture (the \"other way\")"
+status: deprecated
+---
+
 # Plan: Operational-Logic Capability Architecture (the "other way")
 
 > **Version 1.0** — Reframe the shell-script problem from "rewrite 192 scripts in Go (target ≤30)" to "**home every operational capability in the right professional layer**". Operational logic stops being a flat pile of `.sh` files and lives in one of four typed/tested/discoverable homes: **declarative config** (install), **`loopzero-ops` CLI** (operator + CI imperative ops), **controllers** (continuous enforcement), **Go/Ginkgo** (validation). Bash count drops as a *byproduct*, not as the goal. The KPI becomes **"zero un-homed operational logic"**, measurable and FAANG-grade.
 
 ## Context
 
-The predecessor plan (`2026-05-23-incremental-bash-to-go-migration-plan.md`) migrated 8 pure-logic gates + adopted `pkg/shellrun` + built the `no-dangling-script-refs` backstop (N(bash) 209→192). That work is the correct *foundation* — but the script-by-script frame hit three walls:
+The predecessor plan ([`2026-05-23-incremental-bash-to-go-migration-plan.md`](./2026-05-23-incremental-bash-to-go-migration-plan.md)) migrated 8 pure-logic gates + adopted `pkg/shellrun` + built the `no-dangling-script-refs` backstop (N(bash) 209→192). That work is the correct *foundation* — but the script-by-script frame hit three walls:
 
 - **governance/* (4 scripts)** are bash-wrapped Python heredocs → Go migration = reimplementing governance-correctness logic (risk: false-green gates).
 - **drill/dr (37 scripts)** are LIVE-gated → bash deletion needs real DOKS validation.
@@ -161,4 +167,4 @@ After the drill pattern is proven: `loopzero-ops chaos` OR Ginkgo, pairing with 
 
 ## Governance
 
-This is a **T3** reframe (new operational entry-point architecture + reclassifying 93 test scripts to Ginkgo + KPI change). It supersedes the *KPI and frame* of `2026-05-23-incremental-bash-to-go-migration-plan.md` (whose mechanical migrations remain valid as Phase-1 work). Requires sponsor ratification (the user, who requested the FAANG reframe) OR a Change Governor meeting before Phase 4 (declarative bootstrap = highest blast radius).
+This is a **T3** reframe (new operational entry-point architecture + reclassifying 93 test scripts to Ginkgo + KPI change). It supersedes the *KPI and frame* of [`2026-05-23-incremental-bash-to-go-migration-plan.md`](./2026-05-23-incremental-bash-to-go-migration-plan.md) (whose mechanical migrations remain valid as Phase-1 work). Requires sponsor ratification (the user, who requested the FAANG reframe) OR a Change Governor meeting before Phase 4 (declarative bootstrap = highest blast radius).

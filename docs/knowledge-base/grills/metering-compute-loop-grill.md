@@ -1,4 +1,6 @@
 ---
+type: grill
+title: "Grill: metering-compute-loop"
 slug: metering-compute-loop
 date: 2026-07-01
 questions_asked: 9

@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "PV Rebind Runbook — M2 namespace migration with `--include-pvcs=true`"
+---
+
 # PV Rebind Runbook — M2 namespace migration with `--include-pvcs=true`
 
 Operator playbook for the rare path where `migrate-legacy-namespaces.sh

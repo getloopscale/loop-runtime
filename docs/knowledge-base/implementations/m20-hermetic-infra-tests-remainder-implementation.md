@@ -1,3 +1,8 @@
+---
+type: implementation
+title: M20 Implementation Summary (2026-07-10)
+---
+
 # M20 Implementation Summary (2026-07-10)
 
 **Verdict:** COMPLETE with amended DoD (ADR-D2 velocity-split fired).

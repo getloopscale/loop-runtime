@@ -1,3 +1,8 @@
+---
+type: sepa-iteration
+title: "SEPA Initial Brief — metering-compute-loop v1.6 (2026-07-01, pre-flight)"
+---
+
 # SEPA Initial Brief — metering-compute-loop v1.6 (2026-07-01, pre-flight)
 
 See full brief in the /implement launch transcript. HEADLINE [CRITICAL]:

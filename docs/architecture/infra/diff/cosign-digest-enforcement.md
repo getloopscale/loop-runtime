@@ -1,4 +1,6 @@
 ---
+title: "Cosign Digest Enforcement — Infrastructure Diff"
+generated: { by: process:t2.3-engineering-implementation-warn-mode-phase, at: 2026-05-27 }
 name: cosign-digest-enforcement
 description: PARTIALLY IMPLEMENTED (warn-mode) — chart deployments emit image digest references via loopzero-common.image helper + VAP loopzero-require-image-digest enforces digest in WARN mode. T2.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
 type: decision
@@ -11,7 +13,7 @@ updated_by: T2.3 engineering implementation (warn-mode phase)
 
 # Cosign Digest Enforcement — Infrastructure Diff
 
-> **Plan reference:** T2.3 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T2.3 + T1.5 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../../../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
 > **Status:** Phase 1 (warn-mode) ENGINEERING-READY. Phase 2 (Deny-mode) HARD STOP awaiting sponsor + 7-day soak.
 >
@@ -143,7 +145,7 @@ Recon executado post-R3.a-d revelou que o **tenant apps deploy flow** já emite 
 
 ## Related
 
-- `docs/operations/cosign-signing-key-rotation-runbook.md` (T3.3 — pairs with this)
+- [`docs/operations/cosign-signing-key-rotation-runbook.md`](../../../operations/cosign-signing-key-rotation-runbook.md) (T3.3 — pairs with this)
 - `[[cosign-key-rotation]]` (concept page)
 - `api/internal/argo/buildkit.go` (digest emission)
 - `charts/loopzero-admission-policies/templates/cluster-image-policy.yaml` (existing warn policy — adds digest rule)

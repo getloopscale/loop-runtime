@@ -1,3 +1,8 @@
+---
+type: review
+title: "Discover Edge Case Review — infra-tests-hermetic-to-quality-gates"
+---
+
 # Discover Edge Case Review — infra-tests-hermetic-to-quality-gates
 
 **Date:** 2026-07-10

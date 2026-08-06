@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR D6 — Hot-path complexity decomposition pattern"
+---
+
 # ADR D6 — Hot-path complexity decomposition pattern
 
 **Status:** Accepted
@@ -48,7 +53,7 @@ Different problem shapes require different patterns. Generic "extract function" 
 
 ### (d) Introduce dependency injection framework (e.g., wire) to manage decomposition — REJECTED
 
-LoopZero already has explicit constructor-injection per `rules/architecture.md`. A DI framework would replace explicit wiring (testable, debuggable) with reflection-based wiring (opaque, runtime errors). Net negative for a codebase that ALREADY uses DIP cleanly.
+LoopZero already has explicit constructor-injection per [`rules/architecture.md`](../technical/pkg/architecture.md). A DI framework would replace explicit wiring (testable, debuggable) with reflection-based wiring (opaque, runtime errors). Net negative for a codebase that ALREADY uses DIP cleanly.
 
 ## Rationale
 

@@ -1,3 +1,8 @@
+---
+type: audit
+title: "Deps Audit: metering-compute-loop"
+---
+
 # Deps Audit: metering-compute-loop
 
 **Date:** 2026-07-01

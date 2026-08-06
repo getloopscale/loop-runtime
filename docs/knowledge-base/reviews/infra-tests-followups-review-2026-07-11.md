@@ -1,3 +1,8 @@
+---
+type: review
+title: infra/tests taxonomy follow-ups
+---
+
 # Review — infra/tests taxonomy follow-ups
 
 **Date:** 2026-07-11

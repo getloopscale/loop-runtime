@@ -1,3 +1,9 @@
+---
+type: baseline
+title: T6.2 Pre-Rebuild Baseline
+description: "Captured: 2026-06-11T16:29:11Z"
+---
+
 # T6.2 Pre-Rebuild Baseline
 Captured: 2026-06-11T16:29:11Z
 

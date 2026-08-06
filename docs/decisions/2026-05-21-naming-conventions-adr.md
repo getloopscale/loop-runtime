@@ -1,8 +1,13 @@
+---
+type: decision
+title: "ADR: Naming Conventions — Deep Review 2026-05-21 Ratification"
+---
+
 # ADR: Naming Conventions — Deep Review 2026-05-21 Ratification
 
 **Date:** 2026-05-21
 **Status:** Accepted
-**Plan:** `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T7.1
+**Plan:** [`docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`](../plans/completed/2026-05-21-deep-review-remediation-plan.md) T7.1
 **Trigger:** User `/goal` 2026-05-21 flagging `cell2-soaks.yml` as a clean-code violation. Deep review found 5+ workflows with stale-name pattern + cascading anchor references.
 
 ## Context
@@ -124,7 +129,7 @@ These were surfaced by the deep review but require further discussion before bec
 ## References
 
 - Deep review v2: `.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md`
-- Remediation plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`
+- Remediation plan: [`docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`](../plans/completed/2026-05-21-deep-review-remediation-plan.md)
 - Memory: `feedback_anti_lying_workaround_pattern` (per binding `NUNCA MINTA PARA MIM`)
 - Memory: `feedback_skill_md_outdated_vs_code` (Rule 8 origin)
 - Related ADRs (older): `2026-04-26-operators-remediation-classification.md` (precedent for multi-rule ADR)

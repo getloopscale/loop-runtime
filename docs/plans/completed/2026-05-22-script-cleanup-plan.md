@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Script Cleanup — Reduce bash from 221 → ≤30 by migration, not deletion"
+status: deprecated
+---
+
 # Plan: Script Cleanup — Reduce bash from 221 → ≤30 by migration, not deletion
 
 > **Version 1.0** — A focused, evidence-grounded cleanup plan that reduces the repo's shell-script
@@ -13,7 +19,7 @@
 
 ## Context
 
-The parent plan `docs/plans/2026-05-22-shell-script-strategic-plan.md` (v1.3) set the strategic target
+The parent plan [`docs/plans/2026-05-22-shell-script-strategic-plan.md`](./2026-05-22-shell-script-strategic-plan.md) (v1.3) set the strategic target
 N(bash) ≤ 30. Its status tracker (`...-status.md` iter 41) records the current reality:
 
 - **221 `.sh` files** remain (down from 269; ~46 deleted cumulatively, mostly `_legacy/` + read-verified dead).

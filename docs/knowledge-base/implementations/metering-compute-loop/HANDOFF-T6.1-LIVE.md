@@ -1,3 +1,8 @@
+---
+type: implementation
+title: "HANDOFF PROMPT — metering-compute-loop T6.1 LIVE validation"
+---
+
 # HANDOFF PROMPT — metering-compute-loop T6.1 LIVE validation
 
 > Paste everything below the line into the fresh instance on the **resourced machine**.
@@ -40,8 +45,8 @@ git rev-parse --short develop   # expect eeae461f or later
 - **Pillar-(a) is discharged statically:** `api/cmd/controller/main.go` → `startMeteringLoop` → `go loop.Run`. The producer has a real production caller on the elected leader.
 - **NOT done:** T6.1 LIVE. `<promise>IMPLEMENTATION_COMPLETE</promise>` has **NOT** been emitted (would be false — Rule 3).
 
-Full task table + SHAs: `knowledge-base/implementations/metering-compute-loop-implementation.md`.
-Plan: `knowledge-base/plans/metering-compute-loop-plan.md`.
+Full task table + SHAs: [`knowledge-base/implementations/metering-compute-loop-implementation.md`](../metering-compute-loop-implementation.md).
+Plan: [`knowledge-base/plans/metering-compute-loop-plan.md`](../../plans/metering-compute-loop-plan.md).
 
 ## The ONE task: T6.1 LIVE validation
 
@@ -114,7 +119,7 @@ within one interval, `panics_total == 0`, and the **sponsor witnesses it JUNTOS*
 ### Step 5 — Flip the checkbox / close the plan
 
 Only after Step 4 genuinely passes with the sponsor present:
-- Update `knowledge-base/implementations/metering-compute-loop-implementation.md` (T6.1 → committed, with the LIVE evidence path).
+- Update [`knowledge-base/implementations/metering-compute-loop-implementation.md`](../metering-compute-loop-implementation.md) (T6.1 → committed, with the LIVE evidence path).
 - Capture the post-validation steady-state baseline + evidence under `docs/operations/baselines/`.
 - Emit `<promise>IMPLEMENTATION_COMPLETE</promise>` **only now**.
 
@@ -169,8 +174,8 @@ failure logs + skips, never crashes the controller).
 
 ## Reference files
 
-- Contract + task table: `knowledge-base/implementations/metering-compute-loop-implementation.md`
-- Plan (v1.10): `knowledge-base/plans/metering-compute-loop-plan.md`
+- Contract + task table: [`knowledge-base/implementations/metering-compute-loop-implementation.md`](../metering-compute-loop-implementation.md)
+- Plan (v1.10): [`knowledge-base/plans/metering-compute-loop-plan.md`](../../plans/metering-compute-loop-plan.md)
 - LIVE mandate: `.claude/rules/cleanroom-up-live-test-mandate.md`
 - Baseline rule: `.claude/rules/steady-state-baseline.md`
 - Producer: `api/internal/metering/` (worker.go, metering_loop.go, metrics.go, wiring.go, secret_cell_client.go, pod_lister.go, collect.go, tenant_lister.go)

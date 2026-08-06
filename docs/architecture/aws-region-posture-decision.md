@@ -1,11 +1,14 @@
 ---
+title: "AWS Region Posture — Decision Memo (single vs sharded vs active-active)"
+generated: { by: process:m6-loopzero-bottleneck-simulator-operationalization, at: 2026-07-02 }
+status: draft
 name: aws-region-posture-decision
 description: MADR decision memo — single vs sharded vs active-active region posture for the AWS re-platform, quantified by the LoopZero bottleneck simulator (capsim). Every number is a LIVE capsim_* MCP output.
 type: decision
 created_at: 2026-07-02
 updated_at: 2026-07-02
 updated_by: M6 (loopzero-bottleneck-simulator operationalization)
-status: proposed
+workflow_status: proposed
 ---
 
 # AWS Region Posture — Decision Memo (single vs sharded vs active-active)
@@ -153,4 +156,4 @@ Equivalent offline: `cd docs/operations && node -e "import('./loopzero-capsim.mj
 - Simulator + engine: `../operations/loopzero-bottleneck-simulator.html`, `../operations/loopzero-capsim.mjs` (M0-M5).
 - Cost model: `../operations/aws-cost-calculator.html` (engine-backed, M5) — same $ as this memo.
 - AWS re-platform: `decisions/2026-06-17-infra-state-decomposition-aws.md`.
-- Diagrams index: `eraser-diagrams-index.md` (Views 13/14/15).
+- Diagrams index: [`eraser-diagrams-index.md`](./eraser-diagrams-index.md) (Views 13/14/15).

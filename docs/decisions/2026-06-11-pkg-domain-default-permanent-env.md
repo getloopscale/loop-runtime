@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR D3 — `pkg/domain.DefaultPermanentEnv` canonical constant"
+---
+
 # ADR D3 — `pkg/domain.DefaultPermanentEnv` canonical constant
 
 **Status:** Accepted

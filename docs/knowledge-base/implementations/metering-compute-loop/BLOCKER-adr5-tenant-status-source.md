@@ -1,3 +1,8 @@
+---
+type: implementation
+title: "ADR-5 enumeration source (phantom `tenants.status` column)"
+---
+
 # BLOCKER — ADR-5 enumeration source (phantom `tenants.status` column)
 
 **Status:** BLOCKS T2.3, T3.1, T1.3-folded. Requires `cycle-plan` revision of ADR-5 + tenant-guardian re-review before `/implement` resumes.
