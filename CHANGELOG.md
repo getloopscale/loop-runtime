@@ -48,6 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Gate `decisions-deletion` protegia `.claude/knowledge-base/{decisions,meetings,concepts/operations}`,
+  árvore que o corpus de governança deixou ao migrar para `docs/wiki/`. O guard passou a apontar para
+  árvore vazia — reprovando o próprio rename como se fossem 116 deleções não-supersedidas, e deixando
+  de proteger os artefatos onde eles de fato vivem. Paths repontados para `docs/wiki/`; teste novo
+  fixa que rename não é deleção (#267)
+- Quatro regras e um script consumidos por gates foram restaurados após terem saído junto com a
+  limpeza de docs: `shell-scripts-allowlist.md` (15 consumidores, base do gate `no-new-bash`),
+  `cleanroom-up-live-test-mandate.md`, `pre-release-governance.md`, `steady-state-baseline.md` e
+  `.claude/scripts/check-allowlist-sunsets.py`. Sem eles `k6-load-rigor` e `check-allowlist-sunsets`
+  reprovavam por arquivo ausente (#267)
+- `TestStripeSoTShape_PlanAndADRReferencesResolve` citava plano e ADR no caminho pré-migração,
+  reprovando `quality:gates` em `infra/tests/charts` (#267)
 - `trivy-scan` reportava erro de execução como achado de vulnerabilidade. `trivy fs --exit-code 1`
   gasta o mesmo código de saída em "vulnerabilidades encontradas" e "o scan não completou", então um
   HTTP 429 do Maven Central virava `trivy-scan: FAIL — found vulnerabilities` com zero
@@ -86,6 +98,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- As 22 CVEs CRITICAL/HIGH restantes que reprovavam `trivy-scan` foram zeradas — `trivy fs` sai limpo
+  nos 15 manifests do repo. Nos módulos Go: `kin-openapi` 0.140.0 → 0.144.0 (bypass de autenticação
+  fail-open, CRITICAL), `grpc-go` 1.80.0 → 1.82.1, `prometheus` 0.303.0 → 0.311.3 (vazamento de
+  client secret do Azure OAuth via config API) e `moby/spdystream` 0.5.0 → 0.5.1. Nos seis lockfiles
+  npm: `tar`, `shell-quote`, `@grpc/grpc-js`, `protobufjs`, `sigstore`, `brace-expansion`, `js-yaml`,
+  `ip-address`, `fast-uri`, `tmp` e `undici` — todas transitivas, resolvidas por refresh do lock. A
+  fixture e2e `dogfood-monorepo` sobe Next 14 → 16, React 18 → 19, NestJS 10 → 11 e Express 4.21 →
+  4.22, o que também elimina `postcss`, `sharp`, `multer`, `picomatch` e `path-to-regexp` (#267)
 - `golang.org/x/text` sobe de 0.37.0 para 0.39.0 nos 7 módulos que a declaravam (`api`, `pkg`,
   `operators`, `operators/api`, `cmd/loopzero-ops`, `infra/scripts`, `infra/tests`): a versão anterior
   permite negação de serviço via UTF-8 inválido (CVE-2026-56852, HIGH). Não desbloqueia

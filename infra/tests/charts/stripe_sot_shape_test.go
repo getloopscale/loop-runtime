@@ -171,8 +171,8 @@ func TestStripeSoTShape_FixtureMode0644(t *testing.T) {
 func TestStripeSoTShape_PlanAndADRReferencesResolve(t *testing.T) {
 	t.Parallel()
 	refs := []string{
-		"../../../.claude/knowledge-base/plans/m5-stripe-sot-canonical-closure-plan.md",
-		"../../../.claude/knowledge-base/decisions/2026-06-23-tier-na-data-only-milestone-closure.md",
+		"../../../docs/wiki/plans/m5-stripe-sot-canonical-closure-plan.md",
+		"../../../docs/wiki/decisions/2026-06-23-tier-na-data-only-milestone-closure.md",
 		"../../../.claude/rules/cleanroom-up-live-test-mandate.md",
 	}
 	for _, r := range refs {
