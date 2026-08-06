@@ -44,7 +44,10 @@ const (
 	lokiDefaultNodePort      = 30120
 	lokiCanonicalPushURL     = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
 	lokiLoopZeroAPILokiURLEnvVar = "LOKI_URL"
-	lokiBuildServerContainer = "k3d-loopzero-build-server-0"
+	// `lokiBuildServerContainer = "k3d-loopzero-build-server-0"` foi REMOVIDA junto com o
+	// defeito: era o container cujo IP a Layer 3 gravava. Deixa-la seria convidar a
+	// proxima pessoa a voltar a usa-la — e um simbolo morto que aponta para o
+	// comportamento errado e' pior que nenhum.
 )
 
 // pushURLRE matches any http://... URL followed by /loki/api/v1/push. Used to
@@ -87,11 +90,28 @@ func (s *LokiCrossClusterSeed) Run(d Deps) Result {
 	}
 
 	// Layer 3 — set loopzero-api LOKI_URL.
-	buildIP, err := dockerNetworkContainerIP(brokerNetworkName, lokiBuildServerContainer)
+	//
+	// GATEWAY, nao o IP do container (loopzero-workspace#23 item 2). O endereco de
+	// `k3d-loopzero-build-server-0` e' distribuido por DHCP e EMBARALHA a cada
+	// `docker restart` / `k3d cluster create`: no mapa medido em 2026-08-01,
+	// `172.18.0.4` era o server de build e `172.18.0.7` o de mgmt — depois de um
+	// reboot o LOKI_URL gravado podia apontar para OUTRO cluster, e o sintoma
+	// (`loopzero logs` vazio) le-se como "Loki fora do ar", nunca como "cluster errado".
+	//
+	// O par estavel e' gateway + porta PUBLICADA no serverlb, declarada em
+	// `infra/k3d/build-cluster.yaml`. Sem a publicacao o gateway sozinho nao alcanca
+	// a NodePort — por isso as duas mudancas andam juntas.
+	//
+	// FALHA ALTO se o gateway nao resolve. Cair no IP do container como fallback
+	// reintroduziria o defeito EM SILENCIO, e um fallback silencioso para o
+	// comportamento errado e' pior que a falha: nunca e' investigado.
+	gateway, err := dockerNetworkGateway(brokerNetworkName)
 	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 build IP: %v", err)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf(
+			"Layer 3 gateway da rede %s: %v — sem gateway nao ha endereco estavel para LOKI_URL "+
+				"(gravar IP de container reintroduz loopzero-workspace#23)", brokerNetworkName, err)}
 	}
-	canonicalURL := fmt.Sprintf("http://%s:%d", buildIP, nodePort)
+	canonicalURL := fmt.Sprintf("http://%s:%d", gateway, nodePort)
 	if d.DryRun {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would set LOKI_URL=%s on loopzero-api", canonicalURL)}
 	}

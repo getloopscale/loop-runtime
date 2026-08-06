@@ -238,6 +238,54 @@ func defaultDockerNetworkInspect(network, container string) (string, error) {
 	return "", fmt.Errorf("container %s not found in network %s", container, network)
 }
 
+// dockerNetworkGateway returns the IPv4 gateway of a docker network — the address
+// of the bridge itself.
+//
+// POR QUE ELE EXISTE (loopzero-workspace#23). O IP de um CONTAINER e' atribuido por
+// DHCP e EMBARALHA a cada `docker restart` / `k3d cluster create`: qualquer config
+// que o tenha gravado passa a apontar para outro cluster, EM SILENCIO — e o sintoma
+// nunca acusa a causa (`loopzero logs` vazio le-se como "Loki fora do ar", nunca como
+// "voce esta' falando com o cluster errado"). O gateway nao participa desse sorteio:
+// e' declarado no IPAM da rede e vive enquanto a rede viver. Combinado com uma porta
+// PUBLICADA — declarada na config versionada do cluster, nao sorteada — forma o unico
+// endereco estavel que um processo fora do cluster tem para falar com ele. Foi o que
+// tirou o item 1 do issue da classe.
+//
+// DERIVADO, nunca fixado em texto: `172.18.0.1` e' verdade para a rede `k3d-loopzero` de
+// hoje; outra rede tem outra bridge. Ler do IPAM preserva a PROPRIEDADE (estabilidade)
+// sem herdar o literal — e literal de IP e' exatamente o que este issue combate.
+//
+// D1 exemption: read-only introspection, mesmo caso do vizinho acima.
+var dockerGatewayFn = defaultDockerNetworkGateway
+
+func dockerNetworkGateway(network string) (string, error) { return dockerGatewayFn(network) }
+
+func defaultDockerNetworkGateway(network string) (string, error) {
+	out, err := exec.Command("docker", "network", "inspect", network).Output()
+	if err != nil {
+		return "", fmt.Errorf("docker network inspect %s: %w", network, err)
+	}
+	var nets []struct {
+		IPAM struct {
+			Config []struct {
+				Gateway string `json:"Gateway"`
+			} `json:"Config"`
+		} `json:"IPAM"`
+	}
+	if err := json.Unmarshal(out, &nets); err != nil {
+		return "", fmt.Errorf("parse docker network inspect: %w", err)
+	}
+	for _, n := range nets {
+		for _, c := range n.IPAM.Config {
+			// Sem CIDR: algumas versoes reportam `172.18.0.1/16` neste campo.
+			if gw, _, _ := strings.Cut(c.Gateway, "/"); gw != "" {
+				return gw, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("network %s declares no IPAM gateway", network)
+}
+
 // brokerChartAbsPath resolves the chart path relative to the running binary.
 // Overridable via LOOPZERO_CHART_PATH env for operator custom locations.
 func brokerChartAbsPath() (string, error) {
