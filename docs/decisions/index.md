@@ -17,3 +17,4 @@
 * [ADR: Deploy config model — services.json is the immutable app-shape; secrets + scaling are operational commands](2026-06-15-deploy-config-model-services-json-app-shape.md)
 * [ADR 2026-06-15 — LoopZeroCloud deploy supports only the fixed LoopZeroKit stack (python + node)](2026-06-15-deploy-fixed-loopzerokit-stack.md)
 * [J-06 Overview backend: read-model boundaries + price source of truth](2026-07-03-j06-overview-backend-read-model-boundaries.md)
+* [Cluster API como ciclo de vida de cluster para BYOC multi-cloud e multi-país](2026-08-07-capi-byoc-cluster-lifecycle-adr.md) — **PROPOSED** (T3, aguarda reunião)
