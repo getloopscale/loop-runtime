@@ -118,10 +118,24 @@ var gateWiringExemptions = map[string]wiringReason{
 	"runtime-slo":             operatorRun,
 
 	// --- work, but FAIL on a real finding today ---------------------------
-	// Each was executed 2026-07-30 and exited 1 with a substantive message.
 	// The gate is right; the tree is not. Fix the finding, then wire.
-	"alert-runbooks":          failingGate, // a Prometheus alert has no runbook annotation
-	"migration-test-coverage": failingGate, // a migration has no matching test
+	// Re-measured 2026-08-06 with the counts, so the size of each debt is on
+	// the record rather than implied.
+	//
+	// 33 alerts without runbook_url. Worth knowing before "just add the
+	// annotation": the URLs the conformant alerts already carry are 404 —
+	// https://docs.loopzero.example/runbooks/vault-auth-failure-spike returns 404
+	// while the site root returns 200. The gate checks that the string is
+	// present, not that a runbook exists, so adding 33 more dead links would
+	// buy a green gate and nothing else. An on-call operator following a 404 at
+	// 3am is worse off than one who knows there is no runbook.
+	"alert-runbooks": failingGate,
+	// 42 migrations with no matching api/tests/unit/migration_*_test.go. The
+	// gate only checks that the FILE exists, so 42 stubs would turn it green
+	// without testing anything — the bar is the canonical shape in
+	// migration_012_fk_on_delete_test.go, which asserts invariants specific to
+	// its migration. That is 42 pieces of real work, not a mislabel.
+	"migration-test-coverage": failingGate,
 	// Virou ENFORCED em 2026-08-01 (prazo T+60d) com o branch AES legado ainda no
 	// dispatcher — 4 achados em api/internal/db/store/secret_wrapper.go:{148,152,188,192}.
 	// Medido 2026-08-06. A divida T10.3 (deletar o branch) segue aberta: remover o
@@ -137,8 +151,12 @@ var gateWiringExemptions = map[string]wiringReason{
 	// fix is a securityContext on charts whose workloads (argo-events/NATS, the
 	// Argo WorkflowTemplate containers) can break under readOnlyRootFilesystem,
 	// which makes it a T2 change requiring LIVE validation on a cluster.
-	"security-context":         failingGate,
-	"no-pulumi-inline-secrets": failingGate, // inline secret literal in Pulumi code
+	"security-context": failingGate,
+	// 9 inline encrypted secrets across infra/pulumi/Pulumi.{dev,prod}.yaml.
+	// Closing this is the T9 Vault-provider migration, on the legacy DO/Pulumi
+	// layer that the AWS re-platform is retiring (ADR 2026-06-17) — moving live
+	// production secrets, not an edit. Measured 2026-08-06.
+	"no-pulumi-inline-secrets": failingGate,
 
 	// --- pass without asserting anything here -----------------------------
 }
