@@ -24,11 +24,20 @@
 
 # --- app-dev.loopzero.example — the public dashboard edge -------------------------
 # The one that prompted this gate. Ory returns the whole session; the dashboard
-# reads only identity.{id,traits.email,traits.name} and verifiable_addresses
-# (measured against loopzero-cloud/dashboard/src on 2026-08-06). devices[].ip_address,
-# devices[].user_agent and recovery_addresses reach the browser with no consumer.
-# Tracked as an open finding — see docs/operations/findings/ and the CHANGELOG.
-app-dev.loopzero.example /sessions/whoami | reviewed | narrowed from /sessions/* (session list + delete were exposed and unused); the BODY still over-exposes devices[].ip_address + recovery_addresses which no client reads — open finding, not an endorsement
+# read only identity.{id,traits.email,traits.name}, verifiable_addresses and
+# authentication_methods, while devices[].ip_address, devices[].user_agent and
+# recovery_addresses reached the browser with no consumer.
+#
+# CLOSED ON THE CLIENT SIDE (loopzero-cloud eb81cb6, 2026-08-07): the dashboard no
+# longer calls Kratos at all. POST /v1/auth/session/token already validated the
+# cookie server-side, so it now returns the minimal identity alongside the JWT,
+# and the browser's only remaining Kratos paths are /self-service/*.
+#
+# The proxy below is therefore CONSUMER-LESS and should be deleted — but only
+# AFTER the new dashboard bundle is deployed to dev-public. Removing it first
+# would break login for the bundle currently served there. That ordering is the
+# one thing this row is here to record.
+app-dev.loopzero.example /sessions/whoami | reviewed | narrowed from /sessions/*; body still over-exposes devices[].ip_address + recovery_addresses, but the dashboard stopped reading it (loopzero-cloud eb81cb6) — DELETE this proxy once the new bundle is deployed
 app-dev.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI; the browser drives these flows and needs the flow body
 app-dev.loopzero.example /v1/* | reviewed | loopzero-cloud BFF; authenticated, returns only the caller's own tenant data
 app-dev.loopzero.example /v1/integrations/github/* | reviewed | loopzero-cloud BFF; GitHub installation data scoped to the caller's tenant
@@ -55,7 +64,7 @@ cloud-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub w
 # Same Caddy process and same upstreams as the -dev hosts (see the file header:
 # one edge, several hostnames). Classified identically, not separately, because
 # the exposure is identical.
-app.loopzero.example /sessions/whoami | reviewed | same as app-dev: narrowed path, body still over-exposes
+app.loopzero.example /sessions/whoami | reviewed | same as app-dev: narrowed, now consumer-less, delete after the new bundle ships
 app.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI
 app.loopzero.example - | internal | dashboard SPA bundle from the vite server; static assets, no user data
 cloud.loopzero.example - | reviewed | loopzero-cloud BFF; authenticated, caller's own tenant data

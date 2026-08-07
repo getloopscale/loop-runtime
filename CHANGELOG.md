@@ -189,6 +189,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- O consumidor do `/sessions/whoami` no edge deixou de existir: o dashboard passou a obter a
+  identidade pelo `POST /v1/auth/session/token`, que já validava o cookie contra o Ory no servidor
+  (`loopzero-cloud` eb81cb6). O proxy segue no Caddyfile por ordem de deploy — removê-lo antes do bundle
+  novo chegar ao dev-public quebraria o login do bundle que está lá. O registro
+  `infra/quality/proxy-exposure.txt` diz isso na linha correspondente, para que a remoção não fique
+  dependendo de alguém lembrar (#267)
 - Superfície do namespace `/sessions/` reduzida no edge. `handle /sessions/*` proxiava **todo** o
   namespace de sessões do Kratos para a origem do dashboard — incluindo listar e revogar sessões —
   quando os 6 pontos de chamada do dashboard usam apenas `/sessions/whoami` (medido contra
