@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Guardrail de deleção no cluster de gestão: `Application`, `AppProject`, `Tenant`,
+  `Environment`, `ClusterCredential` — **e as definições que os descrevem** — passam a ser
+  protegidos contra remoção por identidade não autorizada. Remover qualquer um deles aciona
+  a cascata que apaga também a infraestrutura que ele gerencia; remover a *definição* apaga
+  todas as instâncias de uma vez, sem que nenhuma regra por instância seja consultada — foi
+  essa a sequência do incidente que motivou a proteção. Até agora o cluster de gestão não
+  tinha **nenhuma** política de admissão: o chart que as carrega só era instalado no cluster
+  de execução, enquanto esses recursos vivem na gestão. Entra em modo de **aviso**, com
+  alerta e runbook; o bloqueio efetivo é uma etapa separada, condicionada a uma janela de
+  observação provar que nenhuma identidade legítima é afetada — ligar o bloqueio com o mapa
+  de identidades incompleto é como cinco namespaces ficaram presos em `Terminating` no
+  passado. Desligável por configuração, sem reconstruir imagem
+  (`.claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md`,
+  `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` D4)
+- Gate `vap-delete-guardrail`: reprova se a política sumir, se o interruptor for desligado
+  na gestão, se a lista de identidades isentas encolher a ponto de inverter a regra (uma
+  lista vazia faria a política negar **toda** remoção, inclusive a dos operadores), se as
+  isenções do coletor de lixo do Kubernetes forem removidas, ou se os dois charts que
+  carregam a política divergirem entre si
+
 - Gate `proxy-exposure` + hook de entrega. Todo `reverse_proxy` do edge
   (`infra/local/Caddyfile`) precisa de uma linha em `infra/quality/proxy-exposure.txt` dizendo o que
   deixa passar, classificada como `filtered` / `internal` / `reviewed` **com justificativa**. Um proxy

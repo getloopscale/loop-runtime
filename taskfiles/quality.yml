@@ -136,6 +136,10 @@ tasks:
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - task: contract   # M10 T3.1 — spec-based consumer contract (engine conformance + cli↔engine + dashboard↔engine); in-repo, no sibling needed, so it gates every pre-push deterministically
       - /tmp/loopzero-ops quality shell-hygiene
+      # D4 (plan d4-vap-delete-guardrail) — the mgmt boundary resources and their CRDs must
+      # stay guarded against unauthorized DELETE. Wired here, not just registered: #255
+      # found 10 gates that existed and never ran, which is how a guardrail silently rots.
+      - /tmp/loopzero-ops quality vap-delete-guardrail
       - /tmp/loopzero-ops quality corrections-txt-closed
       # Issue #255 — gates that were implemented, registered and unit-tested but
       # never actually run. Each of the nine below was executed on 2026-07-30 and
