@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O novo canal do `test-deletion` vazava hermeticidade: um teste que fornecia `DiffOverride`
+  (modo hermético) ainda caía no `git log` real, então assim que um commit deste repo passou a
+  carregar o marcador, todo teste "deleção sem justificativa deve falhar" começou a passar. Pego
+  pelo próprio hook de entrega, no commit que introduziu o canal (#267)
 - Gate `test-deletion` só aceitava justificativa por PR body ou label — ambos fora do repositório.
   O `pre-push` não tem nenhum dos dois, então uma deleção legítima não podia ser enviada, e os dois
   são editáveis depois do fato. Passa a aceitar `Test deletion justification:` no corpo de um commit

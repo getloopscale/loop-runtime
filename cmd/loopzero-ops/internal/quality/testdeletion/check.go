@@ -84,8 +84,14 @@ func Check(cfg Config) Outcome {
 	// and label are both outside it: the pre-push hook has neither, so a
 	// legitimate deletion could not be pushed at all, and both can be edited
 	// after the fact while the commit that did the deleting cannot.
+	// DiffOverride marks a hermetic run: the caller supplied the diff, so the
+	// commit log must come from the caller too. Falling back to `git log` here
+	// let the REAL repository history decide a unit test's verdict — and the
+	// moment a commit in this repo carried the marker, every "deletion without
+	// justification must fail" test started passing. Caught 2026-08-06 by the
+	// delivery-gate hook on the very commit that introduced it.
 	log := cfg.CommitLog
-	if log == "" {
+	if log == "" && cfg.DiffOverride == nil {
 		log = gitCommitLog(cfg)
 	}
 	if strings.Contains(strings.ToLower(log), justificationMarker) {

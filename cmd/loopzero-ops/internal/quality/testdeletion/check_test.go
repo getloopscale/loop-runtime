@@ -150,3 +150,14 @@ func TestNoJustificationAnywhereStillFails(t *testing.T) {
 		t.Errorf("a deletion with no justification in any channel must fail, got %+v", o)
 	}
 }
+
+// A hermetic run must not consult the real repository. DiffOverride means the
+// caller is supplying the world; reading `git log` behind its back makes the
+// verdict depend on whatever this repo's history happens to say today.
+func TestHermeticRunIgnoresRealCommitLog(t *testing.T) {
+	diff := "api/tests/unit/thing_test.go\n"
+	o := Check(Config{DiffOverride: &diff}) // no CommitLog supplied
+	if o.Pass {
+		t.Error("a hermetic run with no justification must fail regardless of the repo's own history")
+	}
+}
