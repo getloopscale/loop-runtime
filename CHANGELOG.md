@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- As quatro entradas que permanecem no ledger passam a carregar a medição, para que o tamanho de
+  cada dívida esteja no registro em vez de implícito: `alert-runbooks` 33 alertas — e as URLs que os
+  alertas conformes já carregam retornam **404**, então o gate confere a presença da string, não a
+  existência do runbook; `migration-test-coverage` 42 migrations, com o gate checando apenas a
+  existência do arquivo (42 stubs o deixariam verde sem testar nada); `no-pulumi-inline-secrets`
+  9 segredos inline na camada DO/Pulumi que o re-platform AWS está aposentando;
+  `no-aes-remaining` o branch AES legado do dispatcher. Nenhuma foi fechada; todas ficaram nomeadas
+  com evidência (#267)
 - Três entradas do ledger de gates não-wired estavam classificadas por sintoma, não por causa, e a
   reclassificação muda o que o registro diz sobre o repo: `security-context` não "sai 0 sem asseverar
   nada" — sai 0 apenas em modo relatório; com `--gate` reprova em dois charts reais
