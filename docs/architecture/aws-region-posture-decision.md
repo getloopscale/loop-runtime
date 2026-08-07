@@ -17,6 +17,45 @@ workflow_status: proposed
 > **Method:** every quantitative claim is a LIVE `capsim_*` MCP output (LoopZero bottleneck simulator,
 > M0-M5). See § Reproduction to re-run each. No number is from memory.
 
+
+> [!IMPORTANT]
+> ## Correção — 2026-08-07: a premissa de capacidade está errada
+>
+> **Toda a simulação abaixo foi rodada com `maxPerCell = 500`. O valor real é `5000`.**
+>
+> | Origem | Valor | Papel |
+> |---|---|---|
+> | `api/internal/config/config.go:497` | `envInt("MAX_TENANTS_PER_CELL", 5000)` | **default real** |
+> | `charts/loopzero-api/values.yaml:121` | `maxTenantsPerCell: "5000"` | valor entregue |
+> | `api/internal/placement/engine.go:90-91` | `if maxPerCell <= 0 { maxPerCell = 500 }` | fallback do construtor |
+>
+> O `500` só é alcançado quando o construtor recebe `<= 0`, e a config sempre passa `5000`.
+> É um fallback defensivo — mas é o número que aparece no comentário do código, e
+> provavelmente foi dali que a simulação o tirou.
+>
+> **O que muda, com o valor real:**
+>
+> - **50.000 tenants são ~10 cells, não 100.** A contagem de clusters cai por um fator de 10.
+> - O gargalo `cell_count` (ρ=1.56, CRITICAL) **provavelmente não existe** — ele é função
+>   direta da contagem de cells.
+> - A **Fase 1 ("do now") seria um downgrade**: elevar `maxPerCell` "toward ~2000" é *reduzir*
+>   de 5000 para 2000, multiplicando o número de clusters em vez de diminuí-lo. **Não execute
+>   a Fase 1 como escrita.**
+> - A economia atribuída à Fase 1 (−$31.560/mês) é, em boa parte, economia que **já está
+>   realizada** hoje.
+>
+> **O que NÃO muda:** a Fase 4 (tier de request — BFF e engine_api) e a alavanca de *prefix
+> delegation* não dependem de `maxPerCell`. A escolha de posture *sharded* continua plausível,
+> mas o memo alerta ele próprio que decidir multi-região antes de corrigir `maxPerCell` é a
+> ordem errada — e é exatamente essa a situação.
+>
+> **Os números originais foram preservados**, não reescritos: são a saída real de uma
+> simulação datada, e apagá-los esconderia a premissa que os produziu. A correção honesta é
+> **re-rodar o `capsim` com `maxPerCell=5000`** e registrar o novo resultado abaixo. Até lá,
+> trate cada número desta página como computado sobre premissa incorreta.
+>
+> Medido e registrado em `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` § D16.
+
 ## Context and problem statement
 
 The AWS re-platform (ADR 2026-06-17) targets a single AWS region today; region is a state-prefix
@@ -28,7 +67,8 @@ regions, no cross-region replication), or **active-active** (cross-region replic
 The simulator's review of the current posture is unambiguous:
 
 > `capsim_review {tenants:50000}` → **score 32 / CRITICAL**. Bottlenecks: `cell_count` ρ=1.56
-> (100 EKS clusters via `maxPerCell=500`), `bff` ρ=1.04 (saturated); single-region SLA falls to 95%
+> (100 EKS clusters via `maxPerCell=500` — **premissa incorreta, ver correção acima; com o valor
+> real de 5000 são ~10 cells**), `bff` ρ=1.04 (saturated); single-region SLA falls to 95%
 > during a full-region outage.
 
 So the decision is two-layered: (A) fix capacity, then (B) choose the region posture.
@@ -68,7 +108,7 @@ region posture:
 
 | Lever | Call | Effect |
 |---|---|---|
-| **Raise `maxPerCell` 500→2000** | `capsim_cost {tenants:50000, maxPerCell:2000}` | $76,656 → **$45,096** (**−$31,560/mo**); cells 100→25, nodes 279→129 |
+| ~~**Raise `maxPerCell` 500→2000**~~ **NÃO EXECUTAR** | `capsim_cost {tenants:50000, maxPerCell:2000}` | ~~$76,656 → **$45,096**; cells 100→25~~ — **o valor real já é 5000; isto seria um downgrade** (ver correção no topo) |
 | **Enable prefix delegation** | `capsim_cost {tenants:50000, prefixDelegation:true}` | $76,656 → $74,396 (−$2,261); unblocks the ENI pod-density ceiling |
 | **Both** | `capsim_review {tenants:50000, maxPerCell:2000, prefixDelegation:true}` | **$42,836/mo, score 32→52**; the `cell_count` bottleneck is **resolved** (BFF becomes the new top) |
 
