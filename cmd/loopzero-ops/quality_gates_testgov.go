@@ -143,7 +143,10 @@ func runTestDeletion(args []string) int {
 	}
 	if !o.Pass {
 		fmt.Fprintf(os.Stderr, "[test-deletion] FAIL: %s\n", o.Reason)
-		fmt.Fprintln(os.Stderr, "Add 'test-deletion-approved' label OR 'Test deletion justification: <reason>' to PR body.")
+		fmt.Fprintln(os.Stderr, "Justify it in ONE of these — the commit body is the one that lives in the repo:")
+		fmt.Fprintln(os.Stderr, "  - a commit message in the range:  Test deletion justification: <reason>")
+		fmt.Fprintln(os.Stderr, "  - the PR body:                    Test deletion justification: <reason>")
+		fmt.Fprintln(os.Stderr, "  - the 'test-deletion-approved' PR label")
 		return 1
 	}
 	fmt.Printf("[test-deletion] PASS — %s\n", o.Reason)

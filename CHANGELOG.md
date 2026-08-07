@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Gate `proxy-exposure` + hook de entrega. Todo `reverse_proxy` do edge
+  (`infra/local/Caddyfile`) precisa de uma linha em `infra/quality/proxy-exposure.txt` dizendo o que
+  deixa passar, classificada como `filtered` / `internal` / `reviewed` **com justificativa**. Um proxy
+  herda o contrato de resposta do upstream, então o que chega ao browser é invisível neste repositório
+  até alguém escrever — foi assim que `app-dev.loopzero.example/sessions/*` passou a devolver a sessão Ory
+  inteira, incluindo `devices[].ip_address` e `recovery_addresses`, que nenhum cliente lê (medido
+  contra `loopzero-cloud/dashboard/src`). 26 proxies declarados, 21ms. Um proxy novo sem linha reprova;
+  uma linha sem proxy correspondente também. O gate não prova que uma resposta é segura — só um probe
+  LIVE prova — mas garante que a superfície inteira foi classificada por alguém (#267)
+- Hook `PreToolUse` `delivery-gate.sh`: intercepta `git push` e bloqueia (exit 2) se
+  `task quality:gates` reprovar. Existe porque o `pre-push` do git não é versionado — só existe onde
+  alguém rodou `install-git-hooks.sh`, então não valia para o agente nem para um clone novo. Escopo
+  estreito (só `git push`, pula `--dry-run`) e sem flag de bypass (#267)
+
 - Gate `workflow-hygiene`: reprova antes do merge qualquer action de terceiro sem SHA fixo e qualquer
   `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
 - Guard de wiring de gates: todo gate registrado passa a exigir wiring em `taskfiles/quality.yml` ou
@@ -47,6 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   contra-prova e dois helpers de dogfood citados só em comentário (#228, #230)
 
 ### Fixed
+
+- Gate `test-deletion` só aceitava justificativa por PR body ou label — ambos fora do repositório.
+  O `pre-push` não tem nenhum dos dois, então uma deleção legítima não podia ser enviada, e os dois
+  são editáveis depois do fato. Passa a aceitar `Test deletion justification:` no corpo de um commit
+  do range: o único canal que viaja junto com a mudança que explica (#267)
+- 14 hooks e scripts do harness (`.claude/hooks/*`, `.claude/scripts/*`,
+  `.github/scripts/check-workflow-hygiene.sh`) nunca foram allowlistados — mesma lacuna já
+  documentada para `validate-command.sh`. `no-new-bash` reprovava em qualquer diff que os tocasse (#267)
 
 - As quatro entradas que permanecem no ledger passam a carregar a medição, para que o tamanho de
   cada dívida esteja no registro em vez de implícito: `alert-runbooks` 33 alertas — e as URLs que os

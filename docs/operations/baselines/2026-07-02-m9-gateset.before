@@ -53,6 +53,10 @@
 #   mock-budget e pkg-usage-matrix '-' -> 'gates': estavam rotulados slowGate ">25s" e medem
 #   0.6s e 0.7s. O segundo tambem parou de publicar um falso "dead code candidate" para
 #   pkg/pulumi, diretorio que so contem o sub-pacote archive/ (importado por loopzero-ops).
+# RE-FREEZE 2026-08-06 (f): 110 -> 111 gates. NOVO gate proxy-exposure — todo reverse_proxy do
+#   edge (infra/local/Caddyfile) precisa de uma linha em infra/quality/proxy-exposure.txt dizendo
+#   o que deixa passar. Motivado por app-dev.loopzero.example/sessions/* devolver a sessao Ory inteira
+#   (devices[].ip_address + recovery_addresses) que nenhum cliente le. 26 proxies declarados, 21ms.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -122,6 +126,7 @@ pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.
+proxy-exposure	gates	Every edge reverse_proxy declares what it lets through.
 pulumi-required-secrets	gates	T1.5 — every Pulumi.<env>.yaml enumerates required secret keys (as `secure:` entry OR comment). Prod=6 keys, staging=4, drill=3 (DO token via env var per D7' sponsor override). Cross-checks prod keys also appear backticked in docs/operations/credentials-required.md. M-Migrate2 2026-07-07 replaces infra/tests/docs/pulumi-required-secrets_test.sh.
 quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
 regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.

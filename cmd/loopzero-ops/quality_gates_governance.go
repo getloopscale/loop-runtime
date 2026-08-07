@@ -26,6 +26,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drilloutputs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitdiff"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/proxyexposure"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skiplink"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
@@ -318,6 +319,40 @@ func runDivergenceMatrix(args []string) int {
 		return 1
 	}
 	fmt.Println("divergence-matrix: GREEN — matrix integrity OK")
+	return 0
+}
+
+func runProxyExposure(args []string) int {
+	fs := flag.NewFlagSet("proxy-exposure", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	caddyfile := fs.String("caddyfile", "", "edge config (default infra/local/Caddyfile)")
+	registry := fs.String("registry", "", "declaration file (default infra/quality/proxy-exposure.txt)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := proxyexposure.Check(proxyexposure.Config{
+		Root: *root, Caddyfile: *caddyfile, Registry: *registry,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[proxy-exposure] %v\n", err)
+		return 5
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[proxy-exposure] FAIL — the edge exposes something nobody declared.\n")
+		for _, u := range o.Undeclared {
+			fmt.Fprintf(os.Stderr, "  UNDECLARED %s\n", u)
+		}
+		for _, st := range o.Stale {
+			fmt.Fprintf(os.Stderr, "  STALE      %s — declared, but no such proxy exists\n", st)
+		}
+		for _, m := range o.Malformed {
+			fmt.Fprintf(os.Stderr, "  MALFORMED  %s\n", m)
+		}
+		fmt.Fprintln(os.Stderr, "Fix: add a row to infra/quality/proxy-exposure.txt saying what the proxy lets through.")
+		fmt.Fprintln(os.Stderr, "A reverse_proxy inherits its response from the upstream — if nobody wrote it down, nobody checked it.")
+		return 1
+	}
+	fmt.Printf("[proxy-exposure] PASS — %d edge proxies, all declared\n", o.Scanned)
 	return 0
 }
 

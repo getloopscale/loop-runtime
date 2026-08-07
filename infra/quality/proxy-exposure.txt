@@ -1,0 +1,70 @@
+# Edge exposure registry — read by `loopzero-ops quality proxy-exposure`.
+#
+# Every `reverse_proxy` in infra/local/Caddyfile must have a row here. A proxy
+# inherits its response contract from whatever sits behind it, so what reaches
+# the browser is invisible in this repository unless somebody writes it down.
+#
+# Format: <site> <path> | <class> | <rationale>
+#   <path> is `-` for a site-level proxy with no enclosing handle.
+#
+# Classes:
+#   filtered — the edge restricts what reaches the client (field allowlist,
+#              narrowed sub-path, rewritten body).
+#   internal — the upstream returns no user data at all (static assets,
+#              websockets, inbound webhooks whose response never reaches a
+#              browser). Nothing to leak.
+#   reviewed — full passthrough, looked at, accepted. The rationale is what
+#              separates this from an oversight.
+#
+# `reviewed` is NOT a rubber stamp: it means someone read the upstream's
+# response and decided the client needs it. When that is not true, the row
+# should be `filtered` and the edge should actually filter.
+#
+# Frozen 2026-08-06 against the 26 proxies then present.
+
+# --- app-dev.loopzero.example — the public dashboard edge -------------------------
+# The one that prompted this gate. Ory returns the whole session; the dashboard
+# reads only identity.{id,traits.email,traits.name} and verifiable_addresses
+# (measured against loopzero-cloud/dashboard/src on 2026-08-06). devices[].ip_address,
+# devices[].user_agent and recovery_addresses reach the browser with no consumer.
+# Tracked as an open finding — see docs/operations/findings/ and the CHANGELOG.
+app-dev.loopzero.example /sessions/* | reviewed | Ory session passthrough; OVER-EXPOSES devices[].ip_address + recovery_addresses which no client reads — open finding, not an endorsement
+app-dev.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI; the browser drives these flows and needs the flow body
+app-dev.loopzero.example /v1/* | reviewed | loopzero-cloud BFF; authenticated, returns only the caller's own tenant data
+app-dev.loopzero.example /v1/integrations/github/* | reviewed | loopzero-cloud BFF; GitHub installation data scoped to the caller's tenant
+app-dev.loopzero.example /v1/memory/* | reviewed | data-plane loopzero-memory behind the BFF admin key; edge is fail-closed 401 without it
+app-dev.loopzero.example /v1/rag/* | reviewed | data-plane loopzero-rag behind the BFF admin key; edge is fail-closed 401 without it
+app-dev.loopzero.example /v1/lens/* | reviewed | data-plane loopzero-lens behind the BFF admin key; edge is fail-closed 401 without it
+app-dev.loopzero.example @auth_bff | reviewed | loopzero-cloud BFF auth exchange; mints the caller's own token
+app-dev.loopzero.example /engine/* | reviewed | engine API via BFF; tenant-scoped by the same auth the CLI uses
+app-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; the response is consumed by GitHub, never rendered in a browser
+
+# --- auth-dev.loopzero.example — Ory Kratos + Hydra -------------------------------
+auth-dev.loopzero.example - | reviewed | Kratos public surface by design (login/registration/recovery flows); this IS the auth service's own hostname
+auth-dev.loopzero.example /oauth2/* | reviewed | Hydra OAuth2/OIDC endpoints; public by the OIDC spec
+auth-dev.loopzero.example /.well-known/* | reviewed | OIDC discovery + JWKS; public by the OIDC spec
+auth-dev.loopzero.example /userinfo | reviewed | OIDC UserInfo; returns the bearer's own claims, public by spec
+auth-dev.loopzero.example /credentials | reviewed | Hydra client credentials endpoint; public by spec, admin surface is denied separately (handle /admin/* -> 404)
+auth-dev.loopzero.example /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
+auth-dev.loopzero.example /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
+
+# --- cloud-dev.loopzero.example ---------------------------------------------------
+cloud-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; response consumed by GitHub
+
+# --- app/cloud/auth.loopzero.example — same droplet, non-"-dev" hostnames ---------
+# Same Caddy process and same upstreams as the -dev hosts (see the file header:
+# one edge, several hostnames). Classified identically, not separately, because
+# the exposure is identical.
+app.loopzero.example /sessions/* | reviewed | same Ory session passthrough as app-dev; carries the same open over-exposure finding
+app.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI
+app.loopzero.example - | internal | dashboard SPA bundle from the vite server; static assets, no user data
+cloud.loopzero.example - | reviewed | loopzero-cloud BFF; authenticated, caller's own tenant data
+auth.loopzero.example - | reviewed | Kratos public surface by design, as auth-dev
+
+# --- tenant app wildcards ----------------------------------------------------
+# These proxy to Traefik, which routes to the tenant's OWN application. The
+# response is the tenant's app, not platform data — the isolation that matters
+# here is Traefik's host routing, covered by the tenant-predicate and
+# multi-cell placement guards rather than by this registry.
+*.preview-dev.loopzero.example - | reviewed | PR preview of a tenant's own app via Traefik host routing; response is the tenant's application
+*.prod-dev.loopzero.example - | reviewed | tenant's own app via Traefik host routing; response is the tenant's application

@@ -84,6 +84,10 @@ tasks:
       # edicao acima de um skip o re-reportava como novo — 145 entradas casando quase
       # nada e 189 falsos "NEW". A chave passou a ser arquivo + texto do proprio skip.
       - /tmp/loopzero-ops quality skip-link
+      # proxy-exposure: todo reverse_proxy do edge declara o que deixa passar.
+      # Um proxy herda o contrato de resposta do upstream, entao o que chega no
+      # browser e' invisivel neste repo ate alguem escrever. 26 proxies, 21ms.
+      - /tmp/loopzero-ops quality proxy-exposure
       # mock-budget e pkg-usage-matrix saem do ledger de slowGate: estavam rotulados
       # ">25s" e medem 0.6s e 0.7s. O segundo tambem parou de publicar um falso
       # "dead code candidate" para pkg/pulumi, que so tem sub-pacotes.
