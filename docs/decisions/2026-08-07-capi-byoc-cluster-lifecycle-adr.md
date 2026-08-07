@@ -1,9 +1,11 @@
 ---
 type: decision
-title: "Cluster API como ciclo de vida de cluster para BYOC multi-cloud e multi-país"
+title: "Cluster API como ciclo de vida de cells — infraestrutura interna e BYOC"
 ---
 
-# ADR — Cluster API (CAPI) como ciclo de vida de cluster para BYOC
+# ADR — Cluster API (CAPI) como ciclo de vida de cells
+
+*Infraestrutura interna e BYOC, pelo mesmo mecanismo.*
 
 **Date:** 2026-08-07
 **Tier:** T3 (arquitetura + stack + fluxo crítico — `.claude/rules/pre-release-governance.md`)
@@ -23,6 +25,13 @@ O produto passará a ser provisionado **na cloud do próprio cliente (BYOC)**, e
 **múltiplos países**. Isso torna o isolamento um **requisito de produto** e a soberania
 de dados um **requisito externo** — as duas condições sob as quais os contra-indicadores
 de escala de fleet deixam de se aplicar (`.claude/skills/multi-cluster-fleet-specialist/references/scaling-decision.md § 3`).
+
+> **Escopo ampliado em 2026-08-07 (sponsor).** O ciclo de vida de cluster passa a servir
+> **também a infraestrutura interna**, não apenas o caminho BYOC. Ver **D15** — a mudança
+> fortalece a decisão D1 em vez de complicá-la, mas altera o que o CAPI cria. Uma
+> interpretação errada foi descartada no caminho e fica registrada para não voltar:
+> "milhares de desenvolvedores independentes" significa **milhares de clientes** usando a
+> plataforma, cada um como tenant — **não** um cluster por desenvolvedor.
 
 Some-se o driver estrutural de **version lifecycle**: o LoopZero tem **8 CRDs**
 (`operators/api/v1/*_types.go`), e CRDs são cluster-scoped — uma única versão global por
@@ -425,6 +434,86 @@ instalada (Loki, Tempo, OTel, Promtail, monitoring, blackbox, OpenCost) foi cons
 mundo onde tudo é nosso; um Promtail mal escopado no cluster do cliente **vaza log de aplicação
 sem que ninguém perceba**. Isso pede um teste que prove a ausência de vazamento, na mesma forma
 do zero-leak que já existe para secrets — não uma revisão de configuração.
+
+### D15 — O CAPI gerencia o ciclo de vida das **cells**, internas e BYOC; nunca um cluster por cliente
+
+**Decisão:** o escopo do CAPI passa a incluir a infraestrutura interna. O objeto que ele
+cria e reconcilia é a **cell** — o cluster que hospeda muitos tenants. Um cluster BYOC é uma
+cell que mora na conta do cliente. **Não existe cluster por cliente.**
+
+**Rationale.** No modelo do produto — Vercel para agentes — o desenvolvedor faz `git push` e
+nunca vê um cluster. Ele é um **tenant**, e tenants são empacotados em cells por um placement
+que já existe (`api/internal/placement/engine.go`). O número de clusters é
+`clientes ÷ maxPerCell`, não um por cliente:
+
+| Clientes | Cells (com `maxPerCell = 5000`) |
+|---:|---:|
+| 1.000 | 1 |
+| 10.000 | 2 |
+| 50.000 | 10 |
+
+A escala do produto, portanto, **não** produz sprawl de clusters. O que produz clusters é o
+crescimento do negócio — dezenas de cells hoje, centenas no limite — e é exatamente essa a
+faixa em que o ciclo de vida deixa de caber num processo manual.
+
+**Por que ampliar o escopo FORTALECE a decisão.** Manter dois mecanismos — camada L1 para as
+nossas cells e CAPI para clusters de cliente — seria duas formas de criar a mesma coisa, com
+duas matrizes de upgrade e dois caminhos de DR. O elemento 4 do padrão repetível pede o
+contrário: uma forma de criar cluster, e customização como controller reconciliado. Um cluster
+BYOC deixa de ser uma categoria à parte e passa a ser uma cell com outro dono de conta.
+
+**Alternativas rejeitadas:** (a) *um cluster por cliente* — a ~$73/mês de control plane por
+cluster, mil clientes custariam ~$876k/ano **antes de qualquer pod**, próximo do custo da
+plataforma inteira medido no memo de posture ($76.656/mês para 50.000 tenants); e nenhum
+requisito exige isso, já que o isolamento por tenant é entregue por namespace + RBAC +
+NetworkPolicy + ResourceQuota, como os preview environments já fazem
+(`operators/internal/preview/preview_controller.go:267`); (b) *manter L1 para as nossas cells
+e CAPI só para BYOC* — a duplicação descrita acima; (c) *cluster virtual (vcluster) por
+tenant* — resolveria o único gap do namespace (CRDs são cluster-scoped, logo versão global
+por cell), mas **nenhum requisito atual pede CRD por tenant**; fica registrado como a resposta
+caso essa necessidade apareça, com **0 hits** no repositório hoje.
+
+**Consequências:** três decisões já registradas passam a servir dois mundos e devem ser
+revisitadas na reunião T3 com isso em mente — **D7** (o management global agora provisiona
+cells nossas e de cliente, concentrando mais autoridade), **D6** (o placement ganha um modo
+BYOC, mas o modo por cell permanece o caminho principal, não a exceção) e **D13** (o regime de
+upgrade de uma cell nossa não tem contrato de cliente para respeitar; são dois regimes).
+
+### D16 — O memo de posture de região modela `maxPerCell` errado; corrigir antes de agir sobre ele
+
+**Decisão:** registrar que `docs/architecture/aws-region-posture-decision.md` (status `draft`)
+parte de um valor de capacidade que não corresponde ao código, e que sua Fase 1 **não deve ser
+executada** antes de re-rodar a simulação com o valor real.
+
+**Evidência medida (2026-08-07):**
+
+| Origem | Valor | Papel |
+|---|---|---|
+| `api/internal/config/config.go:497` | `envInt("MAX_TENANTS_PER_CELL", 5000)` | **default real** |
+| `charts/loopzero-api/values.yaml:121` | `maxTenantsPerCell: "5000"` | valor entregue |
+| `api/internal/placement/engine.go:90-91` | `if maxPerCell <= 0 { maxPerCell = 500 }` | fallback defensivo do construtor |
+
+O memo modela `maxPerCell = 500` e conclui *"100 EKS clusters, bottleneck `cell_count` ρ=1.56,
+score 32 / CRITICAL"*, propondo como **Fase 1 (do now)** elevar o valor "toward ~2000".
+
+Com o valor real, 50.000 tenants são **10 cells, não 100**; o gargalo `cell_count`
+provavelmente não existe; e a Fase 1 seria um **downgrade** de 5000 para 2000 — reduzindo a
+capacidade por cell e **multiplicando** o número de clusters, o oposto do que o memo pretende.
+
+**Rationale:** o `500` de `engine.go` só é alcançado quando o construtor recebe `<= 0`, e a
+config sempre passa 5000. É um fallback, não o caminho real — mas é o número que aparece no
+comentário do código, e foi provavelmente daí que a simulação o tirou.
+
+**Alternativas rejeitadas:** (a) *corrigir o memo direto* — ele é um documento datado com
+números de simulação; a correção honesta é re-rodar o `capsim` com `maxPerCell=5000` e
+registrar o novo resultado, não editar as conclusões antigas; (b) *executar a Fase 1 mesmo
+assim* — aplicaria um downgrade de capacidade com base numa premissa medida como falsa.
+
+**Consequências:** a decisão de posture multi-região (sharded vs single) foi tomada sobre uma
+distribuição de custo que pode mudar materialmente — o memo mesmo alerta que *"decidir
+multi-região antes de corrigir `maxPerCell`"* é a ordem errada. Enquanto o memo estiver
+`draft`, corrigir é barato. **Esta é uma correção pendente que não pertence a este ADR** — fica
+registrada aqui porque foi medida aqui, e deve virar item próprio.
 
 ## Questões abertas — pauta da reunião T3
 
