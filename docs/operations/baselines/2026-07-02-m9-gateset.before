@@ -47,6 +47,12 @@
 #   antiga descrevia outra coisa e o ledger repetiu o erro ("115 a11y violations"). O baseline
 #   era posicional (file:LINE) e decaia a cada refactor; a chave passou a ser arquivo + texto do
 #   skip, e foi re-congelado com 205 entradas. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (e): 111 -> 110 gates. cli-bundle-size DELETADO — guardava cli/dist, que
+#   saiu do repo com o CLI no M2, e reportava "PASS — cli/dist not present" para sempre. Era o
+#   shape do #254 em forma de gate; documentar como vacuoso e' divida, deletar resolve.
+#   mock-budget e pkg-usage-matrix '-' -> 'gates': estavam rotulados slowGate ">25s" e medem
+#   0.6s e 0.7s. O segundo tambem parou de publicar um falso "dead code candidate" para
+#   pkg/pulumi, diretorio que so contem o sub-pacote archive/ (importado por loopzero-ops).
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -62,7 +68,6 @@ caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in i
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
 chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
 check-allowlist-sunsets	gates	Hermetic contract test for .claude/scripts/check-allowlist-sunsets.py (T5.2.a): 5 fixture cases + missing-file + LIVE rules/code-review-allowlist.txt check. Exits 0 for future/today/missing/live-clean; catches past-sunset (exit 1) and malformed/bad-date (exit 2). Requires python3. M-Migrate2 2026-07-07 replaces infra/tests/check-allowlist-sunsets_test.sh.
-cli-bundle-size	-	Guards the CLI published bundle size against regression.
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-role-no-secrets-star	gates	Forbids unconditional cluster-wide secrets/configmaps RBAC grants.
 clusterimagepolicy-mode	-	Validates the sigstore ClusterImagePolicy enforcement mode.
@@ -98,7 +103,7 @@ loki-retention-schema	gates	Trio-compat regression for T8.2 Loki retention_strea
 loki-vault-retention	gates	T8.2 Loki per-NS retention (retention_period 168h default + retention_stream vault-system selector + period 2160h 90-day forensic) + T8.5 archive CronJob (kind + schedule 04:00 UTC monthly + concurrencyPolicy Forbid + runAsNonRoot + capabilities drop ALL + logcli/mc invocation + AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secretKeyRef + loki-archive-s3-creds Secret + vault-system NS target). 14 assertions. M-Migrate2 2026-07-10 M16 T3.1 Wave 2 replaces infra/tests/check-loki-vault-retention_test.sh.
 ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.
 migration-test-coverage	-	Every DB migration has corresponding test coverage.
-mock-budget	-	Caps the number of mocks per test (SRP smell budget).
+mock-budget	gates	Caps the number of mocks per test (SRP smell budget).
 no-aes-remaining	-	Calendar-gated: fails on remaining AES code paths post-transit migration.
 no-cloud-dev-default	gates	T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.loopzero.example (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.
 no-env-vault-secrets	gates	Forbids secrets-as-env-var regression after the ESO/OpenBao migration.
@@ -113,7 +118,7 @@ option-b-eso-deploy-doc	gates	Locks docs/operations/option-b-mgmt-helmfile-eso-d
 orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
-pkg-usage-matrix	-	Verifies the pkg/ cross-component usage matrix is current.
+pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current.
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.

@@ -48,6 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Mais dois gates saem do ledger e um é deletado. `mock-budget` e `pkg-usage-matrix` estavam
+  rotulados como "excedem 25s" e medem 0,6s e 0,7s. `cli-bundle-size` foi **removido**: guardava
+  `cli/dist`, que saiu do repo com o CLI no M2, e reportava "PASS — cli/dist not present" para
+  sempre — documentar como vacuoso é dívida, deletar resolve. O inventário cai de 111 para 110 (#267)
+- A matriz de uso de `pkg/` publicava `pkg/pulumi | 0 ⚠️ dead code candidate` para código vivo: o
+  diretório só contém o subpacote `archive/`, que `cmd/loopzero-ops` importa. O gerador contava o path
+  exato e listava diretórios sem `.go` próprio. Um documento gerado que convida a apagar um pacote
+  em uso é pior que documento nenhum. A tabela também estava congelada em 2026-05-15, ainda com o
+  nome de módulo antigo (#267)
+- `check-allowlist-sunsets` falhava três horas por dia. As fixtures são geradas em Go com
+  `time.Now().UTC()` e avaliadas pelo script Python com `date.today()`, que é local: em qualquer
+  offset UTC negativo os dois discordam no fim do dia, e a fixture "today" era lida como futura.
+  Ambos passam a ler o mesmo relógio (#267)
 - Cinco gates saem do ledger de não-wired (#255) e passam a rodar de verdade em `quality:gates` —
   cada um por ter o defeito corrigido, não por relaxamento:
   `crd-semantic-diff` já passava e estava rotulado como falhando;

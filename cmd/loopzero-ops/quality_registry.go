@@ -58,7 +58,6 @@ var gateRegistry = []gateSpec{
 	{"dev-public-oidc-redirect-syntax", "Hermetic contract for infra/tests/e2e/live/dev-public-oidc-redirect_test.sh — 9 assertions (bash -n / strict-mode / log+assert+test_provider / OIDC provider ref / Kratos browser flow path / exit-code / allowlisted). M22 T2.1 Wave A gate 2/17.", runDevPublicOIDCRedirectSyntax},
 	{"ory-kratos-public-urls", "Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).", runOryKratosPublicURLs},
 	{"test-coverage-report", "Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).", runTestCoverageReport},
-	{"cli-bundle-size", "Guards the CLI published bundle size against regression.", runCLIBundleSize},
 	{"cli-exit-codes", "Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).", runCLIExitCodes},
 	{"clusterimagepolicy-mode", "Validates the sigstore ClusterImagePolicy enforcement mode.", runClusterImagePolicyMode},
 	{"cluster-role-no-secrets-star", "Forbids unconditional cluster-wide secrets/configmaps RBAC grants.", runClusterRoleNoSecretsStar},

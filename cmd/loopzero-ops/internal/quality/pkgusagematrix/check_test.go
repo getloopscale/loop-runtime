@@ -33,9 +33,13 @@ func setup(t *testing.T, files map[string]string) string {
 
 func TestListPkgDirs_FiltersToolsAndSorts(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "zzz"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "aaa"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "tools"), 0o755))
+	// Each candidate needs its own .go to be an importable package — a bare
+	// directory is not one (see hasOwnGoSource).
+	for _, name := range []string{"zzz", "aaa", "tools"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, name, "doc.go"), []byte("package "+name+"\n"), 0o600))
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(""), 0o600))
 
 	got, err := listPkgDirs(dir)
@@ -309,4 +313,46 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "docs/technical/pkg/architecture.md", DefaultDocPath)
 	assert.Equal(t, "<!-- USAGE-MATRIX-START -->", StartMark)
 	assert.Equal(t, "<!-- USAGE-MATRIX-END -->", EndMark)
+}
+
+// A directory that only holds sub-packages is not an importable Go package, so
+// it must not appear in the matrix — and above all must not be labelled a dead
+// code candidate.
+//
+// Measured 2026-08-06: pkg/pulumi/ contains no .go of its own, only
+// pkg/pulumi/archive/, which cmd/loopzero-ops/pulumi_subcmd.go imports. The
+// generator counted imports of the exact path "pkg/pulumi", found none, and
+// published "0 ⚠️ dead code candidate" for live code. A generated document that
+// invites someone to delete a package in use is worse than no document.
+func TestListPkgDirsSkipsSubPackageOnlyDirs(t *testing.T) {
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "pkg")
+
+	// container/ holds only a sub-package; real/ has its own source.
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgRoot, "container", "archive"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgRoot, "container", "archive", "a.go"),
+		[]byte("package archive\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgRoot, "real"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgRoot, "real", "r.go"),
+		[]byte("package real\n"), 0o644))
+
+	dirs, err := listPkgDirs(pkgRoot)
+	require.NoError(t, err)
+	assert.Contains(t, dirs, "real")
+	assert.NotContains(t, dirs, "container",
+		"a directory with no .go of its own is not an importable package")
+}
+
+// A directory whose only .go files are tests is likewise not a package other
+// code can import.
+func TestListPkgDirsSkipsTestOnlyDirs(t *testing.T) {
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "pkg")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgRoot, "testsonly"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgRoot, "testsonly", "x_test.go"),
+		[]byte("package testsonly\n"), 0o644))
+
+	dirs, err := listPkgDirs(pkgRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, dirs, "testsonly")
 }

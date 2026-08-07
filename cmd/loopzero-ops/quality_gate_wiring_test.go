@@ -115,15 +115,7 @@ var gateWiringExemptions = map[string]wiringReason{
 	"no-pulumi-inline-secrets": failingGate, // inline secret literal in Pulumi code
 	"template-compliance":      failingGate, // empty PR body vs the canonical template
 
-	// --- exceed the per-push time budget ----------------------------------
-	"mock-budget":      slowGate, // >25s
-	"pkg-usage-matrix": slowGate, // >25s
-
 	// --- pass without asserting anything here -----------------------------
-	// cli-bundle-size is the #254 shape in gate form: it guards `cli/dist`,
-	// which left this repo with the CLI at M2, so it now reports
-	// "PASS — cli/dist not present" forever. It belongs in loopzero-cli.
-	"cli-bundle-size": vacuousGate,
 	// Prints "NON-CONFORMANT without ADR: 2" and still exits 0 — advisory,
 	// not a gate. Wiring it would add noise without enforcement.
 	"security-context": vacuousGate,

@@ -17,7 +17,6 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselineupdate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfiledevserverdeny"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/decisionsdeletion"
@@ -366,29 +365,6 @@ func runSkipLink(args []string) int {
 	} else {
 		fmt.Println("[skip-link] PASS — all skip calls have issue URL")
 	}
-	return 0
-}
-
-func runCLIBundleSize(args []string) int {
-	fs := flag.NewFlagSet("cli-bundle-size", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	o := clibundlesize.Check(clibundlesize.Config{Root: *root})
-	mb := func(b int64) float64 { return float64(b) / 1024 / 1024 }
-	if o.Skipped {
-		fmt.Println("[cli-bundle-size] PASS — cli/dist not present (run 'cd cli && npm run build' first).")
-		return 0
-	}
-	if !o.Pass {
-		fmt.Fprintf(os.Stderr, "[cli-bundle-size] FAIL — cli/dist %.1f MB > cap %.1f MB (T9.3 governance).\n",
-			mb(o.TotalBytes), mb(o.MaxBytes))
-		fmt.Fprintln(os.Stderr, "Options: (1) remove/lazy-load the heavy dependency, OR")
-		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in cmd/loopzero-ops/internal/quality/clibundlesize + add an ADR justifying the growth.")
-		return 1
-	}
-	fmt.Printf("[cli-bundle-size] PASS — cli/dist %.1f MB <= cap %.1f MB.\n", mb(o.TotalBytes), mb(o.MaxBytes))
 	return 0
 }
 

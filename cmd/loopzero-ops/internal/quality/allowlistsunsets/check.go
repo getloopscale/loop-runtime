@@ -47,6 +47,19 @@ type Outcome struct {
 var ErrViolations = errors.New("check-allowlist-sunsets fixture contract violated")
 
 // Check runs the seven assertions from the bash guard.
+// referenceDate returns the day the fixtures are dated against. It is the
+// LOCAL date, not UTC, because the Python gate that grades those fixtures uses
+// date.today() — which is local. Reading two different clocks made the suite
+// fail for the last hours of every day in any negative UTC offset: measured
+// 2026-08-06 21:15 -03, Go dated fixtures 2026-08-07 while Python graded
+// against 2026-08-06, so "today" read as future and "past" read as today.
+func referenceDate(injected time.Time) time.Time {
+	if !injected.IsZero() {
+		return injected
+	}
+	return time.Now()
+}
+
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
 	if root == "" {
@@ -64,10 +77,7 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{Failures: []string{fmt.Sprintf("python3 not on PATH: %v (this gate is a driver for the Python script and requires python3)", err)}}, ErrViolations
 	}
 
-	today := cfg.Today
-	if today.IsZero() {
-		today = time.Now().UTC()
-	}
+	today := referenceDate(cfg.Today)
 	futureDate := today.Add(30 * 24 * time.Hour).Format("2006-01-02")
 	todayStr := today.Format("2006-01-02")
 	pastDate := today.Add(-24 * time.Hour).Format("2006-01-02")

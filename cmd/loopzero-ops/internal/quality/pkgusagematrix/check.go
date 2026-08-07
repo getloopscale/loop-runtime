@@ -72,15 +72,23 @@ type Config struct {
 
 // Outcome captures the gate result.
 type Outcome struct {
-	Pass     bool
-	Mode     Mode
-	Rows     []PkgRow
+	Pass      bool
+	Mode      Mode
+	Rows      []PkgRow
 	Generated string // the freshly generated table body
-	Messages []string
+	Messages  []string
 }
 
-// listPkgDirs returns the sorted list of pkg/<X> subdirectory names
-// (excluding "tools" — explicit bash skip + reserved future namespace).
+// listPkgDirs returns the sorted list of pkg/<X> subdirectory names that are
+// actually importable Go packages (excluding "tools" — explicit bash skip +
+// reserved future namespace).
+//
+// A directory holding only sub-packages is skipped. pkg/pulumi/ is the case
+// that exposed this: it has no .go of its own, only pkg/pulumi/archive/, which
+// cmd/loopzero-ops/pulumi_subcmd.go imports. Counting imports of the exact path
+// "pkg/pulumi" found none, and the generated matrix published
+// "0 ⚠️ dead code candidate" for live code (measured 2026-08-06). A generated
+// document that invites deleting a package in use is worse than no document.
 func listPkgDirs(pkgRoot string) ([]string, error) {
 	entries, err := os.ReadDir(pkgRoot)
 	if err != nil {
@@ -95,10 +103,33 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 		if name == "tools" {
 			continue
 		}
+		if !hasOwnGoSource(filepath.Join(pkgRoot, name)) {
+			continue
+		}
 		dirs = append(dirs, name)
 	}
 	sort.Strings(dirs)
 	return dirs, nil
+}
+
+// hasOwnGoSource reports whether dir contains a non-test .go file directly —
+// i.e. whether `import ".../pkg/<dir>"` resolves to anything. Sub-directories
+// are not consulted: those are separate packages with their own import paths.
+func hasOwnGoSource(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		n := e.Name()
+		if strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
+			return true
+		}
+	}
+	return false
 }
 
 // countConsumers walks all *.go files under root looking for the
