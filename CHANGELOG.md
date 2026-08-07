@@ -189,6 +189,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Superfície do namespace `/sessions/` reduzida no edge. `handle /sessions/*` proxiava **todo** o
+  namespace de sessões do Kratos para a origem do dashboard — incluindo listar e revogar sessões —
+  quando os 6 pontos de chamada do dashboard usam apenas `/sessions/whoami` (medido contra
+  `loopzero-cloud/dashboard/src`). Passa a expor só `whoami`; o resto responde 404 explícito, não o HTML
+  do SPA (a forma do Red Team #66 que o gate `caddyfile-csp` previne). Logout não é afetado — vive
+  sob `/self-service/logout`.
+
+  Isto reduz a **superfície**, não o corpo: `whoami` continua devolvendo a sessão Ory inteira, com
+  `devices[].ip_address` e `recovery_addresses` que nenhum cliente lê. Filtrar o corpo exige um
+  módulo de reescrita de resposta no Caddy ou um endpoint no BFF — permanece aberto e está declarado
+  como tal em `infra/quality/proxy-exposure.txt` (#267)
+
 - As 22 CVEs CRITICAL/HIGH restantes que reprovavam `trivy-scan` foram zeradas — `trivy fs` sai limpo
   nos 15 manifests do repo. Nos módulos Go: `kin-openapi` 0.140.0 → 0.144.0 (bypass de autenticação
   fail-open, CRITICAL), `grpc-go` 1.80.0 → 1.82.1, `prometheus` 0.303.0 → 0.311.3 (vazamento de

@@ -84,10 +84,14 @@ app.loopzero.example {
   reverse_proxy @ws localhost:5173
 
   # Kratos session endpoints — same-origin proxy
-  handle /sessions/* {
+  # Narrowed to the single endpoint the dashboard calls — see the app-dev block.
+  handle /sessions/whoami {
     reverse_proxy localhost:14433 {
       header_up Host auth.loopzero.example
     }
+  }
+  handle /sessions/* {
+    respond "Not Found" 404
   }
   handle /self-service/* {
     reverse_proxy localhost:14433 {
@@ -209,10 +213,29 @@ app-dev.loopzero.example {
   }
   respond @dev_server_only 404
 
-  handle /sessions/* {
+  # Narrowed from /sessions/* to the single endpoint the dashboard calls
+  # (measured 2026-08-06 against loopzero-cloud/dashboard/src: 6 call sites, all
+  # /sessions/whoami). The wildcard also exposed Kratos's session LIST and
+  # session DELETE on the dashboard origin, which no client uses. Logout is
+  # unaffected — it lives under /self-service/logout, handled below.
+  #
+  # This narrows the SURFACE, not the payload: whoami still returns the whole
+  # Ory session, including devices[].ip_address and recovery_addresses that no
+  # client reads. Filtering the body needs either a Caddy response-rewrite
+  # module or a BFF endpoint; tracked as an open finding, and declared as such
+  # in infra/quality/proxy-exposure.txt.
+  handle /sessions/whoami {
     reverse_proxy localhost:14433 {
       header_up Host auth-dev.loopzero.example
     }
+  }
+  # Everything else under /sessions/ is denied explicitly. Without this block
+  # the narrowed path above would let those requests fall through to the SPA
+  # catch-all and answer `<!DOCTYPE html>` to a JSON client — the Red Team #66
+  # shape the caddyfile-csp gate exists to prevent. 404 rather than 403 gives
+  # no signal that the path was recognised and blocked.
+  handle /sessions/* {
+    respond "Not Found" 404
   }
   handle /self-service/* {
     reverse_proxy localhost:14433 {
