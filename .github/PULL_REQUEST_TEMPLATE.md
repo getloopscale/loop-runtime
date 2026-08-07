@@ -1,8 +1,10 @@
 <!--
 Plan 2026-05-21-comprehensive-quality-gates v1.1 T5.1 + D12.
-Template enforced by .github/workflows/template-compliance.yml.
-
-Quality Gates checklist below is auto-validated. Unchecked = PR fails.
+Checked by the `template-compliance` gate, which needs the PR body as input:
+  loopzero-ops quality template-compliance --pr-body "$(gh pr view N --json body -q .body)"
+It is NOT wired into `task quality:gates` (a repo scan has no PR body) and the
+workflow this line used to name, .github/workflows/template-compliance.yml, does
+not exist — GitHub Actions stopped being the pipeline on 2026-05-23.
 For bots (dependabot/renovate) + PRs labeled `dependencies`/`automated`:
 template gate SKIPS (EC-5 fix).
 -->

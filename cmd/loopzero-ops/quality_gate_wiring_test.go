@@ -65,6 +65,14 @@ const (
 	// vacuousGate: exits 0 without asserting anything in this repo, so wiring
 	// it would buy coverage that does not exist. Usually means the subject
 	// moved (the M2/M4 extractions) or the gate advises rather than blocks.
+	//
+	// UNUSED as of 2026-08-06, and worth saying why: all three entries it once
+	// held turned out to be misdiagnoses. cli-bundle-size was genuinely dead
+	// (its subject left with the CLI at M2) and was deleted rather than
+	// documented. security-context exits 0 only in report mode — with --gate it
+	// fails on two real findings. regression-test needs PR_* in the environment.
+	// "It passes vacuously" is an easy label to reach for when a gate is quiet;
+	// twice out of three it was hiding a different problem.
 	vacuousGate wiringReason = "TODO(#255) — passes VACUOUSLY here; wiring it would read as coverage while asserting nothing"
 
 	// brokenGate: measured to produce a wrong verdict today. Distinct from
@@ -80,6 +88,15 @@ const (
 var gateWiringExemptions = map[string]wiringReason{
 	// --- takes mandatory flags -------------------------------------------
 	"helm-diff-structural": parameterized, // --base and --pr are required (quality_gates_helm.go:93)
+	// Needs the PR body (--pr-body / $PR_BODY). Reported as "FAIL: empty PR
+	// body" from a repo scan, which was read as a real finding and filed under
+	// failingGate; it is a missing mandatory input, like helm-diff-structural.
+	"template-compliance": parameterized,
+	// Reads PR_TITLE / PR_BODY / PR_COMMITS / PR_DIFF_FILES from the environment
+	// and SKIPs when they are absent — which is always, in a repo scan. Filed
+	// under vacuousGate ("SKIPs when there are no bug-fix references, which is
+	// the normal state"); the cause is the missing PR context, not the gate.
+	"regression-test": parameterized,
 
 	// --- produce input for other gates ------------------------------------
 	"git-diff-to-lines": utility,
@@ -111,16 +128,19 @@ var gateWiringExemptions = map[string]wiringReason{
 	// caminho de leitura AES antes de provar que nenhum segredo persistido usa o
 	// prefixo antigo torna esses dados irrecuperaveis, entao a correcao exige
 	// evidencia de migracao que este repo nao carrega.
-	"no-aes-remaining":         failingGate,
+	"no-aes-remaining": failingGate,
+	// NOT vacuous — the old label said it "still exits 0" and that wiring it
+	// would add noise without enforcement. It exits 0 only in report mode; with
+	// --gate it exits 1, measured 2026-08-06:
+	//   argo-events, loopzero-ci-workflows — NON-CONFORMANT, no ADR exception
+	// Both are real releases in build.helmfile.yaml.gotmpl, not dead POCs. The
+	// fix is a securityContext on charts whose workloads (argo-events/NATS, the
+	// Argo WorkflowTemplate containers) can break under readOnlyRootFilesystem,
+	// which makes it a T2 change requiring LIVE validation on a cluster.
+	"security-context":         failingGate,
 	"no-pulumi-inline-secrets": failingGate, // inline secret literal in Pulumi code
-	"template-compliance":      failingGate, // empty PR body vs the canonical template
 
 	// --- pass without asserting anything here -----------------------------
-	// Prints "NON-CONFORMANT without ADR: 2" and still exits 0 — advisory,
-	// not a gate. Wiring it would add noise without enforcement.
-	"security-context": vacuousGate,
-	// SKIPs when there are no bug-fix references, which is the normal state.
-	"regression-test": vacuousGate,
 }
 
 // loadQualityTaskfile returns taskfiles/quality.yml as text.

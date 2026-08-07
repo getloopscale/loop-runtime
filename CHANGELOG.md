@@ -48,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Três entradas do ledger de gates não-wired estavam classificadas por sintoma, não por causa, e a
+  reclassificação muda o que o registro diz sobre o repo: `security-context` não "sai 0 sem asseverar
+  nada" — sai 0 apenas em modo relatório; com `--gate` reprova em dois charts reais
+  (`argo-events`, `loopzero-ci-workflows`, ambos releases do build cluster). `template-compliance` e
+  `regression-test` não falham nem passam vazio: exigem contexto de PR (`--pr-body`, `PR_*`), como
+  `helm-diff-structural` exige `--base`. A categoria `vacuousGate` ficou sem nenhuma entrada (#267)
+- `.github/PULL_REQUEST_TEMPLATE.md` dizia "Template enforced by
+  `.github/workflows/template-compliance.yml`" — workflow que não existe desde que o GitHub Actions
+  deixou de ser o pipeline (2026-05-23). Passa a documentar como o gate é realmente invocado (#267)
 - Mais dois gates saem do ledger e um é deletado. `mock-budget` e `pkg-usage-matrix` estavam
   rotulados como "excedem 25s" e medem 0,6s e 0,7s. `cli-bundle-size` foi **removido**: guardava
   `cli/dist`, que saiu do repo com o CLI no M2, e reportava "PASS — cli/dist not present" para
