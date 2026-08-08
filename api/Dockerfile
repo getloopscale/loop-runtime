@@ -2,10 +2,17 @@ FROM golang:1.26.1-alpine3.22@sha256:07e91d24f6330432729082bb580983181809e0a48f0
 WORKDIR /workspace
 
 ENV GOWORK=off
-ENV GOPRIVATE=github.com/getloopscale/*
+ENV GOPRIVATE=github.com/getloopscale/*,github.com/getloopscale/*
 
 # loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
-# requires github.com/getloopscale/loopzero-contracts v0.3.0, NO replace). The private module
+# requires github.com/getloopscale/loopzero-contracts v0.4.0, NO replace). The private module
+#
+# CORRIGIDO 2026-08-08: este arquivo autenticava para `getloopscale/` enquanto api/go.mod
+# passou a pedir `getloopscale/` no commit f813b367 (2026-08-06). A reescrita de URL nao casava
+# com o modulo pedido, entao o git buscava loopzero-contracts SEM autenticacao — e o GitHub
+# responde a repo privado sem auth com "not found", a mesma mensagem de repo inexistente.
+# O build da imagem loopzero-api quebrou no primeiro push para develop apos a migracao. As duas
+# orgs ficam cobertas enquanto o redirect existir.
 # is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
 # token is NEVER written to an image layer. git is required for the module VCS fetch.
 RUN apk add --no-cache git openssh-client
@@ -31,7 +38,9 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
       ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null; \
       printf "Host github.com\n  IdentityFile /root/.ssh/gomod_key\n  IdentitiesOnly yes\n  IdentityAgent none\n" > /root/.ssh/config; \
       git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
+      git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     elif [ -s /run/secrets/gomod_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
       git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     fi' \
     && cd api && { go mod download || { \

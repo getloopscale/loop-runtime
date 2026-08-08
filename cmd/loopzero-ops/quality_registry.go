@@ -51,6 +51,7 @@ var gateRegistry = []gateSpec{
 	{"baseline-update", "Updates the committed steady-state baseline artifact.", runBaselineUpdate},
 	{"caddyfile-csp", "Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).", runCaddyfileCSP},
 	{"vap-delete-guardrail", "Boundary resources (Application/Tenant/Environment/ClusterCredential) AND their CRDs are protected from unauthorized DELETE (D4).", runVAPDeleteGuardrail},
+	{"gomod-auth-org", "The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').", runGoModAuthOrg},
 	{"helm-topology-index", "Index of which chart runs on which cluster, derived from the helmfiles (never a hand-written second copy).", runHelmTopologyIndex},
 	{"worker-csp", "Cloudflare static worker CSP must not permit inline/eval script (#235).", runWorkerCSP},
 	{"tenant-csp-passthrough", "Static-CSP Traefik middleware must not be attached to tenant routes (#59).", runTenantCSPPassthrough},

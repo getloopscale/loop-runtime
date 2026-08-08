@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Build da imagem `loopzero-api` voltou a passar. O `api/Dockerfile` autenticava para a organização
+  antiga do GitHub enquanto o `api/go.mod` passou a exigir a nova — a reescrita de URL não casava
+  com o módulo pedido, então o git buscava sem credencial. O GitHub responde a repositório privado
+  sem autenticação com "não encontrado", a mesma mensagem de repositório inexistente, então o erro
+  mandava procurar algo que existe. Quebrou no primeiro merge para `develop` depois da migração
+
 ### Added
 
 - Índice de topologia Helm gerado (`docs/architecture/helm-topology.md`): responde "em qual
