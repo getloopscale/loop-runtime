@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
@@ -315,19 +316,52 @@ func (r *TenantReconciler) requiredProvisioningConditions() []string {
 // reconcileEnvironmentCRs creates/updates Environment CRs for each spec.environments[],
 // then garbage-collects orphaned Environment CRs that are no longer in the spec.
 // Each Environment CR is owned by the Tenant CR (cascade delete).
+// buildEnvironmentCRNames returns the set of Environment CR names this tenant should have,
+// one per (project, environment) entry in the spec.
+//
+// # WHY THIS IS ONE FUNCTION
+//
+// Two callers need this set: the create/update loop, and the garbage collector that deletes
+// every Environment CR outside it. Deleting an Environment CR makes EnvironmentReconciler
+// delete the NAMESPACE on the runtime cluster (environment_controller.go, reconcileDelete),
+// so a `desired` set that drifted from what the loop creates would wipe the tenants'
+// namespaces. They read from here, so divergence is unrepresentable rather than unlikely.
+//
+// The name carries the project because the CR's content already does: spec.project and
+// spec.namespace.name are both project-scoped. While it did not, two projects of one tenant
+// sharing an env name collapsed onto a single CR through CreateOrUpdate, and the loser
+// silently received no namespace, RBAC or NetworkPolicy. Measured on app-dev 2026-08-08:
+// 5 of 9 declared (project, environment) tuples had no Environment CR at all (issue #273).
+func buildEnvironmentCRNames(tenant *loopzerov1.Tenant) (map[string]bool, error) {
+	names := make(map[string]bool, len(tenant.Spec.Environments))
+	for _, env := range tenant.Spec.Environments {
+		name, err := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
+		if err != nil {
+			return nil, fmt.Errorf("environment CR name for %s/%s: %w", env.Project, env.Name, err)
+		}
+		names[name] = true
+	}
+	return names, nil
+}
+
 // The EnvironmentController watches these CRs and manages namespaces/RBAC/NetworkPolicy.
 func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	logger := log.FromContext(ctx)
 
 	// Build the desired set of Environment CR names from spec.
-	desired := make(map[string]bool, len(tenant.Spec.Environments))
-	for _, env := range tenant.Spec.Environments {
-		desired[fmt.Sprintf("%s-%s", tenant.Name, env.Name)] = true
+	// Derived, never recomputed: this set decides which Environment CRs are GC'd, and
+	// deleting one deletes the tenant's namespace on the runtime cluster.
+	desired, err := buildEnvironmentCRNames(tenant)
+	if err != nil {
+		return err
 	}
 
 	// Create/update loop — one Environment CR per spec entry.
 	for _, env := range tenant.Spec.Environments {
-		envCRName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+		envCRName, nameErr := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
+		if nameErr != nil {
+			return fmt.Errorf("environment CR name for %s/%s: %w", env.Project, env.Name, nameErr)
+		}
 		// #69 LIVE catch 2026-06-07: the Environment CR carries the
 		// workload namespace name. Use the same canonical-with-fallback
 		// helper as tenant_gitops.go so envController->namespace creation

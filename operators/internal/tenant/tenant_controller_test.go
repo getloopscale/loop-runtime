@@ -596,7 +596,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 
 		It("should create Environment CRs for each environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				envCRName := tenantName + "-" + env
+				envCRName := tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -662,7 +662,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 		It("should set NamespaceReady on Environment CRs (not on Tenant)", func() {
 			// NamespacesReady is no longer on Tenant — it is now on Environment CRs
 			for _, env := range []string{"production", "staging"} {
-				envCRName := tenantName + "-" + env
+				envCRName := tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -762,7 +762,7 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 
 	Context("RBACReady condition (on Environment CR)", func() {
 		It("should set RBACReady on Environment CR (not on Tenant)", func() {
-			expectEnvCondition(tenantName+"-production", conditions.TypeEnvRBACReady, metav1.ConditionTrue)
+			expectEnvCondition(tenantName+"-default-project-production", conditions.TypeEnvRBACReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -882,7 +882,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 
 	Context("NetworkPolicyReady condition (on Environment CR)", func() {
 		It("should set NetworkPolicyReady on Environment CR (not on Tenant)", func() {
-			expectEnvCondition(tenantName+"-production", conditions.TypeEnvNetworkPolicyReady, metav1.ConditionTrue)
+			expectEnvCondition(tenantName+"-default-project-production", conditions.TypeEnvNetworkPolicyReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -1783,7 +1783,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			for _, env := range []string{"production", "staging", "dev"} {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-" + env, Namespace: "default",
+					Name: tenantName + "-default-project-" + env, Namespace: "default",
 				}, &envCR)).To(Succeed())
 			}
 		}, timeout, interval).Should(Succeed())
@@ -1889,7 +1889,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			for _, env := range []string{"production", "staging"} {
 				var envCR loopzerov1.Environment
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-" + env, Namespace: "default",
+					Name: tenantName + "-default-project-" + env, Namespace: "default",
 				}, &envCR)).To(Succeed())
 			}
 		})
@@ -1903,7 +1903,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "gc-env-other-staging", Namespace: "default",
+					Name: "gc-env-other-default-project-staging", Namespace: "default",
 				}, &envCR)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
@@ -1921,7 +1921,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-staging", Namespace: "default",
+					Name: tenantName + "-default-project-staging", Namespace: "default",
 				}, &envCR)).To(Succeed())
 				g.Expect(envCR.DeletionTimestamp.IsZero()).To(BeFalse())
 			}, timeout, interval).Should(Succeed())
@@ -1930,7 +1930,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-staging", Namespace: "default",
+					Name: tenantName + "-default-project-staging", Namespace: "default",
 				}, &envCR)).To(Succeed())
 				var ns corev1.Namespace
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCR.Spec.Namespace.Name}, &ns); err == nil {
@@ -1946,7 +1946,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-staging", Namespace: "default",
+					Name: tenantName + "-default-project-staging", Namespace: "default",
 				}, &envCR)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(errors.IsNotFound(err)).To(BeTrue())
@@ -1955,7 +1955,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			// Assert: other tenant's staging CR must still exist
 			var otherEnv loopzerov1.Environment
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: "gc-env-other-staging", Namespace: "default",
+				Name: "gc-env-other-default-project-staging", Namespace: "default",
 			}, &otherEnv)).To(Succeed())
 			Expect(otherEnv.OwnerReferences[0].Name).To(Equal("gc-env-other"))
 

@@ -774,3 +774,30 @@ func TestIsPreviewEnv_RedTeam41(t *testing.T) {
 		})
 	}
 }
+
+// EnvironmentCRName — #273: a identidade do Environment CR precisa do projeto, porque o
+// conteúdo dele (spec.project, spec.namespace.name) já depende do projeto.
+
+func TestEnvironmentCRName_incluiOProjeto(t *testing.T) {
+	got, err := EnvironmentCRName("tn-acme", "backend", "production")
+	if err != nil {
+		t.Fatalf("EnvironmentCRName: %v", err)
+	}
+	if got != "tn-acme-backend-production" {
+		t.Errorf("EnvironmentCRName = %q, want %q", got, "tn-acme-backend-production")
+	}
+}
+
+func TestEnvironmentCRName_projetosDistintosNaoColidem(t *testing.T) {
+	a, _ := EnvironmentCRName("tn-acme", "alpha", "preview")
+	b, _ := EnvironmentCRName("tn-acme", "beta", "preview")
+	if a == b {
+		t.Fatalf("dois projetos no mesmo ambiente colidiram em %q — é o defeito da #273", a)
+	}
+}
+
+func TestEnvironmentCRName_projetoVazioFalhaAlto(t *testing.T) {
+	if _, err := EnvironmentCRName("tn-acme", "", "production"); err == nil {
+		t.Error("projeto vazio deve devolver erro, não um nome degenerado")
+	}
+}

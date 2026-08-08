@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Um projeto podia ficar sem infraestrutura nenhuma, em silêncio. Quando dois projetos do
+  mesmo time usavam o mesmo nome de ambiente, apenas um recebia namespace, permissões e
+  isolamento de rede — o outro não recebia nada e nada reportava erro. Medido: 5 de 9
+  combinações projeto/ambiente estavam sem provisionamento (#273)
+
 - Dois projetos de um mesmo time no mesmo ambiente deixaram de disputar o mesmo registro de
   deploy. A identidade do deploy omitia o projeto, então o segundo projeto sobrescrevia o
   primeiro a cada ciclo, e cada um enxergava os arquivos de configuração do outro. Deploy,

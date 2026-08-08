@@ -38,7 +38,8 @@ import (
 func buildEnvironmentT31(project, envName, tenantName string) *loopzerov1.Environment {
 	return &loopzerov1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenantName + "-" + envName,
+			// #273: a identidade do Environment CR inclui o projeto.
+			Name:      tenantName + "-" + project + "-" + envName,
 			Namespace: "default",
 		},
 		Spec: loopzerov1.EnvironmentCRSpec{

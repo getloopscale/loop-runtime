@@ -109,7 +109,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 				for _, env := range []string{"production", "staging"} {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-						Name: tenantName + "-" + env, Namespace: "default",
+						Name: tenantName + "-default-project-" + env, Namespace: "default",
 					}, &envCR)).To(Succeed())
 					g.Expect(envCR.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
 				}
@@ -127,7 +127,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			for _, env := range []string{"production", "staging"} {
 				envCR := &loopzerov1.Environment{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-" + env, Namespace: "default",
+					Name: tenantName + "-default-project-" + env, Namespace: "default",
 				}, envCR); err == nil {
 					_ = operatortest.UpdateWithRetry(ctx, k8sClient, envCR, func() {
 						envCR.Finalizers = nil

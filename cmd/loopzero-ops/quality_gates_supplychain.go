@@ -353,8 +353,8 @@ func runArgoAppIdentity(args []string) int {
 		return 5
 	}
 	if rep.OK() {
-		fmt.Printf("argo-app-identity: PASS — %d file(s) scanned, Application name derived only from naming.ArgoAppName\n",
-			rep.Scanned)
+		fmt.Printf("argo-app-identity: PASS — %d file(s) scanned; Application and Environment CR "+
+			"identities derived only from naming.ArgoAppName / naming.EnvironmentCRName\n", rep.Scanned)
 		return 0
 	}
 	for _, f := range rep.Findings {

@@ -214,6 +214,17 @@ func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
 	return composeName("argo app name", "%s-%s-%s", teamSlug, projectSlug, envName)
 }
 
+// EnvironmentCRName returns the Environment CR resource name.
+// Format: "{tenantName}-{projectSlug}-{envName}"
+//
+// The project belongs in the identity because the CR's content already depends on it:
+// spec.project and spec.namespace.name are both project-scoped. While the name omitted
+// it, two projects of one tenant sharing an env name collapsed onto a single CR, and the
+// loser silently received no namespace, RBAC or NetworkPolicy at all (issue #273).
+func EnvironmentCRName(tenantName, projectSlug, envName string) (string, error) {
+	return composeName("environment CR name", "%s-%s-%s", tenantName, projectSlug, envName)
+}
+
 // CertSecretName returns the TLS certificate secret name for a hostname.
 // Format: "{sanitized-hostname}-tls"
 // The hostname is sanitized (dots become hyphens) and truncated to fit

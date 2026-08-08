@@ -14,6 +14,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // fakeArgoListDelete is a minimal stub for the two new Provisioner methods
@@ -542,5 +543,71 @@ func TestPruneExpectedIgualAoQueEnsureCria(t *testing.T) {
 		if !criados[name] {
 			t.Errorf("o prune espera %q, que ninguém cria — nome órfão no conjunto de proteção", name)
 		}
+	}
+}
+
+// --- #273: identidade do Environment CR ---------------------------------------------
+//
+// Medido em app-dev 2026-08-08: 5 das 9 tuplas (project, environment) declaradas não
+// tinham Environment CR nenhum, porque o nome do CR omitia o projeto e cada projeto
+// sobrescrevia o anterior via CreateOrUpdate. O projeto perdedor nunca recebia
+// namespace, RBAC nem NetworkPolicy — em silêncio.
+
+func TestBuildEnvironmentCRNames_ProjetosDistintosNaoColidem(t *testing.T) {
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+	)
+
+	nomes, err := buildEnvironmentCRNames(tenant)
+	if err != nil {
+		t.Fatalf("buildEnvironmentCRNames: %v", err)
+	}
+	if len(nomes) != 2 {
+		t.Errorf("dois projetos no mesmo ambiente precisam de 2 Environment CRs; veio %d %v — "+
+			"o projeto perdedor fica sem namespace, RBAC e NetworkPolicy (#273)", len(nomes), nomes)
+	}
+	if !nomes["tn-test-alpha-preview"] || !nomes["tn-test-beta-preview"] {
+		t.Errorf("formato canônico é {tenant}-{project}-{env}; veio %v", nomes)
+	}
+}
+
+func TestBuildEnvironmentCRNames_ProjectVazioFalhaAlto(t *testing.T) {
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
+	)
+	if _, err := buildEnvironmentCRNames(tenant); err == nil {
+		t.Fatal("Project vazio deve propagar erro, não gerar nome degenerado")
+	}
+}
+
+// TestEnvironmentCRDesiredIgualAoQueSeCria é o irmão de TestPruneExpectedIgualAoQueEnsureCria.
+// O conjunto `desired` protege Environment CRs da coleta de lixo, e deletar um Environment CR
+// faz o EnvironmentReconciler deletar o NAMESPACE no cluster de runtime
+// (environment_controller.go:325-335). Se `desired` divergir do que o loop cria, o operator
+// apaga os namespaces dos tenants. As duas leituras têm de vir da mesma função.
+func TestEnvironmentCRDesiredIgualAoQueSeCria(t *testing.T) {
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+	)
+
+	desired, err := buildEnvironmentCRNames(tenant)
+	if err != nil {
+		t.Fatalf("buildEnvironmentCRNames: %v", err)
+	}
+	for _, env := range tenant.Spec.Environments {
+		criado, nerr := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
+		if nerr != nil {
+			t.Fatalf("EnvironmentCRName: %v", nerr)
+		}
+		if !desired[criado] {
+			t.Errorf("o GC deletaria o Environment CR %q que o próprio loop cria — "+
+				"e deletar um Environment CR apaga o namespace no cluster de runtime", criado)
+		}
+	}
+	if len(desired) != len(tenant.Spec.Environments) {
+		t.Errorf("desired tem %d nomes para %d environments — sobra ou falta proteção",
+			len(desired), len(tenant.Spec.Environments))
 	}
 }

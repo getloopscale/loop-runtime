@@ -48,10 +48,9 @@ func b() {
 	}
 }
 
-// TestNaoAcusaNomeDeEnvironmentCR — tenant_controller.go monta o nome do Environment CR
-// com a mesma forma textual. É outro recurso e está fora do escopo deste gate; acusá-lo
-// treinaria o time a ignorar o gate.
-func TestNaoAcusaNomeDeEnvironmentCR(t *testing.T) {
+// TestDetectaIdentidadeDeEnvironmentCR — #273: o Environment CR tinha a mesma forma e uma
+// consequência pior (o projeto perdedor ficava sem namespace nenhum). O gate cobre os dois.
+func TestDetectaIdentidadeDeEnvironmentCR(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/tenant/tenant_controller.go", `package tenant
 func c() {
@@ -60,8 +59,24 @@ func c() {
 }
 `)
 	rep, _ := Check(root)
-	if !rep.OK() {
-		t.Errorf("nome de Environment CR não é nome de Application; findings=%+v", rep.Findings)
+	if len(rep.Findings) != 1 {
+		t.Errorf("a identidade do Environment CR também é escopo do gate (#273); findings=%+v",
+			rep.Findings)
+	}
+}
+
+// TestDetectaConjuntoDesiredDoGC — o `desired` do GC de Environment CRs decide o que
+// DELETAR, e deletar um Environment CR apaga o namespace do tenant no cluster de runtime.
+func TestDetectaConjuntoDesiredDoGC(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/tenant/tenant_controller.go", `package tenant
+func d() {
+	desired[fmt.Sprintf("%s-%s", tenant.Name, env.Name)] = true
+}
+`)
+	rep, _ := Check(root)
+	if rep.OK() {
+		t.Error("o conjunto que protege da deleção precisa vir da fonte canônica (#273)")
 	}
 }
 

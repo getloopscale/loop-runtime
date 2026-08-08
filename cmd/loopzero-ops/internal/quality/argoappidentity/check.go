@@ -5,8 +5,9 @@
 //
 // # WHAT IT GUARDS
 //
-// The name of an ArgoCD Application is derived in exactly one place —
-// pkg/naming.ArgoAppName(tenant, project, env) — and never rebuilt with fmt.Sprintf.
+// The identity of a per-environment resource is derived in exactly one place —
+// pkg/naming.ArgoAppName / pkg/naming.EnvironmentCRName, both (tenant, project, env) —
+// and never rebuilt with fmt.Sprintf.
 //
 // # WHY A GATE
 //
@@ -25,6 +26,13 @@
 // it had just created.
 //
 // A defect that a careful human undercounted twice is a defect that belongs to a gate.
+//
+// The Environment CR had the identical shape and a worse consequence (#273): its name
+// dropped the project while its content (spec.project, spec.namespace.name) kept it, so
+// two projects of one tenant collapsed onto a single CR through CreateOrUpdate and the
+// loser silently got no namespace, RBAC or NetworkPolicy at all. Measured on app-dev:
+// 5 of 9 declared (project, environment) tuples had no Environment CR. Deleting one of
+// those CRs deletes the tenant's namespace, so its `desired` set is a delete path too.
 //
 // # LIMITS, STATED HONESTLY
 //
@@ -53,15 +61,28 @@ var scanRoots = []string{
 var adHocRe = regexp.MustCompile(
 	`fmt\.Sprintf\(\s*"%s-%s"\s*,\s*[A-Za-z_][A-Za-z0-9_.]*\.(TenantID|Name)\s*,`)
 
-// appVarRe requires the result to land in something named like an app, so that
-// Environment CR names (envCRName) and release-scoped app names are not accused.
-var appVarRe = regexp.MustCompile(`(?i)\b(argo)?app(name)?\b\s*(:?=)`)
+// idVarRe requires the result to land in something named like a resource identity —
+// an ArgoCD Application or an Environment CR — so release-scoped app names are not
+// accused. Both identities dropped the project and both fed a delete path (#271, #273).
+var idVarRe = regexp.MustCompile(
+	`(?i)(\b(argo)?app(name)?\b\s*:?=|\benvcrname\b\s*:?=|\bdesired\[)`)
+
+// envCRRe tells the two identities apart so the remediation names the right function.
+var envCRRe = regexp.MustCompile(`(?i)(\benvcrname\b|\bdesired\[)`)
+
+const (
+	kindApplication   = "application"
+	kindEnvironmentCR = "environment-cr"
+)
 
 // Finding is one gate violation.
 type Finding struct {
 	File    string
 	Line    int
 	Snippet string
+	// Kind selects the remediation, because pointing at the wrong canonical function
+	// would just get the same defect rewritten a different way.
+	Kind string // "application" | "environment-cr"
 }
 
 // Report is the gate result.
@@ -75,10 +96,18 @@ func (r Report) OK() bool { return len(r.Findings) == 0 }
 
 // Message renders the remediation hint for a finding.
 func (f Finding) Message() string {
-	return fmt.Sprintf("%s:%d rebuilds an ArgoCD Application name by hand: %s\n"+
-		"    use naming.ArgoAppName(tenant, project, env) — omitting the project makes two "+
-		"projects of one tenant collide on a single Application (#271)",
-		f.File, f.Line, f.Snippet)
+	fn, consequence, issue := "naming.ArgoAppName",
+		"two projects of one tenant collide on a single Application with conflicting destinations",
+		"#271"
+	if f.Kind == kindEnvironmentCR {
+		fn, consequence, issue = "naming.EnvironmentCRName",
+			"two projects of one tenant collapse onto a single Environment CR and the loser "+
+				"silently gets no namespace, RBAC or NetworkPolicy",
+			"#273"
+	}
+	return fmt.Sprintf("%s:%d rebuilds a per-environment resource identity by hand: %s\n"+
+		"    use %s(tenant, project, env) — omitting the project makes %s (%s)",
+		f.File, f.Line, f.Snippet, fn, consequence, issue)
 }
 
 // Check runs the gate against repoRoot.
@@ -110,9 +139,13 @@ func Check(repoRoot string) (Report, error) {
 				if strings.HasPrefix(trimmed, "//") {
 					continue
 				}
-				if adHocRe.MatchString(line) && appVarRe.MatchString(line) {
+				if adHocRe.MatchString(line) && idVarRe.MatchString(line) {
+					kind := kindApplication
+					if envCRRe.MatchString(line) {
+						kind = kindEnvironmentCR
+					}
 					rep.Findings = append(rep.Findings, Finding{
-						File: rel, Line: i + 1, Snippet: trimmed,
+						File: rel, Line: i + 1, Snippet: trimmed, Kind: kind,
 					})
 				}
 			}
