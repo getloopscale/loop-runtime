@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/operatortest"
 )
@@ -1525,7 +1526,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 	Context("ArgoCD Application creation", func() {
 		It("should ensure one ArgoCD Application per environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				Eventually(func(g Gomega) {
 					fakeArgoCDProvider.Mu.Lock()
 					_, exists := fakeArgoCDProvider.Applications[appName]
@@ -1542,7 +1544,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 
-			appName := fmt.Sprintf("%s-production", tenantName)
+			appName, nerr := naming.ArgoAppName(tenantName, "default-project", "production")
+			Expect(nerr).NotTo(HaveOccurred())
 			fakeArgoCDProvider.Mu.Lock()
 			app := fakeArgoCDProvider.Applications[appName]
 			fakeArgoCDProvider.Mu.Unlock()
@@ -1552,7 +1555,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 
 		It("should set correct destination namespace per environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				expectedNS := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
 
 				fakeArgoCDProvider.Mu.Lock()
@@ -1564,25 +1568,30 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			}
 		})
 
-		It("should set correct path per environment (BLOCKER-3: scoped to env directory)", func() {
+		It("should set correct path per environment+project (BLOCKER-3 + #271: scoped to the project subtree)", func() {
 			// BLOCKER-3: Path is the environment name, not "." (root).
 			// This scopes each ArgoCD Application to only its environment's manifests,
 			// preventing cross-environment contamination.
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]
 				fakeArgoCDProvider.Mu.Unlock()
 
-				Expect(app.Path).To(Equal(env),
-					"ArgoCD Application %s should have path '%s' (env-scoped)", appName, env)
+				// #271: o path é {env}/{project}, casando com onde o pusher escreve os
+				// manifests (api/internal/gitops/gitea_pusher.go:136). Apontar para {env}
+				// sozinho fazia o App ler os manifests de todo projeto daquele ambiente.
+				Expect(app.Path).To(Equal(env+"/default-project"),
+					"ArgoCD Application %s should be scoped to its own project subtree", appName)
 			}
 		})
 
 		It("should set tenantID on each application", func() {
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]
@@ -1596,7 +1605,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			// The default WorkloadClusterURL is "https://kubernetes.default.svc" when not configured.
 			// This test verifies the reconciler uses its configured value rather than a hardcoded string.
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]
@@ -1608,7 +1618,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 		})
 
 		It("should set namespace to argocd", func() {
-			appName := fmt.Sprintf("%s-production", tenantName)
+			appName, nerr := naming.ArgoAppName(tenantName, "default-project", "production")
+			Expect(nerr).NotTo(HaveOccurred())
 
 			fakeArgoCDProvider.Mu.Lock()
 			app := fakeArgoCDProvider.Applications[appName]
@@ -1618,7 +1629,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 		})
 
 		It("should set targetRevision to main", func() {
-			appName := fmt.Sprintf("%s-production", tenantName)
+			appName, nerr := naming.ArgoAppName(tenantName, "default-project", "production")
+			Expect(nerr).NotTo(HaveOccurred())
 
 			fakeArgoCDProvider.Mu.Lock()
 			app := fakeArgoCDProvider.Applications[appName]

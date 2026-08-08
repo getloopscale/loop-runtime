@@ -126,7 +126,10 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build *db.Bui
 	//
 	// We trigger ArgoCD sync once here, then return immediately.
 	// The release stays in PENDING state until async activation.
-	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
+	argoAppName, nameErr := naming.ArgoAppName(build.TenantID, build.ProjectID, build.Environment)
+	if nameErr != nil {
+		return fmt.Errorf("argocd application name: %w", nameErr)
+	}
 	if err := c.triggerSyncWithRetry(ctx, argoAppName); err != nil {
 		// MEET-2026-04-04-029 P3: 404 (app not found) is recoverable — the TenantController
 		// may not have created the ArgoCD Application yet. Leave release in PENDING and let
@@ -190,9 +193,13 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req deploycon
 
 	// Trigger ArgoCD sync (best-effort).
 	// ArgoCD Application name is {tenantID}-{environment}, matching what the
-	// TenantController creates via EnsureApplication. NOT ProjectName.
+	// TenantController creates it via EnsureApplication; the identity is
+	// tenant + project + env, from naming.ArgoAppName (#271).
 	// See MEET-2026-03-27-012 for the bug report.
-	argoAppName := fmt.Sprintf("%s-%s", req.TenantID, req.Environment)
+	argoAppName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
+	if nameErr != nil {
+		return fmt.Errorf("argocd application name: %w", nameErr)
+	}
 	if syncErr := c.sync.TriggerSync(ctx, argoAppName); syncErr != nil {
 		return fmt.Errorf("container rollback: sync trigger failed: %w", syncErr)
 	}

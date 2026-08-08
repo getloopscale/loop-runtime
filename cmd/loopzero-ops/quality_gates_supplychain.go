@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/argoappidentity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartdefaulttags"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gomodauthorg"
 	"os"
@@ -325,6 +326,39 @@ func runGoModAuthOrg(args []string) int {
 	}
 	for _, f := range rep.Findings {
 		fmt.Fprintf(os.Stderr, "gomod-auth-org: FAIL %s — %s\n", f.File, f.Message)
+	}
+	return 1
+}
+
+// runArgoAppIdentity is the Go home for the argo-app-identity gate.
+//
+// Keeps the ArgoCD Application name derived in exactly one place —
+// pkg/naming.ArgoAppName(tenant, project, env). Ten sites across two modules rebuilt it
+// by hand as {tenant}-{env}, dropping the project, so two projects of one tenant in one
+// environment collided on a single Application with conflicting destinations (#271).
+//
+// Two of the ten were inside pruneOrphanPreviewApps, which DELETES every Application
+// outside the set it builds — and that delete cascades through the ArgoCD finalizer into
+// the tenant's workload. Renaming the emit side without them would have made the operator
+// destroy exactly what it had just created.
+func runArgoAppIdentity(args []string) int {
+	fs := flag.NewFlagSet("argo-app-identity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	rep, err := argoappidentity.Check(*root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "argo-app-identity: %v\n", err)
+		return 5
+	}
+	if rep.OK() {
+		fmt.Printf("argo-app-identity: PASS — %d file(s) scanned, Application name derived only from naming.ArgoAppName\n",
+			rep.Scanned)
+		return 0
+	}
+	for _, f := range rep.Findings {
+		fmt.Fprintf(os.Stderr, "argo-app-identity: FAIL %s\n", f.Message())
 	}
 	return 1
 }

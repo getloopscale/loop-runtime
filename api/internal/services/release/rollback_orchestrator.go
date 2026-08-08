@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
@@ -207,9 +208,15 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		if err != nil {
 			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
 		}
-		// MEET-2026-03-27-012 Phase 0.2 + 1.4: Fix app name (TenantID, not ProjectName)
-		// and do NOT swallow sync failure — a rollback that doesn't sync is a lie.
-		appName := fmt.Sprintf("%s-%s", req.TenantID, req.Environment)
+		// MEET-2026-03-27-012 Phase 0.2 + 1.4 fixed a name that used the project in
+		// place of the tenant. The canonical identity is tenant + project + env, via
+		// naming.ArgoAppName — the project belongs in the name, just not alone (#271).
+		// And do NOT swallow sync failure — a rollback that doesn't sync is a lie.
+		appName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
+		if nameErr != nil {
+			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
+				fmt.Errorf("rollback: argocd application name: %w", nameErr))
+		}
 		if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
 			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
 				fmt.Errorf("rollback: sync trigger failed for %s: %w", appName, syncErr))

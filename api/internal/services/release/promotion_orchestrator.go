@@ -295,7 +295,10 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	}
 
 	// Trigger ArgoCD sync — the sync callback will activate the release
-	appName := fmt.Sprintf("%s-%s", req.TenantID, req.ToEnv)
+	appName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.ToEnv)
+	if nameErr != nil {
+		return nil, fmt.Errorf("promote: argocd application name for %s: %w", req.ToEnv, nameErr)
+	}
 	if err := o.deps.Sync.TriggerSync(ctx, appName); err != nil {
 		logger.Error("promote: sync trigger failed — release will be activated by convergence loop",
 			"app_name", appName,

@@ -442,8 +442,10 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 	if terminatingSyncClient.getTerminateCalls() == 0 {
 		t.Error("expected TerminateOperation to be called on timeout")
 	}
-	if terminatingSyncClient.getTerminatedApp() != "acme-production" {
-		t.Errorf("expected TerminateOperation for 'acme-production', got %q", terminatingSyncClient.getTerminatedApp())
+	// #271: a identidade do Application é {tenant}-{project}-{env}; omitir o projeto
+	// fazia dois projetos do mesmo tenant colidirem num único objeto.
+	if terminatingSyncClient.getTerminatedApp() != "acme-my-app-production" {
+		t.Errorf("expected TerminateOperation for 'acme-my-app-production', got %q", terminatingSyncClient.getTerminatedApp())
 	}
 	// Release should be SYNC_FAILED
 	if releaseStore.getStatus("rel-stuck") != "SYNC_FAILED" {

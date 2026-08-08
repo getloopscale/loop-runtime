@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/processing"
+	"github.com/getloopscale/loopzero/pkg/naming"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
@@ -246,7 +247,13 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		// can proceed. Without this, the stuck operation persists and blocks all future syncs.
 		// Sprint B T1.1: TerminateOperation is now part of the SyncClient interface
 		// (was a duck-typed assertion pre-ADR D1).
-		argoApp := fmt.Sprintf("%s-%s", release.TenantID, release.Environment)
+		argoApp, nameErr := naming.ArgoAppName(release.TenantID, release.ProjectID, release.Environment)
+		if nameErr != nil {
+			r.logger.Error("release convergence: argocd application name",
+				"tenant", release.TenantID, "project", release.ProjectID,
+				"environment", release.Environment, "error", nameErr)
+			return
+		}
 		if termErr := r.sync_.TerminateOperation(ctx, argoApp); termErr != nil {
 			r.logger.Error("release convergence: failed to terminate stuck operation",
 				"app", argoApp, "error", termErr)
@@ -259,7 +266,15 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 	}
 
 	// Check ArgoCD status
-	argoAppName := fmt.Sprintf("%s-%s", release.TenantID, release.Environment)
+	argoAppName, nameErr := naming.ArgoAppName(release.TenantID, release.ProjectID, release.Environment)
+	if nameErr != nil {
+		// Syncing the wrong Application is worse than not syncing: fail loud and let the
+		// next pass retry once the release carries a project (rules/error-handling.md § 2).
+		r.logger.Error("release convergence: argocd application name",
+			"tenant", release.TenantID, "project", release.ProjectID,
+			"environment", release.Environment, "error", nameErr)
+		return
+	}
 
 	// Parse app specs to get deployed app names
 	var apps []db.BuildAppSpec
@@ -590,7 +605,13 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 	}
 
 	for _, rel := range releases {
-		argoAppName := fmt.Sprintf("%s-%s", rel.TenantID, rel.Environment)
+		argoAppName, nameErr := naming.ArgoAppName(rel.TenantID, rel.ProjectID, rel.Environment)
+		if nameErr != nil {
+			r.logger.Error("release convergence: argocd application name",
+				"tenant", rel.TenantID, "project", rel.ProjectID,
+				"environment", rel.Environment, "error", nameErr)
+			continue
+		}
 
 		// Parse app specs to filter out static apps (no ArgoCD resources)
 		var apps []db.BuildAppSpec

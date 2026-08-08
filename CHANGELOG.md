@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Dois projetos de um mesmo time no mesmo ambiente deixaram de disputar o mesmo registro de
+  deploy. A identidade do deploy omitia o projeto, então o segundo projeto sobrescrevia o
+  primeiro a cada ciclo, e cada um enxergava os arquivos de configuração do outro. Deploy,
+  promote, rollback e a limpeza automática de ambientes agora derivam essa identidade de um
+  único lugar (#271)
+
 - Sync e health dos deploys pararam de piscar como desconhecidos. O componente que mantém
   os deploys em dia reescrevia o registro de cada ambiente por inteiro e, ao fazer isso,
   apagava o estado que o motor de entrega acabara de calcular — que voltava segundos depois.
