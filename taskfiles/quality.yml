@@ -143,6 +143,10 @@ tasks:
       # Índice de topologia: qual chart roda em qual cluster, derivado dos helmfiles.
       # Wired, não só registrado — #255 encontrou 10 gates que existiam e nunca rodavam.
       - /tmp/loopzero-ops quality helm-topology-index
+      # A org que os arquivos de build AUTENTICAM tem de bater com a que os go.mod PEDEM.
+      # Divergiu duas vezes em dois dias (ci.yml, api/Dockerfile) e a segunda quebrou o build
+      # da imagem no merge para develop — com "not found", que parece repo inexistente.
+      - /tmp/loopzero-ops quality gomod-auth-org
       - /tmp/loopzero-ops quality corrections-txt-closed
       # Issue #255 — gates that were implemented, registered and unit-tested but
       # never actually run. Each of the nine below was executed on 2026-07-30 and
