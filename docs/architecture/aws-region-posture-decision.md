@@ -139,6 +139,84 @@ price failover at 2.23× its real cost.**
    clears both the base and the AZ-fragility (AZ ρ 1.34→0.97). Spread across ≥2 AZs. These are review
    fixes, not cost levers (small platform pods).
 
+
+## Re-medição com `maxPerCell = 5000` — 2026-08-07
+
+A correção no topo desta página anunciou que a simulação partia de um valor errado. O
+`capsim` foi **re-executado** com o valor real. Os comandos estão em § Reproduction; o
+`maxPerCell` é passado explicitamente porque o default da lib
+(`loopzero-capsim.mjs:18`) continua `500`.
+
+**A causa raiz está no próprio simulador**, e é literal — `loopzero-capsim.mjs:18`:
+
+```js
+maxPerCell: 500,   // placement/engine.go:91 — tenants per cell (EKS cluster)
+```
+
+Ele cita `engine.go:91`, que é o **fallback do construtor** para entrada `<= 0`, em vez de
+`config.go:497`, que é o default real entregue (`5000`). A nota em `loopzero-capsim.mjs:227`
+repete a premissa em prosa. **Corrigir a linha 18 é a correção de fonte**; até lá, todo uso
+do simulador precisa passar `maxPerCell` explicitamente.
+
+### O que a re-medição mostra — 50.000 tenants
+
+| `maxPerCell` | cells | custo/mês | score | gargalo no topo |
+|---:|---:|---:|---|---|
+| **500** *(premissa antiga)* | 100 | $76.656 | 32 / CRITICAL | `cell_count` ρ=1.56 |
+| 2000 *(Fase 1 proposta)* | 25 | $45.096 | 52 / AT_RISK | `bff` ρ=1.04 |
+| **5000** *(valor real)* | **10** | **$38.784** | **52 / AT_RISK** | `bff` ρ=1.04 |
+
+Os dois primeiros reproduzem exatamente os números originais desta página — o método está
+íntegro; o que estava errado era a premissa de entrada.
+
+**Três conclusões, e a terceira inverte a Fase 1:**
+
+1. **O gargalo `cell_count` não existe.** Com 5000 ele some da lista de achados. O topo passa
+   a ser `bff` (ρ=1.04) — que é *exatamente o estado final* que a Fase 1 prometia alcançar
+   (*"the `cell_count` bottleneck is resolved, BFF becomes the new top"*).
+2. **O score alvo já está realizado.** A Fase 1 prometia 32 → 52. O estado real **já é 52**,
+   sem nenhuma intervenção e sem *prefix delegation*.
+3. **Executar a Fase 1 pioraria o sistema.** Ir de 5000 para 2000 custa **+$6.312/mês**
+   ($38.784 → $45.096, +16%) e leva de 10 para 25 cells. Mesmo somando *prefix delegation*
+   ($42.836) fica **$4.052/mês acima** da base real.
+
+### A outra alavanca continua válida
+
+*Prefix delegation* não depende de `maxPerCell` e segue valendo:
+**$38.784 → $36.524/mês (−$2.260)**, destravando o teto de densidade de pods por ENI.
+
+### A decisão de posture SOBREVIVE à correção
+
+Re-executado com a base correta (50.000 tenants, `maxPerCell=5000`, 3 regiões):
+
+| Posture | custo/mês | blast radius | SLA | score | Δ vs single |
+|---|---:|---:|---:|---:|---:|
+| single | $38.784 | 100% | 95% | 52 | — |
+| **sharded** | $44.562 | 33% | 98,32% | 57 | **+$5.778** |
+| active-active | $85.289 | 0% | 99,98% | 57 | +$46.505 |
+
+**O custo de resiliência do *sharded* é +$5.778/mês — idêntico ao da simulação antiga.** Isso
+confirma empiricamente a afirmação original de que ele é *scale-insensitive*: o control plane
+por região é constante e não acompanha a contagem de tenants.
+
+O *active-active* fica muito mais barato do que se pensava (+$46.505 contra os +$121.925
+originais), porque há bem menos compute para replicar — mas continua ~8× o custo do
+*sharded* para o mesmo score de review.
+
+**Portanto:** a escolha de posture (*levers-first → sharded → defer active-active*) permanece
+válida. O que não sobrevive é a **Fase 1**, cuja alavanca principal já está aplicada e cuja
+execução literal seria um rebaixamento. Em termos relativos o *sharded* fica até mais atraente:
++$5.778 sobre uma base de $38.784 é **15%**, contra os 7,5% de uma base inflada.
+
+### Ações revisadas
+
+1. ~~**Fase 1 — elevar `maxPerCell` para ~2000**~~ — **cancelada.** Já está em 5000.
+2. **Corrigir `loopzero-capsim.mjs:18`** para ler `config.go:497`, e a nota da linha 227.
+3. **Manter a Fase 4** (tier de request): `bff` ρ=1.04 é agora o gargalo do topo, e não depende
+   de `maxPerCell`. BFF 6→7 réplicas resolve a saturação; 6→10 cobre também a perda de AZ.
+4. **Aplicar *prefix delegation*** (−$2.260/mês), independente do resto.
+5. **Posture *sharded* segue recomendada**, agora sobre números medidos com a premissa correta.
+
 ## Consequences
 
 - **Good:** −44% cost before any resilience spend; region resilience for +$5,778/mo (≈15% of the
