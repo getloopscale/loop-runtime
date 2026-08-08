@@ -128,7 +128,7 @@ Evidence verified during the 2026-07-01 cross-validation. Paths are relative to 
 - `infra/helm/velero/values-schedules.yaml` — 5 backup schedules (ADR D3), retention-differentiated, to S3
 
 ### 13 — View 12 (Multi-Cell Placement & Routing)
-- placement (once): `api/internal/placement/engine.go:77` (RoundRobinEngine, bin-packing, `maxPerCell=500`), `:61-70` (`pg_advisory_xact_lock` `PlacementLockID` + SERIALIZABLE)
+- placement (once): `api/internal/placement/engine.go:77` (RoundRobinEngine, bin-packing; `maxPerCell` **=5000** via `config.go:497` — o `500` em `engine.go:91` é o fallback para entrada `<= 0`, não o valor entregue), `:61-70` (`pg_advisory_xact_lock` `PlacementLockID` + SERIALIZABLE)
 - routing (many): `api/internal/placement/dynamic_router.go` (`Resolve` pure hash lookup; `:100-105` refuse-to-clear-on-0-cells invariant)
 - discovery: `api/internal/placement/k8s_cell_store.go:52` (`LoadCells` from ClusterCredential CRDs where `status.connected=true`; lookup by `spec.cellID`)
 - cells seeded: `api/internal/db/migrations/000006_cells.up.sql:22` (cell-default + cell-1 + cell-2; `tenants.cell_id` DEFAULT cell-default)
