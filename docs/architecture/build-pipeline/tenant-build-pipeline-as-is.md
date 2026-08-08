@@ -1,4 +1,6 @@
 ---
+title: "Tenant Build Pipeline AS-IS — 2026-05-27"
+generated: { by: process:tenant-build-pipeline-gaps-closure-plan-pre-implementation-snapshot, at: 2026-05-27 }
 name: tenant-build-pipeline-as-is
 description: AS-IS state of tenant build pipeline 2026-05-27 — covers BuildKit + cosign keyed signing + syft SBOM + push DOCR. Baseline for gaps closure plan.
 type: architecture
@@ -9,7 +11,7 @@ updated_by: tenant-build-pipeline-gaps-closure plan pre-implementation snapshot
 
 # Tenant Build Pipeline AS-IS — 2026-05-27
 
-> **Pre-plan baseline** for `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`. Captures the build pipeline state across all submodules before the 4 gaps closure.
+> **Pre-plan baseline** for [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](../../plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md). Captures the build pipeline state across all submodules before the 4 gaps closure.
 
 ## System Context
 
@@ -92,7 +94,7 @@ updated_by: tenant-build-pipeline-gaps-closure plan pre-implementation snapshot
   - GAP-1.b — 4 Prometheus alerts (sign_failure, cert_issuance, log_append, TUF expiry)
   - GAP-1.c — Chaos drill manifest cosign-fulcio-kill
   - GAP-1.d — OIDC issuer trust policy in ClusterImagePolicy keyless variant
-  - GAP-1.e — Offline TUF ceremony runbook (`docs/operations/tuf-root-ceremony.md`)
+  - GAP-1.e — Offline TUF ceremony runbook ([`docs/operations/tuf-root-ceremony.md`](../../operations/tuf-root-ceremony.md))
 
 ### GAP-2: SBOM-to-image attestation linking (MEDIUM, SLSA L3)
 - **Status:** SBOM emitted independently; signature emitted independently; NO `cosign attest --predicate` linking them cryptographically
@@ -107,7 +109,7 @@ updated_by: tenant-build-pipeline-gaps-closure plan pre-implementation snapshot
 ### GAP-4: OTel sampling policy não documentado (LOW)
 - **Status:** Argo workflow templates sem explicit OTel sampling config
 - **Engineering required:** Docs only
-- **Files affected:** New `docs/operations/build-pipeline-otel.md`
+- **Files affected:** New [`docs/operations/build-pipeline-otel.md`](../../operations/build-pipeline-otel.md)
 
 ## Invariants preserved post-plan
 
@@ -131,7 +133,7 @@ These MUST continue to hold:
 ## Related
 
 - M07 audit: `.claude/knowledge-base/audits/2026-05-26/07-build-pipeline.md` (§7 Status Update 2026-05-27)
-- Plan superseding: `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`
+- Plan superseding: [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](../../plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md)
 - PROPOSED diff (will be created post-implementation): `docs/architecture/build-pipeline/diff/post-gaps-closure.md`
-- Existing PROPOSED: `docs/architecture/build-pipeline/diff/keyless-active.md` (Cosign keyless cutover)
+- Existing PROPOSED: [`docs/architecture/build-pipeline/diff/keyless-active.md`](./diff/keyless-active.md) (Cosign keyless cutover)
 - ADRs: `2026-05-27-T2.2-offline-tuf-ceremony.md`

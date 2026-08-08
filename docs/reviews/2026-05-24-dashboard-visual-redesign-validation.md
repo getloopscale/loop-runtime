@@ -1,6 +1,11 @@
+---
+type: review
+title: "T-H Validation Report — Dashboard Visual Redesign"
+---
+
 # T-H Validation Report — Dashboard Visual Redesign
 
-> **Plan**: `docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2
+> **Plan**: [`docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md`](../plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md) v1.2
 > **Status**: Phase A-G complete. Phase H partial (T-H.2/3/4 done; T-H.1 sponsor-side smoke pending).
 > **Date**: 2026-05-24
 

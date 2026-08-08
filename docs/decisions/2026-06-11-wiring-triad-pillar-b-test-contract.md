@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR D5 — Wiring triad pillar-(b) test contract"
+---
+
 # ADR D5 — Wiring triad pillar-(b) test contract
 
 **Status:** Accepted

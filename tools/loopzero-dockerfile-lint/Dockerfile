@@ -9,7 +9,7 @@
 # pinned to specific patch matching api/operators/cloud Dockerfiles. Floating
 # 1.25-alpine resolved to whatever latest patch GHCR served on each build,
 # breaking SOURCE_DATE_EPOCH reproducibility.
-FROM golang:1.26.1-alpine3.22 AS build
+FROM golang:1.26.1-alpine3.22@sha256:07e91d24f6330432729082bb580983181809e0a48f0f38ecde26868d4568c6ac AS build
 
 WORKDIR /src
 COPY go.mod ./
@@ -19,7 +19,7 @@ ENV GOWORK=off
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-dockerfile-lint .
 
 # Minimal runtime — aligned to fleet's alpine pin (was 3.20, fleet uses 3.22).
-FROM alpine:3.22
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-dockerfile-lint"

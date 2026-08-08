@@ -285,5 +285,5 @@ k6/
 - [k6 Official](https://k6.io/docs/) — Load testing for engineering teams
 - [k6 Operator](https://github.com/grafana/k6-operator) — Distributed testing via CRD
 - [Coordinated Omission](https://redhatperf.github.io/post/coordinated-omission/) — Why open model matters
-- [SOTA Research](../../docs/technical/load-testing-sota.md) — Full competitive analysis
-- [Plan](../../docs/plans/load-testing-professional-plan.md) — Implementation plan
+- `SOTA Research` *(removido do versionamento)* — Full competitive analysis
+- `Plan` *(removido do versionamento)* — Implementation plan

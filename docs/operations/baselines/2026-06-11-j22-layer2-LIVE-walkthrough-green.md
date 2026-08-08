@@ -1,9 +1,14 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-11 J-22 Layer 2 Code-Review Fixes (LIVE walkthrough GREEN)"
+---
+
 # Steady-State Baseline — 2026-06-11 J-22 Layer 2 Code-Review Fixes (LIVE walkthrough GREEN)
 
 > Snapshot do estado do sistema APÓS sponsor LIVE walkthrough fechar a
 > chain end-to-end com verbatim "Confirmado" (2026-06-11 ~00:20).
-> Companion da `2026-06-10-j22-layer2-pre-fix.md` (bisect anchor) e
-> `2026-06-10-j22-layer2-post-fix.md` (engineering-side closure).
+> Companion da [`2026-06-10-j22-layer2-pre-fix.md`](./2026-06-10-j22-layer2-pre-fix.md) (bisect anchor) e
+> [`2026-06-10-j22-layer2-post-fix.md`](./2026-06-10-j22-layer2-post-fix.md) (engineering-side closure).
 >
 > Per `.claude/rules/steady-state-baseline.md` § Triggers — "Journey
 > delivery (J-22 closed engineering-side + LIVE-validated)" — MANDATORY.

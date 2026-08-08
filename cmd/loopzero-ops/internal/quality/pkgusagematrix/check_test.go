@@ -33,9 +33,13 @@ func setup(t *testing.T, files map[string]string) string {
 
 func TestListPkgDirs_FiltersToolsAndSorts(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "zzz"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "aaa"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "tools"), 0o755))
+	// Each candidate needs its own .go to be an importable package — a bare
+	// directory is not one (see hasOwnGoSource).
+	for _, name := range []string{"zzz", "aaa", "tools"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, name, "doc.go"), []byte("package "+name+"\n"), 0o600))
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(""), 0o600))
 
 	got, err := listPkgDirs(dir)
@@ -78,20 +82,20 @@ func TestFileContainsImport_MissingFile(t *testing.T) {
 
 func TestCountConsumers_AllCategoriesCounted(t *testing.T) {
 	root := setup(t, map[string]string{
-		"pkg/errors/errors.go":              "package errors\n",
-		"api/internal/foo.go":               `package foo
+		"pkg/errors/errors.go": "package errors\n",
+		"api/internal/foo.go": `package foo
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
-		"operators/internal/bar.go":         `package bar
+		"operators/internal/bar.go": `package bar
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
-		"cloud/main.go":                     `package main
+		"cloud/main.go": `package main
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
-		"cli/src/main.go":                   `package main
+		"cli/src/main.go": `package main
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
-		"cmd/loopzero-ops/main.go":              `package main
+		"cmd/loopzero-ops/main.go": `package main
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 	})
@@ -107,7 +111,7 @@ import "github.com/getloopscale/loopzero/pkg/errors"
 
 func TestCountConsumers_SelfImportsExcluded(t *testing.T) {
 	root := setup(t, map[string]string{
-		"pkg/errors/errors.go":      "package errors\n",
+		"pkg/errors/errors.go": "package errors\n",
 		"pkg/errors/errors_test.go": `package errors
 import _ "github.com/getloopscale/loopzero/pkg/errors"
 `,
@@ -130,10 +134,10 @@ func TestCountConsumers_NonGoFilesIgnored(t *testing.T) {
 
 func TestCountConsumers_VendorAndGitPruned(t *testing.T) {
 	root := setup(t, map[string]string{
-		"pkg/errors/errors.go":              "package errors\n",
-		"vendor/example.com/x.go":           `import "github.com/getloopscale/loopzero/pkg/errors"`,
-		".git/hooks/pre-commit.go":          `import "github.com/getloopscale/loopzero/pkg/errors"`,
-		"node_modules/x/y.go":               `import "github.com/getloopscale/loopzero/pkg/errors"`,
+		"pkg/errors/errors.go":     "package errors\n",
+		"vendor/example.com/x.go":  `import "github.com/getloopscale/loopzero/pkg/errors"`,
+		".git/hooks/pre-commit.go": `import "github.com/getloopscale/loopzero/pkg/errors"`,
+		"node_modules/x/y.go":      `import "github.com/getloopscale/loopzero/pkg/errors"`,
 	})
 	row, err := countConsumers(root, "errors")
 	require.NoError(t, err)
@@ -145,13 +149,15 @@ func TestCountConsumers_VendorAndGitPruned(t *testing.T) {
 // =============================================================================
 
 func TestRenderTable_HeaderAndRows(t *testing.T) {
-	now := time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC)
 	body := renderTable([]PkgRow{
 		{Name: "errors", Total: 5, API: 2, Operators: 2, Cloud: 0, CLI: 0, Others: 1},
 		{Name: "dead", Total: 0},
-	}, now)
+	})
 	assert.Contains(t, body, "## Real Usage Matrix")
-	assert.Contains(t, body, "em **2026-05-21**")
+	// The generation date used to live here and was compared, which turned the gate red every
+	// midnight with identical content. The body is now deterministic; git carries the date.
+	assert.NotRegexp(t, `\d{4}-\d{2}-\d{2}`, body,
+		"the compared body must not carry a date — that is what made the gate stale by clock")
 	assert.Contains(t, body, "| `pkg/errors` | 5 | 2 | 2 | 0 | 0 | 1 |")
 	assert.Contains(t, body, "dead code candidate")
 }
@@ -206,9 +212,9 @@ func TestResolvePath(t *testing.T) {
 func miniRepo(t *testing.T) string {
 	t.Helper()
 	return setup(t, map[string]string{
-		"pkg/errors/errors.go":         "package errors\n",
-		"pkg/naming/naming.go":         "package naming\n",
-		"api/internal/svc.go":          `package svc
+		"pkg/errors/errors.go": "package errors\n",
+		"pkg/naming/naming.go": "package naming\n",
+		"api/internal/svc.go": `package svc
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
 		"docs/technical/pkg/architecture.md": `# Pkg Architecture
@@ -309,4 +315,89 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "docs/technical/pkg/architecture.md", DefaultDocPath)
 	assert.Equal(t, "<!-- USAGE-MATRIX-START -->", StartMark)
 	assert.Equal(t, "<!-- USAGE-MATRIX-END -->", EndMark)
+}
+
+// A directory that only holds sub-packages is not an importable Go package, so
+// it must not appear in the matrix — and above all must not be labelled a dead
+// code candidate.
+//
+// Measured 2026-08-06: pkg/pulumi/ contains no .go of its own, only
+// pkg/pulumi/archive/, which cmd/loopzero-ops/pulumi_subcmd.go imports. The
+// generator counted imports of the exact path "pkg/pulumi", found none, and
+// published "0 ⚠️ dead code candidate" for live code. A generated document that
+// invites someone to delete a package in use is worse than no document.
+func TestListPkgDirsSkipsSubPackageOnlyDirs(t *testing.T) {
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "pkg")
+
+	// container/ holds only a sub-package; real/ has its own source.
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgRoot, "container", "archive"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgRoot, "container", "archive", "a.go"),
+		[]byte("package archive\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgRoot, "real"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgRoot, "real", "r.go"),
+		[]byte("package real\n"), 0o644))
+
+	dirs, err := listPkgDirs(pkgRoot)
+	require.NoError(t, err)
+	assert.Contains(t, dirs, "real")
+	assert.NotContains(t, dirs, "container",
+		"a directory with no .go of its own is not an importable package")
+}
+
+// A directory whose only .go files are tests is likewise not a package other
+// code can import.
+func TestListPkgDirsSkipsTestOnlyDirs(t *testing.T) {
+	root := t.TempDir()
+	pkgRoot := filepath.Join(root, "pkg")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgRoot, "testsonly"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgRoot, "testsonly", "x_test.go"),
+		[]byte("package testsonly\n"), 0o644))
+
+	dirs, err := listPkgDirs(pkgRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, dirs, "testsonly")
+}
+
+// TestFrescorIgnoraDataDeGeracao — a freshness gate must answer "does the content differ from
+// source?", not "was this generated today?".
+//
+// The generated header carries `now.Format("2006-01-02")` (check.go:215) and the whole rendered
+// document is compared byte-for-byte against the committed file (:344). So the gate turns red
+// every day at midnight with identical content. Measured on 2026-08-08: it blocked a push, and
+// the only fix was regenerating a file whose matrix had not changed — which trains the team to
+// regenerate without looking, and that is how a gate stops being read.
+func TestFrescorIgnoraDataDeGeracao(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "pkg", "alpha"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "pkg", "alpha", "a.go"),
+		[]byte("package alpha\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc := filepath.Join(root, "matrix.md")
+	// The gate splices into an existing doc; seed it with the markers.
+	if err := os.WriteFile(doc,
+		[]byte("# m\n\n"+StartMark+"\n"+EndMark+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ontem := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	hoje := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+
+	// Generate with yesterday's stamp…
+	if _, err := Run(Config{Root: root, DocPath: "matrix.md", Now: ontem}, ModeWrite); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// …and verify today, with the same pkg/ content underneath.
+	out, err := Run(Config{Root: root, DocPath: "matrix.md", Now: hoje}, ModeCheck)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !out.Pass {
+		raw, _ := os.ReadFile(doc) //nolint:gosec // test fixture
+		t.Errorf("crossing midnight must not make the doc stale — the matrix is identical.\n"+
+			"doc:\n%s", string(raw))
+	}
 }

@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Stripe Production Setup — Operator Runbook"
+---
+
 # Stripe Production Setup — Operator Runbook
 
 > **Last verified against Stripe dashboard:** 2026-06-24

@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M1 (calibrate + deepen)
+---
+
 # Review — LoopZero Bottleneck Simulator M1 (calibrate + deepen)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m1`.

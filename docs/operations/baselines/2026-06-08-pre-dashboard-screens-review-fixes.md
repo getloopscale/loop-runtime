@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-state baseline — 2026-06-08 pre dashboard-screens-review-fixes"
+---
+
 # Steady-state baseline — 2026-06-08 pre dashboard-screens-review-fixes
 
 > 4-layer baseline per `.claude/rules/steady-state-baseline.md` captured
@@ -25,7 +30,7 @@ this baseline commit: pending (T0.1 closes within this commit)
 ```
 
 The previous milestone baseline is
-`docs/operations/baselines/2026-06-07-pre-runtime-envs-m2-refactor.md`
+[`docs/operations/baselines/2026-06-07-pre-runtime-envs-m2-refactor.md`](./2026-06-07-pre-runtime-envs-m2-refactor.md)
 (M2 plan); intermediate work in `worktree-glowing-growing-babbage`
 delivered M2 engineering 22/22 + preview-as-category Phase 0-8 +
 J-23 batch (8 commits, 4-layer canonical flow proven LIVE).

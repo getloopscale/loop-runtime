@@ -1,4 +1,6 @@
 ---
+title: Offline TUF Root Ceremony
+generated: { by: process:tenant-build-pipeline-gaps-closure-plan-t1.5, at: 2026-05-27 }
 name: tuf-root-ceremony
 description: Offline TUF root signing ceremony procedure (3-of-5 quorum, hardware-backed, air-gapped) per ADR-2026-05-27-T2.2-OFFLINE-TUF. Mandatory before Sigstore activation OR annual rotation.
 type: operational-runbook
@@ -215,9 +217,9 @@ After all 5: root.json.signed has 5 signatures (3-of-5 quorum verifiable).
 ## References
 
 - ADR-2026-05-27-T2.2-OFFLINE-TUF: `.claude/knowledge-base/decisions/2026-05-27-T2.2-offline-tuf-ceremony.md`
-- Plan T1.5: `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`
+- Plan T1.5: [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](../plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md)
 - Sigstore canonical multi-party root signing: https://github.com/sigstore/root-signing
 - TUF specification: https://theupdateframework.io/specification/latest/
 - YubiKey FIPS docs: https://www.yubico.com/products/yubikey-fips/
 - SLSA L3 requirements: https://slsa.dev/spec/v1.0/levels#build-l3
-- Related runbooks: `docs/operations/sigstore-storage-model.md`
+- Related runbooks: [`docs/operations/sigstore-storage-model.md`](./sigstore-storage-model.md)

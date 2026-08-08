@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Shell Script Strategic Reduction (269 → <30) + External Tool Adoption (P0)"
+status: deprecated
+---
+
 # Plan: Shell Script Strategic Reduction (269 → <30) + External Tool Adoption (P0)
 
 > **Version 1.3** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
@@ -8,7 +14,7 @@
 > revelou-se sub-ótima — virava shell-wrap em Go sem ganho real).
 >
 > **v1.1 changelog (2026-05-22 post-edge-case-review):** incorporou 4 MUST FIX edges
-> identificados em `docs/plans/2026-05-22-shell-script-strategic-edge-case-review.md`:
+> identificados em [`docs/plans/2026-05-22-shell-script-strategic-edge-case-review.md`](./2026-05-22-shell-script-strategic-edge-case-review.md):
 > - EC-01: T2.3.a (master-sync helmfile para evitar race postgresql↔gitea)
 > - EC-02: T2.3.b (portable base64 — `kubectl -o go-template` em vez de `base64 -d`)
 > - EC-03: T1.1.a (dynamic-invocation grep antes de validation) + T0.1 test
@@ -353,7 +359,7 @@ VERIFY:  cd pkg && go test -coverprofile=/tmp/sa.cov ./quality/scriptsaudit/...
 #### Acceptance Criteria
 - [ ] `pkg/quality/scriptsaudit` package criado com ≥90% test coverage
 - [ ] `loopzero-ops quality scripts-audit` emite CSV com 269 entries + header
-- [ ] CSV reviewed por operador (HUMAN GATE — registrado em docs/scripts-audit/REVIEWED.md)
+- [ ] CSV reviewed por operador (HUMAN GATE — registrado em [docs/scripts-audit/REVIEWED.md](../../scripts-audit/REVIEWED.md))
 - [ ] Pass: `/code-audit` complexity check (≤10 cyclomatic)
 - [ ] Pass: `/code-audit` lint (zero warnings golangci-lint)
 - [ ] Pass: `/code-audit` size (file ≤500 LOC)
@@ -362,7 +368,7 @@ VERIFY:  cd pkg && go test -coverprofile=/tmp/sa.cov ./quality/scriptsaudit/...
 - [ ] Tasks 1-7 completos
 - [ ] Hermetic tests passam (`go test ./quality/scriptsaudit/...`)
 - [ ] Baseline CSV committado em `docs/scripts-audit/2026-05-22.csv`
-- [ ] `docs/scripts-audit/REVIEWED.md` documenta operador-review com timestamp
+- [ ] [`docs/scripts-audit/REVIEWED.md`](../../scripts-audit/REVIEWED.md) documenta operador-review com timestamp
 - [ ] CHANGELOG entry sob `### Added`
 
 ---
@@ -390,7 +396,7 @@ docs/scripts-audit/2026-05-22-dead-set-validated.csv — (NEW) validated subset
 ```
 
 #### Deep file dependency analysis
-- `docs/scripts-audit/2026-05-22-dead-set.md`: lista cada script proposto pra delete +
+- [`docs/scripts-audit/2026-05-22-dead-set.md`](../../scripts-audit/2026-05-22-dead-set.md): lista cada script proposto pra delete +
   evidência ("0 callers em [...]" + "last-mod > 90d") + decisão manual
 - `docs/scripts-audit/2026-05-22-dead-set-validated.csv`: subset confirmado para
   Phase 1.2 executar
@@ -890,7 +896,7 @@ docs/operations/dev-loop.md — (NEW) canonical guide
 1. CLAUDE.md: substituir `task setup; tilt up` por explicit "task setup creates platform,
    tilt up runs dev loop"
 2. README.md: substituir Getting Started com canonical flow
-3. Criar `dev-loop.md` com troubleshooting (port-forwards, common errors)
+3. Criar [`dev-loop.md`](../../operations/dev-loop.md) com troubleshooting (port-forwards, common errors)
 
 #### TDD
 ```
@@ -1462,7 +1468,7 @@ docs/operations/k8s-upgrade-runbook.md — (NEW) reference Pluto output em upgra
   output. Não substitui kubeconform/Polaris — complementa.
 - `pluto-scan.sh` opcional: pode rodar Action `FairwindsOps/pluto@<sha>` direto
   no workflow YAML, evitando criar script. **Decisão default:** Action direto (sem script).
-- `k8s-upgrade-runbook.md`: doc operator que `pluto detect-helm` deve rodar antes
+- [`k8s-upgrade-runbook.md`](../../operations/k8s-upgrade-runbook.md): doc operator que `pluto detect-helm` deve rodar antes
   de aceitar upgrade DOKS, e como interpretar output (FATAL vs DEPRECATED).
 
 #### Deep Dives
@@ -1512,7 +1518,7 @@ docs/operations/k8s-upgrade-runbook.md — (NEW) reference Pluto output em upgra
 2. SHA-pin Action via Renovate config (`.github/renovate.json` já trata)
 3. Criar fixture de teste: chart com `apiVersion: policy/v1beta1` (removed em v1.25)
    → Pluto detect → CI fails
-4. Criar `docs/operations/k8s-upgrade-runbook.md` (ou seção em runbook existente)
+4. Criar [`docs/operations/k8s-upgrade-runbook.md`](../../operations/k8s-upgrade-runbook.md) (ou seção em runbook existente)
    documentando workflow de upgrade DOKS com Pluto check
 5. Update `.claude/rules/shell-scripts-allowlist.md` (T6.1) **SE** decidir criar
    `infra/scripts/pluto-scan.sh` (default decision: NÃO criar — Action direto)
@@ -1588,7 +1594,7 @@ CLAUDE.md                                                   — update Stack/Hel
   (precisa Prometheus rodando primeiro pra scrape).
 - `monitoring/templates/opencost-podmonitor.yaml`: PodMonitor CR que faz Prometheus
   scrapear `:9003/metrics` do OpenCost pod.
-- `cost-attribution.md`: doc operador — como rodar `kubectl port-forward svc/opencost 9090`
+- [`cost-attribution.md`](../../operations/cost-attribution.md): doc operador — como rodar `kubectl port-forward svc/opencost 9090`
   pra ver dashboard local; como query `kubectl_pod_cost_per_hour` per `loopzero.io/tenant`.
 
 #### Deep Dives
@@ -1623,7 +1629,7 @@ CLAUDE.md                                                   — update Stack/Hel
 - OpenCost pod Running em mgmt cluster pós-sync
 - Prometheus scrapea `:9003/metrics` (200 OK, métricas presentes)
 - Query `sum(kubecost_namespace_cost_per_hour) by (namespace)` retorna dados pra todos os tenant namespaces
-- Cost per tenant visível na Grafana via dashboard novo (`docs/operations/cost-attribution.md` referencia)
+- Cost per tenant visível na Grafana via dashboard novo ([`docs/operations/cost-attribution.md`](../../operations/cost-attribution.md) referencia)
 
 **Edge cases:**
 - Tenant namespace recém-criado → OpenCost leva 1h pra ter dados meaningful (rolling window). DOC.
@@ -1636,7 +1642,7 @@ CLAUDE.md                                                   — update Stack/Hel
 3. Adicionar PodMonitor em `infra/helm/monitoring/templates/opencost-podmonitor.yaml`
 4. Validar local: `helmfile -e standalone-multi --selector name=opencost template` renderiza sem erro
 5. Validar local: instalar em k3d mgmt cluster, verificar pod Running + metrics endpoint
-6. Criar `docs/operations/cost-attribution.md` com query examples + Grafana dashboard ID
+6. Criar [`docs/operations/cost-attribution.md`](../../operations/cost-attribution.md) com query examples + Grafana dashboard ID
 7. Update README.md § Stack + § Helm Charts Inventory adicionando OpenCost
 8. Update CLAUDE.md § Stack (Platform Charts section) adicionando OpenCost
 9. Commit + push
@@ -1667,7 +1673,7 @@ VERIFY:  # Local validation:
 - [ ] Helmfile release adicionada com `needs:` correto
 - [ ] PodMonitor configurada
 - [ ] LIVE local: pod Running + métricas presentes em Prometheus
-- [ ] Operator runbook `docs/operations/cost-attribution.md` criado
+- [ ] Operator runbook [`docs/operations/cost-attribution.md`](../../operations/cost-attribution.md) criado
 - [ ] README.md + CLAUDE.md Stack tables atualizadas
 - [ ] Pass: schema validation (`task validate:helm-charts`)
 - [ ] Pass: kubeconform contra rendered template
@@ -1821,7 +1827,7 @@ REPROVADO em cross-validation bloqueia progression para dogfood.
 
 8. **Reinventar tool externa madura como gate Go interno.** **Antes** de implementar
    qualquer `pkg/quality/X` novo (Phase 6 cria 2; Phase 5 sugere "remaining pure-logic
-   gates"), verificar kubetools / CNCF landscape per **Rule 12** (`CLAUDE.md` + `README.md`
+   gates"), verificar kubetools / CNCF landscape per **Rule 12** (`CLAUDE.md` + [`README.md`](../../README.md)
    § Tool Inventory). Implementar Go gate apenas se:
    - (a) nenhuma tool externa madura cobre o caso (e.g., Pluto cobre deprecated-API;
      Kubescape cobre security posture; OpenCost cobre cost — não reimplementar);

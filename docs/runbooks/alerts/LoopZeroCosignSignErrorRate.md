@@ -1,3 +1,8 @@
+---
+type: runbook
+title: "Runbook: LoopZeroCosignSignErrorRate"
+---
+
 # Runbook: LoopZeroCosignSignErrorRate
 
 Alert from `prometheusrule-sigstore.yaml`. Fires when cosign sign

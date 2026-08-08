@@ -1,3 +1,8 @@
+---
+type: runbook
+title: "Runbook: LoopZeroReleaseAttestationRekorURLNullRate"
+---
+
 # Runbook: LoopZeroReleaseAttestationRekorURLNullRate
 
 Alert from `prometheusrule-sigstore.yaml`. Fires when more than **1%**

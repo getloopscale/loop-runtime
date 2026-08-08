@@ -1,10 +1,15 @@
+---
+type: handoff
+title: "Brief #5: 3 dashboard primitives that unblock measured Deep Review findings"
+---
+
 # Brief #5: 3 dashboard primitives that unblock measured Deep Review findings
 
 > **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
 > **Output:** 3 new primitives + tests + stories + barrel exports + subpath exports + shadcn registry entries.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-25.
-> **Priority:** MEDIUM — each primitive **closes a specific Deep Review finding** documented in `docs/reviews/2026-05-25-dashboard-deep-design-review.md` (42 findings, anchored to `docs/design/2026-05-25-loopzero-dashboard-design-system.md` v1.0). Ship when convenient — no blocker on consumer-side timeline.
-> **Companion to:** Brief #1 (`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`) + Brief #2 (`...gaps-brief-2.md`) + Brief #3 (`...gaps-brief-3.md`) + Brief #4 (`2026-05-24-loopzero-ui-subpath-tree-shaking-brief-4.md`).
+> **Priority:** MEDIUM — each primitive **closes a specific Deep Review finding** documented in [`docs/reviews/2026-05-25-dashboard-deep-design-review.md`](../reviews/2026-05-25-dashboard-deep-design-review.md) (42 findings, anchored to [`docs/design/2026-05-25-loopzero-dashboard-design-system.md`](../design/2026-05-25-loopzero-dashboard-design-system.md) v1.0). Ship when convenient — no blocker on consumer-side timeline.
+> **Companion to:** Brief #1 ([`2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md`](./2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md)) + Brief #2 (`...gaps-brief-2.md`) + Brief #3 (`...gaps-brief-3.md`) + Brief #4 ([`2026-05-24-loopzero-ui-subpath-tree-shaking-brief-4.md`](./2026-05-24-loopzero-ui-subpath-tree-shaking-brief-4.md)).
 > **Tracks:** Deep Review § 2.4 (Domains), § 2.12 (Verification), and CC-cross-cutting findings about boilerplate duplication across 13 dashboard pages.
 
 ---

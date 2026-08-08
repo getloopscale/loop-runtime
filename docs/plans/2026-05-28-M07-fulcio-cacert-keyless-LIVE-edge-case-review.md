@@ -1,7 +1,12 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-28-M07-fulcio-cacert-keyless-LIVE"
+---
+
 # Edge Case Review — 2026-05-28-M07-fulcio-cacert-keyless-LIVE
 
 **Data:** 2026-05-28
-**Plano:** docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md
+**Plano:** [docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md](./2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md)
 **Tasks analisadas:** 8 (T0.1, T1.1, T2.1, T3.1, T4.1, T5.1, T5.2, T5.3 + Final Smoke)
 **Edge cases encontrados:** 11 (MUST FIX: 5, SHOULD TEST: 4, DOCUMENT: 2)
 
@@ -55,7 +60,7 @@ Plan Phase 2 (`helm upgrade --reuse-values`) vai falhar com `Error: release: not
 - **Familia:** Integration / Boundary
 - **Cenário:** Sigstore stack tem 4+ componentes (fulcio + rekor + ctlog + trillian). Plan v1.0 menciona apenas Fulcio. Se Phase -1 install (correcting EC-1) só instala Fulcio, sign-image vai pegar 201 cert do Fulcio mas attest falha porque Rekor não existe + ctlog signing chain quebra.
 - **Impacto:** Phase 4 sign-image SUCCEEDED + attest FAILED ou cosign reject signing path inteiro porque CTLog endpoint não resolve.
-- **Fix sugerido:** Phase -1 explicit lista TODOS os componentes Sigstore + Trillian DB + TUF init. Reaproveitar plan derivado `2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` M2 Phase 7-13 (Pulumi up Sigstore) como pré-requisito documented. OU criar dependency declaration: "Pré-req: M2 Phase 7-13 do plan derivado executado primeiro".
+- **Fix sugerido:** Phase -1 explicit lista TODOS os componentes Sigstore + Trillian DB + TUF init. Reaproveitar plan derivado [`2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) M2 Phase 7-13 (Pulumi up Sigstore) como pré-requisito documented. OU criar dependency declaration: "Pré-req: M2 Phase 7-13 do plan derivado executado primeiro".
 
 ## SHOULD TEST
 

@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — post code-review remediation plan v1.2"
+---
+
 # Steady-State Baseline — post code-review remediation plan v1.2
 
 **Date:** 2026-06-11
@@ -55,7 +60,7 @@ and test-debt closures (no Helm release version bumps, no new
 deployments, no CRD changes that affect runtime topology).
 
 **Helm release baseline preserved:** the pre-remediation steady-state
-`docs/operations/baselines/2026-06-11-pre-code-review-remediation.md`
+[`docs/operations/baselines/2026-06-11-pre-code-review-remediation.md`](./2026-06-11-pre-code-review-remediation.md)
 (commit referenced T0.1) captured runtime state; no drift expected.
 
 ---
@@ -155,13 +160,13 @@ Engineering-side validation that DID run:
 
 Future regression: bisect against this baseline + the previous
 pre-remediation baseline
-`docs/operations/baselines/2026-06-11-pre-code-review-remediation.md`.
+[`docs/operations/baselines/2026-06-11-pre-code-review-remediation.md`](./2026-06-11-pre-code-review-remediation.md).
 The delta is ~30 commits across the 26 completed plan tasks above.
 
 ## Cross-references
 
 - Plan: `.claude/knowledge-base/plans/2026-06-11-code-review-remediation-147-findings-plan.md`
-- Pre-baseline: `docs/operations/baselines/2026-06-11-pre-code-review-remediation.md`
+- Pre-baseline: [`docs/operations/baselines/2026-06-11-pre-code-review-remediation.md`](./2026-06-11-pre-code-review-remediation.md)
 - Allowlist: `rules/code-review-allowlist.txt`
 - CI sunset gate: `.claude/scripts/check-allowlist-sunsets.py`
 - Baseline canonical rule: `.claude/rules/steady-state-baseline.md`

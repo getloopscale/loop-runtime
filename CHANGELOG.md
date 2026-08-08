@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Índice de topologia Helm gerado (`docs/architecture/helm-topology.md`): responde "em qual
+  cluster este chart roda?" sem abrir os helmfiles. 44 charts, com a natureza (nosso ou
+  configuração de terceiro), a versão fixada e — quando existe — a condição que faz a instalação
+  valer só em alguns ambientes. É derivado dos helmfiles, que são a fonte executável: uma segunda
+  cópia escrita à mão divergiria, que é o problema que os dois charts duplicados já causam. O gate
+  `helm-topology-index` reprova quando o índice sai de sincronia
+
+- Guardrail de deleção no cluster de gestão: `Application`, `AppProject`, `Tenant`,
+  `Environment`, `ClusterCredential` — **e as definições que os descrevem** — passam a ser
+  protegidos contra remoção por identidade não autorizada. Remover qualquer um deles aciona
+  a cascata que apaga também a infraestrutura que ele gerencia; remover a *definição* apaga
+  todas as instâncias de uma vez, sem que nenhuma regra por instância seja consultada — foi
+  essa a sequência do incidente que motivou a proteção. Até agora o cluster de gestão não
+  tinha **nenhuma** política de admissão: o chart que as carrega só era instalado no cluster
+  de execução, enquanto esses recursos vivem na gestão. Entra em modo de **aviso**, com
+  alerta e runbook; o bloqueio efetivo é uma etapa separada, condicionada a uma janela de
+  observação provar que nenhuma identidade legítima é afetada — ligar o bloqueio com o mapa
+  de identidades incompleto é como cinco namespaces ficaram presos em `Terminating` no
+  passado. Desligável por configuração, sem reconstruir imagem
+  (`.claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md`,
+  `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` D4)
+- Gate `vap-delete-guardrail`: reprova se a política sumir, se o interruptor for desligado
+  na gestão, se a lista de identidades isentas encolher a ponto de inverter a regra (uma
+  lista vazia faria a política negar **toda** remoção, inclusive a dos operadores), se as
+  isenções do coletor de lixo do Kubernetes forem removidas, ou se os dois charts que
+  carregam a política divergirem entre si
+
+- Gate `proxy-exposure` + hook de entrega. Todo `reverse_proxy` do edge
+  (`infra/local/Caddyfile`) precisa de uma linha em `infra/quality/proxy-exposure.txt` dizendo o que
+  deixa passar, classificada como `filtered` / `internal` / `reviewed` **com justificativa**. Um proxy
+  herda o contrato de resposta do upstream, então o que chega ao browser é invisível neste repositório
+  até alguém escrever — foi assim que `app-dev.loopzero.example/sessions/*` passou a devolver a sessão Ory
+  inteira, incluindo `devices[].ip_address` e `recovery_addresses`, que nenhum cliente lê (medido
+  contra `loopzero-cloud/dashboard/src`). 26 proxies declarados, 21ms. Um proxy novo sem linha reprova;
+  uma linha sem proxy correspondente também. O gate não prova que uma resposta é segura — só um probe
+  LIVE prova — mas garante que a superfície inteira foi classificada por alguém (#267)
+- Hook `PreToolUse` `delivery-gate.sh`: intercepta `git push` e bloqueia (exit 2) se
+  `task quality:gates` reprovar. Existe porque o `pre-push` do git não é versionado — só existe onde
+  alguém rodou `install-git-hooks.sh`, então não valia para o agente nem para um clone novo. Escopo
+  estreito (só `git push`, pula `--dry-run`) e sem flag de bypass (#267)
+
 - Gate `workflow-hygiene`: reprova antes do merge qualquer action de terceiro sem SHA fixo e qualquer
   `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
 - Guard de wiring de gates: todo gate registrado passa a exigir wiring em `taskfiles/quality.yml` ou
@@ -48,6 +89,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O novo canal do `test-deletion` vazava hermeticidade: um teste que fornecia `DiffOverride`
+  (modo hermético) ainda caía no `git log` real, então assim que um commit deste repo passou a
+  carregar o marcador, todo teste "deleção sem justificativa deve falhar" começou a passar. Pego
+  pelo próprio hook de entrega, no commit que introduziu o canal (#267)
+- Gate `test-deletion` só aceitava justificativa por PR body ou label — ambos fora do repositório.
+  O `pre-push` não tem nenhum dos dois, então uma deleção legítima não podia ser enviada, e os dois
+  são editáveis depois do fato. Passa a aceitar `Test deletion justification:` no corpo de um commit
+  do range: o único canal que viaja junto com a mudança que explica (#267)
+- 14 hooks e scripts do harness (`.claude/hooks/*`, `.claude/scripts/*`,
+  `.github/scripts/check-workflow-hygiene.sh`) nunca foram allowlistados — mesma lacuna já
+  documentada para `validate-command.sh`. `no-new-bash` reprovava em qualquer diff que os tocasse (#267)
+
+- As quatro entradas que permanecem no ledger passam a carregar a medição, para que o tamanho de
+  cada dívida esteja no registro em vez de implícito: `alert-runbooks` 33 alertas — e as URLs que os
+  alertas conformes já carregam retornam **404**, então o gate confere a presença da string, não a
+  existência do runbook; `migration-test-coverage` 42 migrations, com o gate checando apenas a
+  existência do arquivo (42 stubs o deixariam verde sem testar nada); `no-pulumi-inline-secrets`
+  9 segredos inline na camada DO/Pulumi que o re-platform AWS está aposentando;
+  `no-aes-remaining` o branch AES legado do dispatcher. Nenhuma foi fechada; todas ficaram nomeadas
+  com evidência (#267)
+- Três entradas do ledger de gates não-wired estavam classificadas por sintoma, não por causa, e a
+  reclassificação muda o que o registro diz sobre o repo: `security-context` não "sai 0 sem asseverar
+  nada" — sai 0 apenas em modo relatório; com `--gate` reprova em dois charts reais
+  (`argo-events`, `loopzero-ci-workflows`, ambos releases do build cluster). `template-compliance` e
+  `regression-test` não falham nem passam vazio: exigem contexto de PR (`--pr-body`, `PR_*`), como
+  `helm-diff-structural` exige `--base`. A categoria `vacuousGate` ficou sem nenhuma entrada (#267)
+- `.github/PULL_REQUEST_TEMPLATE.md` dizia "Template enforced by
+  `.github/workflows/template-compliance.yml`" — workflow que não existe desde que o GitHub Actions
+  deixou de ser o pipeline (2026-05-23). Passa a documentar como o gate é realmente invocado (#267)
+- Mais dois gates saem do ledger e um é deletado. `mock-budget` e `pkg-usage-matrix` estavam
+  rotulados como "excedem 25s" e medem 0,6s e 0,7s. `cli-bundle-size` foi **removido**: guardava
+  `cli/dist`, que saiu do repo com o CLI no M2, e reportava "PASS — cli/dist not present" para
+  sempre — documentar como vacuoso é dívida, deletar resolve. O inventário cai de 111 para 110 (#267)
+- A matriz de uso de `pkg/` publicava `pkg/pulumi | 0 ⚠️ dead code candidate` para código vivo: o
+  diretório só contém o subpacote `archive/`, que `cmd/loopzero-ops` importa. O gerador contava o path
+  exato e listava diretórios sem `.go` próprio. Um documento gerado que convida a apagar um pacote
+  em uso é pior que documento nenhum. A tabela também estava congelada em 2026-05-15, ainda com o
+  nome de módulo antigo (#267)
+- `check-allowlist-sunsets` falhava três horas por dia. As fixtures são geradas em Go com
+  `time.Now().UTC()` e avaliadas pelo script Python com `date.today()`, que é local: em qualquer
+  offset UTC negativo os dois discordam no fim do dia, e a fixture "today" era lida como futura.
+  Ambos passam a ler o mesmo relógio (#267)
+- Cinco gates saem do ledger de não-wired (#255) e passam a rodar de verdade em `quality:gates` —
+  cada um por ter o defeito corrigido, não por relaxamento:
+  `crd-semantic-diff` já passava e estava rotulado como falhando;
+  `stack-coverage` mantinha uma lista de 9 linguagens ao lado do `runtimeRegistry` e acusava 7
+  violações fantasma desde que o produto foi reduzido ao stack fixo (node + python) — agora deriva
+  as strategies do próprio registry, que se declara "single source of truth";
+  `base-image-digest` reprovava porque o grandfathering apontava para `golang:1.26.0` e o bump para
+  1.26.1 nunca foi acompanhado do pin — os 16 FROM foram pinados no digest do índice multi-arch e o
+  baseline de exceções ficou vazio;
+  `test-coverage-report` reportava 0.00% porque media `infra/tests/{unit,charts}`, pacotes só-de-teste
+  (`coverage: [no statements]`) — contra o código de produção mede 85.33%, e o piso subiu de 30% para 75%;
+  `skip-link` tinha baseline posicional (`file:LINE`), que qualquer edição acima de um skip invalidava:
+  145 entradas casavam quase nada e o gate reportava 189 falsos "NEW". A chave passou a ser arquivo +
+  texto do próprio skip (#267)
+- `base-image-digest` passava vacuamente quando rodado de outro diretório: todo Dockerfile caía no
+  ramo "missing tolerated" e o veredito era `PASS — 0 FROM directive(s)`. Passa a reprovar quando
+  nenhum arquivo é lido, e a lista deixou de citar três Dockerfiles que saíram do repo (#267)
+- Descrição do gate `skip-link` no registry dizia "accessibility skip-link presence in the dashboard";
+  ele valida `t.Skip`/`it.skip` sem issue URL. O ledger repetia o erro ("115 a11y violations") (#267)
+
+- Suíte `operators` deixa de ser flaky. Os specs de envtest liam um CR e o atualizavam sem retry,
+  correndo contra o reconcile do controller e perdendo no `resourceVersion` — 3 de 4 execuções
+  consecutivas de `internal/tenant` falhavam, cada uma num spec DIFERENTE, com
+  `409 Conflict`. Os 18 `Update` de asserção passam por `operatortest.UpdateWithRetry`, o mesmo
+  retry que o caminho de produção já usa. Dois specs corriam também com o estado que esperavam
+  (namespace lido antes do reconcile cria-lo) e agora aguardam. `DefaultTimeout` 30s → 60s.
+  Medido depois: 5/5 execuções verdes de `internal/tenant`, 2/2 do módulo inteiro (#267)
+- Docs canônicos da raiz (`README.md`, `CLAUDE.md`, `ROADMAP.md`, `GOVERNANCE.md`, `SECURITY.md`,
+  `PITCH.md`) restaurados após saírem na limpeza de docs — o próprio `[Unreleased]` acima os
+  descreve como reescritos e presentes. A ausência quebrava 6 testes de `cmd/loopzero-ops` que os usam
+  como âncora da raiz do repo ou verificam seu conteúdo (#267)
+- Gate `unhomed-logic` religado em `quality:gates`: fora desligado porque lia o allowlist ausente;
+  com ele restaurado, mede de novo (63 ≤ baseline 82). `no-aes-remaining` — que reprova por achado
+  real — passa a ser declarado no ledger de wiring em vez de sumir em silêncio, e o baseline do
+  oráculo registra a mudança. A dívida T10.3 segue aberta e agora está escrita (#267)
+- Gate `decisions-deletion` protegia `.claude/knowledge-base/{decisions,meetings,concepts/operations}`,
+  árvore que o corpus de governança deixou ao migrar para `docs/wiki/`. O guard passou a apontar para
+  árvore vazia — reprovando o próprio rename como se fossem 116 deleções não-supersedidas, e deixando
+  de proteger os artefatos onde eles de fato vivem. Paths repontados para `docs/wiki/`; teste novo
+  fixa que rename não é deleção (#267)
+- Quatro regras e um script consumidos por gates foram restaurados após terem saído junto com a
+  limpeza de docs: `shell-scripts-allowlist.md` (15 consumidores, base do gate `no-new-bash`),
+  `cleanroom-up-live-test-mandate.md`, `pre-release-governance.md`, `steady-state-baseline.md` e
+  `.claude/scripts/check-allowlist-sunsets.py`. Sem eles `k6-load-rigor` e `check-allowlist-sunsets`
+  reprovavam por arquivo ausente (#267)
+- `TestStripeSoTShape_PlanAndADRReferencesResolve` citava plano e ADR no caminho pré-migração,
+  reprovando `quality:gates` em `infra/tests/charts` (#267)
 - `trivy-scan` reportava erro de execução como achado de vulnerabilidade. `trivy fs --exit-code 1`
   gasta o mesmo código de saída em "vulnerabilidades encontradas" e "o scan não completou", então um
   HTTP 429 do Maven Central virava `trivy-scan: FAIL — found vulnerabilities` com zero
@@ -85,6 +215,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   vêm depois) em vez do de `cost_counters`. A suíte de `api/internal/db` volta ao verde (#241)
 
 ### Security
+
+- O consumidor do `/sessions/whoami` no edge deixou de existir: o dashboard passou a obter a
+  identidade pelo `POST /v1/auth/session/token`, que já validava o cookie contra o Ory no servidor
+  (`loopzero-cloud` eb81cb6). O proxy segue no Caddyfile por ordem de deploy — removê-lo antes do bundle
+  novo chegar ao dev-public quebraria o login do bundle que está lá. O registro
+  `infra/quality/proxy-exposure.txt` diz isso na linha correspondente, para que a remoção não fique
+  dependendo de alguém lembrar (#267)
+- Superfície do namespace `/sessions/` reduzida no edge. `handle /sessions/*` proxiava **todo** o
+  namespace de sessões do Kratos para a origem do dashboard — incluindo listar e revogar sessões —
+  quando os 6 pontos de chamada do dashboard usam apenas `/sessions/whoami` (medido contra
+  `loopzero-cloud/dashboard/src`). Passa a expor só `whoami`; o resto responde 404 explícito, não o HTML
+  do SPA (a forma do Red Team #66 que o gate `caddyfile-csp` previne). Logout não é afetado — vive
+  sob `/self-service/logout`.
+
+  Isto reduz a **superfície**, não o corpo: `whoami` continua devolvendo a sessão Ory inteira, com
+  `devices[].ip_address` e `recovery_addresses` que nenhum cliente lê. Filtrar o corpo exige um
+  módulo de reescrita de resposta no Caddy ou um endpoint no BFF — permanece aberto e está declarado
+  como tal em `infra/quality/proxy-exposure.txt` (#267)
+
+- As 22 CVEs CRITICAL/HIGH restantes que reprovavam `trivy-scan` foram zeradas — `trivy fs` sai limpo
+  nos 15 manifests do repo. Nos módulos Go: `kin-openapi` 0.140.0 → 0.144.0 (bypass de autenticação
+  fail-open, CRITICAL), `grpc-go` 1.80.0 → 1.82.1, `prometheus` 0.303.0 → 0.311.3 (vazamento de
+  client secret do Azure OAuth via config API) e `moby/spdystream` 0.5.0 → 0.5.1. Nos seis lockfiles
+  npm: `tar`, `shell-quote`, `@grpc/grpc-js`, `protobufjs`, `sigstore`, `brace-expansion`, `js-yaml`,
+  `ip-address`, `fast-uri`, `tmp` e `undici` — todas transitivas, resolvidas por refresh do lock. A
+  fixture e2e `dogfood-monorepo` sobe Next 14 → 16, React 18 → 19, NestJS 10 → 11 e Express 4.21 →
+  4.22, o que também elimina `postcss`, `sharp`, `multer`, `picomatch` e `path-to-regexp` (#267)
+- `golang.org/x/text` sobe de 0.37.0 para 0.39.0 nos 7 módulos que a declaravam (`api`, `pkg`,
+  `operators`, `operators/api`, `cmd/loopzero-ops`, `infra/scripts`, `infra/tests`): a versão anterior
+  permite negação de serviço via UTF-8 inválido (CVE-2026-56852, HIGH). Não desbloqueia
+  `task quality:gates` sozinha — restam 22 CVEs pré-existentes em dependências, inventariadas em
+  (#267)
 
 - `build-publish.yml`: os dois passos do cosign deixam de interpolar `${{ inputs.* }}` dentro de
   `run:` — os valores passam pelo `env:` do step, então nenhum conteúdo vindo do caller vira sintaxe

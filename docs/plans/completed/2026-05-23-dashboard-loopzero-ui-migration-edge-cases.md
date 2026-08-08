@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-23-dashboard-loopzero-ui-migration"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-23-dashboard-loopzero-ui-migration
 
 **Data:** 2026-05-23
-**Plano:** `docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md`
+**Plano:** [`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](./2026-05-23-dashboard-loopzero-ui-migration-plan.md)
 **Tasks analisadas:** 23 (T0.1-T0.3, T1.1-T1.4, T2.1-T2.3, T3.1-T3.5, T4.1-T4.5, T5.1-T5.3, T6.1-T6.6)
 **Edge cases encontrados:** 18 (MUST FIX: 8, SHOULD TEST: 7, DOCUMENT: 3)
 
@@ -201,6 +207,6 @@
 
 ### Próximo passo
 
-O plano principal (`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md`) deve ser **bumped para v1.1** com os 8 fixes incorporados antes de invocar `/implement` ou começar Phase 0. Esta revisão deveria ser citada no commit message do bump (`Co-discovered-by: /edge-case-plan EC-1 through EC-8`).
+O plano principal ([`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](./2026-05-23-dashboard-loopzero-ui-migration-plan.md)) deve ser **bumped para v1.1** com os 8 fixes incorporados antes de invocar `/implement` ou começar Phase 0. Esta revisão deveria ser citada no commit message do bump (`Co-discovered-by: /edge-case-plan EC-1 through EC-8`).
 
 A boa notícia: 3 dos 8 MUST FIX são bugs no próprio plano (EC-1, EC-2, EC-3) e foram pegos ANTES de qualquer linha de código ser escrita. Esse é exatamente o propósito do `/edge-case-plan`. Os 5 outros são edges reais da migração para uma dependência externa pré-release.

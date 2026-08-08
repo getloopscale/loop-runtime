@@ -82,7 +82,7 @@ jobs:
     timeout-minutes: 20
 
     env:
-      GOPRIVATE: github.com/getloopscale/*
+      GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
 
     steps:
       # DOIS checkouts, e o segundo nao e' opcional.
@@ -114,9 +114,12 @@ jobs:
       # este repo. O acesso vem de uma DEPLOY KEY read-only registrada nele
       # (id 158891596), com a chave privada em GOMOD_SSH_KEY.
       #
-      # O import path em go.mod continua `github.com/getloopscale/loopzero-contracts`:
-      # o redirect do GitHub resolve, e reescrever o path seria uma mudanca de
-      # modulo em cascata por uma transferencia que o proprio GitHub absorve.
+      # ATUALIZADO 2026-08-07: o import path NAO continua mais em `getloopscale`.
+      # O commit f813b367 (2026-08-06) reescreveu api/go.mod e pkg/go.mod para
+      # `github.com/getloopscale/loopzero-contracts v0.4.0`, revertendo a premissa acima —
+      # mas este workflow ficou em `getloopscale` e passou a nao encontrar a versao,
+      # falhando com "pkg/go.mod nao declara loopzero-contracts". O ultimo run verde foi
+      # 2026-07-31; toda a esteira ficou bloqueada desde a migracao.
       #
       # Por que deploy key e nao PAT: a necessidade e' `Contents: read` em UM
       # repositorio. Um PAT de conta alcanca tudo que a conta alcanca; a deploy
@@ -149,7 +152,8 @@ jobs:
           # go/git buscam o modulo por HTTPS; reescrever para SSH e' o que faz a
           # deploy key ser usada.
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
-          git ls-remote git@github.com:getloopscale/loopzero-contracts.git refs/tags/v0.3.0 >/dev/null
+          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
+          git ls-remote git@github.com:getloopscale/loopzero-contracts.git >/dev/null
           echo "deploy key OK — loopzero-contracts acessivel."
 
       # QUAL versao de loopzero-contracts fazer checkout — derivada do `go.mod`, nunca

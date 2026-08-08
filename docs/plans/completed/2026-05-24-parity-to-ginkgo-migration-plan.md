@@ -1,6 +1,12 @@
+---
+type: plan
+title: "Plan: Track B — Parity Scripts → Ginkgo Specs"
+status: deprecated
+---
+
 # Plan: Track B — Parity Scripts → Ginkgo Specs
 
-> **Version 1.0** — Migrate the ~26 `infra/tests/parity/` LIVE prod-parity validation scripts to Ginkgo specs in `infra/tests/e2e/` (the existing, maintained test home), re-pointing the regression matrix, and deleting the bash only after the parity suite passes LIVE with output parity. This is **Track B of the Script Minimization Program** (`2026-05-24-script-minimization-program-plan.md`) — the largest clean yield (~20 scripts) at the lowest architectural risk, so it runs FIRST. Starts after the program Phase 0 T0.1 (script-count gate) lands.
+> **Version 1.0** — Migrate the ~26 `infra/tests/parity/` LIVE prod-parity validation scripts to Ginkgo specs in `infra/tests/e2e/` (the existing, maintained test home), re-pointing the regression matrix, and deleting the bash only after the parity suite passes LIVE with output parity. This is **Track B of the Script Minimization Program** ([`2026-05-24-script-minimization-program-plan.md`](./2026-05-24-script-minimization-program-plan.md)) — the largest clean yield (~20 scripts) at the lowest architectural risk, so it runs FIRST. Starts after the program Phase 0 T0.1 (script-count gate) lands.
 
 ## Context
 
@@ -10,7 +16,7 @@
 - **Audits:** `audit-regression-matrix.sh` (matrix-integrity gate), `audit-golden-test.sh`, `audit-argocd-drift.sh`.
 - `validate-matrix.sh` — master matrix runner.
 
-**Why migrate:** these are unwired-or-operator-invoked bash that the team's strategy (`2026-05-22-shell-script-strategic-plan` D5) wants as Ginkgo (`MIGRATE-GINKGO` disposition). The Ginkgo e2e suite (`infra/tests/e2e/journey_*.go`, validated 128/0 on 2026-05-24) is the maintained home with real assertions, JUnit output, and the `LOOPZERO_E2E` gate. Several are referenced as verification tokens in `docs/runbooks/bootstrap-regression-matrix.md` (the `audit-regression-matrix` gate blocked deleting `cell2-canary-stage1.sh` / `audit-argocd-drift.sh` — they must be re-pointed, not orphaned).
+**Why migrate:** these are unwired-or-operator-invoked bash that the team's strategy (`2026-05-22-shell-script-strategic-plan` D5) wants as Ginkgo (`MIGRATE-GINKGO` disposition). The Ginkgo e2e suite (`infra/tests/e2e/journey_*.go`, validated 128/0 on 2026-05-24) is the maintained home with real assertions, JUnit output, and the `LOOPZERO_E2E` gate. Several are referenced as verification tokens in [`docs/runbooks/bootstrap-regression-matrix.md`](../../runbooks/bootstrap-regression-matrix.md) (the `audit-regression-matrix` gate blocked deleting `cell2-canary-stage1.sh` / `audit-argocd-drift.sh` — they must be re-pointed, not orphaned).
 
 **Constraint:** `audit-regression-matrix.sh` is itself the matrix-integrity GATE — it cannot be naively migrated to Ginkgo without the matrix-token resolution logic moving too. It is the LAST item in this track and may become a Go gate (`loopzero-ops quality regression-matrix`) rather than a Ginkgo spec.
 
@@ -299,7 +305,7 @@ VERIFY:  LOOPZERO_E2E=1 ginkgo --label-filter=parity + audit-regression-matrix e
 ### TB5.1 — audit-regression-matrix.sh → loopzero-ops quality regression-matrix
 
 #### Objective
-Migrate the matrix-integrity gate (every verification token in `bootstrap-regression-matrix.md` resolves in the repo) to a `pkg/quality/regressionmatrix` Go gate + `loopzero-ops` subcommand, wired into `task quality:gates`. MUST be last so all token re-points (B1–B4) are done and it stays GREEN.
+Migrate the matrix-integrity gate (every verification token in [`bootstrap-regression-matrix.md`](../../runbooks/bootstrap-regression-matrix.md) resolves in the repo) to a `pkg/quality/regressionmatrix` Go gate + `loopzero-ops` subcommand, wired into `task quality:gates`. MUST be last so all token re-points (B1–B4) are done and it stays GREEN.
 
 #### Evidence
 `audit-regression-matrix.sh` is pure file-parsing (read the matrix MD, extract tokens, check each resolves). Pure-logic → Go gate (joins the `loopzero-ops quality` family), not a Ginkgo spec (no LIVE behavior). It currently exits 2 (pre-existing-RED on some token) — the migration must reproduce the SAME verdict (faithful port, per `925e34c0` precedent), then the pre-existing failures are a separate fix.

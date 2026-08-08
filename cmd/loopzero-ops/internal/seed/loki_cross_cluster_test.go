@@ -45,11 +45,22 @@ func buildClientCtorFor(name string, k KubeClient) func(string) (KubeClient, err
 }
 
 func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
-	// Stub docker network so Layer 3 can resolve the build-server IP.
+	// Stub docker network so Layer 3 can resolve the stable address.
+	//
+	// O GATEWAY passou a ser stubado aqui por duas razoes, e a segunda so apareceu
+	// ao rodar: (a) a Layer 3 deixou de gravar IP de container (loopzero-workspace#23
+	// item 2), entao e' o gateway que ela consulta; (b) sem o stub, este teste
+	// chamava `docker network inspect` DE VERDADE e passou a depender da maquina —
+	// mediu `10.0.5.1`, o gateway real deste host. Um teste de unidade que alcanca o
+	// daemon do Docker e' nao-deterministico por construcao.
 	origNet := dockerNetworkFn
-	defer func() { dockerNetworkFn = origNet }()
+	origGw := dockerGatewayFn
+	defer func() { dockerNetworkFn = origNet; dockerGatewayFn = origGw }()
 	dockerNetworkFn = func(network, container string) (string, error) {
 		return "172.20.0.99", nil
+	}
+	dockerGatewayFn = func(network string) (string, error) {
+		return "172.20.0.1", nil
 	}
 
 	// Build-cluster fake client — Promtail Secret with a stale URL + loki Service + DS.
@@ -116,13 +127,19 @@ func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
 		t.Errorf("Loki Service type = %s, want NodePort", lokiSvc.Spec.Type)
 	}
 
-	// Assert Layer 3: loopzero-api LOKI_URL env upserted to build IP + NodePort.
+	// Assert Layer 3: loopzero-api LOKI_URL env upserted to GATEWAY + NodePort.
+	//
+	// Este assert dizia `172.20.0.99` — o IP do CONTAINER. Ele nao estava errado por
+	// descuido: travava fielmente o comportamento de entao, que era o defeito do
+	// loopzero-workspace#23 item 2. Trocar o alvo aqui e' a mudanca de contrato, nao um
+	// ajuste de teste: o endereco estavel e' o gateway da rede (declarado no IPAM)
+	// mais a porta publicada no serverlb, nunca um IP distribuido por DHCP.
 	env, err := getDeploymentContainerEnv(context.Background(), mgmtC, "loopzero-system", "loopzero-api", lokiLoopZeroAPILokiURLEnvVar)
 	if err != nil {
 		t.Fatalf("getDeploymentContainerEnv: %v", err)
 	}
-	if !strings.HasPrefix(env, "http://172.20.0.99:") {
-		t.Errorf("LOKI_URL = %q, want prefix http://172.20.0.99:", env)
+	if !strings.HasPrefix(env, "http://172.20.0.1:") {
+		t.Errorf("LOKI_URL = %q, want prefix http://172.20.0.1: (gateway, nao IP de container)", env)
 	}
 }
 

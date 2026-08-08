@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M1 (calibrate + deepen)
+---
+
 # Plan — LoopZero Bottleneck Simulator M1 (calibrate + deepen)
 
 > Slug: `loopzero-bottleneck-simulator-m1`. Builds on M0 (`loopzero-capsim.mjs`). FAANG-level, no fabrication.

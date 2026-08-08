@@ -1,3 +1,8 @@
+---
+type: technical-note
+title: Shared Packages Architecture
+---
+
 # Shared Packages Architecture
 
 ## Escopo
@@ -29,24 +34,26 @@ Elas existem para centralizar contratos que precisam permanecer iguais em múlti
 
 ## Real Usage Matrix
 
-Tabela gerada via grep de `import "github.com/getloopscale/loopzero/pkg/X"` em **2026-05-15**.
-Atualizar via `task pkg:usage-matrix:write` (script: `infra/scripts/pkg-usage-matrix.sh`).
+Tabela gerada via grep de `import "github.com/getloopscale/loopzero/pkg/X"`.
+Atualizar via `task pkg:usage-matrix:write` (script: `loopzero-ops quality pkg-usage-matrix --write`).
 CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).
 
 | Pacote | Total imports | api/internal | operators/internal | cloud | cli | Outros |
 |---|---:|---:|---:|---:|---:|---:|
-| `pkg/circuitbreaker` | 7 | 0 | 4 | 0 | 0 | 3 |
-| `pkg/conditions` | 2 | 0 | 2 | 0 | 0 | 0 |
-| `pkg/correlation` | 7 | 2 | 1 | 0 | 0 | 4 |
-| `pkg/enforcement` | 15 | 8 | 0 | 3 | 0 | 4 |
-| `pkg/errors` | 74 | 68 | 0 | 0 | 0 | 6 |
-| `pkg/healthcheck` | 4 | 0 | 0 | 0 | 0 | 4 |
-| `pkg/id` | 5 | 5 | 0 | 0 | 0 | 0 |
-| `pkg/jwt` | 6 | 2 | 0 | 3 | 0 | 1 |
-| `pkg/logging` | 10 | 3 | 0 | 0 | 0 | 7 |
-| `pkg/naming` | 13 | 5 | 8 | 0 | 0 | 0 |
-| `pkg/serviceauth` | 6 | 2 | 0 | 2 | 0 | 2 |
-| `pkg/statemachine` | 56 | 33 | 10 | 0 | 0 | 13 |
+| `pkg/circuitbreaker` | 6 | 0 | 4 | 0 | 0 | 2 |
+| `pkg/conditions` | 3 | 0 | 2 | 0 | 0 | 1 |
+| `pkg/correlation` | 14 | 2 | 8 | 0 | 0 | 4 |
+| `pkg/domain` | 9 | 7 | 2 | 0 | 0 | 0 |
+| `pkg/enforcement` | 15 | 9 | 0 | 0 | 0 | 6 |
+| `pkg/errors` | 107 | 79 | 0 | 0 | 0 | 28 |
+| `pkg/events` | 5 | 5 | 0 | 0 | 0 | 0 |
+| `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
+| `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
+| `pkg/logging` | 11 | 3 | 0 | 0 | 0 | 8 |
+| `pkg/naming` | 26 | 17 | 7 | 0 | 0 | 2 |
+| `pkg/shellrun` | 4 | 0 | 0 | 0 | 0 | 4 |
+| `pkg/statemachine` | 57 | 31 | 10 | 0 | 0 | 16 |
+| `pkg/vault` | 4 | 1 | 0 | 0 | 0 | 3 |
 
 <!-- USAGE-MATRIX-END -->
 

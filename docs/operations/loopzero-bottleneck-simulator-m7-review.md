@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M7 (quantify the request tier)
+---
+
 # Review — LoopZero Bottleneck Simulator M7 (quantify the request tier)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m7`.
@@ -46,5 +51,5 @@ BFF at 8-9); **Engine 8→11** clears base + AZ-fragility. These are review (ρ)
 - `loopzero-capsim.test.mjs` — **48 tests** (+3 M7: alias, request-tier resolution, review clearing).
 - `loopzero-capsim-mcp/{server.mjs, server.test.mjs}` — schema + **9 integration tests** (both params passthrough-proven).
 - `loopzero-bottleneck-simulator.html` — Engine API replicas slider.
-- `docs/architecture/aws-region-posture-decision.md` — Phase 4 quantified.
+- [`docs/architecture/aws-region-posture-decision.md`](../architecture/aws-region-posture-decision.md) — Phase 4 quantified.
 - `loopzero-bottleneck-simulator-m7-{plan,review}.md`.

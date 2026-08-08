@@ -1,9 +1,14 @@
+---
+type: handoff
+title: "Brief: Add 4 PaaS-shape primitives to @loopzero/ui"
+---
+
 # Brief: Add 4 PaaS-shape primitives to @loopzero/ui
 
 > **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent running in the `loopzero-ui` repo).
 > **Output:** 4 new primitives + tests + stories + barrel export, following existing `@loopzero/ui` conventions.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
-> **Tracking:** companion plan `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` (v1.1).
+> **Tracking:** companion plan [`loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](../plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md) (v1.1).
 
 ---
 
@@ -463,7 +468,7 @@ The following were considered but **NOT included** in this brief — open separa
 
 ## Cross-reference
 
-- Consumer plan: `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1
+- Consumer plan: [`loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md`](../plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md) v1.1
 - Consumer mockup: `loopzero/cloud/dashboard/design/loopzero_overview_dashboard_mockup.html`
 - Library README: `loopzero-ui/README.md` § Quality Gates (1.123 tests passing, 126 Ladle stories, axe-validated)
 - Library voice: `loopzero-ui/CLAUDE.md` § Voice and Tone

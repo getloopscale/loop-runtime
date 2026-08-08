@@ -1,8 +1,13 @@
+---
+type: decision
+title: "Evaluations: External Tooling — Deep Review 2026-05-21 Phase 8"
+---
+
 # Evaluations: External Tooling — Deep Review 2026-05-21 Phase 8
 
 **Date:** 2026-05-21
 **Status:** Recommendations recorded; adoption deferred to per-tool sponsor decision
-**Plan:** `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T8.1–T8.4
+**Plan:** [`docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`](../plans/completed/2026-05-21-deep-review-remediation-plan.md) T8.1–T8.4
 
 ## Context
 
@@ -104,5 +109,5 @@ Deep review v2 (`.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-cr
 ## References
 
 - Deep review v2: `.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md` § "External tools — concrete adoption recommendations"
-- Naming Conventions ADR: `docs/decisions/2026-05-21-naming-conventions-adr.md`
-- Plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T8.1–T8.4
+- Naming Conventions ADR: [`docs/decisions/2026-05-21-naming-conventions-adr.md`](./2026-05-21-naming-conventions-adr.md)
+- Plan: [`docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`](../plans/completed/2026-05-21-deep-review-remediation-plan.md) T8.1–T8.4

@@ -98,7 +98,8 @@ func TestCheck_BaselineGrandfathers(t *testing.T) {
 	writeFile(t, filepath.Join(root, "legacy_test.go"),
 		"package a\nfunc TestX(t *testing.T) {\n  t.Skip(\"old\")\n}\n")
 	baseline := filepath.Join(root, "baseline.txt")
-	writeFile(t, baseline, "# grandfathered\nlegacy_test.go:3\n")
+	// Key = relpath TAB normalized skip line (not relpath:LINE — see baselineKey).
+	writeFile(t, baseline, "# grandfathered\nlegacy_test.go\tt.Skip(\"old\")\n")
 	o, err := Check(Config{TargetDir: root, BaselineFile: baseline})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -163,5 +164,62 @@ func TestParseBaseline(t *testing.T) {
 	}
 	if len(keys) != 2 {
 		t.Errorf("expected 2 keys, got %d: %v", len(keys), keys)
+	}
+}
+
+// A baselined skip that MOVES because unrelated lines were added above it must
+// stay grandfathered. Keying the baseline on relpath:LINE makes every edit
+// above a skip re-report it as new: measured 2026-08-06, the 145-entry baseline
+// was matching almost nothing and the gate reported 189 "NEW" skips, most of
+// them the same conditional environment skips it had already accepted.
+func TestBaselineSurvivesLineShift(t *testing.T) {
+	root := t.TempDir()
+	src := "package a\nfunc TestX(t *testing.T) {\n  t.Skip(\"needs a cluster\")\n}\n"
+	writeFile(t, filepath.Join(root, "a_test.go"), src)
+
+	first, err := Check(Config{TargetDir: root, IgnoreBaseline: true})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(first.NewViolations) != 1 {
+		t.Fatalf("expected the skip to be reported once, got %v", first.NewViolations)
+	}
+
+	// Freeze it, then push it down with an unrelated comment.
+	baselineFile := filepath.Join(root, "baseline.txt")
+	writeFile(t, baselineFile, first.Keys[0]+"\n")
+	writeFile(t, filepath.Join(root, "a_test.go"),
+		"package a\n\n// an unrelated comment added above\nfunc TestX(t *testing.T) {\n  t.Skip(\"needs a cluster\")\n}\n")
+
+	second, err := Check(Config{TargetDir: root, BaselineFile: baselineFile})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(second.NewViolations) != 0 {
+		t.Errorf("a baselined skip that only moved must stay grandfathered, got %v", second.NewViolations)
+	}
+}
+
+// Changing the skip's own text is a different skip, and must be reported.
+// Otherwise the content key would grandfather anything in the same file.
+func TestBaselineDoesNotCoverAChangedSkip(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a_test.go"),
+		"package a\nfunc TestX(t *testing.T) {\n  t.Skip(\"needs a cluster\")\n}\n")
+	first, err := Check(Config{TargetDir: root, IgnoreBaseline: true})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	baselineFile := filepath.Join(root, "baseline.txt")
+	writeFile(t, baselineFile, first.Keys[0]+"\n")
+
+	writeFile(t, filepath.Join(root, "a_test.go"),
+		"package a\nfunc TestX(t *testing.T) {\n  t.Skip(\"disabled while we rewrite it\")\n}\n")
+	second, err := Check(Config{TargetDir: root, BaselineFile: baselineFile})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(second.NewViolations) != 1 {
+		t.Errorf("a skip whose reason changed is a new skip; got %v", second.NewViolations)
 	}
 }

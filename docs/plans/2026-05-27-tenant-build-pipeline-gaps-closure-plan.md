@@ -1,3 +1,8 @@
+---
+type: plan
+title: "Plan: Tenant Build Pipeline — Gaps Closure (M07 → 3.9 ceiling)"
+---
+
 # Plan: Tenant Build Pipeline — Gaps Closure (M07 → 3.9 ceiling)
 
 > **Version 1.1** — Fecha 4 gaps actionable do M07 audit 2026-05-26 (Build Pipeline) por meio de engineering deliverables remaining: cosign keyless infrastructure activation (5 sub-deliverables), SBOM-to-image attestation linking (SLSA L3), Harbor mirror observability, OTel sampling docs. Outcome: M07 maturity sobe de 3.4 → ~3.9 (teto ADR D3 cap por M11 #25 string-aliases globally intractable). Critical-path real é GAP-1 (cosign keyless deadline 2026-08-10 ticking).
@@ -6,7 +11,7 @@
 
 ### v1.1 (2026-05-27, post-edge-case-review)
 
-Absorbed 9 MUST FIX from external `/edge-case-plan` review (`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md`):
+Absorbed 9 MUST FIX from external `/edge-case-plan` review ([`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md)):
 
 - **EC-NEW-1** T1.2: `fulcio_cert_issuance_duration` → `fulcio_cert_issuance_duration_seconds` (Prometheus naming convention)
 - **EC-NEW-2** T1.2: New sub-task T1.2.b — emit `tuf_root_expiry_timestamp` via CronJob (no orphan metric)
@@ -165,7 +170,7 @@ infra/helm/admission-policies/templates/sigstore-storage-alerts.yaml (NEW) — P
 ```
 
 #### Deep file dependency analysis
-- `docs/operations/sigstore-storage-model.md` — new file, references Sigstore component Helm release defaults from `sigstore.ts:HELM_VERSION = "0.7.16"`
+- [`docs/operations/sigstore-storage-model.md`](../operations/sigstore-storage-model.md) — new file, references Sigstore component Helm release defaults from `sigstore.ts:HELM_VERSION = "0.7.16"`
 - `infra/helm/admission-policies/templates/sigstore-storage-alerts.yaml` — new template; appended to existing alert chart (alongside `policy-controller-alerts.yaml`)
 
 #### Deep Dives
@@ -175,7 +180,7 @@ infra/helm/admission-policies/templates/sigstore-storage-alerts.yaml (NEW) — P
 - **Compaction script:** Bash script in `infra/scripts/security/rekor-archive-old-entries.sh` (~50 LOC).
 
 #### Tasks
-1. Write `sigstore-storage-model.md` with formula, retention strategy, compaction script reference
+1. Write [`sigstore-storage-model.md`](../operations/sigstore-storage-model.md) with formula, retention strategy, compaction script reference
 2. Create `sigstore-storage-alerts.yaml` PrometheusRule with 2 alerts (80% warn, 95% critical)
 3. Create compaction script stub (operator implements details post-activation)
 4. Hermetic render test
@@ -428,7 +433,7 @@ VERIFY:  helm template + diff between chart systems
 Operator can execute offline TUF ceremony without code-diving or asking engineers.
 
 #### Evidence
-ADR-2026-05-27-T2.2-OFFLINE-TUF § "Engineering deliverables #9": "Offline TUF ceremony runbook — `docs/operations/tuf-root-ceremony.md` (multi-party + hardware-backed + air-gapped procedure)."
+ADR-2026-05-27-T2.2-OFFLINE-TUF § "Engineering deliverables #9": "Offline TUF ceremony runbook — [`docs/operations/tuf-root-ceremony.md`](../operations/tuf-root-ceremony.md) (multi-party + hardware-backed + air-gapped procedure)."
 
 #### Files to edit
 ```
@@ -674,7 +679,7 @@ VERIFY:  cd api && go test ./internal/argo/... -run TestHarborMirror
 
 **Objective:** Build pipeline OTel sampling explicit documented.
 
-### T4.1 — `docs/operations/build-pipeline-otel.md`
+### T4.1 — [`docs/operations/build-pipeline-otel.md`](../operations/build-pipeline-otel.md)
 
 #### Objective
 Operator understands sampling policy + escape hatch + cost implications.
@@ -789,7 +794,7 @@ LOOPZERO_E2E=1 task e2e:journey
 | 1.e | TUF ceremony runbook | T1.5 | 7-section operator procedure |
 | 2 | SBOM-to-image attestation linking (v1.1 DAG fix) | T2.1+T2.2+T2.3 | cosignAttestTemplate + DAG dep on sign AND syft + activeDeadlineSeconds |
 | 3 | Harbor mirror failures silent (v1.1 Pushgateway-TTL + timeouts) | T3.1 | Exit handler + curl --max-time + Pushgateway-with-TTL |
-| 4 | OTel sampling not documented (v1.1 head-only) | T4.1 | docs/operations/build-pipeline-otel.md, head-based 10% + FORCE_TRACE |
+| 4 | OTel sampling not documented (v1.1 head-only) | T4.1 | [docs/operations/build-pipeline-otel.md](../operations/build-pipeline-otel.md), head-based 10% + FORCE_TRACE |
 
 **Coverage: 9/9 gaps covered (100%)** (was 8, added T1.2.b TUF emitter sub-task)
 
@@ -808,7 +813,7 @@ LOOPZERO_E2E=1 task e2e:journey
 
 ## Edge Case Review (inline)
 
-> **v1.1 status:** External `/edge-case-plan` review (`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md`) identified 9 MUST FIX + 3 SHOULD TEST + 3 DOCUMENT beyond this inline section. All 9 MUST FIX **ABSORBED** into v1.1 (this file). SHOULD TEST + DOCUMENT items integrated below.
+> **v1.1 status:** External `/edge-case-plan` review ([`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md)) identified 9 MUST FIX + 3 SHOULD TEST + 3 DOCUMENT beyond this inline section. All 9 MUST FIX **ABSORBED** into v1.1 (this file). SHOULD TEST + DOCUMENT items integrated below.
 
 ### MUST FIX absorbed inline (v1.0 — 3 items)
 
@@ -865,11 +870,11 @@ LOOPZERO_E2E=1 task e2e:journey
 ## References
 
 - M07 audit § 7 Status Update 2026-05-27: `.claude/knowledge-base/audits/2026-05-26/07-build-pipeline.md`
-- AS-IS snapshot: `docs/architecture/build-pipeline/tenant-build-pipeline-as-is.md`
+- AS-IS snapshot: [`docs/architecture/build-pipeline/tenant-build-pipeline-as-is.md`](../architecture/build-pipeline/tenant-build-pipeline-as-is.md)
 - ADR-2026-05-27-T2.2-OFFLINE-TUF: `.claude/knowledge-base/decisions/2026-05-27-T2.2-offline-tuf-ceremony.md`
 - MEET batch sponsor approvals: `.claude/knowledge-base/meetings/MEET-2026-05-27-batch-sponsor-approvals.md`
 - Sigstore Pulumi component: `infra/pulumi-platform/src/services/sigstore.ts`
-- Roadmap: `docs/strategy/roadmap-macro-2026-05-27.md` R1
+- Roadmap: [`docs/strategy/roadmap-macro-2026-05-27.md`](../strategy/roadmap-macro-2026-05-27.md) R1
 - SLSA spec: https://slsa.dev/spec/v1.0/
 - in-toto spec: https://in-toto.io/
 - Sigstore multi-party root signing: https://github.com/sigstore/root-signing

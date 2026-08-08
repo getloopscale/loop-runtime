@@ -1,6 +1,11 @@
+---
+type: handoff
+title: "Dashboard Journeys — Ground-Truth Status (2026-07-03)"
+---
+
 # Dashboard Journeys — Ground-Truth Status (2026-07-03)
 
-Corrects the stale `2026-06-05-dashboard-vercel-like-integration-roadmap.md` progress
+Corrects the stale [`2026-06-05-dashboard-vercel-like-integration-roadmap.md`](./2026-06-05-dashboard-vercel-like-integration-roadmap.md) progress
 table with **grep-verified** current state (Unbreakable Rule 12: grep, not memory) and
 records the 2026-07-03 delivery session. The month-old roadmap listed several journeys
 as "pending" that are in fact DONE — trusting it would have re-implemented shipped work.

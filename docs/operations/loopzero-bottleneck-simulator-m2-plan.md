@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M2 (AI Design Review via MCP)
+---
+
 # Plan — LoopZero Bottleneck Simulator M2 (AI Design Review via MCP)
 
 > Slug: `loopzero-bottleneck-simulator-m2`. Builds on M0/M1 engine. FAANG-level, no fabrication.

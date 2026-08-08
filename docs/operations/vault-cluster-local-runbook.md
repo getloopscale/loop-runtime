@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Vault Cluster Local Runbook (loopzero-vault k3d)
+---
+
 # Vault Cluster Local Runbook (loopzero-vault k3d)
 
 **Owner**: Platform Security

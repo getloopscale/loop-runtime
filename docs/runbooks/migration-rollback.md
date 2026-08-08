@@ -1,3 +1,8 @@
+---
+type: runbook
+title: "Runbook: Database Migration Safety & Rollback"
+---
+
 # Runbook: Database Migration Safety & Rollback
 
 > Scope: the API-owned migration set in `api/internal/db/migrations/` (the cloud

@@ -1,6 +1,12 @@
+---
+type: plan
+title: "Plan: Deep Review Remediation — Naming + Credentials + Toolchain"
+status: deprecated
+---
+
 # Plan: Deep Review Remediation — Naming + Credentials + Toolchain
 
-> **Version 1.1** (edge-case review pass — 5 MUST FIX absorbed from `2026-05-21-deep-review-remediation-edge-cases.md`: EC-01 extended T1.3 to 11 files, EC-02 added empty-token fail-fast to T1.2, EC-03 extended exempt scope in T6.1, EC-04 made T7.5 alias mandatory, EC-05 added factual namespace verification pre-condition to T3.5). Comprehensive remediation of the 2026-05-21 file-by-file deep review (`/home/paulo/loopzero/.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md`) across 376 reviewed files. The review identified **7 PROBLEM workflows, 10 PROBLEM scripts, 3 PROBLEM Pulumi/Helm artifacts, 1 unexecutable skill (`drill-test`), 10 confirmed false-positives, 33 distinct credentials with no SoT, 18 charts without `values.schema.json`, 10 hardcoded `loopzero-dev-password` instances, 8 honor-system rules that look enforced, and Pulumi DSN exports leaking secrets in plaintext**. This plan ships 8 phases (T0 quick-wins → T7 naming sweep) totaling ~52 tasks across ~80h of engineering work, lifting weighted system grade from **2.6/4.0 → ~3.5/4.0**. Each phase is independently committable; T0 is sponsor-direct quick-wins; T6 introduces CI hooks that prevent regression of the entire class of anti-patterns. Outcome: a system that is **honest** (no advisory gates pretending to enforce), **safe** (no plaintext secrets in Pulumi outputs, no hardcoded dev passwords reaching prod manifests), and **easy to manage** (single SoT for credentials, schema validation everywhere, skill docs matching code).
+> **Version 1.1** (edge-case review pass — 5 MUST FIX absorbed from [`2026-05-21-deep-review-remediation-edge-cases.md`](./2026-05-21-deep-review-remediation-edge-cases.md): EC-01 extended T1.3 to 11 files, EC-02 added empty-token fail-fast to T1.2, EC-03 extended exempt scope in T6.1, EC-04 made T7.5 alias mandatory, EC-05 added factual namespace verification pre-condition to T3.5). Comprehensive remediation of the 2026-05-21 file-by-file deep review (`/home/paulo/loopzero/.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md`) across 376 reviewed files. The review identified **7 PROBLEM workflows, 10 PROBLEM scripts, 3 PROBLEM Pulumi/Helm artifacts, 1 unexecutable skill (`drill-test`), 10 confirmed false-positives, 33 distinct credentials with no SoT, 18 charts without `values.schema.json`, 10 hardcoded `loopzero-dev-password` instances, 8 honor-system rules that look enforced, and Pulumi DSN exports leaking secrets in plaintext**. This plan ships 8 phases (T0 quick-wins → T7 naming sweep) totaling ~52 tasks across ~80h of engineering work, lifting weighted system grade from **2.6/4.0 → ~3.5/4.0**. Each phase is independently committable; T0 is sponsor-direct quick-wins; T6 introduces CI hooks that prevent regression of the entire class of anti-patterns. Outcome: a system that is **honest** (no advisory gates pretending to enforce), **safe** (no plaintext secrets in Pulumi outputs, no hardcoded dev passwords reaching prod manifests), and **easy to manage** (single SoT for credentials, schema validation everywhere, skill docs matching code).
 
 ## Context
 
@@ -34,7 +40,7 @@ The 2026-05-21 user-triggered `/goal` audit produced an exhaustive file-by-file 
 1. 7 PROBLEM workflows → renamed/rewritten/deleted (verified via filename + content scan)
 2. 16 state-writing scripts → `--dry-run` flag supported (verified via `--dry-run` invocation test)
 3. ~110 scripts missing `set -euo pipefail` → all add it (verified via grep gate in CI)
-4. 33 credentials → single `docs/operations/credentials-required.md` SoT (verified via hermetic test that asserts every Secret in code is listed)
+4. 33 credentials → single [`docs/operations/credentials-required.md`](../../operations/credentials-required.md) SoT (verified via hermetic test that asserts every Secret in code is listed)
 5. 10× `loopzero-dev-password` literal occurrences → 0 (verified via render-time gate: `helm template … | grep loopzero-dev-password` must return empty)
 6. 18 charts missing `values.schema.json` → all 18 have schemas (verified via `find infra/helm -name Chart.yaml -exec dirname {} \; | xargs -I{} test -f {}/values.schema.json`)
 7. drill DSN exports → wrapped in `pulumi.secret()` (verified via `pulumi stack output --json | jq` showing `[secret]` masking)
@@ -43,9 +49,9 @@ The 2026-05-21 user-triggered `/goal` audit produced an exhaustive file-by-file 
 
 ## ADRs
 
-- **D1 — Single credentials SoT lives in `docs/operations/credentials-required.md`, NOT in the knowledge-base.**
+- **D1 — Single credentials SoT lives in [`docs/operations/credentials-required.md`](../../operations/credentials-required.md), NOT in the knowledge-base.**
   - **Rationale:** Operators read `docs/` first; `.claude/knowledge-base/` is internal AI context. Choosing `docs/operations/` makes the file user-visible. Alternative considered (rejected): nest under `.claude/knowledge-base/concepts/operations/` — rejected because operators don't naturally browse the knowledge-base.
-  - **Consequences:** Enables hermetic test (`docs/operations/credentials-required.md` MUST list every Secret created by scripts). Constrains future credential additions to require a doc update before merge.
+  - **Consequences:** Enables hermetic test ([`docs/operations/credentials-required.md`](../../operations/credentials-required.md) MUST list every Secret created by scripts). Constrains future credential additions to require a doc update before merge.
 
 - **D2 — Hardcoded `loopzero-dev-password` literals are removed via fail-fast template variables.**
   - **Rationale:** Comments like `# LOCAL DEV ONLY` are hope, not enforcement. Each chart with the literal becomes `required` in values.schema.json + helm template fails if undefined. Standalone install gets an explicit user prompt; production gets Pulumi-injected value. Alternative considered (rejected): keep literal + add render-time grep gate — rejected because gate can be bypassed.
@@ -377,7 +383,7 @@ CLAUDE.md — workflow count (says 40, real is 51)
 ### T1.1 — Create credentials SoT document
 
 #### Objective
-A new `docs/operations/credentials-required.md` enumerates all 33 credentials with: name, source (Pulumi config / generate-secrets / generate-runtime-secrets / generate-build-secrets / bootstrap-oauth-clients / chart hardcoded), consumers (file:line × N), rotation cadence, and standalone/drill/prod applicability.
+A new [`docs/operations/credentials-required.md`](../../operations/credentials-required.md) enumerates all 33 credentials with: name, source (Pulumi config / generate-secrets / generate-runtime-secrets / generate-build-secrets / bootstrap-oauth-clients / chart hardcoded), consumers (file:line × N), rotation cadence, and standalone/drill/prod applicability.
 
 #### Files to edit
 ```

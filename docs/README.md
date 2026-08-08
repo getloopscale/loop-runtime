@@ -1,3 +1,8 @@
+---
+type: overview
+title: "LoopZero docs — index"
+---
+
 # LoopZero docs — index
 
 Entry point for `docs/`. Start here rather than browsing the tree: about two thirds of the files
@@ -11,8 +16,9 @@ not as current instruction.
 | **Audit trail** | `plans/completed/`, `operations/baselines/`, `meetings/records/`, `operations/findings/`, `operations/evidence/`, `reviews/`, `handoff/` | History. Preserved indefinitely per `.claude/rules/audit-trail-rotation.md`. Never edited to match present state. |
 | **In-flight plans** | `plans/` (not `completed/`) | Work agreed but not finished. |
 
-Engineering contracts that govern *how* work is done live in `.claude/rules/`, not here — see the
-"Locked rules" table in [`../CLAUDE.md`](../CLAUDE.md).
+Engineering contracts that govern *how* work is done are no longer versioned in this repo — the
+`.claude/` tree (rules, skills, agents) and the root `CLAUDE.md` were removed in the docs cleanup
+(`1c941b91`). The operator's global contract (`~/.claude/CLAUDE.md`) is the surviving source.
 
 ---
 
@@ -78,6 +84,7 @@ answer an operational question.
 - [`operations/cell-drain-runbook.md`](operations/cell-drain-runbook.md) · [`operations/production-canary-stage4-runbook.md`](operations/production-canary-stage4-runbook.md) · [`operations/production-canary-stage5-runbook.md`](operations/production-canary-stage5-runbook.md)
 - [`operations/crd-conversion-procedure.md`](operations/crd-conversion-procedure.md) · [`operations/pv-rebind-runbook.md`](operations/pv-rebind-runbook.md)
 - [`runbooks/migration-rollback.md`](runbooks/migration-rollback.md) · [`runbooks/bootstrap-regression-matrix.md`](runbooks/bootstrap-regression-matrix.md)
+- [`runbooks/vap-delete-guardrail.md`](runbooks/vap-delete-guardrail.md) — the mgmt-cluster delete guardrail: which identities are exempt and why, what to do when it fires, and the rollback (a values toggle, no rebuild). Read the failure mode at the end before touching it: a `DELETE` policy that stops exempting the cluster GC deadlocks namespaces in `Terminating`.
 - [`runbooks/alerts/`](runbooks/alerts/) — one runbook per Prometheus alert
 
 **Cost, observability, billing**

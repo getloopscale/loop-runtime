@@ -21,17 +21,37 @@ import (
 	"strings"
 )
 
-// strategyTypes maps a language key to its Go strategy type name.
-var strategyTypes = map[string]string{
-	"node":            "NodeStrategy",
-	"go":              "GoStrategy",
-	"python":          "PythonStrategy",
-	"ruby":            "RubyStrategy",
-	"java":            "JavaStrategy",
-	"php":             "PHPStrategy",
-	"rust":            "RustStrategy",
-	"custom":          "CustomStrategy",
-	"user-dockerfile": "UserDockerfileStrategy",
+// runtimeRegistryRe isolates the `var runtimeRegistry = map[...]{ ... }` block
+// in languages.go, and registryEntryRe reads one `"key": {… Strategy: &T{}}`
+// entry out of it.
+//
+// The strategy set is DERIVED from that block rather than duplicated here on
+// purpose. languages.go calls runtimeRegistry "the single source of truth for
+// which runtimes resolve"; a second list beside it is a copy that rots. It did:
+// when the product narrowed to the fixed LoopZeroKit stack (node + python), this
+// gate still asserted 9 languages and reported 7 phantom violations, which is
+// how it ended up quarantined as a failing gate instead of guarding anything.
+var (
+	runtimeRegistryRe = regexp.MustCompile(`(?s)var runtimeRegistry\s*=\s*map\[string\]\w+\{(.*?)\n\}`)
+	registryEntryRe   = regexp.MustCompile(`"([a-z0-9][a-z0-9-]*)"\s*:\s*\{[^}]*Strategy:\s*&(\w+)\{\}`)
+)
+
+// parseRuntimeRegistry returns language key -> strategy type name, read off the
+// runtimeRegistry block. An absent or empty block is an error, never an empty
+// set: a gate that silently asserts nothing is the defect #255 is about.
+func parseRuntimeRegistry(langSrc string) (map[string]string, error) {
+	block := runtimeRegistryRe.FindStringSubmatch(langSrc)
+	if block == nil {
+		return nil, fmt.Errorf("runtimeRegistry not found in languages.go — the gate derives the strategy set from it")
+	}
+	out := map[string]string{}
+	for _, m := range registryEntryRe.FindAllStringSubmatch(block[1], -1) {
+		out[m[1]] = m[2]
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("runtimeRegistry declares no runtime — refusing to pass vacuously")
+	}
+	return out, nil
 }
 
 // frameworkToLang maps a loopzero.yaml framework value to its language key.
@@ -88,6 +108,11 @@ func Check(cfg Config) (*Outcome, error) {
 		return nil, fmt.Errorf("fixtures dir not found at %s", fixturesDir)
 	}
 	langSrc := string(langData)
+
+	strategyTypes, err := parseRuntimeRegistry(langSrc)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &Outcome{Pass: true, StrategyCount: len(strategyTypes)}
 

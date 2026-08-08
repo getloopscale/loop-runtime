@@ -1,3 +1,8 @@
+---
+type: baseline
+title: J-22 Session-Final Regression Evidence (iters 18-33)
+---
+
 # Baseline — J-22 Session-Final Regression Evidence (iters 18-33)
 
 > **Captured:** 2026-06-10T14:38Z
@@ -123,9 +128,9 @@ Iters 27-33 each added 1 more contract test + extended the iter 27 meta-gate. Th
 ## Cross-references
 
 - Plan: `.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md`
-- Operator runbook: `docs/operations/openbao-transit-cutover-runbook.md`
-- Option B analysis: `docs/operations/option-b-mgmt-helmfile-eso-deploy.md`
-- Iter 28 baseline (Layer 1 only): `docs/operations/baselines/2026-06-10-iter-27-j22-quality-gates-evidence.md`
+- Operator runbook: [`docs/operations/openbao-transit-cutover-runbook.md`](../openbao-transit-cutover-runbook.md)
+- Option B analysis: [`docs/operations/option-b-mgmt-helmfile-eso-deploy.md`](../option-b-mgmt-helmfile-eso-deploy.md)
+- Iter 28 baseline (Layer 1 only): [`docs/operations/baselines/2026-06-10-iter-27-j22-quality-gates-evidence.md`](./2026-06-10-iter-27-j22-quality-gates-evidence.md)
 - Steady-state baseline rule: `.claude/rules/steady-state-baseline.md`
 - Productive-idle mandate: memory `feedback_productive_idle_runbook_preauthor_2026_06_10`
 - per-feature LIVE workflow: memory `feedback_post_feature_live_regression_workflow_2026_06_09`

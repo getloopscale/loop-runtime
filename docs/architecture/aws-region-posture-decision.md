@@ -1,11 +1,14 @@
 ---
+title: "AWS Region Posture — Decision Memo (single vs sharded vs active-active)"
+generated: { by: process:m6-loopzero-bottleneck-simulator-operationalization, at: 2026-07-02 }
+status: draft
 name: aws-region-posture-decision
 description: MADR decision memo — single vs sharded vs active-active region posture for the AWS re-platform, quantified by the LoopZero bottleneck simulator (capsim). Every number is a LIVE capsim_* MCP output.
 type: decision
 created_at: 2026-07-02
 updated_at: 2026-07-02
 updated_by: M6 (loopzero-bottleneck-simulator operationalization)
-status: proposed
+workflow_status: proposed
 ---
 
 # AWS Region Posture — Decision Memo (single vs sharded vs active-active)
@@ -13,6 +16,45 @@ status: proposed
 > **Status:** proposed · **Date:** 2026-07-02 · **Deciders:** platform + re-platform owner
 > **Method:** every quantitative claim is a LIVE `capsim_*` MCP output (LoopZero bottleneck simulator,
 > M0-M5). See § Reproduction to re-run each. No number is from memory.
+
+
+> [!IMPORTANT]
+> ## Correção — 2026-08-07: a premissa de capacidade está errada
+>
+> **Toda a simulação abaixo foi rodada com `maxPerCell = 500`. O valor real é `5000`.**
+>
+> | Origem | Valor | Papel |
+> |---|---|---|
+> | `api/internal/config/config.go:497` | `envInt("MAX_TENANTS_PER_CELL", 5000)` | **default real** |
+> | `charts/loopzero-api/values.yaml:121` | `maxTenantsPerCell: "5000"` | valor entregue |
+> | `api/internal/placement/engine.go:90-91` | `if maxPerCell <= 0 { maxPerCell = 500 }` | fallback do construtor |
+>
+> O `500` só é alcançado quando o construtor recebe `<= 0`, e a config sempre passa `5000`.
+> É um fallback defensivo — mas é o número que aparece no comentário do código, e
+> provavelmente foi dali que a simulação o tirou.
+>
+> **O que muda, com o valor real:**
+>
+> - **50.000 tenants são ~10 cells, não 100.** A contagem de clusters cai por um fator de 10.
+> - O gargalo `cell_count` (ρ=1.56, CRITICAL) **provavelmente não existe** — ele é função
+>   direta da contagem de cells.
+> - A **Fase 1 ("do now") seria um downgrade**: elevar `maxPerCell` "toward ~2000" é *reduzir*
+>   de 5000 para 2000, multiplicando o número de clusters em vez de diminuí-lo. **Não execute
+>   a Fase 1 como escrita.**
+> - A economia atribuída à Fase 1 (−$31.560/mês) é, em boa parte, economia que **já está
+>   realizada** hoje.
+>
+> **O que NÃO muda:** a Fase 4 (tier de request — BFF e engine_api) e a alavanca de *prefix
+> delegation* não dependem de `maxPerCell`. A escolha de posture *sharded* continua plausível,
+> mas o memo alerta ele próprio que decidir multi-região antes de corrigir `maxPerCell` é a
+> ordem errada — e é exatamente essa a situação.
+>
+> **Os números originais foram preservados**, não reescritos: são a saída real de uma
+> simulação datada, e apagá-los esconderia a premissa que os produziu. A correção honesta é
+> **re-rodar o `capsim` com `maxPerCell=5000`** e registrar o novo resultado abaixo. Até lá,
+> trate cada número desta página como computado sobre premissa incorreta.
+>
+> Medido e registrado em `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` § D16.
 
 ## Context and problem statement
 
@@ -25,7 +67,8 @@ regions, no cross-region replication), or **active-active** (cross-region replic
 The simulator's review of the current posture is unambiguous:
 
 > `capsim_review {tenants:50000}` → **score 32 / CRITICAL**. Bottlenecks: `cell_count` ρ=1.56
-> (100 EKS clusters via `maxPerCell=500`), `bff` ρ=1.04 (saturated); single-region SLA falls to 95%
+> (100 EKS clusters via `maxPerCell=500` — **premissa incorreta, ver correção acima; com o valor
+> real de 5000 são ~10 cells**), `bff` ρ=1.04 (saturated); single-region SLA falls to 95%
 > during a full-region outage.
 
 So the decision is two-layered: (A) fix capacity, then (B) choose the region posture.
@@ -65,7 +108,7 @@ region posture:
 
 | Lever | Call | Effect |
 |---|---|---|
-| **Raise `maxPerCell` 500→2000** | `capsim_cost {tenants:50000, maxPerCell:2000}` | $76,656 → **$45,096** (**−$31,560/mo**); cells 100→25, nodes 279→129 |
+| ~~**Raise `maxPerCell` 500→2000**~~ **NÃO EXECUTAR** | `capsim_cost {tenants:50000, maxPerCell:2000}` | ~~$76,656 → **$45,096**; cells 100→25~~ — **o valor real já é 5000; isto seria um downgrade** (ver correção no topo) |
 | **Enable prefix delegation** | `capsim_cost {tenants:50000, prefixDelegation:true}` | $76,656 → $74,396 (−$2,261); unblocks the ENI pod-density ceiling |
 | **Both** | `capsim_review {tenants:50000, maxPerCell:2000, prefixDelegation:true}` | **$42,836/mo, score 32→52**; the `cell_count` bottleneck is **resolved** (BFF becomes the new top) |
 
@@ -95,6 +138,84 @@ price failover at 2.23× its real cost.**
    clears it incl. AZ-fragility (an AZ loss saturates BFF at 8-9 replicas); **Engine 8→11 replicas**
    clears both the base and the AZ-fragility (AZ ρ 1.34→0.97). Spread across ≥2 AZs. These are review
    fixes, not cost levers (small platform pods).
+
+
+## Re-medição com `maxPerCell = 5000` — 2026-08-07
+
+A correção no topo desta página anunciou que a simulação partia de um valor errado. O
+`capsim` foi **re-executado** com o valor real. Os comandos estão em § Reproduction; o
+`maxPerCell` é passado explicitamente porque o default da lib
+(`loopzero-capsim.mjs:18`) continua `500`.
+
+**A causa raiz está no próprio simulador**, e é literal — `loopzero-capsim.mjs:18`:
+
+```js
+maxPerCell: 500,   // placement/engine.go:91 — tenants per cell (EKS cluster)
+```
+
+Ele cita `engine.go:91`, que é o **fallback do construtor** para entrada `<= 0`, em vez de
+`config.go:497`, que é o default real entregue (`5000`). A nota em `loopzero-capsim.mjs:227`
+repete a premissa em prosa. **Corrigir a linha 18 é a correção de fonte**; até lá, todo uso
+do simulador precisa passar `maxPerCell` explicitamente.
+
+### O que a re-medição mostra — 50.000 tenants
+
+| `maxPerCell` | cells | custo/mês | score | gargalo no topo |
+|---:|---:|---:|---|---|
+| **500** *(premissa antiga)* | 100 | $76.656 | 32 / CRITICAL | `cell_count` ρ=1.56 |
+| 2000 *(Fase 1 proposta)* | 25 | $45.096 | 52 / AT_RISK | `bff` ρ=1.04 |
+| **5000** *(valor real)* | **10** | **$38.784** | **52 / AT_RISK** | `bff` ρ=1.04 |
+
+Os dois primeiros reproduzem exatamente os números originais desta página — o método está
+íntegro; o que estava errado era a premissa de entrada.
+
+**Três conclusões, e a terceira inverte a Fase 1:**
+
+1. **O gargalo `cell_count` não existe.** Com 5000 ele some da lista de achados. O topo passa
+   a ser `bff` (ρ=1.04) — que é *exatamente o estado final* que a Fase 1 prometia alcançar
+   (*"the `cell_count` bottleneck is resolved, BFF becomes the new top"*).
+2. **O score alvo já está realizado.** A Fase 1 prometia 32 → 52. O estado real **já é 52**,
+   sem nenhuma intervenção e sem *prefix delegation*.
+3. **Executar a Fase 1 pioraria o sistema.** Ir de 5000 para 2000 custa **+$6.312/mês**
+   ($38.784 → $45.096, +16%) e leva de 10 para 25 cells. Mesmo somando *prefix delegation*
+   ($42.836) fica **$4.052/mês acima** da base real.
+
+### A outra alavanca continua válida
+
+*Prefix delegation* não depende de `maxPerCell` e segue valendo:
+**$38.784 → $36.524/mês (−$2.260)**, destravando o teto de densidade de pods por ENI.
+
+### A decisão de posture SOBREVIVE à correção
+
+Re-executado com a base correta (50.000 tenants, `maxPerCell=5000`, 3 regiões):
+
+| Posture | custo/mês | blast radius | SLA | score | Δ vs single |
+|---|---:|---:|---:|---:|---:|
+| single | $38.784 | 100% | 95% | 52 | — |
+| **sharded** | $44.562 | 33% | 98,32% | 57 | **+$5.778** |
+| active-active | $85.289 | 0% | 99,98% | 57 | +$46.505 |
+
+**O custo de resiliência do *sharded* é +$5.778/mês — idêntico ao da simulação antiga.** Isso
+confirma empiricamente a afirmação original de que ele é *scale-insensitive*: o control plane
+por região é constante e não acompanha a contagem de tenants.
+
+O *active-active* fica muito mais barato do que se pensava (+$46.505 contra os +$121.925
+originais), porque há bem menos compute para replicar — mas continua ~8× o custo do
+*sharded* para o mesmo score de review.
+
+**Portanto:** a escolha de posture (*levers-first → sharded → defer active-active*) permanece
+válida. O que não sobrevive é a **Fase 1**, cuja alavanca principal já está aplicada e cuja
+execução literal seria um rebaixamento. Em termos relativos o *sharded* fica até mais atraente:
++$5.778 sobre uma base de $38.784 é **15%**, contra os 7,5% de uma base inflada.
+
+### Ações revisadas
+
+1. ~~**Fase 1 — elevar `maxPerCell` para ~2000**~~ — **cancelada.** Já está em 5000.
+2. **Corrigir `loopzero-capsim.mjs:18`** para ler `config.go:497`, e a nota da linha 227.
+3. **Manter a Fase 4** (tier de request): `bff` ρ=1.04 é agora o gargalo do topo, e não depende
+   de `maxPerCell`. BFF 6→7 réplicas resolve a saturação; 6→10 cobre também a perda de AZ.
+4. **Aplicar *prefix delegation*** (−$2.260/mês), independente do resto.
+5. **Posture *sharded* segue recomendada**, agora sobre números medidos com a premissa correta.
 
 ## Consequences
 
@@ -153,4 +274,4 @@ Equivalent offline: `cd docs/operations && node -e "import('./loopzero-capsim.mj
 - Simulator + engine: `../operations/loopzero-bottleneck-simulator.html`, `../operations/loopzero-capsim.mjs` (M0-M5).
 - Cost model: `../operations/aws-cost-calculator.html` (engine-backed, M5) — same $ as this memo.
 - AWS re-platform: `decisions/2026-06-17-infra-state-decomposition-aws.md`.
-- Diagrams index: `eraser-diagrams-index.md` (Views 13/14/15).
+- Diagrams index: [`eraser-diagrams-index.md`](./eraser-diagrams-index.md) (Views 13/14/15).

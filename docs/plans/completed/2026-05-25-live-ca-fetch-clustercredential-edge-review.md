@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — 2026-05-25-live-ca-fetch-clustercredential"
+status: deprecated
+---
+
 # Edge Case Review — 2026-05-25-live-ca-fetch-clustercredential
 
 **Data:** 2026-05-25
-**Plano:** docs/plans/2026-05-25-live-ca-fetch-clustercredential-plan.md
+**Plano:** [docs/plans/2026-05-25-live-ca-fetch-clustercredential-plan.md](./2026-05-25-live-ca-fetch-clustercredential-plan.md)
 **Tasks analisadas:** 7 (T0.1, T0.2, T1.1, T2.1, T3.1, T4.1, T5.1, T6.1)
 **Edge cases encontrados:** 7 (MUST FIX: 2, SHOULD TEST: 3, DOCUMENT: 2)
 

@@ -1,3 +1,8 @@
+---
+type: design
+title: "LoopZeroCloud Dashboard — Design Language"
+---
+
 # LoopZeroCloud Dashboard — Design Language
 
 > **Status**: canonical reference for `cloud/dashboard/` visual redesign per plan `2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md v1.2`.

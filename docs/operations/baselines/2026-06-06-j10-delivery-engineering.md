@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-06 J-10 Delivery (Engineering + Sponsor LIVE)"
+---
+
 # Steady-State Baseline — 2026-06-06 J-10 Delivery (Engineering + Sponsor LIVE)
 
 ## Update — Sponsor manual end-to-end ✅ CLOSED 2026-06-07

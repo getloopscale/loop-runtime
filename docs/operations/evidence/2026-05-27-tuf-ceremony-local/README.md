@@ -1,6 +1,11 @@
+---
+type: evidence
+title: "TUF Ceremony LOCAL Evidence — 2026-05-27"
+---
+
 # TUF Ceremony LOCAL Evidence — 2026-05-27
 
-**Per ADR D5 do plan `2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1**
+**Per ADR D5 do plan [`2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](../../../plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) v1.1**
 
 LOCAL variant of TUF root signing ceremony — simulated quorum via openssl (NOT prod-grade YubiKey FIPS air-gapped). Generated during M2 Phase 6 execution.
 
@@ -34,7 +39,7 @@ This ceremony is for **LOCAL validation only**. Prod ceremony requires:
 - YubiKey FIPS hardware (not openssl)
 - Air-gapped machine (full disk encryption, never networked)
 - Multi-party in physical room (3-of-5 quorum quorum-verified)
-- Per `docs/operations/tuf-root-ceremony.md` 7-section procedure
+- Per [`docs/operations/tuf-root-ceremony.md`](../../tuf-root-ceremony.md) 7-section procedure
 
 This LOCAL ceremony validates the **chain of trust mechanism** (TUF root → K8s Secret → Pulumi component consumes → Sigstore stack boots) without prod-grade key management. Prod ceremony is documented but NOT executed locally.
 

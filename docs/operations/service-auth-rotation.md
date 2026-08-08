@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Service-Auth Secret Rotation Runbook
+---
+
 # Service-Auth Secret Rotation Runbook
 
 > T1.2 of plan `2026-05-29-dashboard-public-integration-canonicalization`.

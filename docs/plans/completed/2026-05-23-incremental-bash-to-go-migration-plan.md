@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Incremental bash→Go Migration (Strangler-Fig)"
+status: deprecated
+---
+
 # Plan: Incremental bash→Go Migration (Strangler-Fig)
 
 > **Version 1.0** — Migrate the remaining load-bearing shell scripts to Go (`cmd/loopzero-ops` + `pkg/`) **one script per PR**, with mandatory rewiring of all four caller surfaces and a LIVE gate before each bash deletion. This replaces the abandoned `develop-bkp` big-bang (111 commits, +72k LOC) whose Go code was healthy but left ~15 dangling caller references that broke the drill/cleanroom/chaos SKILLs. The strangler-fig cadence makes each step independently revertible and provable, so the system is never left in a broken intermediate state.
@@ -14,7 +20,7 @@ This is the LoopZero systemic pattern inverted: not "implemented but not wired" 
 
 The current `develop` already has the foundation the big-bang built on: **31 `pkg/quality/*` gates migrated** + `cmd/loopzero-ops` CLI entrypoint. N(bash) = **209**. The strategic direction (shell is hard for humans to maintain; pure-logic belongs in tested Go) remains correct — this plan changes the *execution method*, not the goal.
 
-Related: `docs/plans/2026-05-22-shell-script-strategic-plan.md` (D1-D5: no-new-bash gate, helmfile delegation, pure-logic Go gates, D4 keep-criteria), `docs/meetings/MEET-2026-05-21-bash-to-go-migration.md` (on `develop-bkp`).
+Related: [`docs/plans/2026-05-22-shell-script-strategic-plan.md`](./2026-05-22-shell-script-strategic-plan.md) (D1-D5: no-new-bash gate, helmfile delegation, pure-logic Go gates, D4 keep-criteria), `docs/meetings/MEET-2026-05-21-bash-to-go-migration.md` (on `develop-bkp`).
 
 ## Objective
 

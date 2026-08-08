@@ -1,0 +1,65 @@
+# Overlay for the mgmt-cluster install of the admission-policies chart.
+#
+# Plan: .claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md (T1.2)
+#
+# WHY A SECOND INSTALL OF THE SAME CHART
+#
+# The chart was only ever installed on the runtime cluster
+# (infra/helmfile/runtime.helmfile.yaml.gotmpl:169, namespace cosign-system), because every
+# policy in it guards workloads: image digests, signatures, registries, resource limits.
+# The D4 guardrail is the first policy that must run on **mgmt**, where Application,
+# AppProject, Tenant, Environment and ClusterCredential actually live.
+#
+# Rather than fork a second chart (which would triple the dual-chart parity problem), this
+# overlay reuses the existing one and enables exactly one policy. Every runtime-only policy
+# is switched OFF explicitly — leaving them on would emit cosign/sigstore objects into a
+# cluster that has no policy-controller, producing orphaned resources.
+
+vaps:
+  # The only policy this install exists for.
+  protectPlatformDeletes: true
+  # ADR D3 — Warn until T2.3 flips it, gated on the observation window.
+  protectPlatformDeletesAction: Warn
+
+  # Runtime-only policies: OFF on mgmt. Every one of these guards a workload concern
+  # (image provenance, resource limits, tenant namespaces) that has no meaning on the
+  # management cluster, and requireImageDigest additionally emits a policy binding that
+  # would evaluate every mgmt pod for no reason.
+  disallowLatestTag: false
+  restrictRegistries: false
+  requireResourceLimits: false
+  requireImageSignature: false
+  requireImageDigest: false
+  requireImageDigestEnforce: false
+  noRuntimeImageMutations: false
+  protectPlatformNetworkpolicies: false
+  argocdManagedBy: false
+  tenantCrShape: false
+  tenantNamespace: false
+
+# ClusterImagePolicy is a sigstore/policy-controller CRD. The mgmt cluster runs no
+# policy-controller (that release lives in runtime.helmfile), so emitting one here would
+# create an object whose CRD does not exist — the sync fails, or worse, it lands orphaned.
+clusterImagePolicy:
+  enabled: false
+
+sigstoreEnabled: false
+
+# KNOWN RESIDUE, accepted deliberately: the chart also emits a `loopzero-cosign-version-config`
+# ConfigMap unconditionally — its template has no enable/disable toggle (the only `if` in
+# it guards an inner field, not the object). Two options existed:
+#
+#   a) add a toggle to the shared template — touches the runtime install, which is the one
+#      place this ConfigMap actually matters, to remove an object that is inert here;
+#   b) accept it — a ConfigMap holding a version string, with no controller on mgmt to read
+#      it, changes no behaviour.
+#
+# (b) is the KISS choice: the risk of (a) lands on the runtime signing chain, and the cost
+# of (b) is one inert object. Revisit only if the ConfigMap ever gains a consumer on mgmt.
+# The `vap-delete-guardrail` gate therefore asserts "no cosign POLICY objects" (which would
+# be functional) rather than "no cosign-related object at all".
+
+# The chart's PrometheusRules cover cosign/sigstore/harbor, none of which run on mgmt.
+# The D4 alert ships separately in task T2.1.
+alerts:
+  enabled: false

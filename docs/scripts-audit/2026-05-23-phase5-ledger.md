@@ -1,3 +1,8 @@
+---
+type: audit
+title: "Phase-5 Classification Ledger — un-homed operational logic"
+---
+
 # Phase-5 Classification Ledger — un-homed operational logic
 
 Proposed disposition per script (operator ratifies). Evidence is mechanical fact.

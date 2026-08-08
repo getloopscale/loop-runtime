@@ -14,7 +14,9 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdiffstructural"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdrift"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmoverlapparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmtopology"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pgpdb"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vapdeleteguardrail"
 )
 
 // M9 Step 7: quality gate entry points for the "helm" theme, decomposed out of the
@@ -195,4 +197,68 @@ func runHelmDrift(args []string) int {
 	}
 	fmt.Println("✓ All drifts have approving ADRs (intentional).")
 	return 0
+}
+
+// runVAPDeleteGuardrail implements the `vap-delete-guardrail` gate (plan
+// d4-vap-delete-guardrail T1.3, ADR 2026-08-07-capi-byoc-cluster-lifecycle D4).
+//
+// Guards the mgmt boundary resources — and their CRDs — against unauthorized DELETE.
+// The CRD rule is not redundant with the instance rules: deleting the CRD collects every
+// instance without any instance rule being consulted, which is the vector of the reference
+// incident this policy exists to prevent.
+func runVAPDeleteGuardrail(args []string) int {
+	fs := flag.NewFlagSet("vap-delete-guardrail", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	rep := vapdeleteguardrail.Check(*root, nil)
+	for _, w := range rep.Warnings {
+		fmt.Fprintf(os.Stderr, "vap-delete-guardrail: WARN: %s\n", w)
+	}
+	if rep.OK() {
+		fmt.Println("vap-delete-guardrail: OK")
+		return 0
+	}
+	for _, f := range rep.Findings {
+		fmt.Fprintf(os.Stderr, "vap-delete-guardrail: FAIL [%s] %s\n", f.Check, f.Message)
+	}
+	return 1
+}
+
+// runHelmTopologyIndex implements the `helm-topology-index` gate (plan helm-topology-index).
+//
+// Derives "which cluster does this chart run on?" from the four helmfiles — the executable
+// source of truth — instead of encoding it a second time as a folder tree. Two representations
+// of the same fact drift; the helmfile cannot, because it is what installs.
+func runHelmTopologyIndex(args []string) int {
+	fs := flag.NewFlagSet("helm-topology-index", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	doc := fs.String("doc", "", "generated index path (default docs/architecture/helm-topology.md)")
+	write := fs.Bool("write", false, "regenerate the index instead of verifying it")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	mode := helmtopology.ModeCheck
+	if *write {
+		mode = helmtopology.ModeWrite
+	}
+	rep, err := helmtopology.Check(*root, mode, *doc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "helm-topology-index: %v\n", err)
+		return 5
+	}
+	if *write {
+		fmt.Printf("helm-topology-index: wrote index with %d entries\n", len(rep.Entries))
+		return 0
+	}
+	if rep.InSync {
+		fmt.Printf("helm-topology-index: PASS — %d charts indexed, in sync with the helmfiles\n",
+			len(rep.Entries))
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "helm-topology-index: FAIL — %s\n", rep.Message)
+	return 1
 }

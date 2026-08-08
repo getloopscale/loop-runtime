@@ -32,10 +32,10 @@ type protectedPath struct {
 
 // ProtectedPaths are the governance artifact locations under deletion guard.
 var ProtectedPaths = []protectedPath{
-	{".claude/knowledge-base/decisions", "*.md"},
-	{".claude/knowledge-base/meetings", "*.md"},
-	{".claude/knowledge-base/concepts/operations", "*-runbook.md"},
-	{".claude/knowledge-base/concepts/operations", "*-inventory.md"},
+	{"docs/wiki/decisions", "*.md"},
+	{"docs/wiki/meetings", "*.md"},
+	{"docs/wiki/concepts/operations", "*-runbook.md"},
+	{"docs/wiki/concepts/operations", "*-inventory.md"},
 }
 
 // Config drives the gate.

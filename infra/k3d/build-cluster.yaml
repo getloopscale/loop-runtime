@@ -28,6 +28,23 @@ ports:
   - port: 30194:30094
     nodeFilters:
       - loadbalancer
+  # loopzero-workspace#23 item 2 — a NodePort do Service `loki` (30120, fixada pelo seed
+  # `loki-cross-cluster`) precisa ser ALCANCAVEL de fora do cluster por um endereco
+  # ESTAVEL. Sem esta publicacao, o unico caminho era o IP do container
+  # `k3d-loopzero-build-server-0` — atribuido por DHCP, que EMBARALHA a cada
+  # `docker restart` / `k3d cluster create`. Quando embaralha, o LOKI_URL gravado
+  # passa a apontar para outro cluster EM SILENCIO, e o sintoma (`loopzero logs` vazio)
+  # le-se como "Loki fora do ar", nunca como "cluster errado" — foi o que fez duas
+  # investigacoes do #114 gastarem esforco rotacionando credencial.
+  #
+  # Publicada, passa a ser alcancavel por gateway-da-rede + porta, o par estavel que
+  # ja tirou o item 1 do issue da classe. Mesma porta dentro e fora (30120:30120):
+  # nao ha colisao — medido nos cinco `infra/k3d/*.yaml`, as portas de host ocupadas
+  # sao 3000 3002 8090 8091 8200 8443 8444 9001 9090 13001 30081 30082 30090 30091
+  # 30093 30094 30095 30191 30193 30194.
+  - port: 30120:30120
+    nodeFilters:
+      - loadbalancer
 network: k3d-loopzero
 registries:
   use:

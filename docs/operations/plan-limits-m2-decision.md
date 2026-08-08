@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Plan limits M2 decision record — sponsor sign-off"
+---
+
 # Plan limits M2 decision record — sponsor sign-off
 
 **Date:** 2026-06-07
@@ -102,6 +107,6 @@ Dogfood scenario "EC-6 grandfathered tenant Pro" exercises a fixture that simula
 ## Audit trail
 
 - Plan ADR D4 lock: `.claude/knowledge-base/plans/2026-06-07-runtime-envs-per-project-m2-plan.md` lines 70-100 (caps decision).
-- T0.1 baseline that quantifies blast radius (2 tenants): `docs/operations/baselines/2026-06-07-pre-runtime-envs-m2-refactor.md`.
+- T0.1 baseline that quantifies blast radius (2 tenants): [`docs/operations/baselines/2026-06-07-pre-runtime-envs-m2-refactor.md`](./baselines/2026-06-07-pre-runtime-envs-m2-refactor.md).
 - Memory authorizing batch sponsor approval: `feedback_full_execution_authorization`, `feedback_sponsor_scope_extension_pattern`.
 - Governance gate extension: tracked separately when SQL migration lands (T7.1).

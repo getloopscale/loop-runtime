@@ -1,4 +1,6 @@
 ---
+title: "Sigstore Self-Hosted — Storage Growth Model"
+generated: { by: process:tenant-build-pipeline-gaps-closure-plan-t1.1, at: 2026-05-27 }
 name: sigstore-storage-model
 description: Storage growth model + retention policy + PV resize procedure for self-hosted Sigstore (Fulcio + Rekor) per ADR-2026-05-27-T2.2-OFFLINE-TUF + plan T1.1.
 type: operational-runbook
@@ -155,7 +157,7 @@ This is more complex; recommended only if SLA mandates 0 downtime.
 ## Related
 
 - ADR-2026-05-27-T2.2-OFFLINE-TUF: `.claude/knowledge-base/decisions/2026-05-27-T2.2-offline-tuf-ceremony.md`
-- Plan T1.1: `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`
+- Plan T1.1: [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](../plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md)
 - Storage alerts: `infra/helm/admission-policies/templates/sigstore-storage-alerts.yaml`
 - Archive script stub: `infra/scripts/security/rekor-archive-old-entries.sh`
 - Sigstore scaffolding: https://github.com/sigstore/helm-charts

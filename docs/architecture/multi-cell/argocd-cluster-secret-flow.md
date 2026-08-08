@@ -1,3 +1,8 @@
+---
+type: architecture
+title: "ArgoCD Cluster Secret Flow — AS-IS (post Op B)"
+---
+
 <!-- AS-IS STATE -->
 ---
 name: argocd-cluster-secret-flow
@@ -11,8 +16,8 @@ evidence_class: MEASURED
 
 # ArgoCD Cluster Secret Flow — AS-IS (post Op B)
 
-> Plan: `docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md` v1.2 — T0.1 Pre-Plan
-> Related: [[clustercredential]] (platform domain)
+> Plan: [`docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md`](../../plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md) v1.2 — T0.1 Pre-Plan
+> Related: [clustercredential](../platform/clustercredential.md) (platform domain)
 
 ## Multi-cell trust model
 
@@ -110,9 +115,9 @@ Step 6.preamble (per reconcile, 60s interval):
 
 ## Cross-references
 
-- [[clustercredential]] (platform domain entity)
+- [clustercredential](../platform/clustercredential.md) (platform domain entity)
 - [[live-vs-snapshot-credentials]] (concept)
-- ADR: `docs/decisions/2026-05-25-live-ca-fetch-clustercredential-adr.md`
+- ADR: [`docs/decisions/2026-05-25-live-ca-fetch-clustercredential-adr.md`](../../decisions/2026-05-25-live-ca-fetch-clustercredential-adr.md)
 - LIVE evidence (Op B fetch + fingerprint match): `.claude/knowledge-base/reviews/2026-05-26-op-b-live-evidence.md`
 - LIVE evidence (dogfood 112/0): `.claude/knowledge-base/reviews/2026-05-26-dogfood-112-0-pass.md`
 - CLAUDE.md § Multi-Cell Routing

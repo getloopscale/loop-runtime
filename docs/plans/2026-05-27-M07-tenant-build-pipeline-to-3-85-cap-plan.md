@@ -1,6 +1,11 @@
+---
+type: plan
+title: "Plan: M07 Tenant Build Pipeline — 3.4 → ~3.85 (local-validation cap)"
+---
+
 # Plan: M07 Tenant Build Pipeline — 3.4 → ~3.85 (local-validation cap)
 
-> **Version 1.2** — Eleva M07 score registrado de 3.4 (baseline 2026-05-26) para 3.7 (M1) → 3.80 (path 1 sign-image threading fix). **M2 (3.85 local) DEFERRED to prod DOKS plan** após Ralph iter 8 (2026-05-28) confirmar Fulcio chart 2.9.1 + K3s structural blocker. Engineering Phase 0+1 shipped (script diagnose 10/10 tests + 4 layers LIVE fixes em K3s/RBAC) mas Fulcio HTTP 400 token verification persistente apesar de: anonymous-auth=true, ClusterRoleBinding system:unauthenticated, service-account-jwks-uri DNS, kube-root-ca mount em /etc/ssl/certs/. Detalhes completos: `docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md` v1.6. 3.85 target será atingido em prod DOKS (anonymous-auth=true default + Fulcio chart upgrade path).
+> **Version 1.2** — Eleva M07 score registrado de 3.4 (baseline 2026-05-26) para 3.7 (M1) → 3.80 (path 1 sign-image threading fix). **M2 (3.85 local) DEFERRED to prod DOKS plan** após Ralph iter 8 (2026-05-28) confirmar Fulcio chart 2.9.1 + K3s structural blocker. Engineering Phase 0+1 shipped (script diagnose 10/10 tests + 4 layers LIVE fixes em K3s/RBAC) mas Fulcio HTTP 400 token verification persistente apesar de: anonymous-auth=true, ClusterRoleBinding system:unauthenticated, service-account-jwks-uri DNS, kube-root-ca mount em /etc/ssl/certs/. Detalhes completos: [`docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md`](./2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md) v1.6. 3.85 target será atingido em prod DOKS (anonymous-auth=true default + Fulcio chart upgrade path).
 >
 > **Version 1.1** — Eleva M07 score registrado de 3.4 (baseline 2026-05-26) para 3.7 (M1 — sem activation) e depois ~3.85 (M2 — Sigstore stack LIVE em k3d local-only). Teto efetivo deste plano é ~3.85 por **D1 — DNS Local-only**: prod activation (Fulcio/Rekor com TLS público) fica para plano separado. Engineering shipped esta sessão (commits `f1ca9bdf`, `01a561f2`, `686e78e1`, `d7e79882`, `e32b6b8c`) habilita M1; sponsor confirmou ceremony para M2.
 
@@ -8,7 +13,7 @@
 
 ### v1.1 (2026-05-27, post-edge-case-review)
 
-Absorbed 7 MUST FIX from `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-edge-case-review.md`:
+Absorbed 7 MUST FIX from [`docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-edge-case-review.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-edge-case-review.md):
 
 - **EC-1** Phase 6.5 NEW: cert-manager + cluster-issuer bootstrap em loopzero-build (sem isso, Phase 7 Pulumi up trava em Certificate Pending)
 - **EC-3** T8.0 NEW: wire env var `LOOPZERO_COSIGN_KEYLESS` + `LOOPZERO_COSIGN_ATTEST_ENABLED` em api/cmd/main.go (sem isso, M2 inteiro é teatro silencioso — pipeline executa sem erro mas keyless NUNCA ativa)
@@ -27,11 +32,11 @@ Esforço revisado: ~30h → ~33.5h (+3.5h absorption MUST FIX).
 **Estado atual (2026-05-27):**
 - M07 score **registrado**: 3.4/4.0 (audit 2026-05-26 § 6, confidence 88%)
 - M07 score **estimado** pela § 7 Status Update: 3.7 hoje (não-recalculado, sem evidência consolidada)
-- Plan `2026-05-27-tenant-build-pipeline-gaps-closure-plan.md` v1.1 ENGINEERING 100% shipped:
+- Plan [`2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-plan.md) v1.1 ENGINEERING 100% shipped:
   - Phase 1 (cosign keyless deliverables): `f1ca9bdf` — storage model + 5 alerts + chaos drill + OIDC policy + TUF runbook
   - Phase 2 (SBOM-attestation linking): `01a561f2` — `cosignAttestTemplate()` + DAG wiring + DB migration 000019 + 9/9 tests PASS
   - Phase 3 (Harbor mirror observability): `01a561f2` — exit handler + Pushgateway-TTL + alerts + 8/8 tests PASS
-  - Phase 4 (OTel sampling docs): `01a561f2` — `docs/operations/build-pipeline-otel.md`
+  - Phase 4 (OTel sampling docs): `01a561f2` — [`docs/operations/build-pipeline-otel.md`](../operations/build-pipeline-otel.md)
 - Plan Phase 5 (cross-validation) + Phase 6 (operator dogfood) NÃO executados
 - Sigstore Pulumi component (`infra/pulumi-platform/src/services/sigstore.ts`) shipped iter prévia, awaiting activation
 
@@ -131,7 +136,7 @@ Dois milestones independentes:
 **Consequences:**
 - ✅ M2 executável esta semana (sem hardware procurement)
 - ⚠️ TUF root.json gerado LOCAL ≠ prod root.json (operator regera em prod ceremony)
-- ⚠️ Operator runbook `docs/operations/tuf-root-ceremony.md` JÁ shipped descreve prod-grade — LOCAL variant adicionado como appendix
+- ⚠️ Operator runbook [`docs/operations/tuf-root-ceremony.md`](../operations/tuf-root-ceremony.md) JÁ shipped descreve prod-grade — LOCAL variant adicionado como appendix
 
 ## Dependency Graph
 
@@ -1205,13 +1210,13 @@ task doctor                        # 41/0 pre-flight gate
 ## References
 
 - M07 baseline audit: `.claude/knowledge-base/audits/2026-05-26/07-build-pipeline.md`
-- Plan original engineering: `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md` v1.1
+- Plan original engineering: [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](./2026-05-27-tenant-build-pipeline-gaps-closure-plan.md) v1.1
 - ADR-2026-05-12 cosign keyless cutover: `.claude/knowledge-base/decisions/`
 - ADR-2026-05-27-T2.2-OFFLINE-TUF: `.claude/knowledge-base/decisions/2026-05-27-T2.2-offline-tuf-ceremony.md`
 - Sigstore Pulumi component: `infra/pulumi-platform/src/services/sigstore.ts`
-- TUF ceremony runbook: `docs/operations/tuf-root-ceremony.md`
-- Sigstore storage model: `docs/operations/sigstore-storage-model.md`
-- Roadmap macro 2026-05-27: `docs/strategy/roadmap-macro-2026-05-27.md` R1
+- TUF ceremony runbook: [`docs/operations/tuf-root-ceremony.md`](../operations/tuf-root-ceremony.md)
+- Sigstore storage model: [`docs/operations/sigstore-storage-model.md`](../operations/sigstore-storage-model.md)
+- Roadmap macro 2026-05-27: [`docs/strategy/roadmap-macro-2026-05-27.md`](../strategy/roadmap-macro-2026-05-27.md) R1
 
 ---
 

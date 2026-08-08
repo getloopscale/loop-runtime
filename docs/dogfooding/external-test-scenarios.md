@@ -1,3 +1,8 @@
+---
+type: dogfood-report
+title: "External Dogfooding — Test Scenarios"
+---
+
 # External Dogfooding — Test Scenarios
 
 > **Audience:** External validation team (engineers / SREs / product testers who have **never** seen this codebase)

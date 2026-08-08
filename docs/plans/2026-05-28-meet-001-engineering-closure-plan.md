@@ -1,3 +1,8 @@
+---
+type: plan
+title: "Plan: MEET-2026-05-28-001 Engineering Closure (M07 Prod Cutover Path A)"
+---
+
 # Plan: MEET-2026-05-28-001 Engineering Closure (M07 Prod Cutover Path A)
 
 > **Version 1.1** — Edge-case-plan amendment (2026-05-28): absorbed 9 MUST FIX edges identified by `/edge-case-plan` review. Affected tasks: T0.1 (drill context allowlist regex), T0.2 (ConfigMap set_at field), T1.5 (gate excludes comments + test files), T2.1 (audit_log trigger uses SERIAL id + correlation_id NULL), T2.2 (PG filter table_schema=public), T2.3 (chaos tests Skip when chaos-mesh absent), T4.1 (removed circuit-breaker metric, added loopzero_cosign_sign_total counter), T4.2 (removed circuit-breaker alert), T4.5 (runbook includes `argocd app history` discovery step). Plus 5 SHOULD TEST adopted as new test cases. Plus 3 DOCUMENT notes. Total 17 edges integrated.
@@ -9,7 +14,7 @@
 **What exists today:**
 - M07 score 3.85/4.0 LIVE-validated for LOCAL k3d (per Rule 11 Evidence Bar §1, audit `2026-05-28-keyless-GREEN/07-build-pipeline.md`).
 - 15 commits from Ralph iter 4+5 (commits 48915b2c → b3375ed0) implementing keyless signing + Sigstore stack + Rekor URL persistence.
-- Plan `2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md` v1.7 with 11/11 DoD CLOSED for LOCAL scope.
+- Plan [`2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md`](./2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md) v1.7 with 11/11 DoD CLOSED for LOCAL scope.
 
 **What's broken or missing (engineering-side):**
 - `--insecure-skip-verify` hardcoded unconditionally in `api/internal/argo/cosign.go:293` and `cosign_attest.go:110` (CVSS 9.1).
@@ -19,7 +24,7 @@
 - Step name `attest-image-{app}` is a string literal in 5+ files with no shared constant (the 3-layer SQL bug class can recur).
 - No schema-mirror test diffing `INFORMATION_SCHEMA.columns` against struct + INSERT + SELECT + scanner.
 - No `loopzero admin release inspect` diagnostic CLI.
-- No `docs/operations/rollback-m07-cutover-runbook.md`.
+- No [`docs/operations/rollback-m07-cutover-runbook.md`](../operations/rollback-m07-cutover-runbook.md).
 - `infra/scripts/security/rekor-archive-old-entries.sh` is a STUB with Trillian API TODO.
 - `workflow_builder.go:228-235` legacy `spec.Apps` branch missing `InsecureRegistry` field.
 - No CI quality gate blocking `anonymous-auth=true` outside `infra/k3d/`.
@@ -47,7 +52,7 @@ Specific measurable goals:
 11. Legacy `workflow_builder.go:228-235` branch fixed OR deleted.
 12. Rekor retention: Trillian admin API integration complete OR explicit storage budget documented in runbook with manual procedure.
 13. 2 ADR amendments ratified (ADR-A LOCAL exception, ADR-B cosign v2.4.3 deadline).
-14. Cutover ordering codified in `docs/operations/m07-cutover-sequence.md`.
+14. Cutover ordering codified in [`docs/operations/m07-cutover-sequence.md`](../operations/m07-cutover-sequence.md).
 15. All `task quality:gates` EXIT=0 across the 15 actions.
 
 ## ADRs
@@ -93,7 +98,7 @@ Specific measurable goals:
 - **Consequences:** sigstore-extras chart values gains `allowedServiceAccounts` list; helm test added asserting rendered NP has correct podSelector.
 
 ### D9: Rollback runbook + dry-run on LOCAL k3d cleanroom (not drill)
-- **Decision:** Author `docs/operations/rollback-m07-cutover-runbook.md` covering: (a) loopzero-api image rollback via `argocd app rollback`, (b) migration 000019/000020 column-leave-NULL fallback (nullable columns), (c) cosign v2.4.3 → v3.0.6 re-upgrade procedure, (d) keyless → keyed emergency flip via ConfigMap + workflow template re-render. Engineering dry-run on LOCAL k3d cleanroom. Operator rehearsal on drill = separate workstream.
+- **Decision:** Author [`docs/operations/rollback-m07-cutover-runbook.md`](../operations/rollback-m07-cutover-runbook.md) covering: (a) loopzero-api image rollback via `argocd app rollback`, (b) migration 000019/000020 column-leave-NULL fallback (nullable columns), (c) cosign v2.4.3 → v3.0.6 re-upgrade procedure, (d) keyless → keyed emergency flip via ConfigMap + workflow template re-render. Engineering dry-run on LOCAL k3d cleanroom. Operator rehearsal on drill = separate workstream.
 - **Rationale:** SRE veto requires documented + tested rollback. Engineering can author + dry-run LOCAL; operator must drill it before prod claim.
 - **Consequences:** 1 new runbook + 1 cleanroom dry-run evidence file. Drill rehearsal deferred to operator workstream.
 
@@ -274,7 +279,7 @@ infra/scripts/production/m07-cutover-preflight.sh — NEW (validates ordering pr
 - **Abort triggers:** any step failure aborts cutover; rollback runbook T4.5 executed.
 
 #### Tasks
-1. Author `docs/operations/m07-cutover-sequence.md` with 7 numbered steps + pre-conditions + abort triggers.
+1. Author [`docs/operations/m07-cutover-sequence.md`](../operations/m07-cutover-sequence.md) with 7 numbered steps + pre-conditions + abort triggers.
 2. Author `infra/scripts/production/m07-cutover-preflight.sh` with 5 pre-condition checks.
 3. Add hermetic test `infra/tests/check-m07-cutover-preflight_test.sh` (mock all external calls).
 4. Update allowlist for new `.sh` file.
@@ -1132,7 +1137,7 @@ infra/helm/monitoring/dashboards/sigstore-pipeline.json — NEW
 #### Tasks
 1. Author dashboard JSON.
 2. Validate JSON via Grafana API.
-3. Add screenshot to docs/operations/sigstore-storage-model.md.
+3. Add screenshot to [docs/operations/sigstore-storage-model.md](../operations/sigstore-storage-model.md).
 
 #### TDD
 ```
@@ -1389,7 +1394,7 @@ VERIFY:  bash infra/scripts/security/rekor-archive-old-entries.sh --manual-proce
 | 20 | loopzero admin release inspect CLI | T4.4 | New endpoint + CLI command |
 | 21 | ADR-A LOCAL exception | T0.1 | New ADR + bootstrap script context guard |
 | 22 | ADR-B cosign v2.4.3 deadline | T0.2 | New ADR + deadline ratchet extension |
-| 23 | Cutover ordering codified | T0.3 | docs/operations/m07-cutover-sequence.md + preflight script |
+| 23 | Cutover ordering codified | T0.3 | [docs/operations/m07-cutover-sequence.md](../operations/m07-cutover-sequence.md) + preflight script |
 
 **Coverage: 18/18 engineering actions covered (100%)**
 

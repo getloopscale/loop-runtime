@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "LoopZero Bottleneck Simulator M5 (reconcile calculator ↔ engine)"
+---
+
 # Plan — LoopZero Bottleneck Simulator M5 (reconcile calculator ↔ engine)
 
 > Slug: `loopzero-bottleneck-simulator-m5`. Builds on M0-M4. FAANG-level, no fabrication.

@@ -1,3 +1,8 @@
+---
+type: plan
+title: "Plan: M07 → 3.85 — Fulcio CACert Keyless LIVE GREEN"
+---
+
 # Plan: M07 → 3.85 — Fulcio CACert Keyless LIVE GREEN
 
 > **Version 1.7 — ALL 11 DoD CLOSED 2026-05-28 Ralph iter 5.** DoD item 9 ("Runtime-metric proof — releases.image_attestation_rekor_url populated LIVE") closed end-to-end. LIVE evidence (workflow loopzero-build-build-f6968d51b61a271d-mtjkv): Phase=Succeeded + DB rel-506b861c71594269 (project m07-rekor-v2): `image_attestation_rekor_url = http://rekor-server.rekor-system.svc:80/api/v1/log/entries?logIndex=3`. **3 latent bugs caught + fixed via FAANG-level triangulation:** (1) build_reconcile_complete.go enrichAppReleasesWithAttestation never read attest step "rekor-url" output — commit f75a19bc (Go + 3 TDD tests); (2) cosign_attest.go script wrote literal "unknown" sentinel when sed regex didn't match cosign v2.4.3 "tlog entry created with index: N" format — fix reconstructs canonical URL from $REKOR_URL/api/v1/log/entries?logIndex=N (commit f75a19bc); (3) release_store.go INSERT + 13 SELECT statements + scanReleaseFields ALL omitted image_attestation_rekor_url column despite migration 000019 + struct field + writer existing — commit b3375ed0. K3s anonymous-auth=true persisted in infra/k3d/build-cluster.yaml (commit b3375ed0) closes Sigstore OIDC discovery from cleanroom. Plano M07 v1.7 = 11/11 DoD CLOSED objetivamente. M07 score 3.85 LIVE-validated per Rule 11 Evidence Bar §1.
@@ -8,7 +13,7 @@
 >
 > **v1.2 amendment (2026-05-28 Ralph iter 2 LIVE diagnose):** Phase -1/0/1/2/3 EXECUTED LIVE + commit `99aeba53`. Phase 3 manual probe CACert ISOLATED VALIDATION ✓ (token verification mensagem mudou "error processing identity token" → "public key parse"). Phase 4 LIVE keyless builds attempted: **v18, v19, v20 + 4 direct cosign probes** — TODOS Failed com "Fulcio returned 400" mas **Fulcio log mostrou ZERO requests to CreateSigningCertificate**, apenas GetConfiguration. **NEW root cause descoberto:** cosign v3.0.6 (cosign-signer image v0.1.0) faz **client-side token validation** após GetConfiguration + REJECTS LOCALLY sem ever hitting CreateSigningCertificate endpoint. Mensagem "Fulcio returned 400" é MISLEADING — internal cosign v3 rejection, not actual Fulcio response. **Path forward v1.3 future:** rebuild cosign-signer image com cosign v2.5.x (older API simpler) OR adopt cosign v3 full SigningConfig+TrustRoot pattern (complex, requires TUF root locally generated). Iter 2 não atingiu LIVE GREEN — score stays 3.80 honest per anti-lying contract. Phase 5 (audit 3.85) NÃO executed.
 >
-> **v1.1 amendment (2026-05-28):** Absorve 5 MUST FIX edge cases de `2026-05-28-M07-fulcio-cacert-keyless-LIVE-edge-case-review.md` descobertos via verification LIVE pós-cleanroom. Categoria: Scope refinement + state assumption correction. Mudanças críticas:
+> **v1.1 amendment (2026-05-28):** Absorve 5 MUST FIX edge cases de [`2026-05-28-M07-fulcio-cacert-keyless-LIVE-edge-case-review.md`](./2026-05-28-M07-fulcio-cacert-keyless-LIVE-edge-case-review.md) descobertos via verification LIVE pós-cleanroom. Categoria: Scope refinement + state assumption correction. Mudanças críticas:
 > - **NEW Phase -1** (EC-1, EC-2, EC-3, EC-5): restaura state pós-cleanroom — Sigstore stack install + K3s anonymous-auth config + ClusterRoleBinding RBAC (sem isso, Phase 2 falha com `release not found` + discovery 401/403)
 > - **T2.1 clarification** (EC-4): mudar `helm upgrade --reuse-values` → `helm upgrade --install -f rendered-full-values.yaml` (upsert idempotent)
 > - **T3.1 enrichment** (EC-8): documenta 4 outcome classifications para probe response
@@ -68,8 +73,8 @@ Local 3.80 + prod target 3.85+ cria divergence permanente. Cada dogfood/chaos/dr
 
 ### Referências internas
 
-- Plan deferral atual: `docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md` v1.7 (será amendado para v1.8 com revert)
-- Plan derivado: `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.2 (será amendado para v1.3 com revert)
+- Plan deferral atual: [`docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md`](./2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md) v1.7 (será amendado para v1.8 com revert)
+- Plan derivado: [`docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md`](./2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md) v1.2 (será amendado para v1.3 com revert)
 - Audit 3.80: `.claude/knowledge-base/audits/2026-05-27-keyless-LIVE/07-build-pipeline.md`
 - Memory: `~/.claude/projects/-home-paulo-loopzero/memory/reference_m07_path1_signimage_threading_2026_05_28.md`
 - Path 1 fix (sign-image threading): commit `860a8397` — mantém valid, é pre-req
@@ -375,7 +380,7 @@ infra/pulumi-platform/values-fulcio-oidc-overrides/README.md (NEW) — explica f
   - Hoje: não existe (cenario-c-issuer-mismatch.yaml + cenario-a-k3s-config.yaml + cenario-d-tls-ca-investigation.md são predecessores que NÃO funcionaram per iter 5-8)
   - Mudança: NEW file com config.contents.OIDCIssuers contendo CACert PEM
   - Downstream: Phase 2 helm upgrade usa este file via `-f`
-- **`README.md` (NEW):**
+- **[`README.md`](../README.md) (NEW):**
   - Hoje: não existe
   - Mudança: NEW file explicando ordem de apply, por que CACert resolve onde anonymous-auth + jwks_uri DNS + RBAC não resolveram, link para Research-1 sources
   - Downstream: operator/futuras iter Ralph entendem o fix sem re-investigar
@@ -433,7 +438,7 @@ sed "s|<K3S SERVER CA PEM CONTENT INSERTED VIA sed/python AT APPLY TIME>|$(cat /
 #### Tasks
 1. Criar dir `infra/pulumi-platform/values-fulcio-oidc-overrides/` (já existe — verify)
 2. Criar `cenario-a-cacert-trust.yaml` com placeholder `<CACERT_PEM>` no CACert field
-3. Criar `README.md` documentando: (a) por que CACert; (b) Research-1 sources; (c) apply command com K3s CA inject; (d) link para plan derivado v1.3
+3. Criar [`README.md`](../README.md) documentando: (a) por que CACert; (b) Research-1 sources; (c) apply command com K3s CA inject; (d) link para plan derivado v1.3
 4. Validate `yq eval '.config.contents.OIDCIssuers[0].CACert' cenario-a-cacert-trust.yaml` retorna placeholder
 
 #### TDD

@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-10 J-22 Layer 2 Code-Review Fixes (pre-fix)"
+---
+
 # Steady-State Baseline — 2026-06-10 J-22 Layer 2 Code-Review Fixes (pre-fix)
 
 > Snapshot of the system state BEFORE applying the 7-phase plan
@@ -11,7 +16,7 @@
 **Date:** 2026-06-10
 **Plan slug:** `2026-06-10-j22-layer2-code-review-fixes` v1.1
 **Plan verdict:** `SHIPPABLE_WITH_CAVEATS` (final score 89.0 via `/plan-confidence`)
-**Linked artifacts:** [`plan v1.1`](../../.claude/knowledge-base/plans/2026-06-10-j22-layer2-code-review-fixes-plan.md) · [`edge-case review`](../../.claude/knowledge-base/reviews/2026-06-10-j22-layer2-code-review-fixes-edge-cases-2026-06-10.md) · [`deps audit`](../../.claude/knowledge-base/audits/2026-06-10-j22-layer2-code-review-fixes-deps-audit-2026-06-10.md) · [`loop-code-review final report`](../../code-review-output/final_report.md) · upstream baseline [`2026-06-10-j22-layer2-eso-sync-live-green.md`](./2026-06-10-j22-layer2-eso-sync-live-green.md)
+**Linked artifacts:** [`plan v1.1`](../../.claude/knowledge-base/plans/2026-06-10-j22-layer2-code-review-fixes-plan.md) · [`edge-case review`](../../wiki/reviews/2026-06-10-j22-layer2-code-review-fixes-edge-cases-2026-06-10.md) · [`deps audit`](../../wiki/audits/2026-06-10-j22-layer2-code-review-fixes-deps-audit-2026-06-10.md) · [`loop-code-review final report`](../../code-review-output/final_report.md) · upstream baseline [`2026-06-10-j22-layer2-eso-sync-live-green.md`](./2026-06-10-j22-layer2-eso-sync-live-green.md)
 
 ---
 

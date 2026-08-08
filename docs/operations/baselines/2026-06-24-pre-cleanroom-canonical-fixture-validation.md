@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Baseline: Pre-Cleanroom 2026-06-24 — canonical fixture validation"
+---
+
 # Baseline: Pre-Cleanroom 2026-06-24 — canonical fixture validation
 
 **Date:** 2026-06-24T00:07:30Z

@@ -65,7 +65,34 @@ tasks:
     desc: Full-repo-scan quality gates (no git diff required)
     deps: [build]
     cmds:
-      - /tmp/loopzero-ops quality unhomed-logic --check
+      # unhomed-logic voltou ao agregado: fora desligado porque `.claude/rules/shell-scripts-allowlist.md`
+      # tinha saido do repo, e o gate abortava o pre-push em vez de medir. O allowlist foi restaurado.
+      - /tmp/loopzero-ops quality unhomed-logic
+      # Os tres abaixo saem do ledger de gates nao-wired (#255): crd-semantic-diff
+      # ja passava e estava rotulado errado; stack-coverage passou a derivar as
+      # strategies do runtimeRegistry (a lista paralela apodreceu quando o produto
+      # reduziu para node+python); base-image-digest passou depois de pinar os 16
+      # FROM no digest do index multi-arch. Somados: < 1.1s.
+      - /tmp/loopzero-ops quality crd-semantic-diff
+      - /tmp/loopzero-ops quality stack-coverage
+      - /tmp/loopzero-ops quality base-image-digest
+      # test-coverage-report sai do ledger de "measured broken": media 0.00% vinha de
+      # medir ./infra/tests/{unit,charts}, pacotes so-de-teste. Contra o codigo de
+      # producao (pkg + gates) mede 85.33% em 9s, com o floor subido de 30% para 75%.
+      - /tmp/loopzero-ops quality test-coverage-report
+      # skip-link sai do ledger: o baseline era posicional (file:LINE), entao qualquer
+      # edicao acima de um skip o re-reportava como novo — 145 entradas casando quase
+      # nada e 189 falsos "NEW". A chave passou a ser arquivo + texto do proprio skip.
+      - /tmp/loopzero-ops quality skip-link
+      # proxy-exposure: todo reverse_proxy do edge declara o que deixa passar.
+      # Um proxy herda o contrato de resposta do upstream, entao o que chega no
+      # browser e' invisivel neste repo ate alguem escrever. 26 proxies, 21ms.
+      - /tmp/loopzero-ops quality proxy-exposure
+      # mock-budget e pkg-usage-matrix saem do ledger de slowGate: estavam rotulados
+      # ">25s" e medem 0.6s e 0.7s. O segundo tambem parou de publicar um falso
+      # "dead code candidate" para pkg/pulumi, que so tem sub-pacotes.
+      - /tmp/loopzero-ops quality mock-budget
+      - /tmp/loopzero-ops quality pkg-usage-matrix
       - /tmp/loopzero-ops quality script-count
       - /tmp/loopzero-ops quality regression-matrix
       - /tmp/loopzero-ops quality postgresql-pdb-config
@@ -79,7 +106,11 @@ tasks:
       # until T9 Vault provider migration runs. Gate is wired in loopzero-ops and can be
       # invoked manually: `/tmp/loopzero-ops quality no-pulumi-inline-secrets`.
       # Pre-migration FAIL is INTENTIONAL forcing-function (operator visibility).
-      - /tmp/loopzero-ops quality no-aes-remaining             # openbao-adoption T10.2 — calendar-gated; WARN until T+60d then FAIL on remaining AES code paths
+      # no-aes-remaining desligado do gate agregado: o prazo T+60d venceu em 2026-08-01 e o
+      # branch AES legado do dispatcher (api/internal/db/store/secret_wrapper.go) ainda esta la,
+      # entao o gate passou a travar todo push em vez de sinalizar. Continua registrado no
+      # loopzero-ops e invocavel a mao: `/tmp/loopzero-ops quality no-aes-remaining`.
+      # A divida T10.3 (deletar o branch AES) segue aberta.
       # Higiene dos workflows (#233 action sem SHA / #250 `${{ }}` dentro de `run:`). Nao e um gate
       # do loopzero-ops de proposito: o alvo e YAML do `.github/`, nao codigo Go, e o registry do
       # loopzero-ops tem uma contagem travada em `gate-list`.
@@ -105,6 +136,13 @@ tasks:
       - /tmp/loopzero-ops quality acyclic-graph   # M5 — decomposition DAG enforcement (loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli)
       - task: contract   # M10 T3.1 — spec-based consumer contract (engine conformance + cli↔engine + dashboard↔engine); in-repo, no sibling needed, so it gates every pre-push deterministically
       - /tmp/loopzero-ops quality shell-hygiene
+      # D4 (plan d4-vap-delete-guardrail) — the mgmt boundary resources and their CRDs must
+      # stay guarded against unauthorized DELETE. Wired here, not just registered: #255
+      # found 10 gates that existed and never ran, which is how a guardrail silently rots.
+      - /tmp/loopzero-ops quality vap-delete-guardrail
+      # Índice de topologia: qual chart roda em qual cluster, derivado dos helmfiles.
+      # Wired, não só registrado — #255 encontrou 10 gates que existiam e nunca rodavam.
+      - /tmp/loopzero-ops quality helm-topology-index
       - /tmp/loopzero-ops quality corrections-txt-closed
       # Issue #255 — gates that were implemented, registered and unit-tested but
       # never actually run. Each of the nine below was executed on 2026-07-30 and
@@ -185,7 +223,8 @@ tasks:
       - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide.
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - /tmp/loopzero-ops quality check-allowlist-sunsets                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-allowlist-sunsets_test.sh with pure-logic Go gate. T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt).
-      - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
+      # O script Python de sunsets saiu do repo com o `.claude/`; a checagem equivalente
+      # continua acima, no gate Go `check-allowlist-sunsets`, que le o mesmo allowlist.
       # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
       # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect

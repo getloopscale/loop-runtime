@@ -17,7 +17,6 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselineupdate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfiledevserverdeny"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clibundlesize"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/decisionsdeletion"
@@ -27,6 +26,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drilloutputs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitdiff"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/proxyexposure"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skiplink"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
@@ -322,22 +322,67 @@ func runDivergenceMatrix(args []string) int {
 	return 0
 }
 
+func runProxyExposure(args []string) int {
+	fs := flag.NewFlagSet("proxy-exposure", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	caddyfile := fs.String("caddyfile", "", "edge config (default infra/local/Caddyfile)")
+	registry := fs.String("registry", "", "declaration file (default infra/quality/proxy-exposure.txt)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := proxyexposure.Check(proxyexposure.Config{
+		Root: *root, Caddyfile: *caddyfile, Registry: *registry,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[proxy-exposure] %v\n", err)
+		return 5
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[proxy-exposure] FAIL — the edge exposes something nobody declared.\n")
+		for _, u := range o.Undeclared {
+			fmt.Fprintf(os.Stderr, "  UNDECLARED %s\n", u)
+		}
+		for _, st := range o.Stale {
+			fmt.Fprintf(os.Stderr, "  STALE      %s — declared, but no such proxy exists\n", st)
+		}
+		for _, m := range o.Malformed {
+			fmt.Fprintf(os.Stderr, "  MALFORMED  %s\n", m)
+		}
+		fmt.Fprintln(os.Stderr, "Fix: add a row to infra/quality/proxy-exposure.txt saying what the proxy lets through.")
+		fmt.Fprintln(os.Stderr, "A reverse_proxy inherits its response from the upstream — if nobody wrote it down, nobody checked it.")
+		return 1
+	}
+	fmt.Printf("[proxy-exposure] PASS — %d edge proxies, all declared\n", o.Scanned)
+	return 0
+}
+
 func runSkipLink(args []string) int {
 	fs := flag.NewFlagSet("skip-link", flag.ContinueOnError)
 	dir := fs.String("dir", ".", "target directory to scan")
 	baseline := fs.String("baseline", "infra/quality/skip-link-baseline.txt", "baseline file")
 	ignoreBaseline := fs.Bool("ignore-baseline", false, "treat all violations as new")
+	emitBaseline := fs.Bool("emit-baseline", false, "print baseline keys for every violation, one per line, and exit 0")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	o, err := skiplink.Check(skiplink.Config{
 		TargetDir:      *dir,
 		BaselineFile:   *baseline,
-		IgnoreBaseline: *ignoreBaseline,
+		IgnoreBaseline: *ignoreBaseline || *emitBaseline,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[skip-link] %v\n", err)
 		return 5
+	}
+	// A baseline nobody can regenerate is a baseline that decays. The keys are
+	// not derivable from the human-facing output (which carries absolute paths
+	// and line numbers), so emitting them is the only reproducible way to
+	// re-freeze after a deliberate sweep.
+	if *emitBaseline {
+		for _, k := range o.Keys {
+			fmt.Println(k)
+		}
+		return 0
 	}
 	if !o.Pass {
 		fmt.Fprintf(os.Stderr, "[skip-link] FAIL: %d NEW skip(s) without issue URL:\n", len(o.NewViolations))
@@ -355,29 +400,6 @@ func runSkipLink(args []string) int {
 	} else {
 		fmt.Println("[skip-link] PASS — all skip calls have issue URL")
 	}
-	return 0
-}
-
-func runCLIBundleSize(args []string) int {
-	fs := flag.NewFlagSet("cli-bundle-size", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	o := clibundlesize.Check(clibundlesize.Config{Root: *root})
-	mb := func(b int64) float64 { return float64(b) / 1024 / 1024 }
-	if o.Skipped {
-		fmt.Println("[cli-bundle-size] PASS — cli/dist not present (run 'cd cli && npm run build' first).")
-		return 0
-	}
-	if !o.Pass {
-		fmt.Fprintf(os.Stderr, "[cli-bundle-size] FAIL — cli/dist %.1f MB > cap %.1f MB (T9.3 governance).\n",
-			mb(o.TotalBytes), mb(o.MaxBytes))
-		fmt.Fprintln(os.Stderr, "Options: (1) remove/lazy-load the heavy dependency, OR")
-		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in cmd/loopzero-ops/internal/quality/clibundlesize + add an ADR justifying the growth.")
-		return 1
-	}
-	fmt.Printf("[cli-bundle-size] PASS — cli/dist %.1f MB <= cap %.1f MB.\n", mb(o.TotalBytes), mb(o.MaxBytes))
 	return 0
 }
 

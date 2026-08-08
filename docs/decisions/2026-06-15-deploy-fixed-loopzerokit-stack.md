@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR 2026-06-15 — LoopZeroCloud deploy supports only the fixed LoopZeroKit stack (python + node)"
+---
+
 # ADR 2026-06-15 — LoopZeroCloud deploy supports only the fixed LoopZeroKit stack (python + node)
 
 **Status:** Accepted

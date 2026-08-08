@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "LoopZero Bottleneck Simulator M5 (reconcile calculator ↔ engine)"
+---
+
 # Review — LoopZero Bottleneck Simulator M5 (reconcile calculator ↔ engine)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m5`.

@@ -1,7 +1,13 @@
+---
+type: plan
+title: "Edge Case Review — dashboard-faang-tier-3"
+status: deprecated
+---
+
 # Edge Case Review — dashboard-faang-tier-3
 
 **Data:** 2026-05-25
-**Plano:** `docs/plans/2026-05-26-dashboard-faang-tier-3-plan.md` (v1.0 PROPOSED)
+**Plano:** [`docs/plans/2026-05-26-dashboard-faang-tier-3-plan.md`](./2026-05-26-dashboard-faang-tier-3-plan.md) (v1.0 PROPOSED)
 **Tasks analisadas:** 26 (Phase 1: 10, Phase 2: 7, Phase 3: 9)
 **Edge cases encontrados:** 23 (MUST FIX: 9, SHOULD TEST: 7, DOCUMENT: 7)
 

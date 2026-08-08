@@ -50,6 +50,17 @@ clusterImagePolicyKeyless:
 # VAP toggles. Unified schema — matches infra/helm/admission-policies (bootstrap).
 # All VAP templates read from .Values.vaps.<name> (boolean).
 vaps:
+  # D4 / plan d4-vap-delete-guardrail — protect boundary resources (Application,
+  # AppProject, Tenant, Environment, ClusterCredential) AND their CRDs from unauthorized
+  # DELETE. The cascade finalizer means deleting one of these deletes what it manages;
+  # under BYOC that reaches a customer account.
+  #
+  # Default OFF, same reasoning as tenantNamespace above: enabling a DELETE policy with an
+  # incomplete exemption map deadlocks namespace teardown (B33). Enable via the mgmt
+  # overlay AFTER the Warn observation window.
+  protectPlatformDeletes: false
+  # Warn | Deny. Stays Warn until T2.3 proves no legitimate identity is caught.
+  protectPlatformDeletesAction: Warn
   disallowLatestTag: true
   restrictRegistries: true
   requireResourceLimits: true

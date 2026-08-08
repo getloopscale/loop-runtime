@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M7 (quantify the request tier)
+---
+
 # Plan — LoopZero Bottleneck Simulator M7 (quantify the request tier)
 
 > Slug: `loopzero-bottleneck-simulator-m7`. Uses M0-M6. FAANG-level, no workarounds.

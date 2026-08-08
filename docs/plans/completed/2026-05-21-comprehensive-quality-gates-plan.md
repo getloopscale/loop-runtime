@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Comprehensive Quality Gates — Every Change Tested"
+status: deprecated
+---
+
 # Plan: Comprehensive Quality Gates — Every Change Tested
 
 > **Version 1.1** (2026-05-21 — edge case review incorporated, 6 MUST FIX

@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-11 Pre Code-Review Remediation"
+---
+
 # Steady-State Baseline — 2026-06-11 Pre Code-Review Remediation
 
 **Captured at**: 2026-06-11

@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — J-22 Layer 2 ESO Sync LIVE GREEN end-to-end"
+---
+
 # Steady-State Baseline — J-22 Layer 2 ESO Sync LIVE GREEN end-to-end
 
 **Date:** 2026-06-10 (20:23 UTC)
@@ -255,13 +260,13 @@ All controllers Running; no restarts during the LIVE window.
 ## Related
 
 - Plan: `.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md` v1.2
-- Runbook: `docs/operations/openbao-transit-cutover-runbook.md`
+- Runbook: [`docs/operations/openbao-transit-cutover-runbook.md`](../openbao-transit-cutover-runbook.md)
 - Inquebrável Cleanroom mandate: `.claude/rules/cleanroom-up-live-test-mandate.md`
 - Previous baselines on the same day:
-  - `2026-06-10-iter-27-j22-quality-gates-evidence.md`
-  - `2026-06-10-iter-33-j22-session-final-evidence.md`
-  - `2026-06-10-pre-j22-openbao-transit.md` (pre-Cleanroom Sun 06:56 UTC)
-  - `2026-06-10-post-j22-openbao-transit.md` (post-rehearsal 08:21 UTC)
+  - [`2026-06-10-iter-27-j22-quality-gates-evidence.md`](./2026-06-10-iter-27-j22-quality-gates-evidence.md)
+  - [`2026-06-10-iter-33-j22-session-final-evidence.md`](./2026-06-10-iter-33-j22-session-final-evidence.md)
+  - [`2026-06-10-pre-j22-openbao-transit.md`](./2026-06-10-pre-j22-openbao-transit.md) (pre-Cleanroom Sun 06:56 UTC)
+  - [`2026-06-10-post-j22-openbao-transit.md`](./2026-06-10-post-j22-openbao-transit.md) (post-rehearsal 08:21 UTC)
 - Sponsor mandate verbatim: *"Voce deve terminar de implementar, precisamos fechar nosso sistema de Scrects [...] Senao esta fucnionando nao esta implementado"* + *"Por que voce esta preocupado com o tempo?"*
 
 ## Follow-up tasks (already registered)

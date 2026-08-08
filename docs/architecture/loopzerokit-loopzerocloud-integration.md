@@ -1,3 +1,8 @@
+---
+type: architecture
+title: "LoopZeroKit ↔ LoopZeroCloud — Integration Flow"
+---
+
 # LoopZeroKit ↔ LoopZeroCloud — Integration Flow
 
 > **Canonical reference for Claude Code working in either repo.**
@@ -232,7 +237,7 @@ Authorization: Bearer <JWT>
   └────────────────────────────────────────┘
 ```
 
-Full wire spec: `loopzero-cloud/loopzero/docs/api/source-upload-wire-protocol.md`.
+Full wire spec: [`loopzero-cloud/loopzero/docs/api/source-upload-wire-protocol.md`](../api/source-upload-wire-protocol.md).
 
 ## Typed error flow (cause-chain end-to-end)
 
@@ -300,7 +305,7 @@ Plan v1.2 closed 22 findings on the integration seam. The invariants that MUST h
 - **services.json schema is `oneOf` discriminated by `version`**. Add a v3 only via a new branch — never break v1+v2.
 
 ### Wire
-- **Multipart field order is part of the contract.** `services_json` first, `bundle` second. Enforced via `peekFirstMultipartFieldName` (`api/internal/routes/source.go`). Documented at `docs/api/source-upload-wire-protocol.md`.
+- **Multipart field order is part of the contract.** `services_json` first, `bundle` second. Enforced via `peekFirstMultipartFieldName` (`api/internal/routes/source.go`). Documented at [`docs/api/source-upload-wire-protocol.md`](../api/source-upload-wire-protocol.md).
 - **`services_json` field is capped at 256 KB**; `bundle` at 500 MB. Constants: `maxServicesJSONSize`, `maxBundleSize`.
 
 ### Error discipline
@@ -329,7 +334,7 @@ Plan v1.2 closed 22 findings on the integration seam. The invariants that MUST h
 - **Plan v1.2 implementation report:** `loopzerokit-tools/.claude/knowledge-base/reviews/cutover-deep-review-hardening-implementation-2026-06-06.md`
 - **Plan v1.2 plan:** `loopzerokit-tools/.claude/knowledge-base/plans/cutover-deep-review-hardening-plan.md`
 - **Plan v1.2 edge cases:** `loopzerokit-tools/.claude/knowledge-base/reviews/cutover-deep-review-hardening-edge-cases-2026-06-05.md`
-- **Wire protocol spec:** `loopzero-cloud/loopzero/docs/api/source-upload-wire-protocol.md`
+- **Wire protocol spec:** [`loopzero-cloud/loopzero/docs/api/source-upload-wire-protocol.md`](../api/source-upload-wire-protocol.md)
 - **T3.1 callers audit:** `loopzerokit-tools/.claude/knowledge-base/audits/t3-1-render-callers-2026-06-06.md`
 - **Architecture baseline (pre-Plan v1.2):** `loopzerokit-tools/.claude/knowledge-base/architecture/cutover/`
 - **Phase 8 dogfood substitute:** `loopzerokit-tools/.claude/knowledge-base/audits/phase-8-dogfood-substitute-2026-06-06.md`

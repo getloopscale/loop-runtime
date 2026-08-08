@@ -1,7 +1,12 @@
+---
+type: operational-runbook
+title: Kubernetes Upgrade Runbook (DOKS)
+---
+
 # Kubernetes Upgrade Runbook (DOKS)
 
 Operator-facing guide for upgrading the DOKS minor version (e.g., v1.32 → v1.33).
-Adopted via plan `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3 Phase 7 T7.1.
+Adopted via plan [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md) v1.3 Phase 7 T7.1.
 
 ---
 
@@ -113,4 +118,4 @@ DOKS does **NOT** support minor-version rollback in-place. The recovery path:
 - Workflow file: `.github/workflows/pluto-deprecated-apis.yml` — **deleted 2026-05-23**
 - Hermetic tests: `cmd/loopzero-ops/internal/quality/plutogate/` — **deleted 2026-05-23** (the gate only validated the workflow above)
 - Test fixtures: `infra/tests/pluto/fixtures/{deprecated,current}.yaml` — **retained**, ready for a re-homed gate
-- Plan section: `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` Phase 7 T7.1
+- Plan section: [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md) Phase 7 T7.1

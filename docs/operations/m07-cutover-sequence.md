@@ -1,8 +1,13 @@
+---
+type: operational-runbook
+title: M07 Production Cutover Sequence
+---
+
 # M07 Production Cutover Sequence
 
 > **Authoritative cutover ordering for M07 Tenant Build Pipeline (cosign keyless + Sigstore + Rekor URL persistence) production deployment.**
 >
-> Source: T0.3 of plan `2026-05-28-meet-001-engineering-closure-plan.md` v1.1.
+> Source: T0.3 of plan [`2026-05-28-meet-001-engineering-closure-plan.md`](../plans/2026-05-28-meet-001-engineering-closure-plan.md) v1.1.
 > Mandates: MEET-2026-05-28-001 mandatory action #23 (CR-11 fix).
 >
 > **Engineering side of MEET-001 must be GREEN before this sequence is executable** (15 actions per Plan A). Operator HARD STOPs in the sequence below are gated on their respective actions completing.
@@ -112,7 +117,7 @@ argocd app sync loopzero-api --revision $TARGET_REV
 argocd app wait loopzero-api --health
 ```
 
-**Abort trigger:** ArgoCD app Degraded for >5min. Execute rollback per `docs/operations/rollback-m07-cutover-runbook.md`.
+**Abort trigger:** ArgoCD app Degraded for >5min. Execute rollback per [`docs/operations/rollback-m07-cutover-runbook.md`](./rollback-m07-cutover-runbook.md).
 
 ### Step 6 — Validate first build (engineering + operator)
 
@@ -144,7 +149,7 @@ helm upgrade admission-policies infra/helm/admission-policies/ \
 
 ## Pre-cutover gates (engineering side — must complete BEFORE Step 1)
 
-These 15 engineering actions of Plan A (`2026-05-28-meet-001-engineering-closure-plan.md`) MUST be complete + LIVE-validated:
+These 15 engineering actions of Plan A ([`2026-05-28-meet-001-engineering-closure-plan.md`](../plans/2026-05-28-meet-001-engineering-closure-plan.md)) MUST be complete + LIVE-validated:
 
 - T0.1 ADR-A LOCAL exception ✅
 - T0.2 ADR-B cosign v2.4.3 deadline ✅
@@ -167,7 +172,7 @@ These 15 engineering actions of Plan A (`2026-05-28-meet-001-engineering-closure
 
 ## Abort + rollback
 
-If any step fails, execute `docs/operations/rollback-m07-cutover-runbook.md` (T4.5).
+If any step fails, execute [`docs/operations/rollback-m07-cutover-runbook.md`](./rollback-m07-cutover-runbook.md) (T4.5).
 
 Time budgets (per SRE veto release condition):
 - Steps 1-3 + 5: ≤ 15min rollback
@@ -175,7 +180,7 @@ Time budgets (per SRE veto release condition):
 
 ## Related
 
-- Plan: `docs/plans/2026-05-28-meet-001-engineering-closure-plan.md` v1.1
+- Plan: [`docs/plans/2026-05-28-meet-001-engineering-closure-plan.md`](../plans/2026-05-28-meet-001-engineering-closure-plan.md) v1.1
 - Meeting: MEET-2026-05-28-001 (cutover REJECTED + 24 mandatory actions)
-- Rollback: `docs/operations/rollback-m07-cutover-runbook.md` (T4.5, not yet authored)
+- Rollback: [`docs/operations/rollback-m07-cutover-runbook.md`](./rollback-m07-cutover-runbook.md) (T4.5, not yet authored)
 - Preflight script: `infra/scripts/production/m07-cutover-preflight.sh`

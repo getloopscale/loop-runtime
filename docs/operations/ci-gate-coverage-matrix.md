@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "CI Gate Coverage Matrix — Deep Review Remediation Phase 6 Closure"
+---
+
 # CI Gate Coverage Matrix — Deep Review Remediation Phase 6 Closure
 
 > **Status:** Closure document for T6.x gates (Phase 6 of plan
@@ -8,7 +13,7 @@ Last updated: 2026-05-21 (T6.4 + T4.7 closure batch).
 
 ## Rule → Gate mapping
 
-Per ADR `docs/decisions/2026-05-21-naming-conventions-adr.md` § Enforcement.
+Per ADR [`docs/decisions/2026-05-21-naming-conventions-adr.md`](../decisions/2026-05-21-naming-conventions-adr.md) § Enforcement.
 
 | Rule | Gate file | Status | Plan task |
 |---|---|---|---|
@@ -76,6 +81,6 @@ Each rule file declares its enforcement status openly via the Enforcement table 
 
 ## References
 
-- Plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` Phase T6 + T4
-- ADR: `docs/decisions/2026-05-21-naming-conventions-adr.md`
+- Plan: [`docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`](../plans/completed/2026-05-21-deep-review-remediation-plan.md) Phase T6 + T4
+- ADR: [`docs/decisions/2026-05-21-naming-conventions-adr.md`](../decisions/2026-05-21-naming-conventions-adr.md)
 - Memory: `feedback_anti_lying_workaround_pattern` — advisory-without-graduation forbidden

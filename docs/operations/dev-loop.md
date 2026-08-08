@@ -1,7 +1,12 @@
+---
+type: operational-runbook
+title: "LoopZero Dev Loop — Canonical Guide"
+---
+
 # LoopZero Dev Loop — Canonical Guide
 
 This is the **canonical** developer workflow for local LoopZero development.
-Adopted via plan `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3
+Adopted via plan [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md) v1.3
 Phase 3 (T3.1+T3.2).
 
 ---
@@ -124,7 +129,7 @@ task db:migrate
 
 ---
 
-## Local sqlc Workflow (Phase 0 of `2026-05-29-sqlc-migration-plan.md` v1.2)
+## Local sqlc Workflow (Phase 0 of [`2026-05-29-sqlc-migration-plan.md`](../plans/2026-05-29-sqlc-migration-plan.md) v1.2)
 
 The sqlc migration introduces a codegen step in `api/internal/db/`. Local workflow:
 
@@ -186,9 +191,9 @@ git add api/internal/db/schema.gen.sql
 
 ## Phase 3 plan reference
 
-This document materializes T3.1 of `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3.
+This document materializes T3.1 of [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md) v1.3.
 
 Key cross-references:
-- T2.3 (Taskfile delegation to Helmfile): `docs/scripts-audit/2026-05-22-helmfile-mapping.md`
+- T2.3 (Taskfile delegation to Helmfile): [`docs/scripts-audit/2026-05-22-helmfile-mapping.md`](../scripts-audit/2026-05-22-helmfile-mapping.md)
 - T3.2 deprecation notice: see `Taskfile.yml` `setup:` task desc
 - Plan dependency graph: Phase 3 follows Phase 2 (cleanroom unblocked)

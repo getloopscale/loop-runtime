@@ -1,6 +1,12 @@
+---
+type: plan
+title: "Operator Handoff — Drill Skills Rigor Restoration"
+status: deprecated
+---
+
 # Operator Handoff — Drill Skills Rigor Restoration
 
-> **Para o operador humano.** Engineering portion do plano `2026-05-19-drill-skills-rigor-restoration-plan.md` foi shippeada via Ralph (commits `82835ad8` + `6e836768`). Este doc lista as 3 ações LIVE que requerem operador presente — Ralph **não pode** executá-las.
+> **Para o operador humano.** Engineering portion do plano [`2026-05-19-drill-skills-rigor-restoration-plan.md`](./2026-05-19-drill-skills-rigor-restoration-plan.md) foi shippeada via Ralph (commits `82835ad8` + `6e836768`). Este doc lista as 3 ações LIVE que requerem operador presente — Ralph **não pode** executá-las.
 
 ## Status atual (engineering side)
 
@@ -331,7 +337,7 @@ COMPLETE — plano 2026-05-19 rigor restoration ENCERRADO
 
 ## Cross-references
 
-- Plano principal: `docs/plans/2026-05-19-drill-skills-rigor-restoration-plan.md`
+- Plano principal: [`docs/plans/2026-05-19-drill-skills-rigor-restoration-plan.md`](./2026-05-19-drill-skills-rigor-restoration-plan.md)
 - T1.2 finding doc skeleton: `.claude/knowledge-base/concepts/operations/finding-2026-05-19-jwt-drill-401-root-cause.md`
 - Engineering commits: `82835ad8`, `6e836768`
 - Princípio §3 Honestidade Extrema: `~/.claude/CLAUDE.md`

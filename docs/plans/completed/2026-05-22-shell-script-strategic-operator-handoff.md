@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Operator Handoff — Shell Script Strategic Plan (Phase 5 autonomous saturation)"
+status: deprecated
+---
+
 # Operator Handoff — Shell Script Strategic Plan (Phase 5 autonomous saturation)
 
 **Date:** 2026-05-22

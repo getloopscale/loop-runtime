@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan 2026-05-26 Maturity 3.62→4.0 — Iter 5 Broad-Verification Evidence"
+status: deprecated
+---
+
 # Plan 2026-05-26 Maturity 3.62→4.0 — Iter 5 Broad-Verification Evidence
 
 **Date:** 2026-05-27 (iters 1+2+3+4+5 same calendar day)
@@ -104,7 +110,7 @@ Re-verifying Global DoD checkboxes:
 
 ## Next steps for operator (unchanged from iter 4)
 
-See `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-iter4-status.md` § "Operator handoff — next concrete steps" for the 6-step concrete bash command list.
+See [`docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-iter4-status.md`](./2026-05-26-maturity-3-62-to-4-0-roadmap-iter4-status.md) § "Operator handoff — next concrete steps" for the 6-step concrete bash command list.
 
 ## Honest closure
 

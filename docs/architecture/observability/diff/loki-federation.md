@@ -1,4 +1,6 @@
 ---
+title: "Loki Cross-Cluster Federation — Design Proposal"
+generated: { by: process:plan-t4.6, at: 2026-05-27 }
 name: loki-federation
 description: PROPOSED Loki cross-cluster federation design (T4.6 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap). Engineering-pre-validated; LIVE rollout requires drill stack.
 type: decision
@@ -11,7 +13,7 @@ updated_by: plan T4.6
 
 # Loki Cross-Cluster Federation — Design Proposal
 
-> **Plan reference:** T4.6 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T4.6 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../../../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
 > **Closes:** M08 Observability MEDIUM gap — "Loki cross-cluster siloed. Single Loki em build cluster. Runtime/workload Promtail push to build Loki via hardcoded IP. Phase 3 ADR-0009 sem implementation."
 

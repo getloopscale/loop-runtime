@@ -737,3 +737,22 @@ releases:
       - loopzero-system/loopzero-platform-operator
     values:
       - ../helm/smoke-test/values.yaml
+
+  # D4 delete guardrail (plan d4-vap-delete-guardrail, T1.2).
+  #
+  # Second install of the admission-policies chart. The first lives in
+  # runtime.helmfile.yaml.gotmpl and guards workloads; this one guards the mgmt boundary
+  # resources (Application, AppProject, Tenant, Environment, ClusterCredential) and their
+  # CRDs, which live HERE and had no admission policy at all before this release existed.
+  #
+  # Deliberately NO `needs: cosign-system/policy-controller`. That dependency belongs to the
+  # runtime install, where the policies are cosign-related. ValidatingAdmissionPolicy is a
+  # native Kubernetes feature (1.30+; mgmt is pinned at 1.32) and needs no controller, so
+  # copying the runtime block wholesale would invent a dependency that does not exist on
+  # this cluster and would block the sync.
+  - name: admission-policies-mgmt
+    namespace: loopzero-system
+    chart: ../helm/admission-policies
+    values:
+      - ../helm/admission-policies/values.yaml
+      - ../helm/admission-policies/values-mgmt.yaml

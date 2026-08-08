@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Option B — Deploy ESO Controller in mgmt cluster"
+---
+
 # Option B — Deploy ESO Controller in mgmt cluster
 
 > **Pre-authored 2026-06-10 by iter 33 productive-idle** of plan
@@ -171,7 +176,7 @@ ESO controller in workload cluster is UNAFFECTED by this — the destroy is name
 ## Cross-references
 
 - Plan: `.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md`
-- Operator runbook: `docs/operations/openbao-transit-cutover-runbook.md`
+- Operator runbook: [`docs/operations/openbao-transit-cutover-runbook.md`](./openbao-transit-cutover-runbook.md)
 - iter 31 architectural finding: runbook § "Architectural finding — ESO controller absent in mgmt"
 - iter 31 Option A subset LIVE script: `infra/tests/e2e/dev-public-secrets-write-path-subset_test.sh`
 - iter 25 dev-public ESO overlay: `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`

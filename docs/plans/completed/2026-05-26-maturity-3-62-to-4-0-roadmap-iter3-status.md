@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan 2026-05-26 Maturity 3.62→4.0 — Iteration 3 Status (cumulative)"
+status: deprecated
+---
+
 # Plan 2026-05-26 Maturity 3.62→4.0 — Iteration 3 Status (cumulative)
 
 **Date:** 2026-05-27 (iters 1+2+3 same calendar day)

@@ -1,8 +1,14 @@
+---
+type: plan
+title: "Plan: Maturity 3.62→4.0 Roadmap — All 12 Modules to Excellence"
+status: deprecated
+---
+
 # Plan: Maturity 3.62→4.0 Roadmap — All 12 Modules to Excellence
 
 > **Version 1.1** — Synthesize all "Caminho para X+1" sections from the 2026-05-26 modular audit into a single phased executable plan that lifts the entire scorecard from average 3.62 → 4.0 (+0.38 portfolio lift). Address 8 HIGH + 8 MEDIUM + 10 LOW cross-module gaps via 6 phases: operator/sponsor decisions (Phase 0), mechanical high-value (Phase 1), architectural medium (Phase 2), operational runbooks (Phase 3), test debt + polish (Phase 4), re-audit + close-out (Phase 5). Document trade-offs that cap pkg/ + State Machines at 3.9 (M11 #25 typed-enum migration intractable per DB CHECK + JSON marshaling + K8s status conversions). Pre-release governance respected — all tasks tier-classified; operator HARD STOPS preserved (T5.1 Op B 7-day soak NOT in scope here).
 >
-> **v1.1 changes (2026-05-26):** Absorved 8 MUST FIX edge cases from `/edge-case-plan` review (see `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-edge-case-review.md`) — clarifications em T1.1 (correlation pkg path), T2.2 (Fulcio/Rekor chart pinning + TLS issuer per env), T2.3 (values.schema.json oneOf + ClusterImagePolicy progressive rollout), T3.3 (ConfigMap path + emergency override), T4.6 (Promtail templating mechanism). 6 SHOULD TEST + 5 DOCUMENT edges noted in review doc for awareness; not blocking.
+> **v1.1 changes (2026-05-26):** Absorved 8 MUST FIX edge cases from `/edge-case-plan` review (see [`docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-edge-case-review.md`](./2026-05-26-maturity-3-62-to-4-0-roadmap-edge-case-review.md)) — clarifications em T1.1 (correlation pkg path), T2.2 (Fulcio/Rekor chart pinning + TLS issuer per env), T2.3 (values.schema.json oneOf + ClusterImagePolicy progressive rollout), T3.3 (ConfigMap path + emergency override), T4.6 (Promtail templating mechanism). 6 SHOULD TEST + 5 DOCUMENT edges noted in review doc for awareness; not blocking.
 
 ## Context
 

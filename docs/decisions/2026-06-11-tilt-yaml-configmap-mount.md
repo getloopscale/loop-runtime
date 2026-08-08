@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR D1 — Tilt-owned YAML → Helm ConfigMap + Secret mount canonical pattern"
+---
+
 # ADR D1 — Tilt-owned YAML → Helm ConfigMap + Secret mount canonical pattern
 
 **Status:** Accepted

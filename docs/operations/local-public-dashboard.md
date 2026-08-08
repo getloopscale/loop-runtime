@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Local-Public Dashboard Demo (Caddy + k3d)
+---
+
 # Local-Public Dashboard Demo (Caddy + k3d)
 
 > T7.4 of plan `2026-05-29-dashboard-public-integration-canonicalization`.

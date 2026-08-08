@@ -1,3 +1,8 @@
+---
+type: review
+title: "Vercel Dashboard — Benchmark Comparison"
+---
+
 # Vercel Dashboard — Benchmark Comparison
 
 **Data:** 2026-05-25
@@ -5,14 +10,14 @@
 **Evidência:**
 - `vercel-overview-benchmark.png` — Vercel Overview (Hobby tier) — mesma rota lógica que LoopZeroCloud `/`
 - `vercel-observability-query-benchmark.png` — Vercel Observability > Query (URL footer: `vercel.com/paulohenriquevn/~/observability/external-apis`)
-**Companion to:** `REPORT.md` (density audit full tour 13/13 routes)
+**Companion to:** [`REPORT.md`](./REPORT.md) (density audit full tour 13/13 routes)
 **Purpose:** validação empírica das violações P1 detectadas no audit interno (DSS § 6.1 + CC-3) usando um SaaS de classe operator-grade como referência
 
 ---
 
 ## Por que este documento existe
 
-O `REPORT.md` classifica 2 violações P1 (Overview empty states oversized + KPI count baixo) usando o próprio DSS v1.0 como régua. Essa régua é **interna** — o risco é que os targets (≤200px empty state, 4-5 KPIs) sejam folclore não-validado.
+O [`REPORT.md`](./REPORT.md) classifica 2 violações P1 (Overview empty states oversized + KPI count baixo) usando o próprio DSS v1.0 como régua. Essa régua é **interna** — o risco é que os targets (≤200px empty state, 4-5 KPIs) sejam folclore não-validado.
 
 Os 2 screenshots do Vercel são a **régua externa**: se Vercel (o SaaS-de-referência citado pelo próprio DSS) faz **exatamente** o que o nosso target sugere, a violação é real. Se Vercel faz diferente, o target precisa ser revisitado.
 
@@ -94,7 +99,7 @@ Os 2 screenshots do Vercel são a **régua externa**: se Vercel (o SaaS-de-refer
 Este benchmark é o **segundo insumo** (junto com o REPORT.md) para o plano de density refactor **ainda não escrito** (`docs/plans/completed/2026-05-26-dashboard-density-refactor-plan.md`).
 
 Quando o `/to-plan` for invocado, recomenda-se incluir como contexto:
-1. `docs/reviews/density-audit-2026-05-25/REPORT.md` — violações internas DSS-based (2 P1 + 5 P2 + 4 P3)
+1. [`docs/reviews/density-audit-2026-05-25/REPORT.md`](./REPORT.md) — violações internas DSS-based (2 P1 + 5 P2 + 4 P3)
 2. `docs/reviews/density-audit-2026-05-25/vercel-benchmark.md` (este arquivo) — validação externa + 8 novos gaps (V-1 a V-8)
 3. Os 13 PNGs internos + 2 PNGs Vercel — evidência visual
 

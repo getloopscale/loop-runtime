@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Dev-Public Canonical Closure Runbook
+---
+
 # Dev-Public Canonical Closure Runbook
 
 > Final 3 DoDs from plan `2026-06-04-dev-public-domain-canonicalization`

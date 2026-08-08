@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-state baseline — 2026-06-09 pre M2 operator canonical fix"
+---
+
 # Steady-state baseline — 2026-06-09 pre M2 operator canonical fix
 
 > 4-layer baseline per `.claude/rules/steady-state-baseline.md` captured at start
@@ -19,12 +24,12 @@ destination → namespace not found → SA not found → pods Forbidden` and req
 4 manual operator workarounds. The PreviewController is M2-correct; the gap is
 isolated to the production env reconcile path in `operators/internal/tenant/`.
 
-Post-implementation baseline `2026-06-09-post-m2-operator-fix.md` (T7.1 deliverable)
+Post-implementation baseline [`2026-06-09-post-m2-operator-fix.md`](./2026-06-09-post-m2-operator-fix.md) (T7.1 deliverable)
 will capture state after the 9 tasks ship + LIVE E2E `dev-public-production-deploy_test.sh`
 passes. Any regression that surfaces post-merge is diff-bounded by these two snapshots.
 
 The prior milestone baseline is
-`docs/operations/baselines/2026-06-08-post-test-rigor-cleanroom.md` (pre-release
+[`docs/operations/baselines/2026-06-08-post-test-rigor-cleanroom.md`](./2026-06-08-post-test-rigor-cleanroom.md) (pre-release
 test rigor delivery). Intermediate work in `worktree-glowing-growing-babbage`
 delivered the pre-release-test-rigor harness + T6.1 LIVE testing that surfaced
 the M2 operator drift documented here.
@@ -183,7 +188,7 @@ Asymmetry confirms drift is in production path only.
 - Deps audit: `.claude/knowledge-base/audits/2026-06-09-m2-operator-canonical-fix-deps-audit-2026-06-09-v1.2.md`
 - Implementation contract: `.claude/knowledge-base/implementations/2026-06-09-m2-operator-canonical-fix-implementation.md`
 - SEPA: `.claude/agents/implement-2026-06-09-m2-operator-canonical-fix-2026-06-09/sepa.md`
-- Prior baseline: `docs/operations/baselines/2026-06-08-post-test-rigor-cleanroom.md`
+- Prior baseline: [`docs/operations/baselines/2026-06-08-post-test-rigor-cleanroom.md`](./2026-06-08-post-test-rigor-cleanroom.md)
 - Memory: `feedback_m2_canonical_drift_operator_renderer` + `reference_m2_runtime_envs_per_project_session_2026_06_07`
 
 This baseline is referenced from the commit body that closes T0.1 (this commit)

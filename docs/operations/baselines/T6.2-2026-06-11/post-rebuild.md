@@ -1,3 +1,9 @@
+---
+type: baseline
+title: T6.2 Post-Rebuild Baseline
+description: "Captured: 2026-06-11T17:36:52Z"
+---
+
 # T6.2 Post-Rebuild Baseline
 Captured: 2026-06-11T17:36:52Z
 Status: Phase 5 of Cleanroom TOTAL chain (post task setup + tilt up + task doctor PASS gate)

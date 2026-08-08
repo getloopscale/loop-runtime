@@ -1,4 +1,6 @@
 ---
+title: "Tenant Build Pipeline — OpenTelemetry Sampling"
+generated: { by: process:tenant-build-pipeline-gaps-closure-plan-t4.1, at: 2026-05-27 }
 name: build-pipeline-otel
 description: OpenTelemetry sampling policy for tenant build pipeline (Argo Workflows) — head-based 10% with LOOPZERO_BUILD_FORCE_TRACE escape hatch per ADR D3 (v1.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure).
 type: operational-runbook
@@ -148,9 +150,9 @@ For longer retention: archive specific trace IDs to S3 via Tempo's `tempo-cli` (
 
 ## Related
 
-- ADR D3 (v1.1) of plan: `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`
-- Edge case review (v1.1 EC-NEW-9): `docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md`
+- ADR D3 (v1.1) of plan: [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md`](../plans/2026-05-27-tenant-build-pipeline-gaps-closure-plan.md)
+- Edge case review (v1.1 EC-NEW-9): [`docs/plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md`](../plans/2026-05-27-tenant-build-pipeline-gaps-closure-edge-case-review.md)
 - Argo Workflows OTel docs: https://argo-workflows.readthedocs.io/en/stable/metrics/
 - OpenTelemetry sampling spec: https://opentelemetry.io/docs/concepts/sampling/
 - Tempo TraceQL: https://grafana.com/docs/tempo/latest/traceql/
-- Related runbooks: `docs/operations/sigstore-storage-model.md`
+- Related runbooks: [`docs/operations/sigstore-storage-model.md`](./sigstore-storage-model.md)

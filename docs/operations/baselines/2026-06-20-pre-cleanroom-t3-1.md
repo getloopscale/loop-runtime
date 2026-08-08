@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-state baseline — Pre-Cleanroom for T3.1 LIVE bring-up"
+---
+
 # Steady-state baseline — Pre-Cleanroom for T3.1 LIVE bring-up
 
 **Date:** 2026-06-20 UTC

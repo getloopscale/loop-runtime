@@ -1,0 +1,26 @@
+=== check-day30-day60-cronjobs_test.sh baseline (2026-07-10 pre-migration) ===
+Repo HEAD: 9dc131fb24f73e40a1c9a668e5bdcf5152044a30
+
+--- stdout+stderr ---
+[34m== Day 30 + Day 60 disabled by default ==[0m
+[32m  PASS: Day 30 cron absent when enabled=false[0m
+[32m  PASS: Day 60 cron absent when enabled=false[0m
+[34m== Day 30 cron present when enabled ==[0m
+[32m  PASS: Day 30 cron rendered[0m
+[32m  PASS: Day 30 default schedule = '0 3 1 * *' (03:00 UTC day 1 monthly)[0m
+[32m  PASS: Day 30 EC-12 --filter-deleted-tenants flag present[0m
+[32m  PASS: Day 30 concurrencyPolicy: Forbid (no parallel runs)[0m
+[34m== Day 60 cron present when enabled + safety defaults ==[0m
+[32m  PASS: Day 60 cron rendered[0m
+[32m  PASS: Day 60 default --dry-run=true (safety — no destructive ops)[0m
+[32m  PASS: Day 60 default --shred-aes-key=false (safety — irreversible op gated)[0m
+[32m  PASS: Day 60 command invokes migrate-to-transit subcmd[0m
+[34m== Security context hardening present (both crons) ==[0m
+[32m  PASS: runAsNonRoot: true present[0m
+[32m  PASS: readOnlyRootFilesystem: true present[0m
+[32m  PASS: runAsNonRoot: true present[0m
+[32m  PASS: readOnlyRootFilesystem: true present[0m
+
+[34m================================================================[0m
+[32mALL PASS (14/14)[0m
+--- exit code: 0 ---

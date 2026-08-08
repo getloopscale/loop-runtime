@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: LoopZero Bottleneck Simulator M8 (mgmt / control-plane cluster capacity)
+---
+
 # Review — LoopZero Bottleneck Simulator M8 (mgmt / control-plane cluster capacity)
 
 > Cycle verdict record. Slug: `loopzero-bottleneck-simulator-m8`.

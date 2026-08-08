@@ -72,15 +72,23 @@ type Config struct {
 
 // Outcome captures the gate result.
 type Outcome struct {
-	Pass     bool
-	Mode     Mode
-	Rows     []PkgRow
+	Pass      bool
+	Mode      Mode
+	Rows      []PkgRow
 	Generated string // the freshly generated table body
-	Messages []string
+	Messages  []string
 }
 
-// listPkgDirs returns the sorted list of pkg/<X> subdirectory names
-// (excluding "tools" — explicit bash skip + reserved future namespace).
+// listPkgDirs returns the sorted list of pkg/<X> subdirectory names that are
+// actually importable Go packages (excluding "tools" — explicit bash skip +
+// reserved future namespace).
+//
+// A directory holding only sub-packages is skipped. pkg/pulumi/ is the case
+// that exposed this: it has no .go of its own, only pkg/pulumi/archive/, which
+// cmd/loopzero-ops/pulumi_subcmd.go imports. Counting imports of the exact path
+// "pkg/pulumi" found none, and the generated matrix published
+// "0 ⚠️ dead code candidate" for live code (measured 2026-08-06). A generated
+// document that invites deleting a package in use is worse than no document.
 func listPkgDirs(pkgRoot string) ([]string, error) {
 	entries, err := os.ReadDir(pkgRoot)
 	if err != nil {
@@ -95,10 +103,33 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 		if name == "tools" {
 			continue
 		}
+		if !hasOwnGoSource(filepath.Join(pkgRoot, name)) {
+			continue
+		}
 		dirs = append(dirs, name)
 	}
 	sort.Strings(dirs)
 	return dirs, nil
+}
+
+// hasOwnGoSource reports whether dir contains a non-test .go file directly —
+// i.e. whether `import ".../pkg/<dir>"` resolves to anything. Sub-directories
+// are not consulted: those are separate packages with their own import paths.
+func hasOwnGoSource(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		n := e.Name()
+		if strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
+			return true
+		}
+	}
+	return false
 }
 
 // countConsumers walks all *.go files under root looking for the
@@ -176,12 +207,18 @@ func fileContainsImport(path string, needle []byte) bool {
 }
 
 // renderTable produces the bash-compatible markdown table body.
-func renderTable(rows []PkgRow, now time.Time) string {
+func renderTable(rows []PkgRow) string {
 	var sb strings.Builder
 	sb.WriteString("## Real Usage Matrix\n\n")
-	fmt.Fprintf(&sb,
-		"Tabela gerada via grep de `import \"github.com/getloopscale/loopzero/pkg/X\"` em **%s**.\n",
-		now.Format("2006-01-02"))
+	// D2 / plan helm-topology-index T1.2: a data NÃO entra no corpo comparado.
+	//
+	// Um gate de frescor responde "o conteúdo divergiu da fonte?". Com a data aqui dentro ele
+	// passava a responder "isto foi gerado hoje?" — pergunta cuja resposta é "não" todo dia
+	// depois da meia-noite. Medido em 2026-08-08: bloqueou um push com a matriz idêntica, e a
+	// única saída era regenerar um arquivo que não mudou, o que treina o time a regenerar sem
+	// olhar. A data simplesmente sai: o git já registra quando o arquivo mudou, e um carimbo
+	// que ninguém compara não estava pagando o próprio custo.
+	sb.WriteString("Tabela gerada via grep de `import \"github.com/getloopscale/loopzero/pkg/X\"`.\n")
 	sb.WriteString("Atualizar via `task pkg:usage-matrix:write` (script: `loopzero-ops quality pkg-usage-matrix --write`).\n")
 	sb.WriteString("CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).\n\n")
 	sb.WriteString("| Pacote | Total imports | api/internal | operators/internal | cloud | cli | Outros |\n")
@@ -278,7 +315,7 @@ func Run(cfg Config, mode Mode) (*Outcome, error) {
 		}
 		out.Rows = append(out.Rows, row)
 	}
-	out.Generated = renderTable(out.Rows, now)
+	out.Generated = renderTable(out.Rows)
 
 	docRaw, err := os.ReadFile(resolvedDoc) //nolint:gosec // operator-controlled
 	if err != nil {

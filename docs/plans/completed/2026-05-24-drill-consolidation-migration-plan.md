@@ -1,6 +1,12 @@
+---
+type: plan
+title: "Plan: Track C — Drill Scripts → Go/loopzero-ops + Consolidation"
+status: deprecated
+---
+
 # Plan: Track C — Drill Scripts → Go/loopzero-ops + Consolidation
 
-> **Version 1.0** — Reduce the ~20 drill/DR/chaos orchestration scripts (`infra/scripts/dr/*`, `infra/scripts/drill-*`, `infra/scripts/chaos/*`, `infra/scripts/lib/drill-*`) by (a) porting pure-logic pieces to `loopzero-ops`/Go, (b) consolidating duplicated orchestration, and (c) leaving irreducible LIVE DOKS orchestration as KEEP-OPERATOR. The 4 drill SKILLs (`cleanroom-drill`, `dogfood-drill`, `chaos-test-drill`, `drill-test`) are rewired to the new homes BEFORE any bash is deleted. **Track C of the Script Minimization Program** (`2026-05-24-script-minimization-program-plan.md`) — moderate yield, DOKS-drill-LIVE-gated. Starts ONLY after Track B DoD + parity LIVE GREEN (program D4).
+> **Version 1.0** — Reduce the ~20 drill/DR/chaos orchestration scripts (`infra/scripts/dr/*`, `infra/scripts/drill-*`, `infra/scripts/chaos/*`, `infra/scripts/lib/drill-*`) by (a) porting pure-logic pieces to `loopzero-ops`/Go, (b) consolidating duplicated orchestration, and (c) leaving irreducible LIVE DOKS orchestration as KEEP-OPERATOR. The 4 drill SKILLs (`cleanroom-drill`, `dogfood-drill`, `chaos-test-drill`, `drill-test`) are rewired to the new homes BEFORE any bash is deleted. **Track C of the Script Minimization Program** ([`2026-05-24-script-minimization-program-plan.md`](./2026-05-24-script-minimization-program-plan.md)) — moderate yield, DOKS-drill-LIVE-gated. Starts ONLY after Track B DoD + parity LIVE GREEN (program D4).
 
 ## Context
 
@@ -76,7 +82,7 @@ C1–C3 parallel-capable (independent pure-logic). C4 is the operator gate. C5 o
 ### TC0.1 — Classify 25 drill/chaos scripts: PURE-LOGIC vs ORCHESTRATION
 
 #### Objective
-Produce `docs/operations/drill-migration-map.md` (mirror of the helmfile-delegation-map): for each of the 25, mark PURE-LOGIC (→ loopzero-ops, with the line ranges) vs ORCHESTRATION (KEEP-OPERATOR, with the pulumi/doctl/kubectl evidence). This is the honest-yield gate before any porting.
+Produce [`docs/operations/drill-migration-map.md`](../../operations/drill-migration-map.md) (mirror of the helmfile-delegation-map): for each of the 25, mark PURE-LOGIC (→ loopzero-ops, with the line ranges) vs ORCHESTRATION (KEEP-OPERATOR, with the pulumi/doctl/kubectl evidence). This is the honest-yield gate before any porting.
 
 #### Evidence
 The helmfile-delegation-map (task #176) prevented over-claiming on bootstrap (showed only 1/5 delegatable). The same read-only audit is needed here so Track C doesn't repeat the "claim 25, deliver 8" error. The deleted hermetic `*_test.sh` (drill-jwt-gate_test, drill-teardown-validator_test, etc.) prove which pieces ARE pure-logic (they had hermetic tests).
@@ -101,7 +107,7 @@ RED:     N/A (audit doc) — verification: every PURE-LOGIC row cites line range
 GREEN:   drill-migration-map.md complete, 25/25 classified
 VERIFY:  grep -c "PURE-LOGIC\|ORCHESTRATION" drill-migration-map.md == 25
 ```
-- [x] **DONE 2026-05-24** — `docs/operations/drill-migration-map.md`. 21/21 scripts classified (actual count; "25" was the loose unhomed drill=20+chaos=5 estimate). Evidence-cited with line ranges + 3 corrections to the plan's pure-logic premises.
+- [x] **DONE 2026-05-24** — [`docs/operations/drill-migration-map.md`](../../operations/drill-migration-map.md). 21/21 scripts classified (actual count; "25" was the loose unhomed drill=20+chaos=5 estimate). Evidence-cited with line ranges + 3 corrections to the plan's pure-logic premises.
 - [x] No code changed (read-only audit).
 
 > **HONEST YIELD (corrected down from ~8–13):** only **2 confirmed** PURE-LOGIC migratable (cost arithmetic, chaos SLO-compare) + **3 probable** (teardown-validate, evidence-shape, mint-jwt TTL). Realistic delete-after-C4 ≈ 2–4 scripts. Key premise errors caught: `drill-jwt-gate.sh` is a LIVE curl e2e (NOT TTL decode); the chaos SLO verdict lives in `run-scenario.sh:235-257` (NOT `report.sh`, which only formats); `chaos/baseline.sh` only samples LIVE. Same over-count pattern as Track B.

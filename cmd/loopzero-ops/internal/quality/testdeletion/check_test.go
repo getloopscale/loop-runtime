@@ -4,6 +4,7 @@
 package testdeletion
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -110,3 +111,53 @@ func TestIsTestFile(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+// The justification must be readable from the COMMIT that deletes the test.
+//
+// PR body and label are both ephemeral and live outside the repository: the
+// pre-push hook has neither, so a legitimate deletion cannot be pushed at all,
+// and an agent running locally has no channel to justify one. Worse, both are
+// editable after the fact — the commit message is the only place where the
+// reason travels with the change it explains. Measured 2026-08-06: deleting
+// cli-bundle-size (whose subject left the repo with the CLI at M2) blocked
+// every push despite the reason being in the commit, the CHANGELOG and the
+// wiring ledger.
+func TestJustificationInCommitMessage(t *testing.T) {
+	diff := "cmd/loopzero-ops/internal/quality/clibundlesize/check_test.go\n"
+	o := Check(Config{
+		DiffOverride: &diff,
+		CommitLog: "chore: delete the cli-bundle-size gate\n\n" +
+			"Test deletion justification: the gate guarded cli/dist, which left\n" +
+			"this repo with the CLI at M2.\n",
+	})
+	if !o.Pass {
+		t.Errorf("a justification in the commit body must satisfy the gate, got %+v", o)
+	}
+	if !strings.Contains(o.Reason, "commit") {
+		t.Errorf("the reason should say where the justification was found, got %q", o.Reason)
+	}
+}
+
+// Negative case: a deletion whose commit says nothing still fails. The new
+// channel must not become a way to pass by having any commit at all.
+func TestNoJustificationAnywhereStillFails(t *testing.T) {
+	diff := "api/tests/unit/thing_test.go\n"
+	o := Check(Config{
+		DiffOverride: &diff,
+		CommitLog:    "chore: tidy up\n\nRemoved some files.\n",
+	})
+	if o.Pass {
+		t.Errorf("a deletion with no justification in any channel must fail, got %+v", o)
+	}
+}
+
+// A hermetic run must not consult the real repository. DiffOverride means the
+// caller is supplying the world; reading `git log` behind its back makes the
+// verdict depend on whatever this repo's history happens to say today.
+func TestHermeticRunIgnoresRealCommitLog(t *testing.T) {
+	diff := "api/tests/unit/thing_test.go\n"
+	o := Check(Config{DiffOverride: &diff}) // no CommitLog supplied
+	if o.Pass {
+		t.Error("a hermetic run with no justification must fail regardless of the repo's own history")
+	}
+}

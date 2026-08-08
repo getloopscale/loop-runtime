@@ -28,13 +28,42 @@
 # RE-FREEZE 2026-07-30 (f): worker-csp e chart-default-tags '-' -> 'gates'. Os achados de
 #   #235 e #232 foram corrigidos sob CHG-2026-07-30-002 (override do sponsor), entao os dois
 #   RED tests viraram verdes e saem de failingGate. Contagem segue 111.
+# RE-FREEZE 2026-08-06: no-aes-remaining 'gates' -> '-'. O gate virou ENFORCED em 2026-08-01
+#   (prazo T+60d) com o branch AES legado ainda no dispatcher, entao passou a barrar todo push
+#   em vez de sinalizar. Segue registrado e invocavel a mao; declarado failingGate no ledger de
+#   wiring. A divida T10.3 (deletar o branch AES) segue aberta. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (b): base-image-digest, crd-semantic-diff e stack-coverage '-' -> 'gates'.
+#   Os tres saem do ledger de nao-wired (#255) porque passaram a medir de verdade:
+#   crd-semantic-diff ja passava e estava rotulado errado; stack-coverage passou a derivar as
+#   strategies do runtimeRegistry (a lista paralela apodreceu quando o produto reduziu para
+#   node+python e acusava 7 violacoes fantasma); base-image-digest passou depois de pinar os 16
+#   FROM no digest do index multi-arch, com o baseline de excecoes esvaziado. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (c): test-coverage-report '-' -> 'gates'. Sai do ledger de "measured
+#   broken": a media 0.00% vinha de medir ./infra/tests/{unit,charts}, pacotes so-de-teste
+#   ("coverage: [no statements]"). Contra o codigo de producao (pkg + gates) mede 85.33% em 9s;
+#   floor subido de 30% para 75%. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (d): skip-link '-' -> 'gates', e a descricao corrigida. O gate valida
+#   skips de TESTE (t.Skip/it.skip sem issue URL), nao skip-link de acessibilidade — a descricao
+#   antiga descrevia outra coisa e o ledger repetiu o erro ("115 a11y violations"). O baseline
+#   era posicional (file:LINE) e decaia a cada refactor; a chave passou a ser arquivo + texto do
+#   skip, e foi re-congelado com 205 entradas. Contagem segue 111.
+# RE-FREEZE 2026-08-06 (e): 111 -> 110 gates. cli-bundle-size DELETADO — guardava cli/dist, que
+#   saiu do repo com o CLI no M2, e reportava "PASS — cli/dist not present" para sempre. Era o
+#   shape do #254 em forma de gate; documentar como vacuoso e' divida, deletar resolve.
+#   mock-budget e pkg-usage-matrix '-' -> 'gates': estavam rotulados slowGate ">25s" e medem
+#   0.6s e 0.7s. O segundo tambem parou de publicar um falso "dead code candidate" para
+#   pkg/pulumi, diretorio que so contem o sub-pacote archive/ (importado por loopzero-ops).
+# RE-FREEZE 2026-08-06 (f): 110 -> 111 gates. NOVO gate proxy-exposure — todo reverse_proxy do
+#   edge (infra/local/Caddyfile) precisa de uma linha em infra/quality/proxy-exposure.txt dizendo
+#   o que deixa passar. Motivado por app-dev.loopzero.example/sessions/* devolver a sessao Ory inteira
+#   (devices[].ip_address + recovery_addresses) que nenhum cliente le. 26 proxies declarados, 21ms.
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
 anonymous-auth	gates	Forbids anonymous/unauthenticated access on protected API surfaces.
 archive-script-repo-root	gates	T1.2 hermetic guard of plan m1-commit-canonical-30-fixes: no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT with 3-dirs-up ($(dirname "$0")/../../..) — canonical post-quarantine 289cf9d6 is 4-dirs-up. Pure filepath.Walk + regex; missing scan dir treated as no-content. M-Migrate2 2026-07-10 M16 T2.2 Wave 1 replaces infra/tests/check-archive-script-repo-root_test.sh.
-base-image-digest	-	Base images are pinned by digest, not floating tags.
+base-image-digest	gates	Base images are pinned by digest, not floating tags.
 baseline-compare	-	Compares a captured steady-state baseline against the current state.
 baseline-update	-	Updates the committed steady-state baseline artifact.
 caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
@@ -43,7 +72,6 @@ caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in i
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
 chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
 check-allowlist-sunsets	gates	Hermetic contract test for .claude/scripts/check-allowlist-sunsets.py (T5.2.a): 5 fixture cases + missing-file + LIVE rules/code-review-allowlist.txt check. Exits 0 for future/today/missing/live-clean; catches past-sunset (exit 1) and malformed/bad-date (exit 2). Requires python3. M-Migrate2 2026-07-07 replaces infra/tests/check-allowlist-sunsets_test.sh.
-cli-bundle-size	-	Guards the CLI published bundle size against regression.
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-role-no-secrets-star	gates	Forbids unconditional cluster-wide secrets/configmaps RBAC grants.
 clusterimagepolicy-mode	-	Validates the sigstore ClusterImagePolicy enforcement mode.
@@ -53,7 +81,7 @@ correlation-header	gates	Correlation-ID header is forwarded across the request p
 cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
 coverage-diff	-	Diffs test coverage against a baseline to catch regressions.
 coverage-merge	-	Merges per-package coverage profiles into one report.
-crd-semantic-diff	-	Semantic diff of CRD schemas to catch breaking spec changes.
+crd-semantic-diff	gates	Semantic diff of CRD schemas to catch breaking spec changes.
 credentials-sot	gates	T1.1 SoT drift audit — every Secret created by canonical generator scripts (generate-secrets.sh, generate-build-secrets.sh, generate-runtime-secrets.sh, provision-api-tokens.sh) MUST be enumerated in docs/operations/credentials-required.md. Also asserts 4 mandatory drill env vars + Chart-hardcoded credentials section + Rotation playbook section. M-Migrate2 2026-07-07 replaces infra/tests/docs/credentials-sot_test.sh.
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
@@ -73,14 +101,15 @@ git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for oth
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
 helm-drift	-	Detects drift between rendered Helm charts and the deployed state.
 helm-overlap-parity	gates	Keeps the dual Helm chart systems (infra/helm vs charts) in parity.
+helm-topology-index	gates	Index of which chart runs on which cluster, derived from the helmfiles (never a hand-written second copy).
 install-git-hooks	gates	Validates the M8 1.5 pre-push hook + installer canonical shape + idempotency (M-Migrate2 2026-07-07 replaces infra/tests/check-install-git-hooks_test.sh).
 k6-load-rigor	gates	k6 load-harness rigor: dropped_iterations Counter threshold in `base` (EC-2), L5 distributed manifest shape (TestRun kind + pinned image + secretKeyRef + no inline secret, EC-1 YAML validity), k6:distributed:l5 task wired, README per-level runner doc. M-Migrate2 2026-07-07 replaces infra/tests/check-k6-load-rigor_test.sh.
 loki-retention-schema	gates	Trio-compat regression for T8.2 Loki retention_stream schema: infra/helm/loki/values.yaml parses cleanly + deploymentMode SingleBinary (cleanroom-compatible) + exactly 1 retention_stream entry + selector vault-system + period 2160h + priority int (Loki startup schema) + default retention_period 168h. 7 assertions. Uses gopkg.in/yaml.v3 (already-vendored, per plan D2 parsimony rung 4). M-Migrate2 2026-07-10 M16 T3.2 Wave 2 replaces infra/tests/check-loki-retention-schema_test.sh.
 loki-vault-retention	gates	T8.2 Loki per-NS retention (retention_period 168h default + retention_stream vault-system selector + period 2160h 90-day forensic) + T8.5 archive CronJob (kind + schedule 04:00 UTC monthly + concurrencyPolicy Forbid + runAsNonRoot + capabilities drop ALL + logcli/mc invocation + AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secretKeyRef + loki-archive-s3-creds Secret + vault-system NS target). 14 assertions. M-Migrate2 2026-07-10 M16 T3.1 Wave 2 replaces infra/tests/check-loki-vault-retention_test.sh.
 ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.
 migration-test-coverage	-	Every DB migration has corresponding test coverage.
-mock-budget	-	Caps the number of mocks per test (SRP smell budget).
-no-aes-remaining	gates	Calendar-gated: fails on remaining AES code paths post-transit migration.
+mock-budget	gates	Caps the number of mocks per test (SRP smell budget).
+no-aes-remaining	-	Calendar-gated: fails on remaining AES code paths post-transit migration.
 no-cloud-dev-default	gates	T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.loopzero.example (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.
 no-env-vault-secrets	gates	Forbids secrets-as-env-var regression after the ESO/OpenBao migration.
 no-legacy-sa-token-secret	gates	Forbids legacy kubernetes.io/service-account-token Secrets.
@@ -94,10 +123,11 @@ option-b-eso-deploy-doc	gates	Locks docs/operations/option-b-mgmt-helmfile-eso-d
 orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
-pkg-usage-matrix	-	Verifies the pkg/ cross-component usage matrix is current.
+pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current.
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.
+proxy-exposure	gates	Every edge reverse_proxy declares what it lets through.
 pulumi-required-secrets	gates	T1.5 — every Pulumi.<env>.yaml enumerates required secret keys (as `secure:` entry OR comment). Prod=6 keys, staging=4, drill=3 (DO token via env var per D7' sponsor override). Cross-checks prod keys also appear backticked in docs/operations/credentials-required.md. M-Migrate2 2026-07-07 replaces infra/tests/docs/pulumi-required-secrets_test.sh.
 quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
 regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.
@@ -113,17 +143,17 @@ services-acyclic	gates	M9 Step 6: services bounded-context imports form the froz
 shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
 shellcheck-advisory	gates	Advisory shell-lint gate — runs shellcheck across infra/scripts/local + infra/tests/check-*-syntax_test + infra/tests/e2e/live/dev-public-*. Tolerates SC1091/SC2155/SC2086/SC2046. Advisory-only fallthrough when shellcheck not installed (WARN + exit 0). M-Migrate2 2026-07-07 replaces infra/scripts/local/shellcheck-advisory.sh.
 skill-paths	gates	T0.1 EC D5: every infra/scripts/ path AND every `task X` invocation cited in any .claude/skills/*/SKILL.md MUST resolve on disk. Ports the bash awk task-name extractor + flattened/namespaced include set walk into Go. Skips task-automation skill (generic third-party). Enforces dogfood no-GH_TOKEN/.env + to-plan no-`task teardown` anti-patterns. M-Migrate2 2026-07-07 replaces infra/tests/skills/skill-paths_test.sh.
-skip-link	-	Verifies accessibility skip-link presence in the dashboard.
+skip-link	gates	Every t.Skip/it.skip carries an issue URL (or lives in *_skip_test.go).
 spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.
 sprint-syntax	gates	Hermetic contract test for infra/scripts/local/check-sprint.sh + its homed helper check_sprint.py: script exists + bash -n clean + helper compiles (python3 -m py_compile) + no python3 heredoc (T3.2 de-costume gate) + JSON report shape (pass count + spaced-detail preservation + [id,status,detail] tuple layout) + allowlist entry present. Requires bash + python3 on PATH. M-Migrate2 2026-07-10 M16 T2.1 Wave 1 replaces infra/tests/check-sprint-syntax_test.sh.
 sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
-stack-coverage	-	Verifies the tool-inventory stack-coverage claims via grep.
+stack-coverage	gates	Verifies the tool-inventory stack-coverage claims via grep.
 taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-csp-passthrough	gates	Static-CSP Traefik middleware must not be attached to tenant routes (#59).
 tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security veto-backed).
-test-coverage-report	-	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
+test-coverage-report	gates	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
 test-deletion	gates	Guards deletion of test files against coverage loss.
 test-pyramid	gates	Validates the unit/integration/e2e test-pyramid balance.
 test-targets	gates	Verifies Taskfile test targets exist and are wired.
@@ -134,6 +164,7 @@ transit-coverage	gates	Enforces the OpenBao transit dispatcher invariant (encryp
 trivy-scan	gates	Runs Trivy CVE scanning on filesystem/images.
 trufflehog-scan	gates	Runs TruffleHog verified-secret scanning.
 unhomed-logic	gates	Forbids un-homed operational logic that belongs in a pkg/quality gate.
+vap-delete-guardrail	gates	Boundary resources (Application/Tenant/Environment/ClusterCredential) AND their CRDs are protected from unauthorized DELETE (D4).
 vault-bootstrap-in-mgmt-task	gates	Locks task k3d:vault:bootstrap-in-mgmt shortcut as canonical mirror of upstream k3d:vault:bootstrap (helmfile+wait counts match, k3d-loopzero-mgmt context swap total, pre-flight cites task setup, cites runbook Option (c) iter 23). M-Migrate2 2026-07-07 replaces infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh.
 vault-bootstrap-unseal-loop	gates	Regression guard for the 2026-06-15 canonical fix of vault-bootstrap-dev.sh Steps 2+3 (rc-independent bao-status parse, capitalized 'True' compare, no lowercase 'true' fallback). M-Migrate2 2026-07-07 replaces infra/tests/check-vault-bootstrap-unseal-loop_test.sh.
 vault-prom-alerts	gates	T8.4 hermetic contract for PrometheusRule vault-audit-alerts: YAML parses + all 4 P1 alerts declared (VaultAuthFailureRateHigh + VaultPolicyDenialRateHigh + VaultSealedOrDown + VaultAuditLogStalled) + all severity=critical + all runbook_url annotations + all team=platform-security + all domain=vault + VaultAuditLogStalled carries invariant "audit-log-must-flow" (high-confidence adversary signal). M-Migrate2 2026-07-10 M16 T3.3 Wave 2 replaces infra/tests/check-vault-prom-alerts_test.sh.

@@ -1,3 +1,8 @@
+---
+type: plan
+title: "Plan: Cloud Control Plane — Security Remediation (38 findings)"
+---
+
 # Plan: Cloud Control Plane — Security Remediation (38 findings)
 
 > **Version 1.0** — This plan remediates all 38 findings from the deep security review of the `cloud/` module (SaaS control plane: billing + identity + React dashboard), captured in `review-output/final_report.md` and `review-output/review.db`. The review verdict was **NOT READY for launch** (C4 health 1.95/4.0) driven by 2 critical, 10 high, 16 medium, and 10 low findings. The plan sequences fixes so the **CI quality gate is restored first** (it is currently absent for `cloud/`, so no fix can be verified automatically until it exists), then closes the **privilege-escalation chain** (consent client_id + network isolation + RBAC), the **billing/metering integrity chain** (atomic webhook + revenue leakage), and finally the hardening backlog. Expected outcome: every launch-blocker (P1) closed with a failing-test-first proof, and a green CI gate that prevents regression.

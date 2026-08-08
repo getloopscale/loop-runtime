@@ -1,3 +1,8 @@
+---
+type: api-reference
+title: "`POST /api/v1/source/upload` — Wire Contract"
+---
+
 # `POST /api/v1/source/upload` — Wire Contract
 
 **Plan reference:** v1.2 T6.1 (cutover-deep-review-hardening)

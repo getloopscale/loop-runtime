@@ -23,6 +23,9 @@ type Config struct {
 	HeadRef  string // default HEAD
 	PRBody   string
 	PRLabels string // comma-separated
+	// CommitLog, when non-empty, replaces the `git log` call (hermetic tests).
+	// Empty + no override → the log of BaseRef...HeadRef is read from git.
+	CommitLog string
 	// DiffOverride, when non-nil, replaces the `git diff` call (hermetic tests).
 	DiffOverride *string
 	// RepoDir, when set, runs git in this dir (default: cwd).
@@ -77,12 +80,54 @@ func Check(cfg Config) Outcome {
 			Reason: "justification found in PR body"}
 	}
 
+	// The commit body is the only channel that lives in the repository. PR body
+	// and label are both outside it: the pre-push hook has neither, so a
+	// legitimate deletion could not be pushed at all, and both can be edited
+	// after the fact while the commit that did the deleting cannot.
+	// DiffOverride marks a hermetic run: the caller supplied the diff, so the
+	// commit log must come from the caller too. Falling back to `git log` here
+	// let the REAL repository history decide a unit test's verdict — and the
+	// moment a commit in this repo carried the marker, every "deletion without
+	// justification must fail" test started passing. Caught 2026-08-06 by the
+	// delivery-gate hook on the very commit that introduced it.
+	log := cfg.CommitLog
+	if log == "" && cfg.DiffOverride == nil {
+		log = gitCommitLog(cfg)
+	}
+	if strings.Contains(strings.ToLower(log), justificationMarker) {
+		return Outcome{Pass: true, DeletedTests: deletedTests,
+			Reason: "justification found in a commit message"}
+	}
+
 	return Outcome{Pass: false, DeletedTests: deletedTests,
 		Reason: "test deletions without approval label or PR-body justification"}
 }
 
 // gitDeletions runs `git diff --find-renames=80% --diff-filter=D --name-only`
 // to detect TRUE deletions (renames classified as R, not D — per EC-6).
+// gitCommitLog returns the commit messages in BaseRef...HeadRef, where the
+// justification for a deletion naturally lives — next to the deletion.
+func gitCommitLog(cfg Config) string {
+	base := cfg.BaseRef
+	if base == "" {
+		base = "origin/main"
+	}
+	head := cfg.HeadRef
+	if head == "" {
+		head = "HEAD"
+	}
+	//nolint:shell-wrap // git is an ALLOWED CLI (D5) — no mature Go-native log.
+	cmd := exec.Command("git", "log", "--format=%B", base+"..."+head)
+	if cfg.RepoDir != "" {
+		cmd.Dir = cfg.RepoDir
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "" // best-effort: unresolvable range → no justification found
+	}
+	return string(out)
+}
+
 func gitDeletions(cfg Config) string {
 	base := cfg.BaseRef
 	if base == "" {

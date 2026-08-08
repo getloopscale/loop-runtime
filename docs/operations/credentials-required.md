@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Credentials Required — Single Source of Truth"
+---
+
 # Credentials Required — Single Source of Truth
 
 > **This is the canonical enumeration of every credential the LoopZero system needs to operate.** If a credential is created by code anywhere in the repo, it MUST appear in this document. The hermetic test `infra/tests/docs/credentials-sot_test.sh` enforces this contract.
@@ -228,7 +233,7 @@ Add a credential? You MUST update this doc in the same PR, or the gate fails.
 
 ## References
 
-- Plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T1.1
+- Plan: [`docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`](../plans/completed/2026-05-21-deep-review-remediation-plan.md) T1.1
 - Per ADR D1: SoT location is `docs/operations/`, NOT `.claude/knowledge-base/` (operator-visible)
 - Per ADR D2: hardcoded credential defaults are forbidden post-T1.3
 - Per D7' sponsor override 2026-05-16: drill uses shared `DIGITALOCEAN_TOKEN` with project-tag isolation

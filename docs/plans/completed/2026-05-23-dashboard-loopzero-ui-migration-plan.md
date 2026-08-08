@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Dashboard LoopZeroCloud → @loopzero/ui Migration"
+status: deprecated
+---
+
 # Plan: Dashboard LoopZeroCloud → @loopzero/ui Migration
 
 > **Version 1.3** — Refactor completo do `cloud/dashboard/` (SPA React 19 + Vite 6) para consumir `@loopzero/ui@0.9.0-next.0` (Violet Forge dark) como design system canônico, **incluindo upgrade inline de Tailwind v3 → v4** (T0.0.bis). Substitui ~70% do código UI hand-rolled por composites/primitives testados + moderniza stack CSS para CSS-first config canônica de Tailwind v4. Preserva camadas críticas (auth Kratos→JWT, BroadcastChannel cross-tab, runtime config Twelve-Factor, mesma origem MEET-040). Resultado esperado: UX consistente, **~1.500 LOC eliminadas (-49%)**, stack moderna sem dívida técnica, identidade visual coerente com ecossistema LoopZero, gate "polish visual GA-ready" do Sprint 9 destravado.
@@ -41,7 +47,7 @@ Alternativas rejeitadas e por quê:
   - **LOC target revisado**: 1.800 → 1.500 (-49% vs -37% original) porque StatusDot/Timestamp/Table/DangerZone/CopyButton/CodeBlock/Alert deletam mais boilerplate que estimado
   - **Fontes mudam**: dashboard atual usa DM Sans + JetBrains Mono + Cabinet Grotesk; `@loopzero/ui` locked em Geist Sans + Geist Mono. Adoção implica mudança visual real (não cosmética)
 
-- **v1.1 (2026-05-23)** — Incorpora 8 MUST FIX do `/edge-case-plan` review (`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md`):
+- **v1.1 (2026-05-23)** — Incorpora 8 MUST FIX do `/edge-case-plan` review ([`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md`](./2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md)):
   - **EC-1**: T0.3 reescrita — `@loopzero/ui` não exporta JS preset; design system flui via CSS imports
   - **EC-2**: T0.2 reescrita — remover `class="dark"` dos 3 sites (html + 2 divs em app.tsx), validar estratégia do ThemeProvider × Tailwind `darkMode: 'class'`
   - **EC-3**: Nova T0.0 (pre-step) — capturar baseline bundle ANTES de qualquer mudança
@@ -1586,7 +1592,7 @@ Internal terms baniidos (re-statment de Rule 3 + CR-9): `Kubernetes`, `cluster`,
 **Sponsor**: paulo (paulohenriquevn@gmail.com) — ratificou Opção A 2026-05-23
 **Tier**: T3 (refactor stack frontend + nova dep `@loopzero/ui` + dep upgrade Tailwind v3→v4)
 **Estimated effort**: 4-7 sessões de trabalho (Phase 0 cresce 1 task com T0.0.bis; Phases 3/4/5 paralelizáveis)
-**Edge-Case-Review**: PASSED v1.1 (`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md`, 18 edges: 8 MUST FIX incorporados, 7 SHOULD TEST, 3 DOCUMENT). v1.2 não exigiu re-review (mecânico). **v1.3 RECOMENDA re-run** — T0.0.bis é nova task funcional com risk surface próprio (codemod outputs, breaking changes Tailwind v3→v4, darkMode strategy migration). Sponsor pode pular se aceitar smoke test em T0.0.bis task 9 como compensação.
+**Edge-Case-Review**: PASSED v1.1 ([`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md`](./2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md), 18 edges: 8 MUST FIX incorporados, 7 SHOULD TEST, 3 DOCUMENT). v1.2 não exigiu re-review (mecânico). **v1.3 RECOMENDA re-run** — T0.0.bis é nova task funcional com risk surface próprio (codemod outputs, breaking changes Tailwind v3→v4, darkMode strategy migration). Sponsor pode pular se aceitar smoke test em T0.0.bis task 9 como compensação.
 **Upstream dependency status**: ✅ COMPLETO — 14 primitives requested entregues em `@loopzero/ui@0.9.0-next.0` (Briefs #1+#2+#3 shipados 2026-05-23). 116 componentes totais, 1.577 testes, 237 axe stories.
 **Próximo gate**: governança T3 meeting (ou sponsor-direct-approval pattern conforme MEET-2026-05-13-ed25519-sponsor-approval.md precedent) → implementação Phase 0→6 (começando com T0.0 baseline + T0.0.bis Tailwind v4 upgrade) → `/cross-validation` → `/dogfood`
 **Bloqueador atual**: nenhum técnico — pronto para iniciar Phase 0. Falta apenas autorização formal do sponsor para começar implementação.

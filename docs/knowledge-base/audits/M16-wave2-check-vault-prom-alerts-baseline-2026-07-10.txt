@@ -1,0 +1,25 @@
+=== check-vault-prom-alerts_test.sh baseline (2026-07-10 pre-migration) ===
+Repo HEAD: 9dc131fb24f73e40a1c9a668e5bdcf5152044a30
+
+--- stdout+stderr ---
+[34m== YAML valid ==[0m
+[32m  PASS: yq parses YAML cleanly[0m
+[34m== All 4 P1 alerts present ==[0m
+[32m  PASS: alert VaultAuthFailureRateHigh declared[0m
+[32m  PASS: alert VaultPolicyDenialRateHigh declared[0m
+[32m  PASS: alert VaultSealedOrDown declared[0m
+[32m  PASS: alert VaultAuditLogStalled declared[0m
+[34m== All alerts severity=critical ==[0m
+[32m  PASS: all 4 alerts severity=critical[0m
+[34m== All alerts have runbook_url annotation ==[0m
+[32m  PASS: all 4 alerts have runbook_url (count=4)[0m
+[34m== team label = platform-security (Vault is security domain) ==[0m
+[32m  PASS: all 4 alerts routed to platform-security (count=4)[0m
+[34m== domain label = vault (consistent routing) ==[0m
+[32m  PASS: all 4 alerts have domain=vault (count=4)[0m
+[34m== Stalled-audit invariant label present (P1 forcing function) ==[0m
+[32m  PASS: VaultAuditLogStalled carries invariant label (high-confidence adversary signal)[0m
+
+[34m================================================================[0m
+[32mALL PASS (10/10)[0m
+--- exit code: 0 ---

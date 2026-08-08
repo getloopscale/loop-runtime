@@ -1,4 +1,7 @@
 ---
+type: plan
+title: "Edge Case Review — Comprehensive Quality Gates Plan"
+status: deprecated
 name: edge-case-review-2026-05-21-comprehensive-quality-gates
 description: Edge case review of the comprehensive quality gates plan (v1.0). All 15 findings incorporated into plan v1.1.
 metadata:
@@ -15,7 +18,7 @@ metadata:
 # Edge Case Review — Comprehensive Quality Gates Plan
 
 **Data:** 2026-05-21
-**Plano:** `docs/plans/2026-05-21-comprehensive-quality-gates-plan.md`
+**Plano:** [`docs/plans/2026-05-21-comprehensive-quality-gates-plan.md`](./2026-05-21-comprehensive-quality-gates-plan.md)
 **Tasks analisadas:** 19 (1 governance + 18 implementation)
 **Edge cases encontrados:** 15 (MUST FIX: 6, SHOULD TEST: 6, DOCUMENT: 3)
 

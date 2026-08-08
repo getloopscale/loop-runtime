@@ -1,3 +1,9 @@
+---
+type: plan
+title: "Plan: Drill Skills Rigor Restoration"
+status: deprecated
+---
+
 # Plan: Drill Skills Rigor Restoration
 
 > **Version 1.0** — Resolve a violação Princípio §3 (Honestidade Extrema) introduzida pelo Bug #24 workaround no `drill-dogfood-orchestrator.sh`. Reverte aceitação de HTTP 401 como PASS, corrige o root cause real do JWT 401 entre drill Hydra e loopzero-api, reescreve `dogfood-drill` para validar deploys REAIS via CLI `loopzero` (mirror da skill `/dogfood`), e corrige o audit trail falso em `log.md`. Estado final: dogfood-drill executa journeys reais (`loopzero login → init → deploy → scale → rollback → delete`) com Prova de Vida + Prova de Morte e zero workarounds.

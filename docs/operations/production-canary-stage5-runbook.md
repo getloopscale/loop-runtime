@@ -1,6 +1,11 @@
+---
+type: operational-runbook
+title: Production Canary Stage 5 Runbook (Customer Trial)
+---
+
 # Production Canary Stage 5 Runbook (Customer Trial)
 
-> **Plan reference:** T0.3 + T0.4 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T0.3 + T0.4 of [`docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`](../plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md)
 >
 > **Status:** Stage 5 = 1 production customer day-trial WITHOUT incidents. Gate (b) of CLAUDE.md "Path to maturity 4.0".
 
@@ -60,7 +65,7 @@ Day-trial considered SUCCESS quando, durante 24h consecutivas:
 
 ## Pre-Trial Checklist (Operator)
 
-- [ ] Stage 4 GREEN per `production-canary-stage4-runbook.md` (100% promote sem rollback)
+- [ ] Stage 4 GREEN per [`production-canary-stage4-runbook.md`](./production-canary-stage4-runbook.md) (100% promote sem rollback)
 - [ ] 24h soak post-Stage-4 com zero incidents
 - [ ] Customer tenant provisioned via `loopzero admin tenants create`
 - [ ] Customer onboarded via `loopzero login` + `loopzero project create`
@@ -166,6 +171,6 @@ Post-trial, operator writes `.claude/knowledge-base/reviews/2026-XX-XX-customer-
 ## Related
 
 - ADR-0008 Multi-Cell + ADR-0021 Sticky placement
-- `production-canary-stage4-runbook.md` (predecessor stage)
+- [`production-canary-stage4-runbook.md`](./production-canary-stage4-runbook.md) (predecessor stage)
 - CLAUDE.md "Path to maturity 4.0" gate (b)
 - MEET-2026-05-12 (pricing decisions impacting trial scope)

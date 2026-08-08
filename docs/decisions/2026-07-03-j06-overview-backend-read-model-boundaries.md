@@ -1,3 +1,8 @@
+---
+type: decision
+title: "J-06 Overview backend: read-model boundaries + price source of truth"
+---
+
 # ADR — J-06 Overview backend: read-model boundaries + price source of truth
 
 - **Date:** 2026-07-03

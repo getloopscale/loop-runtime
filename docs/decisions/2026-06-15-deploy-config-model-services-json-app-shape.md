@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR: Deploy config model — services.json is the immutable app-shape; secrets + scaling are operational commands"
+---
+
 # ADR: Deploy config model — services.json is the immutable app-shape; secrets + scaling are operational commands
 
 **Date:** 2026-06-15

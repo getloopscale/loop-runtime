@@ -22,6 +22,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 func newTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1.Tenant {
@@ -56,9 +57,62 @@ func newTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1
 	}
 }
 
-// cleanupTenantEnvCRs removes finalizers from all Environment CRs owned by the given tenant,
-// so they can be garbage-collected during test teardown. In envtest, the GC doesn't run,
-// so this must be called explicitly in AfterAll blocks.
+// drainTenantEnvironments deletes every Environment CR owned by tenantName,
+// clears the finalizers envtest has no garbage collector to clear, and returns
+// only once none is left.
+//
+// The exit condition is the point. Clearing a finalizer and returning is not
+// enough: the EnvironmentController re-adds it on its next reconcile, so a loop
+// whose exit condition is "the Update succeeded" leaves the child alive — and
+// the Tenant finalizer then blocks forever on "waiting for child Environment
+// CRs to be deleted (remaining: 1)", which is exactly how the PriorityClass
+// deletion spec timed out on slow runs (measured 2026-08-06).
+func drainTenantEnvironments(tenantName string) {
+	Eventually(func(g Gomega) {
+		var envs loopzerov1.EnvironmentList
+		g.Expect(k8sClient.List(ctx, &envs, client.InNamespace("default"))).To(Succeed())
+		remaining := 0
+		for i := range envs.Items {
+			env := &envs.Items[i]
+			owned := false
+			for _, ref := range env.OwnerReferences {
+				if ref.Name == tenantName {
+					owned = true
+					break
+				}
+			}
+			if !owned {
+				continue
+			}
+			remaining++
+			if env.DeletionTimestamp.IsZero() {
+				_ = k8sClient.Delete(ctx, env)
+			}
+			if nsName := env.Spec.Namespace.Name; nsName != "" {
+				var ns corev1.Namespace
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns); err == nil {
+					_ = operatortest.UpdateWithRetry(ctx, k8sClient, &ns, func() {
+						ns.Finalizers = nil
+						delete(ns.Labels, "loopzero.io/tenant")
+					})
+				}
+			}
+			_ = operatortest.UpdateWithRetry(ctx, k8sClient, env, func() {
+				env.Finalizers = nil
+			})
+		}
+		g.Expect(remaining).To(BeZero(),
+			"child Environment CRs of %s are still present; the Tenant finalizer cannot proceed", tenantName)
+	}, timeout, interval).Should(Succeed())
+}
+
+// cleanupTenantEnvCRs removes finalizers from all Environment CRs owned by the
+// given tenant so they can be collected during teardown. In envtest the GC does
+// not run, so this must be called explicitly in AfterAll blocks.
+//
+// Deliberately single-shot and tolerant, unlike drainTenantEnvironments: this
+// runs in AfterAll, where blocking until the children are gone turns a teardown
+// into a second assertion and fails specs that already passed.
 func cleanupTenantEnvCRs(tenantName string) {
 	var envList loopzerov1.EnvironmentList
 	if err := k8sClient.List(ctx, &envList, client.InNamespace("default")); err != nil {
@@ -68,8 +122,9 @@ func cleanupTenantEnvCRs(tenantName string) {
 		env := &envList.Items[i]
 		for _, ref := range env.OwnerReferences {
 			if ref.Name == tenantName {
-				env.Finalizers = nil
-				_ = k8sClient.Update(ctx, env)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, env, func() {
+					env.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, env)
 				break
 			}
@@ -346,8 +401,9 @@ func withNetworkPolicy(name, namespace string, assertions func(g Gomega, np *net
 func deleteEnvWithFinalizer(envCRName string) {
 	env := &loopzerov1.Environment{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
-		env.Finalizers = nil
-		_ = k8sClient.Update(ctx, env)
+		_ = operatortest.UpdateWithRetry(ctx, k8sClient, env, func() {
+			env.Finalizers = nil
+		})
 		_ = k8sClient.Delete(ctx, env)
 	}
 }
@@ -357,8 +413,9 @@ func deleteEnvWithFinalizer(envCRName string) {
 func deleteTenantWithFinalizer(tenantName string) {
 	t := &loopzerov1.Tenant{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-		t.Finalizers = nil
-		_ = k8sClient.Update(ctx, t)
+		_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
+			t.Finalizers = nil
+		})
 		_ = k8sClient.Delete(ctx, t)
 	}
 }
@@ -465,8 +522,9 @@ var _ = Describe("TenantController", Ordered, func() {
 				Namespace: "default",
 			}, &t)).To(Succeed())
 
-			t.Spec.DisplayName = "Updated Display Name"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "Updated Display Name"
+			})).To(Succeed())
 
 			Eventually(func(g Gomega) {
 				var updated loopzerov1.Tenant
@@ -485,8 +543,9 @@ var _ = Describe("TenantController", Ordered, func() {
 			cleanupTenantEnvCRs(name)
 			t := &loopzerov1.Tenant{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
+					t.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, t)
 			}
 		}
@@ -621,8 +680,9 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "Updated for idempotency"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "Updated for idempotency"
+			})).To(Succeed())
 
 			// Wait for reconcile to complete
 			Eventually(func(g Gomega) {
@@ -723,8 +783,9 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "RBAC idempotency"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "RBAC idempotency"
+			})).To(Succeed())
 
 			// Verify still single SA, Role, RoleBinding
 			nsName := "loopzero-" + tenantName + "-default-project-production"
@@ -752,8 +813,9 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 			}
 			t := &loopzerov1.Tenant{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
+					t.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, t)
 			}
 		}
@@ -941,8 +1003,9 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "PC starter idempotency"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "PC starter idempotency"
+			})).To(Succeed())
 
 			Eventually(func(g Gomega) {
 				var updated loopzerov1.Tenant
@@ -1012,8 +1075,9 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.Plan = loopzerov1.PlanGrowth
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.Plan = loopzerov1.PlanGrowth
+			})).To(Succeed())
 
 			// New PriorityClass should be created
 			Eventually(func(g Gomega) {
@@ -1061,49 +1125,17 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 
 			// Clean up child Environment CRs so tenant finalizer can proceed
 			// (envtest doesn't run GC, so we must manually delete and remove finalizers)
-			var envList loopzerov1.EnvironmentList
-			Expect(k8sClient.List(ctx, &envList, client.InNamespace("default"))).To(Succeed())
-			for i := range envList.Items {
-				env := &envList.Items[i]
-				for _, ref := range env.OwnerReferences {
-					if ref.Name == tenantName {
-						if env.DeletionTimestamp.IsZero() {
-							_ = k8sClient.Delete(ctx, env)
-						}
-						break
-					}
-				}
-			}
-			Eventually(func(g Gomega) {
-				var envs loopzerov1.EnvironmentList
-				g.Expect(k8sClient.List(ctx, &envs, client.InNamespace("default"))).To(Succeed())
-				for i := range envs.Items {
-					env := &envs.Items[i]
-					for _, ref := range env.OwnerReferences {
-						if ref.Name == tenantName {
-							nsName := env.Spec.Namespace.Name
-							var ns corev1.Namespace
-							if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns); err == nil {
-								ns.Finalizers = nil
-								delete(ns.Labels, "loopzero.io/tenant")
-								g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
-							}
-							env.Finalizers = nil
-							g.Expect(k8sClient.Update(ctx, env)).To(Succeed())
-							break
-						}
-					}
-				}
-			}, timeout, interval).Should(Succeed())
+			drainTenantEnvironments(tenantName)
 
 			// Clean up build namespaces
 			var buildNsList corev1.NamespaceList
 			_ = k8sClient.List(ctx, &buildNsList, client.MatchingLabels{"loopzero.io/tenant": tenantName})
 			for i := range buildNsList.Items {
 				ns := &buildNsList.Items[i]
-				ns.Finalizers = nil
-				delete(ns.Labels, "loopzero.io/tenant")
-				_ = k8sClient.Update(ctx, ns)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, ns, func() {
+					ns.Finalizers = nil
+					delete(ns.Labels, "loopzero.io/tenant")
+				})
 			}
 
 			// Wait for tenant to be fully deleted
@@ -1159,8 +1191,9 @@ var _ = Describe("TenantController — Gitea Repo Provisioning", Ordered, func()
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 			initialCalls := fakeGitProvider.GetCalls()
-			t.Spec.DisplayName = "Gitea idempotency"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "Gitea idempotency"
+			})).To(Succeed())
 
 			// Wait for reconcile
 			Eventually(func(g Gomega) {
@@ -1229,12 +1262,20 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			// (CreateOrUpdate preserves existing annotations, so the canary should persist)
 			nsName := "loopzero-" + tenantName + "-default-project-production"
 			var ns corev1.Namespace
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
-			if ns.Annotations == nil {
-				ns.Annotations = make(map[string]string)
-			}
-			ns.Annotations["test.loopzero.io/canary"] = "should-persist"
-			Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
+			// Phase=Active (asserted in BeforeAll) does not imply this namespace is
+			// already readable — it is created by the Environment reconcile, which
+			// races the assertion. Wait for it rather than Get-and-hope.
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &ns, func() {
+				// Inside the closure: the helper re-reads ns before each attempt,
+				// so a nil-map guard placed outside is undone on the retry.
+				if ns.Annotations == nil {
+					ns.Annotations = make(map[string]string)
+				}
+				ns.Annotations["test.loopzero.io/canary"] = "should-persist"
+			})).To(Succeed())
 
 			// Trigger re-reconcile via annotation on tenant (NOT spec change, so generation stays same)
 			// Retry update with conflict resolution (409 is expected in envtest
@@ -1304,8 +1345,9 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 			callsBefore := fakeGitProvider.GetCalls()
 
 			// Change spec to bump generation
-			t.Spec.DisplayName = "Crash Recovery Updated"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "Crash Recovery Updated"
+			})).To(Succeed())
 
 			// Wait for reconcile to complete with new generation
 			Eventually(func(g Gomega) {
@@ -1387,8 +1429,9 @@ var _ = Describe("TenantController — Phase Transition + Deletion", Ordered, fu
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.Plan = loopzerov1.PlanEnterprise
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.Plan = loopzerov1.PlanEnterprise
+			})).To(Succeed())
 
 			nsName := "loopzero-" + tenantName + "-default-project-production"
 			expectDeployerRoleHasResource(nsName, "ingresses")
@@ -1422,71 +1465,10 @@ var _ = Describe("TenantController — Phase Transition + Deletion", Ordered, fu
 			}, &t)).To(Succeed())
 			Expect(t.Finalizers).To(ContainElement("loopzero.io/tenant-cleanup"))
 
-			// Verify child Environment CRs still exist (they have environment-cleanup finalizer)
-			var envList loopzerov1.EnvironmentList
-			Expect(k8sClient.List(ctx, &envList, client.InNamespace("default"))).To(Succeed())
-			childCount := 0
-			for _, env := range envList.Items {
-				for _, ref := range env.OwnerReferences {
-					if ref.UID == t.UID {
-						childCount++
-					}
-				}
-			}
-			Expect(childCount).To(BeNumerically(">", 0),
-				"child Environment CRs should still exist while tenant is deleting")
-		})
-
-		It("should remove finalizer and complete deletion when child Environments are gone", func() {
-			// envtest doesn't run the garbage collector, so ownerRef cascade doesn't
-			// happen automatically. We must manually delete child Environment CRs
-			// and then remove their finalizers to simulate the full cascade.
-			var envList loopzerov1.EnvironmentList
-			Expect(k8sClient.List(ctx, &envList, client.InNamespace("default"))).To(Succeed())
-			for i := range envList.Items {
-				env := &envList.Items[i]
-				isMine := false
-				for _, ref := range env.OwnerReferences {
-					if ref.Name == tenantName {
-						isMine = true
-						break
-					}
-				}
-				if !isMine {
-					continue
-				}
-				// Delete the Environment CR (simulating K8s GC cascade)
-				if env.DeletionTimestamp.IsZero() {
-					Expect(k8sClient.Delete(ctx, env)).To(Succeed())
-				}
-			}
-
-			// Now remove the environment-cleanup finalizer from each Environment CR
-			// (simulating EnvironmentController completing namespace cleanup).
-			// Also clean up the runtime namespaces (envtest doesn't delete namespaces).
-			Eventually(func(g Gomega) {
-				var envs loopzerov1.EnvironmentList
-				g.Expect(k8sClient.List(ctx, &envs, client.InNamespace("default"))).To(Succeed())
-				for i := range envs.Items {
-					env := &envs.Items[i]
-					for _, ref := range env.OwnerReferences {
-						if ref.Name == tenantName {
-							// Remove namespace label so EnvironmentController thinks ns is gone
-							nsName := env.Spec.Namespace.Name
-							var ns corev1.Namespace
-							if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns); err == nil {
-								ns.Finalizers = nil
-								delete(ns.Labels, "loopzero.io/tenant")
-								g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
-							}
-							// Remove finalizer so Environment CR can be garbage-collected
-							env.Finalizers = nil
-							g.Expect(k8sClient.Update(ctx, env)).To(Succeed())
-							break
-						}
-					}
-				}
-			}, timeout, interval).Should(Succeed())
+			// Drain the child Environment CRs (they carry the environment-cleanup
+			// finalizer, which envtest has no GC to clear) so the Tenant finalizer
+			// can proceed to the assertions below.
+			drainTenantEnvironments(tenantName)
 
 			// Clean up build namespaces — remove tenant label so the controller
 			// sees zero remaining namespaces and proceeds to remove the finalizer.
@@ -1663,8 +1645,9 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
-			t.Spec.DisplayName = "ArgoCD idempotency"
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.DisplayName = "ArgoCD idempotency"
+			})).To(Succeed())
 
 			// Wait for reconcile to complete
 			Eventually(func(g Gomega) {
@@ -1738,41 +1721,7 @@ var _ = Describe("TenantController — ArgoCD Deletion Cleanup", Ordered, func()
 		}, timeout, interval).Should(Succeed())
 
 		// Clean up child Environment CRs first (tenant waits for them before calling DeleteApplications)
-		var envList loopzerov1.EnvironmentList
-		Expect(k8sClient.List(ctx, &envList, client.InNamespace("default"))).To(Succeed())
-		for i := range envList.Items {
-			env := &envList.Items[i]
-			for _, ref := range env.OwnerReferences {
-				if ref.Name == tenantName {
-					if env.DeletionTimestamp.IsZero() {
-						_ = k8sClient.Delete(ctx, env)
-					}
-					break
-				}
-			}
-		}
-		// Remove environment-cleanup finalizers and namespace labels
-		Eventually(func(g Gomega) {
-			var envs loopzerov1.EnvironmentList
-			g.Expect(k8sClient.List(ctx, &envs, client.InNamespace("default"))).To(Succeed())
-			for i := range envs.Items {
-				env := &envs.Items[i]
-				for _, ref := range env.OwnerReferences {
-					if ref.Name == tenantName {
-						nsName := env.Spec.Namespace.Name
-						var ns corev1.Namespace
-						if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns); err == nil {
-							ns.Finalizers = nil
-							delete(ns.Labels, "loopzero.io/tenant")
-							g.Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
-						}
-						env.Finalizers = nil
-						g.Expect(k8sClient.Update(ctx, env)).To(Succeed())
-						break
-					}
-				}
-			}
-		}, timeout, interval).Should(Succeed())
+		drainTenantEnvironments(tenantName)
 
 		// Now wait for controller to call DeleteApplications (happens after child Environments are gone)
 		Eventually(func(g Gomega) {
@@ -1790,9 +1739,10 @@ var _ = Describe("TenantController — ArgoCD Deletion Cleanup", Ordered, func()
 		})).To(Succeed())
 		for i := range nsList.Items {
 			ns := &nsList.Items[i]
-			ns.Finalizers = nil
-			delete(ns.Labels, "loopzero.io/tenant")
-			Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, ns, func() {
+				ns.Finalizers = nil
+				delete(ns.Labels, "loopzero.io/tenant")
+			})).To(Succeed())
 		}
 
 		// Wait for tenant to be fully deleted
@@ -1831,8 +1781,9 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 		cleanupTenantEnvCRs(tenantName)
 		var t loopzerov1.Tenant
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, &t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, &t)
+			_ = operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Finalizers = nil
+			})
 			_ = k8sClient.Delete(ctx, &t)
 		}
 	})
@@ -2000,8 +1951,9 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			cleanupTenantEnvCRs("gc-env-other")
 			var ot loopzerov1.Tenant
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "gc-env-other", Namespace: "default"}, &ot); err == nil {
-				ot.Finalizers = nil
-				_ = k8sClient.Update(ctx, &ot)
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, &ot, func() {
+					ot.Finalizers = nil
+				})
 				_ = k8sClient.Delete(ctx, &ot)
 			}
 		})

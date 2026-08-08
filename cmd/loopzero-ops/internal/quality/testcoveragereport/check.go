@@ -18,16 +18,38 @@ import (
 	"strings"
 )
 
-// DefaultCoverageThreshold is the initial coverage floor. Conservative to
-// avoid false-fails on first activation; adjust per project maturity.
-const DefaultCoverageThreshold = 30.0
+// DefaultCoverageThreshold is the coverage floor.
+//
+// Raised 30% -> 75% on 2026-08-06. The 30% was set "conservative to avoid
+// false-fails on first activation", back when the gate measured the wrong
+// scope and reported 0.00%. Against the real scope the measurement is 85.33%,
+// so a 30% floor could not fail on anything short of deleting most of the test
+// suite — a gate that cannot go red is not a gate. 75% keeps ~10 points of
+// headroom for normal movement while still catching a real regression.
+//
+// Honest limit: the figure is an UNWEIGHTED mean across packages, so a tiny
+// 100% package offsets a large 40% one. It detects a broad regression, not a
+// single under-tested hot spot. Weighting by statement count would need
+// -coverprofile plus `go tool cover`, which is a bigger change than the defect
+// being fixed here.
+const DefaultCoverageThreshold = 75.0
 
 // DefaultScopes are the packages measured when Config.ScopeGlobs is empty.
-// Excludes e2e/livetest (require LIVE cluster) and load/ (concentrates on
-// large-scale benchmarks that pull entire fixture trees).
+//
+// They must hold PRODUCTION statements. The previous scopes were
+// ./infra/tests/{unit,charts}/..., which are test-only packages: `go test
+// -cover` reports "coverage: [no statements]" for them, the gate averaged that
+// to 0.00%, and failed against its own floor — red for a reason unrelated to
+// any code under test. That is why it sat quarantined as "measured broken".
+//
+// pkg/ (shared libraries) and cmd/loopzero-ops/internal/quality/ (the gates
+// themselves) are chosen because they are pure-logic and fast: 15s uncached,
+// measured 2026-08-06. api/ and operators/ are deliberately out — they need a
+// database and envtest control planes, which puts them minutes past the budget
+// for something meant to run on a push.
 var DefaultScopes = []string{
-	"./infra/tests/unit/...",
-	"./infra/tests/charts/...",
+	"./pkg/...",
+	"./cmd/loopzero-ops/internal/quality/...",
 }
 
 // Config controls the check.

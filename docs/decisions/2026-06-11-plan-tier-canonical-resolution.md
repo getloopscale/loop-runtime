@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR D4 — Plan tier canonical resolution pattern"
+---
+
 # ADR D4 — Plan tier canonical resolution pattern
 
 **Status:** Accepted

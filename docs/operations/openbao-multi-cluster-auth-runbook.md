@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: OpenBao Multi-Cluster Kubernetes Auth Runbook
+---
+
 # OpenBao Multi-Cluster Kubernetes Auth Runbook
 
 > **T5.1-T5.4 of plan `2026-06-02-openbao-adoption v1.5`**
@@ -224,5 +229,5 @@ Store the audit output in your operator-secure location (NOT Git — contains ku
 - `infra/helm/openbao-init/templates/configmap.yaml` — write_auth_role helper invoked by init Job
 - `infra/tests/check-openbao-init-auth-mounts_test.sh` — hermetic test asserts 19 invariants
 - `infra/scripts/openbao/init-ceremony.sh` — Vault Shamir init (pre-requisite)
-- Plan: `.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md`
+- Plan: [`.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md`](../plans/2026-06-02-openbao-adoption-plan.md)
 - LIVE evidence iter 32: `.claude/knowledge-base/audits/2026-06-03-openbao-adoption-LIVE-evidence.md`

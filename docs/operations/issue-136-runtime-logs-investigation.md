@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "#136 — Runtime logs vazios — Investigation 2026-06-22 (Run-7)"
+---
+
 # #136 — Runtime logs vazios — Investigation 2026-06-22 (Run-7)
 
 **Status:** ROOT CAUSE IDENTIFIED; canonical fix in helmfile overlay (not LIVE patch).

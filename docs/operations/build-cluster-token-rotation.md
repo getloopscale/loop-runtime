@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: "Operator runbook — Build cluster SA token rotation"
+---
+
 # Operator runbook — Build cluster SA token rotation
 
 ## When this fires

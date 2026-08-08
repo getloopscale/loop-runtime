@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
 func newGitRepositoryBinding(name, namespace, repoURL, secretName, secretKey, secretNamespace, consumerType, consumerNamespace string) *loopzerov1.GitRepositoryBinding {
@@ -246,19 +247,23 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "grb-rotation-cred", Namespace: bindingNamespace,
 			}, &cred)).To(Succeed())
-			cred.Data[credentialKey] = []byte(rotatedToken)
-			Expect(k8sClient.Update(ctx, &cred)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &cred, func() {
+				cred.Data[credentialKey] = []byte(rotatedToken)
+			})).To(Succeed())
 
 			// Trigger a reconcile by updating the binding's annotation.
 			var bindingCR loopzerov1.GitRepositoryBinding
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "grb-rotation", Namespace: bindingNamespace,
 			}, &bindingCR)).To(Succeed())
-			if bindingCR.Annotations == nil {
-				bindingCR.Annotations = make(map[string]string)
-			}
-			bindingCR.Annotations["platform.loopzero.io/force-reconcile"] = "true"
-			Expect(k8sClient.Update(ctx, &bindingCR)).To(Succeed())
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &bindingCR, func() {
+				// Inside the closure: the helper re-reads bindingCR before each
+				// attempt, so a nil-map guard placed outside is undone on the retry.
+				if bindingCR.Annotations == nil {
+					bindingCR.Annotations = make(map[string]string)
+				}
+				bindingCR.Annotations["platform.loopzero.io/force-reconcile"] = "true"
+			})).To(Succeed())
 
 			// Assert: hash changed and ArgoCD Secret updated.
 			Eventually(func(g Gomega) {

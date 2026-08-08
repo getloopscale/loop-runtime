@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: CRD Conversion Procedure (loopzero.io CRDs)
+---
+
 # CRD Conversion Procedure (loopzero.io CRDs)
 
 > **Status: DORMANT.** M14 gap #4 installed the Hub/Convertible *pattern*

@@ -68,7 +68,7 @@ cd infra/tests && go test ./e2e/... -v -timeout 120m \
 
 ### Quality gates — the CI substitute
 
-GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **108 pure-logic Go checks** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
+GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **112 pure-logic Go checks** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
 
 ```bash
 task quality:gates            # full-repo scan
@@ -86,7 +86,7 @@ task db:reset                 # drop + recreate + migrate + seed
 task db:generate              # regenerate api/internal/db/generated/ via sqlc
 ```
 
-A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
+A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108; the tree carries 112 as of 2026-08-08) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
 
 **Adding a new `.sh` file is FORBIDDEN by default** (`no-new-bash` gate, D3). New logic belongs in `cmd/loopzero-ops/internal/quality/` (Go — this is where the gates live; the old `pkg/quality/` was relocated out of the shared base at M9), `infra/helmfile/` (declarative), or `infra/tests/e2e/` (Ginkgo). The allowlist + justification contract is `.claude/rules/shell-scripts-allowlist.md`.
 
@@ -128,7 +128,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi` |
-| `cmd/loopzero-ops/` | Ops + quality binary: 108 quality gates + `seed` / `drill` / `pulumi` / `chaos` subcommands |
+| `cmd/loopzero-ops/` | Ops + quality binary: 112 quality gates + `seed` / `drill` / `pulumi` / `chaos` subcommands |
 | `infra/helm/` (44 dirs) | Bootstrap charts — installed by **Helmfile L2** |
 | `charts/` (13) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
 | `infra/tests/` | Ginkgo e2e, chaos, load (k6), unit (own module) |
@@ -262,6 +262,10 @@ Stores **WHY** — decisions, trade-offs, rationale that cannot be derived from 
 | Mistake | Fix |
 |---------|-----|
 | `pg_advisory_lock` (session-scoped) | Use `pg_advisory_xact_lock` |
+| Default lido do fallback do construtor em vez da config | `placement/engine.go:91` tem `if maxPerCell <= 0 { maxPerCell = 500 }` — é o **fallback**, não o valor entregue. O real é `config.go:497` (`envInt("MAX_TENANTS_PER_CELL", 5000)`) + `charts/loopzero-api/values.yaml:121`. O simulador de capacidade leu o 500 e inflou a contagem de cells em 10x, produzindo um gargalo `cell_count` inexistente e uma "Fase 1" que seria um downgrade. Ao citar um default, cite a **config**, não a guarda defensiva. |
+| Expressão CEL sobre `object.` numa regra `DELETE` | Em `DELETE` o `object` **não vem populado** como em CREATE/UPDATE. A expressão levanta erro de avaliação e, sob `failurePolicy: Fail`, isso vira **bloqueio geral**. Use `oldObject` quando precisar inspecionar o recurso, ou `request.*` para decidir por identidade. Terceira armadilha CEL da família (as outras duas: `!has(request.subResource)` e as isenções de GC do B33). Gate `vap-delete-guardrail` trava. |
+| Lista de isenções vazia num `matchCondition` de negação | A forma `!(request.userInfo.username in [...])` com lista **vazia** é `!(x in [])` — **sempre true**. A política passa a rodar para toda identidade e nega **tudo**, inclusive dos operators. Um piso mínimo de identidades é asserção de gate, não convenção. |
+| Testar admission policy com o kubeconfig padrão do e2e | O kubeconfig de k3d é admin, membro de `system:masters` — **grupo exempto** nos VAPs. O teste passa *porque o delete foi permitido*, não porque foi bloqueado. Use `--as=system:serviceaccount:<ns>:<sa>` com uma SA sem isenção, **e conceda RBAC a ela**: sem RBAC o `Forbidden` vem do RBAC e não prova nada sobre a política (a mensagem diz `cannot delete resource ... at the cluster scope`; a da política nomeia a policy). |
 | Concurrent build check OUTSIDE lock | Move inside `withEnvironmentLock` |
 | `errors.New("...")` | Use `LoopZeroError` with typed code |
 | `release.Status.State = "active"` | Use `release.Transition(event)` |

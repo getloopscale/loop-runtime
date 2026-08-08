@@ -1,4 +1,7 @@
 ---
+type: baseline
+title: "Steady-State Baseline — dev-public Cleanroom Engineering-side GREEN"
+generated: { by: claude-autonomous-cleanroom-validation-canonical-fix-chain/unrecorded, at: 2026-06-15 }
 name: 2026-06-15-dev-public-cleanroom-engineering-green
 context: 100% Dashboard Coverage roadmap Phase 4+5 GREEN ENGINEERING-side post 6 canonical fixes session
 plan: .claude/knowledge-base/plans/2026-06-15-100pct-dashboard-coverage-roadmap.md
@@ -122,7 +125,7 @@ session's "canonical fixes" deliverables.
 ## Cross-references
 
 - Roadmap: `.claude/knowledge-base/plans/2026-06-15-100pct-dashboard-coverage-roadmap.md`
-- Prior baseline: `docs/operations/baselines/2026-06-15-cleanroom-phase4-5-green-100pct-coverage-roadmap.md`
+- Prior baseline: [`docs/operations/baselines/2026-06-15-cleanroom-phase4-5-green-100pct-coverage-roadmap.md`](./2026-06-15-cleanroom-phase4-5-green-100pct-coverage-roadmap.md)
 - Cleanroom mandate: `.claude/rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL
 - Migrations canonical consolidation: commit `4e1b8a32`
 - JWT_ISSUER canonical fix: commit `e302963f`

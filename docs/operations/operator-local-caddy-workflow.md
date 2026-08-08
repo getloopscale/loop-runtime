@@ -1,3 +1,8 @@
+---
+type: operational-runbook
+title: Operator-local Caddy workflow (app-dev.loopzero.example)
+---
+
 # Operator-local Caddy workflow (app-dev.loopzero.example)
 
 > Plan `caddyfile-app-dev-prod-bundle-file-server-canonical` v1 — closes Red Team loopzero-cloud#66.

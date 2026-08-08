@@ -1,6 +1,11 @@
+---
+type: audit
+title: Scripts Audit Review Log
+---
+
 # Scripts Audit Review Log
 
-Per **T0.1 acceptance criteria** of `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`:
+Per **T0.1 acceptance criteria** of [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md):
 operator-review (HUMAN GATE) of the baseline CSV before Phase 1 (delete) executes.
 
 This file is **append-only**. Each entry is a timestamped review of a specific
@@ -81,7 +86,7 @@ Next action: proceed to Phase 1.1 (T1.1 dead-set validation)
 ## Review 2026-05-22 (iter 11) — T1.1 dead-set validation
 
 **Performed by:** ralph-loop-iter11 (engineering validation; operator sign-off still pending)
-**Output:** `docs/scripts-audit/2026-05-22-dead-set.md`
+**Output:** [`docs/scripts-audit/2026-05-22-dead-set.md`](./2026-05-22-dead-set.md)
 
 **Finding: validated dead-set = 0 scripts.**
 

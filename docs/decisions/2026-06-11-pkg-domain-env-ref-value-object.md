@@ -1,3 +1,8 @@
+---
+type: decision
+title: "ADR D2 — `pkg/domain.EnvRef` Value Object"
+---
+
 # ADR D2 — `pkg/domain.EnvRef` Value Object
 
 **Status:** Accepted
@@ -35,7 +40,7 @@ Go type aliases don't prevent argument-order swap when both args are `string`-de
 
 ### (c) Use struct embedding (`type EnvRef struct { naming.NamespaceArgs }`) — REJECTED
 
-Leaks the `naming` package's concern (computing K8s namespace) into the domain Value Object. DIP violation per `rules/architecture.md` — domain depends on naming, not the inverse.
+Leaks the `naming` package's concern (computing K8s namespace) into the domain Value Object. DIP violation per [`rules/architecture.md`](../technical/pkg/architecture.md) — domain depends on naming, not the inverse.
 
 ### (d) Functional Options pattern (`NewEnvRef(WithTenant("x"), WithProject("y"))`) — REJECTED
 
@@ -45,7 +50,7 @@ Verbose at call site (34 files × multi-line construction); doesn't compose with
 
 Cited principles:
 - **Domain-Driven Design (Evans 2003)** § Value Object pattern — identity is by value composition, not reference
-- **DIP** per `rules/architecture.md` — high-level domain abstraction; handlers depend on `pkg/domain`, not `pkg/naming`
+- **DIP** per [`rules/architecture.md`](../technical/pkg/architecture.md) — high-level domain abstraction; handlers depend on `pkg/domain`, not `pkg/naming`
 - **Twelve-Factor App § III (Config in environment)** — typed identity, not stringly-typed
 
 Memory: `feedback_no_hardcode_gate_2026_06_09` (structural root); `feedback_endpoint_contract_narrow_consumer_audit` (related pattern of string-form silent drift).

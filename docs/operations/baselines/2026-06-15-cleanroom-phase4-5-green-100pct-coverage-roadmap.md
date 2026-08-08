@@ -1,4 +1,7 @@
 ---
+type: baseline
+title: "Steady-State Baseline — Cleanroom Phase 4+5 GREEN"
+generated: { by: claude-autonomous-cleanroom-validation/unrecorded, at: 2026-06-15 }
 name: 2026-06-15-cleanroom-phase4-5-green
 context: 100% Dashboard Coverage roadmap Phase 4+5 GREEN (Cleanroom TOTAL → tilt up → doctor PASS=42 FAIL=0)
 plan: .claude/knowledge-base/plans/2026-06-15-100pct-dashboard-coverage-roadmap.md

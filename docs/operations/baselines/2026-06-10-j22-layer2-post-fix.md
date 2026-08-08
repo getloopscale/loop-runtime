@@ -1,8 +1,13 @@
+---
+type: baseline
+title: "Steady-State Baseline — 2026-06-10 J-22 Layer 2 Code-Review Fixes (engineering side post-fix)"
+---
+
 # Steady-State Baseline — 2026-06-10 J-22 Layer 2 Code-Review Fixes (engineering side post-fix)
 
 > Snapshot of the system state AFTER applying the 6-commit engineering
 > delivery of plan `2026-06-10-j22-layer2-code-review-fixes` v1.1.
-> Companion to the pre-fix bisect anchor `2026-06-10-j22-layer2-pre-fix.md`.
+> Companion to the pre-fix bisect anchor [`2026-06-10-j22-layer2-pre-fix.md`](./2026-06-10-j22-layer2-pre-fix.md).
 >
 > Per `.claude/rules/steady-state-baseline.md` § Triggers — "Journey
 > delivery (J-22 closed engineering-side + LIVE-validated)".

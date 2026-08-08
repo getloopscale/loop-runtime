@@ -1,3 +1,8 @@
+---
+type: baseline
+title: "Steady-State Baseline — Pre J-22 OpenBao Transit + ESO Sync"
+---
+
 # Steady-State Baseline — Pre J-22 OpenBao Transit + ESO Sync
 
 **Date:** 2026-06-10
@@ -5,7 +10,7 @@
 **Trigger:** T0.2 of plan `2026-06-10-j22-openbao-transit-eso-sync` v1.2 (pre-implementation)
 **Companion JSON:** [`2026-06-10-pre-j22-openbao-transit.json`](./2026-06-10-pre-j22-openbao-transit.json)
 
-This baseline is the bisect anchor for the OpenBao Transit + ESO Sync chain that wires the J-22 user-secret write path through OpenBao transit encryption + declarative ESO sync to workload pod env. If a regression surfaces after implementation, diff `2026-06-10-post-j22-openbao-transit.md` against this snapshot to localize.
+This baseline is the bisect anchor for the OpenBao Transit + ESO Sync chain that wires the J-22 user-secret write path through OpenBao transit encryption + declarative ESO sync to workload pod env. If a regression surfaces after implementation, diff [`2026-06-10-post-j22-openbao-transit.md`](./2026-06-10-post-j22-openbao-transit.md) against this snapshot to localize.
 
 ## Layer 1 — Code state
 
@@ -90,4 +95,4 @@ This baseline captures these gaps so the post-implementation diff CAN verify the
 - Plan: [`.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md`](../../../.claude/knowledge-base/plans/2026-06-10-j22-openbao-transit-eso-sync-plan.md) v1.2 § T0.2
 - Companion JSON: [`2026-06-10-pre-j22-openbao-transit.json`](./2026-06-10-pre-j22-openbao-transit.json)
 - Index: [`index.md`](./index.md)
-- Post-fix baseline (will land after T6.1 closure): `2026-06-10-post-j22-openbao-transit.md`
+- Post-fix baseline (will land after T6.1 closure): [`2026-06-10-post-j22-openbao-transit.md`](./2026-06-10-post-j22-openbao-transit.md)
