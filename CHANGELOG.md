@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- Removidas as duas formas antigas de montar o endereço de um ambiente, que ignoravam o
+  projeto, e o campo de mensagem livre do status de bootstrap, substituído há tempos pelas
+  condições. Nenhuma tinha consumidor legítimo restante (#274)
+
 ### Fixed
+
+- O status de cada serviço no dashboard voltou a refletir a realidade. O sistema procurava
+  os contêineres num endereço que não existia mais desde que os ambientes passaram a ser
+  separados por projeto, então nunca contava nenhum pronto e o deploy aparecia como "em
+  andamento" para sempre — em um caso, por 26 dias, com o serviço no ar (#274)
 
 - Um projeto podia ficar sem infraestrutura nenhuma, em silêncio. Quando dois projetos do
   mesmo time usavam o mesmo nome de ambiente, apenas um recebia namespace, permissões e

@@ -201,12 +201,6 @@ type PlatformBootstrapStatus struct {
 	// +optional
 	Phase PlatformBootstrapPhase `json:"phase,omitempty"`
 
-	// Message provides human-readable detail about the current phase.
-	// Deprecated: ARCH-007 — use Condition messages instead of this freeform field.
-	// Kept for backward compatibility; will be removed in a future version.
-	// +optional
-	Message string `json:"message,omitempty"`
-
 	// RetryCount tracks how many retries have been attempted in the current phase.
 	// +optional
 	RetryCount int `json:"retryCount,omitempty"`

@@ -269,12 +269,6 @@ spec:
                 description: LastTransitionTime is when the phase last changed.
                 format: date-time
                 type: string
-              message:
-                description: |-
-                  Message provides human-readable detail about the current phase.
-                  Deprecated: ARCH-007 — use Condition messages instead of this freeform field.
-                  Kept for backward compatibility; will be removed in a future version.
-                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed
                   by the controller.

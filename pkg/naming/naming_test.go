@@ -159,42 +159,6 @@ func TestTenantNamespace_too_long(t *testing.T) {
 // EnvironmentNamespace
 // ---------------------------------------------------------------------------
 
-func TestEnvironmentNamespace_format(t *testing.T) {
-	got, err := EnvironmentNamespace("tn-loopzero", "production")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "loopzero-tn-loopzero-production" {
-		t.Errorf("got %q, want %q", got, "loopzero-tn-loopzero-production")
-	}
-}
-
-func TestEnvironmentNamespace_empty_tenant(t *testing.T) {
-	_, err := EnvironmentNamespace("", "production")
-	if err == nil {
-		t.Error("should return error for empty tenant")
-	}
-}
-
-func TestEnvironmentNamespace_empty_env(t *testing.T) {
-	_, err := EnvironmentNamespace("tn-acme", "")
-	if err == nil {
-		t.Error("should return error for empty env")
-	}
-}
-
-func TestEnvironmentNamespace_too_long(t *testing.T) {
-	// "loopzero-" = 5 chars + name + "-" + env must be <= 63
-	_, err := EnvironmentNamespace(strings.Repeat("a", 30), strings.Repeat("b", 30))
-	if err == nil {
-		t.Error("should return error when combined name exceeds 63 chars")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// BuildNamespace
-// ---------------------------------------------------------------------------
-
 func TestBuildNamespace_format(t *testing.T) {
 	got, err := BuildNamespace("acme")
 	if err != nil {
@@ -216,21 +180,6 @@ func TestBuildNamespace_empty(t *testing.T) {
 // PreviewNamespace
 // ---------------------------------------------------------------------------
 
-func TestPreviewNamespace_format(t *testing.T) {
-	// Canonical refactor 2026-06-07: PreviewNamespace routes through
-	// Namespace(tenant, project, "preview-pr-N") so all envs share the
-	// uniform "loopzero-<tenant>-<project>-<env>" formula (no special case).
-	got, err := PreviewNamespace("acme", "api", 42)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := "loopzero-acme-api-preview-pr-42"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-// TestNamespace_canonical pins the uniform formula for all envs.
 func TestNamespace_canonical(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -265,38 +214,6 @@ func TestNamespace_canonical(t *testing.T) {
 		})
 	}
 }
-
-func TestPreviewNamespace_empty_tenant(t *testing.T) {
-	_, err := PreviewNamespace("", "api", 1)
-	if err == nil {
-		t.Error("should return error for empty tenant")
-	}
-}
-
-func TestPreviewNamespace_empty_project(t *testing.T) {
-	_, err := PreviewNamespace("acme", "", 1)
-	if err == nil {
-		t.Error("should return error for empty project")
-	}
-}
-
-func TestPreviewNamespace_zero_pr(t *testing.T) {
-	_, err := PreviewNamespace("acme", "api", 0)
-	if err == nil {
-		t.Error("should return error for PR number 0")
-	}
-}
-
-func TestPreviewNamespace_negative_pr(t *testing.T) {
-	_, err := PreviewNamespace("acme", "api", -1)
-	if err == nil {
-		t.Error("should return error for negative PR number")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// RepoName
-// ---------------------------------------------------------------------------
 
 func TestRepoName_format(t *testing.T) {
 	got, err := RepoName("acme", "backend")
@@ -602,19 +519,15 @@ func TestDeterminism_all_functions(t *testing.T) {
 			t.Fatalf("TenantNamespace not deterministic on iteration %d", i)
 		}
 
-		en, _ := EnvironmentNamespace("tn-acme", "prod")
-		if en != "loopzero-tn-acme-prod" {
-			t.Fatalf("EnvironmentNamespace not deterministic on iteration %d", i)
-		}
-
 		bn, _ := BuildNamespace("acme")
 		if bn != "build-acme" {
 			t.Fatalf("BuildNamespace not deterministic on iteration %d", i)
 		}
 
-		pn, _ := PreviewNamespace("acme", "api", 42)
+		// Preview não é especial na camada de nomes: é a tripla como qualquer ambiente.
+		pn, _ := Namespace("acme", "api", "preview-pr-42")
 		if pn != "loopzero-acme-api-preview-pr-42" {
-			t.Fatalf("PreviewNamespace not deterministic on iteration %d", i)
+			t.Fatalf("Namespace (preview) not deterministic on iteration %d", i)
 		}
 
 		rn, _ := RepoName("acme", "api")

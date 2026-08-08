@@ -221,15 +221,19 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	}
 }
 
-// previewNamespaceName returns the namespace name for the preview using
-// the canonical naming.PreviewNamespace helper. Format:
-// {tenantSlug}-{projectSlug}-pr-{prNumber}. Returns an error if any input
+// previewNamespaceName returns the namespace name for the preview.
+//
+// A preview is not special at the naming layer: it is the (tenant, project, env) triple
+// like any other environment, with env = "preview-pr-{N}". Returns an error if any input
 // is invalid (T0.2 / D6).
 func (r *PreviewReconciler) previewNamespaceName(preview *loopzerov1.PreviewEnvironment) (string, error) {
-	return naming.PreviewNamespace(
+	if preview.Spec.PRNumber <= 0 {
+		return "", fmt.Errorf("PR number must be positive, got %d", preview.Spec.PRNumber)
+	}
+	return naming.Namespace(
 		preview.Spec.TenantID,
 		preview.Spec.ProjectID,
-		preview.Spec.PRNumber,
+		fmt.Sprintf("preview-pr-%d", preview.Spec.PRNumber),
 	)
 }
 

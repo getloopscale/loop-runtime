@@ -414,9 +414,12 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 		return
 	}
 
-	// Compute workload namespace via canonical naming helper. The Tenant CR
-	// resource name (typically slug) is what naming.EnvironmentNamespace expects.
-	ns, err := naming.EnvironmentNamespace(tenant.Name, app.Spec.Environment)
+	// Compute the workload namespace from the (tenant, project, env) triple — the real
+	// isolation boundary. The previous helper dropped the project and produced
+	// loopzero-{tenant}-{env}, a namespace that exists in no cluster: List returned empty
+	// without erroring, so readyReplicas was never counted and every LoopZeroApplication sat
+	// in Progressing forever (measured: 26 days on app-dev). Issue #274.
+	ns, err := naming.Namespace(tenant.Name, app.Spec.Project, app.Spec.Environment)
 	if err != nil {
 		logger.V(1).Info("workload-status: namespace compute failed",
 			"tenant", tenant.Name, "env", app.Spec.Environment, "error", err)
@@ -429,7 +432,7 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	//   loopzero.io/environment   = app.Spec.Environment
 	//
 	// (loopzero.io/tenant is implicit via namespace filtering; namespace itself
-	// is loopzero-{tenantRef}-{environment}.)
+	// is loopzero-{tenantRef}-{project}-{environment}.)
 	//
 	// Source of truth for these labels: api/internal/manifests/renderer_*.go.
 	var pods corev1.PodList

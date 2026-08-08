@@ -189,7 +189,6 @@ func TestPlatformBootstrap_StatusFields(t *testing.T) {
 	pbs := PlatformBootstrap{
 		Status: PlatformBootstrapStatus{
 			Phase:              PlatformBootstrapPhaseConfiguringGitea,
-			Message:            "setting up Gitea organizations",
 			RetryCount:         2,
 			ObservedGeneration: 1,
 			LastTransitionTime: &transitionTime,
@@ -198,9 +197,6 @@ func TestPlatformBootstrap_StatusFields(t *testing.T) {
 
 	if pbs.Status.Phase != PlatformBootstrapPhaseConfiguringGitea {
 		t.Errorf("expected Phase %q, got %q", PlatformBootstrapPhaseConfiguringGitea, pbs.Status.Phase)
-	}
-	if pbs.Status.Message != "setting up Gitea organizations" {
-		t.Errorf("expected Message %q, got %q", "setting up Gitea organizations", pbs.Status.Message)
 	}
 	if pbs.Status.RetryCount != 2 {
 		t.Errorf("expected RetryCount %d, got %d", 2, pbs.Status.RetryCount)
