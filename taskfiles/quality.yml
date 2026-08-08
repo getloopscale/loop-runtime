@@ -140,6 +140,9 @@ tasks:
       # stay guarded against unauthorized DELETE. Wired here, not just registered: #255
       # found 10 gates that existed and never ran, which is how a guardrail silently rots.
       - /tmp/loopzero-ops quality vap-delete-guardrail
+      # Índice de topologia: qual chart roda em qual cluster, derivado dos helmfiles.
+      # Wired, não só registrado — #255 encontrou 10 gates que existiam e nunca rodavam.
+      - /tmp/loopzero-ops quality helm-topology-index
       - /tmp/loopzero-ops quality corrections-txt-closed
       # Issue #255 — gates that were implemented, registered and unit-tested but
       # never actually run. Each of the nine below was executed on 2026-07-30 and

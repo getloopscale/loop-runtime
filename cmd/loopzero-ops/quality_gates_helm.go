@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdiffstructural"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdrift"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmoverlapparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmtopology"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pgpdb"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vapdeleteguardrail"
 )
@@ -223,5 +224,41 @@ func runVAPDeleteGuardrail(args []string) int {
 	for _, f := range rep.Findings {
 		fmt.Fprintf(os.Stderr, "vap-delete-guardrail: FAIL [%s] %s\n", f.Check, f.Message)
 	}
+	return 1
+}
+
+// runHelmTopologyIndex implements the `helm-topology-index` gate (plan helm-topology-index).
+//
+// Derives "which cluster does this chart run on?" from the four helmfiles — the executable
+// source of truth — instead of encoding it a second time as a folder tree. Two representations
+// of the same fact drift; the helmfile cannot, because it is what installs.
+func runHelmTopologyIndex(args []string) int {
+	fs := flag.NewFlagSet("helm-topology-index", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	doc := fs.String("doc", "", "generated index path (default docs/architecture/helm-topology.md)")
+	write := fs.Bool("write", false, "regenerate the index instead of verifying it")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	mode := helmtopology.ModeCheck
+	if *write {
+		mode = helmtopology.ModeWrite
+	}
+	rep, err := helmtopology.Check(*root, mode, *doc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "helm-topology-index: %v\n", err)
+		return 5
+	}
+	if *write {
+		fmt.Printf("helm-topology-index: wrote index with %d entries\n", len(rep.Entries))
+		return 0
+	}
+	if rep.InSync {
+		fmt.Printf("helm-topology-index: PASS — %d charts indexed, in sync with the helmfiles\n",
+			len(rep.Entries))
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "helm-topology-index: FAIL — %s\n", rep.Message)
 	return 1
 }

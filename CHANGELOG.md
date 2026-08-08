@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Índice de topologia Helm gerado (`docs/architecture/helm-topology.md`): responde "em qual
+  cluster este chart roda?" sem abrir os helmfiles. 44 charts, com a natureza (nosso ou
+  configuração de terceiro), a versão fixada e — quando existe — a condição que faz a instalação
+  valer só em alguns ambientes. É derivado dos helmfiles, que são a fonte executável: uma segunda
+  cópia escrita à mão divergiria, que é o problema que os dois charts duplicados já causam. O gate
+  `helm-topology-index` reprova quando o índice sai de sincronia
+
 - Guardrail de deleção no cluster de gestão: `Application`, `AppProject`, `Tenant`,
   `Environment`, `ClusterCredential` — **e as definições que os descrevem** — passam a ser
   protegidos contra remoção por identidade não autorizada. Remover qualquer um deles aciona

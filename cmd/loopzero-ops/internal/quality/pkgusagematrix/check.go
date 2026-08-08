@@ -207,12 +207,18 @@ func fileContainsImport(path string, needle []byte) bool {
 }
 
 // renderTable produces the bash-compatible markdown table body.
-func renderTable(rows []PkgRow, now time.Time) string {
+func renderTable(rows []PkgRow) string {
 	var sb strings.Builder
 	sb.WriteString("## Real Usage Matrix\n\n")
-	fmt.Fprintf(&sb,
-		"Tabela gerada via grep de `import \"github.com/getloopscale/loopzero/pkg/X\"` em **%s**.\n",
-		now.Format("2006-01-02"))
+	// D2 / plan helm-topology-index T1.2: a data NÃO entra no corpo comparado.
+	//
+	// Um gate de frescor responde "o conteúdo divergiu da fonte?". Com a data aqui dentro ele
+	// passava a responder "isto foi gerado hoje?" — pergunta cuja resposta é "não" todo dia
+	// depois da meia-noite. Medido em 2026-08-08: bloqueou um push com a matriz idêntica, e a
+	// única saída era regenerar um arquivo que não mudou, o que treina o time a regenerar sem
+	// olhar. A data simplesmente sai: o git já registra quando o arquivo mudou, e um carimbo
+	// que ninguém compara não estava pagando o próprio custo.
+	sb.WriteString("Tabela gerada via grep de `import \"github.com/getloopscale/loopzero/pkg/X\"`.\n")
 	sb.WriteString("Atualizar via `task pkg:usage-matrix:write` (script: `loopzero-ops quality pkg-usage-matrix --write`).\n")
 	sb.WriteString("CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).\n\n")
 	sb.WriteString("| Pacote | Total imports | api/internal | operators/internal | cloud | cli | Outros |\n")
@@ -309,7 +315,7 @@ func Run(cfg Config, mode Mode) (*Outcome, error) {
 		}
 		out.Rows = append(out.Rows, row)
 	}
-	out.Generated = renderTable(out.Rows, now)
+	out.Generated = renderTable(out.Rows)
 
 	docRaw, err := os.ReadFile(resolvedDoc) //nolint:gosec // operator-controlled
 	if err != nil {
