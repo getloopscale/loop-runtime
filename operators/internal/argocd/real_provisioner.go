@@ -141,8 +141,8 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 
 	proj.SetResourceVersion(existing.GetResourceVersion())
 
-	// Preserve existing metadata that we don't manage (annotations added by ArgoCD, finalizers).
-	mergeExistingMetadata(existing, proj)
+	// Preserve what the ArgoCD controller owns (annotations, labels, finalizers, .status).
+	mergeExistingState(existing, proj)
 
 	_, err = p.client.Resource(appProjectGVR).Namespace(p.namespace).Update(ctx, proj, metav1.UpdateOptions{})
 	if err != nil {
@@ -311,7 +311,7 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 			return fmt.Errorf("argocd: refetch application %s: %w", spec.Name, getErr)
 		}
 		desired.SetResourceVersion(current.GetResourceVersion())
-		mergeExistingMetadata(current, desired)
+		mergeExistingState(current, desired)
 		_, updateErr := p.client.Resource(applicationGVR).Namespace(p.namespace).Update(ctx, desired, metav1.UpdateOptions{})
 		if updateErr != nil {
 			return updateErr
@@ -320,11 +320,30 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 	})
 }
 
-// mergeExistingMetadata preserves annotations, labels, and finalizers from the existing
-// resource that our desired object does not explicitly set. This prevents full-replace
-// updates from erasing metadata added by ArgoCD itself (e.g., notification subscriptions,
-// resource finalizers).
-func mergeExistingMetadata(existing, desired *unstructured.Unstructured) {
+// mergeExistingState carries over the parts of an existing ArgoCD resource that are NOT
+// ours to author, so the full-replace Update below does not erase them. What survives:
+//
+//   - annotations and labels — ArgoCD adds its own (notification subscriptions, tracking)
+//   - finalizers — including resources-finalizer.argocd.argoproj.io, whose loss would
+//     silently disable the cascade delete
+//   - .status — written by the ArgoCD application-controller, never by us
+//
+// The .status clause exists because the CRD does NOT enable the `status` subresource
+// (`kubectl get crd applications.argoproj.io -o jsonpath='{.spec.versions[*].subresources}'`
+// returns `{}`), so `.status` is an ordinary field and a whole-object Update replaces it.
+// Dropping it made sync/health flap to empty every few seconds, and every reader — including
+// `loopzero platform status` — saw false drift (issue #271). If ArgoCD upstream ever enables the
+// subresource, this clause becomes inert and can go.
+//
+// The .status copy runs BEFORE the metadata guard on purpose: preserving status must not
+// depend on metadata being well-formed. Putting it after the guard would reproduce the very
+// shape of the original defect — a function that promises to preserve N things and quietly
+// preserves N-1.
+func mergeExistingState(existing, desired *unstructured.Unstructured) {
+	if st, ok := existing.Object["status"]; ok && st != nil {
+		desired.Object["status"] = st
+	}
+
 	existingMeta, _ := existing.Object["metadata"].(map[string]interface{})
 	desiredMeta, _ := desired.Object["metadata"].(map[string]interface{})
 	if existingMeta == nil || desiredMeta == nil {

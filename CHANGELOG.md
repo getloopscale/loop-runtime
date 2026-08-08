@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Sync e health dos deploys pararam de piscar como desconhecidos. O componente que mantém
+  os deploys em dia reescrevia o registro de cada ambiente por inteiro e, ao fazer isso,
+  apagava o estado que o motor de entrega acabara de calcular — que voltava segundos depois.
+  Quem consultasse nesse intervalo, inclusive `loopzero platform status`, via divergência onde
+  não havia (#271)
+
+
 - Build da imagem `loopzero-api` voltou a passar. O `api/Dockerfile` autenticava para a organização
   antiga do GitHub enquanto o `api/go.mod` passou a exigir a nova — a reescrita de URL não casava
   com o módulo pedido, então o git buscava sem credencial. O GitHub responde a repositório privado

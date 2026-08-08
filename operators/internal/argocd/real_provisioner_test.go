@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -241,7 +242,7 @@ func TestMergeExistingMetadata_StripsSkipReconcile(t *testing.T) {
 			},
 		},
 	}
-	mergeExistingMetadata(existing, desired)
+	mergeExistingState(existing, desired)
 	merged := desired.Object["metadata"].(map[string]interface{})["annotations"].(map[string]interface{})
 	if _, present := merged["argocd.argoproj.io/skip-reconcile"]; present {
 		t.Errorf("skip-reconcile must be stripped during merge; got %v", merged)
@@ -251,5 +252,220 @@ func TestMergeExistingMetadata_StripsSkipReconcile(t *testing.T) {
 	}
 	if merged["overlay-me"] != "on" {
 		t.Errorf("desired overlay annotation must be present; got %v", merged)
+	}
+}
+
+// --- #271: preservação do .status no full-replace -------------------------------
+//
+// O CRD applications.argoproj.io NÃO habilita o subresource `status` (verificado em
+// app-dev 2026-08-08: `kubectl get crd applications.argoproj.io -o
+// jsonpath='{.spec.versions[*].subresources}'` → `{}`). Logo `.status` é campo comum
+// do objeto, e um Update de objeto inteiro montado do zero o APAGA. Medido: sync/health
+// oscilando para vazio a cada poucos segundos. Plano:
+// knowledge-base/plans/argocd-application-status-preservation-plan.md
+
+// seedUnstructured monta um objeto do ArgoCD com um .status opcional.
+func seedUnstructured(kind, name string, status map[string]interface{}) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group: "argoproj.io", Version: "v1alpha1", Kind: kind,
+	})
+	obj.SetName(name)
+	obj.SetNamespace("argocd")
+	if status != nil {
+		obj.Object["status"] = status
+	}
+	return obj
+}
+
+func syncStatusOf(t *testing.T, obj *unstructured.Unstructured) string {
+	t.Helper()
+	st, ok := obj.Object["status"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	sync, ok := st["sync"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	s, _ := sync["status"].(string)
+	return s
+}
+
+// TestEnsureApplication_PreservaStatusExistente reproduz a issue #271: o status que o
+// ArgoCD calculou tem de sobreviver a um reconcile do tenant-operator.
+func TestEnsureApplication_PreservaStatusExistente(t *testing.T) {
+	app := seedUnstructured("Application", "acme-production", map[string]interface{}{
+		"sync":   map[string]interface{}{"status": "Synced"},
+		"health": map[string]interface{}{"status": "Healthy"},
+	})
+	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), app)
+	p := NewRealProvisioner("argocd", client)
+
+	err := p.EnsureApplication(context.Background(), ApplicationSpec{
+		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
+		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
+		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-default",
+	})
+	if err != nil {
+		t.Fatalf("EnsureApplication: %v", err)
+	}
+
+	got, err := client.Resource(applicationGVR).Namespace("argocd").
+		Get(context.Background(), "acme-production", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+
+	if s := syncStatusOf(t, got); s != "Synced" {
+		t.Errorf("o .status.sync.status do ArgoCD foi apagado pelo Update: quero %q, veio %q "+
+			"(issue #271 — o CRD não tem subresource status, então o full-replace substitui o campo)",
+			"Synced", s)
+	}
+	st, _ := got.Object["status"].(map[string]interface{})
+	health, _ := st["health"].(map[string]interface{})
+	if h, _ := health["status"].(string); h != "Healthy" {
+		t.Errorf("o .status.health.status foi apagado: quero %q, veio %q", "Healthy", h)
+	}
+
+	// O Update precisa ter de fato acontecido — senão o teste passaria por omissão.
+	spec, _ := got.Object["spec"].(map[string]interface{})
+	source, _ := spec["source"].(map[string]interface{})
+	if pth, _ := source["path"].(string); pth != "production" {
+		t.Errorf("o spec não foi escrito: source.path = %q, quero %q", pth, "production")
+	}
+}
+
+// TestEnsureAppProject_PreservaStatusExistente cobre EC-5: o AppProject passa pela mesma
+// função de merge mas NÃO tem retry — a cópia é feita fora de qualquer closure.
+func TestEnsureAppProject_PreservaStatusExistente(t *testing.T) {
+	proj := seedUnstructured("AppProject", "acme", map[string]interface{}{
+		"sync": map[string]interface{}{"status": "Synced"},
+	})
+	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), proj)
+	p := NewRealProvisioner("argocd", client)
+
+	err := p.EnsureAppProject(context.Background(), AppProjectSpec{
+		Name: "acme", Namespace: "argocd", TenantID: "acme",
+		SourceRepos:           []string{"http://gitea/acme-gitops.git"},
+		DestinationNamespaces: []string{"loopzero-acme-web-production"},
+		CellID:                "cell-default",
+	})
+	if err != nil {
+		t.Fatalf("EnsureAppProject: %v", err)
+	}
+
+	got, err := client.Resource(appProjectGVR).Namespace("argocd").
+		Get(context.Background(), "acme", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+	if s := syncStatusOf(t, got); s != "Synced" {
+		t.Errorf("o .status do AppProject foi apagado pelo Update: quero %q, veio %q", "Synced", s)
+	}
+}
+
+// TestEnsureApplication_StatusVazioEPreservadoComoVazio cobre EC-4: `status` presente e
+// vazio NÃO é o mesmo que ausente. Uma checagem por len() introduziria exatamente o bug
+// que este teste proíbe.
+func TestEnsureApplication_StatusVazioEPreservadoComoVazio(t *testing.T) {
+	app := seedUnstructured("Application", "acme-staging", map[string]interface{}{})
+	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), app)
+	p := NewRealProvisioner("argocd", client)
+
+	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
+		Name: "acme-staging", Namespace: "argocd", TenantID: "acme",
+		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
+		Path: "staging", DestinationNS: "loopzero-acme-web-staging", CellID: "cell-default",
+	}); err != nil {
+		t.Fatalf("EnsureApplication: %v", err)
+	}
+
+	got, err := client.Resource(applicationGVR).Namespace("argocd").
+		Get(context.Background(), "acme-staging", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+	st, present := got.Object["status"]
+	if !present {
+		t.Fatalf("a chave status existia (vazia) e sumiu — preservar não é o mesmo que descartar quando parece vazio")
+	}
+	if m, ok := st.(map[string]interface{}); !ok || len(m) != 0 {
+		t.Errorf("status vazio deve continuar vazio; veio %#v", st)
+	}
+}
+
+// TestEnsureApplication_RetryUsaStatusDaReleitura cobre EC-3: `desired` é montado UMA vez
+// fora do closure do retry (real_provisioner.go:284) e reusado entre tentativas. Sob
+// conflito, o status escrito tem de ser o do objeto RELEITO, não o da primeira leitura.
+func TestEnsureApplication_RetryUsaStatusDaReleitura(t *testing.T) {
+	app := seedUnstructured("Application", "acme-production", map[string]interface{}{
+		"sync": map[string]interface{}{"status": "Synced"},
+	})
+	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), app)
+
+	var updates int
+	client.PrependReactor("update", "applications", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		updates++
+		if updates > 1 {
+			return false, nil, nil // segunda tentativa segue o caminho normal
+		}
+		// Simula o ArgoCD recalculando o status entre a nossa leitura e a nossa escrita.
+		moved := seedUnstructured("Application", "acme-production", map[string]interface{}{
+			"sync": map[string]interface{}{"status": "OutOfSync"},
+		})
+		if err := client.Tracker().Update(applicationGVR, moved, "argocd"); err != nil {
+			t.Fatalf("tracker update: %v", err)
+		}
+		return true, nil, apierrors.NewConflict(
+			schema.GroupResource{Group: "argoproj.io", Resource: "applications"},
+			"acme-production", fmt.Errorf("simulated conflict"),
+		)
+	})
+
+	p := NewRealProvisioner("argocd", client)
+	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
+		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
+		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
+		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-default",
+	}); err != nil {
+		t.Fatalf("EnsureApplication sob conflito: %v", err)
+	}
+	if updates < 2 {
+		t.Fatalf("o reactor de conflito não foi exercitado (updates=%d) — o teste não prova nada", updates)
+	}
+
+	got, err := client.Resource(applicationGVR).Namespace("argocd").
+		Get(context.Background(), "acme-production", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get after retry: %v", err)
+	}
+	if s := syncStatusOf(t, got); s != "OutOfSync" {
+		t.Errorf("sob conflito vale o status da RELEITURA: quero %q, veio %q "+
+			"(se a cópia sair de dentro do closure do retry, este teste pega)", "OutOfSync", s)
+	}
+}
+
+// TestEnsureApplication_CreateNaoInventaStatus é guarda, não regressão: a correção não
+// pode fabricar um `status: null` num recurso que ainda não tem status.
+func TestEnsureApplication_CreateNaoInventaStatus(t *testing.T) {
+	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	p := NewRealProvisioner("argocd", client)
+
+	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
+		Name: "acme-novo", Namespace: "argocd", TenantID: "acme",
+		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
+		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-default",
+	}); err != nil {
+		t.Fatalf("EnsureApplication (create): %v", err)
+	}
+
+	got, err := client.Resource(applicationGVR).Namespace("argocd").
+		Get(context.Background(), "acme-novo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get after create: %v", err)
+	}
+	if _, present := got.Object["status"]; present {
+		t.Errorf("um Application recém-criado não pode ganhar chave status; veio %#v", got.Object["status"])
 	}
 }
