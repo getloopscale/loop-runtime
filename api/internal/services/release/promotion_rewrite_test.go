@@ -12,7 +12,7 @@ const stagingManifestSample = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: versioned-app-api
-  namespace: loopzero-tn-e2etest-staging
+  namespace: loopzero-tn-e2etest-myproject-staging
   labels:
     app: versioned-app-api
     loopzero.io/environment: staging
@@ -37,7 +37,7 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: versioned-app-api
-  namespace: loopzero-tn-e2etest-staging
+  namespace: loopzero-tn-e2etest-myproject-staging
 spec:
   routes:
     - kind: Rule
@@ -54,12 +54,12 @@ spec:
 func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 	// Empty projectID == legacy call site / pre-refactor fixture (the
 	// stagingManifestSample uses the old "loopzero-{tenant}-{env}" format).
-	// Back-compat: the rewriter recognizes the legacy namespace candidate
-	// regardless of project so existing fixtures keep working.
+	// O reescritor ancora no namespace canônico (tenant, project, env). O candidato
+	// legado de dois segmentos foi deletado junto com o fallback de projectID vazio.
 	out, err := rewriteManifestsForEnv(
 		stagingManifestSample,
 		"tn-e2etest",
-		"",
+		"myproject",
 		"staging",
 		"production",
 		"loopzero.local",
@@ -69,7 +69,7 @@ func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 	}
 
 	mustContain := []string{
-		"namespace: loopzero-tn-e2etest-production",
+		"namespace: loopzero-tn-e2etest-myproject-production",
 		"loopzero.io/environment: production",
 		"tn-e2etest-versioned-app-api-production.loopzero.local",
 	}
@@ -199,7 +199,7 @@ func TestRewriteManifestsForEnv_NoOps(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			out, err := rewriteManifestsForEnv(stagingManifestSample, "tn-e2etest", "", c.from, c.to, c.baseDom)
+			out, err := rewriteManifestsForEnv(stagingManifestSample, "tn-e2etest", "myproject", c.from, c.to, c.baseDom)
 			if err != nil {
 				t.Fatalf("unexpected err: %v", err)
 			}
@@ -218,17 +218,17 @@ func TestRewriteManifestsForEnv_DoesNotMutateUnrelatedSubstrings(t *testing.T) {
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: loopzero-tn-e2etest-staging
+  namespace: loopzero-tn-e2etest-myproject-staging
 data:
   ENVIRONMENT_NOTE: "this app runs in staging mode"
   WEBSITE_URL: "https://staging.example.com"
 `
-	out, err := rewriteManifestsForEnv(in, "tn-e2etest", "", "staging", "production", "loopzero.local")
+	out, err := rewriteManifestsForEnv(in, "tn-e2etest", "myproject", "staging", "production", "loopzero.local")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	// Namespace MUST change.
-	if !strings.Contains(out, "namespace: loopzero-tn-e2etest-production") {
+	if !strings.Contains(out, "namespace: loopzero-tn-e2etest-myproject-production") {
 		t.Errorf("namespace was not rewritten: %s", out)
 	}
 	// Free-form data values that only mention "staging" must NOT change.
@@ -237,5 +237,19 @@ data:
 	}
 	if !strings.Contains(out, "https://staging.example.com") {
 		t.Errorf("unrelated URL was mutated:\n%s", out)
+	}
+}
+
+// TestRewriteManifestsForEnv_ProjectIDVazioFalhaAlto — o fallback para o formato de dois
+// segmentos "loopzero-{tenant}-{env}" foi deletado. Medido em 2026-08-08: ZERO namespaces
+// nesse formato existem em qualquer cluster, e a rota de promote sempre preenche o
+// ProjectID a partir do path param. O fallback protegia um estado que não existe — e o
+// preço era reescrever os manifests para um namespace inexistente em silêncio, mandando
+// o deploy para o vazio.
+func TestRewriteManifestsForEnv_ProjectIDVazioFalhaAlto(t *testing.T) {
+	_, err := rewriteManifestsForEnv(stagingManifestSample, "tn-e2etest", "", "staging", "production", "loopzero.local")
+	if err == nil {
+		t.Fatal("projectID vazio deve falhar alto: reescrever para um namespace de dois " +
+			"segmentos manda o deploy para um namespace que não existe")
 	}
 }

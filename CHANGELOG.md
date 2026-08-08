@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Promover um deploy entre ambientes deixou de poder mandá-lo para um endereço inexistente.
+  Quando o projeto não era informado, o sistema reescrevia os arquivos de configuração para
+  o formato antigo de endereço, sem erro — e o deploy ia para o vazio. Agora falha na hora,
+  dizendo o que faltou
+
 - O status de cada serviço no dashboard voltou a refletir a realidade. O sistema procurava
   os contêineres num endereço que não existia mais desde que os ambientes passaram a ser
   separados por projeto, então nunca contava nenhum pronto e o deploy aparecia como "em
