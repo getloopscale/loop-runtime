@@ -710,7 +710,7 @@
         "cfApiToken": {
           "type": "string"
         },
-        "mgmtKubeconfig": {
+        "coreKubeconfig": {
           "type": "string"
         },
         "buildKubeconfig": {

@@ -154,7 +154,7 @@ secrets:
   openbaoVaultRoleId: ""
   openbaoVaultSecretId: ""
   cfApiToken: ""
-  mgmtKubeconfig: ""
+  coreKubeconfig: ""
   buildKubeconfig: ""
   runtimeKubeconfig: ""
   stripeSecretKey: ""
