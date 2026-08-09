@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- O inventário de verificações automáticas deixou de morar num arquivo cujo nome promete ser o retrato
+  de uma data — ele era reescrito a cada verificação nova, então quem o abrisse esperando julho
+  encontrava agosto. O arquivo datado voltou a conter o que continha na data (BACKLOG.md B-006)
 - Os dois clusters cujo nome descrevia algo diferente do que eles são passaram a se chamar pelo que
   são: o que hospeda o produto inteiro agora é `core`, e o que guarda os segredos é `secrets` — este
   último rodava um software de segredos que não é o da marca que o nome citava. O cluster de build não

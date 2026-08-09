@@ -696,11 +696,21 @@ func TestQualityList_ZeroWiredTaskfile(t *testing.T) {
 // time AND proves the committed baseline is in the oracle's native order (not a
 // locale-sorted copy). Re-freeze the baseline via `loopzero-ops quality --list` when
 // gates are consciously added/wired.
+// oracleBaselinePath is the frozen gate set the oracle compares against. It lives in
+// testdata/ — not in docs/operations/baselines/ — because the test re-freezes it on
+// every consciously added gate, which is the opposite of what an audit-trail path
+// promises. See TestOracle_PathIsNotAuditTrail (B-006).
+const oracleBaselinePath = "testdata/gateset.frozen"
+
 func TestOracle_MatchesFrozenBaseline(t *testing.T) {
-	const baseline = "../../docs/operations/baselines/2026-07-02-m9-gateset.before"
+	const baseline = oracleBaselinePath
 	const liveTaskfile = "../../taskfiles/quality.yml"
+	// Absence is a FAILURE, not a skip: the oracle is committed, so a missing file
+	// means it was deleted or the path drifted — and a skip would report green while
+	// the protection silently vanished. Caught in B-006 when moving the path made the
+	// test pass by skipping.
 	if _, err := os.Stat(baseline); err != nil {
-		t.Skipf("frozen baseline not found (%v)", err)
+		t.Fatalf("frozen gate-set oracle missing at %s (%v) — re-freeze with `loopzero-ops quality --list`", baseline, err)
 	}
 	raw, err := os.ReadFile(baseline)
 	if err != nil {
@@ -725,5 +735,33 @@ func TestOracle_MatchesFrozenBaseline(t *testing.T) {
 		t.Errorf("live --list diverged from the frozen baseline (a gate was added/removed/un-wired, "+
 			"or the baseline is stale). Re-freeze with `loopzero-ops quality --list` after a conscious change.\n"+
 			"got %d lines, baseline %d lines", len(got), len(want))
+	}
+}
+
+// TestOracle_PathIsNotAuditTrail keeps the gate-set oracle out of the audit trail.
+//
+// Regression for B-006. The oracle lived at
+// docs/operations/baselines/2026-07-02-m9-gateset.before, and docs/README.md
+// classifies operations/baselines/ as audit trail — "History. Preserved
+// indefinitely. Never edited to match present state." But TestOracle_MatchesFrozenBaseline
+// requires a re-freeze on every consciously added gate, so the file was rewritten in
+// 24 commits and grew from 70 gates to 116. A file named `2026-07-02-…before` that has
+// been rewritten two dozen times is not a record of 2026-07-02; anyone opening it for
+// the July gate set finds today's, and the date in the name makes that especially
+// misleading.
+//
+// The oracle belongs somewhere that declares itself living. testdata/ is where Go puts
+// fixtures a test owns and rewrites.
+func TestOracle_PathIsNotAuditTrail(t *testing.T) {
+	auditTrail := []string{
+		"docs/operations/baselines/", "docs/operations/findings/", "docs/operations/evidence/",
+		"docs/plans/completed/", "docs/meetings/records/", "docs/reviews/", "docs/handoff/",
+		"docs/decisions/",
+	}
+	for _, dir := range auditTrail {
+		if strings.Contains(filepath.ToSlash(oracleBaselinePath), dir) {
+			t.Fatalf("the gate-set oracle sits in the audit trail (%s): it is re-frozen on every "+
+				"gate addition, so it records the present while its location promises history", dir)
+		}
 	}
 }
