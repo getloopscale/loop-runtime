@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- Removidos 4,2 MB de arquivos de comparação gerados em maio que nenhum teste, tarefa ou script lia. O
+  plano que os criou previa cinco arquivos e um teste que os comparasse; o que ficou foram dois
+  arquivos e nenhum teste (BACKLOG.md B-007)
 - Removidas as duas formas antigas de montar o endereço de um ambiente, que ignoravam o
   projeto, e o campo de mensagem livre do status de bootstrap, substituído há tempos pelas
   condições. Nenhuma tinha consumidor legítimo restante (#274)
