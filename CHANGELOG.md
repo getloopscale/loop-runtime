@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Uma verificação automática que prova que a renomeação dos clusters mudou apenas nomes de cluster, e
+  nunca uma linha em que a mesma palavra significava outra coisa — como as 70 linhas em que "vault"
+  nomeia o software de segredos, não o cluster (BACKLOG.md B-001)
 - Registro de manutenção deste repositório (`BACKLOG.md`), com cinco itens abertos, e o plano aprovado
   para renomear os dois clusters cujo nome descreve algo diferente do que eles são: o que hospeda o
   produto inteiro e o que guarda os segredos (BACKLOG.md B-001, B-002, B-005)

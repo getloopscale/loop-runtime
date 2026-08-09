@@ -245,6 +245,7 @@ tasks:
       # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
+      - /tmp/loopzero-ops quality cluster-rename-guard                             # B-001 T0.1: prova que o rename de cluster (mgmt->core, vault->secrets) tocou so identificadores. Toda linha classificada GENERIC antes do rename tem de sobreviver byte a byte — sao 70, e `vault` responde pela maioria porque ali a palavra nomeia o OpenBao.
       - /tmp/loopzero-ops quality route-auth-coverage                                # M-Migrate2 (2026-07-07): replaced infra/tests/check-route-auth-coverage_test.sh with pure-logic Go gate. R2-F8 HIGH: every router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. 40 routes verified.
       # M16 Phase 1 hygiene (2026-07-10): 5 previously-registered M-Migrate2 gates wired in per plan D1 (Rule 3 dead-code closure).
       - /tmp/loopzero-ops quality webhook-canonical-path                             # M16 T1.1 (2026-07-10): pre-Wave-1 backfill. Registered in quality_registry.go:85 by M-Migrate2 (2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh) but not wired into quality:gates until now.
