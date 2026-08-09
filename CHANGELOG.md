@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Registro de manutenção deste repositório (`BACKLOG.md`), com dois itens abertos: corrigir os nomes
+  dos quatro clusters da plataforma, que hoje descrevem coisas diferentes do que realmente são
+  (`B-001`), e medir o raio de explosão do cluster que concentra login, deploy, build e rollback
+  (`B-002`) (BACKLOG.md B-001, B-002)
+
+### Fixed
+
+- Uma evidência que aponta para um arquivo de configuração do próprio ferramental deixou de ser
+  acusada de invenção. O verificador cortava o ponto inicial do caminho, procurava um arquivo que
+  nunca existiu e reprovava o documento inteiro — com o arquivo no lugar e a linha citada correta
+  (BACKLOG.md B-003)
+- O documento de exemplo que serve de referência de qualidade voltou a ser aprovado nos projetos que
+  instalam o ferramental como plugin. Ele citava caminhos de outro formato de instalação, então a
+  suíte ficava vermelha em todo projeto consumidor — e suíte cronicamente vermelha ensina o time a
+  ignorar vermelho (BACKLOG.md B-004)
+
 ### Removed
 
 - Removidas as duas formas antigas de montar o endereço de um ambiente, que ignoravam o
