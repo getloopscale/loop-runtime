@@ -83,33 +83,81 @@ func Check(cfg Config) (Outcome, error) {
 		out.Checked++
 		body, seen := cache[occ.Path]
 		if !seen {
+			// An unreadable file is NOT a failure on its own: the plan moves files with
+			// `git mv`, so the line may simply live elsewhere now. Fall through to the
+			// tree-wide search rather than accusing.
 			b, err := os.ReadFile(filepath.Join(cfg.RepoRoot, occ.Path))
-			if err != nil {
-				cache[occ.Path] = ""
-				out.Failures = append(out.Failures, fmt.Sprintf(
-					"%s: file no longer readable, but the baseline classified %d occurrence(s) of %q in it as GENERIC",
-					occ.Path, 1, occ.Token))
-				continue
+			if err == nil {
+				body = string(b)
 			}
-			body = string(b)
 			cache[occ.Path] = body
 		}
-		if body == "" {
-			out.Failures = append(out.Failures, fmt.Sprintf(
-				"%s: file no longer readable (generic %q)", occ.Path, occ.Token))
+		if body != "" && strings.Contains(body, occ.Content) {
 			continue
 		}
-		if !strings.Contains(body, occ.Content) {
-			out.Failures = append(out.Failures, fmt.Sprintf(
-				"%s: a line classified GENERIC for %q no longer exists — a false positive was renamed:\n      %s",
-				occ.Path, occ.Token, strings.TrimSpace(occ.Content)))
+		// The line is not where the baseline recorded it. Before accusing anyone of
+		// renaming a false positive, look for it elsewhere: the plan moves files with
+		// `git mv` (EC-6), and the claim this guard defends is "the generic line still
+		// exists", not "it still lives at this exact path". Tracking by path alone turned
+		// every legitimate move into a false accusation.
+		if existsAnywhere(cfg.RepoRoot, cfg.BaselinePath, occ.Content) {
+			continue
 		}
+		out.Failures = append(out.Failures, fmt.Sprintf(
+			"%s: a line classified GENERIC for %q exists nowhere in the tree — a false positive was renamed:\n      %s",
+			occ.Path, occ.Token, strings.TrimSpace(occ.Content)))
 	}
 
 	if len(out.Failures) > 0 {
 		return out, errors.New("generic occurrences were modified")
 	}
 	return out, nil
+}
+
+// existsAnywhere reports whether the exact line survives somewhere in the tree.
+//
+// Uses `git grep --fixed-strings` so the content is matched literally — these lines are
+// code and YAML, full of regex metacharacters. Falls back to a filesystem walk when git
+// is unavailable (the unit tests run against a plain temp dir, not a repository).
+func existsAnywhere(root, baselinePath, content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return false
+	}
+	// `:!<path>` excludes the baseline itself — it stores every generic line verbatim
+	// as JSON, so searching it would find each one and the guard could never fail.
+	cmd := exec.Command("git", "grep", "--fixed-strings", "--quiet", trimmed, "--", ".", ":!"+baselinePath)
+	cmd.Dir = root
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+	found := false
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || found {
+			return nil //nolint:nilerr // an unreadable entry is not evidence of a rename
+		}
+		if abs, _ := filepath.Abs(path); abs == mustAbs(root, baselinePath) {
+			return nil
+		}
+		b, readErr := os.ReadFile(path)
+		if readErr == nil && strings.Contains(string(b), trimmed) {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+// mustAbs resolves a possibly-relative baseline path against the repo root.
+func mustAbs(root, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	abs, err := filepath.Abs(filepath.Join(root, p))
+	if err != nil {
+		return p
+	}
+	return abs
 }
 
 // assertAncestor refuses a baseline the gate cannot place before the current work.

@@ -125,3 +125,46 @@ func TestMissingFileIsReportedAsAFailure(t *testing.T) {
 		t.Fatalf("expected 1 failure, got %v", outcome.Failures)
 	}
 }
+
+// The plan renames files with `git mv` (EC-6, so `git log --follow` keeps reaching the
+// history). A guard that tracks occurrences by PATH turns every legitimate file rename
+// into a false accusation — and the claim it defends is "this generic line still
+// exists", not "it still lives at this exact path". Caught when
+// loopzero-vault-secrets.yaml was moved to loopzero-secrets-secrets.yaml to match the resource
+// it declares.
+func TestFollowsAGenericOccurrenceAcrossAFileRename(t *testing.T) {
+	root := t.TempDir()
+	baseline := Baseline{
+		TreeSHA: "deadbeef",
+		Generic: []Occurrence{
+			{Path: "manifests/old-name.yaml", Token: "vault", Content: "  # backed by the vault (OpenBao)"},
+		},
+	}
+	// Same content, new path — the file moved, the generic line did not change.
+	path := writeBaseline(t, root, baseline, map[string]string{
+		"manifests/new-name.yaml": "kind: ClusterSecretStore\n  # backed by the vault (OpenBao)\n",
+	})
+
+	if _, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err != nil {
+		t.Fatalf("a moved file must not read as a renamed false positive: %v", err)
+	}
+}
+
+// The relaxation above must not swallow the defect the guard exists for: when the line
+// is gone from the whole tree, it was renamed, and that still fails.
+func TestStillFailsWhenTheLineIsGoneFromTheWholeTree(t *testing.T) {
+	root := t.TempDir()
+	baseline := Baseline{
+		TreeSHA: "deadbeef",
+		Generic: []Occurrence{
+			{Path: "manifests/old-name.yaml", Token: "vault", Content: "  # backed by the vault (OpenBao)"},
+		},
+	}
+	path := writeBaseline(t, root, baseline, map[string]string{
+		"manifests/new-name.yaml": "kind: ClusterSecretStore\n  # backed by the secrets (OpenBao)\n",
+	})
+
+	if _, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err == nil {
+		t.Fatal("a generic line absent from the entire tree is a renamed false positive and must FAIL")
+	}
+}
