@@ -7,7 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- Removidas as duas formas antigas de montar o endereço de um ambiente, que ignoravam o
+  projeto, e o campo de mensagem livre do status de bootstrap, substituído há tempos pelas
+  condições. Nenhuma tinha consumidor legítimo restante (#274)
+
 ### Fixed
+
+- Promover um deploy entre ambientes deixou de poder mandá-lo para um endereço inexistente.
+  Quando o projeto não era informado, o sistema reescrevia os arquivos de configuração para
+  o formato antigo de endereço, sem erro — e o deploy ia para o vazio. Agora falha na hora,
+  dizendo o que faltou
+
+- O status de cada serviço no dashboard voltou a refletir a realidade. O sistema procurava
+  os contêineres num endereço que não existia mais desde que os ambientes passaram a ser
+  separados por projeto, então nunca contava nenhum pronto e o deploy aparecia como "em
+  andamento" para sempre — em um caso, por 26 dias, com o serviço no ar (#274)
+
+- Um projeto podia ficar sem infraestrutura nenhuma, em silêncio. Quando dois projetos do
+  mesmo time usavam o mesmo nome de ambiente, apenas um recebia namespace, permissões e
+  isolamento de rede — o outro não recebia nada e nada reportava erro. Medido: 5 de 9
+  combinações projeto/ambiente estavam sem provisionamento (#273)
+
+- Dois projetos de um mesmo time no mesmo ambiente deixaram de disputar o mesmo registro de
+  deploy. A identidade do deploy omitia o projeto, então o segundo projeto sobrescrevia o
+  primeiro a cada ciclo, e cada um enxergava os arquivos de configuração do outro. Deploy,
+  promote, rollback e a limpeza automática de ambientes agora derivam essa identidade de um
+  único lugar (#271)
+
+- Sync e health dos deploys pararam de piscar como desconhecidos. O componente que mantém
+  os deploys em dia reescrevia o registro de cada ambiente por inteiro e, ao fazer isso,
+  apagava o estado que o motor de entrega acabara de calcular — que voltava segundos depois.
+  Quem consultasse nesse intervalo, inclusive `loopzero platform status`, via divergência onde
+  não havia (#271)
+
 
 - Build da imagem `loopzero-api` voltou a passar. O `api/Dockerfile` autenticava para a organização
   antiga do GitHub enquanto o `api/go.mod` passou a exigir a nova — a reescrita de URL não casava

@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/operators/operatortest"
 )
 
@@ -64,7 +65,7 @@ func cleanupGoldenTenant(tenantName string, envNames []string) {
 	// Clean up Environment CRs.
 	for _, env := range envNames {
 		envCR := &loopzerov1.Environment{}
-		envKey := types.NamespacedName{Name: tenantName + "-" + env, Namespace: "default"}
+		envKey := types.NamespacedName{Name: tenantName + "-default-project-" + env, Namespace: "default"}
 		if err := k8sClient.Get(ctx, envKey, envCR); err == nil {
 			_ = operatortest.UpdateWithRetry(ctx, k8sClient, envCR, func() {
 				envCR.Finalizers = nil
@@ -405,7 +406,8 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should create an Environment CR for each declared environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				envCRName := fmt.Sprintf("%s-%s", tenantName, env)
+				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -417,7 +419,8 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should set ownerReference on each Environment CR pointing to the Tenant", func() {
 			for _, env := range []string{"production", "staging"} {
-				envCRName := fmt.Sprintf("%s-%s", tenantName, env)
+				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -432,7 +435,8 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should set correct tenantRef and namespace.name on each Environment CR", func() {
 			for _, env := range []string{"production", "staging"} {
-				envCRName := fmt.Sprintf("%s-%s", tenantName, env)
+				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				expectedNS := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment

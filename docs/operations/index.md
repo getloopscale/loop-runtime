@@ -2,6 +2,7 @@
 
 ## Seções
 
+* [argocd-app-identity-migration-runbook](argocd-app-identity-migration-runbook.md) — migração da identidade do Application do ArgoCD (#271); orfanar antes de deletar.
 * [baselines](baselines/index.md) — 32 documento(s).
 * [evidence](evidence/index.md) — 2 documento(s).
 * [findings](findings/index.md) — 2 documento(s).

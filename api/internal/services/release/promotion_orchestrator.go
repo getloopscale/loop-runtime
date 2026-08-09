@@ -295,7 +295,10 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	}
 
 	// Trigger ArgoCD sync — the sync callback will activate the release
-	appName := fmt.Sprintf("%s-%s", req.TenantID, req.ToEnv)
+	appName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.ToEnv)
+	if nameErr != nil {
+		return nil, fmt.Errorf("promote: argocd application name for %s: %w", req.ToEnv, nameErr)
+	}
 	if err := o.deps.Sync.TriggerSync(ctx, appName); err != nil {
 		logger.Error("promote: sync trigger failed — release will be activated by convergence loop",
 			"app_name", appName,
@@ -393,29 +396,20 @@ func rewriteManifestsForEnv(manifests, tenantID, projectID, fromEnv, toEnv, base
 	}
 	docs := splitYAMLDocs(manifests)
 	rewritten := make([]string, 0, len(docs))
-	// Canonical namespace format requires projectID. When the caller
-	// omits projectID (legacy call site / test fixture), fall back to
-	// the pre-refactor "loopzero-{tenant}-{env}" format so back-compat is
-	// preserved. The fall-through happens at the strings.Equal layer
-	// in rewriteString — both formats are produced + recognized below.
-	newNamespace := fmt.Sprintf("loopzero-%s-%s", tenantID, toEnv)
-	if projectID != "" {
-		newNamespace = fmt.Sprintf("loopzero-%s-%s-%s", tenantID, projectID, toEnv)
+	// The namespace is the (tenant, project, env) triple. The two-segment fallback for an
+	// empty projectID was deleted: zero namespaces in that shape exist in any cluster
+	// (measured 2026-08-08), the promote route always fills ProjectID from the path param,
+	// and the price of the fallback was rewriting manifests to a namespace that does not
+	// exist — sending the deploy into the void with no error.
+	newNamespace, err := naming.Namespace(tenantID, projectID, toEnv)
+	if err != nil {
+		return "", fmt.Errorf("promote: target namespace for %s/%s: %w", projectID, toEnv, err)
 	}
-	// Recognize the FromEnv namespace in BOTH formats so a manifest
-	// rendered by either format is rewritten cleanly.
-	oldNamespaceLegacy := fmt.Sprintf("loopzero-%s-%s", tenantID, fromEnv)
-	oldNamespaceCanonical := ""
-	if projectID != "" {
-		oldNamespaceCanonical = fmt.Sprintf("loopzero-%s-%s-%s", tenantID, projectID, fromEnv)
+	oldNamespaceCanonical, err := naming.Namespace(tenantID, projectID, fromEnv)
+	if err != nil {
+		return "", fmt.Errorf("promote: source namespace for %s/%s: %w", projectID, fromEnv, err)
 	}
-	// The downstream walker treats two oldNamespace strings as a
-	// dual-match by joining them with a sentinel that string compare
-	// can split. We keep a single oldNamespace var for back-compat with
-	// the existing rewriteEnvFields signature; rewriteString handles
-	// the canonical alternative explicitly below.
-	_ = oldNamespaceLegacy // captured into oldNs slice below
-	oldNamespaces := []string{oldNamespaceLegacy}
+	oldNamespaces := []string{}
 	if oldNamespaceCanonical != "" {
 		oldNamespaces = append(oldNamespaces, oldNamespaceCanonical)
 	}

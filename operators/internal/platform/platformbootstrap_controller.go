@@ -152,7 +152,6 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
 			platformBootstrapSM.Transition(statemachine.PBPhEmpty, statemachine.PBPEventStart),
 		)
-		pb.Status.Message = "Bootstrap initialized"
 		now := metav1.Now()
 		pb.Status.LastTransitionTime = &now
 		if err := r.Status().Update(ctx, &pb); err != nil {
@@ -166,7 +165,6 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
 			platformBootstrapSM.Transition(statemachine.PBPhPending, statemachine.PBPEventStart),
 		)
-		pb.Status.Message = "Starting Gitea configuration"
 		pb.Status.RetryCount = 0
 		now := metav1.Now()
 		pb.Status.LastTransitionTime = &now
@@ -206,7 +204,6 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
 	}
 	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
-	pb.Status.Message = message
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
 	if err := r.Status().Update(ctx, pb); err != nil {
@@ -223,7 +220,6 @@ func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)
 	}
 	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
-	pb.Status.Message = message
 	pb.Status.RetryCount = 0
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
@@ -238,7 +234,6 @@ func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context,
 func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int, message string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	pb.Status.RetryCount++
-	pb.Status.Message = message
 	logger.Info("phase retry", "phase", pb.Status.Phase, "retryCount", pb.Status.RetryCount, "maxRetries", maxRetries, "reason", message)
 
 	if pb.Status.RetryCount >= maxRetries {

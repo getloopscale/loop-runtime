@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // Client queries Grafana Loki for build logs via the HTTP API.
@@ -220,14 +221,16 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 	// legacy `loopzero-{tenant}-{env}` form, so logs for any M2-shaped
 	// namespace silently disappeared from /logs queries.
 	//
-	// T2.2.a backward-compat: the selector uses an anchored regex OR
-	// (`^(canonical|legacy)$`) so historical logs from pre-M2 deployed
-	// namespaces remain visible alongside M2 namespaces. Anchoring on
-	// ^...$ avoids prefix-collision with downstream-namespaced labels
-	// (e.g. `loopzero-tn-acme-production-canary`).
-	canonical := fmt.Sprintf("loopzero-%s-%s-%s", tenant, project, env)
-	legacy := fmt.Sprintf("loopzero-%s-%s", tenant, env)
-	namespaceSelector := fmt.Sprintf(`namespace=~"^(%s|%s)$"`, canonical, legacy)
+	// The two-segment legacy alternative was deleted. It existed so pre-M2 logs stayed
+	// visible, but tenant namespaces fall under Loki's default 168h retention (only
+	// vault-system carries the 90-day stream), and the M2 rename landed 2026-06-12 —
+	// those logs expired weeks ago. An exact match also removes the prefix-collision
+	// risk the anchored regex was there to contain.
+	canonical, err := naming.Namespace(tenant, project, env)
+	if err != nil {
+		return "", fmt.Errorf("loki: namespace for %s/%s/%s: %w", tenant, project, env, err)
+	}
+	namespaceSelector := fmt.Sprintf(`namespace=%q`, canonical)
 	if app != "" {
 		if !isValidLogParam(app) {
 			return "", fmt.Errorf("loki: invalid app filter parameter")

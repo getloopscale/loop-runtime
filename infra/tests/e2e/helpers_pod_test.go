@@ -17,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/getloopscale/loopzero/infra/tests/seed"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // cleanupTenant deletes the Tenant CR and waits for namespace cleanup.
@@ -67,7 +68,11 @@ func cleanupTenant(tenantID string, timeout time.Duration) {
 // This is the "Prova de Morte" assertion from bash journeys.
 // 2026-05-20 drill-parity: uses kubectlForCluster(ClusterWorkload, ...).
 func proveDead(tenant, project, env string) {
-	ns := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+	// O namespace é a tripla (tenant, project, env). Enquanto isto computava dois
+	// segmentos, a "prova de morte" checava um namespace que nunca existiu — e passava
+	// sempre, provando nada.
+	ns, nsErr := naming.Namespace(tenant, project, env)
+	Expect(nsErr).NotTo(HaveOccurred(), "proveDead: namespace inválido para %s/%s/%s", tenant, project, env)
 
 	Eventually(func() bool {
 		// Check if namespace still exists.

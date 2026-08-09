@@ -144,44 +144,10 @@ func IsPreviewEnv(envName string) bool {
 	return strings.HasPrefix(envName, "preview-")
 }
 
-// EnvironmentNamespace is DEPRECATED — kept only for callers that
-// haven't been migrated to the canonical Namespace yet. New code MUST
-// use Namespace(tenant, project, env) so multi-project tenants don't
-// collide on the same env name.
-//
-// Format: "loopzero-{tenantName}-{envName}" — preserved verbatim for
-// backward compatibility with pre-refactor deployed namespaces.
-//
-// Deprecated: use Namespace(tenant, project, env) instead.
-func EnvironmentNamespace(tenantName, envName string) (string, error) {
-	return composeName("environment namespace", "loopzero-%s-%s", tenantName, envName)
-}
-
 // BuildNamespace returns the build namespace name for a tenant.
 // Format: "build-{tenantSlug}"
 func BuildNamespace(tenantSlug string) (string, error) {
 	return composeName("build namespace", "build-%s", tenantSlug)
-}
-
-// PreviewNamespace is DEPRECATED — preview envs are now indistinguishable
-// from regular envs at the naming layer. Callers should compose the env
-// name as "preview-pr-{N}" and call Namespace(tenant, project, envName).
-//
-// Format (legacy, kept for back-compat): "{tenantSlug}-{projectSlug}-pr-{prNumber}".
-//
-// Deprecated: use Namespace(tenant, project, fmt.Sprintf("preview-pr-%d", n)).
-func PreviewNamespace(tenantSlug, projectSlug string, prNumber int) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if prNumber <= 0 {
-		return "", fmt.Errorf("PR number must be positive, got %d", prNumber)
-	}
-	envName := fmt.Sprintf("preview-pr-%d", prNumber)
-	return Namespace(tenantSlug, projectSlug, envName)
 }
 
 // RepoName returns the source code repository name.
@@ -212,6 +178,17 @@ func Hostname(projectSlug, envName, baseDomain string) (string, error) {
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
 	return composeName("argo app name", "%s-%s-%s", teamSlug, projectSlug, envName)
+}
+
+// EnvironmentCRName returns the Environment CR resource name.
+// Format: "{tenantName}-{projectSlug}-{envName}"
+//
+// The project belongs in the identity because the CR's content already depends on it:
+// spec.project and spec.namespace.name are both project-scoped. While the name omitted
+// it, two projects of one tenant sharing an env name collapsed onto a single CR, and the
+// loser silently received no namespace, RBAC or NetworkPolicy at all (issue #273).
+func EnvironmentCRName(tenantName, projectSlug, envName string) (string, error) {
+	return composeName("environment CR name", "%s-%s-%s", tenantName, projectSlug, envName)
 }
 
 // CertSecretName returns the TLS certificate secret name for a hostname.

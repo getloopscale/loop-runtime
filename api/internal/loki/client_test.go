@@ -26,7 +26,7 @@ func TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched(t *testing.T) {
 	}
 	// Anchored regex `^(M2|legacy)$` avoids prefix collisions with other
 	// namespaces (e.g. `loopzero-tn-acme-production-canary`).
-	want := `{namespace=~"^(loopzero-tn-acme-my-project-production|loopzero-tn-acme-production)$", container=~".+"}`
+	want := `{namespace="loopzero-tn-acme-my-project-production", container=~".+"}`
 	if got != want {
 		t.Errorf("LogQL drift (T2.2 + T2.2.a):\n  got:  %q\n  want: %q", got, want)
 	}
@@ -40,7 +40,7 @@ func TestBuildRuntimeLogQL_FiveSegmentFormWithApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("5-segment form rejected: %v", err)
 	}
-	want := `{namespace=~"^(loopzero-tn-acme-my-project-production|loopzero-tn-acme-production)$", app="web", container=~".+"}`
+	want := `{namespace="loopzero-tn-acme-my-project-production", app="web", container=~".+"}`
 	if got != want {
 		t.Errorf("5-segment LogQL drift:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -59,7 +59,7 @@ func TestBuildRuntimeLogQL_FiveSegmentFormWithEmptyApp(t *testing.T) {
 	if strings.Contains(got, `app=""`) {
 		t.Errorf("empty app must not produce an empty filter clause: %q", got)
 	}
-	want := `{namespace=~"^(loopzero-tn-acme-my-project-production|loopzero-tn-acme-production)$", container=~".+"}`
+	want := `{namespace="loopzero-tn-acme-my-project-production", container=~".+"}`
 	if got != want {
 		t.Errorf("empty-app LogQL drift:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -80,11 +80,13 @@ func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
 	if !strings.Contains(got, expectedM2) {
 		t.Errorf("expected M2 namespace %q in LogQL: got %q", expectedM2, got)
 	}
-	// Legacy must also appear as backward-compat (T2.2.a).
-	expectedLegacy := "loopzero-tn-x-staging-eu-1"
-	if !strings.Contains(got, expectedLegacy) {
-		t.Errorf("expected legacy namespace %q in LogQL (T2.2.a): got %q",
-			expectedLegacy, got)
+	// A alternativa legada de dois segmentos foi deletada: namespaces de tenant caem na
+	// retenção padrão de 168h do Loki (só vault-system tem o stream de 90 dias) e o
+	// rename M2 é de 2026-06-12 — aqueles logs expiraram semanas atrás. O seletor tem de
+	// ser igualdade exata, e não pode reintroduzir a forma antiga.
+	legacyDeletado := `"loopzero-tn-x-staging-eu-1"`
+	if strings.Contains(got, legacyDeletado) {
+		t.Errorf("o seletor legado de dois segmentos voltou: %q", got)
 	}
 }
 

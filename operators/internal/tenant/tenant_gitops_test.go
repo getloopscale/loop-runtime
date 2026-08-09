@@ -14,6 +14,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // fakeArgoListDelete is a minimal stub for the two new Provisioner methods
@@ -311,9 +312,9 @@ func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
 			envs:          []string{"production"},
 			activePreview: []int{1, 2},
 			existing: []string{
-				"tn-acme-production",
-				"tn-acme-preview-pr-1",
-				"tn-acme-preview-pr-2",
+				"tn-acme-default-project-production",
+				"tn-acme-default-project-preview-pr-1",
+				"tn-acme-default-project-preview-pr-2",
 			},
 			wantDeleted: []string{},
 		},
@@ -323,11 +324,11 @@ func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
 			envs:          []string{"production"},
 			activePreview: []int{1},
 			existing: []string{
-				"tn-acme-production",
-				"tn-acme-preview-pr-1",
-				"tn-acme-preview-pr-2", // PR 2 closed -> orphan
+				"tn-acme-default-project-production",
+				"tn-acme-default-project-preview-pr-1",
+				"tn-acme-default-project-preview-pr-2", // PR 2 closed -> orphan
 			},
-			wantDeleted: []string{"tn-acme-preview-pr-2"},
+			wantDeleted: []string{"tn-acme-default-project-preview-pr-2"},
 		},
 		{
 			name:          "prune multiple orphans, keep production + active preview",
@@ -335,17 +336,32 @@ func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
 			envs:          []string{"production"},
 			activePreview: []int{5},
 			existing: []string{
-				"tn-acme-production",
-				"tn-acme-preview-pr-3",
-				"tn-acme-preview-pr-4",
-				"tn-acme-preview-pr-5",
-				"tn-acme-staging-orphan",
+				"tn-acme-default-project-production",
+				"tn-acme-default-project-preview-pr-3",
+				"tn-acme-default-project-preview-pr-4",
+				"tn-acme-default-project-preview-pr-5",
+				"tn-acme-default-project-staging-orphan",
 			},
 			wantDeleted: []string{
-				"tn-acme-preview-pr-3",
-				"tn-acme-preview-pr-4",
-				"tn-acme-staging-orphan",
+				"tn-acme-default-project-preview-pr-3",
+				"tn-acme-default-project-preview-pr-4",
+				"tn-acme-default-project-staging-orphan",
 			},
+		},
+		{
+			// #271: depois do rename, um App de nome LEGADO cai fora do conjunto
+			// esperado e é deletado — COM o finalizer de cascade, ou seja, levando o
+			// workload junto. É por isso que a limpeza do legado é PRÉ-deploy e não
+			// pós: docs/operations/argocd-app-identity-migration-runbook.md
+			name:          "App de nome legado é podado pelo prune canônico (por isso a limpeza é pré-deploy)",
+			tenant:        "tn-acme",
+			envs:          []string{"production"},
+			activePreview: []int{},
+			existing: []string{
+				"tn-acme-default-project-production",
+				"tn-acme-production",
+			},
+			wantDeleted: []string{"tn-acme-production"},
 		},
 		{
 			name:          "empty existing — no work, no error",
@@ -361,11 +377,11 @@ func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
 			envs:          []string{"production", "staging"},
 			activePreview: []int{},
 			existing: []string{
-				"tn-acme-production",
-				"tn-acme-staging",
-				"tn-acme-preview-pr-99",
+				"tn-acme-default-project-production",
+				"tn-acme-default-project-staging",
+				"tn-acme-default-project-preview-pr-99",
 			},
-			wantDeleted: []string{"tn-acme-preview-pr-99"},
+			wantDeleted: []string{"tn-acme-default-project-preview-pr-99"},
 		},
 	}
 	for _, tc := range cases {
@@ -383,10 +399,10 @@ func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
 			previews := make([]loopzerov1.PreviewEnvironment, 0, len(tc.activePreview))
 			for _, pr := range tc.activePreview {
 				previews = append(previews, loopzerov1.PreviewEnvironment{
-					Spec: loopzerov1.PreviewEnvironmentSpec{PRNumber: pr},
+					Spec: loopzerov1.PreviewEnvironmentSpec{PRNumber: pr, ProjectID: "default-project"},
 				})
 			}
-			err := r.pruneOrphanPreviewApps(context.Background(), tenant, previews)
+			err := r.pruneOrphanPreviewApps(context.Background(), tenant, previews, "http://gitea/x.git")
 			if err != nil {
 				t.Fatalf("pruneOrphanPreviewApps unexpected error: %v", err)
 			}
@@ -417,11 +433,181 @@ func TestPruneOrphanPreviewApps_ListErrorBubbles(t *testing.T) {
 	tenant := &loopzerov1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-acme"},
 	}
-	err := r.pruneOrphanPreviewApps(context.Background(), tenant, nil)
+	err := r.pruneOrphanPreviewApps(context.Background(), tenant, nil, "http://gitea/x.git")
 	if err == nil {
 		t.Fatal("expected error from List failure, got nil")
 	}
 	if len(fake.deleted) != 0 {
 		t.Errorf("no deletes expected on list error, got %v", fake.deleted)
+	}
+}
+
+// --- #271 D3: identidade canônica do Application (tenant, project, environment) ------
+//
+// Medido em app-dev 2026-08-08: appName e path omitiam env.Project enquanto destNS o
+// incluía, então dois projetos do mesmo tenant no mesmo ambiente colidiam num único
+// Application com destinos conflitantes (1519 escritas em 5 min). Plano:
+// knowledge-base/plans/argocd-app-identity-canonical-plan.md
+
+func tenantWithEnvs(envs ...loopzerov1.TenantEnvironmentEntry) *loopzerov1.Tenant {
+	return &loopzerov1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{Name: "tn-test"},
+		Spec: loopzerov1.TenantSpec{
+			CellID:       "cell-default",
+			Environments: envs,
+			GitOps:       loopzerov1.GitOpsSpec{Branch: "main"},
+		},
+	}
+}
+
+// TestBuildApplicationSpecs_ProjetosDistintosNaoColidem reproduz a colisão medida: dois
+// projetos com o MESMO env.Name têm de produzir dois Applications, com paths distintos.
+func TestBuildApplicationSpecs_ProjetosDistintosNaoColidem(t *testing.T) {
+	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+	)
+
+	specs, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/tn-test-gitops.git")
+	if err != nil {
+		t.Fatalf("buildApplicationSpecs: %v", err)
+	}
+
+	nomes := map[string]bool{}
+	paths := map[string]bool{}
+	for _, s := range specs {
+		nomes[s.Name] = true
+		paths[s.Path] = true
+	}
+	if len(nomes) != 2 {
+		t.Errorf("dois projetos no mesmo ambiente devem produzir 2 Applications distintos; "+
+			"veio %d nome(s) %v — é a colisão da #271", len(nomes), nomes)
+	}
+	if len(paths) != 2 {
+		t.Errorf("cada Application deve ver só a subárvore do seu projeto; veio %d path(s) %v "+
+			"(gitea_pusher.go:136 escreve em {env}/{project}/)", len(paths), paths)
+	}
+	if !nomes["tn-test-alpha-preview"] || !nomes["tn-test-beta-preview"] {
+		t.Errorf("formato canônico é {tenant}-{project}-{env} (pkg/naming.ArgoAppName); veio %v", nomes)
+	}
+}
+
+// TestBuildApplicationSpecs_ProjectVazioFalhaAlto — mesma disciplina que
+// canonicalDestNamespace já tem (tenant_gitops.go:49-51): Project vazio não pode
+// gerar um nome degenerado em silêncio.
+func TestBuildApplicationSpecs_ProjectVazioFalhaAlto(t *testing.T) {
+	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
+	)
+
+	if _, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/x.git"); err == nil {
+		t.Fatal("Project vazio deve propagar erro, não gerar Application com nome degenerado")
+	}
+}
+
+// TestPruneExpectedIgualAoQueEnsureCria é o teste que torna impossível o cenário
+// destrutivo: pruneOrphanPreviewApps deleta toda Application do tenant fora do conjunto
+// `expected`, e o finalizer de cascade faz esse delete apagar o workload. Se `expected`
+// for computado por uma fórmula diferente da que cria os Apps, o operator deleta em
+// cascata exatamente o que acabou de criar. As duas leituras têm de vir da MESMA função.
+func TestPruneExpectedIgualAoQueEnsureCria(t *testing.T) {
+	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+	)
+
+	specs, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/tn-test-gitops.git")
+	if err != nil {
+		t.Fatalf("buildApplicationSpecs: %v", err)
+	}
+	criados := map[string]bool{}
+	for _, s := range specs {
+		criados[s.Name] = true
+	}
+
+	esperados, err := r.expectedApplicationNames(tenant, nil, "http://gitea/tn-test-gitops.git")
+	if err != nil {
+		t.Fatalf("expectedApplicationNames: %v", err)
+	}
+
+	for name := range criados {
+		if !esperados[name] {
+			t.Errorf("o prune deletaria %q, que o próprio reconcile acabou de criar — "+
+				"com o finalizer de cascade isso apaga o workload do tenant", name)
+		}
+	}
+	for name := range esperados {
+		if !criados[name] {
+			t.Errorf("o prune espera %q, que ninguém cria — nome órfão no conjunto de proteção", name)
+		}
+	}
+}
+
+// --- #273: identidade do Environment CR ---------------------------------------------
+//
+// Medido em app-dev 2026-08-08: 5 das 9 tuplas (project, environment) declaradas não
+// tinham Environment CR nenhum, porque o nome do CR omitia o projeto e cada projeto
+// sobrescrevia o anterior via CreateOrUpdate. O projeto perdedor nunca recebia
+// namespace, RBAC nem NetworkPolicy — em silêncio.
+
+func TestBuildEnvironmentCRNames_ProjetosDistintosNaoColidem(t *testing.T) {
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+	)
+
+	nomes, err := buildEnvironmentCRNames(tenant)
+	if err != nil {
+		t.Fatalf("buildEnvironmentCRNames: %v", err)
+	}
+	if len(nomes) != 2 {
+		t.Errorf("dois projetos no mesmo ambiente precisam de 2 Environment CRs; veio %d %v — "+
+			"o projeto perdedor fica sem namespace, RBAC e NetworkPolicy (#273)", len(nomes), nomes)
+	}
+	if !nomes["tn-test-alpha-preview"] || !nomes["tn-test-beta-preview"] {
+		t.Errorf("formato canônico é {tenant}-{project}-{env}; veio %v", nomes)
+	}
+}
+
+func TestBuildEnvironmentCRNames_ProjectVazioFalhaAlto(t *testing.T) {
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
+	)
+	if _, err := buildEnvironmentCRNames(tenant); err == nil {
+		t.Fatal("Project vazio deve propagar erro, não gerar nome degenerado")
+	}
+}
+
+// TestEnvironmentCRDesiredIgualAoQueSeCria é o irmão de TestPruneExpectedIgualAoQueEnsureCria.
+// O conjunto `desired` protege Environment CRs da coleta de lixo, e deletar um Environment CR
+// faz o EnvironmentReconciler deletar o NAMESPACE no cluster de runtime
+// (environment_controller.go:325-335). Se `desired` divergir do que o loop cria, o operator
+// apaga os namespaces dos tenants. As duas leituras têm de vir da mesma função.
+func TestEnvironmentCRDesiredIgualAoQueSeCria(t *testing.T) {
+	tenant := tenantWithEnvs(
+		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
+		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+	)
+
+	desired, err := buildEnvironmentCRNames(tenant)
+	if err != nil {
+		t.Fatalf("buildEnvironmentCRNames: %v", err)
+	}
+	for _, env := range tenant.Spec.Environments {
+		criado, nerr := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
+		if nerr != nil {
+			t.Fatalf("EnvironmentCRName: %v", nerr)
+		}
+		if !desired[criado] {
+			t.Errorf("o GC deletaria o Environment CR %q que o próprio loop cria — "+
+				"e deletar um Environment CR apaga o namespace no cluster de runtime", criado)
+		}
+	}
+	if len(desired) != len(tenant.Spec.Environments) {
+		t.Errorf("desired tem %d nomes para %d environments — sobra ou falta proteção",
+			len(desired), len(tenant.Spec.Environments))
 	}
 }

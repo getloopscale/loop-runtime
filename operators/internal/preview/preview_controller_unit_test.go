@@ -446,3 +446,27 @@ func TestRuntimeClientForPreview_NilFactory_ReturnsFallback(t *testing.T) {
 		t.Errorf("runtimeClientForPreview returned non-static client when factory is nil")
 	}
 }
+
+// Limpeza de deprecated (2026-08-08): naming.PreviewNamespace foi deletada. Seu
+// doc-comment prometia o formato legado "{tenant}-{project}-pr-{N}", mas o corpo já
+// delegava para Namespace — era um wrapper redundante, não um formato à parte. Este
+// teste fixa a equivalência que tornou a deleção segura: o namespace de preview é o
+// canônico loopzero-{tenant}-{project}-preview-pr-{N}, igual a qualquer outro ambiente.
+func TestPreviewNamespaceName_FormatoCanonico(t *testing.T) {
+	r := &PreviewReconciler{}
+	preview := &loopzerov1.PreviewEnvironment{
+		Spec: loopzerov1.PreviewEnvironmentSpec{
+			TenantID: "tn-acme", ProjectID: "teste", PRNumber: 3,
+		},
+	}
+
+	got, err := r.previewNamespaceName(preview)
+	if err != nil {
+		t.Fatalf("previewNamespaceName: %v", err)
+	}
+	want := "loopzero-tn-acme-teste-preview-pr-3"
+	if got != want {
+		t.Errorf("previewNamespaceName = %q, want %q — o formato legado não corresponde a "+
+			"nenhum namespace existente em nenhum cluster", got, want)
+	}
+}

@@ -63,6 +63,7 @@ agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
 anonymous-auth	gates	Forbids anonymous/unauthenticated access on protected API surfaces.
 archive-script-repo-root	gates	T1.2 hermetic guard of plan m1-commit-canonical-30-fixes: no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT with 3-dirs-up ($(dirname "$0")/../../..) — canonical post-quarantine 289cf9d6 is 4-dirs-up. Pure filepath.Walk + regex; missing scan dir treated as no-content. M-Migrate2 2026-07-10 M16 T2.2 Wave 1 replaces infra/tests/check-archive-script-repo-root_test.sh.
+argo-app-identity	gates	The ArgoCD Application name is derived only from naming.ArgoAppName (dropping the project made two projects of a tenant collide on one Application).
 base-image-digest	gates	Base images are pinned by digest, not floating tags.
 baseline-compare	-	Compares a captured steady-state baseline against the current state.
 baseline-update	-	Updates the committed steady-state baseline artifact.

@@ -82,9 +82,8 @@ func TestReconcileDelete_NoFinalizer_ReturnsClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reconcileDelete without finalizer must NOT error: %v", err)
 	}
-	if result.Requeue {
-		t.Error("reconcileDelete without finalizer must NOT requeue")
-	}
+	// `Requeue` é deprecated no controller-runtime; `RequeueAfter == 0` já é a prova
+	// canônica de que não há reenfileiramento, então a asserção antiga era redundante.
 	if result.RequeueAfter != 0 {
 		t.Errorf("reconcileDelete without finalizer must NOT request requeue, got %v",
 			result.RequeueAfter)

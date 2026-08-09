@@ -6,6 +6,7 @@ package tenant
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +51,112 @@ func canonicalDestNamespace(tenantSlug, projectSlug, envName string) (string, er
 		return "", fmt.Errorf("canonicalDestNamespace: Project is required (T1.1 contract — empty projectSlug used to silently fall back to legacy two-segment namespace; that path is removed in T2.1)")
 	}
 	return naming.Namespace(tenantSlug, projectSlug, envName)
+}
+
+// buildApplicationSpecs returns the canonical ArgoCD Application spec for every
+// (project, environment) of the tenant plus every active preview.
+//
+// # WHY THIS IS ONE FUNCTION
+//
+// Two callers need the identity of these Applications: reconcileArgoCDApp, which
+// CREATES them, and pruneOrphanPreviewApps, which DELETES everything outside the set.
+// The delete carries resources-finalizer.argocd.argoproj.io, so it takes the tenant's
+// workload with it. While the two computed the set independently, any divergence made
+// the operator delete, in cascade, exactly what it had just created. They now read from
+// here, so divergence is not unlikely — it is unrepresentable.
+//
+// The name comes from pkg/naming.ArgoAppName: {tenant}-{project}-{env}. Omitting the
+// project made two projects of one tenant collide on a single Application with
+// conflicting destinations (issue #271; measured at 1519 writes in 5 minutes).
+//
+// The path is {env}/{project} because that is where the manifests are actually written
+// (api/internal/gitops/gitea_pusher.go:136). Pointing at {env} alone let an Application
+// read every project's manifests in that environment.
+func (r *TenantReconciler) buildApplicationSpecs(
+	tenant *loopzerov1.Tenant,
+	previewEnvs []loopzerov1.PreviewEnvironment,
+	repoURL string,
+) ([]argocd.ApplicationSpec, error) {
+	cellID := tenant.Spec.CellID
+	if cellID == "" {
+		cellID = "cell-default"
+	}
+
+	specs := make([]argocd.ApplicationSpec, 0, len(tenant.Spec.Environments)+len(previewEnvs))
+
+	for _, env := range tenant.Spec.Environments {
+		appName, err := naming.ArgoAppName(tenant.Name, env.Project, env.Name)
+		if err != nil {
+			return nil, fmt.Errorf("argocd application name for %s/%s: %w", env.Project, env.Name, err)
+		}
+		destNS, err := canonicalDestNamespace(tenant.Name, env.Project, env.Name)
+		if err != nil {
+			return nil, fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
+		}
+		specs = append(specs, argocd.ApplicationSpec{
+			Name:           appName,
+			Namespace:      constants.DefaultArgoCDNamespace,
+			TenantID:       tenant.Name,
+			RepoURL:        repoURL,
+			TargetRevision: tenant.Spec.GitOps.Branch,
+			Path:           filepath.Join(env.Name, env.Project),
+			DestinationNS:  destNS,
+			DestinationURL: r.WorkloadClusterURL,
+			CellID:         cellID,
+			Environment:    env.Name,
+		})
+	}
+
+	// J-23 bug #6 / ADR D5: previews stay OUT of Tenant.spec.environments but still need
+	// an Application so the operator-created namespace receives the build manifests.
+	for _, pe := range previewEnvs {
+		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
+		appName, err := naming.ArgoAppName(tenant.Name, pe.Spec.ProjectID, envName)
+		if err != nil {
+			return nil, fmt.Errorf("argocd application name for preview %s/%s: %w",
+				pe.Spec.ProjectID, envName, err)
+		}
+		ref, refErr := domain.NewEnvRef(tenant.Name, pe.Spec.ProjectID, envName)
+		if refErr != nil {
+			return nil, fmt.Errorf("invalid EnvRef for preview env %s: %w", envName, refErr)
+		}
+		destNS, err := ref.Namespace()
+		if err != nil {
+			return nil, fmt.Errorf("invalid namespace name for preview env %s: %w", envName, err)
+		}
+		specs = append(specs, argocd.ApplicationSpec{
+			Name:           appName,
+			Namespace:      constants.DefaultArgoCDNamespace,
+			TenantID:       tenant.Name,
+			RepoURL:        repoURL,
+			TargetRevision: tenant.Spec.GitOps.Branch,
+			Path:           filepath.Join(envName, pe.Spec.ProjectID),
+			DestinationNS:  destNS,
+			DestinationURL: r.WorkloadClusterURL,
+			CellID:         cellID,
+			Environment:    envName,
+		})
+	}
+
+	return specs, nil
+}
+
+// expectedApplicationNames is the set pruneOrphanPreviewApps protects from deletion.
+// It is derived from buildApplicationSpecs on purpose — see that function's godoc.
+func (r *TenantReconciler) expectedApplicationNames(
+	tenant *loopzerov1.Tenant,
+	previewEnvs []loopzerov1.PreviewEnvironment,
+	repoURL string,
+) (map[string]bool, error) {
+	specs, err := r.buildApplicationSpecs(tenant, previewEnvs, repoURL)
+	if err != nil {
+		return nil, err
+	}
+	expected := make(map[string]bool, len(specs))
+	for _, s := range specs {
+		expected[s.Name] = true
+	}
+	return expected, nil
 }
 
 // buildAppProjectDestNamespaces returns the AppProject spec.destinations
@@ -218,90 +325,15 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)
 	}
 
-	for _, env := range tenant.Spec.Environments {
-		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
-		// #69 LIVE catch 2026-06-07: same canonical-with-fallback helper
-		// as the destNamespaces loop above. The ArgoCD App destination
-		// MUST match the namespace embedded in the rendered manifests
-		// (renderer_helpers.go:namespace, which is canonical for all
-		// envs). Pre-#69 Tenant CRs without env.Project resolved fall
-		// back to legacy so the controller doesn't crash on rollout.
-		destNS, err := canonicalDestNamespace(tenant.Name, env.Project, env.Name)
-		if err != nil {
-			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
-		}
-		// BLOCKER-3: Path scoped to environment directory.
-		// Manifest hierarchy is {environment}/{projectID}/manifests.yaml.
-		// Each ArgoCD Application watches only its environment's subtree,
-		// preventing cross-environment contamination (e.g., staging manifests applied to production).
-		path := env.Name
-
-		// ADR-0008: Pass CellID so the provisioner can resolve the correct ArgoCD instance.
-		cellID := tenant.Spec.CellID
-		if cellID == "" {
-			cellID = "cell-default"
-		}
-
-		spec := argocd.ApplicationSpec{
-			Name:           appName,
-			Namespace:      constants.DefaultArgoCDNamespace,
-			TenantID:       tenant.Name,
-			RepoURL:        repoURL,
-			TargetRevision: tenant.Spec.GitOps.Branch,
-			Path:           path,
-			DestinationNS:  destNS,
-			DestinationURL: r.WorkloadClusterURL,
-			CellID:         cellID,
-			// Sprint B B3 prep (code-005): populate env so real_provisioner can
-			// label the ArgoCD Application with loopzero.io/environment. Future
-			// activator iteration uses this label instead of LastIndex parser.
-			Environment: env.Name,
-		}
-
-		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {
-			return fmt.Errorf("argocd application %s: %w", appName, err)
-		}
-		log.FromContext(ctx).Info("argocd application reconciled", "application", appName)
+	specs, err := r.buildApplicationSpecs(tenant, previewEnvs, repoURL)
+	if err != nil {
+		return err
 	}
-
-	// J-23 bug #6: also emit ArgoCD Application per active PreviewEnvironment
-	// CR. ADR D5: previews stay OUT of Tenant.spec.environments but DO need
-	// an ArgoCD App so the operator-created namespace receives the build
-	// manifests. The destNS naming mirrors `preview-pr-<N>` so the path in
-	// the gitops repo aligns with what the build pipeline writes.
-	for _, pe := range previewEnvs {
-		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
-		appName := fmt.Sprintf("%s-%s", tenant.Name, envName)
-		// T1.3.c of plan 2026-06-11-code-review-remediation v1.2 — canonical
-		// EnvRef pattern per ADR D2. Same uniform formula as regular envs.
-		ref, refErr := domain.NewEnvRef(tenant.Name, pe.Spec.ProjectID, envName)
-		if refErr != nil {
-			return fmt.Errorf("invalid EnvRef for preview env %s: %w", envName, refErr)
-		}
-		destNS, err := ref.Namespace()
-		if err != nil {
-			return fmt.Errorf("invalid namespace name for preview env %s: %w", envName, err)
-		}
-		cellID := tenant.Spec.CellID
-		if cellID == "" {
-			cellID = "cell-default"
-		}
-		spec := argocd.ApplicationSpec{
-			Name:           appName,
-			Namespace:      constants.DefaultArgoCDNamespace,
-			TenantID:       tenant.Name,
-			RepoURL:        repoURL,
-			TargetRevision: tenant.Spec.GitOps.Branch,
-			Path:           envName,
-			DestinationNS:  destNS,
-			DestinationURL: r.WorkloadClusterURL,
-			CellID:         cellID,
-			Environment:    envName,
-		}
+	for _, spec := range specs {
 		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {
-			return fmt.Errorf("argocd application %s (preview): %w", appName, err)
+			return fmt.Errorf("argocd application %s: %w", spec.Name, err)
 		}
-		log.FromContext(ctx).Info("argocd application reconciled (preview)", "application", appName)
+		log.FromContext(ctx).Info("argocd application reconciled", "application", spec.Name)
 	}
 
 	// #71 LIVE catch 2026-06-07 — prune orphan preview Apps.
@@ -322,7 +354,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 	// (b) the watcher (#70) fires reconcile on PreviewEnv delete events, so
 	// the prune naturally cascades from PR close → CR delete → tenant
 	// reconcile → orphan App removed.
-	if err := r.pruneOrphanPreviewApps(ctx, tenant, previewEnvs); err != nil {
+	if err := r.pruneOrphanPreviewApps(ctx, tenant, previewEnvs, repoURL); err != nil {
 		// Soft-fail: pruning is best-effort housekeeping. Don't reset the
 		// ArgoCDAppReady condition or fail the whole reconcile because the
 		// active-Apps emit above already succeeded.
@@ -343,18 +375,22 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 //
 // #71 LIVE catch 2026-06-07 — the prune side of the preview lifecycle that
 // preview_controller.go:609 hand-waved to the API but the API never wired.
+// repoURL is threaded through only because the expected set is derived from the very
+// specs the reconcile emits — it does not influence which names are protected. Deriving
+// beats recomputing: see buildApplicationSpecs.
 func (r *TenantReconciler) pruneOrphanPreviewApps(
 	ctx context.Context,
 	tenant *loopzerov1.Tenant,
 	previewEnvs []loopzerov1.PreviewEnvironment,
+	repoURL string,
 ) error {
-	expected := make(map[string]bool, len(tenant.Spec.Environments)+len(previewEnvs))
-	for _, env := range tenant.Spec.Environments {
-		expected[fmt.Sprintf("%s-%s", tenant.Name, env.Name)] = true
-	}
-	for _, pe := range previewEnvs {
-		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
-		expected[fmt.Sprintf("%s-%s", tenant.Name, envName)] = true
+	// Derived from buildApplicationSpecs, never recomputed here: this set decides what
+	// gets DELETED, and the delete cascades through the ArgoCD finalizer into the
+	// tenant's workload. A second formula that drifted from the first would make the
+	// operator destroy exactly what it had just created.
+	expected, err := r.expectedApplicationNames(tenant, previewEnvs, repoURL)
+	if err != nil {
+		return fmt.Errorf("expected application names for prune: %w", err)
 	}
 
 	existing, err := r.ArgoCDProvisioner.ListApplicationNames(ctx, tenant.Name)

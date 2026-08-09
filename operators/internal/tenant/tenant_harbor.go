@@ -120,7 +120,7 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 	// Self-healing for pull secrets: check each workload namespace.
 	pullSecretMissing := false
 	for _, env := range tenant.Spec.Environments {
-		envNs, nsErr := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		envNs, nsErr := naming.Namespace(tenant.Name, env.Project, env.Name)
 		if nsErr != nil {
 			return fmt.Errorf("invalid namespace for env %s: %w", env.Name, nsErr)
 		}
@@ -161,7 +161,7 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 	if pullCreds.Secret != "" {
 		ensured := 0
 		for _, env := range tenant.Spec.Environments {
-			envNs, nsErr := naming.EnvironmentNamespace(tenant.Name, env.Name)
+			envNs, nsErr := naming.Namespace(tenant.Name, env.Project, env.Name)
 			if nsErr != nil {
 				return fmt.Errorf("invalid namespace for env %s: %w", env.Name, nsErr)
 			}

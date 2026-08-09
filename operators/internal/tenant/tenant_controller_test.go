@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/operatortest"
 )
@@ -595,7 +596,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 
 		It("should create Environment CRs for each environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				envCRName := tenantName + "-" + env
+				envCRName := tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -661,7 +662,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 		It("should set NamespaceReady on Environment CRs (not on Tenant)", func() {
 			// NamespacesReady is no longer on Tenant — it is now on Environment CRs
 			for _, env := range []string{"production", "staging"} {
-				envCRName := tenantName + "-" + env
+				envCRName := tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var envCR loopzerov1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -761,7 +762,7 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 
 	Context("RBACReady condition (on Environment CR)", func() {
 		It("should set RBACReady on Environment CR (not on Tenant)", func() {
-			expectEnvCondition(tenantName+"-production", conditions.TypeEnvRBACReady, metav1.ConditionTrue)
+			expectEnvCondition(tenantName+"-default-project-production", conditions.TypeEnvRBACReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -881,7 +882,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 
 	Context("NetworkPolicyReady condition (on Environment CR)", func() {
 		It("should set NetworkPolicyReady on Environment CR (not on Tenant)", func() {
-			expectEnvCondition(tenantName+"-production", conditions.TypeEnvNetworkPolicyReady, metav1.ConditionTrue)
+			expectEnvCondition(tenantName+"-default-project-production", conditions.TypeEnvNetworkPolicyReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -1525,7 +1526,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 	Context("ArgoCD Application creation", func() {
 		It("should ensure one ArgoCD Application per environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				Eventually(func(g Gomega) {
 					fakeArgoCDProvider.Mu.Lock()
 					_, exists := fakeArgoCDProvider.Applications[appName]
@@ -1542,7 +1544,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 
-			appName := fmt.Sprintf("%s-production", tenantName)
+			appName, nerr := naming.ArgoAppName(tenantName, "default-project", "production")
+			Expect(nerr).NotTo(HaveOccurred())
 			fakeArgoCDProvider.Mu.Lock()
 			app := fakeArgoCDProvider.Applications[appName]
 			fakeArgoCDProvider.Mu.Unlock()
@@ -1552,7 +1555,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 
 		It("should set correct destination namespace per environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 				expectedNS := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
 
 				fakeArgoCDProvider.Mu.Lock()
@@ -1564,25 +1568,30 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			}
 		})
 
-		It("should set correct path per environment (BLOCKER-3: scoped to env directory)", func() {
+		It("should set correct path per environment+project (BLOCKER-3 + #271: scoped to the project subtree)", func() {
 			// BLOCKER-3: Path is the environment name, not "." (root).
 			// This scopes each ArgoCD Application to only its environment's manifests,
 			// preventing cross-environment contamination.
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]
 				fakeArgoCDProvider.Mu.Unlock()
 
-				Expect(app.Path).To(Equal(env),
-					"ArgoCD Application %s should have path '%s' (env-scoped)", appName, env)
+				// #271: o path é {env}/{project}, casando com onde o pusher escreve os
+				// manifests (api/internal/gitops/gitea_pusher.go:136). Apontar para {env}
+				// sozinho fazia o App ler os manifests de todo projeto daquele ambiente.
+				Expect(app.Path).To(Equal(env+"/default-project"),
+					"ArgoCD Application %s should be scoped to its own project subtree", appName)
 			}
 		})
 
 		It("should set tenantID on each application", func() {
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]
@@ -1596,7 +1605,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			// The default WorkloadClusterURL is "https://kubernetes.default.svc" when not configured.
 			// This test verifies the reconciler uses its configured value rather than a hardcoded string.
 			for _, env := range []string{"production", "staging"} {
-				appName := fmt.Sprintf("%s-%s", tenantName, env)
+				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
+				Expect(nerr).NotTo(HaveOccurred())
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]
@@ -1608,7 +1618,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 		})
 
 		It("should set namespace to argocd", func() {
-			appName := fmt.Sprintf("%s-production", tenantName)
+			appName, nerr := naming.ArgoAppName(tenantName, "default-project", "production")
+			Expect(nerr).NotTo(HaveOccurred())
 
 			fakeArgoCDProvider.Mu.Lock()
 			app := fakeArgoCDProvider.Applications[appName]
@@ -1618,7 +1629,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 		})
 
 		It("should set targetRevision to main", func() {
-			appName := fmt.Sprintf("%s-production", tenantName)
+			appName, nerr := naming.ArgoAppName(tenantName, "default-project", "production")
+			Expect(nerr).NotTo(HaveOccurred())
 
 			fakeArgoCDProvider.Mu.Lock()
 			app := fakeArgoCDProvider.Applications[appName]
@@ -1771,7 +1783,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			for _, env := range []string{"production", "staging", "dev"} {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-" + env, Namespace: "default",
+					Name: tenantName + "-default-project-" + env, Namespace: "default",
 				}, &envCR)).To(Succeed())
 			}
 		}, timeout, interval).Should(Succeed())
@@ -1877,7 +1889,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			for _, env := range []string{"production", "staging"} {
 				var envCR loopzerov1.Environment
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-" + env, Namespace: "default",
+					Name: tenantName + "-default-project-" + env, Namespace: "default",
 				}, &envCR)).To(Succeed())
 			}
 		})
@@ -1891,7 +1903,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "gc-env-other-staging", Namespace: "default",
+					Name: "gc-env-other-default-project-staging", Namespace: "default",
 				}, &envCR)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
@@ -1909,7 +1921,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-staging", Namespace: "default",
+					Name: tenantName + "-default-project-staging", Namespace: "default",
 				}, &envCR)).To(Succeed())
 				g.Expect(envCR.DeletionTimestamp.IsZero()).To(BeFalse())
 			}, timeout, interval).Should(Succeed())
@@ -1918,7 +1930,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-staging", Namespace: "default",
+					Name: tenantName + "-default-project-staging", Namespace: "default",
 				}, &envCR)).To(Succeed())
 				var ns corev1.Namespace
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCR.Spec.Namespace.Name}, &ns); err == nil {
@@ -1934,7 +1946,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			Eventually(func(g Gomega) {
 				var envCR loopzerov1.Environment
 				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName + "-staging", Namespace: "default",
+					Name: tenantName + "-default-project-staging", Namespace: "default",
 				}, &envCR)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(errors.IsNotFound(err)).To(BeTrue())
@@ -1943,7 +1955,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 			// Assert: other tenant's staging CR must still exist
 			var otherEnv loopzerov1.Environment
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: "gc-env-other-staging", Namespace: "default",
+				Name: "gc-env-other-default-project-staging", Namespace: "default",
 			}, &otherEnv)).To(Succeed())
 			Expect(otherEnv.OwnerReferences[0].Name).To(Equal("gc-env-other"))
 
