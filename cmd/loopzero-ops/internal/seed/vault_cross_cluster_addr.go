@@ -22,11 +22,11 @@ import (
 //
 // Sets `OPENBAO_VAULT_ADDR=https://<serverlb-ip>:<nodeport>` on the mgmt/loopzero-system/
 // loopzero-api Deployment env so it can reach OpenBao that runs in the SEPARATE
-// k3d-loopzero-vault cluster (Jeito A per cleanroom-up-live-test-mandate.md).
+// k3d-loopzero-secrets cluster (Jeito A per cleanroom-up-live-test-mandate.md).
 //
 // Cross-cluster discovery:
 //  1. Vault Service `openbao.vault-system` in the vault cluster → https NodePort
-//  2. `docker inspect` on `k3d-loopzero-vault-serverlb` for the container IP
+//  2. `docker inspect` on `k3d-loopzero-secrets-serverlb` for the container IP
 //
 // D1 exemption: `docker inspect` is a READ-ONLY container introspection —
 // docker is the only source-of-truth for the k3d loadbalancer's internal IP.
@@ -39,18 +39,18 @@ func NewVaultCrossClusterAddrSeed() *VaultCrossClusterAddrSeed {
 func (s *VaultCrossClusterAddrSeed) Name() string { return "vault-cross-cluster-addr" }
 
 const (
-	vaultContextName        = "k3d-loopzero-vault"
+	vaultContextName        = "k3d-loopzero-secrets"
 	vaultNamespace          = "vault-system"
 	openbaoServiceName      = "openbao"
 	openbaoHTTPSPortName    = "https"
-	vaultServerLBContainer  = "k3d-loopzero-vault-serverlb"
+	vaultServerLBContainer  = "k3d-loopzero-secrets-serverlb"
 	openBaoVaultAddrEnvVar  = "OPENBAO_VAULT_ADDR"
 	loopzeroAPINamespaceInMgmt  = "loopzero-system"
 	loopzeroAPIDeploymentInMgmt = "loopzero-api"
 )
 
 func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
-	// Vault cluster is a separate context (`k3d-loopzero-vault`).
+	// Vault cluster is a separate context (`k3d-loopzero-secrets`).
 	vaultCli, err := d.ClientFor(vaultContextName)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("resolve vault context %s: %v", vaultContextName, err)}
@@ -59,10 +59,10 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 	// Step 1 — pull https NodePort from openbao Service.
 	np, err := vaultServiceHTTPSNodePort(d.Ctx, vaultCli)
 	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("openbao NodePort: %v (run task k3d:vault:bootstrap first)", err)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("openbao NodePort: %v (run task k3d:secrets:bootstrap first)", err)}
 	}
 
-	// Step 2 — docker inspect the k3d-loopzero-vault serverlb IP.
+	// Step 2 — docker inspect the k3d-loopzero-secrets serverlb IP.
 	ip, err := dockerInspectContainerIP(vaultServerLBContainer)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("docker inspect %s: %v", vaultServerLBContainer, err)}

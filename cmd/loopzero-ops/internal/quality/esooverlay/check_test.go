@@ -29,7 +29,7 @@ const canonical = `# dev-public overlay — post-T1.2 workload identity (issue #
 # See openbao-init-runbook.md for the Shamir ceremony.
 # EC-1: cross-cluster token review required.
 # EC-2: CoreDNS host-alias preserves cert SAN.
-# Cross-cluster topology: loopzero-vault (separate cluster).
+# Cross-cluster topology: loopzero-secrets (separate cluster).
 openbaoTransit:
   enabled: false
   server: "https://openbao.vault-system.svc.cluster.local:8200"

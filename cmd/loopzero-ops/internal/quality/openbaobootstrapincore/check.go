@@ -1,21 +1,21 @@
-// Package vaultbootstrapinmgmt is a hermetic contract test for the
-// `task k3d:vault:bootstrap-in-mgmt` shortcut (Option (c) of cleanroom
+// Package openbaobootstrapincore is a hermetic contract test for the
+// `task k3d:secrets:bootstrap-in-core` shortcut (Option (c) of cleanroom
 // iter 23 cross-cluster reachability Open Question).
 //
 // Locks that the shortcut canonical-mirrors the upstream
-// `task k3d:vault:bootstrap` task with EXACTLY two well-known differences:
-//  1. context k3d-loopzero-vault → k3d-loopzero-core (everywhere)
+// `task k3d:secrets:bootstrap` task with EXACTLY two well-known differences:
+//  1. context k3d-loopzero-secrets → k3d-loopzero-core (everywhere)
 //  2. pre-flight error message references `task setup` instead of
-//     `task k3d:vault:create`
+//     `task k3d:secrets:create`
 //
-// Defense against drift: if upstream `task k3d:vault:bootstrap` adds a new
+// Defense against drift: if upstream `task k3d:secrets:bootstrap` adds a new
 // helmfile selector or kubectl wait step, this test fails so we remember
 // to mirror the change.
 //
-// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
+// Migrated from infra/tests/check-openbao-bootstrap-in-core-task_test.sh
 // (M-Migrate2 continuation 2026-07-07). Hermetic — no kubectl, no helmfile
 // install — pure text walk on taskfiles/k3d.yml.
-package vaultbootstrapinmgmt
+package openbaobootstrapincore
 
 import (
 	"errors"
@@ -39,7 +39,7 @@ type Outcome struct {
 }
 
 // ErrViolations means at least one assertion failed.
-var ErrViolations = errors.New("k3d:vault:bootstrap-in-mgmt shortcut contract violated")
+var ErrViolations = errors.New("k3d:secrets:bootstrap-in-core shortcut contract violated")
 
 // Check runs the 15+ assertions from the bash guard.
 func Check(cfg Config) (Outcome, error) {
@@ -65,14 +65,14 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// A — both tasks registered
-	assert("A1 task k3d:vault:bootstrap-in-mgmt registered",
-		regexp.MustCompile(`(?m)^  k3d:vault:bootstrap-in-mgmt:$`).MatchString(text))
-	assert("A2 task k3d:vault:status-in-mgmt sibling registered",
-		regexp.MustCompile(`(?m)^  k3d:vault:status-in-mgmt:$`).MatchString(text))
+	assert("A1 task k3d:secrets:bootstrap-in-core registered",
+		regexp.MustCompile(`(?m)^  k3d:secrets:bootstrap-in-core:$`).MatchString(text))
+	assert("A2 task k3d:secrets:status-in-mgmt sibling registered",
+		regexp.MustCompile(`(?m)^  k3d:secrets:status-in-mgmt:$`).MatchString(text))
 
 	// Extract the two task bodies (upstream + shortcut).
-	upstream := extractTaskBody(text, "  k3d:vault:bootstrap:", "  k3d:vault:bootstrap-in-mgmt:")
-	shortcut := extractTaskBody(text, "  k3d:vault:bootstrap-in-mgmt:", "  k3d:vault:status-in-mgmt:")
+	upstream := extractTaskBody(text, "  k3d:secrets:bootstrap:", "  k3d:secrets:bootstrap-in-core:")
+	shortcut := extractTaskBody(text, "  k3d:secrets:bootstrap-in-core:", "  k3d:secrets:status-in-mgmt:")
 
 	upstreamHelmfiles := countMatches(upstream, `helmfile -f `)
 	shortcutHelmfiles := countMatches(shortcut, `helmfile -f `)
@@ -93,14 +93,14 @@ func Check(cfg Config) (Outcome, error) {
 	// C — context swap is total
 	assert("C1 shortcut body uses kube-context k3d-loopzero-core somewhere",
 		strings.Contains(shortcut, "kube-context k3d-loopzero-core"))
-	assert("C2 shortcut body does NOT reference k3d-loopzero-vault (no copy-paste drift)",
-		!strings.Contains(shortcut, "k3d-loopzero-vault"))
+	assert("C2 shortcut body does NOT reference k3d-loopzero-secrets (no copy-paste drift)",
+		!strings.Contains(shortcut, "k3d-loopzero-secrets"))
 
 	// D — pre-flight error message
 	assert("D1 shortcut pre-flight references 'task setup'",
 		strings.Contains(shortcut, "task setup"))
-	assert("D2 shortcut pre-flight does NOT reference 'task k3d:vault:create' (mgmt comes from task setup)",
-		!strings.Contains(shortcut, "task k3d:vault:create"))
+	assert("D2 shortcut pre-flight does NOT reference 'task k3d:secrets:create' (mgmt comes from task setup)",
+		!strings.Contains(shortcut, "task k3d:secrets:create"))
 
 	// E — desc block cites runbook + iter 23 audit
 	assert("E1 desc cites docs/operations/openbao-transit-cutover-runbook.md",
@@ -109,7 +109,7 @@ func Check(cfg Config) (Outcome, error) {
 		strings.Contains(shortcut, "Option (c)"))
 	assert("E3 desc names the trade-off (loses control-plane/secret-storage isolation)",
 		strings.Contains(shortcut, "isolation"))
-	assert("E4 desc warns prod must use canonical k3d:vault:bootstrap",
+	assert("E4 desc warns prod must use canonical k3d:secrets:bootstrap",
 		strings.Contains(shortcut, "prod cutover MUST"))
 
 	// F — anti-patterns

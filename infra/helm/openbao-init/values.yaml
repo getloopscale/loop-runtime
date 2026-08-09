@@ -2,7 +2,7 @@
 # F2+ openbao-init values — what to provision in OpenBao via `bao` CLI Job.
 #
 # Per VK validation (vault-local): root token comes inline from devMode
-# (`server.dev.devRootToken` = "loopzero-dev-vault-root" in vault.helmfile).
+# (`server.dev.devRootToken` = "loopzero-dev-vault-root" in secrets.helmfile).
 # Per prod: root token is provided OUT-OF-BAND via K8s Secret created
 # after Shamir init ceremony (operator runbook openbao-init-runbook.md).
 
@@ -252,12 +252,12 @@ policies:
 # Maps Vault role name → SA(s) allowed to login.
 # R1+R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
 # 2026-06-19): the `eso` role moves from the legacy `kubernetes` mount (intended
-# for in-cluster loopzero-vault workloads) to the canonical multi-cluster
+# for in-cluster loopzero-secrets workloads) to the canonical multi-cluster
 # `k8s-mgmt` mount (core-cluster workloads). The `boundAudiences` field
 # enforces EC-5 (TokenRequest aud claim == role bound_audiences) as
 # defence-in-depth — closes the "any-audience login" gap. The
 # `serviceAccountRef.audiences` in the ClusterSecretStore that consumes
-# this role (canonical: infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml)
+# this role (canonical: infra/manifests/cluster-secret-stores/loopzero-secrets-secrets.yaml)
 # MUST match this list exactly, else ESO's TokenRequest emits an `aud`
 # claim the role won't accept → 403 at login.
 authRoles:
@@ -482,7 +482,7 @@ kubernetesRoles:
     tokenMaxTtl: "24h"
 
 spkiExtractor:
-  enabled: false  # opt-in per env; flip to true when loopzero-vault TLS active
+  enabled: false  # opt-in per env; flip to true when loopzero-secrets TLS active
   schedule: "*/5 * * * *"
   image:
     repository: alpine

@@ -23,7 +23,7 @@ title: Pulumi Vault Provider Bootstrap Runbook
 
 ## Prerequisites
 
-1. **Vault stack active** — `task k3d:bootstrap-vault-cluster` already ran (or
+1. **Vault stack active** — `task k3d:bootstrap-secrets-cluster` already ran (or
    prod equivalent). Vault unsealed + reachable from operator workstation.
 2. **`@pulumi/vault` installed** — `cd infra/pulumi && npm install` picks up
    the v7.4.0 dep added in `0b876ad1`.

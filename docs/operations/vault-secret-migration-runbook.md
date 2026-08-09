@@ -22,7 +22,7 @@ v1.8 SDK sweep findings (3 follow-up improvements flagged outside scope).
 ## Architecture summary
 
 ```
-┌─────────────────── loopzero-vault cluster ────────────────────┐
+┌─────────────────── loopzero-secrets cluster ────────────────────┐
 │  OpenBao (Shamir 5/3 + Raft persistent + HTTPS)            │
 │  ├── kv-v2 engine at /secret                               │
 │  ├── kubernetes auth method                                │
@@ -36,10 +36,10 @@ v1.8 SDK sweep findings (3 follow-up improvements flagged outside scope).
                          ▼
 ┌────────────────── loopzero-core cluster ──────────────────────┐
 │  ESO operator (mgmt-side, NS external-secrets)             │
-│  ├── ClusterSecretStore loopzero-vault-secrets                 │
+│  ├── ClusterSecretStore loopzero-secrets-secrets                 │
 │  │   ├── server: https://host.k3d.internal:8210 (local)    │
 │  │   ├── auth: kubernetes (role eso, SA eso-vault-reader)  │
-│  │   └── caProvider: ConfigMap loopzero-vault-ca               │
+│  │   └── caProvider: ConfigMap loopzero-secrets-ca               │
 │  └── 13 ExternalSecret CRs (loopzero-external-secrets chart)   │
 │      ├── loopzero-api group (10 targets, 16 secrets)           │
 │      ├── loopzero-cloud group (2 targets, 3 secrets)           │
@@ -76,17 +76,17 @@ via `vaultBinaryOverride: api`. Single rotation point.
 
 ```bash
 # 1. Vault prerequisites (Phase 0 of openbao-adoption — done if PRODLIKE up)
-task k3d:vault:create
-task k3d:vault:bootstrap   # cert-manager + cluster-issuer + openbao-cert + openbao
-# Operator-time Shamir init + unseal (per vault-cluster-local-runbook P2/P3)
+task k3d:secrets:create
+task k3d:secrets:bootstrap   # cert-manager + cluster-issuer + openbao-cert + openbao
+# Operator-time Shamir init + unseal (per secrets-cluster-local-runbook P2/P3)
 # kubectl create secret openbao-init-token --from-literal=BAO_TOKEN=$ROOT_TOKEN
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
-  --kube-context k3d-loopzero-vault --selector name=openbao-init sync
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-secrets --selector name=openbao-init sync
 
 # 2-4. Canonical (recommended) — codified P1 steps 2-4 via vault-bootstrap-eso.sh:
 bash infra/scripts/openbao/vault-bootstrap-eso.sh \
   --mgmt-context k3d-loopzero-core \
-  --vault-context k3d-loopzero-vault
+  --vault-context k3d-loopzero-secrets
 # Applies SA + ClusterRoleBinding + extracts CA + creates ConfigMap +
 # applies ClusterSecretStore + waits for Ready=True. Exit codes:
 #   0=Ready, 2=apply failure, 3=Ready timeout.
@@ -97,20 +97,20 @@ kubectl --context k3d-loopzero-core apply \
   -f infra/manifests/cluster-secret-stores/eso-vault-reader-sa.yaml
 
 # 3. Extract Vault CA cert + create ConfigMap on mgmt cluster
-VAULT_CA=$(kubectl --context k3d-loopzero-vault -n vault-system \
+VAULT_CA=$(kubectl --context k3d-loopzero-secrets -n vault-system \
   get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d)
-kubectl --context k3d-loopzero-core -n external-secrets create configmap loopzero-vault-ca \
+kubectl --context k3d-loopzero-core -n external-secrets create configmap loopzero-secrets-ca \
   --from-literal=ca.crt="$VAULT_CA" \
   --dry-run=client -o yaml | kubectl --context k3d-loopzero-core apply -f -
 
 # 4. Apply ClusterSecretStore (depends on SA + ConfigMap)
 kubectl --context k3d-loopzero-core apply \
-  -f infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml
+  -f infra/manifests/cluster-secret-stores/loopzero-secrets-secrets.yaml
 
 # 5. Seed initial secrets in Vault (one-time per env)
 # Use seed-loopzero-secrets.sh script (T8.1 follow-up; for now manual):
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN
 bao kv put secret/loopzero/vault-local/api/secrets/gitea/token value=<actual>
 bao kv put secret/loopzero/vault-local/api/secrets/minio/access_key value=<actual>
@@ -157,7 +157,7 @@ stderr output.
 ```bash
 # Step 1: Update Vault (single SoT — Vault is canonical)
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN
 bao kv put secret/loopzero/<env>/api/secrets/gitea/token value=<new-token>
 "
@@ -244,7 +244,7 @@ bash infra/scripts/openbao/enable-vault-backup.sh --env <env>
 # ONLY char counts (security invariant: never raw values).
 
 # Inspect logs after first run:
-kubectl --context k3d-loopzero-vault -n vault-system logs \
+kubectl --context k3d-loopzero-secrets -n vault-system logs \
   -l app=openbao-snapshot-agent --tail=50
 ```
 
@@ -257,21 +257,21 @@ kubectl --context k3d-loopzero-vault -n vault-system logs \
 
 # Provision DO Spaces creds Secret (operator-time, from
 # ~/.openbao-<env>-resources.env per SCRIPT.5)
-kubectl --context k3d-loopzero-vault -n vault-system create secret generic \
+kubectl --context k3d-loopzero-secrets -n vault-system create secret generic \
   openbao-snapshot-s3-creds \
   --from-literal=AWS_ACCESS_KEY_ID=$OPENBAO_BACKUP_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$OPENBAO_BACKUP_SECRET_ACCESS_KEY
 
 # Sync
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e <env> \
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e <env> \
   --selector name=openbao-snapshot-agent sync
 
 # Verify
-kubectl --context k3d-loopzero-vault -n vault-system get cronjob openbao-snapshot
+kubectl --context k3d-loopzero-secrets -n vault-system get cronjob openbao-snapshot
 # Wait for first run
-kubectl --context k3d-loopzero-vault -n vault-system get pods | grep openbao-snapshot
+kubectl --context k3d-loopzero-secrets -n vault-system get pods | grep openbao-snapshot
 # Inspect logs
-kubectl --context k3d-loopzero-vault -n vault-system logs <pod-name>
+kubectl --context k3d-loopzero-secrets -n vault-system logs <pod-name>
 ```
 
 ## P5 — Disaster recovery (restore from snapshot)
@@ -301,7 +301,7 @@ bash infra/scripts/openbao/restore-vault-snapshot.sh \
 
 **POST-RESTORE (MANDATORY operator-time):**
 1. Vault will likely be RE-SEALED. Verify: `bao status`.
-2. Re-run Shamir unseal ceremony per [`docs/operations/vault-cluster-local-runbook.md`](./vault-cluster-local-runbook.md) P3.
+2. Re-run Shamir unseal ceremony per [`docs/operations/secrets-cluster-local-runbook.md`](./secrets-cluster-local-runbook.md) P3.
 3. Verify KV data integrity: `bash infra/scripts/openbao/vault-sync-check.sh --threshold 10`.
 
 **Manual procedure** (legacy — use for debugging or non-standard envs):
@@ -315,7 +315,7 @@ aws --endpoint-url https://sfo3.digitaloceanspaces.com s3 ls \
 aws --endpoint-url https://sfo3.digitaloceanspaces.com s3 cp \
   s3://loopzero-openbao-backups-<env>/<latest>.snap /tmp/
 
-# 3. Restore (per vault-cluster-local-runbook P6)
+# 3. Restore (per secrets-cluster-local-runbook P6)
 kubectl cp /tmp/<latest>.snap openbao-0:/tmp/snapshot.snap
 kubectl exec openbao-0 -- bao operator raft snapshot restore /tmp/snapshot.snap
 
@@ -373,7 +373,7 @@ Each merits its own focused plan with TDD + cross-validation when prioritized.
 - `decisions/2026-06-02-openbao-adoption.md` (parent ADR Q1-Q16)
 - `decisions/2026-06-02-vault-secrets-sot.md` (D1-D12)
 - `plans/2026-06-02-loopzero-api-vault-integration-plan.md` v1.8
-- [`docs/operations/vault-cluster-local-runbook.md`](./vault-cluster-local-runbook.md) (Vault cluster setup + Shamir)
+- [`docs/operations/secrets-cluster-local-runbook.md`](./secrets-cluster-local-runbook.md) (Vault cluster setup + Shamir)
 - [`docs/operations/openbao-aws-resources-runbook.md`](./openbao-aws-resources-runbook.md) (AWS KMS + DO Spaces)
 - [`docs/operations/openbao-init-runbook.md`](./openbao-init-runbook.md) (Shamir init ceremony)
 - [`docs/operations/break-glass-runbook.md`](./break-glass-runbook.md) (recovery without quorum)

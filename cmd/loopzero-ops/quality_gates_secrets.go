@@ -22,7 +22,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 )
 
@@ -362,27 +362,27 @@ func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
 	return 0
 }
 
-// runVaultBootstrapInMgmtTask enforces the `task k3d:vault:bootstrap-in-mgmt`
-// shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
+// runOpenBaoBootstrapInCoreTask enforces the `task k3d:secrets:bootstrap-in-core`
+// shortcut contract — canonical mirror of the upstream `k3d:secrets:bootstrap`
 // with exactly two well-known differences (context swap + pre-flight message).
-// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
+// Migrated from infra/tests/check-openbao-bootstrap-in-core-task_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runVaultBootstrapInMgmtTask(args []string) int {
-	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
+func runOpenBaoBootstrapInCoreTask(args []string) int {
+	fs := flag.NewFlagSet("openbao-bootstrap-in-core-task", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	resolveDotRoot(root)
-	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
+	outcome, err := openbaobootstrapincore.Check(openbaobootstrapincore.Config{RepoRoot: *root})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
+		fmt.Fprintf(os.Stderr, "openbao-bootstrap-in-core-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
 		for _, f := range outcome.Failures {
 			fmt.Fprintf(os.Stderr, "  %s\n", f)
 		}
 		return 1
 	}
-	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
+	fmt.Println("openbao-bootstrap-in-core-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
 	return 0
 }
 

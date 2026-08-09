@@ -7,7 +7,7 @@ issuerRef:
   kind: ClusterIssuer
 
 # Resulting Secret name. Must match what server.extraVolumes[0].name
-# expects in vault.helmfile.yaml.gotmpl.
+# expects in secrets.helmfile.yaml.gotmpl.
 secretName: openbao-tls
 
 # Certificate validity (90d = pattern LoopZero)

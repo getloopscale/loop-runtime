@@ -446,7 +446,7 @@ Developer Plane     CLI (TypeScript, ../loopzero-cli) <-> API (Go, this repo)
 Control Plane       Operators, Gitea, PostgreSQL, ArgoCD, Ory Kratos/Hydra
 Build Plane         Argo Workflows + BuildKit (rootless) + cosign signing
 Workload Plane      User applications managed by ArgoCD + KEDA autoscaling
-Secrets             OpenBao (Transit) + ESO — runs in its own `loopzero-vault` cluster
+Secrets             OpenBao (Transit) + ESO — runs in its own `loopzero-secrets` cluster
 ```
 
 > **This repository is the engine.** The CLI (`../loopzero-cli`), the control-plane/dashboard

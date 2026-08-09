@@ -16,10 +16,10 @@ domain: loopzero.local
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
-# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
 # Default false → secrets continue via legacy env var / K8s Secret pattern.
-# Set to true ONLY after loopzero-vault cluster up + openbao-init Job ran +
-# ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests).
+# Set to true ONLY after loopzero-secrets cluster up + openbao-init Job ran +
+# ClusterSecretStore loopzero-secrets-secrets applied (Phase 3.1 manifests).
 vaultEnabled: false
 dnsZone: loopzero.local
 

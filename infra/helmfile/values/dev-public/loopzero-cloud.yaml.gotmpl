@@ -128,7 +128,7 @@ env:
 # T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
 # ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
 # OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
-# the existing `loopzero-vault-secrets` ClusterSecretStore. Chart template gates
+# the existing `loopzero-secrets-secrets` ClusterSecretStore. Chart template gates
 # on `.Values.rag.externalSecretEnabled` (default false in
 # infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
 # loopzero-rag → `bao kv patch secret/loopzero/cloud rag_platform_admin_key=<new>`
@@ -140,7 +140,7 @@ rag:
 # 2026-07-20 — loopzero-lens equivalent of the rag block above. Enables the
 # ExternalSecret that materializes k8s Secret `loopzero-lens-admin-key` from OpenBao
 # path `secret/loopzero/cloud` property `lens_platform_admin_key` via the same
-# `loopzero-vault-secrets` ClusterSecretStore. Chart template gates on
+# `loopzero-secrets-secrets` ClusterSecretStore. Chart template gates on
 # `.Values.lens.externalSecretEnabled` (default false in
 # infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
 # loopzero-lens → `bao kv patch secret/loopzero/cloud lens_platform_admin_key=<new>`

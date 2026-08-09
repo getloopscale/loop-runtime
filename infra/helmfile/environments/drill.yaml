@@ -34,11 +34,11 @@ dnsZone: loopzero-drill.example
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
-# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
 # Default false → drill uses ephemeral env-var secrets (consistent com
 # drill ephemeral lifecycle); flip to true APENAS quando drill scenario
 # explicitly testar Vault integration prod-identical (T9.2 Dogfood QA).
-# Requires: loopzero-vault drill cluster up (separate ephemeral DOKS) +
+# Requires: loopzero-secrets drill cluster up (separate ephemeral DOKS) +
 # ClusterSecretStore + seed-loopzero-secrets.sh ran for env=drill.
 vaultEnabled: false
 

@@ -60,9 +60,9 @@ env:
   OPENBAO_TRANSIT_ENABLED: "true"
   # T1.2 of dev-public-cross-cluster-secrets (issue #111): under Jeito A
   # (sponsor mandate INQUEBRÁVEL 2026-06-19) OpenBao runs in a SEPARATE
-  # k3d-loopzero-vault cluster. EC-2: the URL stays at the canonical
+  # k3d-loopzero-secrets cluster. EC-2: the URL stays at the canonical
   # intra-cluster DNS name so the cert SAN survives; mgmt CoreDNS
-  # host-alias (T2.2) rewrites this DNS to the loopzero-vault NodePort IP
+  # host-alias (T2.2) rewrites this DNS to the loopzero-secrets NodePort IP
   # at resolve time. Operators in a single-cluster topology
   # (standalone-multi) keep using this same literal — no per-env split.
   OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"

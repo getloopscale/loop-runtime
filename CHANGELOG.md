@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Os dois clusters cujo nome descrevia algo diferente do que eles são passaram a se chamar pelo que
+  são: o que hospeda o produto inteiro agora é `core`, e o que guarda os segredos é `secrets` — este
+  último rodava um software de segredos que não é o da marca que o nome citava. O cluster de build não
+  mudou, e a documentação histórica preserva os nomes antigos, porque descreve o que era verdade na
+  data (BACKLOG.md B-001)
+
 ### Added
 
 - Uma verificação automática que prova que a renomeação dos clusters mudou apenas nomes de cluster, e

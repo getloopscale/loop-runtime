@@ -68,7 +68,7 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 			return "172.20.0.10", nil
 		case "k3d-loopzero-workload-server-0":
 			return "172.20.0.20", nil
-		case "k3d-loopzero-vault-server-0":
+		case "k3d-loopzero-secrets-server-0":
 			return "172.20.0.30", nil
 		default:
 			return "", nil
@@ -94,8 +94,8 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 		"172.20.0.10 k3d-loopzero-build-serverlb",
 		"172.20.0.20 k3d-loopzero-workload-server-0",
 		"172.20.0.20 k3d-loopzero-workload-serverlb", // alias
-		"172.20.0.30 k3d-loopzero-vault-server-0",
-		"172.20.0.30 k3d-loopzero-vault-serverlb", // alias
+		"172.20.0.30 k3d-loopzero-secrets-server-0",
+		"172.20.0.30 k3d-loopzero-secrets-serverlb", // alias
 		"127.0.0.1 preexisting-alias",         // preserved
 	} {
 		if !strings.Contains(block, want) {
@@ -113,8 +113,8 @@ func TestNetworkingCorednsSeed_NoopWhenCanonical(t *testing.T) {
 		"k3d-loopzero-build-serverlb":     "10.0.0.1",
 		"k3d-loopzero-workload-server-0":  "10.0.0.1",
 		"k3d-loopzero-workload-serverlb":  "10.0.0.1",
-		"k3d-loopzero-vault-server-0":     "10.0.0.1",
-		"k3d-loopzero-vault-serverlb":     "10.0.0.1",
+		"k3d-loopzero-secrets-server-0":     "10.0.0.1",
+		"k3d-loopzero-secrets-serverlb":     "10.0.0.1",
 	})
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},

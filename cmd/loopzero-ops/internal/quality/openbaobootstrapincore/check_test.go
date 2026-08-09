@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package vaultbootstrapinmgmt
+package openbaobootstrapincore
 
 import (
 	"errors"
@@ -27,22 +27,22 @@ func writeFixture(t *testing.T, body string) string {
 // mirroring each other symmetrically (4 helmfile syncs + 2 kubectl waits).
 const canonicalTaskfile = `version: '3'
 tasks:
-  k3d:vault:bootstrap:
-    desc: Bootstrap OpenBao on the loopzero-vault k3d cluster (canonical).
+  k3d:secrets:bootstrap:
+    desc: Bootstrap OpenBao on the loopzero-secrets k3d cluster (canonical).
     cmds:
-      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
-      - kubectl --context k3d-loopzero-vault wait deployment/cert-manager --for=condition=Available --timeout=180s
-      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=openbao-cert sync
-      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=openbao sync
-      - kubectl --context k3d-loopzero-vault wait pod -l app=openbao --for=condition=Ready --timeout=180s
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-secrets --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-secrets --selector name=cluster-issuer sync
+      - kubectl --context k3d-loopzero-secrets wait deployment/cert-manager --for=condition=Available --timeout=180s
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-secrets --selector name=openbao-cert sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-secrets --selector name=openbao sync
+      - kubectl --context k3d-loopzero-secrets wait pod -l app=openbao --for=condition=Ready --timeout=180s
 
-  k3d:vault:bootstrap-in-mgmt:
+  k3d:secrets:bootstrap-in-core:
     desc: |
       Shortcut for Option (c) of the iter 23 cross-cluster reachability Open Question
       (docs/operations/openbao-transit-cutover-runbook.md). Loses control-plane
       isolation for dev-public; prod cutover MUST use the canonical
-      k3d:vault:bootstrap task instead.
+      k3d:secrets:bootstrap task instead.
     cmds:
       - test -z "$(kubectl config get-contexts -o name | grep '^k3d-loopzero-core$')" && { echo "run task setup first"; exit 1; } || true
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=cert-manager sync
@@ -52,7 +52,7 @@ tasks:
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=openbao sync
       - kubectl --context k3d-loopzero-core wait pod -l app=openbao --for=condition=Ready --timeout=180s
 
-  k3d:vault:status-in-mgmt:
+  k3d:secrets:status-in-mgmt:
     desc: Status of OpenBao in mgmt cluster.
     cmds:
       - kubectl --context k3d-loopzero-core -n openbao exec -it openbao-0 -- bao status
@@ -85,15 +85,15 @@ func TestCheck_DriftFailsWhenSelectorMissing(t *testing.T) {
 }
 
 func TestCheck_ContextLeakageFails(t *testing.T) {
-	// Leak k3d-loopzero-vault into the shortcut body.
+	// Leak k3d-loopzero-secrets into the shortcut body.
 	body := strings.Replace(canonicalTaskfile,
 		"kubectl --context k3d-loopzero-core wait pod -l app=openbao",
-		"kubectl --context k3d-loopzero-vault wait pod -l app=openbao",
+		"kubectl --context k3d-loopzero-secrets wait pod -l app=openbao",
 		1) // only in shortcut (the LAST kubectl wait line is in shortcut)
 	root := writeFixture(t, body)
 	_, err := Check(Config{RepoRoot: root})
 	if !errors.Is(err, ErrViolations) {
-		t.Fatalf("expected ErrViolations for k3d-loopzero-vault leaked into shortcut, got %v", err)
+		t.Fatalf("expected ErrViolations for k3d-loopzero-secrets leaked into shortcut, got %v", err)
 	}
 }
 

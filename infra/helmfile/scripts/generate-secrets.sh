@@ -28,10 +28,10 @@ CLUSTER="${2:?usage: $0 <env> <cluster>}"
 
 # Canonical 2026-06-20 (issue #115): pin kubectl context to the mgmt cluster.
 # This script applies Secrets to mgmt — without the pin, an active shell
-# context residue (e.g. `k3d-loopzero-vault` from a prior T0.1 / vault-bootstrap
+# context residue (e.g. `k3d-loopzero-secrets` from a prior T0.1 / vault-bootstrap
 # session) silently misprovisions Secrets to the wrong cluster, and
 # `task setup` fails at `infra:install:mgmt` with the secrets landed in
-# loopzero-vault. Override via `KUBECTL_CONTEXT` for non-k3d targets (DOKS prod,
+# loopzero-secrets. Override via `KUBECTL_CONTEXT` for non-k3d targets (DOKS prod,
 # drill cluster). The `kubectl()` function override below injects
 # `--context="$KUBECTL_CONTEXT"` on every call — all bare `kubectl` calls
 # downstream inherit the canonical context by construction. Regression-locked

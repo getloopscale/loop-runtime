@@ -331,7 +331,7 @@ spec:
                 optional: true
             # Phase 3.3 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
             # 5 NEW Secrets created por ExternalSecret CRs (chart
-            # loopzero-external-secrets) pulling from loopzero-vault. Keys são
+            # loopzero-external-secrets) pulling from loopzero-secrets. Keys são
             # UPPER_SNAKE matching env var names (envFrom 1:1 mapping).
             # All optional=true — fallback ao env var legacy se ESO desabilitado
             # (vaultEnabled=false) OR Secret ainda não sincronizado.

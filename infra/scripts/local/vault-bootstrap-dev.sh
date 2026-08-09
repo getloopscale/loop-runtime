@@ -11,15 +11,15 @@
 #
 # SPLIT-CONTEXT contract (T1.1 / Jeito A canonical sponsor mandate
 # INQUEBRÁVEL 2026-06-19, issue #111): OpenBao runs in a SEPARATE
-# k3d-loopzero-vault cluster (NOT mgmt). This script splits the kubectl
+# k3d-loopzero-secrets cluster (NOT mgmt). This script splits the kubectl
 # fan-out into:
-#   - OPENBAO_CONTEXT (default k3d-loopzero-vault) → bao operator init /
-#     auth/approle / SPKI read — the vault-cluster side
+#   - OPENBAO_CONTEXT (default k3d-loopzero-secrets) → bao operator init /
+#     auth/approle / SPKI read — the secrets-cluster side
 #   - TARGET_CONTEXT  (default k3d-loopzero-core)  → loopzero-openbao-approle +
 #     openbao-spki-pin Secret apply (where loopzero-api Deployment envFrom
 #     reads from) — the core-cluster side
 # Legacy single-context invocations (everything against mgmt) were
-# canonical only under the superseded `task k3d:vault:bootstrap-in-mgmt`
+# canonical only under the superseded `task k3d:secrets:bootstrap-in-core`
 # shortcut. Jeito A INQUEBRÁVEL forbids that shortcut.
 #
 # Per ADR D2: idempotent aggregator (re-run no-ops on already-initialized
@@ -39,16 +39,16 @@
 #   10. kubectl create secret loopzero-openbao-approle (external-secrets ns) +
 #       kubectl create secret openbao-spki-pin from openbao-tls cert SPKI
 #
-# Wired in: taskfiles/k3d.yml as `task k3d:vault:bootstrap-dev`.
+# Wired in: taskfiles/k3d.yml as `task k3d:secrets:bootstrap-dev`.
 # Allowlist entry: KEEP-OPERATOR (live-cluster orchestration, irreducible).
 
 set -uo pipefail
 
 # SPLIT-CONTEXT (T1.1 — Jeito A INQUEBRÁVEL — issue #111).
-# OPENBAO_CONTEXT is the vault-cluster side (bao init/unseal/approle/SPKI).
+# OPENBAO_CONTEXT is the secrets-cluster side (bao init/unseal/approle/SPKI).
 # TARGET_CONTEXT is the core-cluster side (Secret apply that loopzero-api
 # Deployment envFrom reads from loopzero-system ns).
-OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-vault}"
+OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-secrets}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-core}"
 # Backwards-compat alias preserved for inline log lines + helmfile sync
 # selectors that pre-date the T1.1 split. New code MUST use one of the
@@ -98,15 +98,15 @@ log "Step 1: pre-flight — OpenBao pod state in $OPENBAO_CONTEXT"
 if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&1; then
   log "FAIL: OpenBao pod $POD not found in $OPENBAO_CONTEXT/$NS."
   log "Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19, issue #111):"
-  log "  1. Provision separate vault cluster: task k3d:vault:create"
-  log "  2. Install OpenBao chart:            task k3d:vault:bootstrap"
+  log "  1. Provision separate vault cluster: task k3d:secrets:create"
+  log "  2. Install OpenBao chart:            task k3d:secrets:bootstrap"
   log "  3. Sponsor JUNTOS Shamir init + unseal × 3 (see docs/operations/openbao-init-runbook.md)"
   log "Override OPENBAO_CONTEXT env if your vault cluster has a different name."
   exit 1
 fi
 
 # T-A4 LIVE finding 2026-06-20 (follow-up to ADR 2026-06-20-dev-public-vault-automated-init):
-# When `task k3d:vault:bootstrap` returns (helm install completes), the openbao-0
+# When `task k3d:secrets:bootstrap` returns (helm install completes), the openbao-0
 # pod may still be Pending without a host assigned — the openbao chart declares
 # `wait: false` (per memory feedback_helmfile_wait_false_for_bootstrap_deps). The
 # very first `kubectl exec` then fails with "pod openbao-0 does not have a host
@@ -253,7 +253,7 @@ fi
 # undefined function — `bao_auth auth list` produced no stdout, the
 # Python check evaluated `'k8s-mgmt/' in {}` → False every iteration,
 # the 180s wait loop ALWAYS timed out, and `auth/k8s-mgmt/config` was
-# NEVER written. Downstream consequence: CSS loopzero-vault-secrets stayed
+# NEVER written. Downstream consequence: CSS loopzero-secrets-secrets stayed
 # `Ready=False reason=InvalidProviderConfig` (1b-vault-bootstrap-eso
 # FAIL), and ESO cross-cluster workload-identity path silently
 # broke. Define bao_auth NOW (after ROOT_TOKEN is set, before Step 5.5
@@ -262,9 +262,9 @@ bao_auth() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BA
 
 # === Step 5: openbao-init helmfile sync ===
 log "Step 5: helmfile sync openbao-init (T5.1-T5.9 provisioning)"
-if [[ -f "infra/helmfile/vault.helmfile.yaml.gotmpl" ]]; then
+if [[ -f "infra/helmfile/secrets.helmfile.yaml.gotmpl" ]]; then
   ENV_NAME="${HELMFILE_ENV:-vault-local}"
-  run helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e "$ENV_NAME" \
+  run helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e "$ENV_NAME" \
     --kube-context "$OPENBAO_CONTEXT" --selector name=openbao-init sync || \
     log "WARN: openbao-init helmfile sync had issues — manual inspect recommended"
 fi
@@ -370,7 +370,7 @@ TR_EOF
       # pod's network namespace. Regression-locked by
       # infra/tests/charts/vault_bootstrap_san_aligned_host_test.go (F1 guard).
       # Two requirements MUST hold simultaneously:
-      #   (a) reachability — from the vault pod (in loopzero-vault cluster), the URL
+      #   (a) reachability — from the vault pod (in loopzero-secrets cluster), the URL
       #       must resolve to + connect to the mgmt API server on the host.
       #   (b) TLS hostname/SAN — OpenBao's Go HTTP client verifies the server cert
       #       strictly. The k3d-mgmt API cert SAN list is:
@@ -386,13 +386,13 @@ TR_EOF
       # serverlb docker container name `k3d-${cluster_name}-serverlb`, derived
       # from TARGET_CONTEXT (e.g., `k3d-loopzero-core` → `k3d-loopzero-core-serverlb`).
       # k3d injects this name into every cluster's CoreDNS NodeHosts via the
-      # shared docker network, so it resolves canonically from loopzero-vault.
+      # shared docker network, so it resolves canonically from loopzero-secrets.
       MGMT_HOST_ORIG="$MGMT_HOST"
       CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-core → loopzero-core
       SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
       MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
       if [[ "$MGMT_HOST" != "$MGMT_HOST_ORIG" ]]; then
-        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-vault)"
+        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-secrets)"
       fi
       if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
         log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"

@@ -5,8 +5,8 @@
 //
 // TestDevPublicVaultBootstrapDefault locks the contract that the
 // dev-public Cleanroom flow uses the AUTOMATED Shamir init path
-// (vault-bootstrap-dev.sh against the SEPARATE k3d-loopzero-vault cluster)
-// as its canonical default, AND that the bootstrap-in-mgmt shortcut
+// (vault-bootstrap-dev.sh against the SEPARATE k3d-loopzero-secrets cluster)
+// as its canonical default, AND that the bootstrap-in-core shortcut
 // remains PROHIBITED (Jeito A INQUEBRÁVEL).
 //
 // 4 assertions, all source-grep on canonical files (no kubectl, no
@@ -14,11 +14,11 @@
 //
 //   (a) seed-post-cleanroom-all.sh invokes vault-bootstrap-dev.sh
 //   (b) seed-post-cleanroom-all.sh, when LOOPZERO_HELMFILE_ENV=dev-public,
-//       auto-provisions loopzero-vault via `task k3d:vault:create` +
-//       `task k3d:vault:bootstrap` BEFORE vault-bootstrap-dev.sh runs
+//       auto-provisions loopzero-secrets via `task k3d:secrets:create` +
+//       `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh runs
 //       (so the dev-public chain is solo/CI provisionable per the ADR)
 //   (c) seed-post-cleanroom-all.sh NEVER invokes the forbidden
-//       `task k3d:vault:bootstrap-in-mgmt` shortcut (Jeito A is
+//       `task k3d:secrets:bootstrap-in-core` shortcut (Jeito A is
 //       INQUEBRÁVEL regardless of witness scope)
 //   (d) cleanroom-up-live-test-mandate.md cites the ADR
 //       2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
@@ -59,20 +59,20 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 	}
 
 	// (b) For LOOPZERO_HELMFILE_ENV=dev-public, the script must auto-provision
-	//     loopzero-vault via `task k3d:vault:create` AND `task k3d:vault:bootstrap`
+	//     loopzero-secrets via `task k3d:secrets:create` AND `task k3d:secrets:bootstrap`
 	//     BEFORE vault-bootstrap-dev.sh runs, so the dev-public chain is
-	//     solo/CI provisionable. We look for both `task k3d:vault:create`
-	//     and `task k3d:vault:bootstrap` invocations gated on
+	//     solo/CI provisionable. We look for both `task k3d:secrets:create`
+	//     and `task k3d:secrets:bootstrap` invocations gated on
 	//     LOOPZERO_HELMFILE_ENV == dev-public.
-	hasCreate := regexp.MustCompile(`task\s+k3d:vault:create\b`).MatchString(seed)
-	hasBootstrap := regexp.MustCompile(`task\s+k3d:vault:bootstrap\b`).MatchString(seed)
+	hasCreate := regexp.MustCompile(`task\s+k3d:secrets:create\b`).MatchString(seed)
+	hasBootstrap := regexp.MustCompile(`task\s+k3d:secrets:bootstrap\b`).MatchString(seed)
 	hasDevPublicGate := regexp.MustCompile(`LOOPZERO_HELMFILE_ENV[^=]*==?\s*"?dev-public"?`).MatchString(seed) ||
 		regexp.MustCompile(`"dev-public"`).MatchString(seed)
 	if !hasCreate || !hasBootstrap || !hasDevPublicGate {
-		t.Errorf("(b) seed-post-cleanroom-all.sh does NOT auto-provision loopzero-vault on dev-public (need `task k3d:vault:create` + `task k3d:vault:bootstrap` BEFORE vault-bootstrap-dev.sh, gated on LOOPZERO_HELMFILE_ENV=dev-public). Current state: hasCreate=%v hasBootstrap=%v hasDevPublicGate=%v", hasCreate, hasBootstrap, hasDevPublicGate)
+		t.Errorf("(b) seed-post-cleanroom-all.sh does NOT auto-provision loopzero-secrets on dev-public (need `task k3d:secrets:create` + `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh, gated on LOOPZERO_HELMFILE_ENV=dev-public). Current state: hasCreate=%v hasBootstrap=%v hasDevPublicGate=%v", hasCreate, hasBootstrap, hasDevPublicGate)
 	}
 
-	// (c) NEVER actually INVOKE `task k3d:vault:bootstrap-in-mgmt` — Jeito A
+	// (c) NEVER actually INVOKE `task k3d:secrets:bootstrap-in-core` — Jeito A
 	//     INQUEBRÁVEL forbids co-locating OpenBao in the mgmt cluster
 	//     regardless of the witness/tier scope. The token MAY appear in a
 	//     comment line explaining the prohibition; what we forbid is an
@@ -82,8 +82,8 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 		if strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if regexp.MustCompile(`task\s+k3d:vault:bootstrap-in-mgmt\b`).MatchString(line) {
-			t.Errorf("(c) seed-post-cleanroom-all.sh executes `task k3d:vault:bootstrap-in-mgmt` at line %d — Jeito A INQUEBRÁVEL forbids this shortcut. Use `task k3d:vault:create` + `task k3d:vault:bootstrap` against the SEPARATE loopzero-vault cluster.\n  offending line: %s", i+1, line)
+		if regexp.MustCompile(`task\s+k3d:secrets:bootstrap-in-core\b`).MatchString(line) {
+			t.Errorf("(c) seed-post-cleanroom-all.sh executes `task k3d:secrets:bootstrap-in-core` at line %d — Jeito A INQUEBRÁVEL forbids this shortcut. Use `task k3d:secrets:create` + `task k3d:secrets:bootstrap` against the SEPARATE loopzero-secrets cluster.\n  offending line: %s", i+1, line)
 			break
 		}
 	}

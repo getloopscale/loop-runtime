@@ -68,7 +68,7 @@ answer an operational question.
 
 - [`operations/openbao-init-runbook.md`](operations/openbao-init-runbook.md) — Shamir unseal ceremony
 - [`operations/openbao-transit-cutover-runbook.md`](operations/openbao-transit-cutover-runbook.md) · [`operations/openbao-multi-cluster-auth-runbook.md`](operations/openbao-multi-cluster-auth-runbook.md) · [`operations/openbao-aws-resources-runbook.md`](operations/openbao-aws-resources-runbook.md)
-- [`operations/vault-cluster-local-runbook.md`](operations/vault-cluster-local-runbook.md) · [`operations/vault-secret-migration-runbook.md`](operations/vault-secret-migration-runbook.md)
+- [`operations/secrets-cluster-local-runbook.md`](operations/secrets-cluster-local-runbook.md) · [`operations/vault-secret-migration-runbook.md`](operations/vault-secret-migration-runbook.md)
 - [`operations/service-auth-rotation.md`](operations/service-auth-rotation.md) · [`operations/session-token-rotation-runbook.md`](operations/session-token-rotation-runbook.md) · [`operations/build-cluster-token-rotation.md`](operations/build-cluster-token-rotation.md)
 - [`operations/break-glass-runbook.md`](operations/break-glass-runbook.md) — time-boxed emergency cluster-admin
 

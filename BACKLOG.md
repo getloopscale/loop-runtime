@@ -90,8 +90,8 @@ dod:
 **O mapa.** `mgmt`/`loopzero-core` → **`core`** (é o produto, não gestão). `workload` + `runtime` como
 cluster → **`cell`**, com `loopzero-workload` → `cell-1` e `loopzero-runtime-2` → `cell-2`, alinhando a infra ao
 vocabulário que o código Go já usa em 137 arquivos (tabela `cells`, `cellID`, `maxPerCell`,
-`K8sCellStore`). `vault`/`loopzero-vault`/`vault-system` → **`secrets`** (o cluster roda OpenBao, não Vault:
-`infra/helmfile/vault.helmfile.yaml.gotmpl` usa o chart `openbao-helm`, appVersion `v2.5.4`, binário
+`K8sCellStore`). `vault`/`loopzero-secrets`/`vault-system` → **`secrets`** (o cluster roda OpenBao, não Vault:
+`infra/helmfile/secrets.helmfile.yaml.gotmpl` usa o chart `openbao-helm`, appVersion `v2.5.4`, binário
 `bao`). `build`/`loopzero-build` **não muda** — já diz o que é e numera bem. O futuro cluster de CAPI nasce
 como **`fleet`**: registrar no ADR, sem trabalho de rename. **`mgmt` fica em quarentena** — não recicla
 para o cluster de CAPI, ainda que o CAPI chame o dele de *management cluster*; um nome que acabou de

@@ -84,7 +84,7 @@ DRY_RUN=0
 SKIP_VERIFY=0
 NAMESPACE="loopzero-system"
 CORE_CONTEXT="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
-VAULT_CONTEXT="${LOOPZERO_VAULT_CONTEXT:-k3d-loopzero-vault}"
+SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
 VAULT_NAMESPACE="${LOOPZERO_VAULT_NAMESPACE:-vault-system}"
 WAIT_TIMEOUT="${ROTATE_WAIT_TIMEOUT:-300}"  # rollout status timeout (s)
 
@@ -112,7 +112,7 @@ ENV VARS
   BAO_TOKEN             Vault token (REQUIRED unless --dry-run)
   BAO_SKIP_VERIFY       set to true for self-signed CA (vault-local)
   LOOPZERO_CORE_CONTEXT     kubectl context for mgmt cluster (default: k3d-loopzero-core)
-  LOOPZERO_VAULT_CONTEXT    kubectl context for vault cluster (default: k3d-loopzero-vault)
+  LOOPZERO_SECRETS_CONTEXT    kubectl context for vault cluster (default: k3d-loopzero-secrets)
   ROTATE_WAIT_TIMEOUT   rollout status timeout in seconds (default: 300)
 
 EXAMPLES

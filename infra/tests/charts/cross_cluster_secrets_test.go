@@ -6,7 +6,7 @@
 // TestCrossClusterSecretStoreContract locks the dev-public ESO
 // ClusterSecretStore overlay (loopzero-external-secrets chart) onto the
 // canonical SPLIT-CONTEXT contract: workload identity (Kubernetes-auth)
-// against the OpenBao instance running in the SEPARATE k3d-loopzero-vault
+// against the OpenBao instance running in the SEPARATE k3d-loopzero-secrets
 // cluster (Jeito A sponsor mandate INQUEBRÁVEL 2026-06-19). The legacy
 // AppRole shape (static secret_id mounted as K8s Secret in mgmt) is
 // replaced with auth.kubernetes pointing at the ESO controller's
@@ -96,12 +96,12 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 
 	// T5. EC-2: `server` URL preserves canonical intra-cluster hostname
 	// (`openbao.vault-system.svc.cluster.local`). CoreDNS host-alias
-	// (T2.2) rewrites this DNS to the loopzero-vault NodePort IP cross-cluster
+	// (T2.2) rewrites this DNS to the loopzero-secrets NodePort IP cross-cluster
 	// while preserving the cert SAN. If the overlay literally points at
 	// the node-cluster docker DNS or a 127.0.0.1 host port, the cert SAN
 	// validation would fail.
 	if !strings.Contains(overlay, "openbao.vault-system.svc.cluster.local") {
-		t.Error("dev-public ESO overlay `server` does not contain canonical hostname `openbao.vault-system.svc.cluster.local` — EC-2 contract requires the SAN-preserving DNS name; CoreDNS host-alias rewrites this to the vault-cluster IP, NOT the overlay")
+		t.Error("dev-public ESO overlay `server` does not contain canonical hostname `openbao.vault-system.svc.cluster.local` — EC-2 contract requires the SAN-preserving DNS name; CoreDNS host-alias rewrites this to the secrets-cluster IP, NOT the overlay")
 	}
 
 	// T6. Traceability — issue #111 / Jeito A / T1.2 cited somewhere in

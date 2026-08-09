@@ -116,11 +116,11 @@ runtimeSecrets: {}
 rag:
   # Renders infra/helm/loopzero-cloud/templates/externalsecret-rag-admin-key.yaml
   # when true. Requires an ESO controller in the cluster + a ClusterSecretStore
-  # named `loopzero-vault-secrets` (dev-public canonical). Off by default so
+  # named `loopzero-secrets-secrets` (dev-public canonical). Off by default so
   # clusters without ESO still boot.
   externalSecretEnabled: false
-  # ClusterSecretStore name — dev-public uses `loopzero-vault-secrets`.
-  secretStoreName: "loopzero-vault-secrets"
+  # ClusterSecretStore name — dev-public uses `loopzero-secrets-secrets`.
+  secretStoreName: "loopzero-secrets-secrets"
   # OpenBao path (kv-v2 mount `secret/`) — canonical `loopzero/cloud` with
   # property `rag_platform_admin_key` (matches the canonical eso-openbao
   # example at charts/loopzero-cloud/examples/eso-openbao.yaml). Rotation:
@@ -139,7 +139,7 @@ rag:
 # Rotation: `bao kv patch secret/loopzero/cloud lens_platform_admin_key=<new-key>`.
 lens:
   externalSecretEnabled: false
-  secretStoreName: "loopzero-vault-secrets"
+  secretStoreName: "loopzero-secrets-secrets"
   openBaoPath: "loopzero/cloud"
   openBaoProperty: "lens_platform_admin_key"
   externalSecretRefreshInterval: "1h"

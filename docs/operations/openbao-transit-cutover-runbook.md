@@ -45,7 +45,7 @@ If any step above fails → STOP. Surface to Claude before proceeding.
 > `vault-system` namespace.
 >
 > **Major delegation update (iter 23, cleanroom-audit 2026-06-10):** the
-> canonical `task k3d:vault:bootstrap` + `helmfile sync --selector
+> canonical `task k3d:secrets:bootstrap` + `helmfile sync --selector
 > name=openbao-init` pipeline ALREADY provisions ~80% of what J-22
 > Transit needs out-of-the-box (transit engine enabled, master keys
 > created, `loopzero-api-transit-encrypt` policy written). This runbook
@@ -60,7 +60,7 @@ Run the canonical pipeline — installs OpenBao chart + does Shamir init
 auth mounts (all idempotent):
 
 ```bash
-task k3d:vault:bootstrap        # creates loopzero-vault cluster + OpenBao
+task k3d:secrets:bootstrap        # creates loopzero-secrets cluster + OpenBao
                                  # chart (PRODLIKE.2 — HA Raft + Shamir 5/3)
 
 # Then follow the operator-only Shamir ceremony:
@@ -89,12 +89,12 @@ These remaining ~20% are step 1.2 through 1.4 below.
 ### 1.2 — Enable AppRole auth method + write the J-22 transit policy
 
 ```bash
-# Port-forward OpenBao for local CLI access (loopzero-vault cluster, not mgmt)
-kubectl --context k3d-loopzero-vault -n vault-system port-forward svc/openbao 8200:8200 &
+# Port-forward OpenBao for local CLI access (loopzero-secrets cluster, not mgmt)
+kubectl --context k3d-loopzero-secrets -n vault-system port-forward svc/openbao 8200:8200 &
 export VAULT_ADDR=https://localhost:8200
-export VAULT_TOKEN=$(kubectl --context k3d-loopzero-vault -n vault-system get secret openbao-init-token -o jsonpath='{.data.BAO_TOKEN}' | base64 -d)
+export VAULT_TOKEN=$(kubectl --context k3d-loopzero-secrets -n vault-system get secret openbao-init-token -o jsonpath='{.data.BAO_TOKEN}' | base64 -d)
 export VAULT_CACERT=/tmp/openbao-ca.pem
-kubectl --context k3d-loopzero-vault -n vault-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > $VAULT_CACERT
+kubectl --context k3d-loopzero-secrets -n vault-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > $VAULT_CACERT
 
 # Enable AppRole auth method (idempotent — bao returns "already enabled" OK)
 bao auth enable approle 2>&1 | grep -v "already enabled" || true
@@ -175,16 +175,16 @@ Save this value too. The LoopZero TransitClient refuses to talk to any server pr
 
 ## Open Question — Cross-cluster reachability (iter 23 cleanroom-audit catch)
 
-**Found during productive-idle iter 23 (2026-06-10):** `task k3d:vault:bootstrap` deploys OpenBao to k3d cluster `loopzero-vault` (NOT mgmt). But the loopzero-api chart values default `OPENBAO_VAULT_ADDR=https://openbao.vault-system.svc.cluster.local:8200` — that's in-cluster service DNS resolvable only from WITHIN the same cluster.
+**Found during productive-idle iter 23 (2026-06-10):** `task k3d:secrets:bootstrap` deploys OpenBao to k3d cluster `loopzero-secrets` (NOT mgmt). But the loopzero-api chart values default `OPENBAO_VAULT_ADDR=https://openbao.vault-system.svc.cluster.local:8200` — that's in-cluster service DNS resolvable only from WITHIN the same cluster.
 
-loopzero-api runs in `k3d-loopzero-core`. Reaching openbao in `k3d-loopzero-vault` requires one of:
+loopzero-api runs in `k3d-loopzero-core`. Reaching openbao in `k3d-loopzero-secrets` requires one of:
 
 | Option | Implementation | Trade-off |
 |---|---|---|
-| (a) Shared Docker network DNS | Override `OPENBAO_VAULT_ADDR` to `https://k3d-loopzero-vault-server-0:NODEPORT/` | Works for k3d only; not portable to prod (DOKS); SPKI pin breaks because hostname doesn't match cert SAN |
-| (b) NodePort + host networking | Expose openbao Service as NodePort, point loopzero-api at `k3d-loopzero-vault-serverlb:NODEPORT` | k3d-specific; same SPKI issue |
-| (c) Deploy OpenBao in mgmt cluster's vault-system ns | Override `task k3d:vault:bootstrap --kube-context k3d-loopzero-core`. Or create a parallel helmfile release in mgmt's helmfile chain. | Simplest reachability; loses isolation between control plane and secret storage; deviates from canonical 5-cluster topology |
-| (d) Add a Service-of-services bridge | Create a Service in mgmt with `type: ExternalName` pointing at the k3d-loopzero-vault container hostname | Requires manual port-forward maintenance OR cluster-spanning network policy work |
+| (a) Shared Docker network DNS | Override `OPENBAO_VAULT_ADDR` to `https://k3d-loopzero-secrets-server-0:NODEPORT/` | Works for k3d only; not portable to prod (DOKS); SPKI pin breaks because hostname doesn't match cert SAN |
+| (b) NodePort + host networking | Expose openbao Service as NodePort, point loopzero-api at `k3d-loopzero-secrets-serverlb:NODEPORT` | k3d-specific; same SPKI issue |
+| (c) Deploy OpenBao in mgmt cluster's vault-system ns | Override `task k3d:secrets:bootstrap --kube-context k3d-loopzero-core`. Or create a parallel helmfile release in mgmt's helmfile chain. | Simplest reachability; loses isolation between control plane and secret storage; deviates from canonical 5-cluster topology |
+| (d) Add a Service-of-services bridge | Create a Service in mgmt with `type: ExternalName` pointing at the k3d-loopzero-secrets container hostname | Requires manual port-forward maintenance OR cluster-spanning network policy work |
 
 **Sponsor decision needed before LIVE step 1:**
 
@@ -193,7 +193,7 @@ Recommended for dev-public iter 1 LIVE: **option (c)** — single-cluster reacha
 **If sponsor picks option (c):** a turn-key task shortcut shipped iter 24 collapses step 1.1 (~5min) into one command:
 
 ```bash
-task k3d:vault:bootstrap-in-mgmt
+task k3d:secrets:bootstrap-in-core
 
 # Then the operator Shamir init ceremony (unchanged from canonical):
 # bao operator init -key-shares=5 -key-threshold=3 -format=json
@@ -207,7 +207,7 @@ helmfile sync --selector name=openbao-init   # T5.1-T5.9 provisioning
                                               # without --kube-context override
 ```
 
-The shortcut is contract-locked via `infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh` (18 hermetic assertions). When the upstream `task k3d:vault:bootstrap` evolves, the test fails so the shortcut catches up.
+The shortcut is contract-locked via `infra/tests/check-openbao-bootstrap-in-core-task_test.sh` (18 hermetic assertions). When the upstream `task k3d:secrets:bootstrap` evolves, the test fails so the shortcut catches up.
 
 Until sponsor decides, steps 2-4 below assume reachability is handled — they take `OPENBAO_VAULT_ADDR` as an opaque URL.
 
@@ -404,7 +404,7 @@ Run only scenarios A + D + E that validate the canonical "no plaintext at rest" 
 
 ```bash
 # Pre-requisite: scenarios A+D+E require:
-#   1. OpenBao in mgmt cluster (task k3d:vault:bootstrap-in-mgmt — runbook step 1.1)
+#   1. OpenBao in mgmt cluster (task k3d:secrets:bootstrap-in-core — runbook step 1.1)
 #   2. AppRole configured (runbook steps 1.2-1.4)
 #   3. K8s Secret loopzero-openbao-approle in loopzero-system ns (runbook step 2.1)
 #   4. OPENBAO_TRANSIT_ENABLED=true + 4 env vars on loopzero-api (runbook step 2.2)

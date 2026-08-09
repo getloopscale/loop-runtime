@@ -5,7 +5,7 @@
 // generalizes): a helmfile script that invokes `kubectl` without making
 // its target cluster explicit silently writes to whatever kubecontext
 // happens to be active. On a clean machine it passes; on a dev box
-// carrying residue (e.g. `k3d-loopzero-vault` left over from a vault
+// carrying residue (e.g. `k3d-loopzero-secrets` left over from a vault
 // bootstrap) it provisions into the WRONG CLUSTER and `task setup`
 // dies mid-chain — or worse, succeeds against the wrong target.
 //

@@ -4,8 +4,8 @@
 // Regression-lock for issue #115: `generate-secrets.sh` did not pin
 // `kubectl --context`, so it applied Secrets to whatever kubecontext
 // was active. During a 2026-06-20 dev-public provision, an active
-// `k3d-loopzero-vault` context (residue from a prior T0.1 session) caused
-// `task setup` to misprovision Secrets to loopzero-vault instead of mgmt
+// `k3d-loopzero-secrets` context (residue from a prior T0.1 session) caused
+// `task setup` to misprovision Secrets to loopzero-secrets instead of mgmt
 // — `infra:install:mgmt` failed silently with the wrong target.
 //
 // Fix: pin via `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"` +
@@ -71,7 +71,7 @@ func auditGenerateSecretsContextPin(body string) []string {
 
 	// (a) Canonical KUBECTL_CONTEXT default MUST be present.
 	if !reKubectlContextDefault.MatchString(body) {
-		errs = append(errs, "(a) script does NOT declare `KUBECTL_CONTEXT=\"${KUBECTL_CONTEXT:-k3d-loopzero-core}\"` — without the canonical mgmt-pin default, an active `k3d-loopzero-vault` (or any other) context silently retargets Secret provisioning to the wrong cluster (issue #115).")
+		errs = append(errs, "(a) script does NOT declare `KUBECTL_CONTEXT=\"${KUBECTL_CONTEXT:-k3d-loopzero-core}\"` — without the canonical mgmt-pin default, an active `k3d-loopzero-secrets` (or any other) context silently retargets Secret provisioning to the wrong cluster (issue #115).")
 	}
 
 	// (b) Canonical kubectl() function override MUST be present.

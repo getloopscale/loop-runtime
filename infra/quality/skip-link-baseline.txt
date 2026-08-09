@@ -150,7 +150,7 @@ cmd/loopzero-ops/internal/quality/trivyscan/check_test.go	t.Skip("trivy IS insta
 cmd/loopzero-ops/internal/quality/trivyscan/check_test.go	t.Skip("trivy IS installed — skip-on-missing path is the test target")
 cmd/loopzero-ops/internal/quality/trivyscan/check_test.go	t.Skip("trivy present — cannot verify skip path")
 cmd/loopzero-ops/internal/quality/trufflehogscan/check_test.go	t.Skip("trufflehog IS installed locally — skip-on-missing test N/A")
-cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt/check_test.go	t.Skip("could not locate taskfiles/k3d.yml within 8 parent dirs; skipping real-repo assertion")
+cmd/loopzero-ops/internal/quality/openbaobootstrapincore/check_test.go	t.Skip("could not locate taskfiles/k3d.yml within 8 parent dirs; skipping real-repo assertion")
 cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop/check_test.go	t.Skip("could not locate vault-bootstrap-dev.sh within 8 parent dirs; skipping real-repo assertion")
 cmd/loopzero-ops/internal/quality/vaultpromalerts/check_test.go	t.Skipf("could not locate ROADMAP.md (skipping)")
 cmd/loopzero-ops/internal/quality/webhookcanonicalpath/check_failclosed_test.go	t.Skip("permission-based walk-error test needs non-root (root bypasses chmod 000)")

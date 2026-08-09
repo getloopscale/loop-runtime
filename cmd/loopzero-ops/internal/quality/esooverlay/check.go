@@ -113,7 +113,7 @@ func Check(cfg Config) (Outcome, error) {
 	assertRE("H1 overlay uses 'openbaoTransit:' top-level key", `(?m)^openbaoTransit:`)
 
 	// I: cross-cluster contract awareness.
-	assertContains("I1 doc cites the separate loopzero-vault cluster topology", "loopzero-vault")
+	assertContains("I1 doc cites the separate loopzero-secrets cluster topology", "loopzero-secrets")
 
 	// silence unused for future when we add regex-only assertions again
 	_ = forbidContains

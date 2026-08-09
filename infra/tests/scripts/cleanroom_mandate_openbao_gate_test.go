@@ -19,13 +19,13 @@ import (
 // JUNTOS browser) without explicitly calling out where the sponsor
 // JUNTOS OpenBao Shamir init fits. Operators reading the mandate
 // assumed `task setup` provisioned OpenBao automatically — when in
-// reality dev-public requires a SEPARATE `loopzero-vault` cluster +
+// reality dev-public requires a SEPARATE `loopzero-secrets` cluster +
 // 5-share Shamir init that ONLY the sponsor can perform.
 //
 // Canonical fix: insert Sub-step 2.5 in the mandate between UP (step 2)
 // and seeds (step 3) for dev-public env. Document the sponsor JUNTOS
 // HARD STOP, the runbook cross-link, and the standalone-multi escape
-// hatch via `task k3d:vault:bootstrap-in-mgmt`.
+// hatch via `task k3d:secrets:bootstrap-in-core`.
 //
 // This test asserts the documentation gate is present, structural, and
 // traceable. It does NOT execute any tooling — purely doc body
@@ -61,11 +61,11 @@ func TestCleanroomMandateOpenBaoSponsorJUNTOSGateDocumented(t *testing.T) {
 	}
 
 	// T4. The mandate MUST document the standalone-multi escape hatch
-	// (`task k3d:vault:bootstrap-in-mgmt`) — without this, operators
+	// (`task k3d:secrets:bootstrap-in-core`) — without this, operators
 	// reading the mandate might assume Shamir init is mandatory in ALL
 	// envs and block standalone Cleanroom flows.
-	if !strings.Contains(mandate, "bootstrap-in-mgmt") {
-		t.Error("mandate does not document the standalone-multi escape hatch `task k3d:vault:bootstrap-in-mgmt` — Cleanroom for standalone-multi might block on missing gate")
+	if !strings.Contains(mandate, "bootstrap-in-core") {
+		t.Error("mandate does not document the standalone-multi escape hatch `task k3d:secrets:bootstrap-in-core` — Cleanroom for standalone-multi might block on missing gate")
 	}
 
 	// T5. Mandate MUST cite the env gate condition explicitly so a

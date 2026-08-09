@@ -101,10 +101,10 @@ DEVELOPER PLANE   — ../loopzero-cli (TypeScript) ↔ api/ (Go)
 CONTROL PLANE     — mgmt cluster: 4 operators · Gitea · PG · MinIO · ArgoCD · Traefik · cert-manager
 BUILD PLANE       — build cluster: Argo Workflows + BuildKit + cosign signing
 WORKLOAD PLANE    — runtime cluster(s): user apps via ArgoCD · Traefik + cert-manager + KEDA + Argo Rollouts (canary)
-SECRETS           — SEPARATE `loopzero-vault` cluster: OpenBao (Transit) + ESO. See below.
+SECRETS           — SEPARATE `loopzero-secrets` cluster: OpenBao (Transit) + ESO. See below.
 ```
 
-`task setup` creates **4** k3d clusters (`infra/k3d/{mgmt,build,workload,runtime-2}-cluster.yaml`). **OpenBao runs in a 5th, separate cluster** (`infra/k3d/vault-cluster.yaml`, `task k3d:vault:create` + `k3d:vault:bootstrap`). Installing it into mgmt (`k3d:vault:bootstrap-in-mgmt`) is **FORBIDDEN in every tier** — it is a topology violation, not a shortcut (`.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5).
+`task setup` creates **4** k3d clusters (`infra/k3d/{mgmt,build,workload,runtime-2}-cluster.yaml`). **OpenBao runs in a 5th, separate cluster** (`infra/k3d/secrets-cluster.yaml`, `task k3d:secrets:create` + `k3d:secrets:bootstrap`). Installing it into mgmt (`k3d:secrets:bootstrap-in-core`) is **FORBIDDEN in every tier** — it is a topology violation, not a shortcut (`.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5).
 
 ### Deploy flow (happy path)
 

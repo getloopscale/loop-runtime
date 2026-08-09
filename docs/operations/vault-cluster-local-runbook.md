@@ -1,9 +1,9 @@
 ---
 type: operational-runbook
-title: Vault Cluster Local Runbook (loopzero-vault k3d)
+title: Vault Cluster Local Runbook (loopzero-secrets k3d)
 ---
 
-# Vault Cluster Local Runbook (loopzero-vault k3d)
+# Vault Cluster Local Runbook (loopzero-secrets k3d)
 
 **Owner**: Platform Security
 **SOT**: this file
@@ -12,8 +12,8 @@ title: Vault Cluster Local Runbook (loopzero-vault k3d)
 
 ## Purpose
 
-Local k3d cluster `loopzero-vault` for validating vault cluster isolation topology
-(per T3 decision 2026-06-02) BEFORE provisioning DOKS `loopzero-vault-prod`. Same
+Local k3d cluster `loopzero-secrets` for validating vault cluster isolation topology
+(per T3 decision 2026-06-02) BEFORE provisioning DOKS `loopzero-secrets-prod`. Same
 Helm chart + Helmfile pattern that will run in production — bugs surfaced
 locally save 5-7h of debug under prod pressure.
 
@@ -26,7 +26,7 @@ locally save 5-7h of debug under prod pressure.
 │  Docker network: k3d-loopzero (shared)                                  │
 │                                                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐       │
-│  │ loopzero-core    │  │ loopzero-build   │  │  loopzero-vault (NEW)    │       │
+│  │ loopzero-core    │  │ loopzero-build   │  │  loopzero-secrets (NEW)    │       │
 │  │ kubeAPI 6443 │  │ kubeAPI 6445 │  │  kubeAPI 6447         │      │
 │  │ 1srv+2agt    │  │ 1srv         │  │  1srv (single-node)  │       │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘       │
@@ -41,24 +41,24 @@ locally save 5-7h of debug under prod pressure.
 
 PRODLIKE refactor replaced devMode with proper prod-posture: Raft persistent
 storage, HTTPS via cert-manager, Shamir 5/3 manual unseal. The bootstrap is
-now a **3-phase sequence** instead of a single `task k3d:vault:bootstrap`
+now a **3-phase sequence** instead of a single `task k3d:secrets:bootstrap`
 (devMode was auto-unsealed; Shamir requires operator-time).
 
 ### Phase 1: provision infrastructure (idempotent)
 
 ```bash
-task k3d:vault:create     # 43s — k3d cluster
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
-  --kube-context k3d-loopzero-vault \
+task k3d:secrets:create     # 43s — k3d cluster
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-secrets \
   --selector name=cert-manager sync
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
-  --kube-context k3d-loopzero-vault \
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-secrets \
   --selector name=cluster-issuer sync
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
-  --kube-context k3d-loopzero-vault \
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-secrets \
   --selector name=openbao-cert sync   # creates Secret openbao-tls
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
-  --kube-context k3d-loopzero-vault \
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-secrets \
   --selector name=openbao sync         # pod Running but Sealed=true
 ```
 
@@ -66,19 +66,19 @@ helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
 
 ```bash
 # Init: capture 5 shards + root token (ONE-TIME; idempotent only via storage state)
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
   'BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao operator init \
     -key-shares=5 -key-threshold=3 -format=json' > /tmp/openbao-init.json
 
 # Unseal: 3 of 5 shards (quorum)
 for i in 0 1 2; do
   SHARD=$(jq -r ".unseal_keys_b64[$i]" /tmp/openbao-init.json)
-  kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+  kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
     "BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao operator unseal $SHARD"
 done
 
 # Verify Sealed=false
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
   'BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao status' | grep Sealed
 ```
 
@@ -86,26 +86,26 @@ kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
 
 ```bash
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
-kubectl --context k3d-loopzero-vault -n vault-system create secret generic \
+kubectl --context k3d-loopzero-secrets -n vault-system create secret generic \
   openbao-init-token --from-literal=BAO_TOKEN="$ROOT_TOKEN"
 
-helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
-  --kube-context k3d-loopzero-vault \
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-secrets \
   --selector name=openbao-init sync
 ```
 
 ### Final validation
 
 ```bash
-task k3d:vault:status     # all pods + bao status
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+task k3d:secrets:status     # all pods + bao status
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
   "BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN \
    bao kv put secret/test foo=bar && bao kv get secret/test"
 ```
 
 ### Cleanup + restart with same state
 
-PVC `data-openbao-0` is persistent — `task k3d:vault:destroy` deletes the
+PVC `data-openbao-0` is persistent — `task k3d:secrets:destroy` deletes the
 k3d cluster but the underlying Docker volume survives. After `create` +
 helmfile sync, Vault comes back Sealed=true and requires unseal with the
 same shards. **Save `/tmp/openbao-init.json` somewhere safe** if you want
@@ -114,21 +114,21 @@ to reuse state.
 ### Full reset (lose all state)
 
 ```bash
-task k3d:vault:destroy
+task k3d:secrets:destroy
 docker volume prune -f   # WARNING: removes ALL unused Docker volumes
-task k3d:vault:create
+task k3d:secrets:create
 # Re-run Phases 1-3 fresh (new shards, new root token)
 ```
 
 ## VK.5 — Cross-cluster auth (mgmt → vault) workflow
 
 Validates that an SA in **loopzero-core** cluster can authenticate to OpenBao
-running in **loopzero-vault** cluster and read secrets per Vault policy. This
+running in **loopzero-secrets** cluster and read secrets per Vault policy. This
 is the core test of T3 vault cluster isolation (LIVE-validated 2026-06-02).
 
 ### Pre-requisites
 
-- loopzero-vault cluster UP + PRODLIKE bootstrap done (Shamir unsealed,
+- loopzero-secrets cluster UP + PRODLIKE bootstrap done (Shamir unsealed,
   openbao-init Job Completed)
 - loopzero-core cluster UP (`k3d cluster create --config infra/k3d/core-cluster.yaml`)
 - `/tmp/openbao-init-output.json` available (Shamir shards + root token)
@@ -140,25 +140,25 @@ kubectl --context k3d-loopzero-core apply -f - <<'EOF'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: loopzero-vault-reviewer
+  name: loopzero-secrets-reviewer
   namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: loopzero-vault-reviewer-binding
+  name: loopzero-secrets-reviewer-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: system:auth-delegator
 subjects:
   - kind: ServiceAccount
-    name: loopzero-vault-reviewer
+    name: loopzero-secrets-reviewer
     namespace: kube-system
 EOF
 
 REVIEWER_JWT=$(kubectl --context k3d-loopzero-core create token \
-  loopzero-vault-reviewer -n kube-system --duration=8760h)
+  loopzero-secrets-reviewer -n kube-system --duration=8760h)
 
 # Extract mgmt CA cert
 kubectl --context k3d-loopzero-core get cm -n kube-system kube-root-ca.crt \
@@ -174,7 +174,7 @@ ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init-output.json)
 MGMT_API="https://$(docker inspect k3d-loopzero-core-server-0 \
   --format '{{ range .NetworkSettings.Networks }}{{ .IPAddress }}{{ end }}'):6443"
 
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200
 export BAO_SKIP_VERIFY=true
 export BAO_TOKEN=$ROOT_TOKEN
@@ -194,7 +194,7 @@ bao write auth/kubernetes/config \
 ### Step 3: Create Vault role bound to SA + seed test data
 
 ```bash
-kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN
 bao write auth/kubernetes/role/test-reader \
   bound_service_account_names=test-vault-reader \
@@ -209,7 +209,7 @@ bao kv put secret/loopzero/test/hello message='Cross-cluster auth works!'
 
 ```bash
 # Extract Vault CA + create ConfigMap in mgmt
-VAULT_CA=$(kubectl --context k3d-loopzero-vault -n vault-system \
+VAULT_CA=$(kubectl --context k3d-loopzero-secrets -n vault-system \
   get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d)
 
 kubectl --context k3d-loopzero-core apply -f - <<EOF
@@ -226,7 +226,7 @@ $(echo "$VAULT_CA" | sed 's/^/    /')
 EOF
 
 # Start port-forward (Vault accessible on host:8210)
-kubectl --context k3d-loopzero-vault -n vault-system port-forward openbao-0 \
+kubectl --context k3d-loopzero-secrets -n vault-system port-forward openbao-0 \
   8210:8200 --address 0.0.0.0 >/tmp/pf.log 2>&1 &
 
 # Create test client pod
@@ -271,7 +271,7 @@ bao kv get secret/loopzero/test/hello
 
 | Bug | Fix |
 |-----|-----|
-| `--disable=servicelb` in vault-cluster.yaml blocked NodePort routing | Re-enabled servicelb (Klipper) |
+| `--disable=servicelb` in secrets-cluster.yaml blocked NodePort routing | Re-enabled servicelb (Klipper) |
 | Klipper servicelb has TLS-passthrough issue on NodePort | Workaround: kubectl port-forward (port 8210, since 8200 already taken by k3d serverlb) |
 | Cert SAN missing `host.k3d.internal` | Added to openbao-cert dnsNames |
 | Pod restart re-seals Vault → must re-unseal manually | Expected prod posture (idempotent: re-run unseal command with shards) |
@@ -351,7 +351,7 @@ detonated in DOKS prod first sync, costing 30-60min debug under pressure.
 |---|-----|-----|------|
 | 1 | OCI chart path `bank-vaults/charts` (404) | `bank-vaults/helm-charts` | `infra/helm/bank-vaults-operator/Chart.yaml` |
 | 2 | Helm dep build loop with alias | Removed `alias:` from dependency | `infra/helm/bank-vaults-operator/Chart.yaml` |
-| 3 | Wrong image+tag (`bank-vaults-operator:1.24.0`) | `vault-operator:v1.24.0` | `infra/helmfile/vault.helmfile.yaml.gotmpl` |
+| 3 | Wrong image+tag (`bank-vaults-operator:1.24.0`) | `vault-operator:v1.24.0` | `infra/helmfile/secrets.helmfile.yaml.gotmpl` |
 | 4 | Helm v3 doesn't apply CRDs on upgrade | Manual `kubectl apply -f crds.yaml` on first run | (manual) |
 | 5 | CRD `BaoConfiguration` doesn't exist | Switched to canonical `Vault` CRD | `infra/helm/openbao/templates/baoconfiguration.yaml` |
 | 6 | Invalid K8s label with spaces/colons | Moved to annotations | `infra/helm/openbao/templates/_helpers.tpl` |
@@ -362,25 +362,25 @@ detonated in DOKS prod first sync, costing 30-60min debug under pressure.
 
 ```bash
 # 1. Tear down
-task k3d:vault:destroy
+task k3d:secrets:destroy
 
 # 2. Rebuild deps (if Chart.yaml changed)
 rm -rf infra/helm/bank-vaults-operator/charts/ infra/helm/bank-vaults-operator/Chart.lock
 
 # 3. Provision fresh
-task k3d:vault:create
-task k3d:vault:bootstrap
+task k3d:secrets:create
+task k3d:secrets:bootstrap
 
 # 4. First-time only: apply Bank-Vaults CRD (helm v3 doesn't on upgrades)
 bunzip2 -c infra/helm/bank-vaults-operator/charts/vault-operator/charts/crds/files/crds.bz2 \
-  | kubectl --context k3d-loopzero-vault apply -f -
+  | kubectl --context k3d-loopzero-secrets apply -f -
 
 # 5. Restart operator AFTER CRD applied (workaround for bug #8)
-kubectl --context k3d-loopzero-vault rollout restart deployment \
+kubectl --context k3d-loopzero-secrets rollout restart deployment \
   -n bank-vaults-operator bank-vaults-operator-vault-operator
 
 # 6. Validate
-task k3d:vault:status
+task k3d:secrets:status
 ```
 
 ## Troubleshooting
@@ -399,7 +399,7 @@ install**, not on upgrades. Apply manually:
 
 ```bash
 bunzip2 -c infra/helm/bank-vaults-operator/charts/vault-operator/charts/crds/files/crds.bz2 \
-  | kubectl --context k3d-loopzero-vault apply -f -
+  | kubectl --context k3d-loopzero-secrets apply -f -
 ```
 
 ### Operator pod stuck on `vault.banzaicloud.com "openbao" not found`
@@ -408,7 +408,7 @@ Bug #8 (TODO operator-time). Workaround: restart operator pod AFTER Vault CR
 exists (forces fresh informer cache sync):
 
 ```bash
-kubectl --context k3d-loopzero-vault rollout restart deployment \
+kubectl --context k3d-loopzero-secrets rollout restart deployment \
   -n bank-vaults-operator bank-vaults-operator-vault-operator
 ```
 
@@ -422,10 +422,10 @@ operator is failing (see bug #8 above).
 
 ## When this graduates to DOKS prod
 
-This local validation gives confidence to provision DOKS `loopzero-vault-prod` with
+This local validation gives confidence to provision DOKS `loopzero-secrets-prod` with
 the same Helmfile + values. Changes needed for prod:
 
-1. Switch env `vault-local` → `prod` in `task k3d:vault:bootstrap` invocation
+1. Switch env `vault-local` → `prod` in `task k3d:secrets:bootstrap` invocation
 2. Use `values-prod.yaml` (HA Raft + AWS KMS unseal) instead of standalone
 3. Source `~/.openbao-prod-resources.env` before `helmfile sync` (per
    [openbao-aws-resources-runbook.md](./openbao-aws-resources-runbook.md))

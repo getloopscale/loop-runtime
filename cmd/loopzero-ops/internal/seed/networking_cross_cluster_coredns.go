@@ -15,7 +15,7 @@ import (
 //
 // Patches mgmt cluster CoreDNS NodeHosts ConfigMap so mgmt pods can resolve
 // cross-cluster Service LoadBalancer hostnames (k3d-loopzero-build-serverlb,
-// k3d-loopzero-workload-serverlb, k3d-loopzero-vault-serverlb).
+// k3d-loopzero-workload-serverlb, k3d-loopzero-secrets-serverlb).
 //
 // Uses `docker inspect` to discover each container IP (READ-ONLY, D1-exempt).
 // Merges into the existing NodeHosts block instead of overwriting: unrelated
@@ -41,7 +41,7 @@ const (
 var corednsContainers = []string{
 	"k3d-loopzero-build-serverlb",
 	"k3d-loopzero-workload-server-0",
-	"k3d-loopzero-vault-server-0",
+	"k3d-loopzero-secrets-server-0",
 }
 
 // corednsAliases maps container name → (alias hostname, aliasApplies) so a
@@ -49,7 +49,7 @@ var corednsContainers = []string{
 // alias (matches the bash script's serverlb alias mapping).
 var corednsAliases = map[string]string{
 	"k3d-loopzero-workload-server-0": "k3d-loopzero-workload-serverlb",
-	"k3d-loopzero-vault-server-0":    "k3d-loopzero-vault-serverlb",
+	"k3d-loopzero-secrets-server-0":    "k3d-loopzero-secrets-serverlb",
 }
 
 func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
