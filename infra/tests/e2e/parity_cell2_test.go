@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	cell2MgmtCtx = "k3d-loopzero-mgmt"
+	cell2MgmtCtx = "k3d-loopzero-core"
 	cell1Ctx     = "k3d-loopzero-workload"   // cell-1 target (per H12/CLAUDE.md)
 	cell2RtCtx   = "k3d-loopzero-runtime-2"  // cell-2 target (per H14)
 	// standalone deterministic PG password (chart pins it; bash c1's Secret

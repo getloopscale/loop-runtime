@@ -33,7 +33,7 @@ data:
   GITEA_URL: {{ .Values.config.giteaUrl | quote }}
   GITEA_CROSS_CLUSTER_URL: {{ .Values.config.giteaCrossClusterUrl | quote }}
   GITEA_ORG: {{ .Values.config.giteaOrg | quote }}
-  MGMT_KUBE_CONTEXT: {{ .Values.config.mgmtKubeContext | quote }}
+  CORE_KUBE_CONTEXT: {{ .Values.config.mgmtKubeContext | quote }}
   BUILD_KUBE_CONTEXT: {{ .Values.config.buildKubeContext | quote }}
   RUNTIME_KUBE_CONTEXT: {{ .Values.config.runtimeKubeContext | quote }}
   MINIO_ENDPOINT: {{ .Values.config.minioEndpoint | quote }}

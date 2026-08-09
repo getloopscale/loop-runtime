@@ -148,7 +148,7 @@ const (
 	e2eBaseDomainDrill = "loopzero-drill.example"
 
 	// mgmtKubeContext is the kubectl context for the management cluster.
-	mgmtKubeContext = "k3d-loopzero-mgmt"
+	mgmtKubeContext = "k3d-loopzero-core"
 
 	// buildKubeContext is the kubectl context for the build cluster.
 	buildKubeContext = "k3d-loopzero-build"

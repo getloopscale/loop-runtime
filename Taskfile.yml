@@ -52,7 +52,7 @@ includes:
     taskfile: ./taskfiles/quality.yml
 
 vars:
-  MGMT_CONTEXT: k3d-loopzero-mgmt
+  CORE_CONTEXT: k3d-loopzero-core
   BUILD_CONTEXT: k3d-loopzero-build
   WORKLOAD_CONTEXT: k3d-loopzero-workload
   # cell-2-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-2'.
@@ -427,8 +427,8 @@ tasks:
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env standalone-multi
       # Sprint A 2026-06-01 — refresh app-controller informer cache so all
       # 3 replicas see the final set of cluster Secrets at boot.
-      - kubectl --context k3d-loopzero-mgmt -n argocd rollout restart statefulset/argocd-application-controller
-      - kubectl --context k3d-loopzero-mgmt -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
+      - kubectl --context k3d-loopzero-core -n argocd rollout restart statefulset/argocd-application-controller
+      - kubectl --context k3d-loopzero-core -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
 
   k3d:heal:
     desc: |

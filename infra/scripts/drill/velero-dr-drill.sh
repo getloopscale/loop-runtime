@@ -34,7 +34,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 DRILL_TIMEOUT_SECS="${DRILL_TIMEOUT_SECS:-300}"
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
 DRY_RUN=false
 DRILL_TENANT_NAME="drill-test"
 DRILL_TENANT_NAMESPACE="loopzero-system"

@@ -32,7 +32,7 @@ func NewMinioCanonicalSeed() *MinioCanonicalSeed { return &MinioCanonicalSeed{} 
 func (s *MinioCanonicalSeed) Name() string { return "minio" }
 
 const (
-	minioMgmtContext         = "k3d-loopzero-mgmt"
+	minioMgmtContext         = "k3d-loopzero-core"
 	minioBuildContext        = "k3d-loopzero-build"
 	minioNamespace           = "loopzero-system"
 	minioMainSecret          = "minio"

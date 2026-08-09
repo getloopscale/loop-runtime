@@ -39,7 +39,7 @@ get_ip() {
 }
 
 # Mgmt server node IP (NodePorts: 30000=Gitea, 30001=API, 32000=MinIO)
-MGMT_SERVER=$(get_ip k3d-loopzero-mgmt-server-0)
+MGMT_SERVER=$(get_ip k3d-loopzero-core-server-0)
 if [ -z "$MGMT_SERVER" ]; then
   echo "ERROR: Cannot find mgmt server IP on ${SHARED_NETWORK}."
   echo "  Are all clusters running? Run: k3d cluster list"
@@ -82,7 +82,7 @@ echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 echo ""
 echo "=== Patching loopzero-api-runtime-config ConfigMap (mgmt cluster) ==="
 
-MGMT_CTX="k3d-loopzero-mgmt"
+MGMT_CTX="k3d-loopzero-core"
 API_CM_NS="loopzero-system"
 API_CM_NAME="loopzero-api-runtime-config"
 

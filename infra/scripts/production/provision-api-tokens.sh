@@ -11,7 +11,7 @@
 # Tokens from apiKey accounts do NOT expire (unlike admin session tokens which expire in 24h).
 set -euo pipefail
 
-MGMT_CTX="k3d-loopzero-mgmt"
+MGMT_CTX="k3d-loopzero-core"
 BUILD_CTX="k3d-loopzero-build"
 WORKLOAD_CTX="k3d-loopzero-workload"
 # REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "loopzero-system".
@@ -23,7 +23,7 @@ GITEA_USER="${GITEA_USER:-gitea_admin}"
 # T1.3 + EC-01 (plan 2026-05-21-deep-review-remediation): no hardcoded
 # fallback. Read from gitea-admin Secret (generate-secrets.sh creates it
 # earlier in bootstrap:standalone chain) OR fail fast.
-GITEA_PASS="${GITEA_PASS:-$(kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
+GITEA_PASS="${GITEA_PASS:-$(kubectl --context "${MGMT_CTX:-k3d-loopzero-core}" -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
 if [[ -z "$GITEA_PASS" ]]; then
   echo "ERROR: GITEA_PASS unset AND gitea-admin Secret missing in loopzero-system" >&2
   echo "       Run generate-secrets.sh first OR set GITEA_PASS env var" >&2
@@ -251,7 +251,7 @@ echo "Setting up runtime cluster kubeconfig..."
 RUNTIME_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
 RUNTIME_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
 # F-10 fix (2026-05-07 cleanroom dogfood): use docker-network IP, not DNS hostname.
-# loopzero-api pod runs inside k3d-loopzero-mgmt cluster and cannot resolve k3d container
+# loopzero-api pod runs inside k3d-loopzero-core cluster and cannot resolve k3d container
 # DNS names from inside cluster pods (B27: docker DNS only works between containers
 # directly on the docker bridge, not from pod network). With DNS-based runtime
 # kubeconfig, SecretK8sManager.runtimeDynamic could not reach the workload cluster,

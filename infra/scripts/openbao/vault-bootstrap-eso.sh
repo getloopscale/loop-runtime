@@ -15,7 +15,7 @@
 #
 # Usage:
 #   bash infra/scripts/openbao/vault-bootstrap-eso.sh \
-#     --mgmt-context k3d-loopzero-mgmt \
+#     --mgmt-context k3d-loopzero-core \
 #     --vault-context k3d-loopzero-vault \
 #     [--vault-secret-name openbao-tls] \
 #     [--vault-secret-namespace vault-system] \
@@ -39,7 +39,7 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 # CLI args
 # ----------------------------------------------------------------------------
-MGMT_CONTEXT="${LOOPZERO_MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
 VAULT_CONTEXT="${LOOPZERO_VAULT_CONTEXT:-k3d-loopzero-vault}"
 VAULT_SECRET_NAME="openbao-tls"
 VAULT_SECRET_NAMESPACE="vault-system"
@@ -56,7 +56,7 @@ USAGE
   $0 [options]
 
 OPTIONS
-  --mgmt-context <ctx>           kubectl context for mgmt cluster (default: k3d-loopzero-mgmt)
+  --mgmt-context <ctx>           kubectl context for mgmt cluster (default: k3d-loopzero-core)
   --vault-context <ctx>          kubectl context for vault cluster (default: k3d-loopzero-vault)
   --vault-secret-name <name>     Vault TLS Secret name (default: openbao-tls)
   --vault-secret-namespace <ns>  Vault TLS Secret NS (default: vault-system)
@@ -75,10 +75,10 @@ WORKFLOW (per Runbook P1 steps 2-4)
 
 EXAMPLES
   # Standalone-multi (local k3d):
-  $0 --mgmt-context k3d-loopzero-mgmt --vault-context k3d-loopzero-vault
+  $0 --mgmt-context k3d-loopzero-core --vault-context k3d-loopzero-vault
 
   # Production (DOKS):
-  $0 --mgmt-context loopzero-mgmt-prod --vault-context loopzero-vault-prod
+  $0 --mgmt-context loopzero-core-prod --vault-context loopzero-vault-prod
 
   # Dry-run preflight check:
   $0 --dry-run
@@ -87,7 +87,7 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --mgmt-context) MGMT_CONTEXT="$2"; shift 2 ;;
+    --mgmt-context) CORE_CONTEXT="$2"; shift 2 ;;
     --vault-context) VAULT_CONTEXT="$2"; shift 2 ;;
     --vault-secret-name) VAULT_SECRET_NAME="$2"; shift 2 ;;
     --vault-secret-namespace) VAULT_SECRET_NAMESPACE="$2"; shift 2 ;;
@@ -121,7 +121,7 @@ for f in "$SA_MANIFEST" "$CSS_MANIFEST"; do
 done
 
 if [ "${SKIP_PREFLIGHT:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
-  for ctx in "$MGMT_CONTEXT" "$VAULT_CONTEXT"; do
+  for ctx in "$CORE_CONTEXT" "$VAULT_CONTEXT"; do
     if ! kubectl --context "$ctx" version --request-timeout=5s >/dev/null 2>&1; then
       echo "ERROR: kubectl context '$ctx' not reachable" >&2
       exit 1
@@ -129,7 +129,7 @@ if [ "${SKIP_PREFLIGHT:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
   done
 fi
 
-echo "[INFO] mgmt=$MGMT_CONTEXT vault=$VAULT_CONTEXT eso-ns=$ESO_NAMESPACE dry-run=$DRY_RUN" >&2
+echo "[INFO] mgmt=$CORE_CONTEXT vault=$VAULT_CONTEXT eso-ns=$ESO_NAMESPACE dry-run=$DRY_RUN" >&2
 echo "" >&2
 
 # ----------------------------------------------------------------------------
@@ -137,9 +137,9 @@ echo "" >&2
 # ----------------------------------------------------------------------------
 echo "[STEP 1/4] Apply eso-vault-reader SA + ClusterRoleBinding em mgmt" >&2
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  [DRY-RUN] kubectl --context $MGMT_CONTEXT apply -f $SA_MANIFEST" >&2
+  echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT apply -f $SA_MANIFEST" >&2
 else
-  if kubectl --context "$MGMT_CONTEXT" apply -f "$SA_MANIFEST" >/dev/null 2>&1; then
+  if kubectl --context "$CORE_CONTEXT" apply -f "$SA_MANIFEST" >/dev/null 2>&1; then
     echo "  [OK] SA + ClusterRoleBinding applied" >&2
   else
     echo "  [FAIL] kubectl apply -f $SA_MANIFEST" >&2
@@ -177,19 +177,19 @@ fi
 # Step 3: Create/update ConfigMap loopzero-vault-ca em mgmt
 # ----------------------------------------------------------------------------
 echo "" >&2
-echo "[STEP 3/4] Create/update ConfigMap loopzero-vault-ca em $MGMT_CONTEXT:$ESO_NAMESPACE" >&2
+echo "[STEP 3/4] Create/update ConfigMap loopzero-vault-ca em $CORE_CONTEXT:$ESO_NAMESPACE" >&2
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  [DRY-RUN] kubectl --context $MGMT_CONTEXT -n $ESO_NAMESPACE create configmap loopzero-vault-ca --from-literal=ca.crt=<CA> --dry-run=client -o yaml | kubectl apply -f -" >&2
+  echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT -n $ESO_NAMESPACE create configmap loopzero-vault-ca --from-literal=ca.crt=<CA> --dry-run=client -o yaml | kubectl apply -f -" >&2
 else
   # Ensure namespace exists (idempotent)
-  kubectl --context "$MGMT_CONTEXT" create namespace "$ESO_NAMESPACE" \
-    --dry-run=client -o yaml | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null 2>&1 || true
+  kubectl --context "$CORE_CONTEXT" create namespace "$ESO_NAMESPACE" \
+    --dry-run=client -o yaml | kubectl --context "$CORE_CONTEXT" apply -f - >/dev/null 2>&1 || true
 
   # Apply ConfigMap via dry-run | apply -f - pattern (idempotent update)
-  if echo "$VAULT_CA" | kubectl --context "$MGMT_CONTEXT" -n "$ESO_NAMESPACE" \
+  if echo "$VAULT_CA" | kubectl --context "$CORE_CONTEXT" -n "$ESO_NAMESPACE" \
       create configmap loopzero-vault-ca --from-file=ca.crt=/dev/stdin \
       --dry-run=client -o yaml \
-      | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null 2>&1; then
+      | kubectl --context "$CORE_CONTEXT" apply -f - >/dev/null 2>&1; then
     echo "  [OK] ConfigMap loopzero-vault-ca synced" >&2
   else
     echo "  [FAIL] ConfigMap apply failed" >&2
@@ -203,10 +203,10 @@ fi
 echo "" >&2
 echo "[STEP 4/4] Apply ClusterSecretStore loopzero-vault-secrets em mgmt" >&2
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  [DRY-RUN] kubectl --context $MGMT_CONTEXT apply -f $CSS_MANIFEST" >&2
+  echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT apply -f $CSS_MANIFEST" >&2
   echo "  [DRY-RUN] kubectl wait clustersecretstore loopzero-vault-secrets --for=condition=Ready --timeout=${WAIT_TIMEOUT}s" >&2
 else
-  if kubectl --context "$MGMT_CONTEXT" apply -f "$CSS_MANIFEST" >/dev/null 2>&1; then
+  if kubectl --context "$CORE_CONTEXT" apply -f "$CSS_MANIFEST" >/dev/null 2>&1; then
     echo "  [OK] ClusterSecretStore applied" >&2
   else
     echo "  [FAIL] kubectl apply -f $CSS_MANIFEST" >&2
@@ -215,12 +215,12 @@ else
 
   # Wait for Ready=True (status condition reconcile)
   echo "  [INFO] waiting up to ${WAIT_TIMEOUT}s for status.conditions[Ready]=True" >&2
-  if kubectl --context "$MGMT_CONTEXT" wait clustersecretstore loopzero-vault-secrets \
+  if kubectl --context "$CORE_CONTEXT" wait clustersecretstore loopzero-vault-secrets \
       --for=condition=Ready --timeout="${WAIT_TIMEOUT}s" >/dev/null 2>&1; then
     echo "  [OK] ClusterSecretStore Ready=True" >&2
   else
     echo "  [FAIL] ClusterSecretStore did NOT reach Ready within ${WAIT_TIMEOUT}s" >&2
-    echo "  [DIAG] kubectl --context $MGMT_CONTEXT describe clustersecretstore loopzero-vault-secrets" >&2
+    echo "  [DIAG] kubectl --context $CORE_CONTEXT describe clustersecretstore loopzero-vault-secrets" >&2
     exit 3
   fi
 fi

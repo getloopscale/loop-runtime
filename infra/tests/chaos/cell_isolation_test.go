@@ -69,7 +69,7 @@ func TestCellIsolation_K3dStop(t *testing.T) {
 	// completely independent of workload cluster state.
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		out, _ := runCmdOutput(t, 5*time.Second, "kubectl", "--context", "k3d-loopzero-mgmt",
+		out, _ := runCmdOutput(t, 5*time.Second, "kubectl", "--context", "k3d-loopzero-core",
 			"get", "deployment", "-n", "loopzero-system", "loopzero-api",
 			"-o", "jsonpath={.status.readyReplicas}")
 		if strings.TrimSpace(out) != "" && strings.TrimSpace(out) != "0" {

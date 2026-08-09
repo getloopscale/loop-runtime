@@ -1,4 +1,4 @@
-# Defaults target standalone-multi: nginx-s3-gateway proxying to mgmt-cluster
+# Defaults target standalone-multi: nginx-s3-gateway proxying to core-cluster
 # MinIO via the docker-bridge NodePort (172.18.0.3:32000).
 # CHG-2026-04-28-LAYERED-BOOTSTRAP / B82 (end-to-end-deploy-validation-plan iter 12)
 # In dev/prod overlays, override s3 to point to DO Spaces (regional endpoint).

@@ -55,7 +55,7 @@ config:
   giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"
   giteaCrossClusterUrl: ""
   giteaOrg: "loopzero"
-  mgmtKubeContext: "k3d-loopzero-mgmt"
+  mgmtKubeContext: "k3d-loopzero-core"
   buildKubeContext: "k3d-loopzero-build"
   runtimeKubeContext: "k3d-loopzero-workload"
   minioEndpoint: "minio.loopzero-system.svc.cluster.local:9000"

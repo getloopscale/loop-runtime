@@ -95,7 +95,7 @@ env:
 
 # Plan 2026-05-19-drill-skills-rigor-restoration T2.1: kubeContexts é
 # env-specific (k3d synthetic uses "in-cluster"; drill/prod use DOKS context
-# names like "do-sfo3-loopzero-drill-mgmt-cluster"). Default fallback "in-cluster"
+# names like "do-sfo3-loopzero-drill-core-cluster"). Default fallback "in-cluster"
 # para local k3d standalone-multi; overlays drill+prod sobrescrevem.
 # Padrão environment-overlay-with-reuse: canonical define schema + fallback
 # safe-for-local; overlays supplem env-specific values via env templating.

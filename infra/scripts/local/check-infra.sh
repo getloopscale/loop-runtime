@@ -34,7 +34,7 @@ set -uo pipefail
 JSON_MODE=0
 [[ "${1:-}" == "--json" ]] && JSON_MODE=1
 
-MGMT_CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+MGMT_CTX="${MGMT_CTX:-k3d-loopzero-core}"
 BUILD_CTX="${BUILD_CTX:-k3d-loopzero-build}"
 WORKLOAD_CTX="${WORKLOAD_CTX:-k3d-loopzero-workload}"
 RUNTIME2_CTX="${RUNTIME2_CTX:-k3d-loopzero-runtime-2}"

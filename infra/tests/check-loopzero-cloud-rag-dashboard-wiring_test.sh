@@ -25,7 +25,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo "=== Rendering helmfile dev-public loopzero-cloud... ==="
 LOOPZERO_HELMFILE_ENV=dev-public helmfile -e dev-public \
-  -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+  -f infra/helmfile/core.helmfile.yaml.gotmpl \
   --selector name=loopzero-cloud \
   template > "$TMP/rendered.yaml" 2> "$TMP/err.log" || {
     echo "FAIL — helmfile template errored"; cat "$TMP/err.log"; exit 1

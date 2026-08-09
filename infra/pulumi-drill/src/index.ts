@@ -147,7 +147,7 @@ const drillVpc = new LoopZeroVpc("drill-vpc", {
 
 // Plan v1.2 T3.1 — LoopZeroDOKSCluster component (4 instances replace inline declarations).
 const mgmtCluster = new LoopZeroDOKSCluster("drill-mgmt", {
-  clusterName: `${doProject}-mgmt-cluster`,
+  clusterName: `${doProject}-core-cluster`,
   region,
   version: mgmtK8sVersion,
   vpcUuid: drillVpc.id,

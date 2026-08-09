@@ -84,7 +84,7 @@ answer an operational question.
 - [`operations/cell-drain-runbook.md`](operations/cell-drain-runbook.md) · [`operations/production-canary-stage4-runbook.md`](operations/production-canary-stage4-runbook.md) · [`operations/production-canary-stage5-runbook.md`](operations/production-canary-stage5-runbook.md)
 - [`operations/crd-conversion-procedure.md`](operations/crd-conversion-procedure.md) · [`operations/pv-rebind-runbook.md`](operations/pv-rebind-runbook.md)
 - [`runbooks/migration-rollback.md`](runbooks/migration-rollback.md) · [`runbooks/bootstrap-regression-matrix.md`](runbooks/bootstrap-regression-matrix.md)
-- [`runbooks/vap-delete-guardrail.md`](runbooks/vap-delete-guardrail.md) — the mgmt-cluster delete guardrail: which identities are exempt and why, what to do when it fires, and the rollback (a values toggle, no rebuild). Read the failure mode at the end before touching it: a `DELETE` policy that stops exempting the cluster GC deadlocks namespaces in `Terminating`.
+- [`runbooks/vap-delete-guardrail.md`](runbooks/vap-delete-guardrail.md) — the core-cluster delete guardrail: which identities are exempt and why, what to do when it fires, and the rollback (a values toggle, no rebuild). Read the failure mode at the end before touching it: a `DELETE` policy that stops exempting the cluster GC deadlocks namespaces in `Terminating`.
 - [`runbooks/alerts/`](runbooks/alerts/) — one runbook per Prometheus alert
 
 **Cost, observability, billing**

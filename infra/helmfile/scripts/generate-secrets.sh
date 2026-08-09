@@ -9,7 +9,7 @@
 #
 # Usage: generate-secrets.sh <env> <cluster>
 #   env:     dev | prod | standalone
-#   cluster: mgmt | runtime
+#   cluster: core | runtime
 #
 # Optional env vars (override existing — used for explicit rotation):
 #   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME, LOOPZERO_DB_USER, LOOPZERO_DB_PASSWORD
@@ -36,7 +36,7 @@ CLUSTER="${2:?usage: $0 <env> <cluster>}"
 # `--context="$KUBECTL_CONTEXT"` on every call — all bare `kubectl` calls
 # downstream inherit the canonical context by construction. Regression-locked
 # by infra/tests/charts/generate_secrets_context_pin_test.go.
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 log() { printf '[generate-secrets] %s\n' "$*" >&2; }
@@ -504,7 +504,7 @@ KUBECONFIG_EOF
 )
 
   resolve_slot() {
-    # $1 = slot key (mgmt.kubeconfig | build.kubeconfig | runtime.kubeconfig)
+    # $1 = slot key (core.kubeconfig | build.kubeconfig | runtime.kubeconfig)
     local key="$1"
     local existing
     existing=$(kubectl get secret loopzero-cluster-kubeconfigs -n loopzero-system \
@@ -518,12 +518,12 @@ KUBECONFIG_EOF
     fi
   }
 
-  MGMT_KC="$(resolve_slot mgmt.kubeconfig)"
+  MGMT_KC="$(resolve_slot core.kubeconfig)"
   BUILD_KC="$(resolve_slot build.kubeconfig)"
   RUNTIME_KC="$(resolve_slot runtime.kubeconfig)"
 
   apply_secret loopzero-cluster-kubeconfigs loopzero-system \
-    --from-literal=mgmt.kubeconfig="$MGMT_KC" \
+    --from-literal=core.kubeconfig="$MGMT_KC" \
     --from-literal=build.kubeconfig="$BUILD_KC" \
     --from-literal=runtime.kubeconfig="$RUNTIME_KC"
 fi

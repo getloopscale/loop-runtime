@@ -36,7 +36,7 @@ func requireE2EFlag(t *testing.T) {
 
 // requireKubeContexts asserts all 3 expected k3d contexts exist.
 func requireKubeContexts(t *testing.T) {
-	for _, ctx := range []string{"k3d-loopzero-mgmt", "k3d-loopzero-build", "k3d-loopzero-workload"} {
+	for _, ctx := range []string{"k3d-loopzero-core", "k3d-loopzero-build", "k3d-loopzero-workload"} {
 		cmd := exec.Command("kubectl", "config", "get-contexts", "-o", "name", ctx)
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("missing kube context %s: run `task setup` first (%v)", ctx, err)
@@ -69,14 +69,14 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	requireBinary(t, "kubectl")
 
 	t.Logf("=== Step 1/8: Verify mgmt cluster loopzero-api healthy ===")
-	out, err := runCmd(t, "kubectl", "--context", "k3d-loopzero-mgmt", "-n", "loopzero-system",
+	out, err := runCmd(t, "kubectl", "--context", "k3d-loopzero-core", "-n", "loopzero-system",
 		"get", "deploy", "loopzero-api", "-o", "jsonpath={.status.readyReplicas}")
 	if err != nil || !strings.Contains(out, "1") {
 		t.Fatalf("loopzero-api not ready: out=%q err=%v", out, err)
 	}
 
 	t.Logf("=== Step 2/8: Verify ArgoCD has all 3 clusters registered ===")
-	out, err = runCmd(t, "kubectl", "--context", "k3d-loopzero-mgmt", "-n", "argocd",
+	out, err = runCmd(t, "kubectl", "--context", "k3d-loopzero-core", "-n", "argocd",
 		"get", "secrets", "-l", "argocd.argoproj.io/secret-type=cluster", "-o", "name")
 	clusterCount := strings.Count(out, "secret/")
 	if err != nil || clusterCount < 2 {
@@ -227,7 +227,7 @@ func TestE2EDeployStructureExists(t *testing.T) {
 	required := []string{
 		"loopzero init",
 		"loopzero deploy",
-		"k3d-loopzero-mgmt",
+		"k3d-loopzero-core",
 		"k3d-loopzero-build",
 		"k3d-loopzero-workload",
 		testRepoURL,

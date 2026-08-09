@@ -112,7 +112,7 @@ set -euo pipefail
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and four k3d
-# clusters running (loopzero-mgmt, loopzero-build, loopzero-workload, loopzero-runtime-2).
+# clusters running (loopzero-core, loopzero-build, loopzero-workload, loopzero-runtime-2).
 #
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
@@ -121,7 +121,7 @@ set -euo pipefail
 set -uo pipefail
 
 SHARED_NET="${SHARED_NET:-k3d-loopzero}"
-MGMT_CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+MGMT_CTX="${MGMT_CTX:-k3d-loopzero-core}"
 BUILD_CTX="${BUILD_CTX:-k3d-loopzero-build}"
 RT_CTX="${RT_CTX:-k3d-loopzero-workload}"
 # cell-2-activation-plan T0.2 — second runtime cluster context (cell-2).
@@ -184,7 +184,7 @@ ip_on() {
     "{{(index .NetworkSettings.Networks \"${SHARED_NET}\").IPAddress}}" \
     2>/dev/null || true
 }
-MGMT_IP=$(ip_on k3d-loopzero-mgmt-server-0)
+MGMT_IP=$(ip_on k3d-loopzero-core-server-0)
 BUILD_IP=$(ip_on k3d-loopzero-build-server-0)
 RT_IP=$(ip_on k3d-loopzero-workload-server-0)
 REG_IP=$(docker network inspect "$SHARED_NET" \
@@ -281,7 +281,7 @@ if [[ -n "$MGMT_TOK" && -n "$BUILD_TOK" && -n "$RT_TOK" ]]; then
   BK=$(mk_kcfg "https://${BUILD_IP}:6443" "$BUILD_TOK")
   RK=$(mk_kcfg "https://${RT_IP}:6443" "$RT_TOK")
   kubectl --context "$MGMT_CTX" -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
-    --from-literal=mgmt.kubeconfig="$MK" \
+    --from-literal=core.kubeconfig="$MK" \
     --from-literal=build.kubeconfig="$BK" \
     --from-literal=runtime.kubeconfig="$RK" \
     --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f - >/dev/null
@@ -600,7 +600,7 @@ else
   REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   BOOTSTRAP="$REPO_ROOT/infra/helmfile/scripts/bootstrap-cell-cc.sh"
   if [[ -x "$BOOTSTRAP" ]]; then
-    if KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
+    if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" \
       INGRESS_DOMAIN="loopzero.local" \
       bash "$BOOTSTRAP" --cell 1 --env standalone-multi >/dev/null 2>&1; then
       log "  ClusterCredential cell-1 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
@@ -807,7 +807,7 @@ EOF
     REPO_ROOT_H14=$(cd "$(dirname "$0")/../../.." && pwd)
     BOOTSTRAP_H14="$REPO_ROOT_H14/infra/helmfile/scripts/bootstrap-cell-cc.sh"
     if [[ -x "$BOOTSTRAP_H14" ]]; then
-      if KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
+      if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" \
         INGRESS_DOMAIN="loopzero.local" \
         bash "$BOOTSTRAP_H14" --cell 2 --env standalone-multi >/dev/null 2>&1; then
         log "  ClusterCredential cell-2 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
@@ -982,7 +982,7 @@ if [[ -x "$SCRIPT_DIR/run-migrations.sh" ]]; then
   log "H17: ensuring schema_migrations table is populated"
   # Probe loopzero-api pod readiness before attempting kubectl exec.
   if kubectl --context "$MGMT_CTX" -n loopzero-system get pod -l app=loopzero-api --no-headers 2>/dev/null | grep -q Running; then
-    if MGMT_CONTEXT="$MGMT_CTX" bash "$SCRIPT_DIR/run-migrations.sh" >/dev/null 2>&1; then
+    if CORE_CONTEXT="$MGMT_CTX" bash "$SCRIPT_DIR/run-migrations.sh" >/dev/null 2>&1; then
       log "  schema_migrations: backfilled / current"
     else
       warn "  run-migrations.sh failed — DB migrations may need manual attention"

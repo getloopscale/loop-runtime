@@ -164,7 +164,7 @@ if [[ "$SKIP_VAULT" == "1" ]]; then
 else
   ESO_BOOTSTRAP="$SCRIPT_DIR/../openbao/vault-bootstrap-eso.sh"
   if [[ -f "$ESO_BOOTSTRAP" ]]; then
-    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopzero-mgmt --vault-context k3d-loopzero-vault" || \
+    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopzero-core --vault-context k3d-loopzero-vault" || \
       log "  (continuing — CSS loopzero-vault-secrets may need operator triage)"
   else
     skip_step "1b-vault-bootstrap-eso" "vault-bootstrap-eso.sh not found at $ESO_BOOTSTRAP (skipped)"
@@ -332,7 +332,7 @@ run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopzero-ops && 
 # whether the poller is enabled is decided by helmfile overlay per env
 # (dev-public: enabled=true; standalone-multi: not declared → treated
 # as disabled). Legacy shell-env override kept for local dev workflows.
-POLLER_ENABLED_CFG="$(kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" \
+POLLER_ENABLED_CFG="$(kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" \
   -n loopzero-system get configmap loopzero-app-operator \
   -o jsonpath='{.data.LOOPZERO_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
 if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then

@@ -8,7 +8,7 @@
 // `task setup` to misprovision Secrets to loopzero-vault instead of mgmt
 // — `infra:install:mgmt` failed silently with the wrong target.
 //
-// Fix: pin via `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"` +
+// Fix: pin via `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"` +
 // a `kubectl()` shell-function wrapper that injects
 // `--context="$KUBECTL_CONTEXT"` on every call. All bare `kubectl`
 // invocations downstream automatically inherit the canonical mgmt
@@ -57,8 +57,8 @@ func loadGenerateSecrets(t *testing.T) (body string, scriptPath string) {
 
 // Regexes — raw strings preserve on-disk shape.
 var (
-	// Canonical assignment: KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
-	reKubectlContextDefault = regexp.MustCompile(`KUBECTL_CONTEXT="\$\{KUBECTL_CONTEXT:-k3d-loopzero-mgmt\}"`)
+	// Canonical assignment: KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
+	reKubectlContextDefault = regexp.MustCompile(`KUBECTL_CONTEXT="\$\{KUBECTL_CONTEXT:-k3d-loopzero-core\}"`)
 
 	// Canonical function override: kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 	reKubectlFnOverride = regexp.MustCompile(`kubectl\(\)\s*\{\s*command\s+kubectl\s+--context="\$KUBECTL_CONTEXT"\s+"\$@";?\s*\}`)
@@ -71,7 +71,7 @@ func auditGenerateSecretsContextPin(body string) []string {
 
 	// (a) Canonical KUBECTL_CONTEXT default MUST be present.
 	if !reKubectlContextDefault.MatchString(body) {
-		errs = append(errs, "(a) script does NOT declare `KUBECTL_CONTEXT=\"${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}\"` — without the canonical mgmt-pin default, an active `k3d-loopzero-vault` (or any other) context silently retargets Secret provisioning to the wrong cluster (issue #115).")
+		errs = append(errs, "(a) script does NOT declare `KUBECTL_CONTEXT=\"${KUBECTL_CONTEXT:-k3d-loopzero-core}\"` — without the canonical mgmt-pin default, an active `k3d-loopzero-vault` (or any other) context silently retargets Secret provisioning to the wrong cluster (issue #115).")
 	}
 
 	// (b) Canonical kubectl() function override MUST be present.

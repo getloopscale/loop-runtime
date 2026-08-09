@@ -181,7 +181,7 @@ export const cellRegistry = pulumi.output(
 const mgmt = getMgmtCluster(clusters);
 export const mgmtClusterName = mgmt.clusterName;
 export const mgmtClusterEndpoint = mgmt.endpoint;
-export const mgmtKubeconfig = pulumi.secret(mgmt.kubeconfig);
+export const mgmtKubeconfig = pulumi.secret(core.kubeconfig);
 
 // First build + runtime clusters (legacy compatibility).
 // When mgmt and build share the same cluster ID (combo mode), the registry

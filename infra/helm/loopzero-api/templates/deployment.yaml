@@ -102,8 +102,8 @@ spec:
               readOnly: true
             {{- end }}
           env:
-            - name: MGMT_KUBECONFIG
-              value: /etc/loopzero/kubeconfigs/mgmt.kubeconfig
+            - name: CORE_KUBECONFIG
+              value: /etc/loopzero/kubeconfigs/core.kubeconfig
             - name: BUILD_KUBECONFIG
               value: /etc/loopzero/kubeconfigs/build.kubeconfig
             - name: RUNTIME_KUBECONFIG
@@ -111,13 +111,13 @@ spec:
             # Plan 2026-05-19-drill-skills-rigor-restoration T2.1: REMOVED
             # hardcoded "in-cluster" defaults that caused loopzero-api CrashLoop
             # quando overlay drill (DOKS) tem real context names like
-            # "do-sfo3-loopzero-drill-mgmt-cluster". Bootstrap script tinha
+            # "do-sfo3-loopzero-drill-core-cluster". Bootstrap script tinha
             # workaround kubectl-set-env post-sync (T2 follow-up tag) que
             # NÃO sobrevivia a re-sync. Comment "Pulumi sets these to actual
             # DOKS context names" era FALSA — Pulumi nunca setou.
             # NOW: values fornecem context names via .Values.kubeContexts
             # com fallback default "in-cluster" para local k3d synthetic.
-            - name: MGMT_KUBE_CONTEXT
+            - name: CORE_KUBE_CONTEXT
               value: {{ .Values.kubeContexts.mgmt | default "in-cluster" | quote }}
             - name: BUILD_KUBE_CONTEXT
               value: {{ .Values.kubeContexts.build | default "in-cluster" | quote }}

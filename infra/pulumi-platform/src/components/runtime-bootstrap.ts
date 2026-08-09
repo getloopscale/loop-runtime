@@ -269,7 +269,7 @@ function installESO(
     "eso-mgmt-token",
     {
       metadata: {
-        name: "mgmt-cluster-token",
+        name: "core-cluster-token",
         namespace: "external-secrets",
       },
       stringData: {
@@ -291,7 +291,7 @@ function installESO(
       apiVersion: "external-secrets.io/v1beta1",
       kind: "ClusterSecretStore",
       metadata: {
-        name: "loopzero-mgmt-store",
+        name: "loopzero-core-store",
       },
       spec: {
         provider: {
@@ -304,7 +304,7 @@ function installESO(
             auth: {
               token: {
                 bearerToken: {
-                  name: "mgmt-cluster-token",
+                  name: "core-cluster-token",
                   namespace: "external-secrets",
                   key: "token",
                 },

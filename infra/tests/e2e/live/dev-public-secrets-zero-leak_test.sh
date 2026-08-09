@@ -37,7 +37,7 @@ TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
 PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}"
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
 DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
-KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-mgmt}"
+KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-core}"
 WORKLOAD_CONTEXT="${LOOPZERO_WORKLOAD_CONTEXT:-k3d-loopzero-workload}"
 
 usage() {
@@ -73,7 +73,7 @@ Env overrides:
   LOOPZERO_TEST_PROJECT      Project (default teste)
   LOOPZERO_TEST_ENV          Env (default production)
   LOOPZERO_DEV_PUBLIC_BASE   Cloud base URL (default https://cloud-dev.loopzero.example)
-  LOOPZERO_KUBE_CONTEXT      Mgmt cluster context (default k3d-loopzero-mgmt)
+  LOOPZERO_KUBE_CONTEXT      Mgmt cluster context (default k3d-loopzero-core)
   LOOPZERO_WORKLOAD_CONTEXT  Workload cluster context (default k3d-loopzero-workload)
 
 Exit codes:

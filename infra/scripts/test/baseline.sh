@@ -43,7 +43,7 @@ parse_duration() {
 }
 DURATION_SEC=$(parse_duration "$DURATION")
 
-TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
+TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-core}"
 WORKLOAD_CTX="${WORKLOAD_CONTEXT:-k3d-loopzero-workload}"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 OUTPUT="/tmp/chaos-baseline-${SCENARIO}-${TS}.json"

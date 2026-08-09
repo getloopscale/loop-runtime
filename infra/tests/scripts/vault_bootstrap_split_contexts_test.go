@@ -11,7 +11,7 @@ import (
 
 // TestVaultBootstrapDev_SplitContexts locks T1.1 of plan
 // dev-public-cross-cluster-secrets (issue #111). The legacy
-// vault-bootstrap-dev.sh defaulted CONTEXT to k3d-loopzero-mgmt and applied
+// vault-bootstrap-dev.sh defaulted CONTEXT to k3d-loopzero-core and applied
 // every kubectl call (both the OpenBao read-side AND the mgmt-side
 // Secret writes) against the SAME context — incompatible with Jeito A
 // canonical (sponsor mandate INQUEBRÁVEL 2026-06-19) which keeps
@@ -20,7 +20,7 @@ import (
 // Post-T1.1 the script splits into two contexts:
 //   - OPENBAO_CONTEXT (default k3d-loopzero-vault) → reads bao operator init
 //     state + mints AppRole + reads SPKI
-//   - TARGET_CONTEXT (default k3d-loopzero-mgmt) → applies the
+//   - TARGET_CONTEXT (default k3d-loopzero-core) → applies the
 //     loopzero-openbao-approle / openbao-spki-pin Secrets where loopzero-api
 //     Deployment envFrom can reach them
 //
@@ -46,15 +46,15 @@ func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 		t.Errorf("OPENBAO_CONTEXT default = %q; want %q (Jeito A sponsor mandate INQUEBRÁVEL 2026-06-19 — OpenBao lives in separate loopzero-vault cluster, NOT mgmt)", got, want)
 	}
 
-	// T2. TARGET_CONTEXT variable exists and defaults to k3d-loopzero-mgmt
+	// T2. TARGET_CONTEXT variable exists and defaults to k3d-loopzero-core
 	// (consumer side where loopzero-openbao-approle Secret + loopzero-api
 	// Deployment envFrom both live).
 	targetContextRe := regexp.MustCompile(`(?m)^TARGET_CONTEXT="\$\{TARGET_CONTEXT:-([^}]+)\}"$`)
 	targetContextMatch := targetContextRe.FindStringSubmatch(body)
 	if targetContextMatch == nil {
-		t.Fatalf("TARGET_CONTEXT variable declaration missing — split-context contract requires `TARGET_CONTEXT=\"${TARGET_CONTEXT:-k3d-loopzero-mgmt}\"` (the mgmt-side write context)")
+		t.Fatalf("TARGET_CONTEXT variable declaration missing — split-context contract requires `TARGET_CONTEXT=\"${TARGET_CONTEXT:-k3d-loopzero-core}\"` (the mgmt-side write context)")
 	}
-	if got, want := targetContextMatch[1], "k3d-loopzero-mgmt"; got != want {
+	if got, want := targetContextMatch[1], "k3d-loopzero-core"; got != want {
 		t.Errorf("TARGET_CONTEXT default = %q; want %q (loopzero-api Deployment envFrom reads from mgmt cluster loopzero-system ns)", got, want)
 	}
 

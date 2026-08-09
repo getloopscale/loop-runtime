@@ -694,7 +694,7 @@ tasks:
       - task: validate:helmfile-templates
       - bash infra/helmfile/scripts/test_helpers/run-all.sh
       - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e dev list >/dev/null
       - echo "✓ All layered-bootstrap offline validations PASS"
@@ -997,7 +997,7 @@ tasks:
 
       Each probe is a single kubectl call returning <1s; total rehearsal
       runtime ~5s. Forwards env vars LOOPZERO_KUBE_CONTEXT to the wrapped
-      script for non-k3d-loopzero-mgmt cluster targeting.
+      script for non-k3d-loopzero-core cluster targeting.
     cmds:
       - bash infra/tests/e2e/live/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
 

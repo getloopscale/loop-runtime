@@ -36,7 +36,7 @@ bootstrap_cell_cc() {
   local K3D_CLUSTER="${2:?bootstrap_cell_cc requires K3D_CLUSTER_NAME}"
   local DRY_RUN="${3:-}"
 
-  local CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+  local CTX="${MGMT_CTX:-k3d-loopzero-core}"
   local NS="${LOOPZERO_NS:-loopzero-system}"
   local SCOPED_LIB
   SCOPED_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/../helmfile/scripts/lib/scoped-kubeconfig.sh"

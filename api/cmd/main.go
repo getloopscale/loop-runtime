@@ -387,7 +387,7 @@ func main() {
 	// Layer 2 ESO sync chain (plan 2026-06-10-j22-openbao-transit-eso-sync
 	// v1.2 D3): wire SecretFetchHandler for the broker endpoint
 	// /internal/v1/secret-fetch/{tenant_id}/{secret_name}. ESO running in
-	// mgmt cluster (Wave -1 of mgmt.helmfile) calls this endpoint via the
+	// mgmt cluster (Wave -1 of core.helmfile) calls this endpoint via the
 	// webhook ClusterSecretStore to resolve user secrets — loopzero-api loads
 	// the vault:v1: ciphertext from PG + decrypts via OpenBao transit +
 	// returns plaintext_b64. Wires nil-safely: if any dep is missing the

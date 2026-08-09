@@ -48,7 +48,7 @@ def builds_projects_for_tenant(tenant_id: str) -> set[str]:
         "AND project_id IS NOT NULL AND project_id != '';"
     )
     out = subprocess.check_output(
-        ["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system","exec","postgresql-0","--",
+        ["kubectl","--context=k3d-loopzero-core","-n","loopzero-system","exec","postgresql-0","--",
          "env","PGPASSWORD=loopzero-dev-password",
          "psql","-U","loopzero","-d","loopzero","-tAc", sql],
         text=True,
@@ -58,7 +58,7 @@ def builds_projects_for_tenant(tenant_id: str) -> set[str]:
 
 def get_tenant_envs(tenant_id: str) -> tuple[list[dict], dict]:
     raw = subprocess.check_output(
-        ["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        ["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
          "get","tenant", tenant_id, "-o","json"],
         text=True,
     )
@@ -68,7 +68,7 @@ def get_tenant_envs(tenant_id: str) -> tuple[list[dict], dict]:
 
 def patch_tenant_envs(tenant_id: str, ops: list[dict]) -> None:
     proc = subprocess.run(
-        ["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        ["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
          "patch","tenant", tenant_id, "--type=json", "-p", json.dumps(ops)],
         capture_output=True, text=True,
     )
@@ -117,7 +117,7 @@ def main() -> int:
 
     if args.all:
         raw = subprocess.check_output(
-            ["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+            ["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
              "get","tenants","-o","jsonpath={.items[*].metadata.name}"],
             text=True,
         )

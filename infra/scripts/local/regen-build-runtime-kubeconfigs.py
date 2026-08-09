@@ -131,12 +131,12 @@ def build_kubeconfig(server_ip: str, ca_b64: str, token: str) -> str:
 
 def patch_secret(data_key: str, kc_yaml: str) -> None:
     sec = json.loads(subprocess.check_output(
-        ["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        ["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
          "get","secret","loopzero-cluster-kubeconfigs","-o","json"]
     ))
     sec["data"][data_key] = base64.b64encode(kc_yaml.encode()).decode()
     proc = subprocess.run(
-        ["kubectl","--context=k3d-loopzero-mgmt","apply","-f","-"],
+        ["kubectl","--context=k3d-loopzero-core","apply","-f","-"],
         input=json.dumps(sec), text=True, capture_output=True,
     )
     if proc.returncode != 0:
@@ -167,9 +167,9 @@ def main() -> int:
         regen_one(t)
 
     if args.verify:
-        subprocess.run(["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        subprocess.run(["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
                         "rollout","restart","deploy/loopzero-api"], check=True)
-        subprocess.run(["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        subprocess.run(["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
                         "rollout","status","deploy/loopzero-api","--timeout=120s"], check=True)
         print("[regen] --verify rollout complete; check `kubectl logs deploy/loopzero-api` for absence of `build cluster auth failed`")
 

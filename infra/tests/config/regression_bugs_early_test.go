@@ -66,7 +66,7 @@ func TestB20NfsStorageClassNotHardcoded(t *testing.T) {
 }
 
 func TestB21PostgresChartVersion18(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestB21PostgresChartVersion18(t *testing.T) {
 }
 
 func TestB22KratosNeedsPostgresConditional(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestB23ServiceMonitorDisabled(t *testing.T) {
 }
 
 func TestB25MinioDistributedConditional(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestB25MinioDistributedConditional(t *testing.T) {
 }
 
 func TestB26MetricsServerInstalledFalse(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestB27PostgresInitdbAllDBs(t *testing.T) {
 }
 
 func TestB28GiteaHaConditional(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestB44SmokeTestImageHasCurl(t *testing.T) {
 }
 
 func TestB45LoopZeroCrdsRelease(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}

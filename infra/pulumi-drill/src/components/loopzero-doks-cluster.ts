@@ -16,7 +16,7 @@ import * as digitalocean from "@pulumi/digitalocean";
 import * as pulumi from "@pulumi/pulumi";
 
 export interface LoopZeroDOKSClusterArgs {
-  /** Cluster name (e.g., "loopzero-drill-mgmt-cluster"). */
+  /** Cluster name (e.g., "loopzero-drill-core-cluster"). */
   clusterName: pulumi.Input<string>;
   /** DO region. */
   region: pulumi.Input<string>;

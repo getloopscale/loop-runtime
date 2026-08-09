@@ -38,7 +38,7 @@ SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 PUBLIC_FIXTURE_URL="${PUBLIC_FIXTURE_URL:-https://${PROJECT_NAME}-dev.loopzero.example}"
-CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 PG_NAMESPACE="${PG_NAMESPACE:-loopzero-system}"
 
 # Wall-clock budget — full chain MUST complete in < 20 min total.

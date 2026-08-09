@@ -6,7 +6,7 @@
 // is correctly wired:
 //
 //   - infra/helm/opencost/ LoopZero wrapper chart exists with required files
-//   - infra/helmfile/mgmt.helmfile.yaml.gotmpl declares the opencost release
+//   - infra/helmfile/core.helmfile.yaml.gotmpl declares the opencost release
 //     with needs: [monitoring/prometheus]
 //   - ServiceMonitor at infra/helm/monitoring/manifests/servicemonitor-opencost.yaml
 //     scrapes :9003/metrics

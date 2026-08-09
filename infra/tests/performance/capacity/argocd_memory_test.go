@@ -30,19 +30,19 @@ import (
 // Run:
 //
 //	# Port-forward ArgoCD metrics first:
-//	kubectl --context=$LOOPZERO_MGMT_CONTEXT -n argocd port-forward svc/argocd-metrics 18082:8082 &
+//	kubectl --context=$LOOPZERO_CORE_CONTEXT -n argocd port-forward svc/argocd-metrics 18082:8082 &
 //
 //	LOOPZERO_CAPACITY=1 \
 //	LOOPZERO_ARGOCD_METRICS_URL=http://localhost:18082 \
-//	LOOPZERO_MGMT_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
+//	LOOPZERO_CORE_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCDMemoryPerApp -v -timeout 15m
 func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
 	metricsURL := os.Getenv("LOOPZERO_ARGOCD_METRICS_URL")
-	mgmtContext := os.Getenv("LOOPZERO_MGMT_CONTEXT")
+	mgmtContext := os.Getenv("LOOPZERO_CORE_CONTEXT")
 	if metricsURL == "" || mgmtContext == "" {
-		t.Fatal("LOOPZERO_ARGOCD_METRICS_URL and LOOPZERO_MGMT_CONTEXT required")
+		t.Fatal("LOOPZERO_ARGOCD_METRICS_URL and LOOPZERO_CORE_CONTEXT required")
 	}
 
 	controllerReplicas := 3 // ArgoCD controller replicas (T-05 sharding).

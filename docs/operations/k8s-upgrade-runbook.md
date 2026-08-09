@@ -68,7 +68,7 @@ Read the workflow output:
 
 2. **Upgrade cell-default (canary cell):**
    ```bash
-   doctl kubernetes cluster upgrade <mgmt-cluster-id> --version v1.33-do.0
+   doctl kubernetes cluster upgrade <core-cluster-id> --version v1.33-do.0
    doctl kubernetes cluster upgrade <build-cluster-id> --version v1.33-do.0
    ```
    Wait for upgrade complete (~10-20min per cluster).

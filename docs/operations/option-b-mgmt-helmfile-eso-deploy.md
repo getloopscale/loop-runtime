@@ -19,7 +19,7 @@ title: "Option B — Deploy ESO Controller in mgmt cluster"
 
 ## Background — iter 31 architectural finding
 
-LIVE pre-flight 2026-06-10 14:11Z discovered: `kubectl get pods -n external-secrets` in `k3d-loopzero-mgmt` returns no resources. ESO controller deployed only in workload + runtime-2 clusters (per `infra/helmfile/runtime.helmfile.yaml.gotmpl` line 108-110).
+LIVE pre-flight 2026-06-10 14:11Z discovered: `kubectl get pods -n external-secrets` in `k3d-loopzero-core` returns no resources. ESO controller deployed only in workload + runtime-2 clusters (per `infra/helmfile/runtime.helmfile.yaml.gotmpl` line 108-110).
 
 Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assumed ESO would be in mgmt. The CSS reconcile flow requires ESO controller in the same cluster as the OpenBao server it reads from. Under Option (c) (OpenBao in mgmt), full T4.1 6/6 scenarios cannot succeed without ESO ALSO in mgmt.
 
@@ -44,7 +44,7 @@ Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assu
 **Canonical commands (run AFTER sponsor verbatim "Option B go"):**
 
 ```bash
-# Step B1.1 — Edit infra/helmfile/mgmt.helmfile.yaml.gotmpl
+# Step B1.1 — Edit infra/helmfile/core.helmfile.yaml.gotmpl
 # Add to repositories: block (around line 97 after chaos-mesh):
 #
 #   - name: external-secrets
@@ -62,14 +62,14 @@ Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assu
 
 # Step B1.2 — Apply the new release ONLY (idempotent — no-op for
 # existing 44 releases under `-l name=external-secrets` filter)
-helmfile -e dev-public --kube-context k3d-loopzero-mgmt --selector name=external-secrets sync
+helmfile -e dev-public --kube-context k3d-loopzero-core --selector name=external-secrets sync
 
 # Step B1.3 — Wait for ESO controller pods Ready
-kubectl --context k3d-loopzero-mgmt -n external-secrets wait \
+kubectl --context k3d-loopzero-core -n external-secrets wait \
   --for=condition=Available deployment --all --timeout=120s
 
 # Step B1.4 — Verify CRDs installed (ClusterSecretStore, ExternalSecret)
-kubectl --context k3d-loopzero-mgmt get crd \
+kubectl --context k3d-loopzero-core get crd \
   clustersecretstores.external-secrets.io \
   externalsecrets.external-secrets.io
 ```
@@ -78,7 +78,7 @@ kubectl --context k3d-loopzero-mgmt get crd \
 
 ```bash
 # Expected: 2 pods Running (controller + cert-controller)
-kubectl --context k3d-loopzero-mgmt get pods -n external-secrets
+kubectl --context k3d-loopzero-core get pods -n external-secrets
 
 # Expected: STATUS=Running 1/1 for both
 ```
@@ -103,7 +103,7 @@ The OCI-published `loopzero-external-secrets` chart bundles ESO + LoopZero CRDs 
 
 ### B3 — Cross-cluster ExternalSecret push (NOT recommended for iter 1)
 
-Keep ESO in workload cluster + design an ExternalSecret CR pattern where workload-cluster ESO reads from mgmt-cluster OpenBao via NodePort + writes K8s Secrets to workload tenant ns.
+Keep ESO in workload cluster + design an ExternalSecret CR pattern where workload-cluster ESO reads from core-cluster OpenBao via NodePort + writes K8s Secrets to workload tenant ns.
 
 **Pros:** preserves the 5-cluster isolation (per ADR D4) without deploying ESO in 2 clusters.
 
@@ -161,13 +161,13 @@ If B1 deployment causes issues:
 
 ```bash
 # Remove ESO release
-helmfile -e dev-public --kube-context k3d-loopzero-mgmt --selector name=external-secrets destroy
+helmfile -e dev-public --kube-context k3d-loopzero-core --selector name=external-secrets destroy
 
 # Revert helmfile changes
-git restore infra/helmfile/mgmt.helmfile.yaml.gotmpl
+git restore infra/helmfile/core.helmfile.yaml.gotmpl
 
 # Verify clean state
-kubectl --context k3d-loopzero-mgmt get ns external-secrets
+kubectl --context k3d-loopzero-core get ns external-secrets
 # Expected: NotFound (or already-cleaning-up)
 ```
 

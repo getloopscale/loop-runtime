@@ -73,7 +73,7 @@ func TestOpenCostValues_ExternalPrometheus(t *testing.T) {
 
 // TestHelmfile_OpenCostReleasePresent — mgmt helmfile declares opencost release
 func TestHelmfile_OpenCostReleasePresent(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helmfile/mgmt.helmfile.yaml.gotmpl"))
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helmfile/core.helmfile.yaml.gotmpl"))
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestHelmfile_OpenCostReleasePresent(t *testing.T) {
 // TestHelmfile_OpenCostNeedsPrometheus — explicit needs: declaration
 // (EC-01 of plan: race conditions in cleanroom resolved via needs:)
 func TestHelmfile_OpenCostNeedsPrometheus(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helmfile/mgmt.helmfile.yaml.gotmpl"))
+	data, err := os.ReadFile(filepath.Join(repoRoot, "infra/helmfile/core.helmfile.yaml.gotmpl"))
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}

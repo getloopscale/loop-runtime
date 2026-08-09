@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Trio compatibility regression test for T8.1 promtail vault-audit scrape
-# in clusters WITHOUT vault-system NS (cleanroom loopzero-mgmt default).
+# in clusters WITHOUT vault-system NS (cleanroom loopzero-core default).
 #
 # Validates that:
 #   - The kubernetes_sd_configs filter restricts to vault-system NS only

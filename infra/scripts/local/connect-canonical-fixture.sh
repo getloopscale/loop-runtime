@@ -57,7 +57,7 @@ PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 # Regression-locked by infra/tests/charts/loopzero_bin_workspace_discovery_test.go.
 LOOPZERO_BIN="${LOOPZERO_BIN:-$(command -v loopzero 2>/dev/null || readlink -f "$(dirname "$0")/../../../../loopzero-cli/bin/loopzero" 2>/dev/null || echo loopzero)}"
 GITHUB_APP_SLUG="${GITHUB_APP_SLUG:-loopzero-platform}"
-CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 PG_NAMESPACE="${PG_NAMESPACE:-loopzero-system}"
 
 DRY_RUN=0

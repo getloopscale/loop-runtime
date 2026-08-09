@@ -34,7 +34,7 @@ v1.8 SDK sweep findings (3 follow-up improvements flagged outside scope).
                          │ kubectl port-forward 8210 (local)
                          │ OR direct VPC peering (DOKS prod)
                          ▼
-┌────────────────── loopzero-mgmt cluster ──────────────────────┐
+┌────────────────── loopzero-core cluster ──────────────────────┐
 │  ESO operator (mgmt-side, NS external-secrets)             │
 │  ├── ClusterSecretStore loopzero-vault-secrets                 │
 │  │   ├── server: https://host.k3d.internal:8210 (local)    │
@@ -85,7 +85,7 @@ helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
 
 # 2-4. Canonical (recommended) — codified P1 steps 2-4 via vault-bootstrap-eso.sh:
 bash infra/scripts/openbao/vault-bootstrap-eso.sh \
-  --mgmt-context k3d-loopzero-mgmt \
+  --mgmt-context k3d-loopzero-core \
   --vault-context k3d-loopzero-vault
 # Applies SA + ClusterRoleBinding + extracts CA + creates ConfigMap +
 # applies ClusterSecretStore + waits for Ready=True. Exit codes:
@@ -93,18 +93,18 @@ bash infra/scripts/openbao/vault-bootstrap-eso.sh \
 
 # Manual fallback (legacy — use for debugging or non-standard envs):
 # 2. Phase 3.1 — apply ClusterSecretStore + SA on mgmt cluster
-kubectl --context k3d-loopzero-mgmt apply \
+kubectl --context k3d-loopzero-core apply \
   -f infra/manifests/cluster-secret-stores/eso-vault-reader-sa.yaml
 
 # 3. Extract Vault CA cert + create ConfigMap on mgmt cluster
 VAULT_CA=$(kubectl --context k3d-loopzero-vault -n vault-system \
   get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d)
-kubectl --context k3d-loopzero-mgmt -n external-secrets create configmap loopzero-vault-ca \
+kubectl --context k3d-loopzero-core -n external-secrets create configmap loopzero-vault-ca \
   --from-literal=ca.crt="$VAULT_CA" \
-  --dry-run=client -o yaml | kubectl --context k3d-loopzero-mgmt apply -f -
+  --dry-run=client -o yaml | kubectl --context k3d-loopzero-core apply -f -
 
 # 4. Apply ClusterSecretStore (depends on SA + ConfigMap)
-kubectl --context k3d-loopzero-mgmt apply \
+kubectl --context k3d-loopzero-core apply \
   -f infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml
 
 # 5. Seed initial secrets in Vault (one-time per env)
@@ -117,16 +117,16 @@ bao kv put secret/loopzero/vault-local/api/secrets/minio/access_key value=<actua
 # ... (repeat per inventory in infra/helm/loopzero-external-secrets/values.yaml)
 "
 
-# 6. Enable Vault path in mgmt.helmfile per env
+# 6. Enable Vault path in core.helmfile per env
 # Edit infra/helmfile/environments/standalone-multi.yaml:
 #   vaultEnabled: true
-helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e standalone-multi \
+helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e standalone-multi \
   --selector name=external-secrets sync
-helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e standalone-multi \
+helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e standalone-multi \
   --selector name=loopzero-external-secrets sync
 
 # 7. Verify ExternalSecret status
-kubectl --context k3d-loopzero-mgmt -n loopzero-system get externalsecrets
+kubectl --context k3d-loopzero-core -n loopzero-system get externalsecrets
 # Each row should show STATUS=SecretSynced
 ```
 
@@ -164,18 +164,18 @@ bao kv put secret/loopzero/<env>/api/secrets/gitea/token value=<new-token>
 
 # Step 2: ESO picks up change within refreshInterval (1h default;
 # 5m for high-rotation paths per values.yaml). Force immediate refresh:
-kubectl --context k3d-loopzero-mgmt -n loopzero-system annotate externalsecret gitea-admin \
+kubectl --context k3d-loopzero-core -n loopzero-system annotate externalsecret gitea-admin \
   force-sync=$(date +%s) --overwrite
 
 # Step 3: Verify K8s Secret updated
-kubectl --context k3d-loopzero-mgmt -n loopzero-system get secret gitea-admin \
+kubectl --context k3d-loopzero-core -n loopzero-system get secret gitea-admin \
   -o jsonpath='{.data.token}' | base64 -d
 # (matches new value)
 
 # Step 4 (CROSS-BINARY rotation per D2 EC-22 amendment): restart ALL
 # binaries reading this path. GITEA_TOKEN used by loopzero-api AND tenant-operator.
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deployment loopzero-api
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deployment loopzero-tenant-operator
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deployment loopzero-api
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deployment loopzero-tenant-operator
 ```
 
 **Rotation table (per shared path → binaries to restart)**:
@@ -205,7 +205,7 @@ If Vault becomes unavailable OR ESO sync fails persistently:
 
 ```bash
 # Option A — Disable ESO + switch back to env var per Helm Deployment
-helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e <env> \
+helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e <env> \
   --state-values-set vaultEnabled=false sync
 
 # This stops ESO from updating Secrets; existing Secret values persist

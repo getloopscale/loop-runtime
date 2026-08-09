@@ -98,7 +98,7 @@ helmfile -e prod sync --selector name=openbao
 helmfile -e prod sync --selector name=bank-vaults-operator
 ```
 
-The Helmfile gotmpl ([`infra/helmfile/mgmt.helmfile.yaml.gotmpl`](../../infra/helmfile/mgmt.helmfile.yaml.gotmpl))
+The Helmfile gotmpl ([`infra/helmfile/core.helmfile.yaml.gotmpl`](../../infra/helmfile/core.helmfile.yaml.gotmpl))
 uses `requiredEnv` for all `OPENBAO_*` keys — if any is missing the sync
 fails fast with a clear error.
 
@@ -265,4 +265,4 @@ variable; with snapshot retention of 7d hourly + 30d daily + 12w weekly
 - [openbao-init-runbook.md](./openbao-init-runbook.md) — Shamir initialization ceremony
 - [break-glass-runbook.md](./break-glass-runbook.md) — Recovery without quorum
 - ADR `2026-06-02-openbao-adoption.md` (Q2 AWS KMS choice rationale)
-- Helmfile wiring: [`infra/helmfile/mgmt.helmfile.yaml.gotmpl`](../../infra/helmfile/mgmt.helmfile.yaml.gotmpl) (openbao release `set:` stanza)
+- Helmfile wiring: [`infra/helmfile/core.helmfile.yaml.gotmpl`](../../infra/helmfile/core.helmfile.yaml.gotmpl) (openbao release `set:` stanza)

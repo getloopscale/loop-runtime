@@ -19,7 +19,7 @@
 #   3. export $(grep -E '^LOOPZERO_|^CLOUDFLARE_' .env | xargs)
 #   4. infra/scripts/local/setup-dev-public-dns.sh --verify
 #   5. infra/scripts/local/caddy-up-dev-public.sh --verify
-#   6. helmfile -e dev-public -f infra/helmfile/mgmt.helmfile.yaml.gotmpl sync
+#   6. helmfile -e dev-public -f infra/helmfile/core.helmfile.yaml.gotmpl sync
 #   7. task doctor (38/0)
 #   8. Browser: https://app-dev.loopzero.example/login
 

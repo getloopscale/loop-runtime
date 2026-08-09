@@ -139,9 +139,9 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		// Live mode: resolve kubeconfigs via k3d.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-mgmt").Output()
+		out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-core").Output()
 		if err != nil {
-			Skip("k3d loopzero-mgmt not available: " + err.Error())
+			Skip("k3d loopzero-core not available: " + err.Error())
 		}
 		mgmtKube = strings.TrimSpace(string(out))
 		out, err = exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-workload").Output()
@@ -258,7 +258,7 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		Expect(strings.TrimSpace(out)).To(BeEmpty(), "ArgoCD apps stuck Unknown (regression F-11)")
 	})
 
-	It("F-12: loopzero-mgmt cluster reachable via k3d kubeconfig", func() {
+	It("F-12: loopzero-core cluster reachable via k3d kubeconfig", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		out, exitCode, err := runKubectl(ctx, mgmtKube, "cluster-info")

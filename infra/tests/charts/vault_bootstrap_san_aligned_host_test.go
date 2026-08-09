@@ -46,12 +46,12 @@ import (
 // Regex inventory — all use raw strings so the in-file escape sequences map
 // cleanly to the on-disk bytes. The script line that ships F1 (7c255524) is:
 //
-//   MGMT_CLUSTER="${TARGET_CONTEXT#k3d-}"
-//   SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"
+//   CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"
+//   SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
 //   MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
 var (
-	reServerlbHostVar  = regexp.MustCompile(`SERVERLB_HOST="k3d-\$\{MGMT_CLUSTER\}-serverlb"`)
-	reMgmtClusterDeriv = regexp.MustCompile(`MGMT_CLUSTER="\$\{TARGET_CONTEXT#k3d-\}"`)
+	reServerlbHostVar  = regexp.MustCompile(`SERVERLB_HOST="k3d-\$\{CORE_CLUSTER\}-serverlb"`)
+	reMgmtClusterDeriv = regexp.MustCompile(`CORE_CLUSTER="\$\{TARGET_CONTEXT#k3d-\}"`)
 	reSedTargetServ    = regexp.MustCompile(`//\$\{SERVERLB_HOST\}\\\\2\|`)
 	reSedAltHostK3d    = regexp.MustCompile(`host\\\\\.k3d\\\\\.internal`)
 	reBaoWriteConfig   = regexp.MustCompile(`bao write auth/k8s-mgmt/config`)
@@ -79,16 +79,16 @@ func loadVaultBootstrapDev(t *testing.T) string {
 func auditSANAlignedKubernetesHost(body string) []string {
 	var errs []string
 
-	// (a1) Script derives `MGMT_CLUSTER` from `TARGET_CONTEXT` — the serverlb
+	// (a1) Script derives `CORE_CLUSTER` from `TARGET_CONTEXT` — the serverlb
 	//      name depends on this assignment.
 	if !reMgmtClusterDeriv.MatchString(body) {
-		errs = append(errs, "(a1) script does NOT derive `MGMT_CLUSTER=\"${TARGET_CONTEXT#k3d-}\"` — the serverlb container name in the cert SAN depends on this derivation (F1 fix, loopzero commit 7c255524).")
+		errs = append(errs, "(a1) script does NOT derive `CORE_CLUSTER=\"${TARGET_CONTEXT#k3d-}\"` — the serverlb container name in the cert SAN depends on this derivation (F1 fix, loopzero commit 7c255524).")
 	}
-	// (a2) Script derives `SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"` —
+	// (a2) Script derives `SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"` —
 	//      the SAN-aligned name `vault-bootstrap-dev.sh` writes into
 	//      `auth/k8s-mgmt/config`.
 	if !reServerlbHostVar.MatchString(body) {
-		errs = append(errs, "(a2) script does NOT assign `SERVERLB_HOST=\"k3d-${MGMT_CLUSTER}-serverlb\"` — required to produce a `kubernetes_host` whose hostname is in the k3d mgmt API cert SAN list (F1 fix, loopzero commit 7c255524).")
+		errs = append(errs, "(a2) script does NOT assign `SERVERLB_HOST=\"k3d-${CORE_CLUSTER}-serverlb\"` — required to produce a `kubernetes_host` whose hostname is in the k3d mgmt API cert SAN list (F1 fix, loopzero commit 7c255524).")
 	}
 
 	// (b1) The MGMT_HOST rewrite sed expression MUST use `${SERVERLB_HOST}`

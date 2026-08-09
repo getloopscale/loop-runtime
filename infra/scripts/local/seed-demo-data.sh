@@ -24,7 +24,7 @@
 #   2  PG unreachable
 set -euo pipefail
 
-CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 NAMESPACE="${NAMESPACE:-loopzero-system}"
 EMAIL="${EMAIL:-admin@loopzero.example}"
 DRY_RUN="${DRY_RUN:-0}"

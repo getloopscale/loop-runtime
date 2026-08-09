@@ -71,8 +71,8 @@ tasks:
           exit 1
         fi
         echo "  [PASS] inotify limits OK (instances=$ACTUAL_INSTANCES, watches=$ACTUAL_WATCHES)"
-      - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
-      - kubectl --context {{.MGMT_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      - k3d cluster list -o json | grep -q '"name":"loopzero-core"' || k3d cluster create --config infra/k3d/core-cluster.yaml
+      - kubectl --context {{.CORE_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
       - kubectl --context {{.BUILD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
@@ -86,7 +86,7 @@ tasks:
   clusters:verify:
     desc: Verify all clusters are reachable
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} cluster-info
+      - kubectl --context {{.CORE_CONTEXT}} cluster-info
       - kubectl --context {{.BUILD_CONTEXT}} cluster-info
       - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
       - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
@@ -123,7 +123,7 @@ tasks:
   clusters:delete:
     desc: Delete all k3d clusters
     cmds:
-      - k3d cluster delete loopzero-mgmt || true
+      - k3d cluster delete loopzero-core || true
       - k3d cluster delete loopzero-build || true
       - k3d cluster delete loopzero-workload || true
       - k3d cluster delete loopzero-runtime-2 || true
@@ -138,7 +138,7 @@ tasks:
           exit 1
         fi
         case "$CLUSTER" in
-          mgmt)       CONFIG="infra/k3d/mgmt-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
+          mgmt)       CONFIG="infra/k3d/core-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
           build)      CONFIG="infra/k3d/build-cluster.yaml";      INSTALL_TASK="infra:install:build" ;;
           workload)   CONFIG="infra/k3d/workload-cluster.yaml";   INSTALL_TASK="infra:install:workload" ;;
           runtime-2)  CONFIG="infra/k3d/runtime-2-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
@@ -250,16 +250,16 @@ tasks:
         helmfile sync --selector name=openbao-init  # T5.1-T5.9 provisioning
     cmds:
       - |
-        kubectl --context k3d-loopzero-mgmt get nodes >/dev/null 2>&1 || {
+        kubectl --context k3d-loopzero-core get nodes >/dev/null 2>&1 || {
           echo "ERROR: mgmt cluster not running. Run: task setup" >&2
           exit 1
         }
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=cert-manager sync
-      - kubectl --context k3d-loopzero-mgmt -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=openbao-cert sync
-      - kubectl --context k3d-loopzero-mgmt -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=openbao sync
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=cert-manager sync
+      - kubectl --context k3d-loopzero-core -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao-cert sync
+      - kubectl --context k3d-loopzero-core -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao sync
       - echo "[OK] OpenBao bootstrapped in mgmt cluster vault-system ns (single-cluster mode). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:vault:status-in-mgmt"
 
   k3d:vault:status-in-mgmt:
@@ -267,12 +267,12 @@ tasks:
       Show mgmt cluster vault-system status (sibling of k3d:vault:status
       for option (c) single-cluster OpenBao deployment).
     cmds:
-      - kubectl --context k3d-loopzero-mgmt get pods -n vault-system 2>&1 | head -10
-      - kubectl --context k3d-loopzero-mgmt get pods -n cert-manager 2>&1 | head -5
+      - kubectl --context k3d-loopzero-core get pods -n vault-system 2>&1 | head -10
+      - kubectl --context k3d-loopzero-core get pods -n cert-manager 2>&1 | head -5
       - |
         echo ""
         echo "Seal status (port-forward + bao status):"
-        kubectl --context k3d-loopzero-mgmt -n vault-system port-forward svc/openbao 18200:8200 &
+        kubectl --context k3d-loopzero-core -n vault-system port-forward svc/openbao 18200:8200 &
         PF=$!
         sleep 3
         VAULT_ADDR=https://localhost:18200 VAULT_SKIP_VERIFY=true bao status 2>&1 | head -8 || true

@@ -28,7 +28,7 @@
 #   - $RESEND_API_KEY exported (the operator's Resend account API key
 #     — same one Kratos config uses). Probed against api.resend.com
 #     to confirm Resend received what Kratos sent.
-#   - kubectl context k3d-loopzero-mgmt reachable.
+#   - kubectl context k3d-loopzero-core reachable.
 #
 # OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL —
 # requires Cleanroom TOTAL precedence + the canonical seed chain.
@@ -47,7 +47,7 @@
 set -euo pipefail
 
 TARGET_HOST="${TARGET_HOST:-https://auth-dev.loopzero.example}"
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
 KNOWN_EMAIL="${KNOWN_EMAIL:-admin@loopzero.example}"
 UNKNOWN_EMAIL="${UNKNOWN_EMAIL:-unknown-redteam-117@example.invalid}"
 SKIP_LIVE=0

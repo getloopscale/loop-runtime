@@ -5,7 +5,7 @@ package metering
 
 // wiring.go — the production assembly of the metering Loop from its
 // infrastructure collaborators (plan metering-compute-loop T3.2, slice S5). The
-// controller's leader constructs the dedicated worker pool + the mgmt-cluster CR
+// controller's leader constructs the dedicated worker pool + the core-cluster CR
 // client + the cell client provider, then calls NewWorkerLoop to wire them into a
 // runnable Loop. Kept as a pure assembly (no I/O) so it is unit-testable; the raw
 // pgxpool + cellmgr construction lives at the main.go boundary (T6.1 LIVE).
@@ -42,7 +42,7 @@ type LoopConfig struct {
 
 // NewWorkerLoop assembles the full metering Loop: a MeteringStore over the
 // dedicated worker pool (used as the money-writer Store, the NamespaceLister, and
-// the kill-switch), a CRTenantLister over the mgmt-cluster client, a per-cell
+// the kill-switch), a CRTenantLister over the core-cluster client, a per-cell
 // PodListerFactory over the cell client provider, the Prometheus metrics, and the
 // system clock — fenced by the leader lease (SC-6). The pool's lifecycle is owned
 // by the caller (main.go closes it on shutdown).

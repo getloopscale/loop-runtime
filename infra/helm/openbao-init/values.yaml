@@ -253,7 +253,7 @@ policies:
 # R1+R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
 # 2026-06-19): the `eso` role moves from the legacy `kubernetes` mount (intended
 # for in-cluster loopzero-vault workloads) to the canonical multi-cluster
-# `k8s-mgmt` mount (mgmt-cluster workloads). The `boundAudiences` field
+# `k8s-mgmt` mount (core-cluster workloads). The `boundAudiences` field
 # enforces EC-5 (TokenRequest aud claim == role bound_audiences) as
 # defence-in-depth — closes the "any-audience login" gap. The
 # `serviceAccountRef.audiences` in the ClusterSecretStore that consumes

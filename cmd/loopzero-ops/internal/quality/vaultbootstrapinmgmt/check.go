@@ -4,7 +4,7 @@
 //
 // Locks that the shortcut canonical-mirrors the upstream
 // `task k3d:vault:bootstrap` task with EXACTLY two well-known differences:
-//  1. context k3d-loopzero-vault → k3d-loopzero-mgmt (everywhere)
+//  1. context k3d-loopzero-vault → k3d-loopzero-core (everywhere)
 //  2. pre-flight error message references `task setup` instead of
 //     `task k3d:vault:create`
 //
@@ -91,8 +91,8 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// C — context swap is total
-	assert("C1 shortcut body uses kube-context k3d-loopzero-mgmt somewhere",
-		strings.Contains(shortcut, "kube-context k3d-loopzero-mgmt"))
+	assert("C1 shortcut body uses kube-context k3d-loopzero-core somewhere",
+		strings.Contains(shortcut, "kube-context k3d-loopzero-core"))
 	assert("C2 shortcut body does NOT reference k3d-loopzero-vault (no copy-paste drift)",
 		!strings.Contains(shortcut, "k3d-loopzero-vault"))
 

@@ -74,7 +74,7 @@ type Result struct {
 // actions without mutating the cluster.
 //
 // Clients holds additional per-context KubeClients for multi-cluster seeds
-// (build / workload / vault). The default Kube points at the k3d-loopzero-mgmt
+// (build / workload / vault). The default Kube points at the k3d-loopzero-core
 // context; alternate contexts are resolved lazily via Deps.ClientFor.
 type Deps struct {
 	Ctx        context.Context

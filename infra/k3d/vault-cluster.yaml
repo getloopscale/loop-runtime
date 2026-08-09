@@ -24,7 +24,7 @@
 #     reach plan k3d-host-published-vault-reach, sponsor 2026-06-20). The
 #     openbao Service is type: NodePort with explicit nodePort: 30200; the
 #     serverlb publishes host:8200 → node:30200 transparently. Reuses the
-#     same in-repo proven pattern as mgmt-cluster.yaml (8 services mapped
+#     same in-repo proven pattern as core-cluster.yaml (8 services mapped
 #     `port:NN@loadbalancer` + Service type: NodePort). Klipper svclb is
 #     DISABLED via `--disable=servicelb` so the serverlb is the sole publish
 #     mechanism (no two LB stacks competing). x509-clean: CSS reads via
@@ -48,7 +48,7 @@ ports:
   # Service is type: NodePort with explicit nodePort: 30200 (see
   # vault.helmfile.yaml.gotmpl); the serverlb forwards transparently,
   # preserving the TLS bytes intact (no L7 decode). Same pattern as
-  # mgmt-cluster.yaml mappings.
+  # core-cluster.yaml mappings.
   - port: 8200:30200
     nodeFilters:
       - loadbalancer
@@ -63,7 +63,7 @@ registries:
   use:
     - k3d-loopzero-registry:5000
   # B6 fix (cleanroom iter 6) — mirror docker.io via gcr.io cache.
-  # Same rationale as outros clusters (see mgmt-cluster.yaml).
+  # Same rationale as outros clusters (see core-cluster.yaml).
   config: |
     mirrors:
       "docker.io":

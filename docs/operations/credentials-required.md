@@ -151,7 +151,7 @@ Render-time grep gate (added in T1.3) will FAIL CI if any literal reaches a rend
 ```bash
 # 1. Update Secret value
 NEW_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=')"
-kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-db-credentials \
+kubectl --context k3d-loopzero-core -n loopzero-system create secret generic loopzero-db-credentials \
   --from-literal=password="$NEW_PASSWORD" --dry-run=client -o yaml \
   | kubectl apply -f -
 
@@ -160,8 +160,8 @@ PGPASSWORD="<current>" psql -h localhost -p 15432 -U loopzero -d postgres -c \
   "ALTER USER loopzero WITH PASSWORD '$NEW_PASSWORD';"
 
 # 3. Restart consumers (they cache DSN at boot)
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-api
-kubectl --context k3d-loopzero-mgmt -n loopzero-auth rollout restart deploy/hydra deploy/kratos
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-api
+kubectl --context k3d-loopzero-core -n loopzero-auth rollout restart deploy/hydra deploy/kratos
 
 # 4. Verify health
 task doctor
@@ -175,7 +175,7 @@ bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
 bash infra/scripts/production/provision-api-tokens.sh
 
 # ArgoCD repo-server cache invalidation:
-kubectl --context k3d-loopzero-mgmt -n argocd rollout restart deploy/argocd-repo-server
+kubectl --context k3d-loopzero-core -n argocd rollout restart deploy/argocd-repo-server
 ```
 
 ### `cosign-signing-key`

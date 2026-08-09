@@ -10,7 +10,7 @@ Centralized observability stack for the LoopZero platform. All system components
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         MGMT CLUSTER (k3d-loopzero-mgmt)                    │
+│                         MGMT CLUSTER (k3d-loopzero-core)                    │
 │                                                                         │
 │  ┌─────────────┐    scrape     ┌──────────────────┐                     │
 │  │ Prometheus   │◄────────────►│ loopzero-api          │ ServiceMonitor      │

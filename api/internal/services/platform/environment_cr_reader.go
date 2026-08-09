@@ -50,7 +50,7 @@ type EnvironmentCRReader struct {
 	Namespace string // canonical "loopzero-system" (matches operators/internal/tenant)
 }
 
-// NewEnvironmentCRReader constructs a reader bound to the mgmt-cluster
+// NewEnvironmentCRReader constructs a reader bound to the core-cluster
 // dynamic client. Namespace defaults to "loopzero-system" if empty.
 func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *EnvironmentCRReader {
 	if namespace == "" {

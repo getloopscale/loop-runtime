@@ -25,7 +25,7 @@
 #   port-forward-public-dashboard.sh status   # show running children + ports
 set -euo pipefail
 
-CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 PID_FILE="${PID_FILE:-/tmp/loopzero-port-forward-public.pids}"
 LOG_DIR="${LOG_DIR:-/tmp}"
 

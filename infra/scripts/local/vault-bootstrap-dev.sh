@@ -15,9 +15,9 @@
 # fan-out into:
 #   - OPENBAO_CONTEXT (default k3d-loopzero-vault) → bao operator init /
 #     auth/approle / SPKI read — the vault-cluster side
-#   - TARGET_CONTEXT  (default k3d-loopzero-mgmt)  → loopzero-openbao-approle +
+#   - TARGET_CONTEXT  (default k3d-loopzero-core)  → loopzero-openbao-approle +
 #     openbao-spki-pin Secret apply (where loopzero-api Deployment envFrom
-#     reads from) — the mgmt-cluster side
+#     reads from) — the core-cluster side
 # Legacy single-context invocations (everything against mgmt) were
 # canonical only under the superseded `task k3d:vault:bootstrap-in-mgmt`
 # shortcut. Jeito A INQUEBRÁVEL forbids that shortcut.
@@ -46,10 +46,10 @@ set -uo pipefail
 
 # SPLIT-CONTEXT (T1.1 — Jeito A INQUEBRÁVEL — issue #111).
 # OPENBAO_CONTEXT is the vault-cluster side (bao init/unseal/approle/SPKI).
-# TARGET_CONTEXT is the mgmt-cluster side (Secret apply that loopzero-api
+# TARGET_CONTEXT is the core-cluster side (Secret apply that loopzero-api
 # Deployment envFrom reads from loopzero-system ns).
 OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-vault}"
-TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-core}"
 # Backwards-compat alias preserved for inline log lines + helmfile sync
 # selectors that pre-date the T1.1 split. New code MUST use one of the
 # two split variables above.
@@ -374,7 +374,7 @@ TR_EOF
       #       must resolve to + connect to the mgmt API server on the host.
       #   (b) TLS hostname/SAN — OpenBao's Go HTTP client verifies the server cert
       #       strictly. The k3d-mgmt API cert SAN list is:
-      #         DNS: k3d-loopzero-mgmt-server-0, k3d-loopzero-mgmt-serverlb,
+      #         DNS: k3d-loopzero-core-server-0, k3d-loopzero-core-serverlb,
       #              kubernetes(.default(.svc(.cluster.local))), localhost
       #         IP : 0.0.0.0, 10.43.0.1, 127.0.0.1, <mgmt-server-0-IP>
       #       `host.k3d.internal` is NOT in the SAN list — using it triggers
@@ -384,12 +384,12 @@ TR_EOF
       #
       # The canonical SAN-aligned + cross-cluster-reachable name is the k3d
       # serverlb docker container name `k3d-${cluster_name}-serverlb`, derived
-      # from TARGET_CONTEXT (e.g., `k3d-loopzero-mgmt` → `k3d-loopzero-mgmt-serverlb`).
+      # from TARGET_CONTEXT (e.g., `k3d-loopzero-core` → `k3d-loopzero-core-serverlb`).
       # k3d injects this name into every cluster's CoreDNS NodeHosts via the
       # shared docker network, so it resolves canonically from loopzero-vault.
       MGMT_HOST_ORIG="$MGMT_HOST"
-      MGMT_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-mgmt → loopzero-mgmt
-      SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"
+      CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-core → loopzero-core
+      SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
       MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
       if [[ "$MGMT_HOST" != "$MGMT_HOST_ORIG" ]]; then
         log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-vault)"

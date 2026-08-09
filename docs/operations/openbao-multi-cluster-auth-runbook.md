@@ -61,7 +61,7 @@ The pattern repeats 5× (or 6 if you also configure the legacy `auth/kubernetes`
 ### Step 1 — Identify the target cluster's K8s API server
 
 ```bash
-TARGET_CONTEXT=k3d-loopzero-mgmt   # or k3d-loopzero-build, ...
+TARGET_CONTEXT=k3d-loopzero-core   # or k3d-loopzero-build, ...
 
 K8S_HOST=$(kubectl --context "${TARGET_CONTEXT}" config view --minify \
   -o jsonpath='{.clusters[0].cluster.server}')
@@ -127,7 +127,7 @@ echo "TokenReviewer JWT minted (${#TOKEN_REVIEWER_JWT} chars)"
 ```bash
 # Determine which Vault auth mount this cluster maps to
 case "${TARGET_CONTEXT}" in
-  *loopzero-mgmt*)    MOUNT=k8s-mgmt ;;
+  *loopzero-core*)    MOUNT=k8s-mgmt ;;
   *loopzero-build*)   MOUNT=k8s-build ;;
   *cell-default*) MOUNT=k8s-cell-default ;;
   *cell-1*)       MOUNT=k8s-cell-1 ;;
@@ -194,13 +194,13 @@ After all 5 mounts are configured, verify rotation works:
 
 ```bash
 # Rotate tokenReviewer JWT (kube-system SA)
-NEW_JWT=$(kubectl --context k3d-loopzero-mgmt -n kube-system \
+NEW_JWT=$(kubectl --context k3d-loopzero-core -n kube-system \
   create token vault-tokenreviewer --duration=8760h)
 
 # Update Vault config
 bao write auth/k8s-mgmt/config \
-  kubernetes_host="$(kubectl --context k3d-loopzero-mgmt config view --minify -o jsonpath='{.clusters[0].cluster.server}')" \
-  kubernetes_ca_cert="$(kubectl --context k3d-loopzero-mgmt -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}')" \
+  kubernetes_host="$(kubectl --context k3d-loopzero-core config view --minify -o jsonpath='{.clusters[0].cluster.server}')" \
+  kubernetes_ca_cert="$(kubectl --context k3d-loopzero-core -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}')" \
   token_reviewer_jwt="${NEW_JWT}" \
   disable_iss_validation=true
 

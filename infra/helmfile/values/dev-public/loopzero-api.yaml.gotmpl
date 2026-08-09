@@ -30,10 +30,10 @@ image:
 imagePullSecrets:
   - name: ghcr-pull
 
-# k3d-loopzero-mgmt LB has host port mapping 30001 → 13001. Exposing loopzero-api
+# k3d-loopzero-core LB has host port mapping 30001 → 13001. Exposing loopzero-api
 # as NodePort 30001 lets `curl localhost:13001/api/...` hit the cluster
 # loopzero-api Service directly — canonical pattern for CLI/dogfood from host.
-# See `k3d cluster list loopzero-mgmt -o json` portMappings.
+# See `k3d cluster list loopzero-core -o json` portMappings.
 service:
   type: NodePort
   port: 3001

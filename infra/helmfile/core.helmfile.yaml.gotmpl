@@ -6,8 +6,8 @@
 # components into the management cluster with explicit `needs:` ordering.
 #
 # Invocation:
-#   helmfile -f infra/helmfile/mgmt.helmfile.yaml -e dev sync       # LoopZero Cloud (multi-cluster)
-#   helmfile -f infra/helmfile/mgmt.helmfile.yaml -e standalone sync # Self-hosting (single cluster)
+#   helmfile -f infra/helmfile/core.helmfile.yaml -e dev sync       # LoopZero Cloud (multi-cluster)
+#   helmfile -f infra/helmfile/core.helmfile.yaml -e standalone sync # Self-hosting (single cluster)
 #
 # Required env vars (injected by `loopzero platform install` from Pulumi outputs):
 #   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME, LOOPZERO_DB_USER, LOOPZERO_DB_PASSWORD
@@ -51,7 +51,7 @@ environments:
     # infra/pulumi-drill/ stack. Bootstrap order:
     #   1. cd infra/pulumi-drill && pulumi up
     #   2. Configure kubeconfig from stack output
-    #   3. helmfile -f mgmt.helmfile.yaml.gotmpl -e drill sync
+    #   3. helmfile -f core.helmfile.yaml.gotmpl -e drill sync
     values:
       - environments/drill.yaml
 

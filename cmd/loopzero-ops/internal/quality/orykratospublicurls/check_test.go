@@ -41,7 +41,7 @@ func TestCheck_AllowlistMissing_FAIL(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a stub helmfile config so gate proceeds past config-missing check.
-	if err := os.WriteFile(filepath.Join(helmfileDir, "mgmt.helmfile.yaml.gotmpl"), []byte("# stub\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(helmfileDir, "core.helmfile.yaml.gotmpl"), []byte("# stub\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// No allowlist created.

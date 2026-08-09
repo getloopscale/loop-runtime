@@ -160,7 +160,7 @@ var reGlobalContextSwitch = regexp.MustCompile(`kubectl\s+config\s+use-context`)
 //
 //	kubectl config use-context k3d-loopzero-build
 //	bash …/generate-build-secrets.sh standalone
-//	kubectl config use-context k3d-loopzero-mgmt
+//	kubectl config use-context k3d-loopzero-core
 //
 // Under `set -e` a failure in the middle line skips the restore, leaving the
 // operator pinned to the build cluster. Every later step then runs against the

@@ -7,7 +7,7 @@
 # cluster's kube-apiserver — this SA's JWT is what ESO sends to Vault
 # at auth/kubernetes/login.
 #
-# Apply on MGMT cluster (k3d-loopzero-mgmt OR DOKS loopzero-mgmt-prod).
+# Apply on MGMT cluster (k3d-loopzero-core OR DOKS loopzero-core-prod).
 ---
 apiVersion: v1
 kind: ServiceAccount

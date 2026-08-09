@@ -14,7 +14,7 @@ title: LoopZero Bottleneck Simulator M8 (mgmt / control-plane cluster capacity)
 ## Goal
 
 Make the BFF/Engine replica sliders **couple** to the mgmt cluster: (1) their `replicas × per-pod
-requests` pack onto mgmt worker nodes; (2) a new `mgmt_nodes` bottleneck surfaces the mgmt-cluster
+requests` pack onto mgmt worker nodes; (2) a new `mgmt_nodes` bottleneck surfaces the core-cluster
 node pressure; (3) `cost()` derives mgmt nodes from that packing instead of the flat `fixedNodes: 10`.
 Preserve the established **$72,566** default (the fiction removed, not the anchor moved).
 

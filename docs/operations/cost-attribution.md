@@ -98,16 +98,16 @@ After Helmfile sync:
 
 ```bash
 # 1. Pod Running
-kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods -l app.kubernetes.io/name=opencost
+kubectl --context k3d-loopzero-core -n loopzero-system get pods -l app.kubernetes.io/name=opencost
 # Expected: 1/1 Running
 
 # 2. Metrics endpoint responsive
-kubectl --context k3d-loopzero-mgmt -n loopzero-system port-forward svc/opencost 9003:9003 &
+kubectl --context k3d-loopzero-core -n loopzero-system port-forward svc/opencost 9003:9003 &
 curl -sf http://localhost:9003/metrics | grep -c "kubecost_"
 # Expected: positive integer (cost metrics present)
 
 # 3. Prometheus scraping
-kubectl --context k3d-loopzero-mgmt -n monitoring port-forward svc/prometheus-server 9090:80 &
+kubectl --context k3d-loopzero-core -n monitoring port-forward svc/prometheus-server 9090:80 &
 curl -sf 'http://localhost:9090/api/v1/query?query=up{job="opencost"}' | jq '.data.result[0].value[1]'
 # Expected: "1" (scrape working)
 
@@ -132,7 +132,7 @@ from `infra/helm/monitoring/dashboards/opencost.json` (operator may custom).
 
 - **Cost data lags ~15min** — OpenCost rolling window. Real-time decisions should
   use Prometheus metrics directly, not OpenCost UI.
-- **DO Spaces / DOCR costs NOT attributed per tenant** — those are mgmt-cluster
+- **DO Spaces / DOCR costs NOT attributed per tenant** — those are core-cluster
   costs, attributed to platform overhead. Operator may add manual allocation
   via OpenCost customPricing if needed.
 - **Reserved instances**: DO has no equivalent of AWS RIs in 2026; pricing model
@@ -146,7 +146,7 @@ from `infra/helm/monitoring/dashboards/opencost.json` (operator may custom).
 - OpenCost upstream: https://opencost.io/
 - Helm chart: https://github.com/opencost/opencost-helm-chart
 - LoopZero wrapper chart: `infra/helm/opencost/`
-- Helmfile entry: `infra/helmfile/mgmt.helmfile.yaml.gotmpl` (look for `name: opencost`)
+- Helmfile entry: `infra/helmfile/core.helmfile.yaml.gotmpl` (look for `name: opencost`)
 - ServiceMonitor: `infra/helm/monitoring/manifests/servicemonitor-opencost.yaml`
 - Hermetic tests: `cmd/loopzero-ops/internal/quality/opencostgate/check_test.go`
 - Plan section: [`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`](../plans/completed/2026-05-22-shell-script-strategic-plan.md) Phase 7 T7.2

@@ -10,7 +10,7 @@
 //
 //	seed.Run(seed.Config{
 //	    DatabaseURL: "postgres://...",
-//	    KubeContext: "k3d-loopzero-mgmt",
+//	    KubeContext: "k3d-loopzero-core",
 //	})
 package seed
 
@@ -63,7 +63,7 @@ const (
 type Config struct {
 	// DatabaseURL is the PostgreSQL connection string.
 	DatabaseURL string
-	// KubeContext is the kubectl context to use (default: k3d-loopzero-mgmt).
+	// KubeContext is the kubectl context to use (default: k3d-loopzero-core).
 	KubeContext string
 	// ReconcileTimeout is how long to wait for namespace reconciliation (default: 60s).
 	ReconcileTimeout time.Duration
@@ -86,7 +86,7 @@ func (c *Config) defaults() {
 		}
 	}
 	if c.KubeContext == "" {
-		c.KubeContext = "k3d-loopzero-mgmt"
+		c.KubeContext = "k3d-loopzero-core"
 	}
 	if c.ReconcileTimeout == 0 {
 		c.ReconcileTimeout = 60 * time.Second
@@ -235,7 +235,7 @@ func kubectlArgs(kubeContext string) []string {
 			return []string{"kubectl", "--kubeconfig", dir + "/build.yaml", "--insecure-skip-tls-verify"}
 		case "k3d-loopzero-workload":
 			return []string{"kubectl", "--kubeconfig", dir + "/runtime.yaml", "--insecure-skip-tls-verify"}
-		case "k3d-loopzero-mgmt", "":
+		case "k3d-loopzero-core", "":
 			return []string{"kubectl", "--kubeconfig", dir + "/mgmt.yaml", "--insecure-skip-tls-verify"}
 		}
 	}

@@ -366,8 +366,8 @@ func Load() Config {
 		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
 
 		// Kubernetes Contexts
-		MgmtKubeconfig:  envOr("MGMT_KUBECONFIG", defaultKubeconfig),
-		MgmtKubeContext: envOr("MGMT_KUBE_CONTEXT", "k3d-loopzero-mgmt"),
+		MgmtKubeconfig:  envOr("CORE_KUBECONFIG", defaultKubeconfig),
+		MgmtKubeContext: envOr("CORE_KUBE_CONTEXT", "k3d-loopzero-core"),
 		BuildKubeconfig:   envOr("BUILD_KUBECONFIG", defaultKubeconfig),
 		BuildKubeContext:  envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
 		RuntimeKubeconfig: envOr("RUNTIME_KUBECONFIG", defaultKubeconfig),

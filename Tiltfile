@@ -17,7 +17,7 @@ load("ext://namespace", "namespace_create")
 namespace_create("loopzero-system")
 
 # Use the mgmt cluster context
-allow_k8s_contexts("k3d-loopzero-mgmt")
+allow_k8s_contexts("k3d-loopzero-core")
 
 # ---------------------------------------------------------------------------
 # gomod_token — required by api/Dockerfile to fetch private loopzero-contracts
@@ -48,21 +48,21 @@ if not os.path.exists(GOMOD_TOKEN_PATH):
 # Probe existing Helm releases so Tilt can track readiness without managing lifecycle.
 local_resource(
     "postgresql",
-    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status statefulset/postgresql --timeout=60s",
+    cmd="kubectl --context k3d-loopzero-core -n loopzero-system rollout status statefulset/postgresql --timeout=60s",
     resource_deps=[],
     labels=["infra"],
 )
 
 local_resource(
     "gitea",
-    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deployment/gitea --timeout=60s",
+    cmd="kubectl --context k3d-loopzero-core -n loopzero-system rollout status deployment/gitea --timeout=60s",
     resource_deps=["postgresql"],
     labels=["infra"],
 )
 
 local_resource(
     "minio",
-    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deployment/minio --timeout=60s",
+    cmd="kubectl --context k3d-loopzero-core -n loopzero-system rollout status deployment/minio --timeout=60s",
     resource_deps=["postgresql"],
     labels=["infra"],
 )
@@ -126,7 +126,7 @@ k8s_resource(
 # `tilt up` session and auto-restarts when postgresql-0 restarts.
 local_resource(
     "pg-port-forward",
-    serve_cmd="kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432",
+    serve_cmd="kubectl --context k3d-loopzero-core port-forward -n loopzero-system svc/postgresql 15432:5432",
     resource_deps=["postgresql"],
     auto_init=True,
     allow_parallel=True,
@@ -207,7 +207,7 @@ k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
     "loopzero-api",
-    # No port_forwards — k3d mgmt-cluster.yaml already maps localhost:3001 → NodePort 30001.
+    # No port_forwards — k3d core-cluster.yaml already maps localhost:3001 → NodePort 30001.
     # Adding port_forwards here would conflict with k3d's loadbalancer binding.
     # loopzero-api-runtime added as dep: Pod needs the ConfigMap+Secret rendered before envFrom can resolve.
     resource_deps=["db-migrate", "postgresql", "loopzero-api-runtime"],
@@ -289,7 +289,7 @@ k8s_resource(
 local_resource(
     "dev-seed",
     cmd="""
-        kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432 &
+        kubectl --context k3d-loopzero-core port-forward -n loopzero-system svc/postgresql 15432:5432 &
         PF_PID=$!
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 3

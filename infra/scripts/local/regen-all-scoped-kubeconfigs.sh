@@ -29,7 +29,7 @@ set -euo pipefail
 
 set -uo pipefail
 
-MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 LOCK_FILE="/tmp/loopzero-regen-scoped-kubeconfig.lock"
 LOCK_FD=200
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -89,7 +89,7 @@ enumerate_cells() {
     cat "$FIXTURE"
     return
   fi
-  kubectl --context "$MGMT_CONTEXT" get clustercredentials -A -o json 2>/dev/null
+  kubectl --context "$CORE_CONTEXT" get clustercredentials -A -o json 2>/dev/null
 }
 
 CC_JSON=$(enumerate_cells)
@@ -186,13 +186,13 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   fi
 
   # EC-3: optimistic-concurrency patch with --resource-version
-  RV=$(kubectl --context "$MGMT_CONTEXT" -n "$secret_ns" get secret "$secret_name" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || echo "")
+  RV=$(kubectl --context "$CORE_CONTEXT" -n "$secret_ns" get secret "$secret_name" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || echo "")
   KC_B64=$(base64 -w0 < "$SCOPED_OUTPUT")
 
   if [[ -z "$RV" ]]; then
     # EC-6: Secret doesn't exist — create it.
     log "  Secret absent; creating ${secret_ns}/${secret_name}"
-    if ! kubectl --context "$MGMT_CONTEXT" -n "$secret_ns" create secret generic "$secret_name" \
+    if ! kubectl --context "$CORE_CONTEXT" -n "$secret_ns" create secret generic "$secret_name" \
         --from-file=kubeconfig="$SCOPED_OUTPUT" 2>/dev/null; then
       log "  ERROR: create Secret ${secret_ns}/${secret_name} failed"
       FAILED=$((FAILED+1))
@@ -201,7 +201,7 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   else
     # Patch existing Secret with optimistic-concurrency lock.
     PATCH_BODY=$(printf '{"metadata":{"resourceVersion":"%s"},"data":{"kubeconfig":"%s"}}' "$RV" "$KC_B64")
-    if ! kubectl --context "$MGMT_CONTEXT" -n "$secret_ns" patch secret "$secret_name" \
+    if ! kubectl --context "$CORE_CONTEXT" -n "$secret_ns" patch secret "$secret_name" \
         --type=merge -p "$PATCH_BODY" 2>&1 | sed 's/^/    [patch] /'; then
       log "  ERROR: patch failed for ${secret_ns}/${secret_name} (possible optimistic-concurrency conflict — Secret modified mid-swap; operator should re-run)"
       FAILED=$((FAILED+1))

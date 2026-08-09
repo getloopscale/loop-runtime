@@ -26,7 +26,7 @@ locally save 5-7h of debug under prod pressure.
 │  Docker network: k3d-loopzero (shared)                                  │
 │                                                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐       │
-│  │ loopzero-mgmt    │  │ loopzero-build   │  │  loopzero-vault (NEW)    │       │
+│  │ loopzero-core    │  │ loopzero-build   │  │  loopzero-vault (NEW)    │       │
 │  │ kubeAPI 6443 │  │ kubeAPI 6445 │  │  kubeAPI 6447         │      │
 │  │ 1srv+2agt    │  │ 1srv         │  │  1srv (single-node)  │       │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘       │
@@ -122,7 +122,7 @@ task k3d:vault:create
 
 ## VK.5 — Cross-cluster auth (mgmt → vault) workflow
 
-Validates that an SA in **loopzero-mgmt** cluster can authenticate to OpenBao
+Validates that an SA in **loopzero-core** cluster can authenticate to OpenBao
 running in **loopzero-vault** cluster and read secrets per Vault policy. This
 is the core test of T3 vault cluster isolation (LIVE-validated 2026-06-02).
 
@@ -130,13 +130,13 @@ is the core test of T3 vault cluster isolation (LIVE-validated 2026-06-02).
 
 - loopzero-vault cluster UP + PRODLIKE bootstrap done (Shamir unsealed,
   openbao-init Job Completed)
-- loopzero-mgmt cluster UP (`k3d cluster create --config infra/k3d/mgmt-cluster.yaml`)
+- loopzero-core cluster UP (`k3d cluster create --config infra/k3d/core-cluster.yaml`)
 - `/tmp/openbao-init-output.json` available (Shamir shards + root token)
 
 ### Step 1: Provision reviewer SA in mgmt
 
 ```bash
-kubectl --context k3d-loopzero-mgmt apply -f - <<'EOF'
+kubectl --context k3d-loopzero-core apply -f - <<'EOF'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -157,11 +157,11 @@ subjects:
     namespace: kube-system
 EOF
 
-REVIEWER_JWT=$(kubectl --context k3d-loopzero-mgmt create token \
+REVIEWER_JWT=$(kubectl --context k3d-loopzero-core create token \
   loopzero-vault-reviewer -n kube-system --duration=8760h)
 
 # Extract mgmt CA cert
-kubectl --context k3d-loopzero-mgmt get cm -n kube-system kube-root-ca.crt \
+kubectl --context k3d-loopzero-core get cm -n kube-system kube-root-ca.crt \
   -o jsonpath='{.data.ca\.crt}' > /tmp/mgmt-ca.crt
 ```
 
@@ -171,7 +171,7 @@ kubectl --context k3d-loopzero-mgmt get cm -n kube-system kube-root-ca.crt \
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init-output.json)
 
 # Find mgmt API URL reachable from vault pod (Docker bridge IP)
-MGMT_API="https://$(docker inspect k3d-loopzero-mgmt-server-0 \
+MGMT_API="https://$(docker inspect k3d-loopzero-core-server-0 \
   --format '{{ range .NetworkSettings.Networks }}{{ .IPAddress }}{{ end }}'):6443"
 
 kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c "
@@ -212,7 +212,7 @@ bao kv put secret/loopzero/test/hello message='Cross-cluster auth works!'
 VAULT_CA=$(kubectl --context k3d-loopzero-vault -n vault-system \
   get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d)
 
-kubectl --context k3d-loopzero-mgmt apply -f - <<EOF
+kubectl --context k3d-loopzero-core apply -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount
 metadata: {name: test-vault-reader, namespace: default}
@@ -230,7 +230,7 @@ kubectl --context k3d-loopzero-vault -n vault-system port-forward openbao-0 \
   8210:8200 --address 0.0.0.0 >/tmp/pf.log 2>&1 &
 
 # Create test client pod
-kubectl --context k3d-loopzero-mgmt apply -f - <<'EOF'
+kubectl --context k3d-loopzero-core apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata: {name: test-vault-client, namespace: default}
@@ -254,7 +254,7 @@ EOF
 ### Step 5: E2E validation
 
 ```bash
-kubectl --context k3d-loopzero-mgmt exec test-vault-client -- sh -c '
+kubectl --context k3d-loopzero-core exec test-vault-client -- sh -c '
 SA_JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
 VAULT_TOKEN=$(bao write -field=token auth/kubernetes/login \
   role=test-reader jwt=$SA_JWT)

@@ -176,7 +176,7 @@ SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}
 
 # B82 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29): in k3d local
 # clusters the kubeconfig server is `https://0.0.0.0:6444` (or similar) — that
-# resolves to localhost inside the mgmt-cluster ArgoCD pod and yields silent
+# resolves to localhost inside the core-cluster ArgoCD pod and yields silent
 # OutOfSync with no resources applied. Substitute the docker-bridge IP of the
 # target cluster's *server-0* container, which IS in the cert SAN list and IS
 # routable from inside the mgmt cluster. DOKS / cloud kubeconfigs already use

@@ -32,7 +32,7 @@ folclore.
 ### 1. Registrar o estado de partida
 
 ```bash
-CTX=k3d-loopzero-mgmt   # ajuste ao ambiente
+CTX=k3d-loopzero-core   # ajuste ao ambiente
 kubectl --context $CTX -n argocd get applications \
   -o custom-columns=NAME:.metadata.name,PATH:.spec.source.path,DEST:.spec.destination.namespace
 

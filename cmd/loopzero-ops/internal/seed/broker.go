@@ -25,7 +25,7 @@ import (
 //     Secret with keys {token, LOOPZERO_BROKER_TOKEN}.
 //  2. Mirror to workload cluster's external-secrets ns with the
 //     `external-secrets.io/type=webhook` canonical label.
-//  3. Resolve k3d-loopzero-mgmt-server-0 container IP → install/upgrade
+//  3. Resolve k3d-loopzero-core-server-0 container IP → install/upgrade
 //     loopzero-external-secrets chart in workload cluster (broker.apiURL points
 //     at mgmt server-0:30001 for cross-cluster).
 //  4. Rollout restart mgmt loopzero-api so envFrom picks up LOOPZERO_BROKER_TOKEN.
@@ -50,7 +50,7 @@ const (
 	brokerAPIPort           = 30001
 	brokerCellID            = "cell-default"
 	brokerEnvName           = "dev-public"
-	brokerMgmtContainer     = "k3d-loopzero-mgmt-server-0"
+	brokerMgmtContainer     = "k3d-loopzero-core-server-0"
 	brokerNetworkName       = "k3d-loopzero"
 )
 

@@ -34,7 +34,7 @@ Rotate the secret when:
 
 ```bash
 # Set context
-CONTEXT=${CONTEXT:-k3d-loopzero-mgmt}
+CONTEXT=${CONTEXT:-k3d-loopzero-core}
 NS=${NS:-loopzero-system}
 
 # 1. Capture the current secret value (will become the PREVIOUS after rotation).

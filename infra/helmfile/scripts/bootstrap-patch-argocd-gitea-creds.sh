@@ -27,7 +27,7 @@
 
 set -euo pipefail
 
-CONTEXT="${KUBECONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${KUBECONTEXT:-k3d-loopzero-core}"
 
 REAL_PWD=$(kubectl --context "$CONTEXT" -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
 REAL_USER=$(kubectl --context "$CONTEXT" -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.username}' 2>/dev/null | base64 -d)

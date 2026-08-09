@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+CTX="${MGMT_CTX:-k3d-loopzero-core}"
 NS="${LOOPZERO_NS:-loopzero-system}"
 TENANT_ID="${SEED_TENANT_ID:-tn-e2etest}"
 DISPLAY_NAME="${SEED_TENANT_DISPLAY:-${TENANT_ID}}"

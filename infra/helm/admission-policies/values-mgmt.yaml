@@ -1,4 +1,4 @@
-# Overlay for the mgmt-cluster install of the admission-policies chart.
+# Overlay for the core-cluster install of the admission-policies chart.
 #
 # Plan: .claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md (T1.2)
 #

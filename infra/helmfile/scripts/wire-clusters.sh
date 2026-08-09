@@ -2,13 +2,13 @@
 # CHG-2026-04-28-LAYERED-BOOTSTRAP — T2.4
 # Cross-cluster wiring: registers build + runtime cluster(s) with the mgmt
 # cluster's ArgoCD, creates scoped kubeconfigs, and seeds Prometheus federation.
-# Executed as a Helmfile post-sync hook from mgmt.helmfile.yaml.gotmpl.
+# Executed as a Helmfile post-sync hook from core.helmfile.yaml.gotmpl.
 #
 # Usage:
 #   wire-clusters.sh <env>
 #
 # Required env vars:
-#   LOOPZERO_MGMT_KUBECONFIG, LOOPZERO_BUILD_KUBECONFIG, LOOPZERO_RUNTIME_KUBECONFIG
+#   LOOPZERO_CORE_KUBECONFIG, LOOPZERO_BUILD_KUBECONFIG, LOOPZERO_RUNTIME_KUBECONFIG
 #   (optional) LOOPZERO_RUNTIME2_KUBECONFIG
 set -euo pipefail
 ENV="${1:?usage: $0 <env>}"
@@ -16,18 +16,18 @@ ENV="${1:?usage: $0 <env>}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '[wire-clusters] %s\n' "$*" >&2; }
 
-if [[ -z "${LOOPZERO_MGMT_KUBECONFIG:-}" ]]; then
-  log "ERROR: LOOPZERO_MGMT_KUBECONFIG not set"
+if [[ -z "${LOOPZERO_CORE_KUBECONFIG:-}" ]]; then
+  log "ERROR: LOOPZERO_CORE_KUBECONFIG not set"
   exit 1
 fi
 
 # ArgoCD cluster registration (B6 fix in lib/argocd-register.sh).
-export KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG"
+export KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG"
 
 if [[ -n "${LOOPZERO_BUILD_KUBECONFIG:-}" ]]; then
   log "wiring build cluster..."
   SCOPED=$(KUBECONFIG="$LOOPZERO_BUILD_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" build "$LOOPZERO_BUILD_KUBECONFIG")
-  KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" build "$SCOPED"
+  KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" build "$SCOPED"
 fi
 
 # cell-2-activation-plan T1.3 / ADR C7: shared ingress-domain across cells.
@@ -51,7 +51,7 @@ fi
 if [[ -n "${LOOPZERO_RUNTIME_KUBECONFIG:-}" ]]; then
   log "wiring runtime cluster..."
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_RUNTIME_KUBECONFIG")
-  KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
+  KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
   # `clustercredential-create.sh cell-1 runtime` call. The ADR-0008
   # canonical path is `bootstrap-cell-cc.sh --cell 1 --env <env>` which
@@ -70,7 +70,7 @@ fi
 if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
   log "wiring runtime-2 cluster..."
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME2_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime-2 "$LOOPZERO_RUNTIME2_KUBECONFIG")
-  KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
+  KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
   # `clustercredential-create.sh cell-2 runtime-2` call. Same root cause
   # as runtime above — the ADR-0008 canonical path is

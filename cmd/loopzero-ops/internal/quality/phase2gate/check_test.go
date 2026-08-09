@@ -95,7 +95,7 @@ func TestT2_3a_HelmfileSyncPresent(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl") {
+	if !strings.Contains(content, "helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl") {
 		t.Errorf("Taskfile should invoke helmfile sync for mgmt cluster")
 	}
 	if !strings.Contains(content, "helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl") {

@@ -22,7 +22,7 @@ loki:
   # chunks (NoCredentialProviders → DNS lookup failure cascade), and
   # query path returned "connection reset by peer" because Loki's internal
   # state was broken. Switching to filesystem storage decouples build-cluster
-  # Loki from mgmt-cluster MinIO entirely — clean SoC: build-pipeline logs
+  # Loki from core-cluster MinIO entirely — clean SoC: build-pipeline logs
   # persist on the build cluster's local PV. Production (DOKS) gets cloud-
   # native object storage (DO Spaces) which IS network-reachable from the
   # build cluster — that wiring lives in pulumi-platform overrides, NOT in

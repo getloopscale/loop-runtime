@@ -18,7 +18,7 @@ will silently stop updating for any build that runs after the alert.
 ## Symptom check
 
 ```bash
-kubectl --context k3d-loopzero-mgmt -n loopzero-system logs -l app=loopzero-api --tail=200 \
+kubectl --context k3d-loopzero-core -n loopzero-system logs -l app=loopzero-api --tail=200 \
   | grep "argo step watcher: build cluster auth failed"
 ```
 
@@ -66,22 +66,22 @@ chmod 600 /tmp/build.kubeconfig
 #    Secret holds one key per cell (mgmt, runtime, runtime2, ...). Hard-coding
 #    only mgmt+runtime here DROPS runtime2 and breaks cell-2 routing.
 ARGS=(--from-file=build.kubeconfig=/tmp/build.kubeconfig)
-OTHER_KEYS=$(kubectl --context k3d-loopzero-mgmt -n loopzero-system get secret loopzero-cluster-kubeconfigs \
+OTHER_KEYS=$(kubectl --context k3d-loopzero-core -n loopzero-system get secret loopzero-cluster-kubeconfigs \
   -o go-template='{{range $k,$v := .data}}{{$k}}{{"\n"}}{{end}}' | grep -v '^build\.kubeconfig$')
 for KEY in $OTHER_KEYS; do
-  kubectl --context k3d-loopzero-mgmt -n loopzero-system get secret loopzero-cluster-kubeconfigs \
+  kubectl --context k3d-loopzero-core -n loopzero-system get secret loopzero-cluster-kubeconfigs \
     -o jsonpath="{.data.${KEY//./\\.}}" | base64 -d > "/tmp/$KEY"
   [ -s "/tmp/$KEY" ] || { echo "FATAL: $KEY empty — refusing to drop a cluster"; exit 1; }
   ARGS+=(--from-file="$KEY=/tmp/$KEY")
 done
 
-kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
-  "${ARGS[@]}" --dry-run=client -o yaml | kubectl --context k3d-loopzero-mgmt apply -f -
+kubectl --context k3d-loopzero-core -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
+  "${ARGS[@]}" --dry-run=client -o yaml | kubectl --context k3d-loopzero-core apply -f -
 
 shred -u /tmp/*.kubeconfig 2>/dev/null || rm -f /tmp/*.kubeconfig
 
 # 4. Force loopzero-api to reload the kubeconfig.
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-api
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-api
 ```
 
 ## Validation
@@ -89,10 +89,10 @@ kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/lo
 After the rollout completes:
 
 ```bash
-POD=$(kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods -l app=loopzero-api \
+POD=$(kubectl --context k3d-loopzero-core -n loopzero-system get pods -l app=loopzero-api \
   -o jsonpath='{.items[0].metadata.name}')
 
-kubectl --context k3d-loopzero-mgmt -n loopzero-system logs $POD | \
+kubectl --context k3d-loopzero-core -n loopzero-system logs $POD | \
   grep -E "argo step watcher: (started|terminal cache loaded)"
 ```
 

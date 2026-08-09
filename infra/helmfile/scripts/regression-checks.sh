@@ -16,7 +16,7 @@ DOMAIN="${1:-${LOOPZERO_DOMAIN:-dev.loopzero.example}}"
 # suite pointed at the wrong cluster does not fail, it reports PASS about a
 # cluster nobody asked about — a green light with no meaning. Override
 # KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 PASS=0

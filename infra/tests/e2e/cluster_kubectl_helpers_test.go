@@ -7,7 +7,7 @@
 //
 // Motivation (feedback_velero_must_be_in_drill, 2026-05-20):
 // before this helper, every journey/edge spec hardcoded
-// `kubectl --context k3d-loopzero-mgmt` (or build/workload equivalents). On
+// `kubectl --context k3d-loopzero-core` (or build/workload equivalents). On
 // drill DOKS those contexts do not exist — the test silently SKIPPED or
 // timed out, masking real prod-parity gaps. This file centralizes the
 // env detection so a single var (LOOPZERO_TEST_ENV=drill + DRILL_KUBECONFIG_DIR

@@ -97,7 +97,7 @@ No manual `task` invocations needed.
 ```bash
 # Re-run helmfile sync for the affected release
 cd infra/helmfile
-helmfile -e standalone-multi --kube-context k3d-loopzero-mgmt --selector name=X sync
+helmfile -e standalone-multi --kube-context k3d-loopzero-core --selector name=X sync
 
 # OR easier: rebuild from setup state
 task infra:install:mgmt

@@ -38,7 +38,7 @@ echo ""
 # Port-forward mode
 PF_PID=""
 if [[ -n "${LOOPZERO_USE_PORT_FORWARD:-}" ]]; then
-  CONTEXT="${LOOPZERO_MGMT_CONTEXT:-do-sfo3-loopzero-infra-dev-sfo3-mgmt}"
+  CONTEXT="${LOOPZERO_CORE_CONTEXT:-do-sfo3-loopzero-infra-dev-sfo3-mgmt}"
   echo "  Starting port-forward (context: $CONTEXT)..."
   kubectl --context="$CONTEXT" -n loopzero-system port-forward svc/loopzero-api 18080:8080 &
   PF_PID=$!

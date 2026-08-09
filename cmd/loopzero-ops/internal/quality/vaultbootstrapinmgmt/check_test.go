@@ -30,11 +30,11 @@ tasks:
   k3d:vault:bootstrap:
     desc: Bootstrap OpenBao on the loopzero-vault k3d cluster (canonical).
     cmds:
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
       - kubectl --context k3d-loopzero-vault wait deployment/cert-manager --for=condition=Available --timeout=180s
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=openbao-cert sync
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=openbao sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=openbao-cert sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-vault --selector name=openbao sync
       - kubectl --context k3d-loopzero-vault wait pod -l app=openbao --for=condition=Ready --timeout=180s
 
   k3d:vault:bootstrap-in-mgmt:
@@ -44,18 +44,18 @@ tasks:
       isolation for dev-public; prod cutover MUST use the canonical
       k3d:vault:bootstrap task instead.
     cmds:
-      - test -z "$(kubectl config get-contexts -o name | grep '^k3d-loopzero-mgmt$')" && { echo "run task setup first"; exit 1; } || true
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-mgmt --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-mgmt --selector name=cluster-issuer sync
-      - kubectl --context k3d-loopzero-mgmt wait deployment/cert-manager --for=condition=Available --timeout=180s
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-mgmt --selector name=openbao-cert sync
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-mgmt --selector name=openbao sync
-      - kubectl --context k3d-loopzero-mgmt wait pod -l app=openbao --for=condition=Ready --timeout=180s
+      - test -z "$(kubectl config get-contexts -o name | grep '^k3d-loopzero-core$')" && { echo "run task setup first"; exit 1; } || true
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=cluster-issuer sync
+      - kubectl --context k3d-loopzero-core wait deployment/cert-manager --for=condition=Available --timeout=180s
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=openbao-cert sync
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=openbao sync
+      - kubectl --context k3d-loopzero-core wait pod -l app=openbao --for=condition=Ready --timeout=180s
 
   k3d:vault:status-in-mgmt:
     desc: Status of OpenBao in mgmt cluster.
     cmds:
-      - kubectl --context k3d-loopzero-mgmt -n openbao exec -it openbao-0 -- bao status
+      - kubectl --context k3d-loopzero-core -n openbao exec -it openbao-0 -- bao status
 `
 
 func TestCheck_CanonicalPasses(t *testing.T) {
@@ -76,7 +76,7 @@ func TestCheck_TaskfileMissingFails(t *testing.T) {
 
 func TestCheck_DriftFailsWhenSelectorMissing(t *testing.T) {
 	// Strip the openbao-cert sync from the SHORTCUT only → count drift.
-	body := strings.Replace(canonicalTaskfile, "--selector name=openbao-cert sync\n      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-mgmt", "--selector name=openbao sync\n      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl --kube-context k3d-loopzero-mgmt", 1)
+	body := strings.Replace(canonicalTaskfile, "--selector name=openbao-cert sync\n      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core", "--selector name=openbao sync\n      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core", 1)
 	root := writeFixture(t, body)
 	_, err := Check(Config{RepoRoot: root})
 	if !errors.Is(err, ErrViolations) {
@@ -87,7 +87,7 @@ func TestCheck_DriftFailsWhenSelectorMissing(t *testing.T) {
 func TestCheck_ContextLeakageFails(t *testing.T) {
 	// Leak k3d-loopzero-vault into the shortcut body.
 	body := strings.Replace(canonicalTaskfile,
-		"kubectl --context k3d-loopzero-mgmt wait pod -l app=openbao",
+		"kubectl --context k3d-loopzero-core wait pod -l app=openbao",
 		"kubectl --context k3d-loopzero-vault wait pod -l app=openbao",
 		1) // only in shortcut (the LAST kubectl wait line is in shortcut)
 	root := writeFixture(t, body)
