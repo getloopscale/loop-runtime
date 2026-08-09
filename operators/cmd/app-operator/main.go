@@ -156,7 +156,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := app.SetupExposureController(mgr); err != nil {
+	// #277: o ExposureController precisa do mesmo factory que o ApplicationController —
+	// o Secret TLS que ele procura vive na cell do workload, não neste cluster.
+	if err := app.SetupExposureController(mgr, app.ExposureControllerConfig{
+		RuntimeFactory: appFactory,
+	}); err != nil {
 		setupLog.Error(err, "unable to setup ExposureController")
 		os.Exit(1)
 	}

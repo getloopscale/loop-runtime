@@ -5,6 +5,8 @@ package manifests
 
 import (
 	"fmt"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"strings"
 )
 
@@ -45,7 +47,16 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)
 	// Cert + IngressRoute names use the project-scoped resource name so two
 	// projects with same app name don't share a cert secret (Achado #17).
-	tlsSecretName := fmt.Sprintf("tls-%s", resName)
+	//
+	// #277: o nome vem de naming.AppCertSecretName, não de um Sprintf local. O exposure
+	// controller precisa procurar exatamente este Secret, e derivar o mesmo nome por duas
+	// fórmulas diferentes foi o que manteve todo ExposedRoute em Pending por 27 dias.
+	tlsSecretName, certErr := naming.AppCertSecretName(ri.ProjectID, app.Name)
+	if certErr != nil {
+		// Fail-loud: um nome inválido aqui produziria um Certificate que o controller
+		// nunca encontraria — exatamente o modo de falha silenciosa da #277.
+		panic(fmt.Sprintf("render: cert secret name for %s/%s: %v", ri.ProjectID, app.Name, certErr))
+	}
 
 	cert := certManagerCertificate{
 		APIVersion: "cert-manager.io/v1",

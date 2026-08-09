@@ -67,6 +67,11 @@ type ExposureReconciler struct {
 	Scheme                *runtime.Scheme
 	HTTPClient            *http.Client
 	AllowProbeURLOverride bool // only true in test environments (SEC-005: prevents SSRF via annotation)
+
+	// RuntimeFactory resolves a client for the cell where the workload runs. The TLS
+	// secret lives there, next to the app — not in this cluster. Nil means the check
+	// degrades to "not ready", which is the honest answer when we cannot look (#277).
+	RuntimeFactory reconcilehelpers.RuntimeClientFactory
 }
 
 // exposureDetailTypes per ADR-0025 D3.
@@ -289,23 +294,75 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
-// checkCertificateReady checks if the TLS certificate secret exists.
-// If TLS is disabled, returns true (no certificate needed).
+// checkCertificateReady reports whether the TLS certificate secret exists in the cell
+// where the workload runs. If TLS is disabled, returns true (no certificate needed).
+//
+// # WHERE IT LOOKS, AND WHY THAT WAS WRONG
+//
+// It used to call r.Get on route.Namespace with a name derived from the hostname. Both
+// were wrong: the ExposedRoute lives in loopzero-system on the MGMT cluster, while the Secret
+// is created by the manifest renderer in the tenant namespace on the WORKLOAD cluster,
+// under the name tls-{project}-{app}. A Get against a Secret that cannot exist returns
+// NotFound, the function returned false, and the route logged "certificate not ready,
+// requeuing" every 30s — for 27 days in app-dev, with a valid certificate sitting beside
+// the pods (issue #277).
+//
+// The lookup now walks the same chain reconcileWorkloadStatus already walks:
+// ExposedRoute -> LoopZeroApplication -> Tenant -> cellID -> runtime client -> tenant namespace.
+//
+// Every failure along that chain logs. The previous silence is what let a wrong lookup
+// look like a pending certificate for four weeks.
 func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *loopzerov1.ExposedRoute) bool {
 	if !route.Spec.TLS.Enabled {
 		return true
 	}
+	logger := log.FromContext(ctx)
 
-	secretName, err := naming.CertSecretName(route.Spec.Hostname)
-	if err != nil {
+	if r.RuntimeFactory == nil {
+		logger.Info("cert check: no runtime factory — cannot look where the secret lives",
+			"route", route.Name)
 		return false
 	}
-	var secret corev1.Secret
-	key := types.NamespacedName{
-		Name:      secretName,
-		Namespace: route.Namespace,
+
+	var app loopzerov1.LoopZeroApplication
+	appKey := types.NamespacedName{Name: route.Spec.ApplicationRef, Namespace: route.Namespace}
+	if err := r.Get(ctx, appKey, &app); err != nil {
+		logger.Info("cert check: LoopZeroApplication not readable",
+			"route", route.Name, "application", route.Spec.ApplicationRef, "error", err)
+		return false
 	}
-	if err := r.Get(ctx, key, &secret); err != nil {
+
+	var tenant loopzerov1.Tenant
+	if err := r.Get(ctx, types.NamespacedName{Name: app.Spec.TenantRef, Namespace: route.Namespace}, &tenant); err != nil {
+		logger.Info("cert check: Tenant not readable",
+			"route", route.Name, "tenant", app.Spec.TenantRef, "error", err)
+		return false
+	}
+
+	workloadClient, err := r.RuntimeFactory.For(ctx, tenant.Spec.CellID)
+	if err != nil {
+		logger.Info("cert check: runtime client unavailable",
+			"route", route.Name, "cell_id", tenant.Spec.CellID, "error", err)
+		return false
+	}
+
+	ns, err := naming.Namespace(tenant.Name, app.Spec.Project, app.Spec.Environment)
+	if err != nil {
+		logger.Info("cert check: namespace compute failed",
+			"route", route.Name, "project", app.Spec.Project, "error", err)
+		return false
+	}
+	secretName, err := naming.AppCertSecretName(app.Spec.Project, app.Spec.ServiceName)
+	if err != nil {
+		logger.Info("cert check: secret name compute failed",
+			"route", route.Name, "project", app.Spec.Project, "error", err)
+		return false
+	}
+
+	var secret corev1.Secret
+	if err := workloadClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: ns}, &secret); err != nil {
+		logger.Info("cert check: TLS secret not found in the workload cell",
+			"route", route.Name, "secret", secretName, "namespace", ns, "error", err)
 		return false
 	}
 	return secret.Type == corev1.SecretTypeTLS
@@ -352,6 +409,11 @@ type ExposureControllerConfig struct {
 	// AllowProbeURLOverride enables the loopzero.io/probe-url-override annotation.
 	// Must only be true in test environments (SEC-005: prevents SSRF).
 	AllowProbeURLOverride bool
+
+	// RuntimeFactory resolves the client for the cell where the workload — and its
+	// TLS secret — actually lives. Without it the cert check cannot look in the right
+	// place and reports not-ready, which is the honest answer (#277).
+	RuntimeFactory reconcilehelpers.RuntimeClientFactory
 }
 
 // SetupExposureController registers the ExposureController with the manager.
@@ -368,5 +430,6 @@ func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig)
 			Scheme:                mgr.GetScheme(),
 			HTTPClient:            httpclient.NewWithTimeout(constants.ProbeTimeout),
 			AllowProbeURLOverride: cfg.AllowProbeURLOverride,
+			RuntimeFactory:        cfg.RuntimeFactory,
 		})
 }

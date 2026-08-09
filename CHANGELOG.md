@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O certificado TLS de um serviço voltou a ser reconhecido. O sistema procurava o
+  certificado no cluster errado e com um nome que ninguém usava, então o endereço público
+  ficava marcado como "aguardando certificado" para sempre — em um caso, 27 dias, com o
+  certificado emitido e válido ao lado da aplicação (#277)
+
 - O status de cada serviço voltou a ser lido de verdade. O componente que acompanha os
   contêineres não recebia acesso ao ambiente onde eles rodam, então desistia em silêncio e
   o deploy ficava marcado como "em andamento" indefinidamente — em um caso, por 26 dias,
