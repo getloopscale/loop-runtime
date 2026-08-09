@@ -9,10 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Registro de manutenção deste repositório (`BACKLOG.md`), com dois itens abertos: corrigir os nomes
-  dos quatro clusters da plataforma, que hoje descrevem coisas diferentes do que realmente são
-  (`B-001`), e medir o raio de explosão do cluster que concentra login, deploy, build e rollback
-  (`B-002`) (BACKLOG.md B-001, B-002)
+- Registro de manutenção deste repositório (`BACKLOG.md`), com cinco itens abertos, e o plano aprovado
+  para renomear os dois clusters cujo nome descreve algo diferente do que eles são: o que hospeda o
+  produto inteiro e o que guarda os segredos (BACKLOG.md B-001, B-002, B-005)
 
 ### Fixed
 
