@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING —** quem instala o chart `loopzero-api` e informa o kubeconfig do cluster central passa a usar
+  a chave `secrets.coreKubeconfig`; ela se chamava `secrets.mgmtKubeconfig`. O cluster mudou de nome e a
+  chave acompanhou, senão ela e a variável de ambiente que ela alimenta diriam coisas diferentes
+  (BACKLOG.md B-001)
+- O arquivo que declara de onde os segredos são lidos passou a se chamar pelo recurso que ele declara,
+  em vez de pelo nome antigo do cluster (BACKLOG.md B-001)
 - O inventário de verificações automáticas deixou de morar num arquivo cujo nome promete ser o retrato
   de uma data — ele era reescrito a cada verificação nova, então quem o abrisse esperando julho
   encontrava agosto. O arquivo datado voltou a conter o que continha na data (BACKLOG.md B-006)
@@ -37,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   instalam o ferramental como plugin. Ele citava caminhos de outro formato de instalação, então a
   suíte ficava vermelha em todo projeto consumidor — e suíte cronicamente vermelha ensina o time a
   ignorar vermelho (BACKLOG.md B-004)
+- A verificação que protege a renomeação parou de acusar arquivos que apenas mudaram de lugar. Ela
+  cobrava que cada linha continuasse no mesmo caminho, quando o que ela precisa garantir é que a linha
+  continue existindo — mover um arquivo é prática normal e virava acusação falsa (BACKLOG.md B-001)
 
 ### Removed
 
