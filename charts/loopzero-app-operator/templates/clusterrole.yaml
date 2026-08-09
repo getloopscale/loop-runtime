@@ -17,6 +17,15 @@ rules:
     resources: ["loopzeroapplications/finalizers", "exposedroutes/finalizers"]
     verbs: ["update"]
 
+  # --- Tenant: read-only, para resolver o cellID ---
+  # reconcileWorkloadStatus faz um Get no Tenant CR antes de consultar o workload, para
+  # descobrir em qual cell ele roda. Sem esta regra o Get falha e a função retorna sem
+  # contar réplicas — toda LoopZeroApplication fica em Progressing para sempre (#274). O
+  # operator nunca escreve Tenant, então get/list/watch basta.
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants"]
+    verbs: ["get", "list", "watch"]
+
   # --- Secrets: TLS cert check only, read-only ---
   - apiGroups: [""]
     resources: ["secrets"]
