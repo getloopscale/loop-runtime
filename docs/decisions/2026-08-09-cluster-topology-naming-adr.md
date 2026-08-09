@@ -63,7 +63,7 @@ arquivos, 122 de `build-cluster` em 69.
 
 ### `fleet` para o cluster de CAPI, e `mgmt` em quarentena
 
-O cluster de gerenciamento de ciclo de vida (AM5, `loopzero-workspace/ROADMAP_AWS.md:79`, hoje `[ ]`) nasce
+O cluster de gerenciamento de ciclo de vida (AM5, `ROADMAP_AWS.md:79` no umbrella `loopzero-workspace`, hoje `[ ]`) nasce
 como **`fleet`**. Não se recicla `mgmt` para ele, ainda que o CAPI chame o dele de *management cluster*:
 um nome que acabou de mudar de dono fica ambíguo em todo log, runbook e ticket antigo por meses, e a
 ambiguidade cai justamente sobre quem está lendo um incidente antigo sob pressão.
