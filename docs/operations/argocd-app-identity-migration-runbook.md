@@ -55,30 +55,62 @@ kubectl --context $CTX -n loopzero-system get tenants \
 Para cada tenant, o conjunto canônico é `{tenant}-{project}-{env}` para cada entrada de
 `spec.environments`. Todo App do tenant fora desse conjunto é legado.
 
-### 3. Orfanar e deletar — nesta ordem, no mesmo bloco
+### 3. Parar quem repõe os finalizers — o passo que faltava
+
+> **Corrigido em 2026-08-09, depois de executar este runbook em `app-dev`.** A versão
+> anterior mandava orfanar e deletar direto. **Não funciona**: o patch aplica, e o
+> controller repõe o finalizer no reconcile seguinte, em segundos. Medido — os oito
+> objetos voltaram com `resources-finalizer.argocd.argoproj.io` e
+> `loopzero.io/environment-cleanup` antes do delete.
+>
+> O `EnsureFinalizer` do `EnvironmentReconciler` e o `buildApplicationObject` do
+> provisioner recolocam. Enquanto eles rodam, orfanar é um no-op com aparência de
+> sucesso — o pior tipo de passo de runbook.
 
 ```bash
-APP=<nome-legado>
+kubectl --context $CTX -n loopzero-system scale deploy/loopzero-tenant-operator --replicas=0
+kubectl --context $CTX -n loopzero-system rollout status deploy/loopzero-tenant-operator --timeout=90s
 
-# (a) orfanar: remove o finalizer de cascade. Sem este passo, o delete abaixo
-#     apaga o workload do tenant.
-kubectl --context $CTX -n argocd patch application "$APP" \
-  --type=merge -p '{"metadata":{"finalizers":[]}}'
-
-# (b) confirmar que o finalizer saiu ANTES de deletar
-kubectl --context $CTX -n argocd get application "$APP" \
-  -o jsonpath='{.metadata.finalizers}'   # deve imprimir vazio ou []
-
-# (c) só então deletar
-kubectl --context $CTX -n argocd delete application "$APP"
+# confirme que zerou de verdade antes de prosseguir
+kubectl --context $CTX -n loopzero-system get pods -l app.kubernetes.io/name=loopzero-tenant-operator
 ```
 
-Se o passo (b) ainda mostrar o finalizer, **pare**. Repita (a); não prossiga para (c).
-
-### 4. Subir o operator novo e confirmar a adoção
+### 4. Orfanar — agora persiste
 
 ```bash
-kubectl --context $CTX -n loopzero-system rollout restart deploy/loopzero-tenant-operator
+for A in $(kubectl --context $CTX -n argocd get applications -o name | cut -d/ -f2); do
+  kubectl --context $CTX -n argocd patch application "$A" \
+    --type=merge -p '{"metadata":{"finalizers":[]}}'
+done
+for E in $(kubectl --context $CTX -n loopzero-system get environments -o name | cut -d/ -f2); do
+  kubectl --context $CTX -n loopzero-system patch environment "$E" \
+    --type=merge -p '{"metadata":{"finalizers":[]}}'
+done
+```
+
+**Verifique que nenhum voltou** antes de seguir. Se algum finalizer reaparecer, o operator
+ainda está de pé — volte ao passo 3.
+
+### 5. Deletar os legados
+
+Sem finalizer, o delete não cascateia na `Application` e não dispara o `reconcileDelete`
+do `Environment` (que apagaria o namespace):
+
+```bash
+for A in $(kubectl --context $CTX -n argocd get applications -o name | cut -d/ -f2); do
+  kubectl --context $CTX -n argocd delete application "$A" --wait=false
+done
+for E in $(kubectl --context $CTX -n loopzero-system get environments -o name | cut -d/ -f2); do
+  kubectl --context $CTX -n loopzero-system delete environment "$E" --wait=false
+done
+```
+
+Confirme a contagem de pods do passo 1 **antes** de subir o operator.
+
+### 6. Subir o operator novo e confirmar a adoção
+
+```bash
+kubectl --context $CTX -n loopzero-system scale deploy/loopzero-tenant-operator --replicas=2
 kubectl --context $CTX -n loopzero-system rollout status  deploy/loopzero-tenant-operator
 
 # os Apps canônicos aparecem e adotam os recursos órfãos
@@ -88,6 +120,20 @@ kubectl --context $CTX -n argocd get applications \
 # a contagem de pods NÃO pode ter caído em relação ao passo 1
 kubectl --context $CTX get pods -A --no-headers | grep '^loopzero-tn-' | awk '{print $1}' | sort | uniq -c
 ```
+
+## Execução de referência — `app-dev`, 2026-08-09
+
+Este runbook foi executado uma vez, e o registro fica aqui porque a primeira versão dele
+estava errada:
+
+| | Antes | Depois |
+|---|---|---|
+| Applications | 5, todas de nome legado | 10 canônicas, `path={env}/{project}` |
+| Environment CRs | 4 | 9 |
+| Pods / namespaces | 10 / 10 | **10 / 10** |
+
+Zero downtime. Os 9 `Environment` CRs contra 4 são a medida do #273: os projetos que não
+tinham namespace, RBAC nem NetworkPolicy passaram a ter.
 
 ## Rollback
 

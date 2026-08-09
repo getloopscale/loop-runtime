@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O status de cada serviço voltou a ser lido de verdade. O componente que acompanha os
+  contêineres não recebia acesso ao ambiente onde eles rodam, então desistia em silêncio e
+  o deploy ficava marcado como "em andamento" indefinidamente — em um caso, por 26 dias,
+  com o serviço no ar. O acesso estava implementado e apenas desligado (#274)
+
 - Promover um deploy entre ambientes deixou de poder mandá-lo para um endereço inexistente.
   Quando o projeto não era informado, o sistema reescrevia os arquivos de configuração para
   o formato antigo de endereço, sem erro — e o deploy ia para o vazio. Agora falha na hora,
