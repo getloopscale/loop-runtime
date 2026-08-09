@@ -25,7 +25,7 @@ import (
 // k3d-loopzero-secrets cluster (Jeito A per cleanroom-up-live-test-mandate.md).
 //
 // Cross-cluster discovery:
-//  1. Vault Service `openbao.vault-system` in the vault cluster → https NodePort
+//  1. Vault Service `openbao.secrets-system` in the vault cluster → https NodePort
 //  2. `docker inspect` on `k3d-loopzero-secrets-serverlb` for the container IP
 //
 // D1 exemption: `docker inspect` is a READ-ONLY container introspection —
@@ -40,7 +40,7 @@ func (s *VaultCrossClusterAddrSeed) Name() string { return "vault-cross-cluster-
 
 const (
 	vaultContextName        = "k3d-loopzero-secrets"
-	vaultNamespace          = "vault-system"
+	vaultNamespace          = "secrets-system"
 	openbaoServiceName      = "openbao"
 	openbaoHTTPSPortName    = "https"
 	vaultServerLBContainer  = "k3d-loopzero-secrets-serverlb"
@@ -114,7 +114,7 @@ func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
 }
 
 // vaultServiceHTTPSNodePort returns the openbao Service's https NodePort in the
-// vault-system namespace of the vault cluster.
+// secrets-system namespace of the vault cluster.
 func vaultServiceHTTPSNodePort(ctx context.Context, k KubeClient) (int32, error) {
 	// KubeClient has no Get-Service today; use the underlying ctrl.Client via a
 	// tiny helper. We shim through the interface by asking for the raw client.

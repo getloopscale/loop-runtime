@@ -8,7 +8,7 @@
 # Pre-reqs (operator-time):
 #   1. loopzero-secrets cluster up + openbao-init Job completed (Vault role
 #      `bao-snapshot` provisioned via openbao-init authRoles extension)
-#   2. K8s Secret `openbao-snapshot-s3-creds` em vault-system NS contendo
+#   2. K8s Secret `openbao-snapshot-s3-creds` em secrets-system NS contendo
 #      AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (DO Spaces creds from
 #      ~/.openbao-<env>-resources.env per SCRIPT.5)
 #

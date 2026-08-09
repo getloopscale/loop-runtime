@@ -32,7 +32,7 @@ const canonical = `# dev-public overlay — post-T1.2 workload identity (issue #
 # Cross-cluster topology: loopzero-secrets (separate cluster).
 openbaoTransit:
   enabled: false
-  server: "https://openbao.vault-system.svc.cluster.local:8200"
+  server: "https://openbao.secrets-system.svc.cluster.local:8200"
   auth:
     kind: "kubernetes"
     kubernetes:

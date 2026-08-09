@@ -97,7 +97,7 @@ kubectl --context k3d-loopzero-core apply \
   -f infra/manifests/cluster-secret-stores/eso-vault-reader-sa.yaml
 
 # 3. Extract Vault CA cert + create ConfigMap on mgmt cluster
-VAULT_CA=$(kubectl --context k3d-loopzero-secrets -n vault-system \
+VAULT_CA=$(kubectl --context k3d-loopzero-secrets -n secrets-system \
   get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d)
 kubectl --context k3d-loopzero-core -n external-secrets create configmap loopzero-secrets-ca \
   --from-literal=ca.crt="$VAULT_CA" \
@@ -110,7 +110,7 @@ kubectl --context k3d-loopzero-core apply \
 # 5. Seed initial secrets in Vault (one-time per env)
 # Use seed-loopzero-secrets.sh script (T8.1 follow-up; for now manual):
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN
 bao kv put secret/loopzero/vault-local/api/secrets/gitea/token value=<actual>
 bao kv put secret/loopzero/vault-local/api/secrets/minio/access_key value=<actual>
@@ -157,7 +157,7 @@ stderr output.
 ```bash
 # Step 1: Update Vault (single SoT — Vault is canonical)
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN
 bao kv put secret/loopzero/<env>/api/secrets/gitea/token value=<new-token>
 "
@@ -244,7 +244,7 @@ bash infra/scripts/openbao/enable-vault-backup.sh --env <env>
 # ONLY char counts (security invariant: never raw values).
 
 # Inspect logs after first run:
-kubectl --context k3d-loopzero-secrets -n vault-system logs \
+kubectl --context k3d-loopzero-secrets -n secrets-system logs \
   -l app=openbao-snapshot-agent --tail=50
 ```
 
@@ -257,7 +257,7 @@ kubectl --context k3d-loopzero-secrets -n vault-system logs \
 
 # Provision DO Spaces creds Secret (operator-time, from
 # ~/.openbao-<env>-resources.env per SCRIPT.5)
-kubectl --context k3d-loopzero-secrets -n vault-system create secret generic \
+kubectl --context k3d-loopzero-secrets -n secrets-system create secret generic \
   openbao-snapshot-s3-creds \
   --from-literal=AWS_ACCESS_KEY_ID=$OPENBAO_BACKUP_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$OPENBAO_BACKUP_SECRET_ACCESS_KEY
@@ -267,11 +267,11 @@ helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e <env> \
   --selector name=openbao-snapshot-agent sync
 
 # Verify
-kubectl --context k3d-loopzero-secrets -n vault-system get cronjob openbao-snapshot
+kubectl --context k3d-loopzero-secrets -n secrets-system get cronjob openbao-snapshot
 # Wait for first run
-kubectl --context k3d-loopzero-secrets -n vault-system get pods | grep openbao-snapshot
+kubectl --context k3d-loopzero-secrets -n secrets-system get pods | grep openbao-snapshot
 # Inspect logs
-kubectl --context k3d-loopzero-secrets -n vault-system logs <pod-name>
+kubectl --context k3d-loopzero-secrets -n secrets-system logs <pod-name>
 ```
 
 ## P5 — Disaster recovery (restore from snapshot)

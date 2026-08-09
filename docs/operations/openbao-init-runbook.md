@@ -44,14 +44,14 @@ title: "Runbook: OpenBao Init Ceremony"
 
 ```bash
 # From operator machine with mgmt cluster kubeconfig:
-kubectl -n vault-system get pods -l app.kubernetes.io/name=openbao
+kubectl -n secrets-system get pods -l app.kubernetes.io/name=openbao
 # Expected: openbao-{0,1,2} Running 1/1 (or pending if size=1 in standalone)
 
 # Port-forward + check seal status (expect Sealed: true, Initialized: false)
-kubectl -n vault-system port-forward svc/openbao 8200:8200 &
+kubectl -n secrets-system port-forward svc/openbao 8200:8200 &
 export VAULT_ADDR=https://localhost:8200
 export VAULT_CACERT=/tmp/openbao-ca.pem
-kubectl -n vault-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/openbao-ca.pem
+kubectl -n secrets-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/openbao-ca.pem
 bao status
 # Expected output BEFORE init:
 #   Sealed:    true

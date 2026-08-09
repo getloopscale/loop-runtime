@@ -9,7 +9,7 @@
 # OpenBao endpoint (Service ClusterIP, port from chart oficial)
 openbao:
   serviceName: openbao
-  serviceNamespace: vault-system
+  serviceNamespace: secrets-system
   port: 8200
   scheme: http  # vault-local uses tlsDisable; prod overrides to https
   # Reference to existing Secret with ca.crt key (typically the openbao-tls
@@ -278,7 +278,7 @@ authRoles:
     boundServiceAccountNames:
       - bao-snapshot
     boundServiceAccountNamespaces:
-      - vault-system
+      - secrets-system
     policies:
       - snapshot
     ttl: "1h"
@@ -298,7 +298,7 @@ authRoles:
     boundServiceAccountNames:
       - vault-spki-extractor
     boundServiceAccountNamespaces:
-      - vault-system
+      - secrets-system
     policies:
       - spki-extractor-write
     ttl: "1h"
@@ -421,7 +421,7 @@ transitKeys:
     type: aes256-gcm96
     mount: transit
 
-# T2.5 SPKI extractor config — CronJob runs in vault-system NS, extracts SPKI
+# T2.5 SPKI extractor config — CronJob runs in secrets-system NS, extracts SPKI
 # hash from openbao-tls Secret tls.crt, writes to KV path
 # secret/data/loopzero/<env>/platform/secrets/vault-spki-pin/spki_hash.
 # ESO mgmt-side reads this path → materializes K8s Secret vault-spki-pin in

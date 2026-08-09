@@ -654,7 +654,7 @@ func TestValidate_TransitEnabledRequiresAddr(t *testing.T) {
 func TestValidate_TransitEnabledRequiresRoleID(t *testing.T) {
 	c := minProdConfig(t)
 	c.OpenBaoTransitEnabled = true
-	c.OpenBaoVaultAddr = "https://openbao.vault-system.svc:8200"
+	c.OpenBaoVaultAddr = "https://openbao.secrets-system.svc:8200"
 	c.OpenBaoVaultRoleID = "" // missing
 	c.OpenBaoVaultSecretID = "sid"
 
@@ -672,7 +672,7 @@ func TestValidate_TransitEnabledRequiresRoleID(t *testing.T) {
 func TestValidate_TransitEnabledRequiresSecretID(t *testing.T) {
 	c := minProdConfig(t)
 	c.OpenBaoTransitEnabled = true
-	c.OpenBaoVaultAddr = "https://openbao.vault-system.svc:8200"
+	c.OpenBaoVaultAddr = "https://openbao.secrets-system.svc:8200"
 	c.OpenBaoVaultRoleID = "rid"
 	c.OpenBaoVaultSecretID = "" // missing
 
@@ -691,7 +691,7 @@ func TestValidate_TransitEnabledRequiresSecretID(t *testing.T) {
 func TestValidate_TransitConfigCompletePasses(t *testing.T) {
 	c := minProdConfig(t)
 	c.OpenBaoTransitEnabled = true
-	c.OpenBaoVaultAddr = "https://openbao.vault-system.svc:8200"
+	c.OpenBaoVaultAddr = "https://openbao.secrets-system.svc:8200"
 	c.OpenBaoVaultRoleID = "rid"
 	c.OpenBaoVaultSecretID = "sid"
 
@@ -717,7 +717,7 @@ func TestValidate_TransitDisabledIgnoresVaultVars(t *testing.T) {
 // correctly. Defaults: enabled=false, all strings empty.
 func TestLoad_OpenBaoTransitFromEnv(t *testing.T) {
 	t.Setenv("OPENBAO_TRANSIT_ENABLED", "true")
-	t.Setenv("OPENBAO_VAULT_ADDR", "https://openbao.vault-system.svc:8200")
+	t.Setenv("OPENBAO_VAULT_ADDR", "https://openbao.secrets-system.svc:8200")
 	t.Setenv("OPENBAO_VAULT_ROLE_ID", "rid-abc")
 	t.Setenv("OPENBAO_VAULT_SECRET_ID", "sid-xyz")
 	t.Setenv("OPENBAO_SPKI_PIN_SHA256", "deadbeef")
@@ -727,7 +727,7 @@ func TestLoad_OpenBaoTransitFromEnv(t *testing.T) {
 	if !cfg.OpenBaoTransitEnabled {
 		t.Error("OpenBaoTransitEnabled: want true (parsed from env)")
 	}
-	if cfg.OpenBaoVaultAddr != "https://openbao.vault-system.svc:8200" {
+	if cfg.OpenBaoVaultAddr != "https://openbao.secrets-system.svc:8200" {
 		t.Errorf("OpenBaoVaultAddr: got %q", cfg.OpenBaoVaultAddr)
 	}
 	if cfg.OpenBaoVaultRoleID != "rid-abc" {

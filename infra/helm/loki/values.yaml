@@ -39,12 +39,12 @@ loki:
     retention_period: 168h                   # 7 days (default)
     # T8.2 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
     # streams require 90-day retention for forensic + compliance review.
-    # Selector matches Vault server pod (vault-system NS). Higher priority
+    # Selector matches Vault server pod (secrets-system NS). Higher priority
     # overrides the default 168h. Other audit-bearing namespaces can be
     # added here (e.g., argocd, loopzero-system) as separate retention_stream
     # entries.
     retention_stream:
-      - selector: '{namespace="vault-system"}'
+      - selector: '{namespace="secrets-system"}'
         priority: 1
         period: 2160h                        # 90 days
     max_query_series: 500

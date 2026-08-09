@@ -115,7 +115,7 @@ kubeContexts:
 # of static token env var. Disabled by default (vault stack opt-in per env).
 vault:
   enabled: false
-  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  addr: "https://openbao.secrets-system.svc.cluster.local:8200"
   authMount: "k8s-mgmt"
   role: "loopzero-api"
   audience: "vault.loopzero.io"
@@ -176,13 +176,13 @@ serviceAuthEd25519:
 
 # T3.3 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — egress
 # NetworkPolicy scoped to loopzero-api pods that allows TCP/8200 ONLY to the
-# openbao pod(s) in vault-system. Disabled by default to preserve back-
+# openbao pod(s) in secrets-system. Disabled by default to preserve back-
 # wards compatibility with environments where network policy is not yet
 # enforced; flip to true once the default-deny-egress baseline ships.
 networkPolicy:
   vaultEgress:
     enabled: false
-    namespace: vault-system
+    namespace: secrets-system
     podName: openbao
     port: 8200
 

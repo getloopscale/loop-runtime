@@ -4,7 +4,7 @@
 // T8.2 — Loki per-namespace retention:
 //
 //	infra/helm/loki/values.yaml has retention_stream with
-//	selector='{namespace="vault-system"}' period=2160h (90 days)
+//	selector='{namespace="secrets-system"}' period=2160h (90 days)
 //	AND default retention_period remains 168h (7 days for other NS).
 //
 // T8.5 — Archive CronJob:
@@ -12,7 +12,7 @@
 //	infra/helm/monitoring/manifests/cronjob-loki-vault-audit-archive.yaml
 //	renders correctly with: kind: CronJob, schedule="0 4 1 * *",
 //	concurrencyPolicy: Forbid, security hardening, DO Spaces env vars,
-//	logcli + mc invocation pattern targeting vault-system NS.
+//	logcli + mc invocation pattern targeting secrets-system NS.
 //
 // Total 14 assertions (4 T8.2 + 10 T8.5). Pure file-content regex — no
 // helm-template shell-out; both files already committed in the repo tree.
@@ -46,7 +46,7 @@ type assertion struct {
 var t82Assertions = []assertion{
 	{`default retention_period: 168h preserved`, regexp.MustCompile(`retention_period: 168h`)},
 	{`retention_stream array declared`, regexp.MustCompile(`retention_stream:`)},
-	{`selector matches vault-system NS`, regexp.MustCompile(`namespace=\\?"vault-system\\?"`)},
+	{`selector matches secrets-system NS`, regexp.MustCompile(`namespace=\\?"secrets-system\\?"`)},
 	{`period: 2160h (90 days) configured`, regexp.MustCompile(`period: 2160h`)},
 }
 
@@ -62,7 +62,7 @@ var t85Assertions = []assertion{
 	// AWS creds env vars require TWO patterns (compound AND) — evaluated in-line.
 	// Loki-archive-s3-creds Secret reference.
 	{`S3 creds Secret referenced (loki-archive-s3-creds)`, regexp.MustCompile(`(?m)^\s+name: loki-archive-s3-creds`)},
-	{`logcli query targets vault-system NS`, regexp.MustCompile(`namespace=vault-system`)},
+	{`logcli query targets secrets-system NS`, regexp.MustCompile(`namespace=secrets-system`)},
 }
 
 // Config controls the check.

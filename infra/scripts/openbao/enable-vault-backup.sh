@@ -21,7 +21,7 @@
 #     --env vault-local \
 #     [--creds-file ~/.openbao-vault-local-resources.env] \
 #     [--vault-context k3d-loopzero-secrets] \
-#     [--vault-namespace vault-system] \
+#     [--vault-namespace secrets-system] \
 #     [--helmfile-path infra/helmfile/secrets.helmfile.yaml.gotmpl] \
 #     [--dry-run] \
 #     [--skip-helmfile]  # only sync Secret, skip helmfile (manual flip)
@@ -42,7 +42,7 @@ set -uo pipefail
 ENV=""
 CREDS_FILE=""
 SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
-VAULT_NAMESPACE="vault-system"
+VAULT_NAMESPACE="secrets-system"
 HELMFILE_PATH="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helmfile/secrets.helmfile.yaml.gotmpl"
 DRY_RUN=0
 SKIP_HELMFILE=0
@@ -61,7 +61,7 @@ REQUIRED
 OPTIONAL
   --creds-file <path>  Operator creds file (default: ~/.openbao-<env>-resources.env)
   --vault-context <ctx>   kubectl context (default: k3d-loopzero-secrets; env LOOPZERO_SECRETS_CONTEXT)
-  --vault-namespace <ns>  Vault NS (default: vault-system)
+  --vault-namespace <ns>  Vault NS (default: secrets-system)
   --helmfile-path <p>  Path to secrets.helmfile (default: infra/helmfile/secrets.helmfile.yaml.gotmpl)
   --skip-helmfile      Sync Secret only; skip helmfile sync (operator does it manually)
   --dry-run            Print planned actions without executing

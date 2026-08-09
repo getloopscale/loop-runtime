@@ -85,7 +85,7 @@ SKIP_VERIFY=0
 NAMESPACE="loopzero-system"
 CORE_CONTEXT="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
 SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
-VAULT_NAMESPACE="${LOOPZERO_VAULT_NAMESPACE:-vault-system}"
+VAULT_NAMESPACE="${LOOPZERO_VAULT_NAMESPACE:-secrets-system}"
 WAIT_TIMEOUT="${ROTATE_WAIT_TIMEOUT:-300}"  # rollout status timeout (s)
 
 usage() {

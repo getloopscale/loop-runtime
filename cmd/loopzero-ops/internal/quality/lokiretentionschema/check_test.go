@@ -26,7 +26,7 @@ loki:
   limits_config:
     retention_period: 168h
     retention_stream:
-      - selector: '{namespace="vault-system"}'
+      - selector: '{namespace="secrets-system"}'
         period: 2160h
         priority: 10
 `
@@ -74,7 +74,7 @@ loki:
   limits_config:
     retention_period: 168h
     retention_stream:
-      - selector: '{namespace="vault-system"}'
+      - selector: '{namespace="secrets-system"}'
         period: 2160h
         priority: 10
 `
@@ -95,7 +95,7 @@ loki:
   limits_config:
     retention_period: 168h
     retention_stream:
-      - selector: '{namespace="vault-system"}'
+      - selector: '{namespace="secrets-system"}'
         period: 2160h
         priority: "high"
 `
@@ -116,7 +116,7 @@ loki:
   limits_config:
     retention_period: 168h
     retention_stream:
-      - selector: '{namespace="vault-system"}'
+      - selector: '{namespace="secrets-system"}'
         period: 720h
         priority: 10
 `

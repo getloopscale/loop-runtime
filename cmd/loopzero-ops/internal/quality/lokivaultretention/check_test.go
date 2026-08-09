@@ -24,7 +24,7 @@ func writeFile(t *testing.T, path, body string) {
 const canonicalLokiValues = `
 retention_period: 168h
 retention_stream:
-  - selector: '{namespace="vault-system"}'
+  - selector: '{namespace="secrets-system"}'
     period: 2160h
 `
 
@@ -61,7 +61,7 @@ spec:
                 - sh
                 - -c
                 - |
-                  logcli query 'namespace=vault-system' | \
+                  logcli query 'namespace=secrets-system' | \
                     mc cp - loopzero-audit-logs-prod/audit/$(date +%Y%m).log
 `
 
@@ -144,7 +144,7 @@ spec:
               command:
                 - sh
                 - -c
-                - "logcli query namespace=vault-system | mc cp - loopzero-audit-logs-prod/x"
+                - "logcli query namespace=secrets-system | mc cp - loopzero-audit-logs-prod/x"
               volumeMounts: []
       name: loki-archive-s3-creds
 `

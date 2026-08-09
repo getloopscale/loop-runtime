@@ -168,7 +168,7 @@ config:
 
       # ────────────────────────────────────────────────────────────────
       # T8.1 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
-      # scrape. Targets vault-system NS specifically; tags namespace +
+      # scrape. Targets secrets-system NS specifically; tags namespace +
       # pod so VaultAuditLogStalled + VaultPolicyDenialRateHigh alerts
       # can correlate by labels.
       # ────────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ config:
           - role: pod
             namespaces:
               names:
-                - vault-system
+                - secrets-system
         pipeline_stages:
           - cri: {}
           - json:

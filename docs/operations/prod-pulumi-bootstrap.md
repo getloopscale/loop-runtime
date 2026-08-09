@@ -77,7 +77,7 @@ this with `--dry-run` and `--env <stack>` flags (read-only by default).
 
 ```bash
 pulumi config set --stack dev vault:address \
-  https://openbao.vault-system.svc.cluster.local:8200
+  https://openbao.secrets-system.svc.cluster.local:8200
 pulumi config set --stack dev vault:token "$(bao print token)"
 # Production: use Vault K8s auth instead of static token
 # pulumi config set --stack prod vault:authLogin '{"path": "auth/k8s-mgmt/login", "parameters": {"role": "pulumi-ci", "jwt": "..."}}'

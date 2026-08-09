@@ -53,7 +53,7 @@ TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-core}"
 # Backwards-compat alias preserved for inline log lines + helmfile sync
 # selectors that pre-date the T1.1 split. New code MUST use one of the
 # two split variables above.
-NS="${OPENBAO_NAMESPACE:-vault-system}"
+NS="${OPENBAO_NAMESPACE:-secrets-system}"
 POD="${OPENBAO_POD:-openbao-0}"
 UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
 # T2.1 of plan dev-public-cross-cluster-secrets (issue #111).
@@ -72,7 +72,7 @@ UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
 # startup and the EC-3 contract requires the Transit backend to be
 # reachable (sys/health 200) BEFORE main init.
 AUTO_UNSEAL_MODE="${AUTO_UNSEAL_MODE:-shamir}"
-OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.vault-system.svc.cluster.local:8200}"
+OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.secrets-system.svc.cluster.local:8200}"
 # Cleanroom mandate run 2026-06-18 caught Finding #2 (issue #91): the
 # legacy default external-secrets ns put the loopzero-openbao-approle
 # Secret out of reach of loopzero-api Deployment (envFrom reads from

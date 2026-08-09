@@ -48,7 +48,7 @@ SNAPSHOT_KEY=""
 LIST_MODE=0
 EXECUTE=0
 SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
-VAULT_NAMESPACE="vault-system"
+VAULT_NAMESPACE="secrets-system"
 VAULT_POD="openbao-0"
 DO_REGION="${OPENBAO_BACKUP_REGION:-sfo3}"
 S3_ENDPOINT="https://${DO_REGION}.digitaloceanspaces.com"
@@ -73,7 +73,7 @@ MODE (one of)
 OPTIONAL
   --execute              ACTUALLY perform restore (default: dry-run only)
   --vault-context <ctx>  kubectl context (default: k3d-loopzero-secrets)
-  --vault-namespace <ns> Vault NS (default: vault-system)
+  --vault-namespace <ns> Vault NS (default: secrets-system)
   --vault-pod <name>     Vault pod name (default: openbao-0)
   --do-region <r>        DO Spaces region (default: sfo3; env OPENBAO_BACKUP_REGION)
   --help                 Show this help

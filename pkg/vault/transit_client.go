@@ -54,7 +54,7 @@ type Transit interface {
 // TransitConfig configures a TransitClient. Fields are immutable after
 // NewTransitClient returns.
 type TransitConfig struct {
-	// Addr is the OpenBao server URL (e.g. https://openbao.vault-system:8200).
+	// Addr is the OpenBao server URL (e.g. https://openbao.secrets-system:8200).
 	// MUST use https:// in production; http:// is allowed only for tests
 	// via httptest.NewTLSServer where the server URL is generated.
 	Addr string

@@ -218,7 +218,7 @@ tasks:
       - kubectl --context k3d-loopzero-secrets -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=cluster-issuer sync
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=openbao-cert sync
-      - kubectl --context k3d-loopzero-secrets -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
+      - kubectl --context k3d-loopzero-secrets -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=openbao sync
       - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status"
 
@@ -226,13 +226,13 @@ tasks:
     desc: |
       Option (c) shortcut from docs/operations/openbao-transit-cutover-runbook.md
       § Open Question (iter 23 cleanroom-audit 2026-06-10). Deploys OpenBao
-      directly into the EXISTING mgmt cluster's vault-system namespace,
+      directly into the EXISTING mgmt cluster's secrets-system namespace,
       eliminating the cross-cluster reachability gap between loopzero-api
       (mgmt) and OpenBao (would be loopzero-secrets under canonical bootstrap).
 
       Trade-off:
       - PRO: single-cluster service DNS works out of the box
-        (openbao.vault-system.svc.cluster.local:8200), no cross-cluster
+        (openbao.secrets-system.svc.cluster.local:8200), no cross-cluster
         NodePort dance, SPKI pin remains stable.
       - CON: loses isolation between control plane and secret storage.
         Recommended for dev-public iter 1 LIVE only — prod cutover MUST
@@ -258,21 +258,21 @@ tasks:
       - kubectl --context k3d-loopzero-core -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=cluster-issuer sync
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao-cert sync
-      - kubectl --context k3d-loopzero-core -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
+      - kubectl --context k3d-loopzero-core -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao sync
-      - echo "[OK] OpenBao bootstrapped in mgmt cluster vault-system ns (single-cluster mode). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status-in-mgmt"
+      - echo "[OK] OpenBao bootstrapped in mgmt cluster secrets-system ns (single-cluster mode). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status-in-mgmt"
 
   k3d:secrets:status-in-mgmt:
     desc: |
-      Show mgmt cluster vault-system status (sibling of k3d:secrets:status
+      Show mgmt cluster secrets-system status (sibling of k3d:secrets:status
       for option (c) single-cluster OpenBao deployment).
     cmds:
-      - kubectl --context k3d-loopzero-core get pods -n vault-system 2>&1 | head -10
+      - kubectl --context k3d-loopzero-core get pods -n secrets-system 2>&1 | head -10
       - kubectl --context k3d-loopzero-core get pods -n cert-manager 2>&1 | head -5
       - |
         echo ""
         echo "Seal status (port-forward + bao status):"
-        kubectl --context k3d-loopzero-core -n vault-system port-forward svc/openbao 18200:8200 &
+        kubectl --context k3d-loopzero-core -n secrets-system port-forward svc/openbao 18200:8200 &
         PF=$!
         sleep 3
         VAULT_ADDR=https://localhost:18200 VAULT_SKIP_VERIFY=true bao status 2>&1 | head -8 || true
@@ -283,11 +283,11 @@ tasks:
       Show loopzero-secrets cluster status: pods, services, OpenBao seal state.
     cmds:
       - kubectl --context k3d-loopzero-secrets get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
-      - kubectl --context k3d-loopzero-secrets -n vault-system get svc 2>/dev/null || echo "vault-system namespace not present yet"
+      - kubectl --context k3d-loopzero-secrets -n secrets-system get svc 2>/dev/null || echo "secrets-system namespace not present yet"
       - |
-        if kubectl --context k3d-loopzero-secrets -n vault-system get pod openbao-0 >/dev/null 2>&1; then
+        if kubectl --context k3d-loopzero-secrets -n secrets-system get pod openbao-0 >/dev/null 2>&1; then
           echo "--- OpenBao seal status ---"
-          kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
+          kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
         fi
 
   # ---------------------------------------------------------------------------

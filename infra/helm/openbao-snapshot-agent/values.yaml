@@ -18,11 +18,11 @@ concurrencyPolicy: Forbid  # avoid overlapping snapshots if previous still runni
 
 # Vault endpoint reached from snapshot pod (intra-cluster).
 vault:
-  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  addr: "https://openbao.secrets-system.svc.cluster.local:8200"
   authPath: "kubernetes"
   role: "bao-snapshot"  # Vault role provisioned via openbao-init authRoles (Phase 8 follow-up)
   # CA cert for Vault TLS verify (from openbao-cert chart). Mounted via
-  # extraVolumes — Secret openbao-tls already in vault-system NS.
+  # extraVolumes — Secret openbao-tls already in secrets-system NS.
   caSecretName: "openbao-tls"
   caSecretKey: "ca.crt"
 

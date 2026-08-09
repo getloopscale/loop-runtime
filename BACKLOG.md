@@ -90,7 +90,7 @@ dod:
 **O mapa.** `mgmt`/`loopzero-core` → **`core`** (é o produto, não gestão). `workload` + `runtime` como
 cluster → **`cell`**, com `loopzero-workload` → `cell-1` e `loopzero-runtime-2` → `cell-2`, alinhando a infra ao
 vocabulário que o código Go já usa em 137 arquivos (tabela `cells`, `cellID`, `maxPerCell`,
-`K8sCellStore`). `vault`/`loopzero-secrets`/`vault-system` → **`secrets`** (o cluster roda OpenBao, não Vault:
+`K8sCellStore`). `vault`/`loopzero-secrets`/`secrets-system` → **`secrets`** (o cluster roda OpenBao, não Vault:
 `infra/helmfile/secrets.helmfile.yaml.gotmpl` usa o chart `openbao-helm`, appVersion `v2.5.4`, binário
 `bao`). `build`/`loopzero-build` **não muda** — já diz o que é e numera bem. O futuro cluster de CAPI nasce
 como **`fleet`**: registrar no ADR, sem trabalho de rename. **`mgmt` fica em quarentena** — não recicla
@@ -104,9 +104,9 @@ torna o resto seguro, e é o que o `/discover` mede para levar este item a `tria
 `runtime` → `cell-1`/`cell-2`, a mais delicada por causa dos 353 arquivos Go, incluindo
 `runtime.helmfile.yaml.gotmpl` → `cell.helmfile.yaml.gotmpl` (ele serve as duas) e o secret
 `loopzero-runtime-kubeconfig` passando a ser por cell. *3* — `vault` → `secrets`, **com sub-tarefa própria**
-para `vault-system` → `secrets-system`: é mudança de **recurso vivo**, não de texto — o namespace
+para `secrets-system` → `secrets-system`: é mudança de **recurso vivo**, não de texto — o namespace
 precisa ser recriado, as cargas migradas, e o `ClusterSecretStore` `openbao-transit` aponta para
-`openbao-transit.vault-system.svc:8200`; o rename de texto sozinho deixa referências apontando para um
+`openbao-transit.secrets-system.svc:8200`; o rename de texto sozinho deixa referências apontando para um
 namespace que não existe mais. *4* — ADR + documentação.
 
 **A armadilha.** Substituição global cega destrói o repositório: 91,2% dos hits são falso positivo. Não

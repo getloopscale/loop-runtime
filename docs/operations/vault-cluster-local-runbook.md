@@ -66,19 +66,19 @@ helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
 
 ```bash
 # Init: capture 5 shards + root token (ONE-TIME; idempotent only via storage state)
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c \
   'BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao operator init \
     -key-shares=5 -key-threshold=3 -format=json' > /tmp/openbao-init.json
 
 # Unseal: 3 of 5 shards (quorum)
 for i in 0 1 2; do
   SHARD=$(jq -r ".unseal_keys_b64[$i]" /tmp/openbao-init.json)
-  kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
+  kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c \
     "BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao operator unseal $SHARD"
 done
 
 # Verify Sealed=false
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c \
   'BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao status' | grep Sealed
 ```
 
@@ -86,7 +86,7 @@ kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
 
 ```bash
 ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
-kubectl --context k3d-loopzero-secrets -n vault-system create secret generic \
+kubectl --context k3d-loopzero-secrets -n secrets-system create secret generic \
   openbao-init-token --from-literal=BAO_TOKEN="$ROOT_TOKEN"
 
 helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
@@ -98,7 +98,7 @@ helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local \
 
 ```bash
 task k3d:secrets:status     # all pods + bao status
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c \
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c \
   "BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN \
    bao kv put secret/test foo=bar && bao kv get secret/test"
 ```
@@ -174,7 +174,7 @@ ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init-output.json)
 MGMT_API="https://$(docker inspect k3d-loopzero-core-server-0 \
   --format '{{ range .NetworkSettings.Networks }}{{ .IPAddress }}{{ end }}'):6443"
 
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200
 export BAO_SKIP_VERIFY=true
 export BAO_TOKEN=$ROOT_TOKEN
@@ -194,7 +194,7 @@ bao write auth/kubernetes/config \
 ### Step 3: Create Vault role bound to SA + seed test data
 
 ```bash
-kubectl --context k3d-loopzero-secrets -n vault-system exec openbao-0 -- sh -c "
+kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- sh -c "
 export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN
 bao write auth/kubernetes/role/test-reader \
   bound_service_account_names=test-vault-reader \
@@ -209,7 +209,7 @@ bao kv put secret/loopzero/test/hello message='Cross-cluster auth works!'
 
 ```bash
 # Extract Vault CA + create ConfigMap in mgmt
-VAULT_CA=$(kubectl --context k3d-loopzero-secrets -n vault-system \
+VAULT_CA=$(kubectl --context k3d-loopzero-secrets -n secrets-system \
   get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d)
 
 kubectl --context k3d-loopzero-core apply -f - <<EOF
@@ -226,7 +226,7 @@ $(echo "$VAULT_CA" | sed 's/^/    /')
 EOF
 
 # Start port-forward (Vault accessible on host:8210)
-kubectl --context k3d-loopzero-secrets -n vault-system port-forward openbao-0 \
+kubectl --context k3d-loopzero-secrets -n secrets-system port-forward openbao-0 \
   8210:8200 --address 0.0.0.0 >/tmp/pf.log 2>&1 &
 
 # Create test client pod
@@ -302,8 +302,8 @@ sempre overwrites).
 |---------|-----------|--------|---------|
 | cert-manager | cert-manager | jetstack v1.15.3 | TLS certificate issuance (prod only) |
 | cluster-issuer | cert-manager | infra/helm/cluster-issuer | self-signed ClusterIssuer |
-| openbao | vault-system | openbao/openbao v0.28.3 (appVersion v2.5.4) | OpenBao StatefulSet (devMode local; HA Raft + KMS unseal prod) |
-| openbao-init | vault-system | infra/helm/openbao-init v0.1.0 | Post-startup Job: secrets engines + auth methods + policies (idempotent) |
+| openbao | secrets-system | openbao/openbao v0.28.3 (appVersion v2.5.4) | OpenBao StatefulSet (devMode local; HA Raft + KMS unseal prod) |
+| openbao-init | secrets-system | infra/helm/openbao-init v0.1.0 | Post-startup Job: secrets engines + auth methods + policies (idempotent) |
 
 ## Validation outcome (2026-06-02 LIVE session)
 

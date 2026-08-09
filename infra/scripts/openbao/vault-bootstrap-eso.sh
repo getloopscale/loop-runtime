@@ -18,7 +18,7 @@
 #     --mgmt-context k3d-loopzero-core \
 #     --vault-context k3d-loopzero-secrets \
 #     [--vault-secret-name openbao-tls] \
-#     [--vault-secret-namespace vault-system] \
+#     [--vault-secret-namespace secrets-system] \
 #     [--eso-namespace external-secrets] \
 #     [--manifest-dir infra/manifests/cluster-secret-stores] \
 #     [--wait-timeout 60] \
@@ -42,7 +42,7 @@ set -uo pipefail
 CORE_CONTEXT="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
 SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
 VAULT_SECRET_NAME="openbao-tls"
-VAULT_SECRET_NAMESPACE="vault-system"
+VAULT_SECRET_NAMESPACE="secrets-system"
 ESO_NAMESPACE="external-secrets"
 MANIFEST_DIR="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/manifests/cluster-secret-stores"
 WAIT_TIMEOUT=60
@@ -59,7 +59,7 @@ OPTIONS
   --mgmt-context <ctx>           kubectl context for mgmt cluster (default: k3d-loopzero-core)
   --vault-context <ctx>          kubectl context for vault cluster (default: k3d-loopzero-secrets)
   --vault-secret-name <name>     Vault TLS Secret name (default: openbao-tls)
-  --vault-secret-namespace <ns>  Vault TLS Secret NS (default: vault-system)
+  --vault-secret-namespace <ns>  Vault TLS Secret NS (default: secrets-system)
   --eso-namespace <ns>           ESO operator namespace (default: external-secrets)
   --manifest-dir <path>          Manifests dir (default: infra/manifests/cluster-secret-stores)
   --wait-timeout <sec>           ClusterSecretStore Ready timeout (default: 60)

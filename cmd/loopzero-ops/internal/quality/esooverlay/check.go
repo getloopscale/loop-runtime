@@ -82,7 +82,7 @@ func Check(cfg Config) (Outcome, error) {
 	forbidRE("B2 NO line setting enabled: true (anti-foot-shooting)", `(?m)^  enabled: true`)
 
 	// C: canonical service DNS.
-	assertContains("C1 server is canonical core-cluster in-cluster DNS", "openbao.vault-system.svc.cluster.local:8200")
+	assertContains("C1 server is canonical core-cluster in-cluster DNS", "openbao.secrets-system.svc.cluster.local:8200")
 	assertContains(`C2 server is https (NOT http)`, `server: "https://`)
 
 	// D: auth.kind=kubernetes + workload identity fields.

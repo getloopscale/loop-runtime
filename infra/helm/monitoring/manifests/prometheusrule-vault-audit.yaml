@@ -95,7 +95,7 @@ spec:
               absent (Vault pod down / network partition). Either way, all
               new Vault operations fail. loopzero-api fallback: serve cached
               secrets from pkg/vault.CachedClient (no rotation possible).
-              Triage: `kubectl -n vault-system get pods openbao-0` + check
+              Triage: `kubectl -n secrets-system get pods openbao-0` + check
               for recent restart events. Unseal procedure: see runbook.
             runbook_url: "https://docs.loopzero.example/runbooks/vault-sealed"
 

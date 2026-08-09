@@ -80,7 +80,7 @@ func TestSetupTransitClient_ReturnsNilWhenPlaintextMode(t *testing.T) {
 func TestSetupTransitClient_ConstructsClientWhenTransitMode(t *testing.T) {
 	cfg := config.Config{
 		OpenBaoTransitEnabled: true,
-		OpenBaoVaultAddr:      "https://openbao.vault-system.svc:8200",
+		OpenBaoVaultAddr:      "https://openbao.secrets-system.svc:8200",
 		OpenBaoVaultRoleID:    "ee35da8a-e26c-4f80-93e1-2bd9b9d05c41",
 		OpenBaoVaultSecretID:  "REDACTED_SECRET_029",
 	}
@@ -109,7 +109,7 @@ func TestSetupTransitClient_ConstructsClientWhenTransitMode(t *testing.T) {
 func TestSetupTransitClient_PropagatesConstructorError(t *testing.T) {
 	cfg := config.Config{
 		OpenBaoTransitEnabled: true,
-		OpenBaoVaultAddr:      "https://openbao.vault-system.svc:8200",
+		OpenBaoVaultAddr:      "https://openbao.secrets-system.svc:8200",
 		OpenBaoVaultRoleID:    "",
 		OpenBaoVaultSecretID:  "REDACTED_SECRET_029",
 	}

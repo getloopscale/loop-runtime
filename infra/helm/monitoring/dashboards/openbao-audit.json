@@ -120,7 +120,7 @@
       ]
     },
     {
-      "title": "Vault Audit Log (Loki — vault-system NS)",
+      "title": "Vault Audit Log (Loki — secrets-system NS)",
       "type": "logs",
       "datasource": {"type": "loki", "uid": "loki"},
       "gridPos": {"h": 14, "w": 24, "x": 0, "y": 14},
@@ -132,7 +132,7 @@
       },
       "targets": [
         {
-          "expr": "{namespace=\"vault-system\", loopzero_component=\"vault-audit\"}",
+          "expr": "{namespace=\"secrets-system\", loopzero_component=\"vault-audit\"}",
           "refId": "A"
         }
       ]

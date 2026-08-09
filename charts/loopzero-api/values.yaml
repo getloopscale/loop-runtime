@@ -198,7 +198,7 @@ serviceAccount:
 vault:
   enabled: false
   # Vault endpoint reachable from loopzero-api (mgmt cluster).
-  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  addr: "https://openbao.secrets-system.svc.cluster.local:8200"
   # K8s auth mount name (matches infra/helm/openbao-init T5.1).
   authMount: "k8s-mgmt"
   # Role name on that mount (matches T5.5 role: loopzero-api).

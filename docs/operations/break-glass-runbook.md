@@ -69,7 +69,7 @@ Air-gap operator machine (disconnect network).
 ```bash
 # Spin up OpenBao Raft cluster (assume restored from snapshot OR
 # fresh init followed by snapshot import via separate procedure)
-kubectl -n vault-system port-forward svc/openbao 8200:8200 &
+kubectl -n secrets-system port-forward svc/openbao 8200:8200 &
 export VAULT_ADDR=https://localhost:8200
 export VAULT_CACERT=/tmp/openbao-ca.pem
 

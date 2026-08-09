@@ -223,7 +223,7 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 	//
 	// The two-segment legacy alternative was deleted. It existed so pre-M2 logs stayed
 	// visible, but tenant namespaces fall under Loki's default 168h retention (only
-	// vault-system carries the 90-day stream), and the M2 rename landed 2026-06-12 —
+	// secrets-system carries the 90-day stream), and the M2 rename landed 2026-06-12 —
 	// those logs expired weeks ago. An exact match also removes the prefix-collision
 	// risk the anchored regex was there to contain.
 	canonical, err := naming.Namespace(tenant, project, env)

@@ -66,7 +66,7 @@ runtimeConfig:
   JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
   LOOPZERO_CLUSTER_ISSUER: "loopzero-ca-issuer"
   OPENBAO_TRANSIT_ENABLED: "true"
-  OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"
+  OPENBAO_VAULT_ADDR: "https://openbao.secrets-system.svc.cluster.local:8200"
   OPENBAO_VAULT_ROLE_ID: "b805a39a-2b8c-afdd-1b7a-95073b1c1be6"
   # T1.4 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2:
   # OPENBAO_SPKI_PIN_SHA256 literal REMOVED. SPKI pin changes whenever

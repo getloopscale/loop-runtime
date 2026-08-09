@@ -189,7 +189,7 @@ type Config struct {
 	// reaching PG (the SecretEncryptionKey AES path is ignored; an EC-05
 	// boot log records `crypto_mode=transit aes_key_ignored=true`).
 	OpenBaoTransitEnabled bool   // OPENBAO_TRANSIT_ENABLED — opt-in
-	OpenBaoVaultAddr      string // OPENBAO_VAULT_ADDR (e.g. https://openbao.vault-system.svc:8200)
+	OpenBaoVaultAddr      string // OPENBAO_VAULT_ADDR (e.g. https://openbao.secrets-system.svc:8200)
 	OpenBaoVaultRoleID    string // OPENBAO_VAULT_ROLE_ID — AppRole role_id
 	OpenBaoVaultSecretID  string // OPENBAO_VAULT_SECRET_ID — AppRole secret_id
 	OpenBaoSPKIPinSHA256  string // OPENBAO_SPKI_PIN_SHA256 — hex-encoded SHA-256 of leaf cert SPKI (optional)
@@ -716,7 +716,7 @@ func (c Config) validateOpenBaoTransit() error {
 		return nil
 	}
 	if c.OpenBaoVaultAddr == "" {
-		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ADDR (e.g. https://openbao.vault-system.svc:8200)")
+		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ADDR (e.g. https://openbao.secrets-system.svc:8200)")
 	}
 	if c.OpenBaoVaultRoleID == "" {
 		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ROLE_ID (AppRole role_id)")

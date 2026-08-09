@@ -4,7 +4,7 @@
 #
 # Hermetic test for Promtail vault-audit scrape job + Grafana dashboard.
 # Asserts:
-#   (T8.1) promtail values.yaml.gotmpl has job_name: vault-audit + namespaces: [vault-system]
+#   (T8.1) promtail values.yaml.gotmpl has job_name: vault-audit + namespaces: [secrets-system]
 #   (T8.1) relabel adds namespace + container + loopzero_component=vault-audit labels
 #   (T8.3) Grafana dashboard JSON parses + has expected panels
 
@@ -28,11 +28,11 @@ if grep -qE 'job_name: vault-audit' "${PROMTAIL}"; then
 else
   fail "job_name: vault-audit MISSING"
 fi
-# Check namespaces.names array contains vault-system
-if awk '/job_name: vault-audit/,/^resources:/' "${PROMTAIL}" | grep -qE '\- vault-system'; then
-  pass "namespaces filter = [vault-system]"
+# Check namespaces.names array contains secrets-system
+if awk '/job_name: vault-audit/,/^resources:/' "${PROMTAIL}" | grep -qE '\- secrets-system'; then
+  pass "namespaces filter = [secrets-system]"
 else
-  fail "namespaces filter does NOT include vault-system"
+  fail "namespaces filter does NOT include secrets-system"
 fi
 if awk '/job_name: vault-audit/,/^resources:/' "${PROMTAIL}" | grep -qE 'target_label: loopzero_component'; then
   pass "loopzero_component label set"
