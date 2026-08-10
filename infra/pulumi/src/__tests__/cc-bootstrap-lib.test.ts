@@ -59,10 +59,10 @@ describe("CC-bootstrap-lib (T5.1 superseded path) — T5.3b", () => {
     });
 
     it("references both runtime + runtime-2 wiring (multi-cell)", () => {
-      // Cells canonical: runtime → cell-1, runtime-2 → cell-2 per
+      // Cells canonical: runtime → cell-0, runtime-2 → cell-1 per
       // helmfile-cell-metadata.test.ts invariants. Wire-clusters must
       // touch both clusters for multi-cell to exist.
-      expect(text).toMatch(/runtime[-_]?2|cell-2/);
+      expect(text).toMatch(/runtime[-_]?2|cell-1/);
     });
   });
 

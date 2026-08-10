@@ -40,7 +40,7 @@ type ReleaseConvergenceLoopConfig struct {
 	// MaxConcurrent bounds parallel release verifications.
 	MaxConcurrent int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
-	// "cell-default" means single-cell / backward-compatible behavior.
+	// "cell-0" means single-cell / backward-compatible behavior.
 	CellID string
 }
 

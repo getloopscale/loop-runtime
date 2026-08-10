@@ -436,7 +436,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// means the feature is off, which is the pre-roadmap default.
 	if h.admission != nil {
 		// MEET-053 A-06: Resolve cell_id per-request from tenant's placement.
-		cellID := "cell-default" // fallback if resolver not set
+		cellID := "cell-0" // fallback if resolver not set
 		if h.cellResolver != nil {
 			if resolved, resolveErr := h.cellResolver.GetTenantCellID(ctx, uc.TenantID); resolveErr == nil {
 				cellID = resolved

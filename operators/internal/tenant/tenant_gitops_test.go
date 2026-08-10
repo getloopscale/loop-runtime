@@ -453,7 +453,7 @@ func tenantWithEnvs(envs ...loopzerov1.TenantEnvironmentEntry) *loopzerov1.Tenan
 	return &loopzerov1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-test"},
 		Spec: loopzerov1.TenantSpec{
-			CellID:       "cell-default",
+			CellID:       "cell-0",
 			Environments: envs,
 			GitOps:       loopzerov1.GitOpsSpec{Branch: "main"},
 		},

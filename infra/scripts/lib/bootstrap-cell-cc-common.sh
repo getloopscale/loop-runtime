@@ -16,7 +16,7 @@ set -euo pipefail
 # bootstrap_cell_cc CELL_ID K3D_CLUSTER_NAME [--dry-run]
 #
 # Args:
-#   CELL_ID          — logical cell identifier (e.g., cell-default, cell-1, cell-2)
+#   CELL_ID          — logical cell identifier (e.g., cell-0, cell-0, cell-1)
 #                      Used as ClusterCredential CR name, Secret name prefix,
 #                      and spec.cellID + spec.clusterName (F-08 alignment).
 #   K3D_CLUSTER_NAME — k3d cluster suffix (e.g., workload, runtime-2).

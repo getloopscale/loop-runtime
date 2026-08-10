@@ -27,7 +27,7 @@ type ReleaseReaperConfig struct {
 	// Interval is how often the reaper runs.
 	Interval time.Duration
 	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
-	// "cell-default" means single-cell / backward-compatible behavior.
+	// "cell-0" means single-cell / backward-compatible behavior.
 	CellID string
 }
 

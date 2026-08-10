@@ -45,7 +45,7 @@ func TestCheck_DisabledAlwaysAdmits(t *testing.T) {
 		},
 	}
 	gate := NewBuildGate(querier, DefaultConfig(), false)
-	res, err := gate.Check(context.Background(), "cell-default", "tn-a")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-a")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestCheck_CellAtCapacity_Rejects(t *testing.T) {
 	}
 	gate := NewBuildGate(querier, cfg, true)
 
-	res, err := gate.Check(context.Background(), "cell-default", "tn-a")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-a")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,12 +98,12 @@ func TestCheck_CellAtCapacityOverBySeveral_LongerRetryAfter(t *testing.T) {
 	atCapGate := NewBuildGate(&fakeQuerier{
 		snapshot: ActiveBuildsSnapshot{Total: 10},
 	}, cfg, true)
-	atCap, _ := atCapGate.Check(context.Background(), "cell-default", "tn-a")
+	atCap, _ := atCapGate.Check(context.Background(), "cell-0", "tn-a")
 
 	fiveOver := NewBuildGate(&fakeQuerier{
 		snapshot: ActiveBuildsSnapshot{Total: 15},
 	}, cfg, true)
-	over, _ := fiveOver.Check(context.Background(), "cell-default", "tn-a")
+	over, _ := fiveOver.Check(context.Background(), "cell-0", "tn-a")
 
 	if over.RetryAfter <= atCap.RetryAfter {
 		t.Errorf("expected longer Retry-After when further over cap: at_cap=%v over=%v",
@@ -134,7 +134,7 @@ func TestCheck_RetryAfter_ScalesWithSaturation(t *testing.T) {
 		gate := NewBuildGate(&fakeQuerier{
 			snapshot: ActiveBuildsSnapshot{Total: tc.total},
 		}, cfg, true)
-		res, _ := gate.Check(context.Background(), "cell-default", "tn-a")
+		res, _ := gate.Check(context.Background(), "cell-0", "tn-a")
 		if res.RetryAfter < tc.want {
 			t.Errorf("total=%d: RetryAfter=%v, want >= %v", tc.total, res.RetryAfter, tc.want)
 		}
@@ -157,7 +157,7 @@ func TestCheck_TenantQuotaExceeded_WhenCellStillHasRoom(t *testing.T) {
 	}
 	gate := NewBuildGate(querier, cfg, true)
 
-	res, err := gate.Check(context.Background(), "cell-default", "tn-noisy")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-noisy")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestCheck_TenantBelowQuota_Admits(t *testing.T) {
 
 	// tn-quiet has only 1 build — should be admitted even though
 	// tn-noisy is at its own quota.
-	res, err := gate.Check(context.Background(), "cell-default", "tn-quiet")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-quiet")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestCheck_NewTenantOnEmptyCell_Admits(t *testing.T) {
 	}
 	gate := NewBuildGate(querier, DefaultConfig(), true)
 
-	res, err := gate.Check(context.Background(), "cell-default", "tn-new")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-new")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestCheck_QuerierError_FailsOpen(t *testing.T) {
 	querier := &fakeQuerier{err: boom}
 	gate := NewBuildGate(querier, DefaultConfig(), true)
 
-	res, err := gate.Check(context.Background(), "cell-default", "tn-a")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-a")
 	if err == nil {
 		t.Error("expected error to be returned alongside Admit decision")
 	}
@@ -246,7 +246,7 @@ func TestCheck_ZeroCaps_MeansNoLimit(t *testing.T) {
 
 	// Cell is "overloaded" but cap is 0 (disabled), and tenant has 1 < 2,
 	// so we expect Admit.
-	res, err := gate.Check(context.Background(), "cell-default", "tn-a")
+	res, err := gate.Check(context.Background(), "cell-0", "tn-a")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

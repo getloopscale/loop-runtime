@@ -86,9 +86,9 @@ type TenantSpec struct {
 	Limits ResourceLimits `json:"limits"`
 
 	// CellID identifies which Cell this tenant's workloads run in.
-	// ADR-0008: Phase 0 defaults to "cell-default" (single Cell).
+	// ADR-0008: Phase 0 defaults to "cell-0" (single Cell).
 	// Phase 1+ PlacementEngine assigns tenants to specific Cells.
-	// +kubebuilder:default="cell-default"
+	// +kubebuilder:default="cell-0"
 	// +kubebuilder:validation:MinLength=1
 	CellID string `json:"cellID,omitempty"`
 }

@@ -36,7 +36,7 @@ import (
 // cluster. It references `placement.DefaultCellID` as the canonical
 // single source of truth (T1.1 of plan 2026-06-10-j22-layer2-code-review-fixes
 // ADR D1 + EC-3 absorption — closes consensus-CRITICAL #13 X-Cell-ID
-// forgery + the magic-literal `"cell-default"` sub-finding). Production
+// forgery + the magic-literal `"cell-0"` sub-finding). Production
 // multi-cluster path will replace this constant with
 // CrossClusterTokenReviewer.Review(cellID, token) per ADR D1 follow-up.
 const brokerSingleClusterCellID = placement.DefaultCellID

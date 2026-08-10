@@ -5,7 +5,7 @@
 // Renders the chart via `helm template` and asserts:
 //
 //   - T5.1-T5.4: 5 auth/k8s-* mounts enabled (k8s-core, k8s-build,
-//     k8s-cell-default, k8s-cell-1, k8s-cell-2).
+//     k8s-cell-0, k8s-cell-0, k8s-cell-1).
 //   - T5.5: loopzero-api role on k8s-core with TTL 1h.
 //   - T5.6: loopzero-tenant-operator role on k8s-core.
 //   - T5.7: loopzero-app/preview/platform-operator roles on k8s-core.
@@ -35,7 +35,7 @@ const chartPath = "infra/helm/openbao-init"
 
 var (
 	authMounts = []string{
-		"k8s-core", "k8s-build", "k8s-cell-default", "k8s-cell-1", "k8s-cell-2",
+		"k8s-core", "k8s-build", "k8s-cell-0", "k8s-cell-0", "k8s-cell-1",
 	}
 	mgmtBinaries = []string{
 		"loopzero-api",
@@ -44,7 +44,7 @@ var (
 		"loopzero-preview-operator",
 		"loopzero-platform-operator",
 	}
-	cellMounts = []string{"k8s-cell-default", "k8s-cell-1", "k8s-cell-2"}
+	cellMounts = []string{"k8s-cell-0", "k8s-cell-0", "k8s-cell-1"}
 )
 
 // Config controls the check.

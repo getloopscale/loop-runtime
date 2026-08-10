@@ -132,7 +132,7 @@ func (r *DynamicRouter) refresh(ctx context.Context) error {
 // because silent fallback would mask routing drift. Plan v2 D3 Stage
 // 5b reconsiders if/when stage 4 surfaces real demand.
 //
-// INVARIANT (cell-2-activation-plan ADR C2): Resolve is deterministic
+// INVARIANT (cell-1-activation-plan ADR C2): Resolve is deterministic
 // — for a fixed cell_id, every call between two refreshes returns a
 // CellConfig that DeepEquals the previous call. The 60s refresh window
 // is the ONLY source of routing-result variability under steady state.

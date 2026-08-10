@@ -136,9 +136,9 @@ CREATE FUNCTION public.populate_cell_id_from_tenant() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    IF NEW.cell_id = 'cell-default' OR NEW.cell_id IS NULL THEN
+    IF NEW.cell_id = 'cell-0' OR NEW.cell_id IS NULL THEN
         SELECT cell_id INTO NEW.cell_id FROM tenants WHERE id = NEW.tenant_id;
-        IF NEW.cell_id IS NULL THEN NEW.cell_id := 'cell-default'; END IF;
+        IF NEW.cell_id IS NULL THEN NEW.cell_id := 'cell-0'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -285,7 +285,7 @@ CREATE TABLE public.builds (
     workflow_id text,
     error_message text,
     duration_seconds integer,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     processing_by text,
     processing_since timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -450,7 +450,7 @@ CREATE TABLE public.idempotency_keys (
 
 CREATE TABLE public.leader_generations (
     name text NOT NULL,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     holder text NOT NULL,
     generation_id bigint DEFAULT 1 NOT NULL,
     acquired_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -588,7 +588,7 @@ CREATE TABLE public.preview_environments (
     repo_full_name text,
     installation_id bigint,
     expires_at timestamp with time zone NOT NULL,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
@@ -650,7 +650,7 @@ CREATE TABLE public.release_app_attestations (
     sbom_s3_key text,
     sbom_format text,
     sbom_component_count integer,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT release_app_attestations_digest_format CHECK ((image_digest ~~ 'sha256:%'::text)),
@@ -675,7 +675,7 @@ CREATE TABLE public.releases (
     artifacts jsonb,
     side_effects jsonb,
     apps jsonb,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     processing_by text,
     processing_since timestamp with time zone,
     image_digest text,
@@ -782,7 +782,7 @@ CREATE TABLE public.tenants (
     display_name text DEFAULT ''::text NOT NULL,
     slug text NOT NULL,
     owner_id text NOT NULL,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     account_id text NOT NULL

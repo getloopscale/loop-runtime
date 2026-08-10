@@ -48,7 +48,7 @@ const (
 	brokerChartRelativePath = "infra/helm/loopzero-external-secrets"
 	brokerHelmReleaseName   = "loopzero-broker"
 	brokerAPIPort           = 30001
-	brokerCellID            = "cell-default"
+	brokerCellID            = "cell-0"
 	brokerEnvName           = "dev-public"
 	brokerMgmtContainer     = "k3d-loopzero-core-server-0"
 	brokerNetworkName       = "k3d-loopzero"

@@ -76,7 +76,7 @@ func TestAcquire_NewLease_ReturnsGenerationFromPG(t *testing.T) {
 	acq := NewAcquirer(s, DefaultConfig())
 
 	// Act
-	lease, err := acq.Acquire(context.Background(), "build-reconcile", "cell-default", "pod-a")
+	lease, err := acq.Acquire(context.Background(), "build-reconcile", "cell-0", "pod-a")
 
 	// Assert
 	if err != nil {
@@ -109,7 +109,7 @@ func TestAcquire_LiveLeaseHeldByPeer_ReturnsErrNotLeader(t *testing.T) {
 	}
 	acq := NewAcquirer(s, DefaultConfig())
 
-	_, err := acq.Acquire(context.Background(), "build-reconcile", "cell-default", "pod-b")
+	_, err := acq.Acquire(context.Background(), "build-reconcile", "cell-0", "pod-b")
 	if !errors.Is(err, ErrNotLeader) {
 		t.Errorf("expected ErrNotLeader, got %v", err)
 	}
@@ -141,7 +141,7 @@ func TestAcquire_ScanError_IsWrappedNotRetried(t *testing.T) {
 	boom := errors.New("boom")
 	s := &scriptedDBTX{nextRowScan: func(_ ...any) error { return boom }}
 	acq := NewAcquirer(s, DefaultConfig())
-	_, err := acq.Acquire(context.Background(), "build-reaper", "cell-default", "pod-d")
+	_, err := acq.Acquire(context.Background(), "build-reaper", "cell-0", "pod-d")
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Errorf("expected wrapped 'boom' error, got %v", err)
 	}
@@ -155,7 +155,7 @@ func TestHeartbeat_RowsAffectedOne_Succeeds(t *testing.T) {
 	s := &scriptedDBTX{nextExecRows: 1}
 	acq := NewAcquirer(s, DefaultConfig())
 	lease := &Lease{
-		Name: "build-reconcile", CellID: "cell-default",
+		Name: "build-reconcile", CellID: "cell-0",
 		Holder: "pod-a", GenerationID: 3,
 	}
 
@@ -178,7 +178,7 @@ func TestHeartbeat_ZeroRows_ReturnsErrFenced(t *testing.T) {
 	// Another pod bumped the generation. Our UPDATE finds zero rows.
 	s := &scriptedDBTX{nextExecRows: 0}
 	acq := NewAcquirer(s, DefaultConfig())
-	lease := &Lease{Name: "x", CellID: "cell-default", Holder: "pod-a", GenerationID: 5}
+	lease := &Lease{Name: "x", CellID: "cell-0", Holder: "pod-a", GenerationID: 5}
 
 	err := acq.Heartbeat(context.Background(), lease)
 	if !errors.Is(err, ErrFenced) {
@@ -189,7 +189,7 @@ func TestHeartbeat_ZeroRows_ReturnsErrFenced(t *testing.T) {
 func TestHeartbeat_DriverError_IsWrapped(t *testing.T) {
 	s := &scriptedDBTX{nextExecErr: errors.New("connection refused")}
 	acq := NewAcquirer(s, DefaultConfig())
-	lease := &Lease{Name: "x", CellID: "cell-default", Holder: "pod-a", GenerationID: 1}
+	lease := &Lease{Name: "x", CellID: "cell-0", Holder: "pod-a", GenerationID: 1}
 
 	err := acq.Heartbeat(context.Background(), lease)
 	if err == nil || errors.Is(err, ErrFenced) {
@@ -217,7 +217,7 @@ func TestValidate_SameGenerationSameHolder_Succeeds(t *testing.T) {
 		},
 	}
 	acq := NewAcquirer(s, DefaultConfig())
-	lease := &Lease{Name: "x", CellID: "cell-default", Holder: "pod-a", GenerationID: 5}
+	lease := &Lease{Name: "x", CellID: "cell-0", Holder: "pod-a", GenerationID: 5}
 
 	if err := acq.Validate(context.Background(), lease); err != nil {
 		t.Errorf("expected nil, got %v", err)
@@ -239,7 +239,7 @@ func TestLeaderGeneration_StaleWriteRejected(t *testing.T) {
 	}
 	acq := NewAcquirer(s, DefaultConfig())
 	staleLease := &Lease{
-		Name: "build-reconcile", CellID: "cell-default",
+		Name: "build-reconcile", CellID: "cell-0",
 		Holder: "pod-a", GenerationID: 5,
 	}
 
@@ -252,7 +252,7 @@ func TestLeaderGeneration_StaleWriteRejected(t *testing.T) {
 func TestValidate_RowMissing_ReturnsErrFenced(t *testing.T) {
 	s := &scriptedDBTX{nextRowScan: func(_ ...any) error { return db.ErrNoRows }}
 	acq := NewAcquirer(s, DefaultConfig())
-	lease := &Lease{Name: "x", CellID: "cell-default", Holder: "pod-a", GenerationID: 1}
+	lease := &Lease{Name: "x", CellID: "cell-0", Holder: "pod-a", GenerationID: 1}
 
 	err := acq.Validate(context.Background(), lease)
 	if !errors.Is(err, ErrFenced) {
@@ -274,7 +274,7 @@ func TestRelease_Nil_IsNoop(t *testing.T) {
 func TestRelease_RowsAffectedOne_Succeeds(t *testing.T) {
 	s := &scriptedDBTX{nextExecRows: 1}
 	acq := NewAcquirer(s, DefaultConfig())
-	lease := &Lease{Name: "x", CellID: "cell-default", Holder: "pod-a", GenerationID: 2}
+	lease := &Lease{Name: "x", CellID: "cell-0", Holder: "pod-a", GenerationID: 2}
 
 	if err := acq.Release(context.Background(), lease); err != nil {
 		t.Errorf("expected nil, got %v", err)
@@ -288,7 +288,7 @@ func TestRelease_RowsAffectedOne_Succeeds(t *testing.T) {
 func TestRelease_ZeroRows_ReturnsErrFenced(t *testing.T) {
 	s := &scriptedDBTX{nextExecRows: 0}
 	acq := NewAcquirer(s, DefaultConfig())
-	lease := &Lease{Name: "x", CellID: "cell-default", Holder: "pod-a", GenerationID: 1}
+	lease := &Lease{Name: "x", CellID: "cell-0", Holder: "pod-a", GenerationID: 1}
 
 	err := acq.Release(context.Background(), lease)
 	if !errors.Is(err, ErrFenced) {

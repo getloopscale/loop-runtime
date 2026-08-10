@@ -64,7 +64,7 @@ chmod 600 /tmp/build.kubeconfig
 # 3. Re-create the mgmt Secret with the new build.kubeconfig and EVERY other
 #    kubeconfig key preserved. Preserve ALL non-build keys dynamically — the
 #    Secret holds one key per cell (mgmt, runtime, runtime2, ...). Hard-coding
-#    only mgmt+runtime here DROPS runtime2 and breaks cell-2 routing.
+#    only mgmt+runtime here DROPS runtime2 and breaks cell-1 routing.
 ARGS=(--from-file=build.kubeconfig=/tmp/build.kubeconfig)
 OTHER_KEYS=$(kubectl --context k3d-loopzero-core -n loopzero-system get secret loopzero-cluster-kubeconfigs \
   -o go-template='{{range $k,$v := .data}}{{$k}}{{"\n"}}{{end}}' | grep -v '^build\.kubeconfig$')

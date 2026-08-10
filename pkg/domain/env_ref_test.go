@@ -21,12 +21,12 @@ func TestNewEnvRef_HappyPath(t *testing.T) {
 }
 
 func TestNewEnvRef_WithCellID(t *testing.T) {
-	ref, err := NewEnvRef("tn-abc", "api", "production", "cell-default")
+	ref, err := NewEnvRef("tn-abc", "api", "production", "cell-0")
 	if err != nil {
 		t.Fatalf("NewEnvRef error: %v", err)
 	}
-	if ref.CellID != "cell-default" {
-		t.Errorf("CellID = %q; want %q", ref.CellID, "cell-default")
+	if ref.CellID != "cell-0" {
+		t.Errorf("CellID = %q; want %q", ref.CellID, "cell-0")
 	}
 }
 
@@ -93,9 +93,9 @@ func TestEnvRef_StringParseRoundTrip(t *testing.T) {
 // design would have failed this case).
 func TestEnvRef_RoundTrip_HyphenatedEnvName(t *testing.T) {
 	cases := []EnvRef{
-		{TenantID: "tn-x", Project: "api", EnvName: "staging-eu-1", CellID: "cell-default"},
+		{TenantID: "tn-x", Project: "api", EnvName: "staging-eu-1", CellID: "cell-0"},
 		{TenantID: "tn-x", Project: "api", EnvName: "preview-pr-42", CellID: ""},
-		{TenantID: "tn-abc-def", Project: "frontend-app", EnvName: "production", CellID: "cell-1"},
+		{TenantID: "tn-abc-def", Project: "frontend-app", EnvName: "production", CellID: "cell-0"},
 	}
 	for _, want := range cases {
 		t.Run(want.EnvName, func(t *testing.T) {
@@ -112,11 +112,16 @@ func TestEnvRef_RoundTrip_HyphenatedEnvName(t *testing.T) {
 
 // TestEnvRef_Equal_ByValue — value object semantic (not pointer identity).
 func TestEnvRef_Equal_ByValue(t *testing.T) {
-	a, _ := NewEnvRef("tn-x", "api", "production", "cell-default")
-	b, _ := NewEnvRef("tn-x", "api", "production", "cell-default")
+	a, _ := NewEnvRef("tn-x", "api", "production", "cell-0")
+	b, _ := NewEnvRef("tn-x", "api", "production", "cell-0")
 	if !a.Equal(b) {
 		t.Error("EnvRef.Equal should return true for value-identical refs")
 	}
+	// A outra cell tem de ser uma cell REALMENTE distinta. Enquanto a primeira se
+	// chamou `cell-default` e a segunda `cell-1`, os dois nomes aqui eram diferentes
+	// por acidente de vocabulario: eles nomeavam a MESMA maquina (ADR 2026-08-09).
+	// Com a unificacao 1:1, `cell-0` e `cell-1` sao duas cells de verdade, e e isso
+	// que faz este caso provar algo.
 	c, _ := NewEnvRef("tn-x", "api", "production", "cell-1")
 	if a.Equal(c) {
 		t.Error("EnvRef.Equal should return false when CellID differs")

@@ -28,7 +28,7 @@ import (
 
 // AutoDeployConfig holds configuration for auto-deploy on push.
 //
-// INVARIANT (cell-2-activation-plan T1.4 / ADR C11 path 3):
+// INVARIANT (cell-1-activation-plan T1.4 / ADR C11 path 3):
 // Auto-deploy MUST NOT set tenant.cell_id from webhook payload. Cell
 // placement is operator-only via POST /api/v1/admin/tenants/pin (see
 // MEET-INFRA-NORMALIZE-T3-multi-cell C8 + admin_pin_cell.go). The webhook

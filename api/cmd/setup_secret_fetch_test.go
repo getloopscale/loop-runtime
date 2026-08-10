@@ -124,7 +124,7 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // a forged value (e.g., "cell-evil") AND presents a valid Bearer token,
 // the synthetic CrossClusterTokenReviewResult injected into the request
 // context carries the SERVER-SIDE constant `placement.DefaultCellID`
-// (currently "cell-default") — NOT the forged header.
+// (currently "cell-0") — NOT the forged header.
 //
 // Why this matters (#13 consensus-CRITICAL): the existing EC-07 cell↔tenant
 // binding control in routes/internal_secret_fetch.go line 143 calls
@@ -328,11 +328,11 @@ func Test_rawSecretReader_ReadSecret_Concurrent_NoRace(t *testing.T) {
 
 func Test_inlineTenantBinding_GetTenantCellID_HappyPath(t *testing.T) {
 	b := &inlineTenantBinding{cellStore: &fakeCellQuerier{
-		cellByTenant: map[string]string{"tn-1": "cell-default"},
+		cellByTenant: map[string]string{"tn-1": "cell-0"},
 	}}
 	got, err := b.GetTenantCellID(context.Background(), "tn-1")
 	require.NoError(t, err)
-	require.Equal(t, "cell-default", got)
+	require.Equal(t, "cell-0", got)
 }
 
 func Test_inlineTenantBinding_GetTenantCellID_TenantNotFound_TranslatesToErrTenantNotFound(t *testing.T) {

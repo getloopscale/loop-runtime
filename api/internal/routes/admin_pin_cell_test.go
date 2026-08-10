@@ -57,7 +57,7 @@ func doPin(t *testing.T, body any, p CellPinner, env map[string]string, headers 
 
 func TestAdminPinCell_FeatureFlagOff_Returns404(t *testing.T) {
 	// LOOPZERO_ADMIN_API not set
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, &fakePinner{}, nil, nil)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, nil, nil)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
 	}
@@ -68,7 +68,7 @@ func TestAdminPinCell_MissingAuth_Returns403(t *testing.T) {
 		"LOOPZERO_ADMIN_API":                 "true",
 		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, &fakePinner{}, env, nil)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, env, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", rec.Code)
 	}
@@ -80,7 +80,7 @@ func TestAdminPinCell_WrongSecret_Returns403(t *testing.T) {
 		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
 	headers := map[string]string{"X-Service-Auth": "wrong"}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, &fakePinner{}, env, headers)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, env, headers)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", rec.Code)
 	}
@@ -117,11 +117,11 @@ func TestAdminPinCell_Success_WritesAuditEntry(t *testing.T) {
 		got.resourceType, got.resourceID, got.metadata = resourceType, resourceID, metadata
 	}
 
-	b, _ := json.Marshal(AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"})
+	b, _ := json.Marshal(AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
 	req.Header.Set("X-Service-Auth", "secret")
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(&fakePinner{prev: "cell-default"}, audit).ServeHTTP(rec, req)
+	AdminPinCellHandler(&fakePinner{prev: "cell-0"}, audit).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
@@ -138,8 +138,8 @@ func TestAdminPinCell_Success_WritesAuditEntry(t *testing.T) {
 	if got.resourceType != "tenant" || got.resourceID != "tn-x" {
 		t.Errorf("resource: want tenant/tn-x, got %s/%s", got.resourceType, got.resourceID)
 	}
-	if got.metadata["from"] != "cell-default" || got.metadata["to"] != "cell-2" {
-		t.Errorf("metadata: want from=cell-default to=cell-2, got %+v", got.metadata)
+	if got.metadata["from"] != "cell-0" || got.metadata["to"] != "cell-1" {
+		t.Errorf("metadata: want from=cell-0 to=cell-1, got %+v", got.metadata)
 	}
 }
 
@@ -152,11 +152,11 @@ func TestAdminPinCell_NoOpPin_WritesNoAudit(t *testing.T) {
 	var calls int
 	audit := func(_, _, _, _, _, _ string, _ map[string]any) { calls++ }
 
-	b, _ := json.Marshal(AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"})
+	b, _ := json.Marshal(AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
 	req.Header.Set("X-Service-Auth", "secret")
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(&fakePinner{prev: "cell-2"}, audit).ServeHTTP(rec, req) // already on cell-2
+	AdminPinCellHandler(&fakePinner{prev: "cell-1"}, audit).ServeHTTP(rec, req) // already on cell-1
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -169,7 +169,7 @@ func TestAdminPinCell_NoOpPin_WritesNoAudit(t *testing.T) {
 func TestAdminPinCell_MissingTenantID_Returns400(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	rec := doPin(t, AdminPinCellInput{TenantID: "", CellID: "cell-2"}, &fakePinner{}, env, headers)
+	rec := doPin(t, AdminPinCellInput{TenantID: "", CellID: "cell-1"}, &fakePinner{}, env, headers)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d (body: %s)", rec.Code, rec.Body.String())
 	}
@@ -189,7 +189,7 @@ func TestAdminPinCell_BadCellPattern_Returns400(t *testing.T) {
 func TestAdminPinCell_NilPinner_Returns503(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, nil, env, headers)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, nil, env, headers)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected 503, got %d", rec.Code)
 	}
@@ -198,8 +198,8 @@ func TestAdminPinCell_NilPinner_Returns503(t *testing.T) {
 func TestAdminPinCell_Success_Returns200(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{prev: "cell-default"}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	pinner := &fakePinner{prev: "cell-0"}
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
 	}
@@ -207,10 +207,10 @@ func TestAdminPinCell_Success_Returns200(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.TenantID != "tn-x" || resp.NewCell != "cell-2" || resp.PreviousCell != "cell-default" || !resp.Updated {
+	if resp.TenantID != "tn-x" || resp.NewCell != "cell-1" || resp.PreviousCell != "cell-0" || !resp.Updated {
 		t.Errorf("unexpected response: %+v", resp)
 	}
-	if pinner.calledTenant != "tn-x" || pinner.calledCell != "cell-2" {
+	if pinner.calledTenant != "tn-x" || pinner.calledCell != "cell-1" {
 		t.Errorf("pinner not called correctly: tenant=%q cell=%q", pinner.calledTenant, pinner.calledCell)
 	}
 }
@@ -218,8 +218,8 @@ func TestAdminPinCell_Success_Returns200(t *testing.T) {
 func TestAdminPinCell_NoChange_Updated_False(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{prev: "cell-2"} // already on cell-2
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	pinner := &fakePinner{prev: "cell-1"} // already on cell-1
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
@@ -236,7 +236,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 	// T6.1 migration: pinner now returns the sentinel directly so the
 	// handler's errors.Is mapping fires (was string-match before).
 	pinner := &fakePinner{err: placementsvc.ErrTenantNotFound}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
 	}
@@ -246,7 +246,7 @@ func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	pinner := &fakePinner{err: placementsvc.ErrCellNotPinnable}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
 	}
@@ -256,14 +256,14 @@ func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	pinner := &fakePinner{err: build.ErrCellAtCapacity}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// cell-2-activation-plan T1.4 / ADR C11 — authz on --cell flag in 3 paths.
+// cell-1-activation-plan T1.4 / ADR C11 — authz on --cell flag in 3 paths.
 //
 // Path 1 (CLI): loopzero admin tenants pin without LOOPZERO_SERVICE_AUTH → exit 4.
 //               CLI behavior tested in cli/tests/integration/admin-tenants-pin.test.ts.
@@ -285,7 +285,7 @@ func TestAdminPinCell_AuthzInvariantC11Path1_CLIRequiresServiceAuth(t *testing.T
 		"LOOPZERO_ADMIN_API":                 "true",
 		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, &fakePinner{}, env, nil)
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, env, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("C11 path 1: expected 403 without X-Service-Auth, got %d", rec.Code)
 	}
@@ -300,8 +300,8 @@ func TestAdminPinCell_AuthzInvariantC11Path2_APIDirect403(t *testing.T) {
 		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "the-real-secret",
 	}
 	headers := map[string]string{} // no X-Service-Auth
-	pinner := &fakePinner{prev: "cell-1"}
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	pinner := &fakePinner{prev: "cell-0"}
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("C11 path 2: expected 403 from API without auth, got %d", rec.Code)
 	}
@@ -422,7 +422,7 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"},
+			rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"},
 				&fakePinner{err: tc.err}, env, headers)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status: want %d got %d body=%s", tc.wantStatus, rec.Code, rec.Body.String())

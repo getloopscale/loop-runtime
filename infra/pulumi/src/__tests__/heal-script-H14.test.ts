@@ -1,15 +1,15 @@
-// cell-2-activation-plan T0.2 / H14 — invariants for k3d-cross-cluster-heal.sh
+// cell-1-activation-plan T0.2 / H14 — invariants for k3d-cross-cluster-heal.sh
 // H14 block. Two modes:
 //
-//   Mode A (refresh) — CR `cell-2` (spec.clusterName=loopzero-cell-1) exists
+//   Mode A (refresh) — CR `cell-1` (spec.clusterName=loopzero-cell-1) exists
 //     but disconnected because SA UID rotated in runtime-2. H14 mints fresh
 //     SA token via `kubectl --context k3d-loopzero-cell-1 create token default`,
 //     rebuilds kubeconfig YAML preserving CA + apiServer, patches the
-//     cell-2-kubeconfig Secret. Mirrors H13 pattern for cell-default.
+//     cell-1-kubeconfig Secret. Mirrors H13 pattern for cell-0.
 //
 //   Mode B (bootstrap) — CR doesn't exist. H14 generates scoped kubeconfig
 //     with cluster_name=runtime-2 (matches k3d-loopzero-cell-1-server-0 docker
-//     container per B82) and invokes clustercredential-create.sh cell-2
+//     container per B82) and invokes clustercredential-create.sh cell-1
 //     runtime-2 <scoped> with INGRESS_DOMAIN=loopzero.local (ADR C7).
 //
 // Test catches drift like 'someone tidied the script back to runtime-2 → workload-2'
@@ -30,7 +30,7 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
   const h14Block = implMatch?.[0] ?? "";
 
   it("script exists and contains H14 block", () => {
-    expect(text).toMatch(/^log "H14: ensuring ClusterCredential cell-2/m);
+    expect(text).toMatch(/^log "H14: ensuring ClusterCredential cell-1/m);
   });
 
   it("H14 documents matrix entry 155 in header comment", () => {
@@ -38,8 +38,8 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
   });
 
   it("detection queries by spec.cellID (NOT CR name) — MEET-053 B9", () => {
-    // Catches drift back to: kubectl get clustercredential cell-2 -o ...
-    expect(h14Block).toMatch(/items\[\?\(@\.spec\.cellID==["']cell-2["']\)\]/);
+    // Catches drift back to: kubectl get clustercredential cell-1 -o ...
+    expect(h14Block).toMatch(/items\[\?\(@\.spec\.cellID==["']cell-1["']\)\]/);
   });
 
   // ----- Mode A (SA token refresh) invariants -----
@@ -58,15 +58,15 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
   });
 
   it("Mode A: preserves CA from existing Secret (no regen)", () => {
-    expect(h14Block).toMatch(/secret cell-2-kubeconfig[\s\S]{0,200}certificate-authority-data/);
+    expect(h14Block).toMatch(/secret cell-1-kubeconfig[\s\S]{0,200}certificate-authority-data/);
   });
 
   it("Mode A: reads apiServer from existing CR spec (preserves docker bridge IP)", () => {
-    expect(h14Block).toMatch(/clustercredential cell-2[\s\S]{0,200}spec\.apiServer/);
+    expect(h14Block).toMatch(/clustercredential cell-1[\s\S]{0,200}spec\.apiServer/);
   });
 
   it("Mode A: patches Secret data.kubeconfig (NOT recreates)", () => {
-    expect(h14Block).toMatch(/patch secret cell-2-kubeconfig[\s\S]{0,200}--type=merge/);
+    expect(h14Block).toMatch(/patch secret cell-1-kubeconfig[\s\S]{0,200}--type=merge/);
   });
 
   it("Mode A: builds in-cluster kubeconfig YAML referencing loopzero-cell-1 context", () => {
@@ -76,15 +76,15 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
   // ----- Mode B (bootstrap) invariants -----
 
   it("Mode B: bootstrap branch when CR absent", () => {
-    expect(h14Block).toMatch(/cell-2 CR absent — bootstrapping/);
+    expect(h14Block).toMatch(/cell-1 CR absent — bootstrapping/);
   });
 
   it("Mode B: cluster-name argument is 'runtime-2' (NOT 'workload-2')", () => {
-    // The cc-create call: clustercredential-create.sh cell-2 <name> <kc>.
+    // The cc-create call: clustercredential-create.sh cell-1 <name> <kc>.
     // Must be 'runtime-2' (matches k3d-loopzero-cell-1-server-0 container).
-    expect(h14Block).toMatch(/cell-2\s+runtime-2\b/);
+    expect(h14Block).toMatch(/cell-1\s+runtime-2\b/);
     // Defensive: workload-2 form MUST NOT appear inside H14.
-    expect(h14Block).not.toMatch(/cc-create.*cell-2\s+workload-2\b/);
+    expect(h14Block).not.toMatch(/cc-create.*cell-1\s+workload-2\b/);
   });
 
   it("Mode B: scoped-kubeconfig.sh first arg is 'runtime-2' (cluster id)", () => {
@@ -92,7 +92,7 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
   });
 
   it("Mode B: applies INGRESS_DOMAIN=loopzero.local for ADR C7 (shared domain)", () => {
-    expect(h14Block).toMatch(/INGRESS_DOMAIN="loopzero\.local".*cell-2 runtime-2/);
+    expect(h14Block).toMatch(/INGRESS_DOMAIN="loopzero\.local".*cell-1 runtime-2/);
   });
 
   it("Mode B: uses trap EXIT for temp file cleanup (NOT trap RETURN)", () => {
@@ -116,7 +116,7 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
 
   // ----- Common invariants (apply to both modes) -----
 
-  it("idempotent skip when cell-2 already connected (no-op fast path)", () => {
+  it("idempotent skip when cell-1 already connected (no-op fast path)", () => {
     expect(h14Block).toMatch(/CELL2_CONNECTED.*==.*"true"[\s\S]{0,200}skip/);
   });
 

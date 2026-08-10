@@ -439,20 +439,20 @@ helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/core.helmfile.yaml.gotmpl" --s
   log "ERROR: loopzero-crds install failed (Bug #19 fix pre-step)"
   exit 3
 }
-log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-default + cell-1 + cell-2)..."
+log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-0 + cell-0 + cell-1)..."
 export DRILL_KUBECONFIG="$CORE_KUBECONFIG"
 # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
 CELL_SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
 bash "$CELL_SCRIPT" --cell default --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-default failed"
+  log "ERROR: bootstrap cell-0 failed"
   exit 3
 }
 bash "$CELL_SCRIPT" --cell 1 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-1 failed"
+  log "ERROR: bootstrap cell-0 failed"
   exit 3
 }
 bash "$CELL_SCRIPT" --cell 2 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-2 failed"
+  log "ERROR: bootstrap cell-1 failed"
   exit 3
 }
 log "  ✓ 3 ClusterCredentials applied"
@@ -464,7 +464,7 @@ log "  ✓ 3 ClusterCredentials applied"
 # are reachable (we provisioned them), so set status.connected=true
 # manually via kubectl patch. Mirrors `task k3d:heal` H13 pattern.
 log "Bug #22 fix: patching status.connected=true on 3 CCs..."
-for cell in cell-default cell-1 cell-2; do
+for cell in cell-0 cell-0 cell-1; do
   kubectl patch clustercredential "$cell" --type=merge --subresource=status \
     -p '{"status":{"connected":true,"lastReconciledAt":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}' \
     --namespace loopzero-system 2>&1 | grep -E "patched|^Error" | head -1

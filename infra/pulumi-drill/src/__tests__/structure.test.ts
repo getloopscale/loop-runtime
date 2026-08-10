@@ -344,9 +344,9 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     expect(src).toContain('purpose: "DR drill prod-identical');
     expect(src).toMatch(/teardownPolicy:/);
     expect(src).toMatch(/cellMapping:/);
-    expect(src).toMatch(/"cell-default":\s*"runtimeCluster"/);
-    expect(src).toMatch(/"cell-1":\s*"runtimeCluster"/);
-    expect(src).toMatch(/"cell-2":\s*"runtimeCluster2"/);
+    expect(src).toMatch(/"cell-0":\s*"runtimeCluster"/);
+    expect(src).toMatch(/"cell-0":\s*"runtimeCluster"/);
+    expect(src).toMatch(/"cell-1":\s*"runtimeCluster2"/);
   });
 
   it("documents D1 rationale + RCA reference in source comments", () => {

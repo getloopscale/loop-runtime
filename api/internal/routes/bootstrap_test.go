@@ -34,7 +34,7 @@ func (f *fakeCellPlacement) AssignAndExecute(_ context.Context, fn func(ctx cont
 
 func TestBootstrap_HappyPath(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
@@ -67,7 +67,7 @@ func TestBootstrap_HappyPath(t *testing.T) {
 
 func TestBootstrap_Idempotent(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
@@ -99,7 +99,7 @@ func TestBootstrap_Idempotent(t *testing.T) {
 
 func TestBootstrap_MissingGitHubID(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_login":"testuser","tenant_slug":"my-team"}`
@@ -115,7 +115,7 @@ func TestBootstrap_MissingGitHubID(t *testing.T) {
 
 func TestBootstrap_MissingAdminLogin(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","tenant_slug":"my-team"}`
@@ -131,7 +131,7 @@ func TestBootstrap_MissingAdminLogin(t *testing.T) {
 
 func TestBootstrap_MissingTenantSlug(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser"}`
@@ -147,7 +147,7 @@ func TestBootstrap_MissingTenantSlug(t *testing.T) {
 
 func TestBootstrap_InvalidJSON(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString("not-json"))
@@ -162,7 +162,7 @@ func TestBootstrap_InvalidJSON(t *testing.T) {
 
 func TestBootstrap_SecretRequired_Unauthorized(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "my-secret", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
@@ -179,7 +179,7 @@ func TestBootstrap_SecretRequired_Unauthorized(t *testing.T) {
 
 func TestBootstrap_SecretRequired_CorrectSecret(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "my-secret", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
@@ -196,7 +196,7 @@ func TestBootstrap_SecretRequired_CorrectSecret(t *testing.T) {
 
 func TestBootstrap_DefaultPlan(t *testing.T) {
 	store := NewInMemoryBootstrapStore()
-	placement := &fakeCellPlacement{cellID: "cell-default"}
+	placement := &fakeCellPlacement{cellID: "cell-0"}
 	h := NewBootstrapHandler(store, "", placement)
 
 	// No "plan" field — should default to "starter"

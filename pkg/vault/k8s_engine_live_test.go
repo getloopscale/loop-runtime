@@ -104,7 +104,7 @@ func TestLIVE_K8sAuthMounts_Isolation(t *testing.T) {
 	}
 
 	// loopzero-api MUST NOT be on cell mounts (isolation invariant).
-	for _, cellMount := range []string{"k8s-cell-default", "k8s-cell-1", "k8s-cell-2"} {
+	for _, cellMount := range []string{"k8s-cell-0", "k8s-cell-0", "k8s-cell-1"} {
 		s, err := c.Logical().ReadWithContext(ctx, "auth/"+cellMount+"/role/loopzero-api")
 		// Vault returns nil + nil err for missing roles; or 404 wrapped.
 		if err == nil && s != nil {
@@ -113,7 +113,7 @@ func TestLIVE_K8sAuthMounts_Isolation(t *testing.T) {
 	}
 
 	// external-secrets-broker SHOULD be on each cell mount.
-	for _, cellMount := range []string{"k8s-cell-default", "k8s-cell-1", "k8s-cell-2"} {
+	for _, cellMount := range []string{"k8s-cell-0", "k8s-cell-0", "k8s-cell-1"} {
 		s, err := c.Logical().ReadWithContext(ctx, "auth/"+cellMount+"/role/external-secrets-broker")
 		if err != nil || s == nil {
 			t.Errorf("LIVE FAIL: auth/%s/role/external-secrets-broker missing: %v", cellMount, err)

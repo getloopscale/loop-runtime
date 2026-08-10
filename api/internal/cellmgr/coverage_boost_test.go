@@ -20,7 +20,7 @@ import (
 
 func TestClientManager_FactoryError_PropagatesError(t *testing.T) {
 	router := placement.NewPassthroughRouter(placement.CellConfig{
-		CellID:      "cell-default",
+		CellID:      "cell-0",
 		KubeConfig:  "/tmp/bad",
 		KubeContext: "bad-ctx",
 	})
@@ -44,7 +44,7 @@ func TestClientManager_FactoryError_PropagatesError(t *testing.T) {
 
 func TestClientManager_ConcurrentAccess_SameCell(t *testing.T) {
 	router := placement.NewPassthroughRouter(placement.CellConfig{
-		CellID:      "cell-default",
+		CellID:      "cell-0",
 		KubeConfig:  "/tmp/kc",
 		KubeContext: "ctx",
 	})

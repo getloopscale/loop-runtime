@@ -42,7 +42,7 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 //   - r.RuntimeFactory  -> cell-aware factory: returns the right runtime client
 //     based on tenant.spec.cellID (fix-all-platform-issues-plan T1.1, parity
 //     with operators/internal/controller/environment_controller.go from
-//     cell-2-activation-plan iter 4 BUG-FIX).
+//     cell-1-activation-plan iter 4 BUG-FIX).
 //
 // All namespace/RBAC/NetworkPolicy/Quota writes MUST go through
 // runtimeClientForEnv() — direct r.RuntimeClient calls bypass cell awareness.
@@ -357,10 +357,10 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 // every environment regardless of cellID.
 //
 // Multi-cell mode: pass a CellAwareRuntimeClientFactory built from
-// mgr.GetClient() (mgmt) + runtimeClient (legacy fallback for cell-default).
+// mgr.GetClient() (mgmt) + runtimeClient (legacy fallback for cell-0).
 //
 // fix-all-platform-issues-plan T1.1 — split-binary parity with the
-// monolithic controller from cell-2-activation-plan iter 4.
+// monolithic controller from cell-1-activation-plan iter 4.
 //
 // Quality-Gate Phase 3: SetupEnvironmentController legacy wrapper removed
 // — all callers (cmd/* binaries + operatortest envtest_suite) now invoke

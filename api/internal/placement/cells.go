@@ -4,7 +4,7 @@
 // Package placement exports canonical multi-cell identifiers used
 // across the API, operators, and tests. T1.1 of plan
 // 2026-06-10-j22-layer2-code-review-fixes (ADR D1 + EC-3 absorption):
-// the literal "cell-default" lived as a magic string across 8+ Go
+// the literal "cell-0" lived as a magic string across 8+ Go
 // files (brokerBearerMiddleware fallback, multiple unit tests,
 // PassthroughRouter, etc.). Centralizing the constant here gives the
 // dev-public-single-cluster path one source of truth and lets future
@@ -27,4 +27,4 @@ package placement
 // in production — it is exclusively for the dev-public synthetic
 // TokenReviewResult emitted by brokerBearerMiddleware (closing #13
 // consensus-CRITICAL per plan T1.1 + ADR D1).
-const DefaultCellID = "cell-default"
+const DefaultCellID = "cell-0"

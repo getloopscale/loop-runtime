@@ -17,16 +17,16 @@ import (
 
 // stubCellEngine implements routes.CellPlacementEngine for tests.
 // CHG-2026-04-30-DELETE-SINGLE-CELL: replaces deleted placement.DefaultEngine.
-// Always returns "cell-default" — same semantics, but production code has
+// Always returns "cell-0" — same semantics, but production code has
 // no single-cell engine to drift back to.
 type stubCellEngine struct{}
 
 func (stubCellEngine) AssignCell(_ context.Context) (string, error) {
-	return "cell-default", nil
+	return "cell-0", nil
 }
 
 func (stubCellEngine) AssignAndExecute(ctx context.Context, fn func(context.Context, string) error) error {
-	return fn(ctx, "cell-default")
+	return fn(ctx, "cell-0")
 }
 
 func TestBootstrapRoute(t *testing.T) {
@@ -287,8 +287,8 @@ func TestBootstrapRoute(t *testing.T) {
 
 		// Verify cell_id was stored
 		cellID := store.GetCellID("tn-acme")
-		if cellID != "cell-default" {
-			t.Errorf("expected cell_id=cell-default, got %q", cellID)
+		if cellID != "cell-0" {
+			t.Errorf("expected cell_id=cell-0, got %q", cellID)
 		}
 	})
 

@@ -66,9 +66,9 @@ $$;
 CREATE OR REPLACE FUNCTION populate_cell_id_from_tenant() RETURNS trigger
     LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW.cell_id = 'cell-default' OR NEW.cell_id IS NULL THEN
+    IF NEW.cell_id = 'cell-0' OR NEW.cell_id IS NULL THEN
         SELECT cell_id INTO NEW.cell_id FROM tenants WHERE id = NEW.tenant_id;
-        IF NEW.cell_id IS NULL THEN NEW.cell_id := 'cell-default'; END IF;
+        IF NEW.cell_id IS NULL THEN NEW.cell_id := 'cell-0'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     display_name TEXT NOT NULL DEFAULT '',
     slug TEXT NOT NULL,
     owner_id TEXT NOT NULL REFERENCES users(id),
-    cell_id TEXT NOT NULL DEFAULT 'cell-default',
+    cell_id TEXT NOT NULL DEFAULT 'cell-0',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS builds (
     workflow_id TEXT,
     error_message TEXT,
     duration_seconds INTEGER,
-    cell_id TEXT NOT NULL DEFAULT 'cell-default',
+    cell_id TEXT NOT NULL DEFAULT 'cell-0',
     processing_by TEXT,
     processing_since TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS releases (
     artifacts JSONB,
     side_effects JSONB,
     apps JSONB,
-    cell_id TEXT NOT NULL DEFAULT 'cell-default',
+    cell_id TEXT NOT NULL DEFAULT 'cell-0',
     processing_by TEXT,
     processing_since TIMESTAMPTZ,
     image_digest TEXT,
@@ -348,7 +348,7 @@ CREATE TABLE IF NOT EXISTS github_webhook_deliveries (
 
 CREATE TABLE IF NOT EXISTS leader_generations (
     name TEXT NOT NULL,
-    cell_id TEXT NOT NULL DEFAULT 'cell-default',
+    cell_id TEXT NOT NULL DEFAULT 'cell-0',
     holder TEXT NOT NULL,
     generation_id BIGINT NOT NULL DEFAULT 1,
     acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),

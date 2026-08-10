@@ -197,13 +197,13 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		Expect(strings.TrimSpace(out)).NotTo(Equal("0"), "schema_migrations empty (regression F-04)")
 	})
 
-	It("F-05: ClusterCredentials for cell-default connected", func() {
+	It("F-05: ClusterCredentials for cell-0 connected", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loopzero-system", "get", "clustercredentials",
-			"cell-default", "-o", "jsonpath={.status.state}")
+			"cell-0", "-o", "jsonpath={.status.state}")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.TrimSpace(out)).To(Equal("Ready"), "cell-default not Ready (regression F-05)")
+		Expect(strings.TrimSpace(out)).To(Equal("Ready"), "cell-0 not Ready (regression F-05)")
 	})
 
 	It("F-06: loopzero-cloud dashboard reachable at localhost:9090", func() {

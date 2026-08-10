@@ -9,8 +9,8 @@
 // Sizing per ADR D2:
 //   mgmt:    medium (s-4vcpu-8gb-amd × 3 nodes) — control plane + ESO + ArgoCD
 //   build:   small  (s-2vcpu-4gb-amd × 2 nodes) — BuildKit + Argo Workflows
-//   runtime: small  (s-2vcpu-4gb-amd × 2 nodes) — tenant workloads (cell-default+cell-1)
-//   runtime-2: small (mirrors runtime) — cell-2 isolation per D3
+//   runtime: small  (s-2vcpu-4gb-amd × 2 nodes) — tenant workloads (cell-0+cell-1)
+//   runtime-2: small (mirrors runtime) — cell-1 isolation per D3
 
 import * as digitalocean from "@pulumi/digitalocean";
 import * as pulumi from "@pulumi/pulumi";

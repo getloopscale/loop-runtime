@@ -16,7 +16,7 @@ package routes
 // Contract:
 //   Headers:
 //     Authorization: Bearer <SA-token-from-cell>     (validated by middleware)
-//     X-Cell-ID: cell-default                        (validated by middleware)
+//     X-Cell-ID: cell-0                        (validated by middleware)
 //   Path:
 //     tenant_id (UUID-like; arbitrary opaque string accepted by router)
 //     secret_name (UPPER_SNAKE_CASE per EC-08)

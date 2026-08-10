@@ -946,7 +946,7 @@ tasks:
         #   k3d-loopzero-core       : loopzero-system
         #   k3d-loopzero-build      : argo
         #   k3d-loopzero-cell-0   : loopzero-system
-        #   k3d-loopzero-cell-1  : loopzero-system  (cell-2; optional if not active)
+        #   k3d-loopzero-cell-1  : loopzero-system  (cell-1; optional if not active)
         for pair in \
             "k3d-loopzero-core:loopzero-system" \
             "k3d-loopzero-build:argo" \

@@ -30,7 +30,7 @@ if [[ -n "${LOOPZERO_BUILD_KUBECONFIG:-}" ]]; then
   KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" build "$SCOPED"
 fi
 
-# cell-2-activation-plan T1.3 / ADR C7: shared ingress-domain across cells.
+# cell-1-activation-plan T1.3 / ADR C7: shared ingress-domain across cells.
 # Default for production is dev.loopzero.example (matches Pulumi infra). Override
 # via LOOPZERO_INGRESS_DOMAIN env var. Local k3d sets loopzero.local via heal script.
 INGRESS_DOMAIN_VAL="${LOOPZERO_INGRESS_DOMAIN:-dev.loopzero.example}"
@@ -53,12 +53,12 @@ if [[ -n "${LOOPZERO_CELL_0_KUBECONFIG:-}" ]]; then
   SCOPED=$(KUBECONFIG="$LOOPZERO_CELL_0_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_CELL_0_KUBECONFIG")
   KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
-  # `clustercredential-create.sh cell-1 runtime` call. The ADR-0008
+  # `clustercredential-create.sh cell-0 runtime` call. The ADR-0008
   # canonical path is `bootstrap-cell-cc.sh --cell 1 --env <env>` which
   # already runs as a Helmfile hook with CR name = cellID (not
   # clusterName=runtime). This redundant call created a SECOND
   # ClusterCredential CR named `runtime` pointing at the same apiServer
-  # URL as `cell-1`, leading to two ArgoCD cluster Secrets with the same
+  # URL as `cell-0`, leading to two ArgoCD cluster Secrets with the same
   # server URL. ArgoCD application-controller registered duplicate
   # informers per server URL; on Watch invalidation the orphan informer
   # left the controller pod with cancelled watches and the apps stuck
@@ -72,10 +72,10 @@ if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME2_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime-2 "$LOOPZERO_RUNTIME2_KUBECONFIG")
   KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
-  # `clustercredential-create.sh cell-2 runtime-2` call. Same root cause
+  # `clustercredential-create.sh cell-1 runtime-2` call. Same root cause
   # as runtime above — the ADR-0008 canonical path is
   # `bootstrap-cell-cc.sh --cell 2 --env <env>` which runs in the same
-  # Helmfile hook chain with CR name = cell-2.
+  # Helmfile hook chain with CR name = cell-1.
 fi
 
 # B11 fix — Gitea repos archived: re-activate any archived repos so tenant

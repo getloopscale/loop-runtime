@@ -48,7 +48,7 @@ type InsertBootstrapTenantParams struct {
 }
 
 // ADR-0008: cell_id assigned by PlacementEngine via
-// BootstrapRequest.CellID (defaults to 'cell-default' for Phase 0
+// BootstrapRequest.CellID (defaults to 'cell-0' for Phase 0
 // when wrapper-side default fires). ON CONFLICT (id) DO NOTHING.
 func (q *Queries) InsertBootstrapTenant(ctx context.Context, db DBTX, arg InsertBootstrapTenantParams) (int64, error) {
 	result, err := db.Exec(ctx, insertBootstrapTenant,

@@ -125,7 +125,7 @@ func TestController_LeaderElection_OnlyOneWinner(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			lease, err := acq.Acquire(context.Background(),
-				"loopzero-controller", "cell-default",
+				"loopzero-controller", "cell-0",
 				// Each goroutine has a unique "holder" string so we can
 				// tell them apart, but only one holder gets the row.
 				"pod-"+string(rune('A'+idx)))
@@ -182,7 +182,7 @@ func TestController_LeaderElection_SecondAcquireBlocks(t *testing.T) {
 	acq := NewAcquirer(fake, DefaultConfig())
 
 	// First Acquire: succeeds.
-	lease1, err := acq.Acquire(context.Background(), "x", "cell-default", "pod-1")
+	lease1, err := acq.Acquire(context.Background(), "x", "cell-0", "pod-1")
 	if err != nil {
 		t.Fatalf("first acquire: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestController_LeaderElection_SecondAcquireBlocks(t *testing.T) {
 	}
 
 	// Second Acquire from a different pod: ErrNotLeader.
-	lease2, err := acq.Acquire(context.Background(), "x", "cell-default", "pod-2")
+	lease2, err := acq.Acquire(context.Background(), "x", "cell-0", "pod-2")
 	if !errors.Is(err, ErrNotLeader) {
 		t.Errorf("second acquire: expected ErrNotLeader, got %v", err)
 	}

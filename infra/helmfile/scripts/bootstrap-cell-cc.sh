@@ -6,22 +6,22 @@
 # parameterized by --cell <id> --env <name>.
 #
 # Plan v1.2 T4.2 / D3 (scripts-param-by-env): replaces:
-#   infra/scripts/bootstrap-cell-default-cc.sh
+#   infra/scripts/bootstrap-cell-0-cc.sh
+#   infra/scripts/bootstrap-cell-0-cc.sh
 #   infra/scripts/bootstrap-cell-1-cc.sh
-#   infra/scripts/bootstrap-cell-2-cc.sh
-#   infra/scripts/bootstrap-cell-default-cc-drill.sh
+#   infra/scripts/bootstrap-cell-0-cc-drill.sh
+#   infra/scripts/bootstrap-cell-0-cc-drill.sh
 #   infra/scripts/bootstrap-cell-1-cc-drill.sh
-#   infra/scripts/bootstrap-cell-2-cc-drill.sh
 #
 # Cell-to-cluster mapping per EC-4 mitigation:
 #
 #   | Cell ID      | k3d local                       | drill DOKS                   |
 #   |--------------|----------------------------------|------------------------------|
-#   | cell-default | k3d-loopzero-cell-0 (cluster)      | runtimeCluster (pulumi key)  |
-#   | cell-1       | k3d-loopzero-cell-0 (same default) | runtimeCluster (same default)|
-#   | cell-2       | k3d-loopzero-cell-1 (cluster)     | runtimeCluster2 (pulumi key) |
+#   | cell-0 | k3d-loopzero-cell-0 (cluster)      | runtimeCluster (pulumi key)  |
+#   | cell-0       | k3d-loopzero-cell-0 (same default) | runtimeCluster (same default)|
+#   | cell-1       | k3d-loopzero-cell-1 (cluster)     | runtimeCluster2 (pulumi key) |
 #
-# Per D3 ADR (multi-cell): cell-1 reuses cell-default's cluster in local k3d
+# Per D3 ADR (multi-cell): cell-0 reuses cell-0's cluster in local k3d
 # (topology limit — k3d host can't sustain a 4th K8s cluster on most laptops);
 # in drill DOKS, both also map to runtimeCluster (mirrors prod posture per
 # multi-cell sticky placement). Cell-2 always maps to a SECOND cluster
@@ -31,10 +31,10 @@
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <default|1|2> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
 #
 # Examples:
-#   # Local k3d, cell-default → cluster loopzero-cell-0:
+#   # Local k3d, cell-0 → cluster loopzero-cell-0:
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env standalone-multi
 #
-#   # Drill DOKS, cell-2 → runtimeCluster2:
+#   # Drill DOKS, cell-1 → runtimeCluster2:
 #   DRILL_KUBECONFIG=/tmp/drill-kc/mgmt.yaml \
 #     bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
 #

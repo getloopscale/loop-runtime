@@ -36,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   virou `kubeContexts.core`: a variável de ambiente que essas chaves alimentam já citava o nome novo, e
   chave e variável dizendo coisas diferentes é como um erro de ligação passa despercebido
   (BACKLOG.md B-001, B-005)
+- **BREAKING —** as células deixaram de ter mais nomes do que máquinas. Havia três — `cell-default`,
+  `cell-1` e `cell-2` — para dois clusters, porque `cell-default` nunca foi uma célula (era o valor que
+  o banco gravava para dizer "ainda não sei") e `cell-1` nomeava a mesma máquina que ela. Agora são
+  `cell-0` e `cell-1`, uma por cluster. A migração funde as duas primeiras antes de renumerar a
+  terceira, nessa ordem, porque fazer as duas coisas ao mesmo tempo juntaria identidades distintas sem
+  deixar rastro (BACKLOG.md B-005)
+- **BREAKING —** ao gravar um build, uma release, um ambiente de preview ou uma atestação sem dizer a
+  célula, o sistema deixa de escolher um valor de reserva e passa a herdá-la do time — e, se o time
+  também não tiver, recusa a gravação nomeando o time. Antes, a linha era gravada com um marcador, e o
+  defeito só aparecia depois, no deploy, como roteamento para o lugar errado (BACKLOG.md B-005)
 - **BREAKING —** os comandos que instalam e provisionam cada cluster passaram a citar o nome dele:
   `task infra:install:core`, `task infra:install:cell`, `task k3d:bootstrap-cell-0` e
   `task k3d:bootstrap-cell-1`. As formas antigas — terminadas em `-mgmt`, `-workload` e `-runtime-2` —

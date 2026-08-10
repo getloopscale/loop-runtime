@@ -439,7 +439,7 @@ func adminEnsurePGState(ctx context.Context, cfg AdminLoopzeroDevConfig, kratosI
 		// tenants
 		`INSERT INTO tenants (id, display_name, slug, owner_id, cell_id, account_id)
 		 SELECT 'tn-' || substring(encode(sha256(($1 || '-' || $3)::bytea), 'hex'), 1, 16),
-		        $2, $3, $1, 'cell-default', a.id
+		        $2, $3, $1, 'cell-0', a.id
 		 FROM accounts a
 		 WHERE a.owner_id = $1
 		   AND NOT EXISTS (SELECT 1 FROM tenants WHERE owner_id = $1)`,

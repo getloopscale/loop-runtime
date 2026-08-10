@@ -170,7 +170,7 @@ func newTestWorker(store *fakeMeteringStore, factory *fakePodListerFactory, nsLi
 		PodListers: factory,
 		Clock:      fakeClock{now: now},
 		Metrics:    metrics,
-		Lease:      leader.Lease{Name: "compute-metering", CellID: "cell-1", GenerationID: 7},
+		Lease:      leader.Lease{Name: "compute-metering", CellID: "cell-0", GenerationID: 7},
 		MaxDelta:   time.Hour,
 	}
 }
@@ -182,7 +182,7 @@ func newTestWorker(store *fakeMeteringStore, factory *fakePodListerFactory, nsLi
 func TestMeterTenant_SameMonth_DispatchesMeterCompute(t *testing.T) {
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
 	expected := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC) // same month as now
-	store := &fakeMeteringStore{cell: "cell-1", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 42}
+	store := &fakeMeteringStore{cell: "cell-0", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 42}
 	metrics := &fakeMetrics{}
 	w := newTestWorker(store,
 		&fakePodListerFactory{lister: fakePodLister{byNS: map[string][]corev1.Pod{"ns1": {podWith("500m", "1Gi")}}}},
@@ -200,8 +200,8 @@ func TestMeterTenant_SameMonth_DispatchesMeterCompute(t *testing.T) {
 	if metrics.tenantMeteredCalls != 1 {
 		t.Errorf("tenant_metered metric=%d, want 1 (a clean pass counts the tenant — subset-miss detector)", metrics.tenantMeteredCalls)
 	}
-	if store.lastInput.Gen != 7 || store.lastInput.ReqMillicore != 500 || store.lastInput.CellID != "cell-1" || store.lastInput.LoopName != "compute-metering" {
-		t.Errorf("MeterInput = %+v, want Gen=7 ReqMillicore=500 CellID=cell-1 LoopName=compute-metering", store.lastInput)
+	if store.lastInput.Gen != 7 || store.lastInput.ReqMillicore != 500 || store.lastInput.CellID != "cell-0" || store.lastInput.LoopName != "compute-metering" {
+		t.Errorf("MeterInput = %+v, want Gen=7 ReqMillicore=500 CellID=cell-0 LoopName=compute-metering", store.lastInput)
 	}
 }
 
@@ -212,7 +212,7 @@ func TestMeterTenant_SameMonth_DispatchesMeterCompute(t *testing.T) {
 func TestMeterTenant_DifferentMonth_DispatchesMeterComputeSplit(t *testing.T) {
 	now := time.Date(2026, 7, 1, 0, 30, 0, 0, time.UTC)
 	expected := time.Date(2026, 6, 30, 23, 59, 0, 0, time.UTC) // previous month
-	store := &fakeMeteringStore{cell: "cell-1", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 10}
+	store := &fakeMeteringStore{cell: "cell-0", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 10}
 	metrics := &fakeMetrics{}
 	w := newTestWorker(store,
 		&fakePodListerFactory{lister: fakePodLister{byNS: map[string][]corev1.Pod{"ns1": {podWith("500m", "1Gi")}}}},
@@ -232,7 +232,7 @@ func TestMeterTenant_DifferentMonth_DispatchesMeterComputeSplit(t *testing.T) {
 // cell error is recorded.
 func TestMeterTenant_CollectError_SC3_NoMeterNoSeed(t *testing.T) {
 	boom := errors.New("cell unreachable")
-	store := &fakeMeteringStore{cell: "cell-1", cellFound: true, cursorFound: true}
+	store := &fakeMeteringStore{cell: "cell-0", cellFound: true, cursorFound: true}
 	metrics := &fakeMetrics{}
 	w := newTestWorker(store,
 		&fakePodListerFactory{lister: fakePodLister{errNS: map[string]error{"ns1": boom}}},
@@ -293,7 +293,7 @@ func TestWorker_RunOnce_MetersAllTenants_IsolatesErrors(t *testing.T) {
 	expected := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	boom := errors.New("cell lookup failed")
 	store := &fakeMeteringStore{
-		cell: "cell-1", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 1,
+		cell: "cell-0", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 1,
 		cellErrByTenant: map[string]error{"tn-bad": boom},
 	}
 	metrics := &fakeMetrics{}
@@ -321,7 +321,7 @@ func TestWorker_RunOnce_MetersAllTenants_IsolatesErrors(t *testing.T) {
 func TestWorker_RunOnce_ParallelCellsNoRace(t *testing.T) {
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
 	expected := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	store := &fakeMeteringStore{cell: "cell-1", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 1}
+	store := &fakeMeteringStore{cell: "cell-0", cellFound: true, cursor: expected, cursorFound: true, tier: "pro", advanced: true, delta: 1}
 	metrics := &fakeMetrics{}
 	w := newTestWorker(store,
 		&fakePodListerFactory{lister: fakePodLister{byNS: map[string][]corev1.Pod{"ns1": {podWith("500m", "1Gi")}}}},

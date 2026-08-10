@@ -34,9 +34,9 @@ func (f *fakeOrphanQuerier) CountByCell(_ context.Context) (map[string]int, erro
 // --- Tests ---
 
 func TestOrphanDetector_NoOrphans(t *testing.T) {
-	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-1", "cell-2"}}
+	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-0", "cell-1"}}
 	querier := &fakeOrphanQuerier{
-		counts: map[string]int{"cell-1": 5, "cell-2": 3},
+		counts: map[string]int{"cell-0": 5, "cell-1": 3},
 	}
 
 	detector := NewOrphanDetector(lister, querier, slog.Default(), time.Minute)
@@ -45,10 +45,10 @@ func TestOrphanDetector_NoOrphans(t *testing.T) {
 }
 
 func TestOrphanDetector_OrphansDetected(t *testing.T) {
-	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-1"}}
+	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-0"}}
 	querier := &fakeOrphanQuerier{
 		counts: map[string]int{
-			"cell-1":       5,
+			"cell-0":       5,
 			"cell-removed": 3, // this cell is not in the lister
 		},
 	}
@@ -60,7 +60,7 @@ func TestOrphanDetector_OrphansDetected(t *testing.T) {
 
 func TestOrphanDetector_CellListerError_ReturnsEarly(t *testing.T) {
 	lister := &fakeOrphanCellLister{err: fmt.Errorf("k8s API unreachable")}
-	querier := &fakeOrphanQuerier{counts: map[string]int{"cell-1": 5}}
+	querier := &fakeOrphanQuerier{counts: map[string]int{"cell-0": 5}}
 
 	detector := NewOrphanDetector(lister, querier, slog.Default(), time.Minute)
 	detector.check(context.Background())
@@ -68,7 +68,7 @@ func TestOrphanDetector_CellListerError_ReturnsEarly(t *testing.T) {
 }
 
 func TestOrphanDetector_QuerierError_ReturnsEarly(t *testing.T) {
-	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-1"}}
+	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-0"}}
 	querier := &fakeOrphanQuerier{err: fmt.Errorf("pg timeout")}
 
 	detector := NewOrphanDetector(lister, querier, slog.Default(), time.Minute)
@@ -91,7 +91,7 @@ func TestNewOrphanDetector_CustomInterval(t *testing.T) {
 }
 
 func TestOrphanDetector_EmptyCounts_NoOrphans(t *testing.T) {
-	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-1"}}
+	lister := &fakeOrphanCellLister{cellIDs: []string{"cell-0"}}
 	querier := &fakeOrphanQuerier{counts: map[string]int{}}
 
 	detector := NewOrphanDetector(lister, querier, slog.Default(), time.Minute)

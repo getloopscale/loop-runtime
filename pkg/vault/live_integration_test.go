@@ -76,9 +76,9 @@ func TestLIVE_AuthMethods_Provisioned(t *testing.T) {
 		"kubernetes/",
 		"k8s-core/",
 		"k8s-build/",
-		"k8s-cell-default/",
+		"k8s-cell-0/",
+		"k8s-cell-0/",
 		"k8s-cell-1/",
-		"k8s-cell-2/",
 	}
 	for _, want := range expected {
 		if _, ok := auths[want]; !ok {

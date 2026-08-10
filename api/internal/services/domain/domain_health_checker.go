@@ -18,7 +18,7 @@ import (
 // DomainHealthStore abstracts persistence needed by the health checker.
 type DomainHealthStore interface {
 	// FindPendingForAutoVerify returns pending_verification domains owned by
-	// tenants belonging to the given cell (roadmap 03). Pass "cell-default"
+	// tenants belonging to the given cell (roadmap 03). Pass "cell-0"
 	// or "" for single-cell / backward-compatible behavior.
 	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]domain.CustomDomain, error)
 	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]domain.CustomDomain, error)
@@ -58,7 +58,7 @@ type DomainHealthCheckerConfig struct {
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
 	// CellID scopes the checker to a single cell (roadmap 03). Empty or
-	// "cell-default" means single-cell / backward-compatible behavior.
+	// "cell-0" means single-cell / backward-compatible behavior.
 	CellID string
 }
 
@@ -91,7 +91,7 @@ func NewDomainHealthChecker(
 	}
 	cellID := cfg.CellID
 	if cellID == "" {
-		cellID = "cell-default"
+		cellID = "cell-0"
 	}
 	return &DomainHealthChecker{
 		store:       store,

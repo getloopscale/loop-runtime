@@ -51,7 +51,7 @@ type ClusterCredentialSpec struct {
 	// ADR-0008 Phase 1.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Pattern=`^cell-[a-z0-9-]+$`
-	// +kubebuilder:default="cell-default"
+	// +kubebuilder:default="cell-0"
 	CellID string `json:"cellID,omitempty"`
 }
 

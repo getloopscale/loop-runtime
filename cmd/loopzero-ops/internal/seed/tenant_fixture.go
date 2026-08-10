@@ -64,7 +64,7 @@ const (
 	tenantFixtureHelmfileEnvKey  = "LOOPZERO_HELMFILE_ENV"
 
 	tenantFixtureNamespace   = "loopzero-system"
-	tenantFixtureCellID      = "cell-default"
+	tenantFixtureCellID      = "cell-0"
 	tenantFixtureProject     = "teste"
 	tenantFixtureEnvName     = "production"
 	tenantFixtureEnvCluster  = "workload"

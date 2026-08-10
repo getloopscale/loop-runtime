@@ -138,26 +138,26 @@ WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> '%s';
 -- ScalingResolver sees pristine state when journeys (re)deploy fixtures.
 DELETE FROM app_scaling_config WHERE tenant_id = '%s';
 `+`
--- Defensive: ensure cell-default exists in cells before tenant INSERT
+-- Defensive: ensure cell-0 exists in cells before tenant INSERT
 -- (dogfood-2026-05-08-fixes T3.1, ADR D4 + EC-4 mitigation). Currently
--- tenants.cell_id has DEFAULT 'cell-default' so the INSERT below works
+-- tenants.cell_id has DEFAULT 'cell-0' so the INSERT below works
 -- even without an explicit value, but if a future migration adds a FK
 -- to cells.cell_id this guard prevents a violation. Idempotent.
 INSERT INTO cells (cell_id, display_name, status, region)
-VALUES ('cell-default', 'Default cell (local)', 'active', 'local')
+VALUES ('cell-0', 'Default cell (local)', 'active', 'local')
 ON CONFLICT (cell_id) DO NOTHING;
 
 INSERT INTO users (id, email, github_id, display_name, username)
 VALUES ('%s', '%s', %d, 'e2e-user', '%s')
 ON CONFLICT (id) DO NOTHING;
 
--- tenants.cell_id is NOT NULL with DEFAULT 'cell-default' so this INSERT
+-- tenants.cell_id is NOT NULL with DEFAULT 'cell-0' so this INSERT
 -- works even without an explicit value. Explicit cell_id improves clarity
 -- and ensures behaviour is identical regardless of future schema changes.
 -- COALESCE on conflict preserves any manual pin (e.g., from loopzero admin
 -- tenants pin) on re-seed (EC-11).
 INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
-VALUES ('%s', '%s', '%s', '%s', 'cell-default')
+VALUES ('%s', '%s', '%s', '%s', 'cell-0')
 ON CONFLICT (id) DO UPDATE SET cell_id = COALESCE(tenants.cell_id, EXCLUDED.cell_id);
 
 -- Pin the e2e tenant to the enterprise plan so the suite is not capped

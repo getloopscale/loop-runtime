@@ -87,14 +87,14 @@ inClusterPostgres: false
 underlyingStorageClass: do-block-storage
 
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.2 — multi-cell metadata.
-# Production: runtime → cell-1, runtime-2 → cell-2. Seeded in cells
-# table (migration 000006). cell-2 in 'maintenance' until canary
+# Production: runtime → cell-0, runtime-2 → cell-1. Seeded in cells
+# table (migration 000006). cell-1 in 'maintenance' until canary
 # stage 4 (T7.1) flips it 'active' with explicit customer opt-in.
-runtimeCellId: cell-1
-runtime2CellId: cell-2
+cell0Id: cell-0
+cell1Id: cell-1
 
-# DynamicRouter enabled in production — but cell-2 admission gated by
-# cells.status, so production traffic routes to cell-1 only until
+# DynamicRouter enabled in production — but cell-1 admission gated by
+# cells.status, so production traffic routes to cell-0 only until
 # canary promotion.
 dynamicRouter: true
 

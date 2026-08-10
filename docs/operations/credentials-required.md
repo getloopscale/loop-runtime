@@ -106,7 +106,7 @@ These are reconciled by `task bootstrap:standalone` (local) or by Pulumi+Helmfil
 | `gitea-admin` | loopzero-system | `generate-secrets.sh:157-158` | `password`, `token` | Gitea pod + tenant operator + app operator | rotate via Gitea admin UI + re-run `provision-api-tokens.sh` |
 | `loopzero-api-tokens` | loopzero-system | `provision-api-tokens.sh:100` | `gitea-token`, `argocd-token` | loopzero-api `/health/deep` probe | rotate via re-run script |
 | `argocd-creds-gitea` | argocd | `provision-api-tokens.sh:119` | `username`, `password`, `url` | ArgoCD repo-creds (Gitea HTTPS) | rotate with gitea-admin |
-| `cluster-cell-default` | argocd | `provision-api-tokens.sh:155` | `server`, `name`, `config` | ArgoCD destination resolution | n/a (kubeconfig embedded) |
+| `cluster-cell-0` | argocd | `provision-api-tokens.sh:155` | `server`, `name`, `config` | ArgoCD destination resolution | n/a (kubeconfig embedded) |
 | `minio-credentials` | argo | `generate-build-secrets.sh:108` | `accesskey`, `secretkey` | Argo Workflows + BuildKit cache S3 | rotate with minio root |
 | `cosign-signing-key` | argo | `generate-build-secrets.sh:87` | `cosign.key`, `cosign.password`, `cosign.pub` | cosign-signer Argo step | **quarterly** (cosign-rotation-drill.yml) |
 | `buildkit-registry-config` | argo | `generate-build-secrets.sh:100` | `config.json` | BuildKit `--registry-config` | rotate with registry creds |

@@ -46,15 +46,15 @@ func TestRoundRobinEngine_GetCell_Error(t *testing.T) {
 }
 
 func TestRoundRobinEngine_GetCell_Success(t *testing.T) {
-	q := &fakeGetCellQuerier{cellID: "cell-default"}
+	q := &fakeGetCellQuerier{cellID: "cell-0"}
 	engine := &RoundRobinEngine{querier: q}
 
 	cellID, err := engine.GetCell(context.Background(), "tn-test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cellID != "cell-default" {
-		t.Errorf("expected cell-default, got %q", cellID)
+	if cellID != "cell-0" {
+		t.Errorf("expected cell-0, got %q", cellID)
 	}
 }
 

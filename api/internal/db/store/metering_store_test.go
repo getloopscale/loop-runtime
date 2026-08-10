@@ -90,7 +90,7 @@ func cleanupMeteringTenant(ctx context.Context, pool *pgxpool.Pool, tenantID, ce
 
 const (
 	meteringLoopName   = "compute-metering"
-	meteringLeaderCell = "cell-1"
+	meteringLeaderCell = "cell-0"
 	meteringGen        = int64(7)
 )
 

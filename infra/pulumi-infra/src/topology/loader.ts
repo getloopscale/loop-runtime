@@ -150,7 +150,7 @@ function buildLegacyTopology(config: pulumi.Config): TopologyConfig {
     runtime: [{
       id: "runtime-default",
       role: "runtime",
-      cellId: "cell-default",
+      cellId: "cell-0",
       region: config.require("region"),
       k8sVersion: config.get("runtimeK8sVersion") ?? undefined,
       nodeClass: config.require("runtimeNodeClass") as NodeClass,

@@ -3,22 +3,31 @@
 //
 // Cell-aware runtime client factory for the EnvironmentReconciler.
 //
-// cell-2-activation-plan iter 4 BUG-FIX:
+// cell-1-activation-plan iter 4 BUG-FIX:
 // The pre-existing EnvironmentReconciler held a single `RuntimeClient` field
 // configured at startup pointing to one runtime cluster. When a tenant was
-// pinned to cell-2 (via `loopzero admin tenants pin --cell cell-2`), the
-// reconciler still created Namespace/RBAC/NetworkPolicy/Quota on cell-1 —
+// pinned to cell-1 (via `loopzero admin tenants pin --cell cell-1`), the
+// reconciler still created Namespace/RBAC/NetworkPolicy/Quota on cell-0 —
 // violating ADR C10 (tenant data isolation) and recreating orphan namespaces
 // on the source cell after re-pin.
 //
 // This factory closes the gap:
 //   1. Reads the parent Tenant CR to determine spec.cellID.
-//   2. For cellID="" or "cell-default" → returns the legacy RuntimeClient
-//      (preserves single-cell deployments + backward compat).
-//   3. For other cellIDs (cell-1, cell-2, ...) → looks up the matching
+//   2. For cellID="" → returns the legacy RuntimeClient (preserves the
+//      single-cluster path where no cell was ever resolved).
+//   3. For EVERY named cellID (cell-0, cell-1, ...) → looks up the matching
 //      ClusterCredential CR by spec.cellID, reads its kubeconfig Secret,
 //      builds a controller-runtime client.Client from it, and caches the
 //      result for reuse. Symmetric to api/internal/cellmgr.ClientManager.
+//
+// O atalho do item 2 já cobriu um nome de cell, e isso era um defeito: enquanto a
+// primeira cell se chamou `cell-default`, o nome era ao mesmo tempo uma cell do
+// catálogo e a sentinela de "sem cell". Com a unificação 1:1 (ADR 2026-08-09) ela
+// passou a ser `cell-0`, uma cell real com tenants — e manter o atalho faria TODO
+// lookup dela devolver o cliente legado em vez de resolver o ClusterCredential dela,
+// que é exatamente o isolamento que esta factory existe para garantir. A string
+// vazia é a única sentinela a partir daqui, pelo mesmo motivo que `NULL` passou a
+// ser a única no banco (migração 000061, fase 4).
 //
 // Thread-safe via sync.RWMutex with double-check pattern. Cache eviction
 // is left to operator restart (token rotation triggers staleness; heal
@@ -47,8 +56,8 @@ import (
 // Implementations resolve a tenant's cellID to the right cluster client.
 type RuntimeClientFactory interface {
 	// For returns a controller-runtime client connected to the runtime
-	// cluster identified by cellID. cellID "" or "cell-default" returns
-	// the default/legacy client to preserve backward compatibility.
+	// cluster identified by cellID. Só cellID "" devolve o cliente
+	// legado; toda cell nomeada resolve o ClusterCredential dela.
 	For(ctx context.Context, cellID string) (client.Client, error)
 }
 
@@ -58,7 +67,7 @@ type RuntimeClientFactory interface {
 type CellAwareRuntimeClientFactory struct {
 	// MgmtClient reads ClusterCredential CRs + their kubeconfig Secrets.
 	MgmtClient client.Client
-	// DefaultClient is returned for cellID="" or "cell-default" (legacy path).
+	// DefaultClient is returned only for cellID="" (legacy path).
 	DefaultClient client.Client
 	// MgmtNamespace is where ClusterCredential CRs live (default: loopzero-system).
 	MgmtNamespace string
@@ -87,7 +96,7 @@ func NewCellAwareRuntimeClientFactory(mgmtClient, defaultClient client.Client, m
 
 // For implements RuntimeClientFactory.
 func (f *CellAwareRuntimeClientFactory) For(ctx context.Context, cellID string) (client.Client, error) {
-	if cellID == "" || cellID == "cell-default" {
+	if cellID == "" {
 		if f.DefaultClient == nil {
 			return nil, fmt.Errorf("runtime-client-factory: default client not configured for cellID=%q", cellID)
 		}

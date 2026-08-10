@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// cell-2-activation-plan T2.2 — text-level invariants of the cell-2
+// cell-1-activation-plan T2.2 — text-level invariants of the cell-1
 // activation migration (no live Postgres required). Live behavior is
-// exercised by the cell-2 activation gate suite (cell2-activation-gates.sh).
+// exercised by the cell-1 activation gate suite (cell2-activation-gates.sh).
 //
 // These tests pin the load-bearing properties:
-//   1. UPDATE targets cell_id='cell-2' specifically (not all cells).
+//   1. UPDATE targets cell_id='cell-1' specifically (not all cells).
 //   2. WHERE clause filters status='maintenance' for idempotency.
 //   3. New status is 'active' (not draining/retired).
 //   4. Audit trail: notes column appended (not overwritten).
@@ -43,8 +43,8 @@ func readMigration007ActivateCell2(t *testing.T) string {
 
 func TestMigration007ActivatesOnlyCell2(t *testing.T) {
 	sql := readMigration007ActivateCell2(t)
-	if !strings.Contains(sql, "WHERE cell_id = 'cell-2'") {
-		t.Fatal("expected WHERE clause filtering cell_id='cell-2' to prevent activating other cells")
+	if !strings.Contains(sql, "WHERE cell_id = 'cell-1'") {
+		t.Fatal("expected WHERE clause filtering cell_id='cell-1' to prevent activating other cells")
 	}
 	// Defensive: the UPDATE must NOT be unbounded.
 	if strings.Contains(sql, "UPDATE cells\n   SET status = 'active'") &&
@@ -86,8 +86,8 @@ func TestMigration007AppendsAuditNote(t *testing.T) {
 		t.Fatal("expected notes appended (notes = notes || ...) to preserve audit trail")
 	}
 	// Audit note should reference this plan/task.
-	if !strings.Contains(sql, "cell-2-activation-plan T2.2") {
-		t.Fatal("expected audit note to reference cell-2-activation-plan T2.2")
+	if !strings.Contains(sql, "cell-1-activation-plan T2.2") {
+		t.Fatal("expected audit note to reference cell-1-activation-plan T2.2")
 	}
 }
 
@@ -118,8 +118,8 @@ func TestMigration007ReferencesADRAndPlan(t *testing.T) {
 	if !strings.Contains(sql, "MEET-INFRA-NORMALIZE-T3-multi-cell") {
 		t.Fatal("expected ADR reference (MEET-INFRA-NORMALIZE-T3-multi-cell) in migration")
 	}
-	if !strings.Contains(sql, "cell-2-activation-plan") {
-		t.Fatal("expected plan reference (cell-2-activation-plan) in migration")
+	if !strings.Contains(sql, "cell-1-activation-plan") {
+		t.Fatal("expected plan reference (cell-1-activation-plan) in migration")
 	}
 }
 

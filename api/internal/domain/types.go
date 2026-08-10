@@ -387,7 +387,7 @@ type BootstrapRequest struct {
 	Plan              string `json:"plan"`
 	// CellID is set by the PlacementEngine before persisting.
 	// Not part of the JSON body -- injected by the handler.
-	// ADR-0008: Phase 0 = "cell-default", Phase 1+ = PlacementEngine assigns.
+	// ADR-0008: Phase 0 = "cell-0", Phase 1+ = PlacementEngine assigns.
 	CellID string `json:"-"`
 }
 
@@ -402,7 +402,7 @@ type BootstrapStore interface {
 }
 
 // CellPlacementEngine assigns tenants to Cells.
-// ADR-0008: Phase 0 = DefaultEngine (always "cell-default").
+// ADR-0008: Phase 0 = DefaultEngine (always "cell-0").
 type CellPlacementEngine interface {
 	AssignCell(ctx context.Context) (cellID string, err error)
 	// AssignAndExecute picks a cell AND runs the callback in the same serialized

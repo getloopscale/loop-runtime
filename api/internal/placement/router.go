@@ -12,7 +12,7 @@ import (
 // Phase 0: single CellConfig matching the current runtime cluster.
 // Phase 1+: one CellConfig per Cell, resolved by Router.
 type CellConfig struct {
-	CellID        string // e.g., "cell-default", "cell-sfo3-02"
+	CellID        string // e.g., "cell-0", "cell-sfo3-02"
 	KubeConfig    string // path to kubeconfig file (StaticRouter: from env)
 	KubeContext   string // context name within kubeconfig
 	ArgocdURL     string // ArgoCD server URL within the Cell

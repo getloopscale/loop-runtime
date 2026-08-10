@@ -67,7 +67,7 @@ spec:
                   previously absent, causing PreviewController to route ALL preview
                   workloads to the static CELL_0_KUBECONFIG cell, ignoring the
                   tenant's pinned cell. Cell-2 tenants' previews silently landed on
-                  cell-default — multi-cell isolation breach.
+                  cell-0 — multi-cell isolation breach.
 
                   When CellID is empty (legacy CRs created pre-T1.1), the controller
                   falls back to tenant.Spec.CellID via tenant lookup. Going forward,

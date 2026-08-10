@@ -24,7 +24,7 @@ import (
 //   - KEEP-INVARIANT preserved structurally by BootstrapStoreSqlc:
 //     * Idempotent 4-INSERT-ON-CONFLICT-DO-NOTHING chain
 //       (users, tenants, tenant_members, subscriptions)
-//     * Wrapper-side defaults (cellID='cell-default', plan='starter',
+//     * Wrapper-side defaults (cellID='cell-0', plan='starter',
 //       displayName=TenantSlug) applied identically
 //     * anyCreated semantics: returns true if ANY of the 4 inserts
 //       took effect, false only when all 4 were no-ops

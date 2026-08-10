@@ -434,7 +434,7 @@ func TestRuntimeClientForPreview_NilFactory_ReturnsFallback(t *testing.T) {
 		Spec: loopzerov1.PreviewEnvironmentSpec{
 			TenantID:  "tn-x",
 			ProjectID: "api",
-			CellID:    "cell-default", // even with CellID set, nil factory must fallback
+			CellID:    "cell-0", // even with CellID set, nil factory must fallback
 		},
 	}
 

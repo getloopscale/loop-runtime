@@ -163,7 +163,7 @@ A merge patch carries no `resourceVersion`, so it never 409s against a concurren
 - **Placement is sticky and one-time.** `loopzero bootstrap` runs `RoundRobinEngine.AssignAndExecute` (`api/internal/placement/engine.go`) inside a SERIALIZABLE txn with `pg_advisory_xact_lock`; bin-packing picks the cell with fewest tenants under `maxPerCell`. Writes `tenants.cell_id` (canonical SoT) + Tenant CR `spec.cellID`.
 - **Routing is pure lookup, zero decision.** `DynamicRouter.Resolve(cellID)` (`api/internal/placement/dynamic_router.go`) is a hash lookup returning kubeconfig / ArgoCD URL+token / base domain.
 - **`loopzero admin tenants pin` is the only path that moves a tenant** — DB update + Tenant CR MergePatch atomically, writes `audit_log`.
-- `ClusterCredential` CRDs are looked up by **`spec.cellID`, NOT by `metadata.name`** (a CR named `workload` with `spec.cellID=cell-1` is valid).
+- `ClusterCredential` CRDs are looked up by **`spec.cellID`, NOT by `metadata.name`** (a CR named `workload` with `spec.cellID=cell-0` is valid).
 - **No automatic rebalancing by design** (ADR-0008 / ADR-0021 D3): DNS continuity, state affinity, hot-spot = upgrade-tier signal, auditability.
 
 ### Helm chart dual system
@@ -278,7 +278,7 @@ Stores **WHY** — decisions, trade-offs, rationale that cannot be derived from 
 | cert-manager Certificate for CF-managed domains | Skip Certificate CR (use `CFManaged`) |
 | Forward-only migration violations (`DROP`) | Explicit sign-off required |
 | Writing prod code before failing test | Test first, always |
-| Multi-cell ClusterCredential CR name = cellID assumption | Wrong — `K8sCellStore` lookup is by `spec.cellID`, not metadata.name. CR named `workload` with `spec.cellID=cell-1` works fine (per H12). |
+| Multi-cell ClusterCredential CR name = cellID assumption | Wrong — `K8sCellStore` lookup is by `spec.cellID`, not metadata.name. CR named `workload` with `spec.cellID=cell-0` works fine (per H12). |
 | `wire-clusters.sh` with `cluster-name=cell-0` for k3d | Wrong — local cluster is `loopzero-cell-0`. Use `cluster-name=cell-0` so `scoped-kubeconfig.sh` resolves `k3d-loopzero-cell-0-server-0` docker container (B82 + H12). |
 | Cached SA token in ClusterCredential Secret stops working before exp claim | SA UID changed (recreated during rollout). Mint fresh: `kubectl create token loopzero-system/default --duration=24h` + patch Secret data.kubeconfig (per H13). |
 | ArgoCD `InvalidSpecError: project X does not exist` (but project EXISTS) | Repo-server cached `app path does not exist` for ~5min. `SyncClient.TriggerSync` calls `?refresh=hard` BEFORE POST /sync (B32). |

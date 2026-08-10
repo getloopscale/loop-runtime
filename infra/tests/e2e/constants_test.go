@@ -138,7 +138,7 @@ const (
 	// e2eTraefikPort is the default local Traefik HTTPS port.
 	e2eTraefikPort = "8443"
 
-	// e2eTraefikPortCell2 is the Traefik port for cell-2.
+	// e2eTraefikPortCell2 is the Traefik port for cell-1.
 	e2eTraefikPortCell2 = "8444"
 
 	// e2eBaseDomainLocal is the local k3d base domain.

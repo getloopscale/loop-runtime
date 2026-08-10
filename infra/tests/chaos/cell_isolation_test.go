@@ -7,7 +7,7 @@
 // Per ADR D3: Chaos Mesh CRDs are SINGLE-cluster — the daemon only has
 // access to its own node's network stack. Cross-cluster partitions cannot
 // be expressed as NetworkChaos. Instead we stop the workload k3d cluster
-// directly and verify the mgmt control plane keeps operating + cell-default
+// directly and verify the mgmt control plane keeps operating + cell-0
 // (still running in mgmt) keeps serving.
 //
 // This is a pragmatic deviation from the CRD-only chaos pattern,
@@ -32,7 +32,7 @@ import (
 //   1. Pre-condition: mgmt + workload both up; API serving health.
 //   2. `k3d cluster stop loopzero-cell-0` — pauses worker containers; state preserved.
 //   3. Within 60s: verify API on mgmt still serves /healthz.
-//   4. Within 90s: verify cell-default tenant workloads (in mgmt) still reachable.
+//   4. Within 90s: verify cell-0 tenant workloads (in mgmt) still reachable.
 //   5. Cleanup: `k3d cluster start loopzero-cell-0` — resumes.
 //
 // SLO claims validated:

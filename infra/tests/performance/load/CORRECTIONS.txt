@@ -158,7 +158,7 @@ Load Test Corrections & Learnings — 2026-04-09
   manually recreate the SA + token on the new build cluster nodes.
 - Lesson: NEVER change node pools manually. All infra changes must
   go through Pulumi to maintain consistency of cross-cluster credentials.
-- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `task k3d:regen-scoped` (Taskfile target) + `infra/scripts/regen-all-scoped-kubeconfigs.sh` orchestrator + 9/9 hermetic tests. flock prevents concurrent races (EC-3), cell-default excluded (EC-1), optimistic-concurrency Secret patch (EC-3), creates Secret if absent (EC-6). Plan T2.1.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `task k3d:regen-scoped` (Taskfile target) + `infra/scripts/regen-all-scoped-kubeconfigs.sh` orchestrator + 9/9 hermetic tests. flock prevents concurrent races (EC-3), cell-0 excluded (EC-1), optimistic-concurrency Secret patch (EC-3), creates Secret if absent (EC-6). Plan T2.1.
 
 ### O. Pipeline orphan SA cleanup deletes Pulumi-managed SAs
 - Problem: Pipeline cleanup step deletes SAs without Helm annotations.

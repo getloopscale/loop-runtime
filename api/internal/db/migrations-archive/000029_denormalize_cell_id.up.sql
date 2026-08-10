@@ -10,7 +10,7 @@
 --      roadmap/index.md) REQUIRES cell_id as a column on the partitioned
 --      table. Denormalization is a prerequisite for future partition pruning.
 --   3. Backward compatibility: existing rows and any INSERT that does not
---      specify cell_id fall back to 'cell-default', matching current behavior.
+--      specify cell_id fall back to 'cell-0', matching current behavior.
 --
 -- Forward-only: no DOWN migration required (additive column + indexes).
 
@@ -18,7 +18,7 @@
 -- 1. Add cell_id column to builds
 -- =============================================================================
 ALTER TABLE builds
-    ADD COLUMN IF NOT EXISTS cell_id TEXT NOT NULL DEFAULT 'cell-default';
+    ADD COLUMN IF NOT EXISTS cell_id TEXT NOT NULL DEFAULT 'cell-0';
 
 -- Backfill from tenants.cell_id for rows created before this migration.
 -- The DEFAULT already handles new rows, but existing rows must be migrated
@@ -27,8 +27,8 @@ UPDATE builds b
 SET    cell_id = t.cell_id
 FROM   tenants t
 WHERE  b.tenant_id = t.id
-  AND  b.cell_id = 'cell-default'
-  AND  t.cell_id IS DISTINCT FROM 'cell-default';
+  AND  b.cell_id = 'cell-0'
+  AND  t.cell_id IS DISTINCT FROM 'cell-0';
 
 -- Composite index: the most common cell-scoped query is
 -- `WHERE status IN (...) AND cell_id = $N ORDER BY created_at`.
@@ -43,14 +43,14 @@ COMMENT ON COLUMN builds.cell_id IS
 -- 2. Add cell_id column to releases
 -- =============================================================================
 ALTER TABLE releases
-    ADD COLUMN IF NOT EXISTS cell_id TEXT NOT NULL DEFAULT 'cell-default';
+    ADD COLUMN IF NOT EXISTS cell_id TEXT NOT NULL DEFAULT 'cell-0';
 
 UPDATE releases r
 SET    cell_id = t.cell_id
 FROM   tenants t
 WHERE  r.tenant_id = t.id
-  AND  r.cell_id = 'cell-default'
-  AND  t.cell_id IS DISTINCT FROM 'cell-default';
+  AND  r.cell_id = 'cell-0'
+  AND  t.cell_id IS DISTINCT FROM 'cell-0';
 
 CREATE INDEX IF NOT EXISTS idx_releases_cell_status_created
     ON releases (cell_id, status, created_at);
@@ -69,12 +69,12 @@ COMMENT ON COLUMN releases.cell_id IS
 CREATE OR REPLACE FUNCTION populate_cell_id_from_tenant()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.cell_id = 'cell-default' OR NEW.cell_id IS NULL THEN
+    IF NEW.cell_id = 'cell-0' OR NEW.cell_id IS NULL THEN
         SELECT cell_id INTO NEW.cell_id
         FROM   tenants
         WHERE  id = NEW.tenant_id;
         IF NEW.cell_id IS NULL THEN
-            NEW.cell_id := 'cell-default';
+            NEW.cell_id := 'cell-0';
         END IF;
     END IF;
     RETURN NEW;

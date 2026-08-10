@@ -14,7 +14,7 @@
 //
 // CHG-2026-04-30-DELETE-SINGLE-CELL: DefaultEngine, DefaultCellID,
 // Engine interface, ExtractRegion, ConstraintEngine + CellLabelQuerier
-// were deleted. All were unused in production paths. The cell-default
+// were deleted. All were unused in production paths. The cell-0
 // row in tenants.cell_id remains as the SQL DEFAULT — this is data, not
 // code, and has its own comment in 000001_initial_schema.up.sql.
 package placement
@@ -34,14 +34,14 @@ type TenantCellQuerier interface {
 
 // ExtractRegion derives a region label from a cell_id.
 // Convention: cell-{region}-{nn}. Examples:
-//   "cell-default" → "default" (legacy single-cell installs)
+//   "cell-0" → "default" (legacy single-cell installs)
 //   "cell-sfo3-02" → "sfo3"
-//   "cell-1"       → "1" (no region encoded; rare)
+//   "cell-0"       → "1" (no region encoded; rare)
 //
 // Used by services/cell_service.go to populate CellStatus.Region in
 // API responses.
 func ExtractRegion(cellID string) string {
-	if cellID == "cell-default" {
+	if cellID == "cell-0" {
 		return "default"
 	}
 	if len(cellID) > 5 { // strip "cell-" prefix

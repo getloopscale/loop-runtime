@@ -38,7 +38,7 @@ func httpGet(url string) (statusCode int, body string, err error) {
 }
 
 // resolveTraefikPort returns the Traefik HTTPS port for a tenant based on cell assignment.
-// cell-2 uses port 8444, everything else uses 8443.
+// cell-1 uses port 8444, everything else uses 8443.
 func resolveTraefikPort(tenant string) string {
 	// Query the tenant's cell from the API or default.
 	url := fmt.Sprintf("%s/api/v1/admin/tenants/%s", apiURL(), tenant)
@@ -60,7 +60,7 @@ func resolveTraefikPort(tenant string) string {
 		return e2eTraefikPort
 	}
 
-	if cellID, ok := result["cell_id"].(string); ok && cellID == "cell-2" {
+	if cellID, ok := result["cell_id"].(string); ok && cellID == "cell-1" {
 		return e2eTraefikPortCell2
 	}
 	return e2eTraefikPort

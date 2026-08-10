@@ -116,7 +116,7 @@ func newAuthedRequest(method, url string, cellID string) *http.Request {
 
 func TestSecretFetch_HappyPath(t *testing.T) {
 	deps := SecretFetchHandlerDeps{
-		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-default"}},
+		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-0"}},
 		SecretReader: &mockSecretReader{
 			plaintextByKey: map[string][]byte{"tenant-a:testproj:production:MY_SECRET": []byte("hunter2")},
 		},
@@ -125,13 +125,13 @@ func TestSecretFetch_HappyPath(t *testing.T) {
 	identity := &middleware.TokenReviewResult{
 		Authenticated: true,
 		Username:      "system:serviceaccount:external-secrets:eso",
-		CellID:        "cell-default",
+		CellID:        "cell-0",
 	}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 		"",
 	}
 	identity := &middleware.TokenReviewResult{
-		Authenticated: true, CellID: "cell-default",
+		Authenticated: true, CellID: "cell-0",
 	}
 	for _, badName := range cases {
 		t.Run(fmt.Sprintf("bad/%s", badName), func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 			// path was never actually exercised.
 			composite := badName + ".testproj.production"
 			url := srv.URL + "/internal/v1/secret-fetch/tenant-a/" + composite
-			req := newAuthedRequest(http.MethodPost, url, "cell-default")
+			req := newAuthedRequest(http.MethodPost, url, "cell-0")
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("http.DefaultClient.Do: %v", err)
@@ -218,16 +218,19 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 
 // EC-07 MUST FIX P0
 func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
-	// Tenant placed at cell-default but ESO claims X-Cell-ID=cell-1
+	// Tenant colocado em cell-0, mas o ESO alega X-Cell-ID=cell-1 (outra cell).
 	deps := SecretFetchHandlerDeps{
-		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-default"}},
+		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-0"}},
 		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{"tenant-a:testproj:production:S": []byte("x")}},
 		AuditWriter:   &mockAuditWriter{},
 	}
 	identity := &middleware.TokenReviewResult{
 		Authenticated: true,
 		Username:      "system:serviceaccount:external-secrets:eso",
-		CellID:        "cell-1", // attacker cell
+		// A cell do atacante tem de ser OUTRA cell. Antes da unificacao 1:1 este par
+		// era `cell-1` x `cell-default` — dois nomes do MESMO cluster, entao o teste
+		// nunca chegou a exercer travessia de cell de verdade (ADR 2026-08-09).
+		CellID:        "cell-1", // attacker cell — distinta da cell do tenant
 	}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
@@ -272,12 +275,12 @@ func TestSecretFetch_TenantNotFound_404(t *testing.T) {
 		SecretReader:  &mockSecretReader{},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-default"}
+	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-missing/MY_SECRET.testproj.production", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-missing/MY_SECRET.testproj.production", "cell-0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("http.DefaultClient.Do: %v", err)
@@ -290,16 +293,16 @@ func TestSecretFetch_TenantNotFound_404(t *testing.T) {
 
 func TestSecretFetch_SecretNotFound_404(t *testing.T) {
 	deps := SecretFetchHandlerDeps{
-		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-default"}},
+		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-0"}},
 		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{}},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-default"}
+	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MISSING.testproj.production", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MISSING.testproj.production", "cell-0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("http.DefaultClient.Do: %v", err)
@@ -316,12 +319,12 @@ func TestSecretFetch_TenantBindingError_500(t *testing.T) {
 		SecretReader:  &mockSecretReader{},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-default"}
+	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("http.DefaultClient.Do: %v", err)

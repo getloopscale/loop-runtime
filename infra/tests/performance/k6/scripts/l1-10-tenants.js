@@ -19,7 +19,7 @@
 //
 // Roadmap coverage:
 //   - Item 01 DoD #1: L1 10/10 SUCCEEDED
-//   - Item 03 DoD #4: cell-default backward compat
+//   - Item 03 DoD #4: cell-0 backward compat
 //   - Item 07: admission gate must NOT reject any build at L1 (cell has capacity)
 
 import { group, sleep } from 'k6';

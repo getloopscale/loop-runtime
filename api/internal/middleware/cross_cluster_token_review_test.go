@@ -116,7 +116,7 @@ func TestMiddleware_HappyPath_SetsContext(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/internal/v1/secret-fetch/tenant-a/MY_TOKEN", nil)
 	req.Header.Set("Authorization", "Bearer good-token")
-	req.Header.Set("X-Cell-ID", "cell-default")
+	req.Header.Set("X-Cell-ID", "cell-0")
 
 	rr, captured := sendThroughMW(t, mw, req)
 	if rr.Code != http.StatusOK {
@@ -125,8 +125,8 @@ func TestMiddleware_HappyPath_SetsContext(t *testing.T) {
 	if captured == nil {
 		t.Fatal("expected captured TokenReviewResult, got nil")
 	}
-	if captured.CellID != "cell-default" {
-		t.Errorf("CellID = %s, want cell-default", captured.CellID)
+	if captured.CellID != "cell-0" {
+		t.Errorf("CellID = %s, want cell-0", captured.CellID)
 	}
 	if !captured.Authenticated {
 		t.Error("expected Authenticated=true")
@@ -141,7 +141,7 @@ func TestMiddleware_MissingAuthHeader_401(t *testing.T) {
 	mw := NewCrossClusterMiddleware(CrossClusterMiddlewareConfig{Reviewer: mr})
 
 	req, _ := http.NewRequest("POST", "/", nil)
-	req.Header.Set("X-Cell-ID", "cell-default")
+	req.Header.Set("X-Cell-ID", "cell-0")
 
 	rr, captured := sendThroughMW(t, mw, req)
 	if rr.Code != http.StatusUnauthorized {
@@ -175,7 +175,7 @@ func TestMiddleware_AuthenticatedFalse_401(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/", nil)
 	req.Header.Set("Authorization", "Bearer tok")
-	req.Header.Set("X-Cell-ID", "cell-1")
+	req.Header.Set("X-Cell-ID", "cell-0")
 
 	rr, _ := sendThroughMW(t, mw, req)
 	if rr.Code != http.StatusUnauthorized {
@@ -190,7 +190,7 @@ func TestMiddleware_ReviewerError_401(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/", nil)
 	req.Header.Set("Authorization", "Bearer badtok")
-	req.Header.Set("X-Cell-ID", "cell-1")
+	req.Header.Set("X-Cell-ID", "cell-0")
 
 	rr, _ := sendThroughMW(t, mw, req)
 	if rr.Code != http.StatusUnauthorized {
@@ -208,7 +208,7 @@ func TestMiddleware_CacheHit_SkipsRepeatReview(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		req, _ := http.NewRequest("POST", "/", nil)
 		req.Header.Set("Authorization", "Bearer cached-token")
-		req.Header.Set("X-Cell-ID", "cell-default")
+		req.Header.Set("X-Cell-ID", "cell-0")
 		rr, _ := sendThroughMW(t, mw, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("iter %d: want 200, got %d", i, rr.Code)
@@ -222,7 +222,7 @@ func TestMiddleware_CacheHit_SkipsRepeatReview(t *testing.T) {
 // EC-18 critical test: ClientVersion change invalidates cache.
 func TestMiddleware_EC18_KubeconfigRotationInvalidatesCache(t *testing.T) {
 	mr := newMockReviewer()
-	mr.versionByCell["cell-default"] = "v1"
+	mr.versionByCell["cell-0"] = "v1"
 	mw := NewCrossClusterMiddleware(CrossClusterMiddlewareConfig{
 		Reviewer: mr,
 		CacheTTL: 5 * time.Second,
@@ -230,7 +230,7 @@ func TestMiddleware_EC18_KubeconfigRotationInvalidatesCache(t *testing.T) {
 
 	req1, _ := http.NewRequest("POST", "/", nil)
 	req1.Header.Set("Authorization", "Bearer rotated-tok")
-	req1.Header.Set("X-Cell-ID", "cell-default")
+	req1.Header.Set("X-Cell-ID", "cell-0")
 	rr1, _ := sendThroughMW(t, mw, req1)
 	if rr1.Code != http.StatusOK {
 		t.Fatalf("first request: want 200, got %d", rr1.Code)
@@ -240,11 +240,11 @@ func TestMiddleware_EC18_KubeconfigRotationInvalidatesCache(t *testing.T) {
 	}
 
 	// H13: kubeconfig rotation bumps the cell's client version.
-	mr.setVersion("cell-default", "v2")
+	mr.setVersion("cell-0", "v2")
 
 	req2, _ := http.NewRequest("POST", "/", nil)
 	req2.Header.Set("Authorization", "Bearer rotated-tok") // SAME token
-	req2.Header.Set("X-Cell-ID", "cell-default")
+	req2.Header.Set("X-Cell-ID", "cell-0")
 	rr2, _ := sendThroughMW(t, mw, req2)
 	if rr2.Code != http.StatusOK {
 		t.Fatalf("after rotation: want 200, got %d", rr2.Code)
@@ -264,7 +264,7 @@ func TestMiddleware_CacheExpiry_TriggersRevalidate(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/", nil)
 	req.Header.Set("Authorization", "Bearer expiring-tok")
-	req.Header.Set("X-Cell-ID", "cell-default")
+	req.Header.Set("X-Cell-ID", "cell-0")
 
 	sendThroughMW(t, mw, req)
 	sendThroughMW(t, mw, req)
@@ -289,15 +289,20 @@ func TestNewCrossClusterMiddleware_PanicsOnNilReviewer(t *testing.T) {
 }
 
 func TestCacheKey_DistinctVersionsProduceDistinctKeys(t *testing.T) {
-	a := crossClusterCacheKey("cell-default", "tok", "v1")
-	b := crossClusterCacheKey("cell-default", "tok", "v2")
+	a := crossClusterCacheKey("cell-0", "tok", "v1")
+	b := crossClusterCacheKey("cell-0", "tok", "v2")
 	if a == b {
 		t.Errorf("expected different keys for different versions, got identical: %s", a)
 	}
 }
 
 func TestCacheKey_DistinctCellsProduceDistinctKeys(t *testing.T) {
-	a := crossClusterCacheKey("cell-default", "tok", "v1")
+	// As duas cells tem de ser REALMENTE distintas. Enquanto a primeira se chamou
+	// `cell-default` e a segunda `cell-1`, os nomes diferiam sem que as maquinas
+	// diferissem — eram o mesmo cluster (ADR 2026-08-09). Com a unificacao 1:1,
+	// `cell-0` e `cell-1` sao duas cells de verdade, e a chave de cache separar as
+	// duas passa a significar isolamento entre clusters, nao entre sinonimos.
+	a := crossClusterCacheKey("cell-0", "tok", "v1")
 	b := crossClusterCacheKey("cell-1", "tok", "v1")
 	if a == b {
 		t.Errorf("expected different keys for different cells")

@@ -47,7 +47,7 @@ import (
 // assignment. Kept as a local constant to avoid a db→placement package
 // dependency; placement.DefaultCellID is the authoritative value and
 // must match.
-const CellDefault = "cell-default"
+const CellDefault = "cell-0"
 
 // Build represents a build record in the database.
 type Build struct {

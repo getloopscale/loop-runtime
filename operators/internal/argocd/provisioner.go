@@ -38,7 +38,7 @@ type ApplicationSpec struct {
 
 	// CellID identifies which Cell this Application targets.
 	// ADR-0008 Phase 1: The provisioner resolves CellID to the correct ArgoCD instance.
-	// Phase 0: empty or "cell-default" — uses the single ArgoCD instance.
+	// Phase 0: empty or "cell-0" — uses the single ArgoCD instance.
 	CellID string
 
 	// Environment is the env name (e.g., "production", "staging", "j-rollout-a").
@@ -75,11 +75,11 @@ type AppProjectSpec struct {
 	// cross-cluster deployment via ArgoCD when multiple clusters are registered.
 	// If empty, defaults to "*" for backward compatibility.
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: ignored when CellID is set to a
-	// non-default cell (eg. "cell-2") — destinations switch to `name: cellID`.
+	// non-default cell (eg. "cell-1") — destinations switch to `name: cellID`.
 	DestinationServer string
 
 	// CellID is the cell identifier (matches ClusterCredential CR name +
-	// ArgoCD cluster Secret label). When non-empty AND not "cell-default",
+	// ArgoCD cluster Secret label). When non-empty AND not "cell-0",
 	// AppProject destinations use `name: <CellID>` instead of `server: URL`,
 	// so ArgoCD resolves via its cluster registry (handles k3d IP rotation
 	// transparently and is the same idiomatic mechanism Argo recommends

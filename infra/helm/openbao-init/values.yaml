@@ -93,9 +93,9 @@ secretsEngines:
 #                          (eso, snapshot-agent, tenant-controller, spki-extractor)
 #   - k8s-core          : NEW T5.1 — explicit mgmt cluster auth (loopzero-api, operators)
 #   - k8s-build         : NEW T5.2 — build cluster auth (argo-workflows, BuildKit)
-#   - k8s-cell-default  : NEW T5.3 — default workload cell auth (ESO broker)
+#   - k8s-cell-0  : NEW T5.3 — default workload cell auth (ESO broker)
+#   - k8s-cell-0        : NEW T5.4 — cell-0 workload cluster (ESO broker)
 #   - k8s-cell-1        : NEW T5.4 — cell-1 workload cluster (ESO broker)
-#   - k8s-cell-2        : NEW T5.4 — cell-2 workload cluster (ESO broker)
 #
 # Operator-time: per-mount auth/<path>/config (kubernetesHost + CACert +
 # tokenReviewerJwt) MUST be written manually after init — see
@@ -111,15 +111,15 @@ authMethods:
   - path: k8s-build
     type: kubernetes
     description: "T5.2 build cluster auth (argo-workflows, BuildKit)"
-  - path: k8s-cell-default
+  - path: k8s-cell-0
     type: kubernetes
     description: "T5.3 default workload cell auth (ESO broker)"
+  - path: k8s-cell-0
+    type: kubernetes
+    description: "T5.4 cell-0 workload cluster auth (ESO broker)"
   - path: k8s-cell-1
     type: kubernetes
     description: "T5.4 cell-1 workload cluster auth (ESO broker)"
-  - path: k8s-cell-2
-    type: kubernetes
-    description: "T5.4 cell-2 workload cluster auth (ESO broker)"
 
 # Policies to provision. Each: { name, ruleHcl }.
 policies:
@@ -375,7 +375,7 @@ authRoles:
   # eso-broker SA per cell maps to its own mount; tokens issued by cell-X
   # cluster cannot login on cell-Y mount (multi-tenant isolation gate).
   - name: external-secrets-broker
-    mount: k8s-cell-default
+    mount: k8s-cell-0
     boundServiceAccountNames:
       - eso-broker
     boundServiceAccountNamespaces:
@@ -383,7 +383,17 @@ authRoles:
     policies:
       - eso-read
     ttl: "1h"
-    description: "T5.9 ESO broker on cell-default — reads tenant secrets to materialize K8s Secrets"
+    description: "T5.9 ESO broker on cell-0 — reads tenant secrets to materialize K8s Secrets"
+  - name: external-secrets-broker
+    mount: k8s-cell-0
+    boundServiceAccountNames:
+      - eso-broker
+    boundServiceAccountNamespaces:
+      - external-secrets
+    policies:
+      - eso-read
+    ttl: "1h"
+    description: "T5.9 ESO broker on cell-0"
   - name: external-secrets-broker
     mount: k8s-cell-1
     boundServiceAccountNames:
@@ -394,16 +404,6 @@ authRoles:
       - eso-read
     ttl: "1h"
     description: "T5.9 ESO broker on cell-1"
-  - name: external-secrets-broker
-    mount: k8s-cell-2
-    boundServiceAccountNames:
-      - eso-broker
-    boundServiceAccountNamespaces:
-      - external-secrets
-    policies:
-      - eso-read
-    ttl: "1h"
-    description: "T5.9 ESO broker on cell-2"
 
 # T3.2 of openbao-adoption v1.3 — Transit keys provisioned at init time.
 # Per-tenant keys (tenant-<id>) are created on-demand by tenant-controller

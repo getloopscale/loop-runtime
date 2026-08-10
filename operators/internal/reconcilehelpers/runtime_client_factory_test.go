@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 //
 // Unit tests for CellAwareRuntimeClientFactory + StaticRuntimeClientFactory.
-// cell-2-activation-plan iter 4 BUG-FIX. These tests use fake clients (no envtest).
+// cell-1-activation-plan iter 4 BUG-FIX. These tests use fake clients (no envtest).
 
 package reconcilehelpers
 
@@ -31,20 +31,35 @@ func newSchemeForTest(t *testing.T) *runtime.Scheme {
 	return scheme
 }
 
-func TestCellAwareFactory_DefaultClientForEmptyOrCellDefault(t *testing.T) {
+// TestCellAwareFactory_DefaultClientOnlyForEmptyCellID trava a fronteira entre
+// "sem cell" e "cell nomeada".
+//
+// Este teste já aceitou DOIS valores no caminho legado: a string vazia e o nome da
+// primeira cell, que na época era `cell-default`. Isso funcionava porque aquele nome
+// era sentinela e cell ao mesmo tempo. Com a unificação 1:1 (ADR 2026-08-09) ela
+// virou `cell-0`, uma cell real com tenants, e aceitar o nome dela aqui devolveria o
+// cliente legado em vez do cluster dela — furando o isolamento por cell que esta
+// factory existe para garantir. A string vazia é a única sentinela.
+func TestCellAwareFactory_DefaultClientOnlyForEmptyCellID(t *testing.T) {
 	scheme := newSchemeForTest(t)
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).Build()
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	f := NewCellAwareRuntimeClientFactory(mgmt, def, "")
-	for _, cellID := range []string{"", "cell-default"} {
-		c, err := f.For(context.Background(), cellID)
-		if err != nil {
-			t.Fatalf("For(%q): unexpected error: %v", cellID, err)
-		}
-		if c != def {
-			t.Errorf("For(%q): expected default client, got different", cellID)
-		}
+
+	c, err := f.For(context.Background(), "")
+	if err != nil {
+		t.Fatalf(`For(""): unexpected error: %v`, err)
+	}
+	if c != def {
+		t.Error(`For(""): expected default client, got different`)
+	}
+
+	// Uma cell nomeada NUNCA cai no atalho, mesmo sendo a primeira.
+	if _, err := f.For(context.Background(), "cell-0"); err == nil {
+		t.Error(`For("cell-0"): devolveu o cliente legado; cell nomeada tem de resolver ` +
+			`o ClusterCredential dela, senão todo tenant da cell-0 seria reconciliado no ` +
+			`cluster errado`)
 	}
 }
 
@@ -54,7 +69,7 @@ func TestCellAwareFactory_ErrorWhenNoCCFound(t *testing.T) {
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
 	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
 
-	_, err := f.For(context.Background(), "cell-2")
+	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
 		t.Fatal("expected error for missing ClusterCredential, got nil")
 	}
@@ -63,13 +78,13 @@ func TestCellAwareFactory_ErrorWhenNoCCFound(t *testing.T) {
 func TestCellAwareFactory_ErrorWhenSecretMissing(t *testing.T) {
 	scheme := newSchemeForTest(t)
 	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-2", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
 		Spec: loopzerov1.ClusterCredentialSpec{
 			ClusterName: "loopzero-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
-			CellID:      "cell-2",
+			CellID:      "cell-1",
 			SecretRef: loopzerov1.SecretReference{
-				Name:      "cell-2-kubeconfig",
+				Name:      "cell-1-kubeconfig",
 				Namespace: "loopzero-system",
 			},
 		},
@@ -78,7 +93,7 @@ func TestCellAwareFactory_ErrorWhenSecretMissing(t *testing.T) {
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
 	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
 
-	_, err := f.For(context.Background(), "cell-2")
+	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
 		t.Fatal("expected error for missing kubeconfig Secret, got nil")
 	}
@@ -87,26 +102,26 @@ func TestCellAwareFactory_ErrorWhenSecretMissing(t *testing.T) {
 func TestCellAwareFactory_ErrorWhenSecretLacksKubeconfig(t *testing.T) {
 	scheme := newSchemeForTest(t)
 	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-2", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
 		Spec: loopzerov1.ClusterCredentialSpec{
 			ClusterName: "loopzero-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
-			CellID:      "cell-2",
+			CellID:      "cell-1",
 			SecretRef: loopzerov1.SecretReference{
-				Name:      "cell-2-kubeconfig",
+				Name:      "cell-1-kubeconfig",
 				Namespace: "loopzero-system",
 			},
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-2-kubeconfig", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loopzero-system"},
 		Data:       map[string][]byte{"other": []byte("not-kubeconfig")},
 	}
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc, secret).Build()
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
 	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
 
-	_, err := f.For(context.Background(), "cell-2")
+	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
 		t.Fatal("expected error when Secret has no data.kubeconfig, got nil")
 	}
@@ -114,15 +129,15 @@ func TestCellAwareFactory_ErrorWhenSecretLacksKubeconfig(t *testing.T) {
 
 func TestCellAwareFactory_LookupByCellIDNotCRName(t *testing.T) {
 	// Per MEET-053 B9: lookup by spec.cellID, NOT metadata.name.
-	// The CR name might be "workload" with cellID="cell-1", or "cell-2"
-	// with cellID="cell-2"; either should be found.
+	// The CR name might be "workload" with cellID="cell-0", or "cell-1"
+	// with cellID="cell-1"; either should be found.
 	scheme := newSchemeForTest(t)
 	cc := &loopzerov1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{Name: "workload-not-matching-cellid", Namespace: "loopzero-system"},
 		Spec: loopzerov1.ClusterCredentialSpec{
 			ClusterName: "loopzero-cell-0",
 			APIServer:   "https://172.18.0.7:6443",
-			CellID:      "cell-1",
+			CellID:      "cell-0",
 			SecretRef: loopzerov1.SecretReference{
 				Name:      "workload-not-matching-cellid-kubeconfig",
 				Namespace: "loopzero-system",
@@ -134,7 +149,7 @@ func TestCellAwareFactory_LookupByCellIDNotCRName(t *testing.T) {
 	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
 
 	// Lookup by spec.cellID, NOT by metadata.name.
-	_, err := f.For(context.Background(), "cell-1")
+	_, err := f.For(context.Background(), "cell-0")
 	// It should find the CR but fail on Secret missing — which proves it
 	// matched by cellID not name.
 	if err == nil {
@@ -153,7 +168,7 @@ func TestStaticFactory_ReturnsSameClient(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	f := NewStaticRuntimeClientFactory(c)
 
-	for _, cellID := range []string{"", "cell-default", "cell-1", "cell-2"} {
+	for _, cellID := range []string{"", "cell-0", "cell-0", "cell-1"} {
 		got, err := f.For(context.Background(), cellID)
 		if err != nil {
 			t.Fatalf("For(%q) unexpected error: %v", cellID, err)
@@ -166,7 +181,7 @@ func TestStaticFactory_ReturnsSameClient(t *testing.T) {
 
 func TestStaticFactory_NilErrors(t *testing.T) {
 	f := NewStaticRuntimeClientFactory(nil)
-	_, err := f.For(context.Background(), "cell-2")
+	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
 		t.Fatal("expected error for nil static client, got nil")
 	}

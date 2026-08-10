@@ -58,7 +58,7 @@ type BuildReconcileLoopConfig struct {
 	// Default: 3. Override via MAX_BUILDS_PER_TENANT env var.
 	MaxBuildsPerTenant int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
-	// "cell-default" means single-cell / backward-compatible behavior.
+	// "cell-0" means single-cell / backward-compatible behavior.
 	// MEET-053 A-07: When CellLister is set, CellID is ignored and the
 	// loop iterates over all cells returned by the lister each tick.
 	CellID string

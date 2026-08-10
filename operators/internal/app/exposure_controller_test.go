@@ -124,7 +124,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 			tenant := &loopzerov1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: "tn-cert", Namespace: "default"},
 				Spec: loopzerov1.TenantSpec{
-					CellID:      "cell-default",
+					CellID:      "cell-0",
 					DisplayName: "cert test tenant",
 					Plan:        loopzerov1.PlanStarter,
 					GitOps:      loopzerov1.GitOpsSpec{RepoName: "loopzero-tn-cert", Branch: "main"},

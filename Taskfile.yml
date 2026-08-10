@@ -55,13 +55,13 @@ vars:
   CORE_CONTEXT: k3d-loopzero-core
   BUILD_CONTEXT: k3d-loopzero-build
   CELL_0_CONTEXT: k3d-loopzero-cell-0
-  # cell-2-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-2'.
+  # cell-1-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-1'.
   # Provisioned by infra/k3d/cell-1-cluster.yaml. Cluster name `loopzero-cell-1`
   # matches production wire-clusters.sh + Pulumi convention (LOOPZERO_RUNTIME2_KUBECONFIG).
-  # ClusterCredential CR is named `cell-2` with spec.clusterName=loopzero-cell-1.
+  # ClusterCredential CR is named `cell-1` with spec.clusterName=loopzero-cell-1.
   # Status starts 'maintenance' in cells SQL table (migration 000006); migration
-  # 000007 flips to 'active' after cell-2 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
-  RUNTIME2_CONTEXT: k3d-loopzero-cell-1
+  # 000007 flips to 'active' after cell-1 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
+  CELL_1_CONTEXT: k3d-loopzero-cell-1
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
   PG_HOST: localhost
@@ -308,10 +308,10 @@ tasks:
           echo "[NOTICE] SKIP_SIGSTORE_LOCAL=1 — skipping Sigstore LOCAL stack bootstrap"
         fi
       # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
-      # CC bootstrap so cell-2 has a reachable workload destination.
+      # CC bootstrap so cell-1 has a reachable workload destination.
       - task: k3d:bootstrap-cell-1
       # 2026-05-14 (plan T0.1): bootstrap all three cells atomically
-      # (cell-default + cell-1 + cell-2). Closes CTO Golden Rule #1 gap.
+      # (cell-0 + cell-0 + cell-1). Closes CTO Golden Rule #1 gap.
       - task: k3d:bootstrap-cells
 
   bootstrap:standalone:post-db:
@@ -372,9 +372,9 @@ tasks:
 
   k3d:bootstrap-cell-1:
     desc: |
-      Bootstrap the runtime-2 (k3d-loopzero-cell-1) cluster with cert-manager
+      Bootstrap the second cell cluster (k3d-loopzero-cell-1) with cert-manager
       + traefik + external-secrets + argo-rollouts via helmfile. Mirrors
-      `k3d:bootstrap-cell-0` but targets the runtime-2 cluster.
+      `k3d:bootstrap-cell-0` but targets the second cell.
 
       Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.2
       Closes CTO Golden Rule #1 gap (cleanroom must be multi-cell by default).
@@ -387,7 +387,7 @@ tasks:
 
       D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
       this list — same reason as k3d:bootstrap-cell-0 above. Otherwise
-      tenants pinned to cell-2 have no ClusterIssuer for cert-manager.
+      tenants pinned to cell-1 have no ClusterIssuer for cert-manager.
 
       Idempotent: helmfile sync no-ops if releases match desired state.
     cmds:
@@ -400,8 +400,8 @@ tasks:
 
   k3d:bootstrap-cells:
     desc: |
-      Bootstrap the three ClusterCredential CRs (cell-default, cell-1, cell-2)
-      atomically. cell-default + cell-1 map to k3d-loopzero-cell-0; cell-2 maps
+      Bootstrap the three ClusterCredential CRs (cell-0, cell-0, cell-1)
+      atomically. cell-0 + cell-0 map to k3d-loopzero-cell-0; cell-1 maps
       to k3d-loopzero-cell-1 (real multi-cell placement).
 
       Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.1.

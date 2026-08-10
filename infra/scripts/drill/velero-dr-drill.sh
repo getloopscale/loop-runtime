@@ -235,7 +235,7 @@ metadata:
 spec:
   displayName: "Drill Test Tenant Velero DR"
   plan: starter
-  cellID: cell-default
+  cellID: cell-0
   environments:
     - cluster: workload
       name: production

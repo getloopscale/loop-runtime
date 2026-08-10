@@ -1,7 +1,7 @@
 # Dev (DOKS shared dev) overrides for loopzero-api.
 #
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4. Pairs with values-prod
-# overlay; dev opts into DynamicRouter so cell-2 canary stages 1+2
+# overlay; dev opts into DynamicRouter so cell-1 canary stages 1+2
 # (T5.6/T5.7) can exercise the multi-cell code path before production.
 
 env:

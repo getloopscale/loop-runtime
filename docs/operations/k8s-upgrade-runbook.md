@@ -66,7 +66,7 @@ Read the workflow output:
    - Backup snapshot of mgmt PG via Velero (verify via `/dogfood velero` skill)
    - Document current cluster versions: `doctl kubernetes cluster list`
 
-2. **Upgrade cell-default (canary cell):**
+2. **Upgrade cell-0 (canary cell):**
    ```bash
    doctl kubernetes cluster upgrade <core-cluster-id> --version v1.33-do.0
    doctl kubernetes cluster upgrade <build-cluster-id> --version v1.33-do.0
@@ -79,14 +79,14 @@ Read the workflow output:
    - ArgoCD repo creds + sync functional
 
 4. **Smoke deploy:**
-   - Test deploy against cell-default
+   - Test deploy against cell-0
    - Validate `loopzero deploy` → live URL responds 200
    - SSE rollout events flow correctly
 
 5. **Upgrade additional cells (one at a time):**
    ```bash
    doctl kubernetes cluster upgrade <runtime-cluster-id> --version v1.33-do.0
-   doctl kubernetes cluster upgrade <runtime-cell-2-id> --version v1.33-do.0
+   doctl kubernetes cluster upgrade <runtime-cell-1-id> --version v1.33-do.0
    ```
 
 6. **Post-upgrade evidence:**

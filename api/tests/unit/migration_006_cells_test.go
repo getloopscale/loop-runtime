@@ -97,17 +97,17 @@ func TestMigration006CellsAuditColumns(t *testing.T) {
 
 func TestMigration006CellsSeedRows(t *testing.T) {
 	sql := readMigration006Cells(t)
-	for _, want := range []string{"'cell-default'", "'cell-1'", "'cell-2'"} {
+	for _, want := range []string{"'cell-0'", "'cell-0'", "'cell-1'"} {
 		if !strings.Contains(sql, want) {
 			t.Errorf("seed row missing %q", want)
 		}
 	}
-	// cell-2 must seed in 'maintenance' so placement rejects pinning until
+	// cell-1 must seed in 'maintenance' so placement rejects pinning until
 	// canary stage 1 flips it 'active'. This is the safety gate.
-	if !strings.Contains(sql, "'cell-2', 'Cell 2 (runtime-2)',\n                     'maintenance'") {
+	if !strings.Contains(sql, "'cell-1', 'Cell 2 (runtime-2)',\n                     'maintenance'") {
 		// tolerate single-line variant if formatter changes layout
-		if !strings.Contains(sql, "cell-2") || !strings.Contains(sql, "'maintenance'") {
-			t.Fatal("expected cell-2 seeded in 'maintenance' status (safety gate)")
+		if !strings.Contains(sql, "cell-1") || !strings.Contains(sql, "'maintenance'") {
+			t.Fatal("expected cell-1 seeded in 'maintenance' status (safety gate)")
 		}
 	}
 	// Idempotent re-run.

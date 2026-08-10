@@ -23,7 +23,7 @@ import { ProvisionedCluster } from "./provisioner";
 // ---------------------------------------------------------------------------
 
 export interface CellConfig {
-  /** Unique cell identifier (e.g., "cell-default", "cell-sfo3-02"). */
+  /** Unique cell identifier (e.g., "cell-0", "cell-sfo3-02"). */
   readonly cellId: string;
   /** The runtime cluster backing this cell. */
   readonly cluster: ProvisionedCluster;

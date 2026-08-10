@@ -336,7 +336,7 @@ broker:
   # prod will template per-cell.
   apiURL: "http://loopzero-api.loopzero-system.svc.cluster.local:3001"
   # Default single-cluster cell for dev-public.
-  cellID: "cell-default"
+  cellID: "cell-0"
   # K8s Secret holding the opaque Bearer token. Same value MUST be set in
   # the loopzero-api Deployment via envFrom: loopzero-broker-token Secret in
   # loopzero-system ns. Rotate by re-rolling both sides simultaneously.

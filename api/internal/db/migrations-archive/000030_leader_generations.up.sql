@@ -28,7 +28,7 @@
 
 CREATE TABLE IF NOT EXISTS leader_generations (
     name          TEXT        NOT NULL,
-    cell_id       TEXT        NOT NULL DEFAULT 'cell-default',
+    cell_id       TEXT        NOT NULL DEFAULT 'cell-0',
     holder        TEXT        NOT NULL,
     generation_id BIGINT      NOT NULL DEFAULT 1,
     acquired_at   TIMESTAMPTZ NOT NULL DEFAULT now(),

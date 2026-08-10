@@ -127,7 +127,7 @@ func TestAggregator_ScrubAppliedBeforeAppend(t *testing.T) {
 			{Phase: "release", Status: "completed", Timestamp: now().Add(5 * time.Second)},
 			{Phase: "deploy", Status: "in_progress", Timestamp: now().Add(6 * time.Second)},
 			{Phase: "deploy", Status: "degraded",
-				DegradedReason: "ArgoCD application sync timeout in cell-default",
+				DegradedReason: "ArgoCD application sync timeout in cell-0",
 				Timestamp:      now().Add(7 * time.Second)},
 			{Phase: "deploy", Status: "in_progress", Timestamp: now().Add(8 * time.Second)},
 			{Phase: "deploy", Status: "completed", Timestamp: now().Add(9 * time.Second)},
@@ -237,7 +237,7 @@ func TestAggregator_SourceFieldStamped(t *testing.T) {
 
 // containsAnyDenylist helper used only inside this test file.
 func containsAnyDenylist(s string) bool {
-	terms := []string{"ArgoCD", "argocd", "argo-cd", "cell-default", "cell-1",
+	terms := []string{"ArgoCD", "argocd", "argo-cd", "cell-0", "cell-0",
 		"cosign", "Kaniko", "BuildKit", "Gitea", "Webpack", "Turbopack"}
 	for _, t := range terms {
 		if contains(s, t) {

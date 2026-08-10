@@ -131,7 +131,7 @@ Evidence verified during the 2026-07-01 cross-validation. Paths are relative to 
 - placement (once): `api/internal/placement/engine.go:77` (RoundRobinEngine, bin-packing; `maxPerCell` **=5000** via `config.go:497` — o `500` em `engine.go:91` é o fallback para entrada `<= 0`, não o valor entregue), `:61-70` (`pg_advisory_xact_lock` `PlacementLockID` + SERIALIZABLE)
 - routing (many): `api/internal/placement/dynamic_router.go` (`Resolve` pure hash lookup; `:100-105` refuse-to-clear-on-0-cells invariant)
 - discovery: `api/internal/placement/k8s_cell_store.go:52` (`LoadCells` from ClusterCredential CRDs where `status.connected=true`; lookup by `spec.cellID`)
-- cells seeded: `api/internal/db/migrations/000006_cells.up.sql:22` (cell-default + cell-1 + cell-2; `tenants.cell_id` DEFAULT cell-default)
+- cells seeded: `api/internal/db/migrations/000006_cells.up.sql:22` (cell-0 + cell-0 + cell-1; `tenants.cell_id` DEFAULT cell-0)
 - **enabled, always-on** (not feature-flagged); wired in `api/cmd/{main,setup_background,setup_server,setup_workflows}.go`. Closes cross-validation finding M1.
 
 ### 14 — View 13 (AWS-first Runtime — TARGET)

@@ -58,7 +58,7 @@ func NewRealProvisioner(namespace string, client dynamic.Interface) *RealProvisi
 // EnsureAppProject creates or updates an ArgoCD AppProject CR for tenant RBAC isolation (MOD-5).
 //
 // CHG-2026-04-30-DELETE-SINGLE-CELL: when CellID is non-empty AND not the
-// "cell-default" sentinel, AppProject destinations use `name: <cellID>`
+// "cell-0" sentinel, AppProject destinations use `name: <cellID>`
 // (matches cluster Secret label) instead of `server: <URL>`. This keeps
 // AppProject + Application destinations consistent — both resolve via
 // ArgoCD's cluster name registry instead of pinning to an apiServer URL
@@ -70,13 +70,13 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 	// SEC-007: Use explicit destination server instead of wildcard to prevent
 	// cross-cluster deployment when multiple clusters are registered in ArgoCD.
 	//
-	// F-08 fix (2026-05-07 cleanroom dogfood): the previous cell-default
+	// F-08 fix (2026-05-07 cleanroom dogfood): the previous cell-0
 	// sentinel exclusion forced `server: <URL>` resolution, which broke
 	// when the operator's WORKLOAD_CLUSTER_URL env (DNS hostname) didn't
 	// match the cluster Secret's `data.server` (IP). Now ALL non-empty
 	// cellIDs use name-based lookup. ClusterCredential.spec.clusterName
-	// is required to equal cellID for cell-default deploys (enforced
-	// canonically by infra/scripts/bootstrap-cell-default-cc.sh).
+	// is required to equal cellID for cell-0 deploys (enforced
+	// canonically by infra/scripts/bootstrap-cell-0-cc.sh).
 	useName := spec.CellID != ""
 	destServer := spec.DestinationServer
 	if destServer == "" {
@@ -455,13 +455,13 @@ func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string)
 // buildDestination resolves the ArgoCD Application destination block.
 //
 // CHG-2026-04-30-DELETE-SINGLE-CELL: when CellID is non-empty AND not
-// the legacy "cell-default" sentinel, ArgoCD destination uses `name:`
+// the legacy "cell-0" sentinel, ArgoCD destination uses `name:`
 // pointing to the cluster Secret labeled `argocd.argoproj.io/secret-type=cluster`
-// with `name=<cellID>` (eg. "cell-2-argocd-cluster" → name=cell-2).
+// with `name=<cellID>` (eg. "cell-1-argocd-cluster" → name=cell-1).
 // ArgoCD application-controller resolves this at sync time, picking up
 // IP rotations / token refreshes without operator awareness.
 //
-// For "cell-default" or empty cellID we keep the explicit `server:` URL
+// For "cell-0" or empty cellID we keep the explicit `server:` URL
 // to preserve compatibility with the existing single-runtime-cluster
 // installs whose argocd-cluster Secret may be named differently
 // (eg. "runtime-argocd-cluster") OR who use the in-cluster API server
@@ -472,7 +472,7 @@ func buildDestination(spec ApplicationSpec) map[string]interface{} {
 	dest := map[string]interface{}{
 		"namespace": spec.DestinationNS,
 	}
-	// F-08 fix (2026-05-07): cell-default is no longer a sentinel.
+	// F-08 fix (2026-05-07): cell-0 is no longer a sentinel.
 	// All non-empty cellIDs use name-based lookup. See EnsureAppProject
 	// for full rationale.
 	if spec.CellID != "" {
