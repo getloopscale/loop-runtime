@@ -622,3 +622,21 @@ dod:
   - está decidido se `k3d:secrets:create` deve restaurar o contexto anterior ao terminar
 
 > Registrado 2026-08-10 ao restaurar o login com Google.
+
+## B-025 — Três hosts públicos apontam para o vazio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-live-test
+evidence: medido em 2026-08-10 ao revalidar a topologia. `app.loopzero.example`, `auth.loopzero.example` e `cloud.loopzero.example` — **sem** o sufixo `-dev` — têm bloco próprio no Caddyfile e não servem nada: `app` devolve **502** porque encaminha para `localhost:5173`, um servidor Vite de desenvolvimento que não está rodando (`ss -ltn` na 5173 devolve zero sockets); `auth` e `cloud` devolvem **404**. Os três estão declarados em `infra/quality/proxy-exposure.txt`, e a declaração de `app.loopzero.example /sessions/whoami` diz literalmente *"now consumer-less, delete after the new bundle"*. O `setup-dev-public-dns.sh` só gerencia `auth-dev` e `app-dev`, então nem DNS eles têm por parte deste repositório.
+why_now: apareceu ao medir para onde a borda encaminha, e não por sondagem de host — a sonda `loopzero-ops leak live` só cobre `app-dev` e `auth-dev`, então estes três nunca foram medidos. O `app.loopzero.example` é o mais relevante: ele encaminha para um servidor de **desenvolvimento** (Vite), e o Red Team já fechou dois achados sobre justamente isso (loopzero-cloud#66 e #141, sobre o bundle de produção e o bloqueio de caminhos de dev-server). Um bloco vivo apontando para o Vite reabre a mesma superfície se alguém subir a 5173 na máquina.
+status: raw
+severity: média — hoje não servem nada, então não vazam. O risco é o bloco existir e alguém subir o Vite: aí `app.loopzero.example` passa a servir código-fonte na internet, que é exatamente o que o #66 fechou.
+dod:
+  - está decidido se os três hosts são removidos ou se voltam a servir — e a decisão vale para os três, não só para o que devolve 502
+  - se removidos: saem do Caddyfile e do inventário juntos, e o gate `proxy-exposure` continua PASS
+  - se mantidos: a sonda `loopzero-ops leak live` passa a cobri-los, porque hoje três hosts públicos não são medidos por nada
+  - a declaração que diz "delete after the new bundle" é resolvida em vez de continuar descrevendo uma intenção de meses atrás
+
+> Registrado 2026-08-10 durante a revalidação completa da topologia.
