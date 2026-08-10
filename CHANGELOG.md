@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- As chamadas do painel que passam pelo `/engine/*` — implantar, ver projetos, acompanhar build —
+  deixaram de falhar de forma intermitente no ambiente de desenvolvimento público. A borda alcançava o
+  serviço por um encaminhamento de porta que é ferramenta de depuração, não de operação: ele reiniciava
+  cerca de duas vezes por minuto, e cada reinício era uma janela de erro 502. O serviço passou a ser
+  alcançado pelo mesmo mecanismo estável que o seu irmão já usava (BACKLOG.md B-010)
 - Uma evidência que aponta para um arquivo de configuração do próprio ferramental deixou de ser
   acusada de invenção. O verificador cortava o ponto inicial do caminho, procurava um arquivo que
   nunca existiu e reprovava o documento inteiro — com o arquivo no lugar e a linha citada correta

@@ -1,3 +1,18 @@
+# A borda (Caddy) roda no host e precisa alcancar o loopzero-cloud. Ate 2026-08-10 ela
+# fazia isso por `kubectl port-forward`, que e ferramenta de depuracao e nao
+# transporte: a unit systemd que o vigiava marcou NRestarts=126499 — ~1,8 reinicios
+# por minuto — e cada reinicio e uma janela de 502 em `/engine/*`, que carrega deploy,
+# whoami, listar projetos e status de build.
+#
+# NodePort e o padrao que o irmao `loopzero-api` ja usa e que nunca teve o problema, porque
+# o serverlb do k3d publica a porta por mapeamento docker comum. 30002 e escolhida
+# porque `docker port k3d-loopzero-mgmt-serverlb` ja a publica como host 3002 e ela nao
+# estava tomada; uma NodePort que o serverlb nao publique renderiza igual e continua
+# inalcancavel do host.
+service:
+  type: NodePort
+  nodePort: 30002
+
 # CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
 # `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images
 # are published EXCLUSIVELY to GHCR by the AM6 reusable workflow

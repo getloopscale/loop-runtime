@@ -180,5 +180,11 @@ spec:
     - port: {{ .Values.service.port }}
       targetPort: http
       name: http
+      {{- if .Values.service.nodePort }}
+      # Pinned so the edge can reach it. A NodePort the k3d serverlb does not publish
+      # renders fine and is still unreachable from the host, which is how the edge ended
+      # up on a kubectl port-forward that restarted 126k times.
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
   selector:
     app: loopzero-cloud
