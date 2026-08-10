@@ -6,6 +6,11 @@
 //
 // Exigem um PostgreSQL real com a migracao 000061 aplicada; pulam sem falhar quando nao ha banco
 // alcancavel, como os demais testes deste pacote.
+//
+// Enquanto pularem, a unificacao esta verificada por leitura e nao por execucao — e as duas
+// premissas que a migracao assume sobre o Postgres continuam sem prova. O caminho para executa-los
+// e a cadeia de .claude/rules/cleanroom-up-live-test-mandate.md, onde ha banco de pe depois do
+// setup + seeds. Rastreado em https://github.com/getloopscale/loopzero/issues/279
 package integration
 
 import (
@@ -28,10 +33,12 @@ func cellTestPool(t *testing.T) *pgxpool.Pool {
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dbURL())
 	if err != nil {
+		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
 		t.Skipf("pulando: sem PostgreSQL alcancavel: %v", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
+		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
 		t.Skipf("pulando: sem PostgreSQL alcancavel: %v", err)
 	}
 	return pool
@@ -55,6 +62,7 @@ func TestGatilhoResolveCellIdAntesDoNotNullReprovar(t *testing.T) {
 	// Rollback sempre: o teste prova uma ordem, nao deixa dado.
 	tx, err := pool.Begin(ctx)
 	if err != nil {
+		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
 		t.Skipf("pulando: nao foi possivel abrir transacao: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -87,6 +95,7 @@ func TestGatilhoFalhaAltoQuandoOTenantNaoTemCell(t *testing.T) {
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
+		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
 		t.Skipf("pulando: nao foi possivel abrir transacao: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -118,6 +127,7 @@ func TestCatalogoNaoTemMaisAsIdentidadesAntigas(t *testing.T) {
 	err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM cells WHERE cell_id IN ('cell-default', 'cell-2')`).Scan(&sobreviventes)
 	if err != nil {
+		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
 		t.Skipf("pulando: tabela cells indisponivel: %v", err)
 	}
 	if sobreviventes != 0 {
