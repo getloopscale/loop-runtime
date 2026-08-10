@@ -192,9 +192,11 @@ docker_build(
 # Without this, the Deployment's envFrom: configMapRef/secretRef references resolve to
 # missing resources and Pod fails CrashLoopBackOff. Output written to .tilt-rendered/
 # (gitignored) — re-rendered on every values-dev.yaml or template edit.
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml"
+
 local_resource(
     "loopzero-api-runtime",
-    cmd="mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml",
+    cmd=_API_RUNTIME_RENDER,
     deps=[
         "infra/helm/loopzero-api/values-dev.yaml",
         "infra/helm/loopzero-api/templates/configmap-runtime.yaml",
@@ -202,6 +204,19 @@ local_resource(
     ],
     labels=["loopzero"],
 )
+
+# Renderiza uma vez durante o CARREGAMENTO do Tiltfile, antes do k8s_yaml abaixo.
+#
+# Sem isto o Tiltfile nao carrega num clone novo, e o erro nao aponta para a causa:
+# `.tilt-rendered/` e gitignored, `k8s_yaml` le o arquivo no momento em que o Tiltfile
+# e avaliado, e quem o produz e o `local_resource` acima — que so roda DEPOIS que o
+# Tiltfile carregou. O recurso dependia do artefato que ele mesmo gera. Medido no
+# droplet app-dev em 2026-08-10, durante a reconstrucao total: `tilt up` abortou com
+# "open .tilt-rendered/loopzero-api-runtime.yaml: no such file or directory".
+#
+# O `local_resource` continua existindo e nao e redundante: ele re-renderiza quando os
+# `deps` mudam, que e o laco de desenvolvimento. Este `local()` so garante o primeiro.
+local(_API_RUNTIME_RENDER, quiet=True)
 k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
 
 k8s_yaml("infra/tilt/api-deployment.yaml")

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS release_app_attestations (
     sbom_s3_key     TEXT,
     sbom_format     TEXT,
     sbom_component_count INTEGER,
-    cell_id         TEXT NOT NULL DEFAULT 'cell-0',
+    cell_id         TEXT NOT NULL DEFAULT 'cell-default',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 

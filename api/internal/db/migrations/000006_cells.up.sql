@@ -13,26 +13,26 @@
 --     audit trail of cell registration, deterministic ordering for placement
 --     decisions, and persistence of cell state independent of K8s API
 --     availability. Without it, capacity policy ("don't pin tenant to full
---     cell") and audit ("when was cell-1 activated, by whom?") have no home.
+--     cell") and audit ("when was cell-2 activated, by whom?") have no home.
 --   • The two SoTs are not redundant — they answer different questions.
 --     A reconciler keeps them consistent (planned T5.4 observability +
 --     cell-status reconciler in operators).
 --
 -- Forward-only migration. INSERTs are idempotent (ON CONFLICT DO NOTHING).
--- Seeded with cell-0 + cell-0 + cell-1 so existing tenants
--- (cell_id='cell-0' DEFAULT) resolve cleanly when the API queries
+-- Seeded with cell-default + cell-1 + cell-2 so existing tenants
+-- (cell_id='cell-default' DEFAULT) resolve cleanly when the API queries
 -- this table for capacity checks.
 --
 -- Cross-references:
 --   • api/internal/db/migrations/000001_initial_schema.up.sql — defines
---     tenants.cell_id with DEFAULT 'cell-0' (line 89) + populate_cell_
+--     tenants.cell_id with DEFAULT 'cell-default' (line 89) + populate_cell_
 --     id_from_tenant() trigger (line 59).
 --   • operators/api/v1/clustercredential_types.go — CC.spec.cellID pattern
 --     `^cell-[a-z0-9-]+$`. This table's CHECK constraint matches.
 --   • api/internal/placement/dynamic_router.go — Resolve(cellID) is the
 --     consumer that benefits when this table tracks capacity (future).
 --   • docs/decisions/MEET-INFRA-NORMALIZE-T3-multi-cell.md — references
---     this migration as part of cell-1 activation gates.
+--     this migration as part of cell-2 activation gates.
 
 CREATE TABLE IF NOT EXISTS cells (
     -- Primary key. Matches CC.spec.cellID pattern.
@@ -95,33 +95,33 @@ CREATE TRIGGER trg_cells_set_updated_at
     FOR EACH ROW EXECUTE FUNCTION set_cells_updated_at();
 
 -- Seed three baseline cells.
---   cell-0 : preserves the DEFAULT 'cell-0' value of
+--   cell-default : preserves the DEFAULT 'cell-default' value of
 --                  tenants.cell_id from migration 000001. Status active,
 --                  unlimited capacity. Existing tenants reference it
 --                  implicitly via DEFAULT.
 --   cell-1       : the canonical first cell. Pre-multi-cell activation,
---                  this is logically the same cluster as cell-0
+--                  this is logically the same cluster as cell-default
 --                  in single-cell deployments. The cells.cell_id column
 --                  represents the *named* cell; the DEFAULT exists for
 --                  backwards compatibility.
---   cell-1       : the runtime-2 cluster (per CLAUDE.md "Cell architecture
+--   cell-2       : the runtime-2 cluster (per CLAUDE.md "Cell architecture
 --                  Phase 0+1+1.5 complete; runtime-2 physically provisioned
 --                  but not routed"). Seeded as 'maintenance' so placement
 --                  rejects pinning until the activation canary
 --                  (plan v2 Phase 5 stage 1+2) flips it to 'active'.
---                  This makes cell-1 visible to operators (capacity gate
+--                  This makes cell-2 visible to operators (capacity gate
 --                  exists, audit trail begins) without admitting traffic.
 INSERT INTO cells (cell_id, display_name, status, region, notes)
 VALUES
-    ('cell-0', 'Default Cell',
+    ('cell-default', 'Default Cell',
                      'active', 'unknown',
                      'Backwards-compat default for tenants.cell_id DEFAULT. ' ||
                      'Pre-multi-cell, all tenants referenced this implicitly.'),
-    ('cell-0',       'Cell 1 (runtime)',
+    ('cell-1',       'Cell 1 (runtime)',
                      'active', 'sfo3',
                      'Canonical first cell. Maps to runtime-1 DOKS cluster ' ||
                      'in production deployments.'),
-    ('cell-1',       'Cell 2 (runtime-2)',
+    ('cell-2',       'Cell 2 (runtime-2)',
                      'maintenance', 'sfo3',
                      'Physically provisioned (infra.ts:160-175) but not ' ||
                      'admitting traffic. Activation gated by plan v2 Phase 5 ' ||

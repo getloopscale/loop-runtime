@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS preview_environments (
     repo_full_name  TEXT,
     installation_id BIGINT,
     expires_at      TIMESTAMPTZ NOT NULL,
-    cell_id         TEXT NOT NULL DEFAULT 'cell-0',
+    cell_id         TEXT NOT NULL DEFAULT 'cell-default',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at      TIMESTAMPTZ,
