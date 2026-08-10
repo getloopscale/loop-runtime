@@ -206,3 +206,38 @@ func DefaultClient() *http.Client {
 		},
 	}
 }
+
+// DiscoveryLeak reporta os campos do documento de descoberta OIDC que anunciam um host
+// inalcançável de fora do cluster, ou texto claro.
+//
+// POR QUE ISTO É UMA SONDA E NÃO UM GATE. O chart do Hydra JÁ resolve isto: ele usa
+// `publicAuthUrl` quando presente, e um comentário nele registra que alguém já pagou esse
+// preço antes ("otherwise Hydra emits verification_uri with the cluster-internal host").
+// A configuração está certa; o que roda é que não estava. Medido em 2026-08-10 no
+// app-dev: NOVE campos — incluindo `issuer` e `jwks_uri` — anunciavam
+// `http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444`, porque o sync rodou sem a
+// variável. Nenhum gate hermético pega isso, porque o defeito não está no repositório.
+//
+// O impacto é concreto: um cliente OIDC que siga a descoberta — o mecanismo padrão —
+// tenta resolver um nome que só existe dentro do cluster, em texto claro. E o `issuer` é
+// o valor que entra no token e que todo verificador compara; anunciá-lo errado quebra a
+// validação em quem consumir o token depois.
+func DiscoveryLeak(doc map[string]any) []string {
+	var vazamentos []string
+	for campo, valor := range doc {
+		s, ok := valor.(string)
+		if !ok {
+			continue
+		}
+		switch {
+		case strings.Contains(s, ".svc.cluster.local"):
+			vazamentos = append(vazamentos, fmt.Sprintf(
+				"%s anuncia o host interno %q — inalcançável fora do cluster", campo, s))
+		case strings.HasPrefix(s, "http://"):
+			vazamentos = append(vazamentos, fmt.Sprintf(
+				"%s anuncia texto claro %q — a borda serve HTTPS", campo, s))
+		}
+	}
+	sort.Strings(vazamentos)
+	return vazamentos
+}

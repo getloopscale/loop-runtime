@@ -193,7 +193,7 @@ tasks:
       # own template render — no separate `helm template | kubectl apply` step needed.
       - >-
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
-        -e standalone-multi
+        -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         sync --skip-deps
       # Post-sync: MinIO credentials Secret for cache CWTs (envFrom.secretRef)
@@ -231,7 +231,7 @@ tasks:
       # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
       - >-
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
-        -e standalone-multi
+        -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.CELL_0_CONTEXT}}
         sync --skip-deps
       # Post-sync: Traefik middlewares + wildcard cert + TLSStore
@@ -263,7 +263,7 @@ tasks:
     cmds:
       - >-
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
-        -e standalone-multi
+        -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         --selector name=loki sync --skip-deps
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/loki/nodeport-service.yaml
@@ -280,7 +280,7 @@ tasks:
       # release Helmfile manages in build clusters, with the correct push URL resolved.
       - >-
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
-        -e standalone-multi
+        -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         --selector name=promtail sync
 
@@ -394,7 +394,7 @@ tasks:
           get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
           2>/dev/null || echo "")
         helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
-          -e standalone-multi \
+          -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}" \
           --kube-context {{.CORE_CONTEXT}} \
           --selector name=ory-kratos --selector name=ory-hydra \
           sync --skip-deps

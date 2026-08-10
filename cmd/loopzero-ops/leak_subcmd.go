@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
@@ -106,6 +107,21 @@ func runLeak(args []string) int {
 		}
 	}
 
+	// O documento de descoberta OIDC é lido por todo cliente ANTES de existir token, e o
+	// `issuer` que ele anuncia é o valor que entra no token e que todo verificador compara.
+	// Anunciar um host de cluster ali quebra quem consumir o token depois — e nenhum gate
+	// hermético pega, porque o defeito não está no repositório: o chart já sabe usar o FQDN
+	// público, e o que roda é que não recebeu a variável.
+	if vazamentos := probeDiscovery(ctx, cli, *authHost); len(vazamentos) > 0 {
+		for _, v := range vazamentos {
+			rep.Fail++
+			rep.Failures = append(rep.Failures, *authHost+" descoberta OIDC: "+v)
+			if !*asJSON {
+				fmt.Printf("  FAIL  %-46s %s\n", *authHost+"/.well-known/openid-configuration", v)
+			}
+		}
+	}
+
 	// Uma família declarada e não medida é buraco de cobertura. Contá-la como falha é
 	// deliberado: o modo de falha que esta sonda existe para impedir é justamente a rota
 	// nova que ninguém sonda, e um aviso silencioso reproduziria isso.
@@ -141,4 +157,29 @@ func runLeak(args []string) int {
 		fmt.Println("  A borda fecha em tudo que exige credencial, e abre no que a especificação exige.")
 	}
 	return 0
+}
+
+// probeDiscovery lê o documento de descoberta e devolve os campos que anunciam um host
+// inalcançável de fora, ou texto claro. Falha de leitura NÃO vira vazamento — a sonda de
+// fecho acima já cobre a indisponibilidade, e inventar um achado a partir de uma rede
+// ruim seria pior que não medir.
+func probeDiscovery(ctx context.Context, cli *http.Client, host string) []string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://"+host+"/.well-known/openid-configuration", nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		return nil
+	}
+	return leak.DiscoveryLeak(doc)
 }

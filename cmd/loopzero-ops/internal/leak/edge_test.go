@@ -5,6 +5,7 @@ package leak
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -176,4 +177,85 @@ func TestProbeMarcaInalcançávelComoSkip(t *testing.T) {
 	if !v.Skipped {
 		t.Error("alvo inalcançável tem de ser marcado como pulado, para o relatório distinguir de uma reprovação")
 	}
+}
+
+// TestDiscoveryLeakPegaHostInternoETextoClaro — os dois modos medidos em 2026-08-10.
+func TestDiscoveryLeakPegaHostInternoETextoClaro(t *testing.T) {
+	doc := map[string]any{
+		"issuer":                 "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/",
+		"jwks_uri":               "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json",
+		"authorization_endpoint": "https://auth-dev.loopzero.example/oauth2/auth",
+		"scopes_supported":       []any{"openid"},
+	}
+	got := DiscoveryLeak(doc)
+	if len(got) != 2 {
+		t.Fatalf("queria 2 vazamentos (issuer + jwks_uri), veio %d: %v", len(got), got)
+	}
+	for _, g := range got {
+		if !strings.Contains(g, "interno") {
+			t.Errorf("o vazamento devia nomear o host interno: %q", g)
+		}
+	}
+}
+
+// TestDiscoveryLeakAceitaDocumentoCorreto — sem falso positivo em HTTPS público.
+func TestDiscoveryLeakAceitaDocumentoCorreto(t *testing.T) {
+	doc := map[string]any{
+		"issuer":                 "https://auth-dev.loopzero.example/",
+		"jwks_uri":               "https://auth-dev.loopzero.example/.well-known/jwks.json",
+		"authorization_endpoint": "https://auth-dev.loopzero.example/oauth2/auth",
+	}
+	if got := DiscoveryLeak(doc); len(got) != 0 {
+		t.Errorf("documento correto não pode gerar vazamento, veio %v", got)
+	}
+}
+
+// TestNenhumaTaskFixaOAmbienteHelmfile trava a causa raiz medida em 2026-08-10.
+//
+// `LOOPZERO_HELMFILE_ENV=dev-public task cloud:setup` sincronizava o Ory com
+// `-e standalone-multi` FIXO, ignorando a variável. O efeito era invisível e caro: o
+// ambiente `standalone-multi` não declara `publicAuthUrl`, então o chart do Hydra caía no
+// FQDN de cluster e o documento de descoberta OIDC passava a anunciar
+// `http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444` em NOVE campos — incluindo o
+// `issuer`, que é o valor gravado no token e comparado por todo verificador.
+//
+// A task não falhava; ela sincronizava o ambiente errado com sucesso. Este guarda existe
+// porque nada mais distinguia "instalou dev-public" de "instalou standalone-multi
+// enquanto você pedia dev-public".
+func TestNenhumaTaskFixaOAmbienteHelmfile(t *testing.T) {
+	raiz := repoRootFromTest(t)
+	b, err := os.ReadFile(filepath.Join(raiz, "taskfiles", "infra.yml"))
+	if err != nil {
+		t.Fatalf("ler taskfiles/infra.yml: %v", err)
+	}
+	var ofensoras []string
+	for i, linha := range strings.Split(string(b), "\n") {
+		if strings.Contains(linha, "-e standalone-multi") {
+			ofensoras = append(ofensoras, fmt.Sprintf("infra.yml:%d", i+1))
+		}
+	}
+	if len(ofensoras) > 0 {
+		t.Errorf("%d task(s) fixam `-e standalone-multi` e ignoram LOOPZERO_HELMFILE_ENV: %s\n"+
+			"Use `${LOOPZERO_HELMFILE_ENV:-standalone-multi}` como as demais. Fixar o ambiente faz a task "+
+			"instalar o ambiente ERRADO com sucesso — foi assim que o issuer do OIDC virou um host "+
+			"de cluster em 9 campos do documento de descoberta.",
+			len(ofensoras), strings.Join(ofensoras, ", "))
+	}
+}
+
+// repoRootFromTest sobe até achar go.work, que só existe na raiz do repositório.
+func repoRootFromTest(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for i := 0; i < 8; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+			return dir
+		}
+		dir = filepath.Dir(dir)
+	}
+	t.Fatal("raiz do repositório não encontrada (go.work ausente)")
+	return ""
 }
