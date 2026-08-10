@@ -267,3 +267,46 @@ func DiscoveryLeak(doc map[string]any) []string {
 	sort.Strings(vazamentos)
 	return vazamentos
 }
+
+// PlaceholderLeak reporta valores de configuração que ficaram como marcador de
+// substituição em vez de credencial real.
+//
+// POR QUE ISTO EXISTE. Em 2026-08-10 o login com Google parou com `Erro 401:
+// invalid_client` — o Google dizia, corretamente, que o cliente não existia. A causa: o
+// chart do Kratos lê `LOOPZERO_GOOGLE_CLIENT_ID` do ambiente e tem
+// `| default "REPLACE_VIA_PULUMI"`; um `helmfile sync` sem a variável exportada gravou o
+// MARCADOR por cima da credencial boa, e o sync terminou com sucesso.
+//
+// É a mesma classe do bug do Resend que o CLAUDE.md documenta — configuração que aceita
+// um valor de placeholder como se fosse válido. O `default` existe para o chart renderizar
+// em ambiente sem credencial; o defeito é ninguém verificar depois se o que ficou no
+// cluster é credencial ou marcador.
+//
+// A verificação é barata e o modo de falha é caro: um marcador quebra o login inteiro e
+// só aparece quando alguém tenta entrar.
+func PlaceholderLeak(config string) []string {
+	marcadores := []string{"REPLACE_VIA_PULUMI", "REPLACE_VIA_", "CHANGEME", "TODO_SET_ME"}
+	vistos := map[string]bool{}
+	var achados []string
+	for _, linha := range strings.Split(config, "\n") {
+		for _, m := range marcadores {
+			if !strings.Contains(linha, m) {
+				continue
+			}
+			campo := strings.TrimSpace(linha)
+			if i := strings.Index(campo, ":"); i > 0 {
+				campo = strings.TrimSpace(strings.TrimPrefix(campo[:i], "- "))
+			}
+			if vistos[campo] {
+				continue
+			}
+			vistos[campo] = true
+			achados = append(achados, fmt.Sprintf(
+				"%s ficou com o marcador %q em vez de uma credencial — o sync rodou sem a variável exportada",
+				campo, m))
+			break
+		}
+	}
+	sort.Strings(achados)
+	return achados
+}

@@ -77,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Entrar com a conta do Google voltou a funcionar. Uma reinstalação do serviço de login gravou um
+  texto de exemplo no lugar das credenciais reais e terminou como se tivesse dado certo — o Google
+  então recusava a entrada dizendo que o aplicativo não existe. As credenciais nunca se perderam;
+  só haviam sido cobertas. A verificação automática passou a reprovar quando encontra um texto de
+  exemplo onde deveria haver credencial (BACKLOG.md B-023)
+
 - Digitar o endereço do serviço de login no navegador levava a uma página de erro em texto puro, sem
   caminho nenhum dali. Agora leva à tela de entrada. O endereço é usado sobretudo por programas, e
   nenhuma parte do produto mandava alguém para lá — mas um endereço público que não leva a lugar

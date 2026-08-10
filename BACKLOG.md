@@ -589,3 +589,36 @@ dod:
 **Uma coisa que este item NÃO propõe.** Remover o `requireJWT` do grupo `/engine` para o CLI falar direto com o motor. Isso trocaria um problema de disponibilidade por um de segurança, e é a direção errada: a fronteira única de autenticação é o que há de mais valioso no arranjo atual.
 
 > Registrado 2026-08-10, medido por acidente durante a remoção do `cloud-dev`.
+
+## B-023 — Um `helmfile sync` sem as variáveis grava marcador por cima de credencial   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: human
+evidence: reportado pelo sponsor em 2026-08-10 — o login com Google devolvia `Erro 401: invalid_client`, e o Google estava certo: o cliente não existia. Medido no cluster, `ory-kratos-config` tinha `client_id: REPLACE_VIA_PULUMI` para **Google e GitHub**. A causa é `infra/helm/ory-kratos/values.yaml.gotmpl:104-113`: o chart lê `LOOPZERO_GOOGLE_CLIENT_ID` do ambiente com `| default "REPLACE_VIA_PULUMI"`, então um `helmfile sync` sem a variável exportada grava o MARCADOR por cima da credencial boa — **e termina com sucesso**. Fui eu que causei, rodando `task cloud:setup` três vezes hoje sem exportá-las.
+why_now: é a mesma classe do bug do Resend que o `CLAUDE.md` documenta — configuração que aceita um placeholder como se fosse válido. O `default` existe por uma razão legítima (o chart precisa renderizar em ambiente sem credencial); o defeito é ninguém verificar depois se o que ficou no cluster é credencial ou marcador. O modo de falha é caro e silencioso: nada reprova, e só aparece quando uma pessoa tenta entrar.
+status: shipped
+dod:
+  - ~~as credenciais reais voltam ao cluster~~ — **feito** via `loopzero-ops seed patch-kratos` (7 correções); o fluxo redireciona para `accounts.google.com` com o `client_id` real
+  - ~~existe verificação que reprova marcador sobrevivente~~ — **feito**: `loopzero-ops leak live` lê a configuração de identidade e reprova `REPLACE_VIA_*`, `CHANGEME`, `TODO_SET_ME`
+  - falta decidir se `task cloud:setup` deve **recusar** rodar sem as variáveis em vez de gravar o marcador — hoje ele grava e reporta sucesso, que é o comportamento que causou isto
+
+**Um achado de passagem.** O `loopzero-ops seed patch-kratos` falhou primeiro com `configmaps "ory-kratos-config" not found`, embora o ConfigMap existisse: o contexto padrão do kubectl estava em `k3d-loopzero-secrets`, deixado pelo `k3d:secrets:create`. O seed herda o contexto atual em vez de fixar o cluster que ele opera — e a mensagem culpa o ConfigMap em vez do contexto. Registrado como `B-024`.
+
+## B-024 — Os seeds herdam o contexto do kubectl e culpam o recurso errado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: medido em 2026-08-10. `loopzero-ops seed patch-kratos` reprovou com `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found` — e o ConfigMap existia. O contexto padrão do kubectl estava em `k3d-loopzero-secrets` (deixado por `task k3d:secrets:create`), e o seed operou o cluster errado. Trocado o contexto para `k3d-loopzero-core`, o mesmo comando passou com 7 correções.
+why_now: o `k3d:secrets:create` passou a fazer parte do caminho canônico há poucas semanas, e ele muda o contexto ativo como efeito colateral. Qualquer seed rodado depois dele opera o cluster de segredos sem avisar. A mensagem de erro é o que torna isto caro: ela nomeia o recurso ausente, não o cluster errado — quem a lê procura o ConfigMap, que está lá.
+status: raw
+severity: média — não corrompe nada (o cluster errado simplesmente não tem os recursos), mas manda quem depura para o lugar errado, e o custo é tempo em cima de um sistema já quebrado.
+dod:
+  - os seeds fixam o cluster que operam em vez de herdar o contexto ativo, ou falham dizendo qual contexto usaram
+  - a mensagem de recurso-não-encontrado nomeia o contexto, para quem lê não procurar o recurso certo no cluster errado
+  - está decidido se `k3d:secrets:create` deve restaurar o contexto anterior ao terminar
+
+> Registrado 2026-08-10 ao restaurar o login com Google.

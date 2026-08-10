@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
 )
@@ -122,6 +123,18 @@ func runLeak(args []string) int {
 		}
 	}
 
+	// Um marcador de substituição que sobreviveu no cluster quebra o login inteiro e só
+	// aparece quando alguém tenta entrar — foi o `Erro 401: invalid_client` de 2026-08-10.
+	// A checagem só roda quando o kubectl alcança o cluster; fora dele, silêncio (a sonda
+	// mede a borda pública e não pode exigir acesso ao cluster para funcionar).
+	for _, achado := range probePlaceholders() {
+		rep.Fail++
+		rep.Failures = append(rep.Failures, "configuração de identidade: "+achado)
+		if !*asJSON {
+			fmt.Printf("  FAIL  %-46s %s\n", "ory-kratos-config", achado)
+		}
+	}
+
 	// Uma família declarada e não medida é buraco de cobertura. Contá-la como falha é
 	// deliberado: o modo de falha que esta sonda existe para impedir é justamente a rota
 	// nova que ninguém sonda, e um aviso silencioso reproduziria isso.
@@ -182,4 +195,19 @@ func probeDiscovery(ctx context.Context, cli *http.Client, host string) []string
 		return nil
 	}
 	return leak.DiscoveryLeak(doc)
+}
+
+// probePlaceholders lê a configuração do Kratos no cluster e devolve os campos que
+// ficaram com marcador de substituição.
+//
+// Sem kubectl alcançável não há achado — e isso é deliberado: esta sonda mede a borda
+// PÚBLICA, e exigir acesso ao cluster para ela rodar a tornaria inútil de fora. Quem
+// roda com acesso ganha a verificação de graça.
+func probePlaceholders() []string {
+	out, err := exec.Command("kubectl", "--context", "k3d-loopzero-core",
+		"-n", "loopzero-auth", "get", "cm", "ory-kratos-config", "-o", "yaml").Output()
+	if err != nil {
+		return nil
+	}
+	return leak.PlaceholderLeak(string(out))
 }

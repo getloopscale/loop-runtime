@@ -304,3 +304,33 @@ func TestProbeReprova404NaRotaPública(t *testing.T) {
 		t.Errorf("a razão devia dizer QUEM depende da rota, veio %q", v.Reason)
 	}
 }
+
+// TestPlaceholderLeakPegaCredencialNaoSubstituida — o defeito que quebrou o login.
+func TestPlaceholderLeakPegaCredencialNaoSubstituida(t *testing.T) {
+	cfg := `
+      providers:
+        - id: google
+          client_id: "REPLACE_VIA_PULUMI"
+          client_secret: "REPLACE_VIA_PULUMI"
+        - id: github
+          client_id: "Ov23li3uhReal"
+`
+	got := PlaceholderLeak(cfg)
+	if len(got) != 2 {
+		t.Fatalf("queria 2 achados (client_id + client_secret), veio %d: %v", len(got), got)
+	}
+	for _, g := range got {
+		if !strings.Contains(g, "marcador") {
+			t.Errorf("o achado devia nomear o marcador: %q", g)
+		}
+	}
+}
+
+// TestPlaceholderLeakAceitaCredencialReal — sem falso positivo.
+func TestPlaceholderLeakAceitaCredencialReal(t *testing.T) {
+	cfg := `client_id: "46285214407-8mrcsu.apps.googleusercontent.com"
+client_secret: "GOCSPX-real"`
+	if got := PlaceholderLeak(cfg); len(got) != 0 {
+		t.Errorf("credencial real não pode gerar achado, veio %v", got)
+	}
+}
