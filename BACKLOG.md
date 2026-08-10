@@ -678,3 +678,27 @@ dod:
   - existe verificação que reprova endereço fixo em mensagem de diagnóstico — a lição é que a correção de junho consertou o valor e esqueceu a mensagem
 
 > Registrado 2026-08-10 ao medir se o CLI passa pelo painel (`B-022`).
+
+## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: human
+sponsor: diretriz de 2026-08-10 — *"SEGURANÇA SEMPRE É CRÍTICO E PRIORIDADE P0. TEMOS QUE TER SOMENTE UM ENDEREÇO EXPOSTO."*
+severity: **P0** — por diretriz do sponsor, e sustentada por medição.
+evidence: medido em 2026-08-10, **da internet** (não do droplet). 39 portas escutam em `0.0.0.0`; o firewall `loopzero-host-firewall` bloqueia 20; sobram **19**, das quais 2 estão na `ALLOW_EXTERNAL` com justificativa medida. As outras **17 não estão em lista nenhuma**. Testado de fora com conexão TCP: `14433`, `14444`, `30082`, `18084`, `30090` e `30094` responderam **ABERTA**. Identificado o que serve cada uma via `docker ps`: `30082` é o **ArgoCD** (entregador GitOps), `30095` é o **cluster de segredos**, `18083`–`18090` são cinco produtos do plano de dados servindo direto, contornando a borda, e `14433`/`14444` são Kratos e Hydra **sem TLS** — o mesmo serviço que a borda já publica em HTTPS.
+why_now: a lista `PROTECT` do firewall foi escrita quando os clusters se chamavam `mgmt`, `workload`, `runtime-2` e `vault` — os comentários dela ainda citam esses nomes. Ela cobre as portas que existiam então; tudo que subiu depois (as pontes NodePort de Kratos e Hydra que criei hoje, os produtos do plano de dados, o cluster de segredos) nasceu fora da lista. **Uma lista escrita à mão degrada sozinha**, e esta degradou em silêncio: nada reprova quando uma porta nova aparece sem entrada.
+status: raw
+blocked_by: nada técnico. O que exige decisão é a política — quais portas ficam abertas e com que justificativa —, e a diretriz do sponsor já a define: **uma superfície exposta**.
+dod:
+  - o firewall passa a fechar **por padrão** e abrir por exceção nomeada, em vez do inverso: hoje uma porta ausente da lista fica ABERTA, que é a polaridade errada para uma regra de segurança
+  - as 17 portas sem lista são classificadas — fecha, ou entra na `ALLOW_EXTERNAL` com o consumidor nomeado e medido, como as duas que já estão lá
+  - o `loopzero-host-firewall.sh` passa a viver num repositório versionado: hoje ele existe **só em `/home/paulo/loopzero-ops/dev/`**, fora de qualquer git, e é o mesmo padrão do `B-010` — um controle que vive só no servidor some no próximo servidor
+  - existe verificação que reprova porta escutando em `0.0.0.0` sem entrada em `PROTECT` nem em `ALLOW_EXTERNAL` — sem ela, a lista degrada de novo pelo mesmo caminho
+
+**O que NÃO deve ser feito, e o autor do firewall já documentou.** As portas `8787` e `18084` foram fechadas uma vez e quebraram dois gates de CI (`dev-version-drift.yml` do loopzero-rag e do loopzero-lens, que sondam o droplet **de um runner do GitHub**). O autor reabriu com a medição registrada no próprio script: *"o gate é CONTROLE — ele é o que detecta deploy"*. Fechar sem substituir o caminho de verificação troca uma exposição por uma cegueira.
+
+**O crédito onde é devido.** O `loopzero-host-firewall` existe, está habilitado, e a `ALLOW_EXTERNAL` documenta cada exceção com evidência de quando e como foi medida. O defeito não é ausência de controle — é que o controle é uma lista de negação escrita à mão, e listas de negação envelhecem para o lado inseguro.
+
+> Registrado 2026-08-10, a partir da diretriz de superfície única do sponsor.
