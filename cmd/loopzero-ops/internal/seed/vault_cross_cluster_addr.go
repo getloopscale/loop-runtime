@@ -45,8 +45,8 @@ const (
 	openbaoHTTPSPortName    = "https"
 	vaultServerLBContainer  = "k3d-loopzero-secrets-serverlb"
 	openBaoVaultAddrEnvVar  = "OPENBAO_VAULT_ADDR"
-	loopzeroAPINamespaceInMgmt  = "loopzero-system"
-	loopzeroAPIDeploymentInMgmt = "loopzero-api"
+	loopzeroAPINamespaceInCore  = "loopzero-system"
+	loopzeroAPIDeploymentInCore = "loopzero-api"
 )
 
 func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
@@ -70,23 +70,23 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 	vaultAddr := fmt.Sprintf("https://%s:%d", ip, np)
 
 	if d.DryRun {
-		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would set %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt)}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would set %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore)}
 	}
 
 	// EC-2 absorption: wait for any in-progress rollout to settle before
 	// triggering the env change (avoids double-rollout race).
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, 120*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, 120*time.Second)
 
 	// Step 3 — set env on loopzero-api Deployment.
 	if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, openBaoVaultAddrEnvVar, vaultAddr); err != nil {
+		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultAddrEnvVar, vaultAddr); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("set env on loopzero-api: %v", err)}
 	}
 	// Rollout settle post-change.
-	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, 60*time.Second); err != nil {
+	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, 60*time.Second); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("loopzero-api rollout: %v", err)}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("wired %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt)}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("wired %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore)}
 }
 
 func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
@@ -103,7 +103,7 @@ func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	wantAddr := fmt.Sprintf("https://%s:%d", ip, np)
-	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, openBaoVaultAddrEnvVar)
+	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultAddrEnvVar)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}

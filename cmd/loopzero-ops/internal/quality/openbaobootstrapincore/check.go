@@ -67,12 +67,12 @@ func Check(cfg Config) (Outcome, error) {
 	// A — both tasks registered
 	assert("A1 task k3d:secrets:bootstrap-in-core registered",
 		regexp.MustCompile(`(?m)^  k3d:secrets:bootstrap-in-core:$`).MatchString(text))
-	assert("A2 task k3d:secrets:status-in-mgmt sibling registered",
-		regexp.MustCompile(`(?m)^  k3d:secrets:status-in-mgmt:$`).MatchString(text))
+	assert("A2 task k3d:secrets:status-in-core sibling registered",
+		regexp.MustCompile(`(?m)^  k3d:secrets:status-in-core:$`).MatchString(text))
 
 	// Extract the two task bodies (upstream + shortcut).
 	upstream := extractTaskBody(text, "  k3d:secrets:bootstrap:", "  k3d:secrets:bootstrap-in-core:")
-	shortcut := extractTaskBody(text, "  k3d:secrets:bootstrap-in-core:", "  k3d:secrets:status-in-mgmt:")
+	shortcut := extractTaskBody(text, "  k3d:secrets:bootstrap-in-core:", "  k3d:secrets:status-in-core:")
 
 	upstreamHelmfiles := countMatches(upstream, `helmfile -f `)
 	shortcutHelmfiles := countMatches(shortcut, `helmfile -f `)

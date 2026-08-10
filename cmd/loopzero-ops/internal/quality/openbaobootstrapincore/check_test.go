@@ -52,7 +52,7 @@ tasks:
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core --selector name=openbao sync
       - kubectl --context k3d-loopzero-core wait pod -l app=openbao --for=condition=Ready --timeout=180s
 
-  k3d:secrets:status-in-mgmt:
+  k3d:secrets:status-in-core:
     desc: Status of OpenBao in mgmt cluster.
     cmds:
       - kubectl --context k3d-loopzero-core -n openbao exec -it openbao-0 -- bao status

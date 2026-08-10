@@ -260,9 +260,9 @@ tasks:
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao-cert sync
       - kubectl --context k3d-loopzero-core -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao sync
-      - echo "[OK] OpenBao bootstrapped in mgmt cluster secrets-system ns (single-cluster mode). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status-in-mgmt"
+      - echo "[OK] OpenBao bootstrapped in mgmt cluster secrets-system ns (single-cluster mode). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status-in-core"
 
-  k3d:secrets:status-in-mgmt:
+  k3d:secrets:status-in-core:
     desc: |
       Show mgmt cluster secrets-system status (sibling of k3d:secrets:status
       for option (c) single-cluster OpenBao deployment).
