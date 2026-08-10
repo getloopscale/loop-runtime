@@ -216,6 +216,10 @@ tasks:
       - task: registry:create
       - task: clusters:create
       - task: images:build
+      # Vendoriza dependencias ANTES do install: `charts/*/charts/` e gitignored, entao
+      # um clone novo nao tem nenhuma. Sem este passo, `task setup` reprovava num clone
+      # limpo (medido 2026-08-10 no droplet app-dev: loopzero-crds, depois opencost).
+      - task: validate:helm-deps
       - task: infra:install
       - task: networking:setup
       - task: crds:install
@@ -273,7 +277,7 @@ tasks:
       with this canonical pointer — the comment was missing 80%+ of the
       actual patches (B14, B15, B17-19, B22, B23, B25-82+).
     cmds:
-      - bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
+      - bash infra/helmfile/scripts/generate-secrets.sh standalone core
       - task: k3d:bootstrap-cell-0
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh

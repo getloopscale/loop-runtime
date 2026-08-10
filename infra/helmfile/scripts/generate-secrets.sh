@@ -129,8 +129,11 @@ if out:
   fi
 }
 
-if [[ "$CLUSTER" != "mgmt" ]]; then
-  log "noop: cluster=$CLUSTER (only mgmt handled by this script)"
+# O cluster central chama-se `core` desde o rename de 2026-08-09 (ADR
+# docs/decisions/2026-08-09-cluster-topology-naming-adr.md). Chamador e guarda mudaram
+# juntos: enquanto os dois diziam `mgmt` nada quebrava, mas o vocabulario ficava preso.
+if [[ "$CLUSTER" != "core" ]]; then
+  log "noop: cluster=$CLUSTER (only core handled by this script)"
   exit 0
 fi
 

@@ -500,23 +500,45 @@ tasks:
         fi
   validate:helm-deps:
     desc: |
-      Run `helm dependency build` on every chart with file:// deps so
-      umbrella charts (loopzero-platform) + 4 split-operator charts can
-      `helm template` cleanly. Closes condition C24 of
+      Vendoriza as dependências de TODO chart que declara `dependencies:`, nas duas
+      árvores (`charts/` e `infra/helm/`). Fecha a condição C24 de
       MEET-INFRA-NORMALIZE-T3-operator-split.
+
+      Por que descoberta e não lista fixa: `charts/*/charts/` é gitignored, então um
+      clone novo não tem dependência nenhuma vendorizada. Enquanto esta task listava
+      9 charts à mão e só de `charts/`, `task setup` reprovava num clone limpo —
+      medido em 2026-08-10 no droplet app-dev, primeiro em `loopzero-crds` (dep local
+      `loopzero-common`) e, depois de corrigido, em `opencost` (dep remota, sob
+      `infra/helm/`). Uma lista fixa só cobre os charts que alguém lembrou de
+      adicionar; a descoberta cobre o que existe.
+
+      Falha de dependência REMOTA não aborta: um chart cujo upstream saiu do ar ou
+      renomeou a versão não é motivo para impedir toda instalação nova, e as falhas
+      são impressas com o erro do upstream em vez de engolidas. Dependência local
+      (`file://`) é outra coisa — ela vive neste repositório, então falhar nela é
+      defeito nosso e aborta.
     cmds:
       - |
-        set -e
-        for chart in charts/loopzero-api charts/loopzero-app-operator charts/loopzero-cloud \
-                     charts/loopzero-crds charts/loopzero-dashboard \
-                     charts/loopzero-platform charts/loopzero-platform-operator \
-                     charts/loopzero-preview-operator \
-                     charts/loopzero-tenant-operator; do
-          if [[ -d "$chart" ]]; then
-            echo "==> helm dependency build: $chart"
-            (cd "$chart" && helm dependency build) || exit 1
+        set -uo pipefail
+        falhas=0; ok=0
+        for chart in charts/*/ infra/helm/*/; do
+          [[ -f "$chart/Chart.yaml" ]] || continue
+          grep -q "^dependencies:" "$chart/Chart.yaml" || continue
+          if helm dependency build "$chart" >/tmp/helm-dep.out 2>&1 \
+             || helm dependency update "$chart" >/tmp/helm-dep.out 2>&1; then
+            ok=$((ok+1))
+          else
+            falhas=$((falhas+1))
+            echo "  [FALHA] $chart"
+            tail -2 /tmp/helm-dep.out | sed 's/^/          /'
+            # Dependência local quebrada é defeito deste repositório, não do upstream.
+            if grep -q "file://" "$chart/Chart.yaml"; then
+              echo "  [ABORT] $chart declara dependência file:// — isto e defeito nosso." >&2
+              exit 1
+            fi
           fi
         done
+        echo "[validate:helm-deps] $ok chart(s) com dependências vendorizadas, $falhas com upstream indisponível"
 
   generate:rbac:
     desc: |

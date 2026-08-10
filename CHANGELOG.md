@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Instalar a plataforma a partir de uma cópia recém-clonada do repositório voltou a funcionar. O passo
+  que baixa as dependências dos pacotes de instalação nunca rodava antes da instalação, e essas
+  dependências não são versionadas — então quem clonasse o repositório e mandasse instalar recebia um
+  erro sobre um pacote ausente, num ponto que não sugeria a causa. O passo passou a rodar antes, e a
+  descobrir os pacotes em vez de trabalhar sobre uma lista escrita à mão que só cobria parte deles
+  (BACKLOG.md B-015)
 - A verificação que compara o painel com o contrato do motor parou de acusar rotas que ninguém chama.
   Ela lia o arquivo inteiro procurando endereços, inclusive dentro de comentários — então um comentário
   que **descrevia** um problema passado, citando os endereços envolvidos, era contado como uso real. A
