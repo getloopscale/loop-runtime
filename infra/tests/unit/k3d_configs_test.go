@@ -37,7 +37,7 @@ func k3dDir() string {
 var k3dFiles = []string{
 	"core-cluster.yaml",
 	"build-cluster.yaml",
-	"workload-cluster.yaml",
+	"cell-0-cluster.yaml",
 }
 
 func loadK3dConfigs(t *testing.T) []k3dConfig {
@@ -85,7 +85,7 @@ func TestK3dClusterNamesAreUnique(t *testing.T) {
 	expectedNames := map[string]bool{
 		"loopzero-core":     false,
 		"loopzero-build":    false,
-		"loopzero-workload": false,
+		"loopzero-cell-0": false,
 	}
 
 	for _, cfg := range configs {
@@ -113,7 +113,7 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 	expectedPorts := map[string]string{
 		"loopzero-core":     "6443",
 		"loopzero-build":    "6445",
-		"loopzero-workload": "6444",
+		"loopzero-cell-0": "6444",
 	}
 
 	seen := make(map[string]string) // port -> cluster name
@@ -140,7 +140,7 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 //     1 agent OOM's mid-bootstrap (Achado #131, T5.1 run 4).
 //   - loopzero-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
 //     is bounded by the workflow controller, not node count.
-//   - loopzero-workload — 1 agent: tenant pods scale horizontally, but the
+//   - loopzero-cell-0 — 1 agent: tenant pods scale horizontally, but the
 //     cluster itself doesn't need a second node for HA in dev.
 //
 // Tightening this beyond actual need wastes ~1.7 GiB RAM per cluster on
@@ -151,7 +151,7 @@ func TestK3dAgentCount(t *testing.T) {
 	expected := map[string]int{
 		"loopzero-core":     2,
 		"loopzero-build":    1,
-		"loopzero-workload": 1,
+		"loopzero-cell-0": 1,
 	}
 
 	for _, cfg := range configs {

@@ -100,9 +100,9 @@ env:
 # Padrão environment-overlay-with-reuse: canonical define schema + fallback
 # safe-for-local; overlays supplem env-specific values via env templating.
 kubeContexts:
-  mgmt: "in-cluster"
+  core: "in-cluster"
   build: "in-cluster"
-  runtime: "in-cluster"
+  cell0: "in-cluster"
 
 # F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7) — bootstrap chart toggle for
 # OTel exporter. Default false because local k3d does not install Tempo;
@@ -116,7 +116,7 @@ kubeContexts:
 vault:
   enabled: false
   addr: "https://openbao.secrets-system.svc.cluster.local:8200"
-  authMount: "k8s-mgmt"
+  authMount: "k8s-core"
   role: "loopzero-api"
   audience: "vault.loopzero.io"
   tokenExpirationSeconds: 3600

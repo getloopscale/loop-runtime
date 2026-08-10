@@ -61,8 +61,8 @@ import yaml
 CLUSTER_MAP = {
     # logical name → (k3d cluster context, k3d container, kubeconfig data key, (sa_namespace, sa_name))
     "build":    ("k3d-loopzero-build",    "k3d-loopzero-build-server-0",    "build.kubeconfig",    ("argo", "loopzero-workflow-submitter")),
-    "runtime":  ("k3d-loopzero-workload", "k3d-loopzero-workload-server-0", "runtime.kubeconfig",  ("kube-system", "default")),
-    "runtime2": ("k3d-loopzero-runtime-2","k3d-loopzero-runtime-2-server-0","runtime2.kubeconfig", ("kube-system", "default")),
+    "runtime":  ("k3d-loopzero-cell-0", "k3d-loopzero-cell-0-server-0", "cell-0.kubeconfig",  ("kube-system", "default")),
+    "runtime2": ("k3d-loopzero-cell-1","k3d-loopzero-cell-1-server-0","runtime2.kubeconfig", ("kube-system", "default")),
 }
 
 
@@ -99,8 +99,8 @@ def mint_token(context: str, namespace: str, sa: str) -> str:
 
 
 def get_ca_b64(context: str) -> str:
-    raw = subprocess.check_output(["k3d","kubeconfig","get", context.replace("k3d-loopzero-","loopzero-").replace("loopzero-workload","loopzero-workload")], text=True)
-    # k3d kubeconfig get accepts cluster short name (loopzero-build / loopzero-workload / loopzero-runtime-2)
+    raw = subprocess.check_output(["k3d","kubeconfig","get", context.replace("k3d-loopzero-","loopzero-").replace("loopzero-cell-0","loopzero-cell-0")], text=True)
+    # k3d kubeconfig get accepts cluster short name (loopzero-build / loopzero-cell-0 / loopzero-cell-1)
     parsed = yaml.safe_load(raw)
     return parsed["clusters"][0]["cluster"]["certificate-authority-data"]
 

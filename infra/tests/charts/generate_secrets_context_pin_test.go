@@ -6,7 +6,7 @@
 // was active. During a 2026-06-20 dev-public provision, an active
 // `k3d-loopzero-secrets` context (residue from a prior T0.1 session) caused
 // `task setup` to misprovision Secrets to loopzero-secrets instead of mgmt
-// — `infra:install:mgmt` failed silently with the wrong target.
+// — `infra:install:core` failed silently with the wrong target.
 //
 // Fix: pin via `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"` +
 // a `kubectl()` shell-function wrapper that injects

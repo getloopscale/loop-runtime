@@ -696,7 +696,7 @@ tasks:
       - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e dev list >/dev/null
       - echo "✓ All layered-bootstrap offline validations PASS"
 
   validate:k3d-integration:

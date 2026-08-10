@@ -41,7 +41,7 @@ except ImportError:
 HELMFILES = [
     "infra/helmfile/core.helmfile.yaml.gotmpl",
     "infra/helmfile/build.helmfile.yaml.gotmpl",
-    "infra/helmfile/runtime.helmfile.yaml.gotmpl",
+    "infra/helmfile/cell.helmfile.yaml.gotmpl",
 ]
 
 # Go-template literal stripping. Two-pass per NEW-7 fix preserved from

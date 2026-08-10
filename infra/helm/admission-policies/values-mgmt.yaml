@@ -5,7 +5,7 @@
 # WHY A SECOND INSTALL OF THE SAME CHART
 #
 # The chart was only ever installed on the runtime cluster
-# (infra/helmfile/runtime.helmfile.yaml.gotmpl:169, namespace cosign-system), because every
+# (infra/helmfile/cell.helmfile.yaml.gotmpl:169, namespace cosign-system), because every
 # policy in it guards workloads: image digests, signatures, registries, resource limits.
 # The D4 guardrail is the first policy that must run on **mgmt**, where Application,
 # AppProject, Tenant, Environment and ClusterCredential actually live.
@@ -38,7 +38,7 @@ vaps:
   tenantNamespace: false
 
 # ClusterImagePolicy is a sigstore/policy-controller CRD. The mgmt cluster runs no
-# policy-controller (that release lives in runtime.helmfile), so emitting one here would
+# policy-controller (that release lives in cell.helmfile), so emitting one here would
 # create an object whose CRD does not exist — the sync fails, or worse, it lands orphaned.
 clusterImagePolicy:
   enabled: false

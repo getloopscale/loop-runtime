@@ -56,12 +56,12 @@ else
 fi
 
 blue "== CLUSTER_ID → VAULT_ROLE mapping =="
-# Three canonical roles (cell* + workload* both resolve to loopzero-runtime-workload).
+# Three canonical roles (cell* + workload* both resolve to loopzero-cell-0-workload).
 for combo in "build" "workload" "mgmt"; do
-  if grep -qE "loopzero-runtime-${combo}" "${SCOPED}"; then
-    pass "loopzero-runtime-${combo} role mapped"
+  if grep -qE "loopzero-cell-0-${combo}" "${SCOPED}"; then
+    pass "loopzero-cell-0-${combo} role mapped"
   else
-    fail "loopzero-runtime-${combo} role MISSING from CLUSTER_ID switch"
+    fail "loopzero-cell-0-${combo} role MISSING from CLUSTER_ID switch"
   fi
 done
 if grep -qE 'cell\*\|workload\*' "${SCOPED}"; then

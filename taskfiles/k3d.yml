@@ -9,7 +9,7 @@ version: "3"
 
 tasks:
   # Migration target: extract from Taskfile.yml lines around 641-697 (registry,
-  # clusters), 1320-1352 (k3d:bootstrap-workload, k3d:heal).
+  # clusters), 1320-1352 (k3d:bootstrap-cell-0, k3d:heal).
   # Until migration: tasks remain in Taskfile.yml. Adding new k3d:* tasks here
   # works because Task v3 includes merge namespaces.
 
@@ -75,11 +75,11 @@ tasks:
       - kubectl --context {{.CORE_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
       - kubectl --context {{.BUILD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
-      - kubectl --context {{.WORKLOAD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      # cell-2-activation-plan T0.1: loopzero-runtime-2 maps to cells.cell_id='cell-2'.
+      - k3d cluster list -o json | grep -q '"name":"loopzero-cell-0"' || k3d cluster create --config infra/k3d/cell-0-cluster.yaml
+      - kubectl --context {{.CELL_0_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      # cell-2-activation-plan T0.1: loopzero-cell-1 maps to cells.cell_id='cell-2'.
       # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
-      - k3d cluster list -o json | grep -q '"name":"loopzero-runtime-2"' || k3d cluster create --config infra/k3d/runtime-2-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loopzero-cell-1"' || k3d cluster create --config infra/k3d/cell-1-cluster.yaml
       - kubectl --context {{.RUNTIME2_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - task: clusters:verify
 
@@ -88,7 +88,7 @@ tasks:
     cmds:
       - kubectl --context {{.CORE_CONTEXT}} cluster-info
       - kubectl --context {{.BUILD_CONTEXT}} cluster-info
-      - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
+      - kubectl --context {{.CELL_0_CONTEXT}} cluster-info
       - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
 
   k3d:recover-degraded:
@@ -125,24 +125,29 @@ tasks:
     cmds:
       - k3d cluster delete loopzero-core || true
       - k3d cluster delete loopzero-build || true
-      - k3d cluster delete loopzero-workload || true
-      - k3d cluster delete loopzero-runtime-2 || true
+      - k3d cluster delete loopzero-cell-0 || true
+      - k3d cluster delete loopzero-cell-1 || true
 
   clusters:recreate:
-    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
+    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- cell-0)
     cmds:
+      # O rotulo do case E o sufixo do cluster — `loopzero-${CLUSTER}` logo abaixo deriva o
+      # nome dele daqui. Enquanto o rotulo foi `mgmt` e o config `core-cluster.yaml`, esta
+      # task apagava `loopzero-mgmt` (inexistente, no-op silencioso) e criava `loopzero-core`: o
+      # "Recreating…" mentia e nenhum cluster era de fato recriado. Manter rotulo e nome
+      # 1:1 e o que impede a divergencia de voltar.
       - |
         CLUSTER="{{.CLI_ARGS}}"
         if [ -z "$CLUSTER" ]; then
-          echo "Usage: task clusters:recreate -- <mgmt|build|workload|runtime-2>"
+          echo "Usage: task clusters:recreate -- <core|build|cell-0|cell-1>"
           exit 1
         fi
         case "$CLUSTER" in
-          mgmt)       CONFIG="infra/k3d/core-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
-          build)      CONFIG="infra/k3d/build-cluster.yaml";      INSTALL_TASK="infra:install:build" ;;
-          workload)   CONFIG="infra/k3d/workload-cluster.yaml";   INSTALL_TASK="infra:install:workload" ;;
-          runtime-2)  CONFIG="infra/k3d/runtime-2-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
-          *)          echo "Unknown cluster: $CLUSTER. Use mgmt, build, workload, or runtime-2."; exit 1 ;;
+          core)    CONFIG="infra/k3d/core-cluster.yaml";   INSTALL_TASK="infra:install:core" ;;
+          build)   CONFIG="infra/k3d/build-cluster.yaml";  INSTALL_TASK="infra:install:build" ;;
+          cell-0)  CONFIG="infra/k3d/cell-0-cluster.yaml"; INSTALL_TASK="infra:install:cell" ;;
+          cell-1)  CONFIG="infra/k3d/cell-1-cluster.yaml"; INSTALL_TASK="infra:install:cell" ;;
+          *)       echo "Unknown cluster: $CLUSTER. Use core, build, cell-0, or cell-1."; exit 1 ;;
         esac
         echo "Recreating loopzero-${CLUSTER}..."
         k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true

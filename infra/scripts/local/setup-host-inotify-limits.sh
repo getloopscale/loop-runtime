@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-host-inotify-limits.sh — persist kernel inotify limits required for k3d multi-cluster topology.
 #
-# Why this exists (Finding 2026-05-13 — k3d loopzero-workload agent timeout):
+# Why this exists (Finding 2026-05-13 — k3d loopzero-cell-0 agent timeout):
 #
 # LoopZero's local dev topology runs 4 k3d clusters (mgmt + build + workload + runtime-2)
 # simultaneously. Each k3s server + agent runs an embedded containerd which uses
@@ -16,7 +16,7 @@
 #
 # Symptom: `k3d cluster create` times out at the agent registration step
 # (`Successfully registered node` never logged) — typically the 3rd cluster
-# (loopzero-workload) hits the wall after mgmt+build already consumed instances.
+# (loopzero-cell-0) hits the wall after mgmt+build already consumed instances.
 #
 # CTO mandate 2026-05-13 Rule 0 (local fidedigno ao prod) + Rule 6 (zero workaround):
 # fix the kernel limit systematically, persist across reboots, and pre-flight gate

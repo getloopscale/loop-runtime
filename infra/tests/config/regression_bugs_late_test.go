@@ -136,7 +136,7 @@ func TestB61CloudflaredStandaloneFallback(t *testing.T) {
 	if !strings.Contains(s, "STANDALONE_LOCAL_NO_CF_TUNNEL") {
 		t.Errorf("B61 regression: sentinel token absent")
 	}
-	rt, err := os.ReadFile("../../helmfile/runtime.helmfile.yaml.gotmpl")
+	rt, err := os.ReadFile("../../helmfile/cell.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read runtime helmfile: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestB61CloudflaredStandaloneFallback(t *testing.T) {
 }
 
 func TestB62MetricsServerInstalledFalseInRuntime(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/runtime.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/cell.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read runtime helmfile: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestB62MetricsServerInstalledFalseInRuntime(t *testing.T) {
 }
 
 func TestB63KedaHttpAddonHasNeedsKeda(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/runtime.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/cell.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read runtime helmfile: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestB63KedaHttpAddonHasNeedsKeda(t *testing.T) {
 }
 
 func TestB64AdmissionPoliciesAlertsConditional(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/runtime.helmfile.yaml.gotmpl")
+	data, err := os.ReadFile("../../helmfile/cell.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read runtime helmfile: %v", err)
 	}
@@ -407,16 +407,16 @@ func TestB82StaticAssetsChartExists(t *testing.T) {
 	if !strings.Contains(dstr, "name: nginx-conf-d") {
 		t.Error("B82 regression: static-assets deployment must declare nginx-conf-d emptyDir volume")
 	}
-	rt, err := os.ReadFile("../../helmfile/runtime.helmfile.yaml.gotmpl")
+	rt, err := os.ReadFile("../../helmfile/cell.helmfile.yaml.gotmpl")
 	if err != nil {
-		t.Fatalf("read runtime.helmfile: %v", err)
+		t.Fatalf("read cell.helmfile: %v", err)
 	}
 	rstr := string(rt)
 	if !strings.Contains(rstr, "name: static-assets") {
-		t.Error("B82 regression: runtime.helmfile must include static-assets release")
+		t.Error("B82 regression: cell.helmfile must include static-assets release")
 	}
 	if !strings.Contains(rstr, "../helm/static-assets") {
-		t.Error("B82 regression: runtime.helmfile must reference ../helm/static-assets chart")
+		t.Error("B82 regression: cell.helmfile must reference ../helm/static-assets chart")
 	}
 	// Workload cluster needs an `allow-static-assets` NetworkPolicy so Traefik
 	// can reach the gateway through default-deny-ingress.

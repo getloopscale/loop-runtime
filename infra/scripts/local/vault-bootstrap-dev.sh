@@ -251,8 +251,8 @@ fi
 # `bao_auth` function was historically defined later (after Step 5.5)
 # alongside other auth-required steps. Step 5.5 therefore called an
 # undefined function — `bao_auth auth list` produced no stdout, the
-# Python check evaluated `'k8s-mgmt/' in {}` → False every iteration,
-# the 180s wait loop ALWAYS timed out, and `auth/k8s-mgmt/config` was
+# Python check evaluated `'k8s-core/' in {}` → False every iteration,
+# the 180s wait loop ALWAYS timed out, and `auth/k8s-core/config` was
 # NEVER written. Downstream consequence: CSS loopzero-secrets-secrets stayed
 # `Ready=False reason=InvalidProviderConfig` (1b-vault-bootstrap-eso
 # FAIL), and ESO cross-cluster workload-identity path silently
@@ -269,20 +269,20 @@ if [[ -f "infra/helmfile/secrets.helmfile.yaml.gotmpl" ]]; then
     log "WARN: openbao-init helmfile sync had issues — manual inspect recommended"
 fi
 
-# === Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt ===
+# === Step 5.5: R3 — canonical TokenReview config for auth/k8s-core ===
 # R3 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
-# 2026-06-19). The openbao-init Job (Step 5) provisions the `k8s-mgmt`
+# 2026-06-19). The openbao-init Job (Step 5) provisions the `k8s-core`
 # auth mount + the `eso` role bound to eso-vault-reader@loopzero-system.
-# But the mount needs `auth/k8s-mgmt/config` (kubernetes_host + CA +
+# But the mount needs `auth/k8s-core/config` (kubernetes_host + CA +
 # token_reviewer_jwt) for OpenBao to validate mgmt-issued SA tokens
 # via the TokenReview API. The canonical operator runbook documented
 # this as "operator-time" — codifying it here closes seed chain FAIL=11
 # for the cross-cluster ESO read path (per
 # docs/operations/openbao-multi-cluster-auth-runbook.md).
 #
-# Mount-precedence guard: bao MUST report `k8s-mgmt/` enabled before
-# `bao write auth/k8s-mgmt/config` — else Vault returns 404
-# `no handler for route auth/k8s-mgmt/config`. Sponsor reinforced.
+# Mount-precedence guard: bao MUST report `k8s-core/` enabled before
+# `bao write auth/k8s-core/config` — else Vault returns 404
+# `no handler for route auth/k8s-core/config`. Sponsor reinforced.
 #
 # Long-lived token contract: K8s ≥1.24 `kubectl create token` produces
 # bounded TokenRequest JWTs that expire — useless for OpenBao's
@@ -294,10 +294,10 @@ fi
 # This step only runs when the TARGET_CONTEXT (mgmt) is different from
 # OPENBAO_CONTEXT (vault) — single-cluster setups don't need
 # cross-cluster TokenReview wiring.
-log "Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt"
+log "Step 5.5: R3 — canonical TokenReview config for auth/k8s-core"
 if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
-  # Wait for openbao-init Job to provision the k8s-mgmt mount.
-  log "  Waiting for auth/k8s-mgmt/ mount (openbao-init Job creates it)"
+  # Wait for openbao-init Job to provision the k8s-core mount.
+  log "  Waiting for auth/k8s-core/ mount (openbao-init Job creates it)"
   # LIVE-measured 2026-06-19 Cleanroom: the openbao-init Job takes
   # ~78s to complete (helmfile sync + Job init + bao auth enable across
   # 6 mounts + transit keys). The 60s budget skipped R3 mid-LIVE; bumped
@@ -305,15 +305,15 @@ if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
   MOUNT_READY=0
   for i in $(seq 1 90); do  # 90 * 2s = 180s budget
     if bao_auth auth list -format=json 2>/dev/null | python3 -c \
-        "import sys,json; d=json.loads(sys.stdin.read() or '{}'); sys.exit(0 if 'k8s-mgmt/' in d else 1)" 2>/dev/null; then
+        "import sys,json; d=json.loads(sys.stdin.read() or '{}'); sys.exit(0 if 'k8s-core/' in d else 1)" 2>/dev/null; then
       MOUNT_READY=1
-      log "  OK: auth/k8s-mgmt/ mount present (attempt $i)"
+      log "  OK: auth/k8s-core/ mount present (attempt $i)"
       break
     fi
     sleep 2
   done
   if [[ "$MOUNT_READY" -eq 0 ]]; then
-    log "  WARN: auth/k8s-mgmt/ mount not present after 180s — skipping R3 config write (seed chain FAIL=11 will surface)"
+    log "  WARN: auth/k8s-core/ mount not present after 180s — skipping R3 config write (seed chain FAIL=11 will surface)"
   else
     # MGMT side: ensure vault-tokenreviewer SA + CRB exist.
     log "  Applying vault-tokenreviewer SA + CRB on $TARGET_CONTEXT"
@@ -380,7 +380,7 @@ TR_EOF
       #       `host.k3d.internal` is NOT in the SAN list — using it triggers
       #       SAN-mismatch ("x509: certificate is valid for ... not host.k3d.internal")
       #       which OpenBao surfaces to callers as a generic "permission denied"
-      #       from auth/k8s-mgmt/login for every role (blanket 403).
+      #       from auth/k8s-core/login for every role (blanket 403).
       #
       # The canonical SAN-aligned + cross-cluster-reachable name is the k3d
       # serverlb docker container name `k3d-${cluster_name}-serverlb`, derived
@@ -397,17 +397,17 @@ TR_EOF
       if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
         log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"
       else
-        # Write auth/k8s-mgmt/config inside the OpenBao pod (avoids
+        # Write auth/k8s-core/config inside the OpenBao pod (avoids
         # CA distribution overhead — pod has bao CLI + connectivity).
-        log "  Writing auth/k8s-mgmt/config with MGMT_HOST=$MGMT_HOST"
+        log "  Writing auth/k8s-core/config with MGMT_HOST=$MGMT_HOST"
         kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec -i "$POD" -- \
           env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true \
-          bao write auth/k8s-mgmt/config \
+          bao write auth/k8s-core/config \
             kubernetes_host="$MGMT_HOST" \
             kubernetes_ca_cert="$MGMT_CA" \
             token_reviewer_jwt="$TR_JWT" \
             disable_iss_validation=true 2>&1 | tail -5 || \
-          log "  WARN: bao write auth/k8s-mgmt/config returned non-zero"
+          log "  WARN: bao write auth/k8s-core/config returned non-zero"
         log "  R3 codification complete"
       fi
     fi
@@ -420,7 +420,7 @@ fi
 log "Step 6+7: approle + loopzero-api policy"
 export BAO_TOKEN="$ROOT_TOKEN"
 # `bao_auth` is now defined right after ROOT_TOKEN is set (Step 4) so
-# Step 5.5's auth/k8s-mgmt wait-loop can actually call it. The legacy
+# Step 5.5's auth/k8s-core wait-loop can actually call it. The legacy
 # duplicate definition here was the source of the silent R3 skip
 # (issue #111 cross-cluster ESO path).
 

@@ -62,6 +62,32 @@ Hoje são **5 sítios não-teste** que a referenciam.
 `cell-1` é *"Canonical first cell"* (`active`), e `cell-2` está em **`maintenance`** — *"Physically
 provisioned but not admitting traffic"*.
 
+### `cell-default` e `cell-1` são a mesma máquina sob dois nomes
+
+Medido em 2026-08-10, três fontes independentes:
+
+1. `infra/helmfile/environments/dev.yaml:76,79` — *"In dev: runtime cluster maps to cell-1"*, e
+   `runtimeCellId: cell-1`. O cluster das aplicações se declara `cell-1`.
+2. `000006_cells.up.sql:120-123` — `cell-1` é *"Canonical first cell. Maps to runtime-1 … cluster"*;
+   `cell-default` é o valor que o `DEFAULT` da coluna grava. O mesmo cluster, um nome por camada.
+3. `docs/runbooks/bootstrap-regression-matrix.md:180` (auditoria LIVE de 2026-05-01) — a tabela `cells`
+   tinha três linhas `active`, mas existiam ClusterCredential CRs para **duas**. A terceira identidade
+   nunca teve máquina.
+
+É o mesmo defeito que motivou a renomeação dos clusters — "duas palavras, mesmo cluster" —, uma camada
+abaixo. Isso **muda o custo da Opção A**: aposentar `cell-default` não é só trocar uma sentinela, é
+fundir duas identidades numa só. A fusão tem ordem obrigatória (`cell-default`+`cell-1` → `cell-0`
+**antes** de `cell-2` → `cell-1`), e uma substituição textual ingênua faria as duas ao mesmo tempo,
+colapsando identidades distintas sem deixar rastro.
+
+### A migração é um conjunto de UPDATEs, não uma cirurgia de esquema
+
+`git grep "REFERENCES cells"` em `api/internal/db/migrations` não devolve nada: `cell_id` é `TEXT` livre
+em todas as 6 tabelas que o declaram (`000001` ×4, `000004`, `000005`), sem chave estrangeira para
+`cells(cell_id)`. Renomear não exige `ON UPDATE CASCADE` nem janela de indisponibilidade — mas também
+significa que **nada no banco impede um `cell_id` órfão**, que é o que torna a escolha da sentinela uma
+decisão de integridade e não de estilo.
+
 ## A pergunta que a reunião decide
 
 Aposentar `cell-default` exige escolher **quem passa a portar o sentido de "ainda não resolvido"**, e

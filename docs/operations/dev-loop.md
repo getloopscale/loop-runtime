@@ -100,7 +100,7 @@ cd infra/helmfile
 helmfile -e standalone-multi --kube-context k3d-loopzero-core --selector name=X sync
 
 # OR easier: rebuild from setup state
-task infra:install:mgmt
+task infra:install:core
 ```
 
 ### After CRD schema change (`operators/api/v1alpha1/`)
@@ -177,7 +177,7 @@ git add api/internal/db/schema.gen.sql
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `task setup` fails at `infra:install:mgmt` step | LOOPZERO_DB_PASSWORD not in `loopzero-db-credentials` Secret | Run `bash infra/helmfile/scripts/generate-secrets.sh standalone-multi mgmt` first |
+| `task setup` fails at `infra:install:core` step | LOOPZERO_DB_PASSWORD not in `loopzero-db-credentials` Secret | Run `bash infra/helmfile/scripts/generate-secrets.sh standalone-multi mgmt` first |
 | `task doctor` reports `[FAIL] sqlc (v1.31.1)` | sqlc CLI absent or wrong version | `go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1` |
 | `task db:verify-sync` red on freshly-pulled branch | Locally-generated `generated/` diverges from committed (sqlc version drift) | Verify `sqlc version` returns `v1.31.1`; run `task db:generate` and commit any diff |
 | `task db:render-schema` produces non-empty diff after fresh run | Migration changed OR render non-determinism | If migration changed: `git add api/internal/db/schema.gen.sql && git commit`. If no migration change: render script is non-deterministic — see ADR-2 §"Reproducibility" |

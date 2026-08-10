@@ -44,7 +44,7 @@ TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"
 
 MGMT_CTX="k3d-loopzero-core"
 BUILD_CTX="k3d-loopzero-build"
-WORKLOAD_CTX="k3d-loopzero-workload"
+WORKLOAD_CTX="k3d-loopzero-cell-0"
 
 # Each check appends one entry to RESULTS as JSON object.
 declare -a RESULTS=()
@@ -287,9 +287,9 @@ check_traefik_lb() {
     return
   fi
   local ports
-  ports=$(docker port k3d-loopzero-workload-serverlb 2>/dev/null || true)
+  ports=$(docker port k3d-loopzero-cell-0-serverlb 2>/dev/null || true)
   if [[ -z "$ports" ]]; then
-    record "$id" "FAIL" "k3d-loopzero-workload-serverlb container not running"
+    record "$id" "FAIL" "k3d-loopzero-cell-0-serverlb container not running"
     return
   fi
   if ! grep -q '443/tcp' <<<"$ports"; then

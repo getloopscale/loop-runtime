@@ -93,9 +93,9 @@ set -euo pipefail
 #         Future fix in tenant-controller's clustercredential reconciler:
 #         propagate token to dependent ArgoCD secret on every reconcile.
 #
-#   H14 — ClusterCredential cell-2 SA token refresh OR bootstrap for loopzero-runtime-2.
+#   H14 — ClusterCredential cell-2 SA token refresh OR bootstrap for loopzero-cell-1.
 #         The cell-2 CR may already exist (named `cell-2`, spec.clusterName=
-#         loopzero-runtime-2) but its kubeconfig Secret carries a stale SA token
+#         loopzero-cell-1) but its kubeconfig Secret carries a stale SA token
 #         after a runtime-2 rollout — same H13 pattern, different cluster.
 #         If CR is connected: skip. If disconnected (typically because of an
 #         SA UID rotation in runtime-2): mint fresh token in runtime-2,
@@ -103,7 +103,7 @@ set -euo pipefail
 #         cell-2-kubeconfig Secret. If CR doesn't exist at all: bootstrap
 #         via clustercredential-create.sh cell-2 runtime-2 <scoped> (cluster_name
 #         passed to scoped-kubeconfig is `runtime-2` so docker container
-#         k3d-loopzero-runtime-2-server-0 resolves correctly per B82). Without
+#         k3d-loopzero-cell-1-server-0 resolves correctly per B82). Without
 #         H14, `loopzero_cell_discovery_count` stays at 2 locally (cell-default
 #         + cell-1 only) and Stage 1 canary preflight fails. K8sCellStore
 #         reads spec.cellID (NOT CR name) per MEET-053 B9. Idempotent: skip
@@ -112,7 +112,7 @@ set -euo pipefail
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and four k3d
-# clusters running (loopzero-core, loopzero-build, loopzero-workload, loopzero-runtime-2).
+# clusters running (loopzero-core, loopzero-build, loopzero-cell-0, loopzero-cell-1).
 #
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
@@ -123,11 +123,11 @@ set -uo pipefail
 SHARED_NET="${SHARED_NET:-k3d-loopzero}"
 MGMT_CTX="${MGMT_CTX:-k3d-loopzero-core}"
 BUILD_CTX="${BUILD_CTX:-k3d-loopzero-build}"
-RT_CTX="${RT_CTX:-k3d-loopzero-workload}"
+RT_CTX="${RT_CTX:-k3d-loopzero-cell-0}"
 # cell-2-activation-plan T0.2 — second runtime cluster context (cell-2).
-# Provisioned by infra/k3d/runtime-2-cluster.yaml. Used by H14 below.
-# Cluster name `loopzero-runtime-2` matches Pulumi/wire-clusters.sh convention.
-RT2_CTX="${RT2_CTX:-k3d-loopzero-runtime-2}"
+# Provisioned by infra/k3d/cell-1-cluster.yaml. Used by H14 below.
+# Cluster name `loopzero-cell-1` matches Pulumi/wire-clusters.sh convention.
+RT2_CTX="${RT2_CTX:-k3d-loopzero-cell-1}"
 REGISTRY_HOST="${REGISTRY_HOST:-k3d-loopzero-registry}"
 
 log() { printf '[k3d-heal] %s\n' "$*" >&2; }
@@ -173,8 +173,8 @@ attach_to_shared() {
   fi
 }
 for c in k3d-loopzero-build-server-0 k3d-loopzero-build-agent-0 k3d-loopzero-build-serverlb \
-         k3d-loopzero-workload-server-0 k3d-loopzero-workload-agent-0 k3d-loopzero-workload-serverlb \
-         k3d-loopzero-runtime-2-server-0 k3d-loopzero-runtime-2-agent-0 k3d-loopzero-runtime-2-serverlb; do
+         k3d-loopzero-cell-0-server-0 k3d-loopzero-cell-0-agent-0 k3d-loopzero-cell-0-serverlb \
+         k3d-loopzero-cell-1-server-0 k3d-loopzero-cell-1-agent-0 k3d-loopzero-cell-1-serverlb; do
   attach_to_shared "$c"
 done
 
@@ -186,7 +186,7 @@ ip_on() {
 }
 MGMT_IP=$(ip_on k3d-loopzero-core-server-0)
 BUILD_IP=$(ip_on k3d-loopzero-build-server-0)
-RT_IP=$(ip_on k3d-loopzero-workload-server-0)
+RT_IP=$(ip_on k3d-loopzero-cell-0-server-0)
 REG_IP=$(docker network inspect "$SHARED_NET" \
   --format '{{range .Containers}}{{if eq .Name "'"$REGISTRY_HOST"'"}}{{.IPv4Address}}{{end}}{{end}}' \
   2>/dev/null | sed 's|/.*||')
@@ -217,10 +217,10 @@ if [[ -n "$REG_IP" ]]; then
     fi
   }
   # 2026-05-14 (plan T0.2): runtime-2 nodes added so helmfile sync against
-  # k3d-loopzero-runtime-2 can pull from the shared local registry (EC-1 fix).
+  # k3d-loopzero-cell-1 can pull from the shared local registry (EC-1 fix).
   for c in k3d-loopzero-build-server-0 k3d-loopzero-build-agent-0 \
-           k3d-loopzero-workload-server-0 k3d-loopzero-workload-agent-0 \
-           k3d-loopzero-runtime-2-server-0 k3d-loopzero-runtime-2-agent-0; do
+           k3d-loopzero-cell-0-server-0 k3d-loopzero-cell-0-agent-0 \
+           k3d-loopzero-cell-1-server-0 k3d-loopzero-cell-1-agent-0; do
     ensure_host "$c"
   done
 fi
@@ -283,7 +283,7 @@ if [[ -n "$MGMT_TOK" && -n "$BUILD_TOK" && -n "$RT_TOK" ]]; then
   kubectl --context "$MGMT_CTX" -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
     --from-literal=core.kubeconfig="$MK" \
     --from-literal=build.kubeconfig="$BK" \
-    --from-literal=runtime.kubeconfig="$RK" \
+    --from-literal=cell-0.kubeconfig="$RK" \
     --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f - >/dev/null
   log "  loopzero-cluster-kubeconfigs Secret refreshed"
 else
@@ -564,13 +564,13 @@ fi
 # silent failures. Codify the recovery here so every `task k3d:heal`
 # converges to {cell-default, cell-1, cell-2} ClusterCredentials.
 # ---------------------------------------------------------------------------
-log "H12: ensuring ClusterCredential cell-1 exists for loopzero-workload"
+log "H12: ensuring ClusterCredential cell-1 exists for loopzero-cell-0"
 # Note: K8sCellStore uses spec.cellID (not CR name) per
 # api/internal/placement/k8s_cell_store.go MEET-053 fix B9. The CR is
 # named after the k3d cluster id ("workload") so scoped-kubeconfig.sh
-# can resolve k3d-loopzero-workload-server-0 docker container IP. Using
+# can resolve k3d-loopzero-cell-0-server-0 docker container IP. Using
 # cluster-name="runtime" would fail B82 docker-resolution (container
-# k3d-loopzero-runtime-server-0 doesn't exist locally).
+# k3d-loopzero-cell-0-server-0 doesn't exist locally).
 CELL1_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
   get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-1")].status.connected}' \
   2>/dev/null || echo "")
@@ -633,7 +633,7 @@ CELL_DEFAULT_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
   2>/dev/null || echo "")
 # B29 fix (real-paas-cleanroom-dogfood-loop iter 27, 2026-05-05):
 # bootstrap-cell-default-cc.sh produces a kubeconfig that points at
-# loopzero-workload (cluster name `workload`) with a `loopzero-ctrl-runtime`
+# loopzero-cell-0 (cluster name `workload`) with a `loopzero-ctrl-runtime`
 # SA token in the workload cluster — correct for standalone-multi
 # where cell-default is colocated with workload. H13's design assumes
 # cell-default points at mgmt cluster; if H13 patches the kubeconfig
@@ -705,21 +705,21 @@ fi
 # H14 — ClusterCredential cell-2 SA token refresh OR bootstrap (regression
 # matrix entry 155). Two modes:
 #
-#   Mode A (refresh) — CR `cell-2` exists with spec.clusterName=loopzero-runtime-2
-#     but status.connected=false because SA UID in loopzero-runtime-2 rotated
+#   Mode A (refresh) — CR `cell-2` exists with spec.clusterName=loopzero-cell-1
+#     but status.connected=false because SA UID in loopzero-cell-1 rotated
 #     (same trap as H13 for cell-default). Mint fresh 24h SA token via
-#     `kubectl --context k3d-loopzero-runtime-2 create token default` and patch
+#     `kubectl --context k3d-loopzero-cell-1 create token default` and patch
 #     cell-2-kubeconfig Secret data.kubeconfig preserving CA + apiServer.
 #
 #   Mode B (bootstrap) — CR doesn't exist at all (e.g., fresh workstation
 #     without runtime-2 wire-up). Generate scoped kubeconfig with cluster_name
-#     ID `runtime-2` so docker container k3d-loopzero-runtime-2-server-0 resolves
+#     ID `runtime-2` so docker container k3d-loopzero-cell-1-server-0 resolves
 #     correctly per B82, then invoke clustercredential-create.sh cell-2
 #     runtime-2 <scoped>. INGRESS_DOMAIN=loopzero.local for ADR C7.
 #
 # Idempotent: skip if connected. Non-fatal: WARN on failure so heal exits 0.
 # ---------------------------------------------------------------------------
-log "H14: ensuring ClusterCredential cell-2 connected (loopzero-runtime-2)"
+log "H14: ensuring ClusterCredential cell-2 connected (loopzero-cell-1)"
 CELL2_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
   get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-2")].status.connected}' \
   2>/dev/null || echo "")
@@ -770,18 +770,18 @@ else
 apiVersion: v1
 kind: Config
 clusters:
-- name: loopzero-runtime-2
+- name: loopzero-cell-1
   cluster:
     server: $H14_APISERVER
 $H14_TLS_LINE
 contexts:
-- name: loopzero-runtime-2
+- name: loopzero-cell-1
   context:
-    cluster: loopzero-runtime-2
-    user: loopzero-runtime-2
-current-context: loopzero-runtime-2
+    cluster: loopzero-cell-1
+    user: loopzero-cell-1
+current-context: loopzero-cell-1
 users:
-- name: loopzero-runtime-2
+- name: loopzero-cell-1
   user:
     token: $H14_NEW_TOKEN
 EOF

@@ -17,9 +17,9 @@
 #
 #   | Cell ID      | k3d local                       | drill DOKS                   |
 #   |--------------|----------------------------------|------------------------------|
-#   | cell-default | k3d-loopzero-workload (cluster)      | runtimeCluster (pulumi key)  |
-#   | cell-1       | k3d-loopzero-workload (same default) | runtimeCluster (same default)|
-#   | cell-2       | k3d-loopzero-runtime-2 (cluster)     | runtimeCluster2 (pulumi key) |
+#   | cell-default | k3d-loopzero-cell-0 (cluster)      | runtimeCluster (pulumi key)  |
+#   | cell-1       | k3d-loopzero-cell-0 (same default) | runtimeCluster (same default)|
+#   | cell-2       | k3d-loopzero-cell-1 (cluster)     | runtimeCluster2 (pulumi key) |
 #
 # Per D3 ADR (multi-cell): cell-1 reuses cell-default's cluster in local k3d
 # (topology limit — k3d host can't sustain a 4th K8s cluster on most laptops);
@@ -31,7 +31,7 @@
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <default|1|2> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
 #
 # Examples:
-#   # Local k3d, cell-default → cluster loopzero-workload:
+#   # Local k3d, cell-default → cluster loopzero-cell-0:
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env standalone-multi
 #
 #   # Drill DOKS, cell-2 → runtimeCluster2:

@@ -223,7 +223,7 @@ ON CONFLICT (id) DO NOTHING;
 //
 // Per-cluster kubeconfig resolution (drill multi-cluster):
 //   - mgmt: $DRILL_KUBECONFIG (default for any context not in DRILL_KUBECONFIG_DIR)
-//   - k3d-loopzero-build / k3d-loopzero-workload: $DRILL_KUBECONFIG_DIR/build.yaml /
+//   - k3d-loopzero-build / k3d-loopzero-cell-0: $DRILL_KUBECONFIG_DIR/build.yaml /
 //     $DRILL_KUBECONFIG_DIR/runtime.yaml if DRILL_KUBECONFIG_DIR set, else
 //     defaults to mgmt kubeconfig.
 func kubectlArgs(kubeContext string) []string {
@@ -233,7 +233,7 @@ func kubectlArgs(kubeContext string) []string {
 		switch kubeContext {
 		case "k3d-loopzero-build":
 			return []string{"kubectl", "--kubeconfig", dir + "/build.yaml", "--insecure-skip-tls-verify"}
-		case "k3d-loopzero-workload":
+		case "k3d-loopzero-cell-0":
 			return []string{"kubectl", "--kubeconfig", dir + "/runtime.yaml", "--insecure-skip-tls-verify"}
 		case "k3d-loopzero-core", "":
 			return []string{"kubectl", "--kubeconfig", dir + "/mgmt.yaml", "--insecure-skip-tls-verify"}
@@ -446,8 +446,8 @@ func ExpectedNamespacesByContext() []expectedNamespace {
 	return []expectedNamespace{
 		// Workload namespaces are created by the operator with "loopzero-" prefix
 		// on the workload cluster (cell context).
-		{context: "k3d-loopzero-workload", name: "loopzero-" + TenantID + "-production"},
-		{context: "k3d-loopzero-workload", name: "loopzero-" + TenantID + "-staging"},
+		{context: "k3d-loopzero-cell-0", name: "loopzero-" + TenantID + "-production"},
+		{context: "k3d-loopzero-cell-0", name: "loopzero-" + TenantID + "-staging"},
 		// Build namespace is created on the build cluster (no "loopzero-" prefix).
 		{context: "k3d-loopzero-build", name: "build-" + TenantID},
 	}

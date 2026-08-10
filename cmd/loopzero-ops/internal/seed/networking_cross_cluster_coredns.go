@@ -15,7 +15,7 @@ import (
 //
 // Patches mgmt cluster CoreDNS NodeHosts ConfigMap so mgmt pods can resolve
 // cross-cluster Service LoadBalancer hostnames (k3d-loopzero-build-serverlb,
-// k3d-loopzero-workload-serverlb, k3d-loopzero-secrets-serverlb).
+// k3d-loopzero-cell-0-serverlb, k3d-loopzero-secrets-serverlb).
 //
 // Uses `docker inspect` to discover each container IP (READ-ONLY, D1-exempt).
 // Merges into the existing NodeHosts block instead of overwriting: unrelated
@@ -36,11 +36,11 @@ const (
 
 // corednsContainers is the ordered set of k3d containers whose IPs must resolve
 // in the mgmt CoreDNS. The value is the hostname CoreDNS will publish.
-// Aliases (e.g. `k3d-loopzero-workload-serverlb` for `-server-0`) are handled
+// Aliases (e.g. `k3d-loopzero-cell-0-serverlb` for `-server-0`) are handled
 // separately in Run.
 var corednsContainers = []string{
 	"k3d-loopzero-build-serverlb",
-	"k3d-loopzero-workload-server-0",
+	"k3d-loopzero-cell-0-server-0",
 	"k3d-loopzero-secrets-server-0",
 }
 
@@ -48,7 +48,7 @@ var corednsContainers = []string{
 // single docker inspect can publish both the canonical hostname AND a common
 // alias (matches the bash script's serverlb alias mapping).
 var corednsAliases = map[string]string{
-	"k3d-loopzero-workload-server-0": "k3d-loopzero-workload-serverlb",
+	"k3d-loopzero-cell-0-server-0": "k3d-loopzero-cell-0-serverlb",
 	"k3d-loopzero-secrets-server-0":    "k3d-loopzero-secrets-serverlb",
 }
 

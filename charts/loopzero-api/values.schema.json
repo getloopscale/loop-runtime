@@ -716,7 +716,7 @@
         "buildKubeconfig": {
           "type": "string"
         },
-        "runtimeKubeconfig": {
+        "cell0Kubeconfig": {
           "type": "string"
         },
         "stripeSecretKey": {

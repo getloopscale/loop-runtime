@@ -40,7 +40,7 @@ import (
 //	LOOPZERO_API_URL=https://api.dev.loopzero.example \
 //	LOOPZERO_SERVICE_AUTH=... \
 //	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
-//	LOOPZERO_RUNTIME_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-runtime \
+//	LOOPZERO_CELL_0_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-runtime \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityPodMemoryByFramework -v -timeout 120m
 func TestCapacityPodMemoryByFramework(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
@@ -48,9 +48,9 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 	apiURL := os.Getenv("LOOPZERO_API_URL")
 	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
 	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
-	runtimeCtx := os.Getenv("LOOPZERO_RUNTIME_CONTEXT")
+	runtimeCtx := os.Getenv("LOOPZERO_CELL_0_CONTEXT")
 	if apiURL == "" || serviceAuth == "" || appDomain == "" || runtimeCtx == "" {
-		t.Fatal("LOOPZERO_API_URL, LOOPZERO_SERVICE_AUTH, LOOPZERO_APP_DOMAIN, LOOPZERO_RUNTIME_CONTEXT required")
+		t.Fatal("LOOPZERO_API_URL, LOOPZERO_SERVICE_AUTH, LOOPZERO_APP_DOMAIN, LOOPZERO_CELL_0_CONTEXT required")
 	}
 
 	cfg := NewConfig("pod-memory")

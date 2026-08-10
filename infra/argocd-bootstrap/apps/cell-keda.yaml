@@ -74,7 +74,7 @@ spec:
                 additionalLabels:
                   release: monitoring
   destination:
-    server: https://loopzero-runtime.example
+    server: https://loopzero-cell-0.example
     namespace: keda
   syncPolicy:
     syncOptions:

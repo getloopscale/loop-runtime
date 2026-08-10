@@ -74,7 +74,7 @@ func TestLIVE_AuthMethods_Provisioned(t *testing.T) {
 	}
 	expected := []string{
 		"kubernetes/",
-		"k8s-mgmt/",
+		"k8s-core/",
 		"k8s-build/",
 		"k8s-cell-default/",
 		"k8s-cell-1/",

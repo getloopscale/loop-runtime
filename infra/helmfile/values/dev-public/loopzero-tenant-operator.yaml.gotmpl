@@ -45,8 +45,8 @@ secrets:
 kubeconfig:
   build:
     existingConfigMap: loopzero-build-kubeconfig
-  runtime:
-    existingConfigMap: loopzero-runtime-kubeconfig
+  cell0:
+    existingConfigMap: loopzero-cell-0-kubeconfig
 
 # dev-public env-specific NetworkPolicy override: helmfile installs Gitea
 # in `loopzero-system` namespace (NOT a dedicated `gitea` ns like the chart

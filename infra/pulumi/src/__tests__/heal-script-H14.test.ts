@@ -1,14 +1,14 @@
 // cell-2-activation-plan T0.2 / H14 — invariants for k3d-cross-cluster-heal.sh
 // H14 block. Two modes:
 //
-//   Mode A (refresh) — CR `cell-2` (spec.clusterName=loopzero-runtime-2) exists
+//   Mode A (refresh) — CR `cell-2` (spec.clusterName=loopzero-cell-1) exists
 //     but disconnected because SA UID rotated in runtime-2. H14 mints fresh
-//     SA token via `kubectl --context k3d-loopzero-runtime-2 create token default`,
+//     SA token via `kubectl --context k3d-loopzero-cell-1 create token default`,
 //     rebuilds kubeconfig YAML preserving CA + apiServer, patches the
 //     cell-2-kubeconfig Secret. Mirrors H13 pattern for cell-default.
 //
 //   Mode B (bootstrap) — CR doesn't exist. H14 generates scoped kubeconfig
-//     with cluster_name=runtime-2 (matches k3d-loopzero-runtime-2-server-0 docker
+//     with cluster_name=runtime-2 (matches k3d-loopzero-cell-1-server-0 docker
 //     container per B82) and invokes clustercredential-create.sh cell-2
 //     runtime-2 <scoped> with INGRESS_DOMAIN=loopzero.local (ADR C7).
 //
@@ -69,8 +69,8 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
     expect(h14Block).toMatch(/patch secret cell-2-kubeconfig[\s\S]{0,200}--type=merge/);
   });
 
-  it("Mode A: builds in-cluster kubeconfig YAML referencing loopzero-runtime-2 context", () => {
-    expect(h14Block).toMatch(/name:\s*loopzero-runtime-2/);
+  it("Mode A: builds in-cluster kubeconfig YAML referencing loopzero-cell-1 context", () => {
+    expect(h14Block).toMatch(/name:\s*loopzero-cell-1/);
   });
 
   // ----- Mode B (bootstrap) invariants -----
@@ -81,7 +81,7 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
 
   it("Mode B: cluster-name argument is 'runtime-2' (NOT 'workload-2')", () => {
     // The cc-create call: clustercredential-create.sh cell-2 <name> <kc>.
-    // Must be 'runtime-2' (matches k3d-loopzero-runtime-2-server-0 container).
+    // Must be 'runtime-2' (matches k3d-loopzero-cell-1-server-0 container).
     expect(h14Block).toMatch(/cell-2\s+runtime-2\b/);
     // Defensive: workload-2 form MUST NOT appear inside H14.
     expect(h14Block).not.toMatch(/cc-create.*cell-2\s+workload-2\b/);
@@ -101,8 +101,8 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
     expect(h14Block).not.toMatch(/trap\s+["'][^"']+["']\s+RETURN/);
   });
 
-  it("Mode B: k3d kubeconfig source is loopzero-runtime-2 (the real cluster)", () => {
-    expect(h14Block).toMatch(/k3d\s+kubeconfig\s+get\s+loopzero-runtime-2/);
+  it("Mode B: k3d kubeconfig source is loopzero-cell-1 (the real cluster)", () => {
+    expect(h14Block).toMatch(/k3d\s+kubeconfig\s+get\s+loopzero-cell-1/);
   });
 
   it("Mode B: references CC_LIB_H14 and SCOPED_LIB_H14 to lib helpers", () => {
@@ -124,14 +124,14 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
     expect(text).toMatch(/for ctx in .*\$RT2_CTX/);
   });
 
-  it("RT2_CTX defaults to k3d-loopzero-runtime-2", () => {
-    expect(text).toMatch(/RT2_CTX="\$\{RT2_CTX:-k3d-loopzero-runtime-2\}"/);
+  it("RT2_CTX defaults to k3d-loopzero-cell-1", () => {
+    expect(text).toMatch(/RT2_CTX="\$\{RT2_CTX:-k3d-loopzero-cell-1\}"/);
   });
 
   it("H1 attach loop includes runtime-2 containers", () => {
-    expect(text).toMatch(/k3d-loopzero-runtime-2-server-0/);
-    expect(text).toMatch(/k3d-loopzero-runtime-2-agent-0/);
-    expect(text).toMatch(/k3d-loopzero-runtime-2-serverlb/);
+    expect(text).toMatch(/k3d-loopzero-cell-1-server-0/);
+    expect(text).toMatch(/k3d-loopzero-cell-1-agent-0/);
+    expect(text).toMatch(/k3d-loopzero-cell-1-serverlb/);
   });
 
   it("final log line reports H1-H18+ (NOT 9 hacks) — incrementing counter", () => {
@@ -143,7 +143,7 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
     expect(text).toMatch(/H1-H1[89] codified|H1-H[2-9][0-9] codified/);
   });
 
-  it("does NOT reference loopzero-workload-2 anywhere (drift guard)", () => {
+  it("does NOT reference loopzero-cell-0-2 anywhere (drift guard)", () => {
     expect(text).not.toMatch(/workload-2/);
   });
 });

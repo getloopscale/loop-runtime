@@ -40,7 +40,7 @@ echo "=== Cross-cluster networking setup ==="
 # --- Step 1: Verify all clusters are on the shared network ---
 echo ""
 echo "Verifying cluster connectivity on ${SHARED_NETWORK}..."
-for container in k3d-loopzero-core-server-0 k3d-loopzero-build-server-0 k3d-loopzero-workload-server-0; do
+for container in k3d-loopzero-core-server-0 k3d-loopzero-build-server-0 k3d-loopzero-cell-0-server-0; do
   IP=$(docker inspect "$container" --format "{{(index .NetworkSettings.Networks \"${SHARED_NETWORK}\").IPAddress}}" 2>/dev/null || true)
   if [ -n "$IP" ]; then
     echo "  [OK] $container: $IP"

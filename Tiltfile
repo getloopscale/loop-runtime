@@ -40,7 +40,7 @@ if not os.path.exists(GOMOD_TOKEN_PATH):
 # ---------------------------------------------------------------------------
 # Helm dependencies (PostgreSQL, Gitea, MinIO)
 # ---------------------------------------------------------------------------
-# These are installed via `task infra:install:mgmt` during `task setup`.
+# These are installed via `task infra:install:core` during `task setup`.
 # Tilt observes them as existing resources for dependency ordering.
 # They are NOT managed by Tilt — `tilt down` will NOT uninstall them.
 # This prevents accidental data loss when stopping the dev loop.

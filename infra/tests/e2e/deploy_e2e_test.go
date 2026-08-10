@@ -36,7 +36,7 @@ func requireE2EFlag(t *testing.T) {
 
 // requireKubeContexts asserts all 3 expected k3d contexts exist.
 func requireKubeContexts(t *testing.T) {
-	for _, ctx := range []string{"k3d-loopzero-core", "k3d-loopzero-build", "k3d-loopzero-workload"} {
+	for _, ctx := range []string{"k3d-loopzero-core", "k3d-loopzero-build", "k3d-loopzero-cell-0"} {
 		cmd := exec.Command("kubectl", "config", "get-contexts", "-o", "name", ctx)
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("missing kube context %s: run `task setup` first (%v)", ctx, err)
@@ -110,7 +110,7 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	}
 	t.Logf("release URL: %s", url)
 
-	t.Logf("=== Step 7/8: Workload pod running on loopzero-workload ===")
+	t.Logf("=== Step 7/8: Workload pod running on loopzero-cell-0 ===")
 	if err := waitForWorkloadPodRunning(t, testTenant, probeTimeout); err != nil {
 		t.Fatalf("workload pod did not become Ready: %v", err)
 	}
@@ -178,7 +178,7 @@ func waitForWorkloadPodRunning(t *testing.T, tenant string, timeout time.Duratio
 	ns := "loopzero-tenants"
 	label := fmt.Sprintf("loopzero.io/tenant=%s", tenant)
 	for time.Now().Before(deadline) {
-		out, _ := runCmd(t, "kubectl", "--context", "k3d-loopzero-workload", "-n", ns,
+		out, _ := runCmd(t, "kubectl", "--context", "k3d-loopzero-cell-0", "-n", ns,
 			"get", "pods", "-l", label, "-o", "jsonpath={.items[0].status.phase}")
 		if strings.TrimSpace(out) == "Running" {
 			return nil
@@ -229,7 +229,7 @@ func TestE2EDeployStructureExists(t *testing.T) {
 		"loopzero deploy",
 		"k3d-loopzero-core",
 		"k3d-loopzero-build",
-		"k3d-loopzero-workload",
+		"k3d-loopzero-cell-0",
 		testRepoURL,
 	}
 	for _, r := range required {

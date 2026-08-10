@@ -53,7 +53,7 @@ type ApplicationReconciler struct {
 	Scheme     *runtime.Scheme
 	BaseDomain string
 
-	// RuntimeFactory resolves a workload-cluster client per tenant cell_id
+	// RuntimeFactory resolves a cell-0-cluster client per tenant cell_id
 	// (dogfood-2026-05-08-fixes T4.2 / ADR D6). nil = single-cell legacy mode:
 	// fast-path Healthy is disabled and Application.phase only converges via
 	// ExposedRoute Reachable. Wiring is in app-operator/main.go.
@@ -376,7 +376,7 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 // app.Spec.TenantRef → tenant.Spec.CellID → RuntimeFactory.For(cellID).
 //
 // dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5 multi-cell awareness +
-// EC-9 graceful degrade on workload-cluster unreachable).
+// EC-9 graceful degrade on cell-0-cluster unreachable).
 //
 // Behavior:
 //   - RuntimeFactory == nil: single-cell legacy mode → no-op (current path).

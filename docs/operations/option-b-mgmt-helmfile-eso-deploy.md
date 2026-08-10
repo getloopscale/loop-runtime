@@ -19,7 +19,7 @@ title: "Option B — Deploy ESO Controller in mgmt cluster"
 
 ## Background — iter 31 architectural finding
 
-LIVE pre-flight 2026-06-10 14:11Z discovered: `kubectl get pods -n external-secrets` in `k3d-loopzero-core` returns no resources. ESO controller deployed only in workload + runtime-2 clusters (per `infra/helmfile/runtime.helmfile.yaml.gotmpl` line 108-110).
+LIVE pre-flight 2026-06-10 14:11Z discovered: `kubectl get pods -n external-secrets` in `k3d-loopzero-core` returns no resources. ESO controller deployed only in workload + runtime-2 clusters (per `infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110).
 
 Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assumed ESO would be in mgmt. The CSS reconcile flow requires ESO controller in the same cluster as the OpenBao server it reads from. Under Option (c) (OpenBao in mgmt), full T4.1 6/6 scenarios cannot succeed without ESO ALSO in mgmt.
 
@@ -27,7 +27,7 @@ Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assu
 
 ### B1 — Deploy upstream `external-secrets` chart in mgmt (RECOMMENDED)
 
-**Canonical pattern:** mirror exactly what `runtime.helmfile.yaml.gotmpl` does for workload cluster. Single chart, single namespace, ~3min sync. Operationally simplest.
+**Canonical pattern:** mirror exactly what `cell.helmfile.yaml.gotmpl` does for workload cluster. Single chart, single namespace, ~3min sync. Operationally simplest.
 
 **Pros:**
 - Minimal helmfile diff (1 repo + 1 release)
@@ -103,7 +103,7 @@ The OCI-published `loopzero-external-secrets` chart bundles ESO + LoopZero CRDs 
 
 ### B3 — Cross-cluster ExternalSecret push (NOT recommended for iter 1)
 
-Keep ESO in workload cluster + design an ExternalSecret CR pattern where workload-cluster ESO reads from core-cluster OpenBao via NodePort + writes K8s Secrets to workload tenant ns.
+Keep ESO in workload cluster + design an ExternalSecret CR pattern where cell-0-cluster ESO reads from core-cluster OpenBao via NodePort + writes K8s Secrets to workload tenant ns.
 
 **Pros:** preserves the 5-cluster isolation (per ADR D4) without deploying ESO in 2 clusters.
 
@@ -180,6 +180,6 @@ ESO controller in workload cluster is UNAFFECTED by this — the destroy is name
 - iter 31 architectural finding: runbook § "Architectural finding — ESO controller absent in mgmt"
 - iter 31 Option A subset LIVE script: `infra/tests/e2e/dev-public-secrets-write-path-subset_test.sh`
 - iter 25 dev-public ESO overlay: `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`
-- Runtime helmfile ESO release (canonical pattern source): `infra/helmfile/runtime.helmfile.yaml.gotmpl` line 108-110
+- Runtime helmfile ESO release (canonical pattern source): `infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110
 - Productive-idle mandate: memory `feedback_productive_idle_runbook_preauthor_2026_06_10`
 - per-feature LIVE workflow mandate: memory `feedback_post_feature_live_regression_workflow_2026_06_09`

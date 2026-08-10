@@ -118,7 +118,7 @@ These are reconciled by `task bootstrap:standalone` (local) or by Pulumi+Helmfil
 | `loopzero-registry-pull` | loopzero-system (workload cluster) | `bootstrap-cluster.sh:76` (doctl) | `.dockerconfigjson` | every loopzero-* Deployment imagePullSecret | rotate via `doctl registry kubernetes-manifest` |
 
 **ESO-managed (synced from mgmt → workload):**
-- The ClusterCredential CR's kubeconfig Secret in `loopzero-system` (mgmt) is synced by ESO into the workload cluster as `runtime.kubeconfig` for loopzero-api consumption (per CLAUDE.md B34).
+- The ClusterCredential CR's kubeconfig Secret in `loopzero-system` (mgmt) is synced by ESO into the workload cluster as `cell-0.kubeconfig` for loopzero-api consumption (per CLAUDE.md B34).
 
 ---
 

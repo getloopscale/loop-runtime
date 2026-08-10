@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: runtime-policy-controller
+  name: runtime-cloudflared
   namespace: argocd
   labels:
     loopzero.io/managed-by: loopzero-platform
@@ -11,24 +11,16 @@ metadata:
 spec:
   project: loopzero-platform
   source:
-    repoURL: https://sigstore.github.io/helm-charts
-    chart: policy-controller
-    targetRevision: 0.8.5
+    repoURL: https://gitea.loopzero-system.svc.cluster.local:3000/loopzero-platform/charts.git
+    path: infra/helm/cloudflared
+    targetRevision: HEAD
     helm:
-      releaseName: policy-controller
-      valuesObject:
-        webhook:
-          replicaCount: 1
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+      releaseName: cloudflared
+      valueFiles:
+      - ../../helm/cloudflared/values.yaml
   destination:
-    server: https://loopzero-runtime.example
-    namespace: cosign-system
+    server: https://loopzero-cell-0.example
+    namespace: loopzero-system
   syncPolicy:
     syncOptions:
     - CreateNamespace=true

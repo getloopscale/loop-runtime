@@ -4,15 +4,15 @@
 //
 // Renders the chart via `helm template` and asserts:
 //
-//   - T5.1-T5.4: 5 auth/k8s-* mounts enabled (k8s-mgmt, k8s-build,
+//   - T5.1-T5.4: 5 auth/k8s-* mounts enabled (k8s-core, k8s-build,
 //     k8s-cell-default, k8s-cell-1, k8s-cell-2).
-//   - T5.5: loopzero-api role on k8s-mgmt with TTL 1h.
-//   - T5.6: loopzero-tenant-operator role on k8s-mgmt.
-//   - T5.7: loopzero-app/preview/platform-operator roles on k8s-mgmt.
+//   - T5.5: loopzero-api role on k8s-core with TTL 1h.
+//   - T5.6: loopzero-tenant-operator role on k8s-core.
+//   - T5.7: loopzero-app/preview/platform-operator roles on k8s-core.
 //   - T5.8: argo-workflows role on k8s-build.
 //   - T5.9: external-secrets-broker role on each k8s-cell-* mount.
 //   - Isolation: loopzero-api NOT on any k8s-cell-* mount.
-//   - Isolation: external-secrets-broker NOT on k8s-mgmt.
+//   - Isolation: external-secrets-broker NOT on k8s-core.
 //
 // Advisory-fallthrough when helm binary is absent.
 //
@@ -35,7 +35,7 @@ const chartPath = "infra/helm/openbao-init"
 
 var (
 	authMounts = []string{
-		"k8s-mgmt", "k8s-build", "k8s-cell-default", "k8s-cell-1", "k8s-cell-2",
+		"k8s-core", "k8s-build", "k8s-cell-default", "k8s-cell-1", "k8s-cell-2",
 	}
 	mgmtBinaries = []string{
 		"loopzero-api",
@@ -104,11 +104,11 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	// T5.5: loopzero-api role on k8s-mgmt with TTL 1h.
-	loopzeroAPIRE := regexp.MustCompile(`write_auth_role "k8s-mgmt" "loopzero-api"[\s\S]{0,400}?"1h"`)
+	// T5.5: loopzero-api role on k8s-core with TTL 1h.
+	loopzeroAPIRE := regexp.MustCompile(`write_auth_role "k8s-core" "loopzero-api"[\s\S]{0,400}?"1h"`)
 	if !loopzeroAPIRE.Match(rendered) {
-		if !regexp.MustCompile(`write_auth_role "k8s-mgmt" "loopzero-api"`).Match(rendered) {
-			failures = append(failures, "T5.5: loopzero-api role on k8s-mgmt MISSING")
+		if !regexp.MustCompile(`write_auth_role "k8s-core" "loopzero-api"`).Match(rendered) {
+			failures = append(failures, "T5.5: loopzero-api role on k8s-core MISSING")
 		} else {
 			failures = append(failures, "T5.5: loopzero-api TTL != 1h")
 		}
@@ -119,9 +119,9 @@ func Check(cfg Config) (Outcome, error) {
 		if binary == "loopzero-api" {
 			continue // already asserted with TTL
 		}
-		re := regexp.MustCompile(fmt.Sprintf(`write_auth_role "k8s-mgmt" "%s"`, regexp.QuoteMeta(binary)))
+		re := regexp.MustCompile(fmt.Sprintf(`write_auth_role "k8s-core" "%s"`, regexp.QuoteMeta(binary)))
 		if !re.Match(rendered) {
-			failures = append(failures, fmt.Sprintf("T5.6/T5.7: %s role on k8s-mgmt MISSING", binary))
+			failures = append(failures, fmt.Sprintf("T5.6/T5.7: %s role on k8s-core MISSING", binary))
 		}
 	}
 
@@ -146,9 +146,9 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	// Isolation: external-secrets-broker NOT on k8s-mgmt.
-	if regexp.MustCompile(`write_auth_role "k8s-mgmt" "external-secrets-broker"`).Match(rendered) {
-		failures = append(failures, "Isolation: external-secrets-broker role LEAKED to k8s-mgmt (isolation broken)")
+	// Isolation: external-secrets-broker NOT on k8s-core.
+	if regexp.MustCompile(`write_auth_role "k8s-core" "external-secrets-broker"`).Match(rendered) {
+		failures = append(failures, "Isolation: external-secrets-broker role LEAKED to k8s-core (isolation broken)")
 	}
 
 	if len(failures) > 0 {

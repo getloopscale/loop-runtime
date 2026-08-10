@@ -4,9 +4,9 @@
 // entry 153). Two subtle decisions are load-bearing:
 //   (1) Detection queries by spec.cellID, NOT CR name — because
 //       K8sCellStore lookup uses spec.cellID per MEET-053 B9.
-//   (2) cluster-name=workload, NOT runtime — because k3d local cluster is
-//       loopzero-workload; cluster-name=runtime would resolve docker container
-//       k3d-loopzero-runtime-server-0 which doesn't exist (B82 fallback to
+//   (2) cluster-name=cell-0, NOT runtime — because k3d local cluster is
+//       loopzero-cell-0; cluster-name=cell-0 would resolve docker container
+//       k3d-loopzero-cell-0-server-0 which doesn't exist (B82 fallback to
 //       0.0.0.0:6444 unreachable).
 //
 // Test catches drift like 'someone tidied the script back to runtime' or
@@ -44,7 +44,7 @@ describe("k3d-cross-cluster-heal.sh H12 invariants (matrix #153)", () => {
 
   it("cluster-name argument is 'workload' (NOT 'runtime')", () => {
     // The cc-create call: clustercredential-create.sh cell-1 <name> <kc>
-    // Must be 'workload' (matches k3d-loopzero-workload-server-0 container).
+    // Must be 'workload' (matches k3d-loopzero-cell-0-server-0 container).
     expect(h12Block).toMatch(/cell-1\s+workload\b/);
     // Defensive: the buggy form (cell-1 runtime) MUST NOT appear inside H12.
     expect(h12Block).not.toMatch(/cc-create.*cell-1\s+runtime\b/);
@@ -63,8 +63,8 @@ describe("k3d-cross-cluster-heal.sh H12 invariants (matrix #153)", () => {
     expect(h12Block).not.toMatch(/trap\s+["'][^"']+["']\s+RETURN/);
   });
 
-  it("k3d kubeconfig source is loopzero-workload (the real cluster)", () => {
-    expect(h12Block).toMatch(/k3d\s+kubeconfig\s+get\s+loopzero-workload/);
+  it("k3d kubeconfig source is loopzero-cell-0 (the real cluster)", () => {
+    expect(h12Block).toMatch(/k3d\s+kubeconfig\s+get\s+loopzero-cell-0/);
   });
 
   it("references CC_LIB and SCOPED_LIB to lib helpers", () => {

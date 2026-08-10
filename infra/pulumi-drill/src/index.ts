@@ -180,7 +180,7 @@ const runtimeCluster = new LoopZeroDOKSCluster("drill-runtime", {
 });
 
 const runtimeCluster2 = new LoopZeroDOKSCluster("drill-runtime-2", {
-  clusterName: `${doProject}-runtime-2-cluster`,
+  clusterName: `${doProject}-cell-1-cluster`,
   region,
   version: runtimeK8sVersion,
   vpcUuid: drillVpc.id,

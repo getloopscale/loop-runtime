@@ -28,7 +28,7 @@ tasks:
     cmds:
       - bash infra/scripts/local/check-infra.sh {{.CLI_ARGS}}
 
-  infra:install:mgmt:
+  infra:install:core:
     desc: Install platform components in mgmt cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
     cmds:
@@ -58,7 +58,7 @@ tasks:
       # node Ready up to 180s before any cluster operation. Idempotent
       # (no-op if already ready).
       - |
-        echo "[infra:install:mgmt] waiting for k3d-loopzero-core API server + node Ready..."
+        echo "[infra:install:core] waiting for k3d-loopzero-core API server + node Ready..."
         for i in $(seq 1 36); do
           if kubectl --context {{.CORE_CONTEXT}} wait --for=condition=Ready node --all --timeout=5s 2>/dev/null; then
             echo "  ready after ${i} attempts"
@@ -69,7 +69,7 @@ tasks:
         done
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
-        echo "[infra:install:mgmt] helmfile env: $HELMFILE_ENV"
+        echo "[infra:install:core] helmfile env: $HELMFILE_ENV"
         bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" mgmt
       # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA
       # É GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
@@ -81,7 +81,7 @@ tasks:
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         if [ "$HELMFILE_ENV" = "dev-public" ]; then
-          echo "[infra:install:mgmt] dev-public env detected — GHCR canonical pre-flight"
+          echo "[infra:install:core] dev-public env detected — GHCR canonical pre-flight"
           task images:ghcr:pullsecret
         fi
       - |
@@ -129,7 +129,7 @@ tasks:
       - kubectl --context {{.CORE_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
 
-  infra:install:mgmt-dashboard-only:
+  infra:install:core-dashboard-only:
     desc: |
       Install only the 16 core-cluster releases the dashboard demo needs (skips
       harbor, opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
@@ -154,7 +154,7 @@ tasks:
           exit 1
         fi
         echo "OK: dashboard-only selector matched $count releases"
-      # Same pre-sync as infra:install:mgmt for LOOPZERO_DB_PASSWORD
+      # Same pre-sync as infra:install:core for LOOPZERO_DB_PASSWORD
       - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} mgmt
       - |
         export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \
@@ -207,7 +207,7 @@ tasks:
           insecure = true' \
           --dry-run=client -o yaml | kubectl --context {{.BUILD_CONTEXT}} apply -f -
 
-  infra:install:workload:
+  infra:install:cell:
     desc: Install platform components in workload cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
     cmds:
@@ -222,7 +222,7 @@ tasks:
       - |
         S3_KEY=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
         S3_SECRET=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
-        KUBECONFIG=$(k3d kubeconfig write loopzero-workload) \
+        KUBECONFIG=$(k3d kubeconfig write loopzero-cell-0) \
           LOOPZERO_PROFILE=standalone-multi \
           LOOPZERO_S3_ACCESS_KEY="$S3_KEY" LOOPZERO_S3_SECRET_KEY="$S3_SECRET" \
           bash infra/helmfile/scripts/generate-runtime-secrets.sh standalone-multi workload
@@ -230,14 +230,14 @@ tasks:
       # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
       # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
       - >-
-        helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl
+        helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
         -e standalone-multi
-        --kube-context {{.WORKLOAD_CONTEXT}}
+        --kube-context {{.CELL_0_CONTEXT}}
         sync --skip-deps
       # Post-sync: Traefik middlewares + wildcard cert + TLSStore
       # (these are non-helm CRs that depend on Traefik + cert-manager CRDs being installed)
-      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
-      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/traefik-tls.yaml
+      - kubectl --context {{.CELL_0_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
+      - kubectl --context {{.CELL_0_CONTEXT}} apply -f infra/helm/cert-manager/traefik-tls.yaml
 
   infra:install:monitoring:
     desc: |
@@ -245,7 +245,7 @@ tasks:
 
       Note (T2.3 of plan 2026-05-22): monitoring releases (prometheus, grafana,
       otel-collector, tempo, opencost) are now declared in core.helmfile.yaml.gotmpl
-      and installed by `infra:install:mgmt`. This task is now a no-op alias for
+      and installed by `infra:install:core`. This task is now a no-op alias for
       backward compatibility — invokes dashboards:install + infra:install:loki only.
     cmds:
       - task: dashboards:install
@@ -312,7 +312,7 @@ tasks:
         kubectl --context {{.BUILD_CONTEXT}} apply
         -f infra/helm/monitoring/manifests/metrics-service-argo-workflows.yaml
       - >-
-        kubectl --context {{.WORKLOAD_CONTEXT}} apply
+        kubectl --context {{.CELL_0_CONTEXT}} apply
         -f infra/helm/monitoring/manifests/metrics-service-traefik.yaml
       # Alerting rules
       - >-
@@ -329,7 +329,7 @@ tasks:
       # Prometheus Operator CRs are cluster-scoped by kind but reference objects in specific clusters,
       # so each cluster needs the type registered independently before its charts install.
       - |
-        for CTX in {{.CORE_CONTEXT}} {{.BUILD_CONTEXT}} {{.WORKLOAD_CONTEXT}}; do
+        for CTX in {{.CORE_CONTEXT}} {{.BUILD_CONTEXT}} {{.CELL_0_CONTEXT}}; do
           echo "=== Installing Prometheus CRDs + monitoring namespace on $CTX ==="
           kubectl --context "$CTX" create namespace monitoring --dry-run=client -o yaml \
             | kubectl --context "$CTX" apply -f -
@@ -343,9 +343,9 @@ tasks:
     desc: Install all platform components via Helm
     cmds:
       - task: infra:install:monitoring-crds
-      - task: infra:install:mgmt
+      - task: infra:install:core
       - task: infra:install:build
-      - task: infra:install:workload
+      - task: infra:install:cell
       - task: infra:install:monitoring
 
   # ---------------------------------------------------------------------------
@@ -364,7 +364,7 @@ tasks:
       Install Ory Kratos + Hydra for auth (idempotent).
 
       Note (T2.3 of plan 2026-05-22): kratos + hydra are declared in
-      core.helmfile.yaml.gotmpl and installed by `infra:install:mgmt`.
+      core.helmfile.yaml.gotmpl and installed by `infra:install:core`.
       This task is now a thin wrapper that re-runs the helmfile sync for
       these specific releases + ensures databases exist.
 
@@ -690,7 +690,7 @@ tasks:
       - bash infra/scripts/local/setup-cross-cluster-networking.sh
       - bash infra/scripts/local/update-cross-cluster-ips.sh
       # T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
-      # Patches mgmt CoreDNS NodeHosts so `k3d-loopzero-workload-server-0`
+      # Patches mgmt CoreDNS NodeHosts so `k3d-loopzero-cell-0-server-0`
       # resolves — required for the mgmt Prometheus scrape of the workload
       # cluster's kube-state-metrics NodePort (values-prometheus.yaml).
       # Idempotent (diff-then-patch). Same mechanism J-17 Loki cross-
@@ -945,13 +945,13 @@ tasks:
         # Targets (context : namespace pairs):
         #   k3d-loopzero-core       : loopzero-system
         #   k3d-loopzero-build      : argo
-        #   k3d-loopzero-workload   : loopzero-system
-        #   k3d-loopzero-runtime-2  : loopzero-system  (cell-2; optional if not active)
+        #   k3d-loopzero-cell-0   : loopzero-system
+        #   k3d-loopzero-cell-1  : loopzero-system  (cell-2; optional if not active)
         for pair in \
             "k3d-loopzero-core:loopzero-system" \
             "k3d-loopzero-build:argo" \
-            "k3d-loopzero-workload:loopzero-system" \
-            "k3d-loopzero-runtime-2:loopzero-system"; do
+            "k3d-loopzero-cell-0:loopzero-system" \
+            "k3d-loopzero-cell-1:loopzero-system"; do
           ctx="${pair%%:*}"
           ns="${pair##*:}"
           if ! kubectl --context "$ctx" version --request-timeout=5s >/dev/null 2>&1; then
@@ -1145,7 +1145,7 @@ tasks:
     desc: |
       Composite: bring up the entire local-public dashboard demo. Runs
       port-forward → caddy → demo seed (skip if data already present).
-      Use after `task infra:install:mgmt-dashboard-only ENV=standalone-public`.
+      Use after `task infra:install:core-dashboard-only ENV=standalone-public`.
     cmds:
       - task: cloud:port-forward:up
       - task: cloud:caddy:up

@@ -35,7 +35,7 @@ environments:
     # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
     # Same topology as standalone-multi, but configured for the local-Caddy
     # public-DNS demo flow (app/cloud/auth.loopzero.example via Let's Encrypt).
-    # Used by `task infra:install:mgmt-dashboard-only ENV=standalone-public`.
+    # Used by `task infra:install:core-dashboard-only ENV=standalone-public`.
     values:
       - environments/standalone-public.yaml
   dev-public:
@@ -741,7 +741,7 @@ releases:
   # D4 delete guardrail (plan d4-vap-delete-guardrail, T1.2).
   #
   # Second install of the admission-policies chart. The first lives in
-  # runtime.helmfile.yaml.gotmpl and guards workloads; this one guards the mgmt boundary
+  # cell.helmfile.yaml.gotmpl and guards workloads; this one guards the mgmt boundary
   # resources (Application, AppProject, Tenant, Environment, ClusterCredential) and their
   # CRDs, which live HERE and had no admission policy at all before this release existed.
   #

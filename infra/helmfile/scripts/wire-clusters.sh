@@ -8,7 +8,7 @@
 #   wire-clusters.sh <env>
 #
 # Required env vars:
-#   LOOPZERO_CORE_KUBECONFIG, LOOPZERO_BUILD_KUBECONFIG, LOOPZERO_RUNTIME_KUBECONFIG
+#   LOOPZERO_CORE_KUBECONFIG, LOOPZERO_BUILD_KUBECONFIG, LOOPZERO_CELL_0_KUBECONFIG
 #   (optional) LOOPZERO_RUNTIME2_KUBECONFIG
 set -euo pipefail
 ENV="${1:?usage: $0 <env>}"
@@ -48,9 +48,9 @@ if [[ "$INGRESS_DOMAIN_VAL" == "loopzero.local" ]]; then
   log "k3d-local detected (ingress-domain=loopzero.local) — rendering ClusterCredential CRs with spec.tls.insecure=true (issue #67)"
 fi
 
-if [[ -n "${LOOPZERO_RUNTIME_KUBECONFIG:-}" ]]; then
+if [[ -n "${LOOPZERO_CELL_0_KUBECONFIG:-}" ]]; then
   log "wiring runtime cluster..."
-  SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_RUNTIME_KUBECONFIG")
+  SCOPED=$(KUBECONFIG="$LOOPZERO_CELL_0_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_CELL_0_KUBECONFIG")
   KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
   # `clustercredential-create.sh cell-1 runtime` call. The ADR-0008

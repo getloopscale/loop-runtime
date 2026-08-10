@@ -1,35 +1,36 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: runtime-metrics-server
+  name: runtime-kube-state-metrics
   namespace: argocd
   labels:
     loopzero.io/managed-by: loopzero-platform
     loopzero.io/cluster-role: runtime
   annotations:
-    argocd.argoproj.io/sync-wave: '-3'
+    argocd.argoproj.io/sync-wave: '0'
 spec:
   project: loopzero-platform
   source:
-    repoURL: https://kubernetes-sigs.github.io/metrics-server/
-    chart: metrics-server
-    targetRevision: 3.12.1
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-state-metrics
+    targetRevision: 5.25.1
     helm:
-      releaseName: metrics-server
+      releaseName: kube-state-metrics
       valuesObject:
-        args:
-        - --kubelet-insecure-tls
-        - --kubelet-preferred-address-types=InternalIP
         resources:
           requests:
-            cpu: 100m
-            memory: 200Mi
+            cpu: 50m
+            memory: 64Mi
           limits:
             cpu: 200m
-            memory: 400Mi
+            memory: 256Mi
+        service:
+          type: NodePort
+          nodePort: 30030
+          servicePort: 8080
   destination:
-    server: https://loopzero-runtime.example
-    namespace: kube-system
+    server: https://loopzero-cell-0.example
+    namespace: monitoring
   syncPolicy:
     syncOptions:
     - CreateNamespace=true

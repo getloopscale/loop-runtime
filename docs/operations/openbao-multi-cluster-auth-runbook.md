@@ -41,7 +41,7 @@ Provisioned by `openbao-init`:
 | Mount | Binds | Used by |
 |---|---|---|
 | `auth/kubernetes` | Legacy/backward compat | spki-extractor, bao-snapshot, tenant-controller-transit |
-| `auth/k8s-mgmt` | mgmt cluster SAs | loopzero-api, loopzero-{tenant,app,preview,platform}-operator |
+| `auth/k8s-core` | mgmt cluster SAs | loopzero-api, loopzero-{tenant,app,preview,platform}-operator |
 | `auth/k8s-build` | build cluster SAs | argo-workflows |
 | `auth/k8s-cell-default` | cell-default workload SAs | external-secrets-broker |
 | `auth/k8s-cell-1` | cell-1 workload SAs | external-secrets-broker |
@@ -127,7 +127,7 @@ echo "TokenReviewer JWT minted (${#TOKEN_REVIEWER_JWT} chars)"
 ```bash
 # Determine which Vault auth mount this cluster maps to
 case "${TARGET_CONTEXT}" in
-  *loopzero-core*)    MOUNT=k8s-mgmt ;;
+  *loopzero-core*)    MOUNT=k8s-core ;;
   *loopzero-build*)   MOUNT=k8s-build ;;
   *cell-default*) MOUNT=k8s-cell-default ;;
   *cell-1*)       MOUNT=k8s-cell-1 ;;
@@ -151,7 +151,7 @@ echo "auth/${MOUNT}/config written"
 Pick one of the per-binary roles that should work for this mount.
 
 ```bash
-# Example for k8s-mgmt: loopzero-api role expects loopzero-api SA in loopzero-system NS
+# Example for k8s-core: loopzero-api role expects loopzero-api SA in loopzero-system NS
 TEST_NS=loopzero-system
 TEST_SA=loopzero-api
 TEST_ROLE=loopzero-api
@@ -198,7 +198,7 @@ NEW_JWT=$(kubectl --context k3d-loopzero-core -n kube-system \
   create token vault-tokenreviewer --duration=8760h)
 
 # Update Vault config
-bao write auth/k8s-mgmt/config \
+bao write auth/k8s-core/config \
   kubernetes_host="$(kubectl --context k3d-loopzero-core config view --minify -o jsonpath='{.clusters[0].cluster.server}')" \
   kubernetes_ca_cert="$(kubectl --context k3d-loopzero-core -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}')" \
   token_reviewer_jwt="${NEW_JWT}" \
@@ -213,7 +213,7 @@ After running this runbook, capture state for audit:
 
 ```bash
 bao auth list -detailed | tee ~/openbao-auth-mounts-$(date -u +%Y-%m-%d).txt
-for mount in kubernetes k8s-mgmt k8s-build k8s-cell-default k8s-cell-1 k8s-cell-2; do
+for mount in kubernetes k8s-core k8s-build k8s-cell-default k8s-cell-1 k8s-cell-2; do
   echo "=== auth/${mount}/config ==="
   bao read "auth/${mount}/config"
   echo "=== auth/${mount}/role (list) ==="

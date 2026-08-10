@@ -34,7 +34,7 @@
 //	(4) Caller-pinned contract made EXPLICIT AND FAIL-FAST via
 //	    `: "${KUBECONFIG:?...}"`. Some scripts legitimately target a
 //	    cluster chosen by the caller (generate-runtime-secrets.sh is
-//	    invoked as `KUBECONFIG=$(k3d kubeconfig write loopzero-workload)
+//	    invoked as `KUBECONFIG=$(k3d kubeconfig write loopzero-cell-0)
 //	    bash ...`). Inheriting is fine; inheriting SILENTLY is not.
 //	    The `:?` form aborts with a message when the caller forgot.
 //

@@ -202,7 +202,7 @@ The architectural seam between them is **a single JSON file on disk**: `.loopzer
 │                                  ▼                                               │
 │   ┌─────────────────────────────────────────────────────────────────────────┐    │
 │   │  GitOps push → Gitea                                                    │    │
-│   │  ArgoCD reconcile  →  K8s cluster (loopzero-build / loopzero-runtime-*)         │    │
+│   │  ArgoCD reconcile  →  K8s cluster (loopzero-build / loopzero-cell-0-*)         │    │
 │   │  Deployment + Service + IngressRoute + Rollout                          │    │
 │   │  CertManager (ClusterIssuer) emite TLS                                  │    │
 │   │  Live HTTP 200 ✓                                                        │    │

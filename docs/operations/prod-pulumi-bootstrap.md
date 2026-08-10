@@ -80,7 +80,7 @@ pulumi config set --stack dev vault:address \
   https://openbao.secrets-system.svc.cluster.local:8200
 pulumi config set --stack dev vault:token "$(bao print token)"
 # Production: use Vault K8s auth instead of static token
-# pulumi config set --stack prod vault:authLogin '{"path": "auth/k8s-mgmt/login", "parameters": {"role": "pulumi-ci", "jwt": "..."}}'
+# pulumi config set --stack prod vault:authLogin '{"path": "auth/k8s-core/login", "parameters": {"role": "pulumi-ci", "jwt": "..."}}'
 ```
 
 ### Step 5 — Refactor Pulumi TS to read from Vault

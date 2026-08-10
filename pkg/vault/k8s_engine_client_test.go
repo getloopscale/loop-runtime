@@ -63,7 +63,7 @@ func TestCachingK8sEngineClient_EmptyRole_Errors(t *testing.T) {
 
 func TestCachingK8sEngineClient_EmptyNamespace_Errors(t *testing.T) {
 	c := NewCachingK8sEngineClient(&mockK8s{}, 15*time.Minute)
-	_, err := c.GenerateSAToken(context.Background(), "loopzero-runtime", "")
+	_, err := c.GenerateSAToken(context.Background(), "loopzero-cell-0", "")
 	if err == nil {
 		t.Fatal("expected error for empty namespace")
 	}
@@ -73,8 +73,8 @@ func TestCachingK8sEngineClient_CacheHit(t *testing.T) {
 	m := &mockK8s{}
 	c := NewCachingK8sEngineClient(m, 15*time.Minute)
 
-	tok1, _ := c.GenerateSAToken(context.Background(), "loopzero-runtime", "loopzero-system")
-	tok2, _ := c.GenerateSAToken(context.Background(), "loopzero-runtime", "loopzero-system")
+	tok1, _ := c.GenerateSAToken(context.Background(), "loopzero-cell-0", "loopzero-system")
+	tok2, _ := c.GenerateSAToken(context.Background(), "loopzero-cell-0", "loopzero-system")
 	if tok1 != tok2 {
 		t.Error("expected cache hit")
 	}
@@ -87,8 +87,8 @@ func TestCachingK8sEngineClient_PerNamespaceCache(t *testing.T) {
 	m := &mockK8s{}
 	c := NewCachingK8sEngineClient(m, 15*time.Minute)
 
-	_, _ = c.GenerateSAToken(context.Background(), "loopzero-runtime", "loopzero-system")
-	_, _ = c.GenerateSAToken(context.Background(), "loopzero-runtime", "argo")
+	_, _ = c.GenerateSAToken(context.Background(), "loopzero-cell-0", "loopzero-system")
+	_, _ = c.GenerateSAToken(context.Background(), "loopzero-cell-0", "argo")
 
 	if m.genCalls != 2 {
 		t.Errorf("expected 2 underlying calls (distinct namespaces), got %d", m.genCalls)

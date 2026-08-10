@@ -104,7 +104,7 @@ spec:
                   X-Correlation-ID: keep
                   User-Agent: keep
   destination:
-    server: https://loopzero-runtime.example
+    server: https://loopzero-cell-0.example
     namespace: traefik
   syncPolicy:
     syncOptions:

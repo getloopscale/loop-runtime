@@ -26,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   último rodava um software de segredos que não é o da marca que o nome citava. O cluster de build não
   mudou, e a documentação histórica preserva os nomes antigos, porque descreve o que era verdade na
   data (BACKLOG.md B-001)
+- Os clusters que executam as aplicações dos clientes passaram a se chamar pela unidade que hospedam:
+  `loopzero-cell-0` e `loopzero-cell-1`. Um deles era chamado ora de "workload" ora de "runtime" — duas
+  palavras para a mesma máquina —, e o outro carregava um número que não correspondia ao da célula que
+  rodava nele. Agora cada cluster tem um nome, e esse nome é o da célula (BACKLOG.md B-001, B-005)
+- **BREAKING —** quem instala os charts `loopzero-api`, `loopzero-tenant-operator` ou `loopzero-preview-operator`
+  e informa o cluster das aplicações passa a usar as chaves `kubeconfig.cell0` e `kubeContexts.cell0`;
+  elas se chamavam `kubeconfig.runtime` e `kubeContexts.runtime`. Pelo mesmo motivo, `kubeContexts.mgmt`
+  virou `kubeContexts.core`: a variável de ambiente que essas chaves alimentam já citava o nome novo, e
+  chave e variável dizendo coisas diferentes é como um erro de ligação passa despercebido
+  (BACKLOG.md B-001, B-005)
+- **BREAKING —** os comandos que instalam e provisionam cada cluster passaram a citar o nome dele:
+  `task infra:install:core`, `task infra:install:cell`, `task k3d:bootstrap-cell-0` e
+  `task k3d:bootstrap-cell-1`. As formas antigas — terminadas em `-mgmt`, `-workload` e `-runtime-2` —
+  respondem "task not found" (BACKLOG.md B-001, B-005)
 
 ### Added
 
@@ -38,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O comando que recria um cluster isolado voltou a recriá-lo. Ele derivava o nome do cluster do rótulo
+  digitado e não do arquivo de configuração que usava para criá-lo; quando os dois divergiram, o comando
+  apagava um cluster inexistente, criava outro com nome diferente e anunciava sucesso. Rótulo e nome do
+  cluster agora são a mesma palavra, que é o que impede a divergência de voltar (BACKLOG.md B-001, B-005)
 - As chamadas do painel que passam pelo `/engine/*` — implantar, ver projetos, acompanhar build —
   deixaram de falhar de forma intermitente no ambiente de desenvolvimento público. A borda alcançava o
   serviço por um encaminhamento de porta que é ferramenta de depuração, não de operação: ele reiniciava

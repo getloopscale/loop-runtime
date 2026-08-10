@@ -142,8 +142,8 @@ done
 # re-sync). Names extraídos do current-context line dos kubeconfigs baixados.
 export CORE_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
 export BUILD_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
-export RUNTIME_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
-log "  ✓ Exported DOKS context names: mgmt=$CORE_KUBE_CONTEXT build=$BUILD_KUBE_CONTEXT runtime=$RUNTIME_KUBE_CONTEXT"
+export CELL_0_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
+log "  ✓ Exported DOKS context names: mgmt=$CORE_KUBE_CONTEXT build=$BUILD_KUBE_CONTEXT runtime=$CELL_0_KUBE_CONTEXT"
 
 # --- Phase 1: Read Pulumi outputs ---
 log "Phase 1/4: Reading Pulumi outputs (v2 flat named exports)..."
@@ -484,17 +484,17 @@ else
 fi
 
 # Bug #26 LIVE FIX (caught 2026-05-17 iter 19): operators require BUILD_KUBECONFIG
-# + RUNTIME_KUBECONFIG env vars pointing to mounted files. Chart mounts when
+# + CELL_0_KUBECONFIG env vars pointing to mounted files. Chart mounts when
 # kubeconfig.{build,runtime}.existingConfigMap is set. Create ConfigMaps now
 # from drill kubeconfigs we already have at /tmp/drill-kc/.
 log "Bug #26 fix: creating build + runtime kubeconfig ConfigMaps for operators..."
 kubectl create configmap loopzero-build-kubeconfig --namespace loopzero-system \
   --from-file=config="$DRILL_KUBECONFIG_DIR/build.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-kubectl create configmap loopzero-runtime-kubeconfig --namespace loopzero-system \
+kubectl create configmap loopzero-cell-0-kubeconfig --namespace loopzero-system \
   --from-file=config="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-runtime-kubeconfig created"
+log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-cell-0-kubeconfig created"
 
 # Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
 # generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
@@ -536,7 +536,7 @@ log "Bug #56 ordering fix: overriding loopzero-cluster-kubeconfigs Secret with R
 kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
   --from-file=core.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
   --from-file=build.kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
-  --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=cell-0.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 log "  ✓ loopzero-cluster-kubeconfigs Secret now has 4 REAL kubeconfigs (mgmt+build+runtime+runtime-2)"
@@ -576,10 +576,10 @@ for cluster in "${CLUSTERS[@]}"; do
   # Per-cluster helmfile file mapping (iter 11 LIVE bug fix — no unified helmfile.yaml exists):
   #   mgmt    → core.helmfile.yaml.gotmpl
   #   build   → build.helmfile.yaml.gotmpl
-  #   runtime → runtime.helmfile.yaml.gotmpl
-  #   runtime-2 → runtime.helmfile.yaml.gotmpl (reuses runtime, same workload pattern)
+  #   runtime → cell.helmfile.yaml.gotmpl
+  #   runtime-2 → cell.helmfile.yaml.gotmpl (reuses runtime, same workload pattern)
   case "$cluster" in
-    runtime-2) CLUSTER_HELMFILE="runtime.helmfile.yaml.gotmpl" ;;
+    runtime-2) CLUSTER_HELMFILE="cell.helmfile.yaml.gotmpl" ;;
     *)         CLUSTER_HELMFILE="${cluster}.helmfile.yaml.gotmpl" ;;
   esac
   # Iter 12 LIVE bug fix: helmfile default timeout (5min) insufficient for drill
@@ -833,12 +833,12 @@ log "Bug #56 fix: loopzero-cluster-kubeconfigs Secret with REAL drill kubeconfig
 kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
   --from-file=core.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
   --from-file=build.kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
-  --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=cell-0.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
 # REMOVED kubectl-set-env workaround (lines 790-797 pre-fix). MGMT/BUILD/
-# RUNTIME_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
+# CELL_0_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
 # e consumidas pelo Helm chart via .Values.kubeContexts (sobrevive re-sync).
 log "  ✓ Real kubeconfigs mounted (context names provided to chart via export at Phase 0)"
 

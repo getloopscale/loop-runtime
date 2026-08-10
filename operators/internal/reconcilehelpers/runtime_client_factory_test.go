@@ -65,7 +65,7 @@ func TestCellAwareFactory_ErrorWhenSecretMissing(t *testing.T) {
 	cc := &loopzerov1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{Name: "cell-2", Namespace: "loopzero-system"},
 		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-runtime-2",
+			ClusterName: "loopzero-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
 			CellID:      "cell-2",
 			SecretRef: loopzerov1.SecretReference{
@@ -89,7 +89,7 @@ func TestCellAwareFactory_ErrorWhenSecretLacksKubeconfig(t *testing.T) {
 	cc := &loopzerov1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{Name: "cell-2", Namespace: "loopzero-system"},
 		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-runtime-2",
+			ClusterName: "loopzero-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
 			CellID:      "cell-2",
 			SecretRef: loopzerov1.SecretReference{
@@ -120,7 +120,7 @@ func TestCellAwareFactory_LookupByCellIDNotCRName(t *testing.T) {
 	cc := &loopzerov1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{Name: "workload-not-matching-cellid", Namespace: "loopzero-system"},
 		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-workload",
+			ClusterName: "loopzero-cell-0",
 			APIServer:   "https://172.18.0.7:6443",
 			CellID:      "cell-1",
 			SecretRef: loopzerov1.SecretReference{

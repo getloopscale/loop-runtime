@@ -38,35 +38,35 @@ LEGACY_NS="loopzero-${TENANT}-<env>"               # 2-seg
 CANONICAL_NS="loopzero-${TENANT}-<project>-<env>"  # 3-seg
 
 # 1. List PVCs in the legacy namespace + their PVs
-kubectl --context k3d-loopzero-workload -n "$LEGACY_NS" get pvc -o jsonpath='{range .items[*]}{.metadata.name}={.spec.volumeName}{"\n"}{end}'
+kubectl --context k3d-loopzero-cell-0 -n "$LEGACY_NS" get pvc -o jsonpath='{range .items[*]}{.metadata.name}={.spec.volumeName}{"\n"}{end}'
 
 # 2. Quiesce workloads writing to those PVCs (scale Deployments/Rollouts to 0)
-kubectl --context k3d-loopzero-workload -n "$LEGACY_NS" scale deploy --all --replicas=0
-kubectl --context k3d-loopzero-workload -n "$LEGACY_NS" wait --for=delete pod --all --timeout=120s
+kubectl --context k3d-loopzero-cell-0 -n "$LEGACY_NS" scale deploy --all --replicas=0
+kubectl --context k3d-loopzero-cell-0 -n "$LEGACY_NS" wait --for=delete pod --all --timeout=120s
 
 # 3. Snapshot PV state for rollback audit
-kubectl --context k3d-loopzero-workload get pv -o yaml > "/tmp/pv-snapshot-${TENANT}-$(date +%s).yaml"
+kubectl --context k3d-loopzero-cell-0 get pv -o yaml > "/tmp/pv-snapshot-${TENANT}-$(date +%s).yaml"
 ```
 
 ### The rebind dance (per PV)
 
 ```bash
 PVC_NAME="<name>"
-PV_NAME="$(kubectl --context k3d-loopzero-workload -n "$LEGACY_NS" get pvc "$PVC_NAME" -o jsonpath='{.spec.volumeName}')"
+PV_NAME="$(kubectl --context k3d-loopzero-cell-0 -n "$LEGACY_NS" get pvc "$PVC_NAME" -o jsonpath='{.spec.volumeName}')"
 
 # Patch the PV's reclaim policy to Retain so it survives the PVC delete
-kubectl --context k3d-loopzero-workload patch pv "$PV_NAME" --type=merge \
+kubectl --context k3d-loopzero-cell-0 patch pv "$PV_NAME" --type=merge \
   -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 
 # Drop the old PVC; the PV survives in Released state
-kubectl --context k3d-loopzero-workload -n "$LEGACY_NS" delete pvc "$PVC_NAME"
+kubectl --context k3d-loopzero-cell-0 -n "$LEGACY_NS" delete pvc "$PVC_NAME"
 
 # Clear the claimRef so the PV is bindable again
-kubectl --context k3d-loopzero-workload patch pv "$PV_NAME" --type=json \
+kubectl --context k3d-loopzero-cell-0 patch pv "$PV_NAME" --type=json \
   -p='[{"op": "remove", "path": "/spec/claimRef"}]'
 
 # Create the new PVC in the canonical namespace, pinning it to the PV
-cat <<EOF | kubectl --context k3d-loopzero-workload apply -f -
+cat <<EOF | kubectl --context k3d-loopzero-cell-0 apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -81,7 +81,7 @@ spec:
 EOF
 
 # Verify the binding
-kubectl --context k3d-loopzero-workload -n "$CANONICAL_NS" get pvc "$PVC_NAME" -o jsonpath='{.status.phase}'
+kubectl --context k3d-loopzero-cell-0 -n "$CANONICAL_NS" get pvc "$PVC_NAME" -o jsonpath='{.status.phase}'
 # Expect: Bound
 ```
 
@@ -90,7 +90,7 @@ kubectl --context k3d-loopzero-workload -n "$CANONICAL_NS" get pvc "$PVC_NAME" -
 ```bash
 # Re-scale workloads in the CANONICAL namespace (they were re-created via
 # the script's adopt path; just bring replicas back up)
-kubectl --context k3d-loopzero-workload -n "$CANONICAL_NS" scale deploy --all --replicas=1
+kubectl --context k3d-loopzero-cell-0 -n "$CANONICAL_NS" scale deploy --all --replicas=1
 ```
 
 ---
@@ -121,10 +121,10 @@ deleted:
 
 ```bash
 # Restore the PV state from the snapshot
-kubectl --context k3d-loopzero-workload apply -f "/tmp/pv-snapshot-${TENANT}-<timestamp>.yaml"
+kubectl --context k3d-loopzero-cell-0 apply -f "/tmp/pv-snapshot-${TENANT}-<timestamp>.yaml"
 
 # Re-scale workloads in the LEGACY namespace
-kubectl --context k3d-loopzero-workload -n "$LEGACY_NS" scale deploy --all --replicas=1
+kubectl --context k3d-loopzero-cell-0 -n "$LEGACY_NS" scale deploy --all --replicas=1
 ```
 
 If the legacy namespace has already been deleted, recovery depends on

@@ -144,9 +144,9 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 			Skip("k3d loopzero-core not available: " + err.Error())
 		}
 		mgmtKube = strings.TrimSpace(string(out))
-		out, err = exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-workload").Output()
+		out, err = exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-cell-0").Output()
 		if err != nil {
-			Skip("k3d loopzero-workload not available: " + err.Error())
+			Skip("k3d loopzero-cell-0 not available: " + err.Error())
 		}
 		workloadKube = strings.TrimSpace(string(out))
 		_ = mgmtKube
@@ -286,9 +286,9 @@ var _ = Describe("Dogfood cleanup helper (folded from cleanup-terminating-namesp
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
-			out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-workload").Output()
+			out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopzero-cell-0").Output()
 			if err != nil {
-				Skip("k3d loopzero-workload not available")
+				Skip("k3d loopzero-cell-0 not available")
 			}
 			workloadKube := strings.TrimSpace(string(out))
 

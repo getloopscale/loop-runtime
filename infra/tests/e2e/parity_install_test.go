@@ -31,7 +31,7 @@ var _ = Describe("Parity: Install Matrix", Label("parity"), func() {
 	})
 
 	It("k3d-virgin: platform converges (operator-run, destructive)", func() {
-		// k3d-virgin-install.sh pauses live loopzero-build + loopzero-workload to
+		// k3d-virgin-install.sh pauses live loopzero-build + loopzero-cell-0 to
 		// free RAM, creates `loopzero-virgin`, runs full helmfile sync, runs
 		// journey-01 smoke, then tears the virgin cluster down + restarts
 		// the originals. Wrong scope for inline dogfood: stand-alone by

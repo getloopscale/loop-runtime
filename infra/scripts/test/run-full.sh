@@ -43,7 +43,7 @@ log() { printf '[chaos-full] %s\n' "$*" >&2; }
 declare -A SCENARIO_CTX
 SCENARIO_CTX["C01"]="k3d-loopzero-core"        # pod-kill-api-leader → loopzero-system
 SCENARIO_CTX["C02"]="k3d-loopzero-core"        # pod-kill-controller → loopzero-system
-SCENARIO_CTX["C03"]="k3d-loopzero-workload"    # random-tenant-pod-kill → tenant ns
+SCENARIO_CTX["C03"]="k3d-loopzero-cell-0"    # random-tenant-pod-kill → tenant ns
 SCENARIO_CTX["C04"]="k3d-loopzero-build"       # node-unschedulable → argo ns
 SCENARIO_CTX["C05"]="k3d-loopzero-core"        # argocd-crash → loopzero-system
 SCENARIO_CTX["C06"]="k3d-loopzero-build"       # build-cluster-network-partition → argo
@@ -71,7 +71,7 @@ cat > "$SUMMARY" <<EOF
 
 EOF
 
-for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-workload k3d-loopzero-runtime-2; do
+for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-cell-0 k3d-loopzero-cell-1; do
   pods=$(kubectl --context "$ctx" get pods -n chaos-mesh 2>/dev/null | grep -c "Running" || echo 0)
   echo "- $ctx chaos-mesh: $pods pods Running" >> "$SUMMARY"
 done

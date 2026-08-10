@@ -91,7 +91,7 @@ secretsEngines:
 # Mount layout:
 #   - kubernetes        : legacy/backward-compat for in-cluster mgmt workloads
 #                          (eso, snapshot-agent, tenant-controller, spki-extractor)
-#   - k8s-mgmt          : NEW T5.1 — explicit mgmt cluster auth (loopzero-api, operators)
+#   - k8s-core          : NEW T5.1 — explicit mgmt cluster auth (loopzero-api, operators)
 #   - k8s-build         : NEW T5.2 — build cluster auth (argo-workflows, BuildKit)
 #   - k8s-cell-default  : NEW T5.3 — default workload cell auth (ESO broker)
 #   - k8s-cell-1        : NEW T5.4 — cell-1 workload cluster (ESO broker)
@@ -105,7 +105,7 @@ authMethods:
   - path: kubernetes
     type: kubernetes
     description: "K8s ServiceAccount auth — legacy mount for in-cluster mgmt workloads"
-  - path: k8s-mgmt
+  - path: k8s-core
     type: kubernetes
     description: "T5.1 mgmt cluster auth (loopzero-api, operators)"
   - path: k8s-build
@@ -253,7 +253,7 @@ policies:
 # R1+R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
 # 2026-06-19): the `eso` role moves from the legacy `kubernetes` mount (intended
 # for in-cluster loopzero-secrets workloads) to the canonical multi-cluster
-# `k8s-mgmt` mount (core-cluster workloads). The `boundAudiences` field
+# `k8s-core` mount (core-cluster workloads). The `boundAudiences` field
 # enforces EC-5 (TokenRequest aud claim == role bound_audiences) as
 # defence-in-depth — closes the "any-audience login" gap. The
 # `serviceAccountRef.audiences` in the ClusterSecretStore that consumes
@@ -262,7 +262,7 @@ policies:
 # claim the role won't accept → 403 at login.
 authRoles:
   - name: eso
-    mount: k8s-mgmt
+    mount: k8s-core
     boundServiceAccountNames:
       - eso-vault-reader
     boundServiceAccountNamespaces:
@@ -303,10 +303,10 @@ authRoles:
       - spki-extractor-write
     ttl: "1h"
     description: "SPKI extractor CronJob (intra-cluster; pins Vault TLS SPKI every 5min)"
-  # T5.5 of openbao-adoption v1.3 — loopzero-api role on auth/k8s-mgmt.
+  # T5.5 of openbao-adoption v1.3 — loopzero-api role on auth/k8s-core.
   # TTL 1h per plan + audience claim enforced via Deployment projected token.
   - name: loopzero-api
-    mount: k8s-mgmt
+    mount: k8s-core
     boundServiceAccountNames:
       - loopzero-api
     boundServiceAccountNamespaces:
@@ -315,9 +315,9 @@ authRoles:
       - loopzero-api
     ttl: "1h"
     description: "T5.5 loopzero-api Vault role (mgmt cluster — secret read + Transit encrypt/decrypt)"
-  # T5.6 of openbao-adoption v1.3 — loopzero-tenant-operator on auth/k8s-mgmt.
+  # T5.6 of openbao-adoption v1.3 — loopzero-tenant-operator on auth/k8s-core.
   - name: loopzero-tenant-operator
-    mount: k8s-mgmt
+    mount: k8s-core
     boundServiceAccountNames:
       - loopzero-tenant-operator
     boundServiceAccountNamespaces:
@@ -326,9 +326,9 @@ authRoles:
       - loopzero-tenant-operator
     ttl: "1h"
     description: "T5.6 tenant-operator Vault role (D6 shared paths + per-tenant Transit key)"
-  # T5.7 of openbao-adoption v1.3 — loopzero-app-operator on auth/k8s-mgmt.
+  # T5.7 of openbao-adoption v1.3 — loopzero-app-operator on auth/k8s-core.
   - name: loopzero-app-operator
-    mount: k8s-mgmt
+    mount: k8s-core
     boundServiceAccountNames:
       - loopzero-app-operator
     boundServiceAccountNamespaces:
@@ -337,9 +337,9 @@ authRoles:
       - loopzero-app-operator
     ttl: "1h"
     description: "T5.7 app-operator Vault role (operators/app-operator path only)"
-  # T5.7 of openbao-adoption v1.3 — loopzero-preview-operator on auth/k8s-mgmt.
+  # T5.7 of openbao-adoption v1.3 — loopzero-preview-operator on auth/k8s-core.
   - name: loopzero-preview-operator
-    mount: k8s-mgmt
+    mount: k8s-core
     boundServiceAccountNames:
       - loopzero-preview-operator
     boundServiceAccountNamespaces:
@@ -348,9 +348,9 @@ authRoles:
       - loopzero-preview-operator
     ttl: "1h"
     description: "T5.7 preview-operator Vault role (operators/preview-operator path only)"
-  # T5.7 of openbao-adoption v1.3 — loopzero-platform-operator on auth/k8s-mgmt.
+  # T5.7 of openbao-adoption v1.3 — loopzero-platform-operator on auth/k8s-core.
   - name: loopzero-platform-operator
-    mount: k8s-mgmt
+    mount: k8s-core
     boundServiceAccountNames:
       - loopzero-platform-operator
     boundServiceAccountNamespaces:
@@ -460,24 +460,24 @@ databaseRoles:
 # T7.1-T7.2 of openbao-adoption v1.3 — kubernetes engine roles.
 # Each role: { name, allowedKubernetesNamespaces, serviceAccountName, tokenDefaultTtl, tokenMaxTtl }.
 kubernetesRoles:
-  - name: loopzero-runtime-mgmt
+  - name: loopzero-cell-0-mgmt
     allowedKubernetesNamespaces:
       - loopzero-system
       - argocd
       - external-secrets
-    serviceAccountName: loopzero-runtime
+    serviceAccountName: loopzero-cell-0
     tokenDefaultTtl: "1h"
     tokenMaxTtl: "24h"
-  - name: loopzero-runtime-build
+  - name: loopzero-cell-0-build
     allowedKubernetesNamespaces:
       - argo
     serviceAccountName: loopzero-build
     tokenDefaultTtl: "1h"
     tokenMaxTtl: "24h"
-  - name: loopzero-runtime-workload
+  - name: loopzero-cell-0-workload
     allowedKubernetesNamespaces:
       - loopzero-system
-    serviceAccountName: loopzero-runtime
+    serviceAccountName: loopzero-cell-0
     tokenDefaultTtl: "1h"
     tokenMaxTtl: "24h"
 

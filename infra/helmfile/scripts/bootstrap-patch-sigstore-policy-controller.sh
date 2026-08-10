@@ -26,7 +26,7 @@ else
   set --
 fi
 
-CONTEXT="${KUBECONTEXT:-k3d-loopzero-workload}"
+CONTEXT="${KUBECONTEXT:-k3d-loopzero-cell-0}"
 
 # helm repo list is read-only — safe outside apply
 helm repo list 2>/dev/null | grep -q '^sigstore' || apply helm repo add sigstore https://sigstore.github.io/helm-charts

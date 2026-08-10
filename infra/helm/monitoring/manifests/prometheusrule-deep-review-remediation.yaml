@@ -86,7 +86,7 @@ spec:
             summary: "loopzero secret set silently no-ops (ESO sync disabled)"
             description: |
               loopzero_secret_externalsecret_total{result="skip"} > 0 means the
-              SecretK8sManager was nil at boot (RUNTIME_KUBECONFIG mount
+              SecretK8sManager was nil at boot (CELL_0_KUBECONFIG mount
               missing or context name drift — see B34). API returns 200 OK
               but writes nothing to the workload cluster — silent data
               loss for tenants.
@@ -102,7 +102,7 @@ spec:
             summary: "ExternalSecret CR creation failing >5%"
             description: |
               loopzero_secret_externalsecret_total{result="fail"} rate > 0.05/s
-              over 5m — investigate runtime client RBAC or workload-cluster
+              over 5m — investigate runtime client RBAC or cell-0-cluster
               connectivity.
 
     # === T5.3 — Workqueue terminal-write fail (closes find_workqueue_silent_db_errors HIGH) ===

@@ -43,7 +43,7 @@ var externalSecretGVR = schema.GroupVersionResource{
 // out-of-cluster path used a kubeconfig with kube-system:default SA token
 // which doesn't have those permissions, producing 403 on every loopzero
 // secret set call.
-func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtimeContext string) (*SecretK8sManager, error) {
+func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, cell0Kubeconfig, runtimeContext string) (*SecretK8sManager, error) {
 	// Mgmt cluster — typed client for Secret creation. In-cluster preferred.
 	var mgmtConfig *rest.Config
 	if inCfg, inErr := rest.InClusterConfig(); inErr == nil {
@@ -65,7 +65,7 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtime
 
 	// Runtime cluster — dynamic client for ExternalSecret CRs
 	runtimeConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: runtimeKubeconfig},
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: cell0Kubeconfig},
 		&clientcmd.ConfigOverrides{CurrentContext: runtimeContext},
 	).ClientConfig()
 	if err != nil {

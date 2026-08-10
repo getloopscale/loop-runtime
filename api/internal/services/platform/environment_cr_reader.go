@@ -69,7 +69,7 @@ func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *Environ
 // CR naming convention (M2 v1.2, 2026-06-07):
 //   - canonical (post-M2): `<tenantID>-<project>-<envName>` — when
 //     project is non-empty. Per `pkg/naming.Namespace` semantics, this
-//     matches the workload-cluster namespace `loopzero-<tenant>-<project>-<env>`
+//     matches the cell-0-cluster namespace `loopzero-<tenant>-<project>-<env>`
 //     once the `loopzero-` prefix is stripped (CR names live in mgmt, no prefix).
 //   - legacy (pre-M2 / production): `<tenantID>-<envName>` — when
 //     project is empty (ADR D2 — backward compatibility for tenants whose

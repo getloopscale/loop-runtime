@@ -6,7 +6,7 @@
 // TestHostK3dInternalCanonical asserts the canonical contract for the
 // `setup-cross-cluster-networking.sh` script: mgmt CoreDNS `host.k3d.internal`
 // MUST resolve to the docker bridge GATEWAY of the `k3d-loopzero` network, NEVER
-// to the `k3d-loopzero-workload-serverlb` container IP.
+// to the `k3d-loopzero-cell-0-serverlb` container IP.
 //
 // Why this gate exists:
 //
@@ -68,11 +68,11 @@ func TestHostK3dInternalCanonical(t *testing.T) {
 	body := string(b)
 
 	// (a) Script MUST NOT derive the host.k3d.internal target from the
-	//     k3d-loopzero-workload-serverlb container — that's the F-2 hijack of the
-	//     T0.1 SPIKE. `docker inspect k3d-loopzero-workload-serverlb` for the
+	//     k3d-loopzero-cell-0-serverlb container — that's the F-2 hijack of the
+	//     T0.1 SPIKE. `docker inspect k3d-loopzero-cell-0-serverlb` for the
 	//     PURPOSE of populating host.k3d.internal is FORBIDDEN.
-	if regexp.MustCompile(`(?s)docker\s+inspect\s+k3d-loopzero-workload-serverlb`).MatchString(body) {
-		t.Errorf("(a) script still derives host.k3d.internal from k3d-loopzero-workload-serverlb — the wrong target per ADR D6 (probe-proved RST on every host-publish port). Replace with docker network inspect gateway derivation.")
+	if regexp.MustCompile(`(?s)docker\s+inspect\s+k3d-loopzero-cell-0-serverlb`).MatchString(body) {
+		t.Errorf("(a) script still derives host.k3d.internal from k3d-loopzero-cell-0-serverlb — the wrong target per ADR D6 (probe-proved RST on every host-publish port). Replace with docker network inspect gateway derivation.")
 	}
 	// Also forbid the literal pollution line shape from the legacy script.
 	if regexp.MustCompile(`(?m)^\s*\S*\$WORKLOAD_LB_IP\s+host\.k3d\.internal\s*['"]?\s*$`).MatchString(body) ||

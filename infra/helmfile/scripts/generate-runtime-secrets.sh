@@ -23,7 +23,7 @@ CLUSTER_ID="${2:?usage: $0 <env> <cluster-id>}"
 # Unlike its mgmt-bound siblings, this script has no single fixed target: the
 # runtime cluster varies with <cluster-id> (workload, runtime-2, ...). The
 # established contract is that the CALLER pins it, e.g.
-#   KUBECONFIG=$(k3d kubeconfig write loopzero-workload) bash $0 standalone-multi workload
+#   KUBECONFIG=$(k3d kubeconfig write loopzero-cell-0) bash $0 standalone-multi workload
 # (see taskfiles/infra.yml, which deliberately pins via KUBECONFIG rather than
 # mutating the global current-context).
 #

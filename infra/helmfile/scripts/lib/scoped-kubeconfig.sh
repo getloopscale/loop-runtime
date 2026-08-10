@@ -123,12 +123,12 @@ SCRIPT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TOKEN=""
 if declare -f mint_vault_k8s_token >/dev/null 2>&1; then
-  # Vault role naming convention (T7.2): loopzero-runtime-<cluster-type>.
-  # Map CLUSTER_ID prefix to role name; default to loopzero-runtime-mgmt.
+  # Vault role naming convention (T7.2): loopzero-cell-0-<cluster-type>.
+  # Map CLUSTER_ID prefix to role name; default to loopzero-cell-0-mgmt.
   case "${CLUSTER_ID:-}" in
-    build*) VAULT_ROLE="loopzero-runtime-build" ;;
-    cell*|workload*) VAULT_ROLE="loopzero-runtime-workload" ;;
-    *)       VAULT_ROLE="loopzero-runtime-mgmt" ;;
+    build*) VAULT_ROLE="loopzero-cell-0-build" ;;
+    cell*|workload*) VAULT_ROLE="loopzero-cell-0-workload" ;;
+    *)       VAULT_ROLE="loopzero-cell-0-mgmt" ;;
   esac
   if TOKEN=$(mint_vault_k8s_token "${VAULT_ROLE}" "${NAMESPACE}" 2>/dev/null) && [[ -n "${TOKEN}" ]]; then
     log "T7.3: SA token fetched via Vault kubernetes engine role=${VAULT_ROLE} (TTL 1h)"

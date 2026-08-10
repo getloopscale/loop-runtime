@@ -154,5 +154,5 @@ const (
 	buildKubeContext = "k3d-loopzero-build"
 
 	// workloadKubeContext is the kubectl context for the workload cluster.
-	workloadKubeContext = "k3d-loopzero-workload"
+	workloadKubeContext = "k3d-loopzero-cell-0"
 )

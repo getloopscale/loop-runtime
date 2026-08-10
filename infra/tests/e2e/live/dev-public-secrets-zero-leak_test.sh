@@ -38,7 +38,7 @@ PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}"
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
 DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
 KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-core}"
-WORKLOAD_CONTEXT="${LOOPZERO_WORKLOAD_CONTEXT:-k3d-loopzero-workload}"
+CELL_0_CONTEXT="${LOOPZERO_CELL_0_CONTEXT:-k3d-loopzero-cell-0}"
 
 usage() {
   cat <<EOF
@@ -74,7 +74,7 @@ Env overrides:
   LOOPZERO_TEST_ENV          Env (default production)
   LOOPZERO_DEV_PUBLIC_BASE   Cloud base URL (default https://cloud-dev.loopzero.example)
   LOOPZERO_KUBE_CONTEXT      Mgmt cluster context (default k3d-loopzero-core)
-  LOOPZERO_WORKLOAD_CONTEXT  Workload cluster context (default k3d-loopzero-workload)
+  LOOPZERO_CELL_0_CONTEXT  Workload cluster context (default k3d-loopzero-cell-0)
 
 Exit codes:
   0  All 6 scenarios PASS (or all rehearsal probes PASS under --rehearsal)
@@ -143,9 +143,9 @@ cleanup() {
   if [ $SKIP_LIVE -eq 1 ]; then return; fi
   # Best-effort: delete the probe secret + ExternalSecret CR + K8s Secret
   # so failed runs do not leave the sentinel orphaned in PG.
-  kubectl --context="$WORKLOAD_CONTEXT" delete secret "$SECRET_NAME" \
+  kubectl --context="$CELL_0_CONTEXT" delete secret "$SECRET_NAME" \
     -n "loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}" --ignore-not-found=true >/dev/null 2>&1 || true
-  kubectl --context="$WORKLOAD_CONTEXT" delete externalsecret "$SECRET_NAME" \
+  kubectl --context="$CELL_0_CONTEXT" delete externalsecret "$SECRET_NAME" \
     -n "loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}" --ignore-not-found=true >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -262,14 +262,14 @@ JWT="$(cat "$JWT_PATH")"
 # fresh sentinel. Idempotent — no-ops when state is already clean.
 WORKLOAD_NS_CLEANUP="loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
 TARGET_SECRET="user-secrets-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
-kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
+kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
   delete externalsecret -l '!nonexistent' --field-selector="metadata.name!=does-not-exist" 2>/dev/null \
   | grep -i zeroleak || true
-kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
+kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
   get externalsecret -o name 2>/dev/null \
   | grep zeroleak \
-  | xargs -r kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" delete >/dev/null 2>&1 || true
-kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
+  | xargs -r kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" delete >/dev/null 2>&1 || true
+kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
   delete secret "$TARGET_SECRET" >/dev/null 2>&1 || true
 kubectl --context="$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 -c postgresql \
   -- env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -c \
@@ -328,7 +328,7 @@ if run_scenario B; then
   # to be tolerant of future broker contract (raw plaintext mode).
   SEC_VALUE=""
   for _ in $(seq 1 12); do
-    RAW="$(kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS" \
+    RAW="$(kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS" \
       get secret "$CANONICAL_SECRET" -o jsonpath="{.data.$SECRET_NAME}" 2>/dev/null || echo "")"
     DECODED_ONCE="$(printf '%s' "$RAW" | base64 -d 2>/dev/null || echo "")"
     DECODED_TWICE="$(printf '%s' "$DECODED_ONCE" | base64 -d 2>/dev/null || echo "")"
@@ -364,14 +364,14 @@ fi
 # pod is found AND wires the canonical Secret via envFrom, validate the
 # value; otherwise the absence is the canonical signal.
 if run_scenario C; then
-  POD="$(kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS" \
+  POD="$(kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS" \
     get pods --no-headers 2>/dev/null | awk 'NR==1 {print $1}')"
   if [ -n "$POD" ]; then
-    HAS_ENVFROM="$(kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS" \
+    HAS_ENVFROM="$(kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS" \
       get pod "$POD" -o jsonpath='{.spec.containers[*].envFrom}' 2>/dev/null | grep -c "user-secrets" || echo "0")"
     if [ "$HAS_ENVFROM" -gt 0 ]; then
       # Pod wires the canonical Secret — validate plaintext exposure.
-      PRINTENV="$(kubectl --context="$WORKLOAD_CONTEXT" -n "$WORKLOAD_NS" \
+      PRINTENV="$(kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS" \
         exec "$POD" -- printenv "$SECRET_NAME" 2>/dev/null || echo "")"
       if [ "$PRINTENV" = "$SENTINEL_VALUE" ]; then
         record C PASS
@@ -405,7 +405,7 @@ fi
 
 # === Scenario E: kubectl describe pods | grep ENV_KEY shows KEY only ===
 if run_scenario E; then
-  DESCRIBE_MATCHES="$(kubectl --context="$WORKLOAD_CONTEXT" describe pods -A 2>/dev/null | \
+  DESCRIBE_MATCHES="$(kubectl --context="$CELL_0_CONTEXT" describe pods -A 2>/dev/null | \
     grep -cF "$SENTINEL_VALUE" || true)"
   if [ "$DESCRIBE_MATCHES" -eq 0 ]; then
     record E PASS
@@ -420,7 +420,7 @@ if run_scenario F; then
   # Decode every Secret in every ns, search for sentinel, verify all
   # matches are in the workload ns.
   WORKLOAD_NS="loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
-  ALL_MATCHES="$(kubectl --context="$WORKLOAD_CONTEXT" get secret -A -o json 2>/dev/null | \
+  ALL_MATCHES="$(kubectl --context="$CELL_0_CONTEXT" get secret -A -o json 2>/dev/null | \
     python3 -c "
 import json, sys, base64
 data = json.load(sys.stdin)

@@ -37,7 +37,7 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `GITEA_ORG` | `loopzero` | N | - | Gitea org for tenant gitops repos |
 | `CORE_KUBE_CONTEXT` | `k3d-loopzero-core` | N | - | mgmt cluster context name |
 | `BUILD_KUBE_CONTEXT` | `k3d-loopzero-build` | N | - | build cluster context name |
-| `RUNTIME_KUBE_CONTEXT` | `k3d-loopzero-workload` | N | - | runtime cluster context name |
+| `CELL_0_KUBE_CONTEXT` | `k3d-loopzero-cell-0` | N | - | runtime cluster context name |
 | `MINIO_ENDPOINT` | `minio.loopzero-system.svc.cluster.local:9000` | N | internal-url | MinIO endpoint |
 | `MINIO_CROSS_CLUSTER_ENDPOINT` | (empty) | N | internal-url | MinIO endpoint reachable from build cluster |
 | `SOURCE_BUCKET` | `loopzero-builds` | N | - | S3 bucket for source bundles |

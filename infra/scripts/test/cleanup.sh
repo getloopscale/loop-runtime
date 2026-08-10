@@ -102,7 +102,7 @@ cleanup_context() {
 }
 
 if [[ "$ALL_CONTEXTS" == "1" ]]; then
-  for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-workload k3d-loopzero-runtime-2; do
+  for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-cell-0 k3d-loopzero-cell-1; do
     cleanup_context "$ctx"
   done
 else

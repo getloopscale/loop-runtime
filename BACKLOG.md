@@ -222,6 +222,41 @@ Dois contextos que a medição trouxe: o repositório **já removeu** esse camin
 
 **A pauta da reunião T3 é concreta:** quem passa a portar o sentido de "não resolvido". `NULL` já é aceito pelo trigger, mas a coluna é `NOT NULL DEFAULT 'cell-default'` (`000011_add_cell_id.up.sql:9`) — as duas decisões vieram de momentos diferentes e hoje se sustentam mutuamente. E o **primeiro passo do plano é contar**, não editar: quantos tenants por cell, e quantas linhas nas 4 tabelas com `cell_id = 'cell-default'`. Isso não pôde ser medido porque nenhum cluster de tenants está de pé.
 
+**A metade CLUSTER foi entregue em 2026-08-10; a metade CELL continua bloqueada, e agora com custo medido.**
+Os clusters passaram a 1:1 com a célula que hospedam — `loopzero-workload`/`loopzero-runtime` → `loopzero-cell-0`,
+`loopzero-runtime-2` → `loopzero-cell-1` —, guardado pela mesma prova usada em `B-001`: das **688** ocorrências
+genéricas de `workload`/`runtime` congeladas antes da primeira edição, **0** foram renomeadas. Isso
+desbloqueia o vocabulário sem tocar em identidade de cell.
+
+A metade cell **não** foi aplicada, e a medição de hoje explica por quê — ela é pior do que "renomear
+uma sentinela". Três fontes independentes mostram que **`cell-default` e `cell-1` são a mesma máquina
+sob dois nomes**: `infra/helmfile/environments/dev.yaml:76,79` (`runtimeCellId: cell-1`, com o comentário
+*"runtime cluster maps to cell-1"*), o seed em `000006_cells.up.sql:120-123` (*"Canonical first cell.
+Maps to runtime-1"*) e a auditoria LIVE de 2026-05-01 em `docs/runbooks/bootstrap-regression-matrix.md:180`
+(três cells `active`, ClusterCredential CRs para **duas**). Ou seja, é o mesmo defeito "duas palavras,
+mesmo cluster" do `B-001`, uma camada abaixo — e a unificação é uma **fusão de identidades**, não um
+rename.
+
+Isso impõe uma **ordem obrigatória**: `cell-default` + `cell-1` → `cell-0` **antes** de `cell-2` → `cell-1`.
+Uma substituição textual ingênua faria as duas ao mesmo tempo e colapsaria identidades distintas sem
+deixar rastro — o motivo pelo qual esta metade não foi aplicada junto com a dos clusters. Medição que
+barateia a migração: `git grep "REFERENCES cells"` em `api/internal/db/migrations` **não devolve nada**
+— `cell_id` é `TEXT` livre nas 6 tabelas que o declaram, sem chave estrangeira, então renomear é um
+conjunto de `UPDATE`s e não exige janela de indisponibilidade. Ambas as medições estão no ADR
+`docs/decisions/2026-08-09-cell-cluster-unification-adr.md`, que é a pauta da reunião T3.
+
+**Inconsistências de nome encontradas de passagem, e o que foi feito com cada uma:**
+
+| O que | Estado |
+|---|---|
+| `task clusters:recreate` derivava o nome do cluster do rótulo, não do config — apagava cluster inexistente e criava outro, anunciando sucesso | **corrigido** (`taskfiles/k3d.yml`) |
+| `kubeContexts.mgmt` sobreviveu à fase `mgmt`→`core` do `B-001` | **corrigido** → `kubeContexts.core` |
+| `kubeconfig.runtime` alimentava `CELL_0_KUBECONFIG` — chave e variável diziam coisas diferentes | **corrigido** → `kubeconfig.cell0` |
+| `secrets.runtimeKubeconfig` idem, pego pelo teste de contrato do chart | **corrigido** → `secrets.cell0Kubeconfig` |
+| ponto de autenticação do OpenBao ainda em `auth/k8s-mgmt` | **corrigido** → `auth/k8s-core` (o ADR já é ACEITO para `core`) |
+| `auth/k8s-cell-default`, `auth/k8s-cell-1`, `auth/k8s-cell-2` | **anotado, não tocado** — dependem desta fusão |
+| output de stack Pulumi `runtimeKubeconfig` | **anotado, não tocado** — contrato externo vivo, e o Pulumi é legado AS-IS até o corte AWS |
+
 > Registrado 2026-08-09 a partir da decisão do CTO sobre D2 da opportunity de `B-001` (slug: `cell-cluster-unification`).
 
 ## B-006 — O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate   [ ]

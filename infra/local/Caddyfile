@@ -634,7 +634,7 @@ auth-dev.loopzero.example {
 # Docker network IP. Docker network 172.18.0.0/16 assigns container IPs
 # via DHCP; k3d cluster containers get a new IP on every `docker restart`
 # / `k3d cluster create`. The IP `172.18.0.10` drifted from
-# k3d-loopzero-workload-serverlb to k3d-loopzero-secrets-serverlb after a restart
+# k3d-loopzero-cell-0-serverlb to k3d-loopzero-secrets-serverlb after a restart
 # and every customer-app request silently routed to VAULT → 502
 # sustentado for the ENTIRE Red Team dev-public probe surface. The
 # canonical stable form is `https://127.0.0.1:8443` — k3d declares the
@@ -680,7 +680,7 @@ auth-dev.loopzero.example {
 # Red Team loopzero-cloud#127 root cause (2026-06-30 → 2026-07-01): same
 # as the *.preview-dev.loopzero.example block above — the previous
 # `https://172.18.0.10:443` hardcoded Docker network IP drifted from
-# k3d-loopzero-workload-serverlb to k3d-loopzero-secrets-serverlb after a docker
+# k3d-loopzero-cell-0-serverlb to k3d-loopzero-secrets-serverlb after a docker
 # restart and every customer-app request routed to VAULT → 502
 # sustentado. Canonical stable form: `https://127.0.0.1:8443`.
 # Regression-protector:

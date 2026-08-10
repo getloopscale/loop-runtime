@@ -21,14 +21,14 @@
 #   bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh \
 #     [<mgmt-context>] [<runtime-context>]
 #
-#   defaults: k3d-loopzero-core + k3d-loopzero-workload
+#   defaults: k3d-loopzero-core + k3d-loopzero-cell-0
 #
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
 
 MGMT_CTX="${1:-k3d-loopzero-core}"
-RUNTIME_CTX="${2:-k3d-loopzero-workload}"
+RUNTIME_CTX="${2:-k3d-loopzero-cell-0}"
 PLATFORM_NS="loopzero-system"
 ESO_NS="external-secrets"
 SA_NAME="eso-secret-reader"

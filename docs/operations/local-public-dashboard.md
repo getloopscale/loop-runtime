@@ -61,7 +61,7 @@ task k3d:up                                 # 4 clusters (mgmt+build+workload+ru
 #    Skips harbor/opencost/chaos-mesh/monitoring/loki/tempo/otel/blackbox/etc.
 #    v1.1 EC-01 guards against empty selector + v1.1 EC-02 includes the
 #    platform/preview operators that are essential for tenant provisioning.
-task infra:install:mgmt-dashboard-only ENV=standalone-public
+task infra:install:core-dashboard-only ENV=standalone-public
 
 # 3. Bring up the public-flow plumbing (port-forwards + Caddy + seed data)
 task cloud:port-forward:up                  # 4 persistent port-forwards w/ backoff

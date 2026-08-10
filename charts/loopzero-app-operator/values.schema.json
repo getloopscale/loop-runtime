@@ -365,7 +365,7 @@
     "readinessProbe": {
       "type": "object"
     },
-    "runtimeKubeconfigMount": {
+    "cell0KubeconfigMount": {
       "type": "object"
     },
     "dataPlanePoller": {

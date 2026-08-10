@@ -164,7 +164,7 @@ infra/pulumi/src/__tests__/production-runbooks.test.ts	it.skip("runbook files re
 infra/pulumi/src/__tests__/production-runbooks.test.ts	it.skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11", () => {});
 infra/pulumi/src/__tests__/production-runbooks.test.ts	it.skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11", () => {});
 infra/tests/chaos/cell_isolation_test.go	t.Skip("LOOPZERO_CHAOS_TEST not set; skipping LIVE k3d chaos test")
-infra/tests/chaos/cell_isolation_test.go	t.Skip("k3d cluster loopzero-workload is not running; skipping (re-run after task setup)")
+infra/tests/chaos/cell_isolation_test.go	t.Skip("k3d cluster loopzero-cell-0 is not running; skipping (re-run after task setup)")
 infra/tests/charts/openbao_cert_san_canonical_test.go	t.Skip("helm not on PATH — skipping render assertion")
 infra/tests/charts/openbao_cert_san_canonical_test.go	t.Skip("helm not on PATH — skipping negative-control render")
 infra/tests/charts/loopzero_cloud_install_contract_test.go	t.Skip("helm not installed — skipping render assertion")

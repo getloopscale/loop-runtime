@@ -38,5 +38,5 @@ secrets:
 kubeconfig:
   build:
     existingConfigMap: loopzero-build-kubeconfig
-  runtime:
-    existingConfigMap: loopzero-runtime-kubeconfig
+  cell0:
+    existingConfigMap: loopzero-cell-0-kubeconfig

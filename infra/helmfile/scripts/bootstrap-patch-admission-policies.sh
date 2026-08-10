@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-CONTEXT="${KUBECONTEXT:-k3d-loopzero-workload}"
+CONTEXT="${KUBECONTEXT:-k3d-loopzero-cell-0}"
 
 helm upgrade --install admission-policies infra/helm/admission-policies \
   --kube-context "$CONTEXT" \

@@ -37,7 +37,7 @@ Centralized observability stack for the LoopZero platform. All system components
 
 ┌──────────────────────────┐   ┌──────────────────────────────┐
 │ BUILD CLUSTER            │   │ WORKLOAD CLUSTER              │
-│ (k3d-loopzero-build)         │   │ (k3d-loopzero-workload)           │
+│ (k3d-loopzero-build)         │   │ (k3d-loopzero-cell-0)           │
 │                          │   │                                │
 │  Argo Workflows          │   │  Traefik                      │
 │  controller :9090        │   │  metrics  :9100                │

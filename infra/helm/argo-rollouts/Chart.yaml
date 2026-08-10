@@ -3,7 +3,7 @@
 # Pinned to 2.38.1 (Argo Rollouts 1.7.x) per
 # docs/plans/argo-rollouts-progressive-delivery-plan.md T0.1.
 #
-# Deployed to ALL workload clusters via infra/helmfile/runtime.helmfile.yaml.gotmpl
+# Deployed to ALL workload clusters via infra/helmfile/cell.helmfile.yaml.gotmpl
 # (Wave 0, alongside KEDA — both are workload controllers).
 #
 # Provides CRDs:

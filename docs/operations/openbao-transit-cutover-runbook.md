@@ -73,7 +73,7 @@ helmfile sync --selector name=openbao-init   # T5.1-T5.9 provisioning
                                               # Enables: transit engine,
                                               # kv-v2, database engine,
                                               # kubernetes engine, K8s
-                                              # auth mounts (k8s-mgmt /
+                                              # auth mounts (k8s-core /
                                               # k8s-build / k8s-cell-*),
                                               # loopzero-api-* policies
 ```
@@ -391,7 +391,7 @@ unwrap. Fix via `pkg/vault/redaction.go` slog.Handler wrapper extension.
 
 ### Architectural finding — ESO controller absent in mgmt (iter 31 LIVE pre-flight)
 
-**Discovered 2026-06-10 during the first LIVE attempt:** `kubectl get pods -n external-secrets` returns no resources in k3d-loopzero-core. ESO controller is deployed in workload + runtime-2 clusters only (`infra/helmfile/runtime.helmfile.yaml.gotmpl` line 108-110), NOT in mgmt. The full T4.1 6/6 scenarios (B/C/F that depend on ESO sync) cannot succeed under Option (c) — they require either:
+**Discovered 2026-06-10 during the first LIVE attempt:** `kubectl get pods -n external-secrets` returns no resources in k3d-loopzero-core. ESO controller is deployed in workload + runtime-2 clusters only (`infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110), NOT in mgmt. The full T4.1 6/6 scenarios (B/C/F that depend on ESO sync) cannot succeed under Option (c) — they require either:
 
 - (B-extend) ESO controller ALSO deployed in mgmt — add release to `infra/helmfile/core.helmfile.yaml.gotmpl`
 - (C-extend) Cross-cluster ExternalSecret targeting — design pattern where mgmt ESO reads from mgmt OpenBao + writes K8s Secrets to workload cluster (requires multi-cluster secret push)
@@ -499,8 +499,8 @@ Sponsor opens dev-public dashboard at `https://app-dev.loopzero.example`, logs i
    Expected: `preview` column starts with `vault:v1:` (NOT random bytes — that would indicate AES legacy path still wired).
 4. Trigger a redeploy of the test app (so workload pod picks up the new ESO-synced env). Verify pod env:
    ```bash
-   POD=$(kubectl --context k3d-loopzero-workload -n tn-<id> get pod -o name | head -1)
-   kubectl --context k3d-loopzero-workload -n tn-<id> exec $POD -- printenv LIVE_PROBE_<timestamp>
+   POD=$(kubectl --context k3d-loopzero-cell-0 -n tn-<id> get pod -o name | head -1)
+   kubectl --context k3d-loopzero-cell-0 -n tn-<id> exec $POD -- printenv LIVE_PROBE_<timestamp>
    ```
    Expected: prints `liveprobe-<uuid>` exactly (plaintext via ESO + envFrom).
 5. Sponsor verbatim: *"Funcionou!"* OR surface what didn't work.

@@ -61,7 +61,7 @@ spec:
         {{- if .Values.vault.enabled }}
         # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
         # token with bounded audience + expiration. Read by pkg/vault.Client
-        # at /var/run/secrets/vault.loopzero.io/token; sent to auth/k8s-mgmt/login.
+        # at /var/run/secrets/vault.loopzero.io/token; sent to auth/k8s-core/login.
         # Vault TokenReview validates audience claim cryptographically,
         # preventing token re-use against K8s API or other audiences.
         - name: vault-sa-token
@@ -106,8 +106,8 @@ spec:
               value: /etc/loopzero/kubeconfigs/core.kubeconfig
             - name: BUILD_KUBECONFIG
               value: /etc/loopzero/kubeconfigs/build.kubeconfig
-            - name: RUNTIME_KUBECONFIG
-              value: /etc/loopzero/kubeconfigs/runtime.kubeconfig
+            - name: CELL_0_KUBECONFIG
+              value: /etc/loopzero/kubeconfigs/cell-0.kubeconfig
             # Plan 2026-05-19-drill-skills-rigor-restoration T2.1: REMOVED
             # hardcoded "in-cluster" defaults that caused loopzero-api CrashLoop
             # quando overlay drill (DOKS) tem real context names like
@@ -118,11 +118,11 @@ spec:
             # NOW: values fornecem context names via .Values.kubeContexts
             # com fallback default "in-cluster" para local k3d synthetic.
             - name: CORE_KUBE_CONTEXT
-              value: {{ .Values.kubeContexts.mgmt | default "in-cluster" | quote }}
+              value: {{ .Values.kubeContexts.core | default "in-cluster" | quote }}
             - name: BUILD_KUBE_CONTEXT
               value: {{ .Values.kubeContexts.build | default "in-cluster" | quote }}
-            - name: RUNTIME_KUBE_CONTEXT
-              value: {{ .Values.kubeContexts.runtime | default "in-cluster" | quote }}
+            - name: CELL_0_KUBE_CONTEXT
+              value: {{ .Values.kubeContexts.cell0 | default "in-cluster" | quote }}
             {{- range $k, $v := .Values.env }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}

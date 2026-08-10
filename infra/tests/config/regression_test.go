@@ -96,9 +96,9 @@ func TestStandaloneMultiEnvironmentsExist(t *testing.T) {
 }
 
 func TestK3dWorkloadConfigOneAgent(t *testing.T) {
-	data, err := os.ReadFile("../../k3d/workload-cluster.yaml")
+	data, err := os.ReadFile("../../k3d/cell-0-cluster.yaml")
 	if err != nil {
-		t.Fatalf("read workload-cluster.yaml: %v", err)
+		t.Fatalf("read cell-0-cluster.yaml: %v", err)
 	}
 	if !strings.Contains(string(data), "agents: 1") {
 		t.Error("end-to-end-deploy T0.2: workload cluster must have agents:1")

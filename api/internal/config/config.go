@@ -370,8 +370,8 @@ func Load() Config {
 		MgmtKubeContext: envOr("CORE_KUBE_CONTEXT", "k3d-loopzero-core"),
 		BuildKubeconfig:   envOr("BUILD_KUBECONFIG", defaultKubeconfig),
 		BuildKubeContext:  envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
-		RuntimeKubeconfig: envOr("RUNTIME_KUBECONFIG", defaultKubeconfig),
-		RuntimeKubeContext: envOr("RUNTIME_KUBE_CONTEXT", "k3d-loopzero-workload"),
+		RuntimeKubeconfig: envOr("CELL_0_KUBECONFIG", defaultKubeconfig),
+		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loopzero-cell-0"),
 
 		// Service URLs
 		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),

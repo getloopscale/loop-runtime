@@ -61,7 +61,7 @@ spec:
       remoteRef: { key: "loopzero/api", property: "mgmt_kubeconfig" }
     - secretKey: BUILD_KUBECONFIG
       remoteRef: { key: "loopzero/api", property: "build_kubeconfig" }
-    - secretKey: RUNTIME_KUBECONFIG
+    - secretKey: CELL_0_KUBECONFIG
       remoteRef: { key: "loopzero/api", property: "runtime_kubeconfig" }
     - secretKey: STRIPE_SECRET_KEY
       remoteRef: { key: "loopzero/api", property: "stripe_secret_key" }

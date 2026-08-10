@@ -62,7 +62,7 @@ spec:
                   CellID is the multi-cell routing target for this preview environment.
                   T1.1 of deep-review-remediation-plan (closes find_arch_002 HIGH):
                   previously absent, causing PreviewController to route ALL preview
-                  workloads to the static RUNTIME_KUBECONFIG cell, ignoring the
+                  workloads to the static CELL_0_KUBECONFIG cell, ignoring the
                   tenant's pinned cell. Cell-2 tenants' previews silently landed on
                   cell-default — multi-cell isolation breach.
 

@@ -5,7 +5,7 @@
 # Creates:
 #   - loopzero-api-tokens Secret          (gitea-token + argocd-token)
 #   - loopzero-build-kubeconfig ConfigMap  (build cluster access for API + operator)
-#   - loopzero-runtime-kubeconfig ConfigMap (workload cluster access for operator)
+#   - loopzero-cell-0-kubeconfig ConfigMap (workload cluster access for operator)
 #
 # ArgoCD auth: Uses a dedicated 'loopzero-api' account with apiKey capability.
 # Tokens from apiKey accounts do NOT expire (unlike admin session tokens which expire in 24h).
@@ -13,7 +13,7 @@ set -euo pipefail
 
 MGMT_CTX="k3d-loopzero-core"
 BUILD_CTX="k3d-loopzero-build"
-WORKLOAD_CTX="k3d-loopzero-workload"
+WORKLOAD_CTX="k3d-loopzero-cell-0"
 # REVIEW-2026-03-30: Fixes MED-12 — was "loopzero-system" but Pulumi uses "loopzero-system".
 # Local dev uses loopzero-system, production uses loopzero-system.
 NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
@@ -144,7 +144,7 @@ if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
   WORKLOAD_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
   # Use the same server URL that update-cross-cluster-ips.sh writes to WORKLOAD_CLUSTER_URL
   # in the operator deployment. The ArgoCD Application destination.server must match exactly.
-  WORKLOAD_IP=$(docker inspect k3d-loopzero-workload-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
+  WORKLOAD_IP=$(docker inspect k3d-loopzero-cell-0-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
   WORKLOAD_SERVER="https://${WORKLOAD_IP}:6443"
   echo "  Workload server: $WORKLOAD_SERVER"
 
@@ -258,16 +258,16 @@ RUNTIME_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o js
 # silently failing to create ExternalSecret CRs. Result: pod envFrom referenced a
 # Secret that ESO never produced (because no ExternalSecret), pod hit
 # CreateContainerConfigError, Journey 03 Secrets HTTP probe timed out.
-RUNTIME_IP=$(docker inspect k3d-loopzero-workload-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
+RUNTIME_IP=$(docker inspect k3d-loopzero-cell-0-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
 if [ -z "$RUNTIME_IP" ]; then
-  echo "ERROR: Cannot resolve k3d-loopzero-workload-server-0 docker IP — falling back to DNS hostname"
-  RUNTIME_SERVER="https://k3d-loopzero-workload-server-0:6443"
+  echo "ERROR: Cannot resolve k3d-loopzero-cell-0-server-0 docker IP — falling back to DNS hostname"
+  RUNTIME_SERVER="https://k3d-loopzero-cell-0-server-0:6443"
 else
   RUNTIME_SERVER="https://${RUNTIME_IP}:6443"
 fi
 
 # dogfood-2026-05-08-fixes T2.2 (F-2 root cause):
-# Context name MUST be "in-cluster" to match RUNTIME_KUBE_CONTEXT in
+# Context name MUST be "in-cluster" to match CELL_0_KUBE_CONTEXT in
 # infra/tilt/api-deployment.yaml + infra/helm/loopzero-api Deployment env.
 # B34 fix doc says the kubeconfig "ships with a single context named
 # in-cluster", but F-11 (2026-05-07) regenerated it with name=runtime —
@@ -297,7 +297,7 @@ users:
     client-key-data: ${RUNTIME_KEY}
 KUBECONFIG
 
-kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-runtime-kubeconfig \
+kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-cell-0-kubeconfig \
   --from-file=config=/tmp/runtime-kubeconfig.yaml \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 
@@ -305,22 +305,22 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-runtime-
 # is mounted by loopzero-api Deployment at /etc/loopzero/runtime/kubeconfig (per
 # infra/tilt/api-deployment.yaml + helm/loopzero-api). generate-secrets.sh
 # creates this Secret with a synthetic in-cluster kubeconfig that points
-# all 3 cluster keys (mgmt/build/runtime.kubeconfig) at kubernetes.default.svc
+# all 3 cluster keys (mgmt/build/cell-0.kubeconfig) at kubernetes.default.svc
 # (the SAME mgmt cluster). That assumption is wrong for k3d multi-cluster
 # setups where workload is a separate cluster. Symptom: loopzero-api creates
 # ExternalSecret CRs in mgmt instead of workload, hits forbidden RBAC,
 # and silently fails — Journey 03 Secrets pod hits CreateContainerConfigError.
 #
-# Fix: overwrite the runtime.kubeconfig key in loopzero-cluster-kubeconfigs
+# Fix: overwrite the cell-0.kubeconfig key in loopzero-cluster-kubeconfigs
 # Secret with the REAL workload kubeconfig (IP-based, admin certs)
 # AFTER generate-secrets.sh has run. Idempotent kubectl apply.
-echo "Patching loopzero-cluster-kubeconfigs runtime.kubeconfig with real workload kubeconfig..."
+echo "Patching loopzero-cluster-kubeconfigs cell-0.kubeconfig with real workload kubeconfig..."
 kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get secret loopzero-cluster-kubeconfigs >/dev/null 2>&1 && {
   RUNTIME_KC_B64=$(base64 -w0 /tmp/runtime-kubeconfig.yaml)
   kubectl --context "$MGMT_CTX" -n "$NAMESPACE" patch secret loopzero-cluster-kubeconfigs \
     --type='json' \
-    -p="[{\"op\":\"replace\",\"path\":\"/data/runtime.kubeconfig\",\"value\":\"${RUNTIME_KC_B64}\"}]" 2>&1 | tail -1
-  echo "loopzero-cluster-kubeconfigs runtime.kubeconfig: patched with real workload IP"
+    -p="[{\"op\":\"replace\",\"path\":\"/data/cell-0.kubeconfig\",\"value\":\"${RUNTIME_KC_B64}\"}]" 2>&1 | tail -1
+  echo "loopzero-cluster-kubeconfigs cell-0.kubeconfig: patched with real workload IP"
 } || echo "loopzero-cluster-kubeconfigs Secret not present yet — generate-secrets.sh will create later"
 
 rm -f /tmp/runtime-kubeconfig.yaml
@@ -349,7 +349,7 @@ echo ""
 echo "=== Done ==="
 echo "Secret 'loopzero-api-tokens' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-build-kubeconfig' created in $NAMESPACE"
-echo "ConfigMap 'loopzero-runtime-kubeconfig' created in $NAMESPACE"
+echo "ConfigMap 'loopzero-cell-0-kubeconfig' created in $NAMESPACE"
 echo "ArgoCD repo + cluster secrets configured"
 echo "MinIO buckets ensured"
 echo ""

@@ -2,7 +2,7 @@
 # end-to-end-deploy-validation-plan T0.3
 #
 # Variant of `standalone` for local E2E validation with 3 separate k3d
-# clusters (loopzero-core + loopzero-build + loopzero-workload). Used by:
+# clusters (loopzero-core + loopzero-build + loopzero-cell-0). Used by:
 #   - infra/tests/e2e/deploy_e2e_test.go (TestE2EDeployHappyPath)
 #
 # Differences vs `standalone`:

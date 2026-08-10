@@ -54,14 +54,14 @@ includes:
 vars:
   CORE_CONTEXT: k3d-loopzero-core
   BUILD_CONTEXT: k3d-loopzero-build
-  WORKLOAD_CONTEXT: k3d-loopzero-workload
+  CELL_0_CONTEXT: k3d-loopzero-cell-0
   # cell-2-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-2'.
-  # Provisioned by infra/k3d/runtime-2-cluster.yaml. Cluster name `loopzero-runtime-2`
+  # Provisioned by infra/k3d/cell-1-cluster.yaml. Cluster name `loopzero-cell-1`
   # matches production wire-clusters.sh + Pulumi convention (LOOPZERO_RUNTIME2_KUBECONFIG).
-  # ClusterCredential CR is named `cell-2` with spec.clusterName=loopzero-runtime-2.
+  # ClusterCredential CR is named `cell-2` with spec.clusterName=loopzero-cell-1.
   # Status starts 'maintenance' in cells SQL table (migration 000006); migration
   # 000007 flips to 'active' after cell-2 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
-  RUNTIME2_CONTEXT: k3d-loopzero-runtime-2
+  RUNTIME2_CONTEXT: k3d-loopzero-cell-1
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
   PG_HOST: localhost
@@ -274,7 +274,7 @@ tasks:
       actual patches (B14, B15, B17-19, B22, B23, B25-82+).
     cmds:
       - bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
-      - task: k3d:bootstrap-workload
+      - task: k3d:bootstrap-cell-0
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
       - bash infra/scripts/production/provision-api-tokens.sh
@@ -309,7 +309,7 @@ tasks:
         fi
       # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
       # CC bootstrap so cell-2 has a reachable workload destination.
-      - task: k3d:bootstrap-runtime-2
+      - task: k3d:bootstrap-cell-1
       # 2026-05-14 (plan T0.1): bootstrap all three cells atomically
       # (cell-default + cell-1 + cell-2). Closes CTO Golden Rule #1 gap.
       - task: k3d:bootstrap-cells
@@ -330,12 +330,12 @@ tasks:
       - task: setup
       - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
 
-  k3d:bootstrap-workload:
+  k3d:bootstrap-cell-0:
     desc: |
-      Bootstrap the workload (k3d-loopzero-workload) cluster with cert-manager +
+      Bootstrap the workload (k3d-loopzero-cell-0) cluster with cert-manager +
       traefik + external-secrets + argo-rollouts via helmfile. Idempotent —
       `helmfile sync` no-ops if releases match desired state. Required after
-      fresh `k3d cluster create loopzero-workload` (the runtime helmfile usually
+      fresh `k3d cluster create loopzero-cell-0` (the runtime helmfile usually
       only runs in production cells).
       Discovered LIVE 2026-04-30: ArgoCD app sync to runtime fails with
       "Certificate CRD not found" until this is run.
@@ -354,11 +354,11 @@ tasks:
       dogfood 2026-05-27: 5 of 8 Ginkgo journey failures all root-caused
       to missing ClusterIssuer.
     cmds:
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=argo-rollouts sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=traefik sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=external-secrets sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=argo-rollouts sync
 
   k3d:bootstrap-build-cert-manager:
     desc: |
@@ -367,14 +367,14 @@ tasks:
       Sigstore Fulcio/Rekor/CTLog precisam TLS internos via loopzero-ca-issuer.
       Idempotente — helmfile sync no-ops se já deployed.
     cmds:
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
 
-  k3d:bootstrap-runtime-2:
+  k3d:bootstrap-cell-1:
     desc: |
-      Bootstrap the runtime-2 (k3d-loopzero-runtime-2) cluster with cert-manager
+      Bootstrap the runtime-2 (k3d-loopzero-cell-1) cluster with cert-manager
       + traefik + external-secrets + argo-rollouts via helmfile. Mirrors
-      `k3d:bootstrap-workload` but targets the runtime-2 cluster.
+      `k3d:bootstrap-cell-0` but targets the runtime-2 cluster.
 
       Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.2
       Closes CTO Golden Rule #1 gap (cleanroom must be multi-cell by default).
@@ -386,23 +386,23 @@ tasks:
       2026-05-14).
 
       D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
-      this list — same reason as k3d:bootstrap-workload above. Otherwise
+      this list — same reason as k3d:bootstrap-cell-0 above. Otherwise
       tenants pinned to cell-2 have no ClusterIssuer for cert-manager.
 
       Idempotent: helmfile sync no-ops if releases match desired state.
     cmds:
       - task: k3d:heal
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=traefik sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=external-secrets sync
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=argo-rollouts sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=traefik sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=external-secrets sync
+      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=argo-rollouts sync
 
   k3d:bootstrap-cells:
     desc: |
       Bootstrap the three ClusterCredential CRs (cell-default, cell-1, cell-2)
-      atomically. cell-default + cell-1 map to k3d-loopzero-workload; cell-2 maps
-      to k3d-loopzero-runtime-2 (real multi-cell placement).
+      atomically. cell-default + cell-1 map to k3d-loopzero-cell-0; cell-2 maps
+      to k3d-loopzero-cell-1 (real multi-cell placement).
 
       Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.1.
       Idempotent. Failures (cluster missing) abort early with clear msg.

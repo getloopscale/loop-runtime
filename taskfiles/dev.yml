@@ -85,7 +85,7 @@ tasks:
 
         echo ""
         echo "=== k3d Clusters ==="
-        for CLUSTER in loopzero-core loopzero-build loopzero-workload loopzero-runtime-2; do
+        for CLUSTER in loopzero-core loopzero-build loopzero-cell-0 loopzero-cell-1; do
           if k3d cluster list -o json 2>/dev/null | grep -q "\"name\":\"$CLUSTER\""; then
             echo "  [PASS] $CLUSTER cluster exists"
             PASS=$((PASS+1))
@@ -97,7 +97,7 @@ tasks:
 
         echo ""
         echo "=== Cluster Connectivity ==="
-        for CTX in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-workload k3d-loopzero-runtime-2; do
+        for CTX in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-cell-0 k3d-loopzero-cell-1; do
           if kubectl --context "$CTX" cluster-info >/dev/null 2>&1; then
             echo "  [PASS] $CTX reachable"
             PASS=$((PASS+1))
@@ -193,7 +193,7 @@ tasks:
             echo "  [WARN] $SVC ($NS) — not installed yet (required from Sprint 2)"
             WARN=$((WARN+1))
           else
-            echo "  [FAIL] $SVC ($NS) — not found. Run: task infra:install:mgmt"
+            echo "  [FAIL] $SVC ($NS) — not found. Run: task infra:install:core"
             FAIL=$((FAIL+1))
           fi
         done
@@ -278,12 +278,12 @@ tasks:
         echo "  Cells: $CELL_COUNT/3 connected"
         # Verify runtime-2 has loopzero-platform deployed (cell-2 destination).
         if [ "$CELL_COUNT" -ge 3 ] || [ "$ALLOW_SINGLE" != "1" ]; then
-          if kubectl --context k3d-loopzero-runtime-2 get ns argo-rollouts >/dev/null 2>&1 \
-             && kubectl --context k3d-loopzero-runtime-2 get ns traefik >/dev/null 2>&1; then
+          if kubectl --context k3d-loopzero-cell-1 get ns argo-rollouts >/dev/null 2>&1 \
+             && kubectl --context k3d-loopzero-cell-1 get ns traefik >/dev/null 2>&1; then
             echo "  [PASS] runtime-2 platform — argo-rollouts + traefik deployed"
             PASS=$((PASS+1))
           else
-            echo "  [FAIL] runtime-2 platform — missing argo-rollouts or traefik. Run: task k3d:bootstrap-runtime-2"
+            echo "  [FAIL] runtime-2 platform — missing argo-rollouts or traefik. Run: task k3d:bootstrap-cell-1"
             FAIL=$((FAIL+1))
           fi
         fi
@@ -328,7 +328,7 @@ tasks:
 
         echo ""
         echo "=== Pod Status (traefik — workload cluster) ==="
-        kubectl --context {{.WORKLOAD_CONTEXT}} -n traefik get pods 2>/dev/null \
+        kubectl --context {{.CELL_0_CONTEXT}} -n traefik get pods 2>/dev/null \
           || echo "Cannot reach workload cluster"
 
         echo ""
@@ -385,7 +385,7 @@ tasks:
         # 1. Clusters respond
         smoke "mgmt cluster reachable"     kubectl --context {{.CORE_CONTEXT}} cluster-info
         smoke "build cluster reachable"    kubectl --context {{.BUILD_CONTEXT}} cluster-info
-        smoke "workload cluster reachable" kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
+        smoke "workload cluster reachable" kubectl --context {{.CELL_0_CONTEXT}} cluster-info
 
         # 2. Core pods running
         smoke "postgresql pod running" kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \

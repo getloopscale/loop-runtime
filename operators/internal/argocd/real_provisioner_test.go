@@ -196,7 +196,7 @@ func TestBuildApplicationObject_HasNoSkipReconcile(t *testing.T) {
 		RepoURL:        "http://gitea/loopzero/acme-gitops.git",
 		TargetRevision: "main",
 		Path:           "production",
-		DestinationURL: "https://workload-cluster:6443",
+		DestinationURL: "https://cell-0-cluster:6443",
 		DestinationNS:  "acme-production",
 	}
 	obj := buildApplicationObject(spec)

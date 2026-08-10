@@ -30,10 +30,10 @@ import (
 //
 // Scenario:
 //   1. Pre-condition: mgmt + workload both up; API serving health.
-//   2. `k3d cluster stop loopzero-workload` — pauses worker containers; state preserved.
+//   2. `k3d cluster stop loopzero-cell-0` — pauses worker containers; state preserved.
 //   3. Within 60s: verify API on mgmt still serves /healthz.
 //   4. Within 90s: verify cell-default tenant workloads (in mgmt) still reachable.
-//   5. Cleanup: `k3d cluster start loopzero-workload` — resumes.
+//   5. Cleanup: `k3d cluster start loopzero-cell-0` — resumes.
 //
 // SLO claims validated:
 //   - Blast radius: 1 cell (workload), 0 cells (mgmt control plane).
@@ -46,21 +46,21 @@ func TestCellIsolation_K3dStop(t *testing.T) {
 	}
 
 	// Pre-condition: workload cluster must be UP.
-	if !k3dClusterIsRunning(t, "loopzero-workload") {
-		t.Skip("k3d cluster loopzero-workload is not running; skipping (re-run after task setup)")
+	if !k3dClusterIsRunning(t, "loopzero-cell-0") {
+		t.Skip("k3d cluster loopzero-cell-0 is not running; skipping (re-run after task setup)")
 	}
 
 	// Stop the workload cluster.
-	t.Logf("Stopping k3d cluster loopzero-workload...")
-	if err := runCmd(t, 60*time.Second, "k3d", "cluster", "stop", "loopzero-workload"); err != nil {
+	t.Logf("Stopping k3d cluster loopzero-cell-0...")
+	if err := runCmd(t, 60*time.Second, "k3d", "cluster", "stop", "loopzero-cell-0"); err != nil {
 		t.Fatalf("k3d cluster stop failed: %v", err)
 	}
 
 	// MUST always attempt to restart, even on test failure (otherwise
 	// subsequent runs of any test will fail since cluster is down).
 	t.Cleanup(func() {
-		t.Logf("Cleanup: restarting k3d cluster loopzero-workload...")
-		if err := runCmd(t, 120*time.Second, "k3d", "cluster", "start", "loopzero-workload"); err != nil {
+		t.Logf("Cleanup: restarting k3d cluster loopzero-cell-0...")
+		if err := runCmd(t, 120*time.Second, "k3d", "cluster", "start", "loopzero-cell-0"); err != nil {
 			t.Errorf("CRITICAL cleanup failed: k3d cluster start: %v -- manual recovery required", err)
 		}
 	})
@@ -87,7 +87,7 @@ func TestCellIsolation_K3dStop(t *testing.T) {
 	// stopped it). This is the inverse-positive: ensure the chaos actually
 	// happened. Without this, the test could pass trivially if k3d stop
 	// silently no-op'd.
-	out, _ := runCmdOutput(t, 10*time.Second, "kubectl", "--context", "k3d-loopzero-workload",
+	out, _ := runCmdOutput(t, 10*time.Second, "kubectl", "--context", "k3d-loopzero-cell-0",
 		"get", "nodes", "-o", "jsonpath={.items[0].metadata.name}")
 	if !strings.Contains(out, "error") && !strings.Contains(out, "refused") && strings.TrimSpace(out) != "" {
 		// Workload responded — means k3d stop didn't actually stop. Test
@@ -109,7 +109,7 @@ func k3dClusterIsRunning(t *testing.T, name string) bool {
 	}
 	// Quick substring check — full JSON parsing would require json package
 	// + struct. The output format is stable enough that substring works.
-	// Looking for `"name":"loopzero-workload"` with non-zero running serverCount.
+	// Looking for `"name":"loopzero-cell-0"` with non-zero running serverCount.
 	if !strings.Contains(out, `"name":"`+name+`"`) {
 		return false
 	}

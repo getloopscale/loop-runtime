@@ -22,7 +22,7 @@ func TestPassthroughRouter_Resolve(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
 		CellID:        "cell-default",
 		KubeConfig:    "/path/to/kubeconfig",
-		KubeContext:   "k3d-loopzero-workload",
+		KubeContext:   "k3d-loopzero-cell-0",
 		ArgocdURL:     "http://argocd:80",
 		ArgocdToken:   "test-token",
 		IngressDomain: "loopzero.local",
@@ -71,7 +71,7 @@ func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
 func TestPassthroughRouter_ListCells(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
 		CellID:      "cell-default",
-		KubeContext: "k3d-loopzero-workload",
+		KubeContext: "k3d-loopzero-cell-0",
 	})
 
 	cells, err := router.ListCells(context.Background())

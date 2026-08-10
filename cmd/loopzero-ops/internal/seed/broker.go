@@ -40,7 +40,7 @@ func NewBrokerSeed() *BrokerSeed { return &BrokerSeed{} }
 func (s *BrokerSeed) Name() string { return "broker" }
 
 const (
-	brokerContextWorkload   = "k3d-loopzero-workload"
+	brokerContextWorkload   = "k3d-loopzero-cell-0"
 	brokerESONamespace      = "external-secrets"
 	brokerSecretName        = "loopzero-broker-token"
 	brokerTokenKey          = "token"

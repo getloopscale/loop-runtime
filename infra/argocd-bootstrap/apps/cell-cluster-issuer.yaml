@@ -19,7 +19,7 @@ spec:
       valueFiles:
       - ../../helm/cluster-issuer/values.yaml
   destination:
-    server: https://loopzero-runtime.example
+    server: https://loopzero-cell-0.example
     namespace: cert-manager
   syncPolicy:
     syncOptions:

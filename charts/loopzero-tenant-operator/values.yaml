@@ -56,7 +56,7 @@ secrets:
 kubeconfig:
   build:
     existingConfigMap: ""
-  runtime:
+  cell0:
     existingConfigMap: ""
 
 # Operator binary arguments

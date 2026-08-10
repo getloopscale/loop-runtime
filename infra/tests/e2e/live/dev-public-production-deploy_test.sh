@@ -48,7 +48,7 @@ SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loopzero-core}"
-CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopzero-workload}"
+CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopzero-cell-0}"
 
 MAX_DURATION_SECONDS="${MAX_DURATION_SECONDS:-1200}"  # 20 min hard ceiling
 LINK_RELEASE_BUDGET=$((10 * 60)) # release ACTIVE
@@ -335,7 +335,7 @@ assert_no_workarounds() {
   # The 4 workarounds from T6.1 of plan 2026-06-08-pre-release-test-rigor
   # (per feedback_m2_canonical_drift_operator_renderer memory) were:
   #   (a) kubectl patch appproject ... destinations
-  #   (b) kubectl --context loopzero-workload create namespace loopzero-...
+  #   (b) kubectl --context loopzero-cell-0 create namespace loopzero-...
   #   (c) kubectl get sa loopzero-app -o yaml | sed | kubectl apply -f -
   #   (d) kubectl patch app .../sync force
   # T6.1 SUCCESS = the script body NEVER invokes any of these.

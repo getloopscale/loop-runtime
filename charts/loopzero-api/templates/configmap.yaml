@@ -35,7 +35,7 @@ data:
   GITEA_ORG: {{ .Values.config.giteaOrg | quote }}
   CORE_KUBE_CONTEXT: {{ .Values.config.mgmtKubeContext | quote }}
   BUILD_KUBE_CONTEXT: {{ .Values.config.buildKubeContext | quote }}
-  RUNTIME_KUBE_CONTEXT: {{ .Values.config.runtimeKubeContext | quote }}
+  CELL_0_KUBE_CONTEXT: {{ .Values.config.runtimeKubeContext | quote }}
   MINIO_ENDPOINT: {{ .Values.config.minioEndpoint | quote }}
   MINIO_CROSS_CLUSTER_ENDPOINT: {{ .Values.config.minioCrossClusterEndpoint | quote }}
   SOURCE_BUCKET: {{ .Values.config.sourceBucket | quote }}

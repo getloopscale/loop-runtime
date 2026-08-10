@@ -27,7 +27,7 @@ func TestDefaultLiveConfig_SetsCanonicalDefaults(t *testing.T) {
 	if cfg.BuildTimeout != 15*time.Minute {
 		t.Errorf("BuildTimeout = %v", cfg.BuildTimeout)
 	}
-	if cfg.KubeContext != "k3d-loopzero-workload" {
+	if cfg.KubeContext != "k3d-loopzero-cell-0" {
 		t.Errorf("KubeContext = %q", cfg.KubeContext)
 	}
 }

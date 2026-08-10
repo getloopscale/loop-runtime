@@ -57,7 +57,7 @@ export function bootstrapRuntimeCluster(
   // MEET-2026-04-04-030 Phase 3.1: RBAC for loopzero-api to create ExternalSecret CRs
   // on the runtime cluster. The SecretK8sManager (api/internal/k8s/secret_k8s_manager.go)
   // creates ExternalSecret CRs in tenant namespaces when `loopzero secret set` is called.
-  // The scoped kubeconfig SA (loopzero-runtime-sa) needs permissions for ESO CRDs.
+  // The scoped kubeconfig SA (loopzero-cell-0-sa) needs permissions for ESO CRDs.
   const esoWriterRole = new k8s.rbac.v1.ClusterRole(
     "loopzero-eso-writer",
     {
@@ -84,7 +84,7 @@ export function bootstrapRuntimeCluster(
     {
       metadata: { name: "loopzero-eso-writer" },
       subjects: [
-        { kind: "ServiceAccount", name: "loopzero-runtime-sa", namespace: PLATFORM_NAMESPACE },
+        { kind: "ServiceAccount", name: "loopzero-cell-0-sa", namespace: PLATFORM_NAMESPACE },
       ],
       roleRef: { kind: "ClusterRole", name: "loopzero-eso-writer", apiGroup: "rbac.authorization.k8s.io" },
     },
