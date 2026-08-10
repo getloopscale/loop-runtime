@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Hook de validação de comandos ficou mais rápido: ~6 processos por chamada de ferramenta em vez de ~50, sem mudança de comportamento
 
 - **BREAKING —** quem instala o chart `loopzero-api` e informa o kubeconfig do cluster central passa a usar
   a chave `secrets.coreKubeconfig`; ela se chamava `secrets.mgmtKubeconfig`. O cluster mudou de nome e a
