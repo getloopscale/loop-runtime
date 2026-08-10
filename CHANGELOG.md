@@ -77,6 +77,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O serviço de login voltou a anunciar seu endereço público. Ele publica uma página que diz aos
+  programas onde ficam suas próprias funções, e essa página apontava para um endereço que só existe
+  dentro do servidor — inalcançável de fora, e sem criptografia. Nove endereços estavam assim,
+  incluindo o que é gravado dentro do crachá de acesso e conferido por quem o recebe. A causa era um
+  comando de instalação que ignorava o ambiente pedido e instalava outro: ele não falhava, apenas
+  instalava a coisa errada com sucesso (BACKLOG.md B-020)
+
 - Instalar a plataforma a partir de uma cópia recém-clonada do repositório voltou a funcionar. O passo
   que baixa as dependências dos pacotes de instalação nunca rodava antes da instalação, e essas
   dependências não são versionadas — então quem clonasse o repositório e mandasse instalar recebia um
