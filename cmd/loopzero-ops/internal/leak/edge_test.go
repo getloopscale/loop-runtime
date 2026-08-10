@@ -334,3 +334,66 @@ client_secret: "GOCSPX-real"`
 		t.Errorf("credencial real não pode gerar achado, veio %v", got)
 	}
 }
+
+// TestInstalarCelulaNaoFixaUmaCelula trava a divergência entre células.
+//
+// MEDIDO em 2026-08-10: a `cell-0` roda 8 componentes de plataforma e a `cell-1` roda 4 —
+// faltam KEDA (escala por demanda), static-assets, cloudflared, policy-controller e
+// kube-state-metrics. As duas tasks de bootstrap instalam o MESMO conjunto de 5 releases,
+// então a divergência não vem dali: vem de `infra:install:cell`, que sincroniza o
+// helmfile completo (28 releases) com `--kube-context {{.CELL_0_CONTEXT}}` FIXO.
+//
+// Duas consequências, e a segunda é pior:
+//
+//  1. Um tenant fixado na cell-1 recebe MENOS plataforma que um na cell-0, e ninguém
+//     escolhe a célula — o roteamento é por bin-packing. A célula é um detalhe de
+//     alocação, então duas células com capacidades diferentes tornam o comportamento do
+//     produto dependente de onde o tenant caiu.
+//  2. `task clusters:recreate -- cell-1` chama esta mesma task (k3d.yml:149). Recriar a
+//     cell-1 instalaria na cell-0 — no cluster errado, sem erro.
+//
+// O guarda é textual de propósito: ele reprova o contexto FIXO, não a divergência
+// observada. A divergência é o sintoma; o contexto fixo é a causa, e é o que volta.
+func TestInstalarCelulaNaoFixaUmaCelula(t *testing.T) {
+	raiz := repoRootFromTest(t)
+	b, err := os.ReadFile(filepath.Join(raiz, "taskfiles", "infra.yml"))
+	if err != nil {
+		t.Fatalf("ler taskfiles/infra.yml: %v", err)
+	}
+
+	linhas := strings.Split(string(b), "\n")
+	inicio := -1
+	for i, l := range linhas {
+		if strings.HasPrefix(l, "  infra:install:cell:") {
+			inicio = i
+			break
+		}
+	}
+	if inicio < 0 {
+		t.Fatal("task infra:install:cell não encontrada — o guarda perdeu o alvo e precisa ser revisto")
+	}
+
+	var ofensoras []string
+	for i := inicio + 1; i < len(linhas); i++ {
+		// a próxima task de topo encerra o bloco
+		if strings.HasPrefix(linhas[i], "  ") && !strings.HasPrefix(linhas[i], "   ") &&
+			strings.HasSuffix(strings.TrimSpace(linhas[i]), ":") {
+			break
+		}
+		// Comentário não é código: a própria explicação do conserto cita o nome antigo, e
+		// contá-la reprovaria o texto que documenta a correção. O guarda mira a diretiva.
+		if strings.HasPrefix(strings.TrimSpace(linhas[i]), "#") {
+			continue
+		}
+		if strings.Contains(linhas[i], "CELL_0_CONTEXT") {
+			ofensoras = append(ofensoras, fmt.Sprintf("infra.yml:%d", i+1))
+		}
+	}
+	if len(ofensoras) > 0 {
+		t.Errorf("`infra:install:cell` fixa a cell-0 em %d linha(s): %s\n"+
+			"A task instala a plataforma de UMA célula, então o contexto tem de ser parâmetro. "+
+			"Fixo, ela deixa a cell-1 com menos plataforma que a cell-0 — e faz "+
+			"`clusters:recreate -- cell-1` instalar no cluster errado.",
+			len(ofensoras), strings.Join(ofensoras, ", "))
+	}
+}

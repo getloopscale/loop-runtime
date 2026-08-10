@@ -229,15 +229,27 @@ tasks:
       # T2.3.a (EC-01) MASTER SYNC — runtime helmfile declares:
       # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
       # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
+      #
+      # O CONTEXTO E PARAMETRO, e nao fixo. Enquanto foi `{{.CELL_0_CONTEXT}}`, esta task
+      # instalava as 28 releases SEMPRE na cell-0: a cell-1 ficava so com as 5 do
+      # `k3d:bootstrap-cell-1` e um tenant fixado nela recebia MENOS plataforma —
+      # sem KEDA (escala por demanda), sem static-assets, sem cloudflared, sem
+      # policy-controller. Ninguem escolhe a celula (o roteamento e bin-packing), entao
+      # duas celulas com capacidades diferentes tornam o comportamento do produto
+      # dependente de onde o tenant caiu. Medido em 2026-08-10: 8 componentes na cell-0
+      # contra 4 na cell-1.
+      #
+      # Pior: `task clusters:recreate -- cell-1` chama esta mesma task (k3d.yml), entao
+      # recriar a cell-1 instalava no cluster ERRADO, sem erro.
       - >-
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
         -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
-        --kube-context {{.CELL_0_CONTEXT}}
+        --kube-context "{{.CELL_CTX | default (env \"LOOPZERO_CELL_CONTEXT\") | required \"CELL_CTX ausente. Esta task instala a plataforma de UMA celula; um padrao silencioso instalaria sempre na mesma\"}}"
         sync --skip-deps
       # Post-sync: Traefik middlewares + wildcard cert + TLSStore
       # (these are non-helm CRs that depend on Traefik + cert-manager CRDs being installed)
-      - kubectl --context {{.CELL_0_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
-      - kubectl --context {{.CELL_0_CONTEXT}} apply -f infra/helm/cert-manager/traefik-tls.yaml
+      - kubectl --context "{{.CELL_CTX | default (env \"LOOPZERO_CELL_CONTEXT\") | required \"CELL_CTX ausente. Esta task instala a plataforma de UMA celula; um padrao silencioso instalaria sempre na mesma\"}}" apply -f infra/helm/traefik/middlewares.yaml
+      - kubectl --context "{{.CELL_CTX | default (env \"LOOPZERO_CELL_CONTEXT\") | required \"CELL_CTX ausente. Esta task instala a plataforma de UMA celula; um padrao silencioso instalaria sempre na mesma\"}}" apply -f infra/helm/cert-manager/traefik-tls.yaml
 
   infra:install:monitoring:
     desc: |
@@ -345,7 +357,15 @@ tasks:
       - task: infra:install:monitoring-crds
       - task: infra:install:core
       - task: infra:install:build
+      # UMA CHAMADA POR CELULA. Chamar uma vez so deixava a cell-1 com 4 componentes
+      # contra 8 da cell-0 — e como ninguem escolhe a celula (o roteamento e
+      # bin-packing), o tenant que caisse nela recebia menos plataforma sem que nada
+      # avisasse. As celulas sao espelho por contrato; a lista abaixo cresce junto com
+      # `clusters:create`.
       - task: infra:install:cell
+        vars: { CELL_CTX: '{{.CELL_0_CONTEXT}}' }
+      - task: infra:install:cell
+        vars: { CELL_CTX: '{{.CELL_1_CONTEXT}}' }
       - task: infra:install:monitoring
 
   # ---------------------------------------------------------------------------
