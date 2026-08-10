@@ -640,3 +640,24 @@ dod:
   - a declaração que diz "delete after the new bundle" é resolvida em vez de continuar descrevendo uma intenção de meses atrás
 
 > Registrado 2026-08-10 durante a revalidação completa da topologia.
+
+## B-026 — As células divergem: a plataforma só era instalada na primeira   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: perguntado pelo sponsor em 2026-08-10 ao ler o desenho da topologia — *"as cells deveriam ter configurações espelho, por que uma cell está configurada diferente da outra?"*. Medido: `loopzero-cell-0` com **8** componentes de plataforma e `loopzero-cell-1` com **4** — faltavam KEDA (escala por demanda), `static-assets`, `cloudflared`, `policy-controller` e `kube-state-metrics`. As duas tasks de bootstrap instalam o **mesmo** conjunto de 5 releases, então a divergência não vinha dali: vinha de `infra:install:cell`, que sincroniza as 28 releases do `cell.helmfile.yaml.gotmpl` com `--kube-context {{.CELL_0_CONTEXT}}` **fixo**, e de `infra:install`, que a chamava **uma vez só**.
+why_now: a pergunta veio de olhar o desenho, não de um incidente — e é o tipo de divergência que não produz erro nenhum até produzir um difícil. Um tenant fixado na `cell-1` recebia menos plataforma, e **ninguém escolhe a célula**: o roteamento é bin-packing, então a célula é detalhe de alocação. Duas células com capacidades diferentes tornam o comportamento do produto dependente de onde o tenant caiu — sem nada avisando.
+status: shipped
+severity: alta — não pela divergência de hoje (a `cell-1` tem zero tenants), mas pelo segundo efeito: `task clusters:recreate -- cell-1` chamava a mesma task e instalava na `cell-0`. Recriar uma célula mexia no cluster errado, sem erro.
+dod:
+  - ~~o contexto da célula é parâmetro e não valor fixo~~ — **feito**, e `required`: um padrão silencioso recriaria o defeito na primeira chamada que esquecesse de passá-lo
+  - ~~`infra:install` instala em todas as células~~ — **feito**, uma chamada por célula
+  - ~~`clusters:recreate` opera a célula que foi pedida~~ — **feito**, exporta `LOOPZERO_CELL_CONTEXT`
+  - ~~existe verificação que reprova o contexto fixo voltando~~ — **feito**: o guarda mira a causa (contexto fixo), não o sintoma (divergência observada)
+  - falta aplicar na `cell-1` do app-dev — o conserto está no repositório, e o cluster ainda tem os 4 componentes
+
+**Duas notas de honestidade.** O guarda nasceu com um falso positivo próprio: varria texto e contava o comentário que explica o conserto como se fosse a diretiva. Corrigido para ignorar comentários — um guarda que reprova a documentação da correção treina o time a desligá-lo. E a primeira versão do `required` quebrou o YAML: a mensagem tinha dois-pontos, e o gate de qualidade pegou antes do push.
+
+> Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor sobre o desenho.
