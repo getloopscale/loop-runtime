@@ -313,3 +313,35 @@ dod:
 
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `app-dev-edge-portforward`).
 
+## B-011 — O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: medido no droplet `loopzero-e2e-runner` em 2026-08-10. `kubectl get rs -l app=loopzero-cloud` mostrava **4 ReplicaSets em 19 minutos** (19m, 14m, 8m59s, 3m48s), e o diff entre dois consecutivos tinha **uma única diferença**: a anotação `kubectl.kubernetes.io/restartedAt` — a assinatura de `kubectl rollout restart`. A origem é `loopzero-cloud-reconcile.timer` (a cada 5 min) → `~/.local/bin/loopzero-cloud-reconcile.sh`, que chamava `rollout restart deploy/loopzero-cloud` **incondicionalmente**. O efeito não ficava no loopzero-cloud: `kubectl port-forward` se prende a um POD, então cada rollout matava os forwards da borda — `loopzero-cloud-edge-13002.service` com `NRestarts=126499` e `loopzero-pf-loopzero-cloud-bff.service` com `72163`. Cada morte é uma janela de 502 em `/engine/*`. Este é o **causador** do `B-010`.
+why_now: encontrado ao perseguir a intermitência do `B-010` até a origem, em vez de parar no sintoma. Nenhuma verificação de pod acusaria: os pods estavam todos `Running`, só que sempre recém-nascidos.
+status: planned
+resolved_in: `loopzero-workspace@526f608` — o script passa a comparar o digest da imagem local com o do pod **antes** de reiniciar, e dispensa o rollout quando são iguais. Ele já calculava `before`/`after` para decidir `changed`; só comparava depois de reiniciar, quando a informação já não servia. Digest ausente de qualquer lado reinicia, deliberadamente o comportamento antigo. Aplicado também no fonte real do droplet (`/home/paulo/loopzero-ops/dev/loopzero-cloud/reconcile.sh`).
+dod:
+  - o log diz `BFF: imagem em dia (sha256:...)` quando nada mudou — **verificado 2026-08-10**
+  - o pod não troca de nome entre duas execuções do reconcile — **verificado: mesmo pod, 11 ReplicaSets antes e depois**
+  - as duas units de port-forward do loopzero-cloud estão paradas e desabilitadas — **verificado**
+
+## B-012 — A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa   [ ]
+
+domain: data-plane-ts
+repo: loopzero-promptly
+suggested_mode: bug
+source: discover-live-test
+evidence: `docker ps` no droplet mostra `loopzeropromptly_mcp` em `Restarting` — crash loop. `docker logs` dá `ERR_MODULE_NOT_FOUND` para `file:///app/node_modules/@loopzero/promptly-template/dist/index.js`. Causa: `loopzero-promptly/Dockerfile.mcp` faz `COPY . .` e vai direto a `pnpm deploy --filter ./packages/mcp --prod /app`, **sem nenhum passo de build**. `packages/template` e `packages/sdk` declaram `exports: {".": {"default": "./dist/index.js"}}`, então resolvem para um `dist/` que nada produz; os outros três exportam de `./src/*.ts` e são resolvidos pelo tsx em runtime, que é por que a falha atinge só esses dois. **O Dockerfile irmão já estava certo:** `loopzero-promptly/Dockerfile:61` tem `RUN pnpm run build` com o comentário explicando *"O build roda ANTES do `pnpm deploy` porque este stage ainda tem as devDependencies"* — a segunda imagem copiou o padrão e perdeu o passo.
+why_now: encontrado na varredura de containers do droplet sob o mandato de deixá-lo funcional. O `loopzeropromptly_app` está saudável há 4 dias, então o produto parece de pé; só o MCP está morto, e MCP é a superfície que agentes consomem.
+status: raw
+blocked_by: a imagem vem de `ghcr.io/getloopscale/loopzero-promptly-mcp:develop`, construída por CI. O repo não está no droplet, então a correção só chega lá por publicação — não por edição local.
+dod:
+  - `Dockerfile.mcp` constrói os pacotes de workspace antes do `pnpm deploy`
+  - a imagem construída resolve `@loopzero/promptly-template` sem `ERR_MODULE_NOT_FOUND`
+  - `loopzeropromptly_mcp` fica `Up (healthy)` no droplet, não `Restarting`
+
+> B-011 e B-012 registrados 2026-08-10 durante o diagnóstico do app-dev.
+
