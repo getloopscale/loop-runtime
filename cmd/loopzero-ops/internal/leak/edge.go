@@ -54,6 +54,11 @@ type Target struct {
 	Host         string
 	Path         string
 	PublicBySpec bool
+	// PorQue explica QUEM depende desta rota responder. A razão muda o conserto: a
+	// descoberta OIDC é lida por um programa antes de existir token; a raiz é alcançada
+	// por uma pessoa que digitou o endereço. Uma mensagem única para os dois casos
+	// mandaria quem lê o relatório para o lugar errado.
+	PorQue string
 }
 
 // closed reporta se o código nega acesso ao dado.
@@ -93,8 +98,11 @@ func Probe(ctx context.Context, client *http.Client, t Target) Verdict {
 			v.Passed = true
 			v.Reason = "pública por especificação, respondeu 200"
 		} else {
-			v.Reason = fmt.Sprintf("devolveu %d; é pública por especificação OIDC e precisa responder 200 — "+
-				"clientes a leem antes de ter qualquer token", resp.StatusCode)
+			porque := t.PorQue
+			if porque == "" {
+				porque = "é pública por especificação OIDC e clientes a leem antes de ter qualquer token"
+			}
+			v.Reason = fmt.Sprintf("devolveu %d e precisa responder — %s", resp.StatusCode, porque)
 		}
 		return v
 	}
@@ -188,10 +196,23 @@ func Targets(inventário string, host string) (alvos []Target, semRepresentante 
 
 // IdentityTargets são as rotas do host de identidade, com a asserção invertida nas duas
 // que a especificação OIDC obriga a serem públicas.
+//
+// A raiz entra com `PublicBySpec` porque quem a alcança é uma PESSOA que digitou o
+// endereço — e ela precisa de um caminho para o login, não de um beco sem saída. Medido
+// em 2026-08-10: `https://auth-dev.loopzero.example/` devolvia `404 page not found` em texto
+// puro. O 404 vinha do próprio Kratos, que é uma API de identidade e não serve página na
+// raiz; a borda encaminhava certo e recebia o 404 de volta. Nenhum fluxo do produto leva
+// ali (os usos do host são todos programáticos: base de API, emissor de token, origem
+// CORS), mas um endereço público que não leva a lugar nenhum é defeito de produto mesmo
+// quando nada aponta para ele.
 func IdentityTargets(host string) []Target {
 	return []Target{
-		{Host: host, Path: "/.well-known/openid-configuration", PublicBySpec: true},
-		{Host: host, Path: "/health/alive", PublicBySpec: true},
+		{Host: host, Path: "/.well-known/openid-configuration", PublicBySpec: true,
+			PorQue: "é a descoberta OIDC, lida por todo cliente antes de existir token"},
+		{Host: host, Path: "/health/alive", PublicBySpec: true,
+			PorQue: "é o health do serviço de identidade"},
+		{Host: host, Path: "/", PublicBySpec: true,
+			PorQue: "quem digita o endereço é uma pessoa, e precisa de um caminho para o login em vez de um beco sem saída"},
 		{Host: host, Path: "/userinfo"},
 	}
 }

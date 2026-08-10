@@ -562,6 +562,23 @@ auth-dev.loopzero.example {
   handle /credentials {
     reverse_proxy localhost:14444
   }
+  # A RAIZ leva ao login, em vez de devolver 404.
+  #
+  # Quem digita `auth-dev.loopzero.example` no navegador e uma PESSOA. Ate 2026-08-10 ela
+  # recebia `404 page not found` em texto puro, e sem caminho nenhum dali: o 404 vinha do
+  # proprio Kratos, que e uma API de identidade e nao serve pagina na raiz. A borda
+  # encaminhava certo e recebia o 404 de volta.
+  #
+  # Nenhum fluxo do produto leva aqui — os usos deste host sao todos programaticos (base
+  # de API, emissor de token, origem CORS) —, mas um endereco publico que nao leva a lugar
+  # nenhum e defeito de produto mesmo quando nada aponta para ele.
+  #
+  # 302 e nao 301: o destino do login pode mudar, e um permanente fica no cache do
+  # navegador de quem visitou uma vez.
+  handle / {
+    redir https://app-dev.loopzero.example/login 302
+  }
+
   handle /admin/* {
     # Hydra admin should NEVER be exposed publicly; deny defense-in-depth.
     respond "Not Found" 404
