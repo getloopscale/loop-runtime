@@ -31,8 +31,17 @@ UPDATE leader_generations       SET cell_id = 'cell-0' WHERE cell_id IN ('cell-d
 UPDATE preview_environments     SET cell_id = 'cell-0' WHERE cell_id IN ('cell-default', 'cell-1');
 UPDATE release_app_attestations SET cell_id = 'cell-0' WHERE cell_id IN ('cell-default', 'cell-1');
 
--- As linhas de dados ja sairam das duas identidades acima, entao apagar a duplicata e seguro.
-DELETE FROM cells WHERE cell_id = 'cell-1';
+-- As linhas de dados ja sairam das duas identidades acima, entao apagar as duplicatas e
+-- seguro. `cell-1` so pode cair AQUI enquanto ainda significa a identidade antiga — depois
+-- da fase 2 ela passa a ser a renumeracao de `cell-2`, e apaga-la seria destruir a segunda
+-- cell. E por isso que a guarda abaixo existe: este migrador REAPLICA todos os arquivos a
+-- cada execucao (infra/scripts/production/run-migrations.sh), entao a 000006 volta a
+-- inserir `cell-default`/`cell-1`/`cell-2` e esta migracao roda de novo por cima. Medido no
+-- droplet app-dev em 2026-08-10: sem a guarda, a segunda passagem tentava renomear
+-- `cell-default` para um `cell-0` que ja existia. Toda esta fase e escrita para ser
+-- re-executavel sem mudar o resultado.
+DELETE FROM cells WHERE cell_id = 'cell-1'
+   AND EXISTS (SELECT 1 FROM cells c WHERE c.cell_id = 'cell-2');
 
 UPDATE cells
    SET cell_id      = 'cell-0',
@@ -40,7 +49,11 @@ UPDATE cells
        notes        = 'Primeira cell. 1:1 com o cluster loopzero-cell-0. Absorveu cell-default '
                    || '(que era sentinela de "ainda nao resolvido", nao uma cell) e cell-1 '
                    || '(que nomeava esta mesma maquina). ADR 2026-08-09.'
- WHERE cell_id = 'cell-default';
+ WHERE cell_id = 'cell-default'
+   AND NOT EXISTS (SELECT 1 FROM cells c WHERE c.cell_id = 'cell-0');
+
+-- Se `cell-0` ja existia (re-execucao), a linha antiga apenas desaparece.
+DELETE FROM cells WHERE cell_id = 'cell-default';
 
 -- ---------------------------------------------------------------------------------------------
 -- Fase 2 — so agora `cell-1` esta livre. Renumera `cell-2`, preservando o `status` dela.
@@ -58,7 +71,12 @@ UPDATE cells
        notes        = 'Segunda cell. 1:1 com o cluster loopzero-cell-1. Era cell-2; renumerada '
                    || 'quando a fusao liberou o numero. O status nao muda aqui — quem admite '
                    || 'trafego continua sendo decidido pelo canary. ADR 2026-08-09.'
- WHERE cell_id = 'cell-2';
+ WHERE cell_id = 'cell-2'
+   AND NOT EXISTS (SELECT 1 FROM cells c WHERE c.cell_id = 'cell-1');
+
+-- Idem: numa re-execucao `cell-1` ja e a renumerada, e a `cell-2` reinserida pela 000006
+-- so precisa sumir.
+DELETE FROM cells WHERE cell_id = 'cell-2';
 
 -- ---------------------------------------------------------------------------------------------
 -- Fase 3 — os defaults deixam de gravar uma sentinela.
@@ -87,7 +105,7 @@ ALTER TABLE release_app_attestations ALTER COLUMN cell_id DROP DEFAULT;
 -- `NULL` passa a ser o unico sinal de "nao resolvido". O gatilho e BEFORE INSERT e roda antes da
 -- checagem de NOT NULL, entao um INSERT que omita a coluna e resolvido antes de a restricao
 -- olhar para a linha — comportamento documentado do Postgres, e provado por
--- api/internal/db/cell_identity_trigger_test.go, que existe porque afirmar sem provar e o que
+-- api/tests/integration/cell_identity_unification_test.go, que existe porque afirmar sem provar e o que
 -- este trabalho evita.
 --
 -- E quando o tenant tambem nao tem cell, a linha deixa de ser gravada. Um build cuja cell nao
