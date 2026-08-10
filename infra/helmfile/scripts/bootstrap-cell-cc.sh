@@ -32,11 +32,11 @@
 #
 # Examples:
 #   # Local k3d, cell-0 → cluster loopzero-cell-0:
-#   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env standalone-multi
+#   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env standalone-multi
 #
 #   # Drill DOKS, cell-1 → runtimeCluster2:
 #   DRILL_KUBECONFIG=/tmp/drill-kc/mgmt.yaml \
-#     bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
+#     bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
 #
 # Idempotent. Shellcheck clean.
 set -euo pipefail
@@ -85,10 +85,14 @@ if [[ -z "$CELL" ]] || [[ -z "$ENV" ]]; then
   usage
 fi
 
+# Uma cell por cluster. O conjunto era `default, 1, 2` — tres nomes para duas maquinas,
+# porque `default` e `1` mapeavam ambos para o mesmo cluster. A unificacao 1:1 de
+# 2026-08-09 (ADR docs/decisions/2026-08-09-cell-cluster-unification-adr.md) eliminou a
+# duplicata; `default` nao existe mais como cell.
 case "$CELL" in
-  default|1|2) ;;
+  0|1) ;;
   *)
-    echo "[bootstrap-cell-cc] --cell must be one of: default, 1, 2 (got: $CELL)" >&2
+    echo "[bootstrap-cell-cc] --cell must be one of: 0, 1 (got: $CELL)" >&2
     exit 1
     ;;
 esac
@@ -118,9 +122,11 @@ case "$ENV" in
     source "$LIB"
 
     # Resolve Pulumi output key per EC-4 mapping
+    # As chaves de output do Pulumi NAO mudam: sao contrato externo de codigo legado,
+    # vivo ate o corte AWS. So o lado da cell foi renumerado.
     case "$CELL" in
-      default|1) PULUMI_KEY="runtimeCluster" ;;
-      2)         PULUMI_KEY="runtimeCluster2" ;;
+      0) PULUMI_KEY="runtimeCluster" ;;
+      1) PULUMI_KEY="runtimeCluster2" ;;
     esac
 
     echo "[bootstrap-cell-cc] env=$ENV cell=$CELL_ID → Pulumi output key=$PULUMI_KEY"
@@ -138,9 +144,10 @@ case "$ENV" in
     source "$LIB"
 
     # Resolve k3d cluster name per EC-4 mapping (verified against B82)
+    # O nome do cluster E o da cell — era aqui que a relacao 2:1 vivia em shell.
     case "$CELL" in
-      default|1) K3D_CLUSTER="workload" ;;
-      2)         K3D_CLUSTER="runtime-2" ;;
+      0) K3D_CLUSTER="cell-0" ;;
+      1) K3D_CLUSTER="cell-1" ;;
     esac
 
     echo "[bootstrap-cell-cc] env=$ENV cell=$CELL_ID → k3d cluster=$K3D_CLUSTER"

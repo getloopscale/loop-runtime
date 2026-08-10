@@ -426,9 +426,9 @@ tasks:
       cache. Idempotent (safe to re-run; no-op if no Secret changes).
     cmds:
       # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
-      - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env standalone-multi
+      # Duas chamadas, nao tres: `default` e `1` apontavam para o mesmo cluster.
+      - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env standalone-multi
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env standalone-multi
-      - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env standalone-multi
       # Sprint A 2026-06-01 — refresh app-controller informer cache so all
       # 3 replicas see the final set of cluster Secrets at boot.
       - kubectl --context k3d-loopzero-core -n argocd rollout restart statefulset/argocd-application-controller

@@ -74,7 +74,7 @@ if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
   # `clustercredential-create.sh cell-1 runtime-2` call. Same root cause
   # as runtime above — the ADR-0008 canonical path is
-  # `bootstrap-cell-cc.sh --cell 2 --env <env>` which runs in the same
+  # `bootstrap-cell-cc.sh --cell 1 --env <env>` which runs in the same
   # Helmfile hook chain with CR name = cell-1.
 fi
 
