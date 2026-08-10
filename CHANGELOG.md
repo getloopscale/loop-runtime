@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Uma verificação automática lista todas as portas que o servidor abre e reprova qualquer uma que
+  apareça sem estar declarada. Antes a regra era o contrário — uma porta nova ficava aberta até
+  alguém lembrar de fechá-la —, e o resultado foi que dezessete portas se tornaram alcançáveis da
+  internet sem que ninguém tivesse decidido isso, entre elas o painel que entrega as aplicações e o
+  serviço de login sem criptografia. Cada porta agora tem uma classe e um responsável escritos, e só
+  a classe que declara um consumidor externo permanece aberta (BACKLOG.md B-028)
+
 - Um comando que verifica, contra o ambiente no ar, que nada da plataforma responde a quem não se
   identificou. Ele testa cada endereço público sem credencial nenhuma e exige recusa — e cobra
   resposta justamente das duas páginas que o padrão de login obriga a serem abertas. A lista do que
