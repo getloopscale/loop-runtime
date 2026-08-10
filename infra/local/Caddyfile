@@ -179,7 +179,7 @@ app-dev.loopzero.example {
     # devtools when prior version stripped Google Fonts via narrower header
     # CSP intersection. Plan caddyfile-app-dev-prod-bundle-file-server-
     # canonical v1.2.
-    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
@@ -250,10 +250,10 @@ app-dev.loopzero.example {
   # Proxy /v1/integrations/github/* to loopzero-cloud so install + callback
   # both work from app-dev.loopzero.example. Cookies are set with Domain=
   # loopzero.example (AUTH_COOKIE_DOMAIN) so they travel cross-subdomain
-  # back to cloud-dev when GitHub redirects.
+  # back to app-dev when GitHub redirects.
   handle /v1/integrations/github/* {
     reverse_proxy localhost:13002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host app-dev.loopzero.example
     }
   }
 
@@ -284,7 +284,7 @@ app-dev.loopzero.example {
   # canonical + CORS not needed. Aligns dev-public arch with MEET-040 via edge.
   handle /v1/* {
     reverse_proxy localhost:13002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host app-dev.loopzero.example
     }
   }
 
@@ -308,7 +308,7 @@ app-dev.loopzero.example {
   @auth_bff path /auth/login /auth/login/complete /auth/consent /auth/device
   handle @auth_bff {
     reverse_proxy localhost:13002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host app-dev.loopzero.example
     }
   }
 
@@ -327,7 +327,7 @@ app-dev.loopzero.example {
   # cross-origin proxy entry).
   handle /engine/* {
     reverse_proxy localhost:13002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host app-dev.loopzero.example
     }
   }
 
@@ -413,37 +413,18 @@ app-dev.loopzero.example {
     file_server
   }
 }
+# `cloud-dev.loopzero.example` foi REMOVIDO em 2026-08-10.
+#
+# Ele tinha duas metades e as duas ja estavam cobertas aqui. A carga era o webhook do
+# GitHub, que nao pode carregar JWT (o GitHub assina o corpo com HMAC) e por isso ia
+# direto ao loopzero-api; mas o webhook e registrado contra `app-dev`
+# (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) e o bloco `app-dev` acima ja
+# tem o mesmo desvio direto. A outra metade era um 301 de compatibilidade para clientes
+# antigos — que nao existem: a plataforma ainda nao foi lancada.
+#
+# O que sobrava era um host publico servindo redirecionamento e autorizado em CORS e em
+# URL de retorno de login. Superficie de auth concedida a ninguem.
 
-cloud-dev.loopzero.example {
-  # Plan release-blockers-2026-06-25-set T1.2 (closes #47).
-  # HSTS at the edge — the Go cloud middleware already emits CSP/nosniff/XFO/
-  # Referrer; only HSTS was missing per Red Team #47.
-  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
-
-  # Plan J-09 T4.1 (2026-06-06) — GitHub webhook bypass cloud auth proxy.
-  # GitHub does NOT send JWT/cookie -- it signs the body with HMAC-SHA256
-  # using the App's webhook secret. loopzero-api validates that signature
-  # directly (api/internal/github/webhook/handler.go). Routing this path
-  # through the loopzero-cloud /engine proxy would require adding a public
-  # (no-JWT) route there, widening loopzero-cloud's attack surface for no
-  # benefit. Instead Caddy hands the request straight to loopzero-api:3001
-  # so the HMAC check is the single boundary -- defense in layers via
-  # TLS at edge + HMAC at app. loopzero-cloud stays JWT-only.
-  handle /api/v1/webhooks/github {
-    reverse_proxy localhost:13001 {
-      header_up Host loopzero-api.loopzero-system.svc.cluster.local
-    }
-  }
-
-  # Canonical surface is app-dev.loopzero.example as of 2026-06-22 per
-  # qa-dogfood-cleanup-2026-06-21 #128/#122 (QA walkthrough audit).
-  # Everything OTHER than the GitHub webhook redirects to the canonical
-  # host so external CLI consumers + doc bookmarks don't 404 silently.
-  # 301 permanent so browsers + the LoopZero CLI follow + update bookmarks.
-  handle {
-    redir https://app-dev.loopzero.example{uri} 301
-  }
-}
 
 auth-dev.loopzero.example {
   # Plan release-blockers-2026-06-25-set T1.3 (closes #45 — HSTS on /auth-dev).
@@ -554,12 +535,12 @@ auth-dev.loopzero.example {
   # + 2 blocks — the matcher form is not fundamentally shorter).
   handle /self-service/registration/methods/password {
     reverse_proxy localhost:13002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host app-dev.loopzero.example
     }
   }
   handle /self-service/registration {
     reverse_proxy localhost:13002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host app-dev.loopzero.example
     }
   }
 

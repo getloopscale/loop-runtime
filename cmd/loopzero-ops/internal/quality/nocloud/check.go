@@ -107,7 +107,7 @@ func Check(cfg Config) (Outcome, error) {
 				}
 				rel, _ := filepath.Rel(root, path)
 				failures = append(failures,
-					fmt.Sprintf("%s:%d: cloud-dev default env-var (Caddy 301 redirect trap) — %s",
+					fmt.Sprintf("%s:%d: cloud-dev default env-var (host removido em 2026-08-10; antes era armadilha de 301, agora nao resolve) — %s",
 						rel, lineNum+1, strings.TrimSpace(line)),
 				)
 			}

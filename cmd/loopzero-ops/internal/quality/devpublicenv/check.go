@@ -35,8 +35,8 @@ type Outcome struct {
 var ErrViolations = errors.New("dev-public.yaml canonical shape violated")
 
 var (
-	localhostRE   = regexp.MustCompile(`localhost:4455|http://localhost|127\.0\.0\.1`)
-	legacyURLRE   = regexp.MustCompile(`https://(auth|app|cloud)\.loopzero\.dev`)
+	localhostRE    = regexp.MustCompile(`localhost:4455|http://localhost|127\.0\.0\.1`)
+	legacyURLRE    = regexp.MustCompile(`https://(auth|app|cloud)\.loopzero\.dev`)
 	devSuffixEnvRE = regexp.MustCompile(`LOOPZERO_(GITHUB|GOOGLE)_CLIENT_(ID|SECRET)_DEV`)
 )
 
@@ -63,20 +63,36 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	// Core public URLs
+	// Core public URLs.
+	//
+	// Um painel, um nome. `app-dev` e a superficie canonica desde 2026-06-22, mas o
+	// ambiente seguia declarando `cloud-dev` como dashboardOrigin e publicCloudUrl —
+	// dois nomes para a MESMA coisa, que so funcionava porque o `cloud-dev` respondia
+	// 301 para o `app-dev`. E o mesmo defeito que motivou a renomeacao dos clusters e a
+	// unificacao das cells, agora na camada de identidade: CORS e URL de retorno
+	// autorizando um host que existe apenas para redirecionar.
+	//
+	// O host `cloud-dev` foi removido em 2026-08-10. Antes de remove-lo foi verificado
+	// que as duas metades dele estavam cobertas: o webhook do GitHub ja e registrado
+	// contra `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) e o
+	// `app-dev` ja tem o mesmo desvio direto para o loopzero-api, entao nada dependia dele.
 	assertContains("publicAuthUrl points to auth-dev", `publicAuthUrl: "https://auth-dev.loopzero.example"`)
-	assertContains("publicCloudUrl points to cloud-dev", `publicCloudUrl: "https://cloud-dev.loopzero.example"`)
+	assertContains("publicCloudUrl points to app-dev", `publicCloudUrl: "https://app-dev.loopzero.example"`)
 	assertContains("uiBaseUrl points to app-dev", `uiBaseUrl: "https://app-dev.loopzero.example"`)
-	assertContains("dashboardOrigin points to cloud-dev", `dashboardOrigin: "https://cloud-dev.loopzero.example"`)
+	assertContains("dashboardOrigin points to app-dev", `dashboardOrigin: "https://app-dev.loopzero.example"`)
 	assertContains("cookieDomain is eTLD+1", `cookieDomain: "loopzero.example"`)
 
 	// CORS + allowedReturnUrls
 	assertContains("corsAllowedOrigins includes app-dev", `  - "https://app-dev.loopzero.example"`)
-	assertContains("corsAllowedOrigins includes cloud-dev", `  - "https://cloud-dev.loopzero.example"`)
-	// The exact hostnames are repeated for allowedReturnUrls; the two extra
-	// checks below assert the trailing-slash variants.
 	assertContains("allowedReturnUrls includes app-dev trailing slash", `  - "https://app-dev.loopzero.example/"`)
-	assertContains("allowedReturnUrls includes cloud-dev trailing slash", `  - "https://cloud-dev.loopzero.example/"`)
+
+	// E o inverso, que e o que impede o host de voltar por inercia: autorizar em CORS ou
+	// em URL de retorno um host que nao existe mais e superficie de auth concedida a
+	// ninguem.
+	if strings.Contains(text, "cloud-dev.loopzero.example") {
+		failures = append(failures, "PRESENT: cloud-dev.loopzero.example — o host foi removido em 2026-08-10; "+
+			"mante-lo em CORS/allowedReturnUrls autoriza uma origem que nao responde")
+	}
 
 	// No localhost leak
 	if localhostRE.MatchString(text) {

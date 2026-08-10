@@ -57,8 +57,9 @@ auth-dev.loopzero.example /credentials | reviewed | Hydra client credentials end
 auth-dev.loopzero.example /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
 auth-dev.loopzero.example /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
 
-# --- cloud-dev.loopzero.example ---------------------------------------------------
-cloud-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; response consumed by GitHub
+# cloud-dev.loopzero.example foi REMOVIDO em 2026-08-10 — era um segundo nome para o mesmo
+# painel, servindo 301, e o webhook do GitHub que justificava o host ja e registrado
+# contra app-dev (ver a linha app-dev.loopzero.example /api/v1/webhooks/github acima).
 
 # --- app/cloud/auth.loopzero.example — same droplet, non-"-dev" hostnames ---------
 # Same Caddy process and same upstreams as the -dev hosts (see the file header:

@@ -3,7 +3,6 @@
 # Provisions 3 A records on loopzero.example zone for dev-public env:
 #   auth-dev.loopzero.example  -> $DROPLET_IP
 #   app-dev.loopzero.example   -> $DROPLET_IP
-#   cloud-dev.loopzero.example -> $DROPLET_IP
 #
 # proxied=false because Caddy on droplet terminates TLS via Let's Encrypt
 # HTTP-01 challenge. Cloudflare proxy would intercept :80 and break ACME.
@@ -85,7 +84,7 @@ print(f\"  {r.get('name','?'):35s} {r.get('content','?'):20s} (id={r.get('id','?
 
 main() {
   log "zone=$ZONE droplet_ip=$DROPLET_IP dry_run=$DRY_RUN verify=$VERIFY"
-  for sub in auth-dev app-dev cloud-dev; do
+  for sub in auth-dev app-dev; do
     upsert_record "$sub"
   done
 
@@ -93,7 +92,7 @@ main() {
     log "waiting 10s for propagation..."
     sleep 10
     local all_ok=1
-    for sub in auth-dev app-dev cloud-dev; do
+    for sub in auth-dev app-dev; do
       local got
       got=$(dig +short "$sub.loopzero.example" @1.1.1.1 2>&1 | head -1)
       if [[ "$got" == "$DROPLET_IP" ]]; then
