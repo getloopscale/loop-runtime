@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (BACKLOG.md B-001)
 - O arquivo que declara de onde os segredos são lidos passou a se chamar pelo recurso que ele declara,
   em vez de pelo nome antigo do cluster (BACKLOG.md B-001)
+- **BREAKING —** os dois comandos que operam o cluster de segredos a partir do cluster central passaram
+  a citar o nome novo dele: `task k3d:secrets:bootstrap-in-core` e `task k3d:secrets:status-in-core`.
+  Quem digitar as formas antigas, terminadas em `-in-mgmt`, recebe "task not found" (BACKLOG.md B-001)
 - O inventário de verificações automáticas deixou de morar num arquivo cujo nome promete ser o retrato
   de uma data — ele era reescrito a cada verificação nova, então quem o abrisse esperando julho
   encontrava agosto. O arquivo datado voltou a conter o que continha na data (BACKLOG.md B-006)
