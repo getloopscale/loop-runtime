@@ -568,3 +568,24 @@ dod:
   - existe verificação que reprova quando a rota do webhook não está registrada, senão o próximo apagamento é igualmente silencioso
 
 > Registrado 2026-08-10 ao investigar por que o `cloud-dev` existia.
+
+
+## B-022 — O caminho do motor depende do painel estar de pé   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-live-test
+evidence: medido em 2026-08-10, por acidente. Ao sincronizar o Caddyfile canônico por cima do servidor, o `loopzero-cloud` ficou sem upstream alcançável — e **`/engine/*` e `/v1/*` devolveram 502 juntos**, embora o `loopzero-api` estivesse saudável o tempo todo (`curl http://localhost:13001/api/v1/health` → 200 durante toda a janela). A razão está em `loopzero-cloud/cmd/main.go:1678`: `r.Route("/engine")` tira o prefixo, aplica `requireJWT` e repassa ao motor. Ou seja, o painel é o proxy autenticador do motor, e cair leva os dois caminhos junto.
+why_now: o arranjo é deliberado e tem valor real — `r.Use(requireJWT)` no grupo `/engine` é o que mantém o `loopzero-api` **nunca exposto diretamente**: quem autentica é o plano de controle, e o motor só recebe o que já passou por ele. O que não está registrado é o custo: o CLI, que fala com o motor e não com o painel, fica sem deploy quando um componente de dashboard cai. Nenhum incidente até hoje veio disso — a medição veio de um acidente meu, não de uma queda real.
+status: raw
+severity: baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele.
+dod:
+  - está decidido se o caminho do motor mantém a dependência do painel ou ganha uma rota própria autenticada — e a decisão está num ADR, porque muda a fronteira de autenticação
+  - se mantiver: existe medição de quanto tempo o `loopzero-cloud` ficou indisponível no último trimestre, para a decisão ser sobre risco medido e não sobre desenho no quadro
+  - se mudar: o `loopzero-api` continua sem ser exposto diretamente sem autenticação — trocar o proxy por uma rota aberta seria piorar em nome de disponibilidade
+  - a sonda `loopzero-ops leak live` distingue "o motor está fora" de "o painel está fora", que hoje ela não faz: ambos aparecem como 502
+
+**Uma coisa que este item NÃO propõe.** Remover o `requireJWT` do grupo `/engine` para o CLI falar direto com o motor. Isso trocaria um problema de disponibilidade por um de segurança, e é a direção errada: a fronteira única de autenticação é o que há de mais valioso no arranjo atual.
+
+> Registrado 2026-08-10, medido por acidente durante a remoção do `cloud-dev`.
