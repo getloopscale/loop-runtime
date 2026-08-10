@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Um comando que verifica, contra o ambiente no ar, que nada da plataforma responde a quem não se
+  identificou. Ele testa cada endereço público sem credencial nenhuma e exige recusa — e cobra
+  resposta justamente das duas páginas que o padrão de login obriga a serem abertas. A lista do que
+  testar sai do inventário de endereços já existente, então um endereço novo entra na verificação
+  sozinho; se alguém declarar um e não disser como testá-lo, isso é reprovado em vez de passar
+  despercebido. Uma resposta "não encontrado" não conta como recusa: esconder não é negar, e aceitá-la
+  faria endereço quebrado passar por endereço protegido (BACKLOG.md B-020)
 - Uma verificação automática que prova que a renomeação dos clusters mudou apenas nomes de cluster, e
   nunca uma linha em que a mesma palavra significava outra coisa — como as 70 linhas em que "vault"
   nomeia o software de segredos, não o cluster (BACKLOG.md B-001)
