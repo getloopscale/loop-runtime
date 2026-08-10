@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   para renomear os dois clusters cujo nome descreve algo diferente do que eles são: o que hospeda o
   produto inteiro e o que guarda os segredos (BACKLOG.md B-001, B-002, B-005)
 
+### Removed
+
+- O endereço `cloud-dev` deixou de existir. Ele era um segundo nome para o mesmo painel: tudo que
+  chegava nele era redirecionado para `app-dev`, e a única coisa que ele de fato entregava — o aviso
+  que o GitHub manda quando alguém publica código — já era entregue no endereço novo. Enquanto
+  existia, ele constava como origem autorizada para login, o que é permissão concedida a um endereço
+  que ninguém usava (BACKLOG.md B-020)
+
 ### Fixed
 
 - Instalar a plataforma a partir de uma cópia recém-clonada do repositório voltou a funcionar. O passo

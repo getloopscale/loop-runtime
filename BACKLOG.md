@@ -527,3 +527,44 @@ dod:
   - existe verificação que reprova quando um manifesto agendado referencia imagem impossível de puxar, senão o próximo apodrecimento é igualmente silencioso
 
 > Registrado 2026-08-10 ao fechar o `B-018`. Mitigado no mesmo commit: `standalone-multi` deixou de agendá-los (`ciCronsEnabled: false`), e os ambientes com alvo real — `drill`, `standalone`, `dev`, `prod` — seguem com os quatro.
+
+
+## B-020 — O host `cloud-dev` era um segundo nome para o mesmo painel   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: perguntado pelo sponsor em 2026-08-10 — *"por que estamos expondo o cloud-dev?"*. A medição respondeu que ele tinha duas metades, e nenhuma se sustentava. A **carga** era o webhook do GitHub, que não pode carregar JWT (o GitHub assina o corpo com HMAC-SHA256) e por isso ia direto ao `loopzero-api` sem passar pelo proxy do painel — mas o webhook é registrado contra `app-dev` (`cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44`), e o bloco `app-dev` já tem o mesmo desvio direto. Nada entregava lá. A **compatibilidade** era um 301 para clientes antigos, que não existem: a plataforma ainda não foi lançada. O que sobrava era um host público servindo redirecionamento, declarado como `dashboardOrigin` e `publicCloudUrl` do ambiente, autorizado em `corsAllowedOrigins` e `allowedReturnUrls`, e recebendo o `Host` reescrito de seis rotas da borda.
+why_now: a pergunta surgiu ao ler o desenho do sistema, e o desenho só o listava porque ele respondeu 301 na sondagem — eu o havia incluído sem saber a razão de existir. É o mesmo defeito que motivou a renomeação dos clusters e a unificação das cells — "duas palavras, mesma coisa" —, agora na camada de identidade, com o agravante de autorizar em CORS e em URL de retorno um host que existia só para redirecionar.
+status: shipped
+dod:
+  - ~~o host sai da borda, do DNS e do ambiente~~ — **feito** (`d201168a`)
+  - ~~as seis reescritas de `Host` e o `connect-src` do CSP acompanham~~ — **feito**
+  - ~~o gate deixa de exigir o nome antigo e passa a reprovar seu retorno~~ — **feito**: `dev-public-env` reprova se `cloud-dev` reaparecer em CORS ou em URL de retorno, com teste próprio
+
+**Dois achados de passagem, ambos consertados no mesmo trabalho:**
+
+1. **`GITHUB_WEBHOOK_SECRET` não está semeado** — o log do `loopzero-api` diz *"github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled"*, e `POST /api/v1/webhooks/github` devolve 404 enquanto `POST /api/v1/health` devolve 405 (rota existe, método errado). O seed `5-seed-github-app-dev` falhou com `namespaces "loopzero-system" not found` porque rodou antes do namespace existir. **Auto-deploy a partir do GitHub está morto até a cadeia de seeds ser reexecutada** — e minha verificação anterior não pegou porque sondei `/engine/*` e login, não o webhook. Rastreado no `B-021`.
+
+2. **O conserto do `B-010` vivia só no servidor.** O Caddyfile canônico deste repositório seguia apontando para `localhost:13002` em nove lugares — a porta do `kubectl port-forward` que o B-010 aposentou. Sincronizar o arquivo canônico por cima do servidor **reverteu o conserto**, e `/engine/*` foi de 401 a 502 na hora. Corrigido em `69b08c91`, com guarda que reprova a string antiga: um conserto que vive só no servidor é uma correção esperando o próximo `git pull` para ser desfeita.
+
+> Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor.
+
+## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: medido em 2026-08-10 ao investigar o `cloud-dev`. `POST /api/v1/webhooks/github` devolve **404** por `app-dev` e direto no `loopzero-api` (`localhost:13001`), enquanto `POST /api/v1/health` devolve **405** — ou seja, a rota do webhook nem chega a ser registrada, não é erro de roteamento. O log do `loopzero-api` confirma: *"github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)"*. A causa está em `api/cmd/setup_github.go:152-158`: sem o segredo, `WebhookHandler` fica nil e o roteador não registra a rota. O seed que provisiona o segredo (`5-seed-github-app-dev`) reprovou com `namespaces "loopzero-system" not found` — ele rodou antes do namespace existir, durante a reconstrução.
+why_now: enquanto o segredo existiu no cluster, isto era invisível. A reconstrução total o apagou junto com tudo, e o seed que o recria falhou por ordem. **A consequência é que auto-deploy a partir do GitHub não funciona** — um `git push` no repositório de um cliente não dispara build nenhum. Não apareceu antes porque as sondagens de verificação cobriam `/engine/*` e os fluxos de login, e o webhook é a única superfície que não se testa com um GET.
+status: raw
+severity: alta — é uma jornada inteira do produto (conectar repositório → push → deploy) que está morta, e ela falha em silêncio: o GitHub recebe 404 e o usuário não vê erro nenhum no painel.
+dod:
+  - a cadeia de seeds pós-cleanroom completa sem falhas de pré-requisito, ou a ordem dela garante que o namespace exista antes do seed que depende dele
+  - `POST /api/v1/webhooks/github` deixa de devolver 404 — com assinatura inválida deve devolver 401, não 404
+  - um push real no repositório de fixture dispara um build, medido ponta a ponta
+  - existe verificação que reprova quando a rota do webhook não está registrada, senão o próximo apagamento é igualmente silencioso
+
+> Registrado 2026-08-10 ao investigar por que o `cloud-dev` existia.
