@@ -134,3 +134,22 @@ dashboardRoute:
   verification: /verification
   settings: /settings
   error: /login
+
+# Os CronWorkflows de CI/drill NAO sao agendados aqui.
+#
+# MEDIDO em 2026-08-10, na reconstrucao total do app-dev: o pod `drill-watchdog-*` ficava
+# em ImagePullBackOff, e a causa nao era credencial — `doctl registry get` responde
+# **404 registry does not exist**. A imagem que os quatro crons executam,
+# `registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, mora num registro DELETADO.
+# Ninguem consegue puxa-la, com ou sem token.
+#
+# Eles tambem nao tem alvo aqui: `drill:watchdog` e `drill:l2-scale` exercitam o ambiente
+# DRILL (DOKS), que nao existe num k3d local. Desligar nao remove cobertura deste
+# ambiente — ela nunca existiu.
+#
+# Pod vermelho recorrente e pior que ausencia de automacao: treina quem olha o cluster a
+# ignorar vermelho. Foi esse ruido que fez o watchdog ser o ULTIMO item investigado nesta
+# reconstrucao. Isto nao e o conserto — o conserto e republicar `loopzero-ops` num registro
+# alcancavel (BACKLOG.md B-019). O ambiente `drill`, que tem alvo de verdade, segue
+# agendando os quatro.
+ciCronsEnabled: false

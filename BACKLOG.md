@@ -499,3 +499,21 @@ dod:
   - derrubar e recriar os clusters não exige intervenção manual para o login voltar
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev.
+
+## B-019 — Os quatro CronWorkflows executam uma imagem cujo registro foi deletado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: medido em 2026-08-10, ao perseguir o último pod vermelho da reconstrução. `drill-watchdog-*` ficava em `ImagePullBackOff` no cluster de build; o container falho é `main=registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, declarado em `infra/helm/loopzero-ci-workflows/values.yaml:11`. **Não é credencial**: o `doctl` está autenticado (`paulohenriquevn@gmail.com`) e `doctl registry get` responde **`404 registry does not exist`** — o registro DigitalOcean inteiro foi deletado. Ninguém consegue puxar essa imagem, com token ou sem. Os **quatro** crons do chart (`drillWatchdog` a cada 6h, `weeklySoak`, `coverageReport`, `cosignDeadline`) executam a mesma imagem, então os quatro só podem falhar — o watchdog apenas dispara com mais frequência e por isso apareceu primeiro.
+why_now: enquanto o registro existiu, isto era invisível. A reconstrução total expôs porque destruir os clusters apagou o cache de imagens, e nenhum `imagePullSecret` resolve um registro que não existe. Um agendamento que produz pod vermelho a cada disparo é pior que automação ausente: treina quem olha o cluster a ignorar vermelho — foi exatamente esse ruído que fez este ser o último item investigado.
+status: raw
+severity: média — nenhum dos quatro serve o app-dev, mas `cosignDeadline` verifica o prazo do corte keyless do cosign e `coverageReport` alimenta a cobertura; ambos silenciosamente não rodam há tanto tempo quanto o registro não existe.
+dod:
+  - `loopzero-ops` está publicada num registro alcançável, ou os crons executam uma imagem que existe
+  - `ciCronsEnabled` volta a `true` em `standalone-multi`, ou está registrado por que ele fica desligado lá em definitivo
+  - está medido desde quando os quatro não rodam — e o que se perdeu nesse intervalo, em especial o prazo do cosign
+  - existe verificação que reprova quando um manifesto agendado referencia imagem impossível de puxar, senão o próximo apodrecimento é igualmente silencioso
+
+> Registrado 2026-08-10 ao fechar o `B-018`. Mitigado no mesmo commit: `standalone-multi` deixou de agendá-los (`ciCronsEnabled: false`), e os ambientes com alvo real — `drill`, `standalone`, `dev`, `prod` — seguem com os quatro.

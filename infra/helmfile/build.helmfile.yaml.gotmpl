@@ -129,6 +129,17 @@ releases:
       - argo-events/argo-events-bus
     values:
       - ../helm/loopzero-ci-workflows/values.yaml
+      # `ciCronsEnabled` e opt-out por ambiente e vale `true` para quem nao opinou, entao
+      # `drill` — o unico com alvo real — segue agendando sem precisar declarar nada.
+      - crons:
+          drillWatchdog:
+            enabled: {{ dig "ciCronsEnabled" true .Values }}
+          weeklySoak:
+            enabled: {{ dig "ciCronsEnabled" true .Values }}
+          coverageReport:
+            enabled: {{ dig "ciCronsEnabled" true .Values }}
+          cosignDeadline:
+            enabled: {{ dig "ciCronsEnabled" true .Values }}
 
   # Wave 0: Loki for build logs (NodePort 30100 for cross-cluster scrape)
   - name: loki
