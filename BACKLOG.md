@@ -445,3 +445,22 @@ dod:
   - está decidido se um chart cuja dependência remota some deve reprovar a instalação ou apenas avisar — hoje avisa, e a razão está escrita na própria task
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
+
+## B-016 — O token que puxa as imagens de plataforma do GHCR está inválido   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: medido no droplet app-dev em 2026-08-10, após a reconstrução total. Quatro componentes do cluster `loopzero-core` ficam em `ImagePullBackOff`: `loopzero-api`, `loopzero-cloud`, `loopzero-app-operator` e `loopzero-platform-operator` (13 pods problemáticos de 69; os clusters `loopzero-build`, `loopzero-cell-0` e `loopzero-cell-1` estão 100% limpos). O `dev-public` os puxa de `ghcr.io/getloopscale/loopzero-api:develop` com o `imagePullSecret` `ghcr-pull`, cuja fonte canônica é `~/.loopzero/ghcr-pull-token.txt` (`taskfiles/infra.yml:985,993`). O arquivo existe, tem 40 bytes e data de **2026-06-19**; testado direto contra o registro devolve **`HTTP 401`** para `develop`, `latest` e `main`. O Secret no cluster carrega o mesmo token (usuário `getloopscale`) e falha igual. `docker pull` sem credencial devolve `403`.
+why_now: a condição é anterior à reconstrução — o achado de 2026-08-09 já registrava GHCR inacessível a partir do droplet. O que mudou é que o cache local de imagens mascarava o problema: os pods rodavam com camadas puxadas meses atrás. `k3d cluster delete` levou o cache junto, e a dependência ficou exposta. **Não é regressão do rename**; é uma dependência que só aparece quando o ambiente sobe do zero, que é exatamente o que o mandato de cleanroom existe para forçar.
+status: raw
+severity: alta — sem isto, `app-dev.loopzero.example` não volta a servir. É o único item que separa a plataforma reconstruída de estar funcional.
+blocked_by: **credencial** — emitir um PAT do GitHub com escopo `read:packages` para `getloopscale` não é ação que o agente possa executar. Não há caminho técnico que contorne isso sem trocar a origem das imagens.
+dod:
+  - `~/.loopzero/ghcr-pull-token.txt` contém um token que devolve `HTTP 200` para `ghcr.io/v2/getloopscale/loopzero-api/manifests/develop`
+  - `task images:ghcr:pullsecret` reprovisiona o Secret nos 4 clusters e os 4 deployments saem de `ImagePullBackOff`
+  - está decidido se o dev-public continua dependendo de imagem publicada ou se ganha um caminho de build local — hoje `task images:build` produz os operators no registry k3d, mas **não** `loopzero-api` nem `loopzero-cloud`, então o caminho local não existe inteiro
+  - se as imagens não estiverem publicadas no GHCR (o `401` não distingue ausente de não-autorizado), isso fica dito, porque muda o conserto de "renovar token" para "publicar imagem"
+
+> Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
