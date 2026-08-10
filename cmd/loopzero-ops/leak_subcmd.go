@@ -16,6 +16,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
 )
@@ -23,7 +26,8 @@ import (
 const leakHelpText = `loopzero-ops leak — sonda LIVE da superfície pública
 
 USAGE:
-  loopzero-ops leak live [flags]
+  loopzero-ops leak live  [flags]   sonda a borda pública sem credencial
+  loopzero-ops leak ports [flags]   audita as portas do host contra o registro declarado
 
 O QUE ELA PROVA:
   Que a borda pública NEGA sem credencial (401/403) ou leva ao login (302), e que as
@@ -61,8 +65,11 @@ func runLeak(args []string) int {
 		fmt.Print(leakHelpText)
 		return 0
 	}
+	if args[0] == "ports" {
+		return runLeakPorts(args[1:])
+	}
 	if args[0] != "live" {
-		fmt.Fprintf(os.Stderr, "subcomando desconhecido %q (use: live)\n", args[0])
+		fmt.Fprintf(os.Stderr, "subcomando desconhecido %q (use: live|ports)\n", args[0])
 		return 1
 	}
 
@@ -210,4 +217,96 @@ func probePlaceholders() []string {
 		return nil
 	}
 	return leak.PlaceholderLeak(string(out))
+}
+
+// runLeakPorts audita o que escuta no host contra `infra/quality/host-ports.txt`.
+//
+// FECHADO POR PADRÃO: porta que escuta em 0.0.0.0 e não está no registro REPROVA. O
+// firewall anterior tinha a polaridade oposta — abria por padrão, fechava por lista — e a
+// medição de 2026-08-10 encontrou 17 portas alcançáveis da internet fora de qualquer
+// lista, entre elas o ArgoCD e a identidade sem TLS.
+func runLeakPorts(args []string) int {
+	fs := flag.NewFlagSet("leak ports", flag.ContinueOnError)
+	registro := fs.String("registry", "infra/quality/host-ports.txt", "registro declarado")
+	asJSON := fs.Bool("json", false, "saída legível por máquina")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	decls, err := leak.ParsePorts(*registro)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+
+	escutando, err := portasEscutando()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "não foi possível ler as portas em escuta: %v\n", err)
+		return 1
+	}
+
+	naoDecl, obsoletas := leak.AuditPorts(escutando, decls)
+	fechar := leak.PortsToClose(escutando, decls)
+
+	if *asJSON {
+		rep := map[string]any{
+			"escutando": len(escutando), "declaradas": len(decls),
+			"nao_declaradas": naoDecl, "obsoletas": obsoletas, "a_fechar": fechar,
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(rep); err != nil {
+			return 1
+		}
+	} else {
+		fmt.Printf("  escutando em 0.0.0.0: %d   declaradas: %d\n", len(escutando), len(decls))
+		for _, f := range naoDecl {
+			fmt.Printf("  FAIL  porta %-6d %s\n", f.Port, f.Why)
+		}
+		for _, f := range obsoletas {
+			fmt.Printf("  WARN  porta %-6d %s\n", f.Port, f.Why)
+		}
+		fmt.Printf("\n  a fechar (classe não admite alcance externo): %d\n", len(fechar))
+		for _, d := range fechar {
+			fmt.Printf("    %-6d %-8s %s\n", d.Port, d.Class, d.Reason)
+		}
+	}
+
+	if len(naoDecl) > 0 {
+		fmt.Fprintf(os.Stderr, "\n%d porta(s) escutam sem estar no registro. O registro é fechado por "+
+			"padrão: declare cada uma com a classe e o consumidor, ou feche.\n", len(naoDecl))
+		return 1
+	}
+	return 0
+}
+
+// portasEscutando lê as portas TCP em escuta em endereço de todas as interfaces.
+func portasEscutando() ([]int, error) {
+	out, err := exec.Command("ss", "-ltn").Output()
+	if err != nil {
+		return nil, err
+	}
+	vistas := map[int]bool{}
+	for _, linha := range strings.Split(string(out), "\n") {
+		campos := strings.Fields(linha)
+		if len(campos) < 4 {
+			continue
+		}
+		addr := campos[3]
+		if !strings.HasPrefix(addr, "0.0.0.0:") && !strings.HasPrefix(addr, "[::]:") {
+			continue
+		}
+		i := strings.LastIndex(addr, ":")
+		p, err := strconv.Atoi(addr[i+1:])
+		if err != nil {
+			continue
+		}
+		vistas[p] = true
+	}
+	var portas []int
+	for p := range vistas {
+		portas = append(portas, p)
+	}
+	sort.Ints(portas)
+	return portas, nil
 }

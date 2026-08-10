@@ -1,0 +1,88 @@
+# Registro de portas do host — lido por `loopzero-ops leak ports`.
+#
+# POLARIDADE: FECHADO POR PADRÃO. Uma porta que escuta em 0.0.0.0 e não aparece aqui é
+# uma REPROVAÇÃO, não um silêncio. O firewall que existia antes fazia o inverso — abria
+# por padrão e fechava por lista —, e o resultado foi medido em 2026-08-10: 39 portas
+# escutando, 20 na lista de bloqueio, e 17 alcançáveis da internet sem estar em lista
+# nenhuma. Entre elas o ArgoCD, o cluster de segredos e a identidade sem TLS.
+#
+# A causa não foi descuido: a lista de bloqueio foi escrita quando os clusters se
+# chamavam mgmt/workload/runtime-2/vault, e tudo que subiu depois nasceu fora dela. Uma
+# lista de NEGAÇÃO envelhece para o lado inseguro — a de PERMISSÃO envelhece para o lado
+# seguro, que é a única direção aceitável numa regra de segurança.
+#
+# FORMATO
+#   <porta> | <classe> | <quem consome, e como isso foi medido>
+#
+# CLASSES
+#   edge      — a borda (Caddy) publica em HTTPS; a porta crua NÃO deve ser alcançável
+#   external  — consumidor legítimo FORA do host, nomeado e medido. Exige evidência.
+#   host      — consumido pelo próprio host (Caddy, scripts); nunca da internet
+#   admin     — painel ou API de infraestrutura; nunca da internet
+#
+# Só a classe `external` permanece alcançável da internet. Todas as outras são fechadas.
+# Adicionar uma linha `external` sem nomear o consumidor e sem dizer como foi medido é o
+# mesmo que desligar o controle.
+
+# --- external: alcançáveis da internet, com consumidor medido -----------------------
+# Estas duas já foram fechadas uma vez, em 2026-07-30, e quebraram dois gates de CI que
+# sondam o droplet de FORA (`dev-version-drift.yml` do loopzero-rag e do loopzero-lens). Os dois
+# estavam verdes em toda execução até 23:2xZ e falharam na primeira execução depois das
+# regras (03:3xZ / 03:4xZ) com "dev host inalcançável após 8 tentativas". O gate é
+# CONTROLE — é ele que detecta deploy —, então fechar sem substituir o caminho de
+# verificação troca uma exposição por uma cegueira.
+8787  | external | therag_api — lido por loopzero-rag/dev-version-drift.yml de um runner do GitHub
+18084 | external | OTLP loopzero-lens — lido por loopzero-lens/dev-version-drift.yml de um runner do GitHub
+22    | external | SSH do operador — é como esta própria medição foi feita
+
+# --- edge: a borda publica em HTTPS; a porta crua fecha -----------------------------
+# Kratos e Hydra ganharam ponte NodePort em 2026-08-10 (B-018) para a borda alcançá-los
+# sem `kubectl port-forward`. A ponte é para o HOST, não para a internet: `auth-dev`
+# serve os dois em HTTPS, e a porta crua é o mesmo serviço SEM TLS.
+14433 | edge  | Kratos público — a borda serve em https://auth-dev.loopzero.example
+14444 | edge  | Hydra público — idem
+3000  | edge  | NodePort atrás do Caddy
+3002  | edge  | loopzero-cloud — a borda serve em https://app-dev.loopzero.example
+13001 | edge  | loopzero-api — alcançado pelo loopzero-cloud, nunca direto
+8092  | edge  | ingress do workspace — consumo é do host, pelo Caddy
+8443  | edge  | ingress TLS
+8444  | edge  | ingress TLS
+
+# --- admin: painel ou API de infraestrutura ----------------------------------------
+30082 | admin | ArgoCD — o entregador GitOps não tem nada a fazer na internet
+30095 | admin | serverlb do cluster de segredos
+6443  | admin | API do Kubernetes — cluster core
+6444  | admin | API do Kubernetes
+6445  | admin | API do Kubernetes
+6446  | admin | API do Kubernetes
+6447  | admin | API do Kubernetes
+8200  | admin | OpenBao
+9090  | admin | Prometheus
+9001  | admin | console do MinIO
+5000  | admin | registro de contêineres — respondia HTTP 200 na internet antes do firewall
+
+# --- host: consumido pelo próprio host ----------------------------------------------
+5432  | host  | Postgres — memórias multi-tenant
+5434  | host  | Postgres — loopzero-lens
+8080  | host  | themory_app — consumido pela borda
+8090  | host  | ingress de célula
+8091  | host  | ingress de célula
+30081 | host  | serverlb do cluster de build
+30090 | host  | serverlb do cluster de build
+30091 | host  | serverlb da cell-0
+30093 | host  | processo do host
+30094 | host  | ponte de logs entre clusters — lida pelo loopzero-api
+30120 | host  | serverlb do cluster de build
+30191 | host  | serverlb da cell-1
+30193 | host  | serverlb do cluster de build
+30194 | host  | serverlb do cluster de build
+
+# --- plano de dados: pendente de classificação --------------------------------------
+# Estes cinco servem HTTP direto, contornando a borda. NÃO foram fechados ainda porque a
+# lição de 2026-07-30 se aplica: pode haver gate de CI sondando de fora, como acontecia
+# com 8787 e 18084. Classificar exige medir quem os consome — até lá ficam registrados
+# como pendência explícita, e não como omissão (BACKLOG.md B-028).
+18083 | pendente | loopzeropromptly_app — consumidor não medido
+18085 | pendente | loopzerotrust_app — consumidor não medido
+18087 | pendente | loopzeroskill_app — consumidor não medido
+18090 | pendente | gateway MCP do workspace — consumidor não medido
