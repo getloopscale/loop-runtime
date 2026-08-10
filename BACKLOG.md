@@ -428,3 +428,20 @@ dod:
   - se a conclusão for que a rajada não é testável de forma determinística nesta forma, o teste é removido e o que ele protegia fica dito explicitamente
 
 > Registrado 2026-08-10 ao rodar a suíte completa durante a unificação cell↔cluster (`B-005`).
+
+## B-015 — Dois charts apontam para versões que não existem mais no upstream   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: medido no droplet app-dev em 2026-08-10, durante a reconstrução total. Ao vendorizar as dependências de todos os charts, dois falharam contra o upstream: `infra/helm/k6-operator/` — *"can't get a valid version for 1 subchart(s): \"k6-operator\" (repository https://grafana.github.io/helm-charts, version 3.10.0)"* — e `infra/helm/keda-http-addon/` — *"http-add-on chart not found in repo https://kedacore.github.io/charts"*. Os outros 16 charts com dependências vendorizaram sem erro. Nenhum dos dois está no caminho de `task setup` (a instalação completou com eles falhando), então o impacto hoje é potencial, não atual.
+why_now: apareceu porque a reconstrução a partir de clone limpo é a única situação que exercita `helm dependency build` em todos os charts de uma vez — o `B-015` é filho direto do defeito que o `9918556b` corrigiu. Enquanto ninguém instalava do zero, as duas quebras ficaram invisíveis. Elas mordem no dia em que alguém precisar de k6 ou do KEDA HTTP add-on, que é exatamente um dia em que já se está resolvendo outro problema.
+status: raw
+severity: baixa — nada instalado hoje depende deles; alta no dia em que depender, porque a falha aparece no meio de uma instalação e não no momento em que a versão sumiu do upstream.
+dod:
+  - cada um dos dois tem versão (ou nome de chart) válida contra o repositório upstream atual, ou está declarado como removido com a razão
+  - `task validate:helm-deps` termina com `0 com upstream indisponível`
+  - está decidido se um chart cuja dependência remota some deve reprovar a instalação ou apenas avisar — hoje avisa, e a razão está escrita na própria task
+
+> Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
