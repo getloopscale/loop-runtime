@@ -466,7 +466,7 @@ dod:
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
 
 
-## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [ ]
+## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
 
 domain: control-plane
 repo: loopzero-cloud
@@ -481,9 +481,13 @@ dod:
   - o build compila o pacote (`./cmd`), não um arquivo
   - existe verificação que constrói por este Dockerfile **sem** o token disponível, senão o próximo apodrecimento é invisível igual
 
-> Registrado 2026-08-10 durante a reconstrução total do app-dev. As correções foram aplicadas apenas numa cópia de build; **o repositório `loopzero-cloud` segue com os dois defeitos**.
+**RESOLVIDO NO REPOSITÓRIO em 2026-08-10** — `loopzero-cloud@1dfb3513`. Os dois defeitos corrigidos no arquivo de verdade, não mais numa cópia de build: o `replace` passou a citar o caminho de módulo atual, e o build passou a compilar o pacote (`./cmd`) em vez de um arquivo.
 
-## B-018 — A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild   [ ]
+**Provado por execução, no cenário para o qual o arquivo existe**: clone limpo do commit publicado, `loopzero-contracts` na `v0.4.0`, e `docker build -f loopzero-cloud/Dockerfile.local` **sem segredo algum** → OK. Antes do conserto o mesmo comando falhava em `git ls-remote` (defeito 1) e, passado esse, em `undefined: newTrustDashboardKeyResolver` (defeito 2).
+
+Guarda: `internal/ci/dockerfile_local_test.go` compara o `replace` injetado com o que o `go.mod` **declara** — em vez de fixar a string, que é como o defeito entrou — e reprova qualquer alvo de build terminado em `.go`. RED antes de GREEN nos dois.
+
+## B-018 — A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild   [x]
 
 domain: engine-go
 repo: loopzero
@@ -497,6 +501,12 @@ dod:
   - Kratos e Hydra são alcançados pela borda sem `kubectl port-forward`, ou o encaminhamento é uma unidade supervisionada e declarada como as irmãs
   - a escolha vale para os dois, e não só para o que quebrou primeiro
   - derrubar e recriar os clusters não exige intervenção manual para o login voltar
+
+**RESOLVIDO em 2026-08-10** — `loopzero@ddf6e3a4`. Kratos e Hydra ganharam pontes NodePort com porta FIXA (`30005`/`30006`), o `core-cluster.yaml` publica `14433:30005` e `14444:30006`, e o Caddyfile já apontava para essas portas. As pontes são aditivas: os Services ClusterIP do chart seguem intactos.
+
+**Prova de que o encaminhamento saiu do caminho**: `ps -eo cmd | grep -c "^kubectl port-forward"` devolve **0**, as portas 14433/14444 são mantidas por **`docker-proxy`** (o loadbalancer do k3d), e `auth-dev/health/alive` responde **200** com os fluxos de login e registro em **303**.
+
+Aplicado sem recriar cluster (`k3d cluster edit --port-add`), então não houve regressão nas demais portas publicadas. Guarda: `infra/tests/charts/ory_edge_nodeport_test.go` trava as três pontas juntas — Service, mapeamento e Caddyfile —, porque foi a divergência entre elas que produziu o 502 com tudo saudável.
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev.
 
