@@ -205,8 +205,10 @@ evidence: hoje a relação é **2:1** — `infra/helmfile/scripts/bootstrap-cell
 why_now: nasceu da medição do `B-001`. O mapa original do rename (`loopzero-workload` → `cell-1`) foi refutado porque criaria homônimo entre o nome do cluster e o de uma das duas cells que rodam nele. O CTO decidiu em 2026-08-09 pela saída de fundo: **eliminar a relação 2:1** e fazer cell↔cluster 1:1, o que torna `cell-N` um nome não-ambíguo para o cluster e alinha de vez a infra ao vocabulário que o código já usa. Sem isto, a metade `cell` do `B-001` fica bloqueada.
 status: triaged
 blocks: a metade `cell` do `B-001` (`loopzero-workload`/`loopzero-runtime-2` → `cell-N`). As metades `mgmt`→`core` e `vault`→`secrets` **não** dependem deste item e seguem em planejamento.
+**Medição de 2026-08-10 (droplet app-dev), que fecha o primeiro bullet do DoD:** `select cell_id, count(*) from tenants group by cell_id` retorna **`cell-default | 94`** e mais nada — zero tenants em `cell-1`, zero em `cell-2`. E `select cell_id, status from cells` retorna as três como `active`, ou seja, a migration `000007_activate_cell_2` de fato ativou a cell-2. Consequência para o desenho: **a unificação não migra tenant nenhum entre cells** — os 94 estão todos na cell de compatibilidade, e o trabalho é reapontá-los para uma cell nomeada, não redistribuí-los. Isso muda o tamanho da migração de "mover 94 tenants" para "renomear a cell de 94 tenants", que são coisas diferentes na reunião T3.
+
 dod:
-  - está medido quantos tenants estão hoje em cada cell e o que acontece com os de `cell-default` na unificação — migração de dados não se planeja sem contagem
+  - ~~está medido quantos tenants estão hoje em cada cell~~ — **MEDIDO 2026-08-10: 94 em `cell-default`, 0 nas demais**; falta o que acontece com eles na unificação
   - o caminho dev-public/standalone continua funcionando sem a constante `DefaultCellID`, ou a substituição dela está explícita
   - `CHECK (cell_id ~ '^cell-[a-z0-9-]+$')` continua satisfeito pelos ids finais
   - existe ADR T3, com reunião antes de código, cobrindo schema + placement + ClusterCredential
@@ -346,4 +348,23 @@ dod:
   - `loopzeropromptly_mcp` fica `Up (healthy)` no droplet, não `Restarting`
 
 > B-011 e B-012 registrados 2026-08-10 durante o diagnóstico do app-dev.
+
+## B-013 — O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: medido no droplet em 2026-08-10. `kubectl --context k3d-loopzero-runtime-2 get nodes` mostra `k3d-loopzero-runtime-2-agent-0` **`NotReady`**, com `Kubelet stopped posting node status` e `lastHeartbeatTime = 2026-07-23T14:36:39Z` — 18 dias parado. O container Docker está **`Up 2 semanas`**: o processo vive, o k3s dentro dele não. O log daquele dia registra a morte: `Shutdown request received: failed to start networking: unable to initialize network policy controller: error getting node subnet: failed to find interface with specified node ip` — deriva de IP na rede Docker. Reiniciei o container (2026-08-10 03:15): o k3s **inicia** (`Starting k3s agent v1.32.13+k3s1`) e então trava em `Waiting to retrieve agent configuration; server is not ready: failed to retrieve configuration from server: **not authorized**` — o token do agente já não bate com o do servidor. Consequência colateral: os 6 pods em `Terminating` há 18-28 dias estão todos nesse nó, e um nó NotReady nunca confirma deleção; todos têm substituto `Running` no nó servidor, então não há degradação de serviço por causa deles.
+why_now: encontrado ao perseguir os 6 pods `Terminating` até a origem, em vez de forçar a remoção deles. Forçar teria escondido o nó morto.
+status: raw
+severity: **baixa, e a medição é o que permite dizer isso.** `select cell_id, count(*) from tenants` retorna 94 em `cell-default` e **zero** em `cell-2` — o cluster degradado não hospeda nenhum tenant. É capacidade reserva pela metade, não impacto de usuário.
+dod:
+  - `k3d-loopzero-runtime-2-agent-0` volta a `Ready` e o kubelet reporta heartbeat atual
+  - os 6 pods `Terminating` desaparecem sozinhos, sem `--force` — se sumirem só à força, o nó não foi consertado
+  - está decidido se o k3d ganha um passo canônico de re-registro de agente, ou se o caminho é recriar o nó
+
+**Por que não improvisei.** `infra/scripts/local/k3d-cross-cluster-heal.sh` cobre H1–H7 — rede, `/etc/hosts`, RBAC, Secrets de kubeconfig — e **nenhum** trata token de nó. Sem caminho canônico, recriar um nó num cluster vivo para restaurar capacidade que ninguém usa é trocar um defeito conhecido por um risco desconhecido. Com o impacto medido em zero tenants, registrar é a decisão mais defensável que agir.
+
+> Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `cell2-agent-node-unauthorized`).
 
