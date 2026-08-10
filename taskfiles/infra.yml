@@ -226,9 +226,15 @@ tasks:
       # generate-runtime-secrets.sh against the workload context (KUBECONFIG,
       # no global current-context mutation). Idempotent.
       - |
+        # O CLUSTER VEM DO PARAMETRO. Enquanto foi `loopzero-cell-0` fixo, este passo gerava o
+        # Secret `static-assets-s3` SEMPRE na primeira celula — e o `static-assets` da
+        # segunda ficava em CreateContainerConfigError com "secret not found", medido em
+        # 2026-08-10. E a mesma classe do defeito do contexto fixo, uma camada abaixo: nao
+        # basta instalar em cada celula se os segredos so nascem numa delas.
+        CELL_CTX_K3D="{{.CELL_CTX}}"; CELL_CTX_K3D="${CELL_CTX_K3D#k3d-}"
         S3_KEY=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
         S3_SECRET=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
-        KUBECONFIG=$(k3d kubeconfig write loopzero-cell-0) \
+        KUBECONFIG=$(k3d kubeconfig write "${CELL_CTX_K3D}") \
           LOOPZERO_PROFILE=standalone-multi \
           LOOPZERO_S3_ACCESS_KEY="$S3_KEY" LOOPZERO_S3_SECRET_KEY="$S3_SECRET" \
           bash infra/helmfile/scripts/generate-runtime-secrets.sh standalone-multi workload
