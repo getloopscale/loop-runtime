@@ -398,6 +398,12 @@ tasks:
           --kube-context {{.CORE_CONTEXT}} \
           --selector name=ory-kratos --selector name=ory-hydra \
           sync --skip-deps
+      # Pontes NodePort para a borda. Sem elas, `auth-dev` so e alcancavel por
+      # `kubectl port-forward` — que morreu com os clusters em 2026-08-10 e derrubou o
+      # login com Kratos e Hydra saudaveis (B-018, mesmo defeito do B-010). Aditivas: os
+      # Services ClusterIP do chart seguem intactos.
+      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-kratos/nodeport-service.yaml
+      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-hydra/nodeport-service.yaml
       - task: cloud:health
 
   cloud:health:

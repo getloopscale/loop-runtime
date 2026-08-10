@@ -30,6 +30,17 @@ ports:
   - port: 30093:30093
     nodeFilters:
       - loadbalancer
+  # Borda -> identidade. Kratos e Hydra sao ClusterIP no chart, e a borda os alcancava por
+  # `kubectl port-forward` nao supervisionado: destruir os clusters em 2026-08-10 matou os
+  # processos e derrubou o login, com os dois servicos saudaveis (B-018, mesmo defeito do
+  # B-010). Pareado com infra/helm/ory-{kratos,hydra}/nodeport-service.yaml e com o
+  # `localhost:14433`/`localhost:14444` do Caddyfile.
+  - port: 14433:30005
+    nodeFilters:
+      - loadbalancer
+  - port: 14444:30006
+    nodeFilters:
+      - loadbalancer
   # 30094 exposes loki-cross-cluster so Promtail (build cluster) can ship workflow
   # pod logs to Loki (mgmt cluster). Without this, `loopzero logs --build <id>` works
   # only if logs arrive via another path. F1.4 E2E validation 2026-04-23.

@@ -1,0 +1,39 @@
+# Ponte NodePort — expõe o Hydra público para a borda (Caddy) do host.
+#
+# Irmão de `infra/helm/ory-kratos/nodeport-service.yaml`, criado pela mesma medição de
+# 2026-08-10 e pelo mesmo motivo: o Service do chart é ClusterIP e a borda o alcançava por
+# `kubectl port-forward` não supervisionado, que morreu junto com os clusters.
+#
+# O Hydra aparece no fluxo de login logo depois do Kratos — o Caddyfile registra que "o
+# navegador precisa alcançar o Hydra (localhost:14444), não o Kratos" no passo de consentimento.
+# Consertar só o Kratos deixaria o login quebrando um passo adiante, que é o meio-conserto
+# que o B-018 existe para não repetir.
+#
+# AS TRÊS PONTAS: este Service (`nodePort: 30006`), o mapeamento `14444:30006` em
+# `infra/k3d/core-cluster.yaml`, e o `localhost:14444` do Caddyfile.
+# `infra/tests/charts/ory_edge_nodeport_test.go` trava as três.
+#
+# ATENÇÃO À PORTA: o Service do chart do Hydra escuta em 4444, e NÃO em 80 como o do Kratos.
+# Um encaminhamento para 80 aqui produz um Service que existe, tem endpoints, e recusa
+# conexão — medido ao restaurar o encaminhamento manual, que respondeu `HTTP 000` até a
+# porta ser corrigida.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ory-hydra-public-nodeport
+  namespace: loopzero-auth
+  labels:
+    app.kubernetes.io/name: hydra
+    app.kubernetes.io/instance: ory-hydra
+    app.kubernetes.io/component: edge-bridge
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: hydra
+    app.kubernetes.io/instance: ory-hydra
+  ports:
+    - name: http
+      port: 4444
+      targetPort: http-public
+      nodePort: 30006
+      protocol: TCP
