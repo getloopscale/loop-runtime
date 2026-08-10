@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A verificação que compara o painel com o contrato do motor parou de acusar rotas que ninguém chama.
+  Ela lia o arquivo inteiro procurando endereços, inclusive dentro de comentários — então um comentário
+  que **descrevia** um problema passado, citando os endereços envolvidos, era contado como uso real. A
+  verificação passou a ignorar comentários (BACKLOG.md B-008)
 - O comando que recria um cluster isolado voltou a recriá-lo. Ele derivava o nome do cluster do rótulo
   digitado e não do arquivo de configuração que usava para criá-lo; quando os dois divergiram, o comando
   apagava um cluster inexistente, criava outro com nome diferente e anunciava sucesso. Rótulo e nome do
