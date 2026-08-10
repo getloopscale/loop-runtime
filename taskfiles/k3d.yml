@@ -145,15 +145,15 @@ tasks:
         case "$CLUSTER" in
           core)    CONFIG="infra/k3d/core-cluster.yaml";   INSTALL_TASK="infra:install:core" ;;
           build)   CONFIG="infra/k3d/build-cluster.yaml";  INSTALL_TASK="infra:install:build" ;;
-          cell-0)  CONFIG="infra/k3d/cell-0-cluster.yaml"; INSTALL_TASK="infra:install:cell"; export LOOPZERO_CELL_CONTEXT="k3d-loopzero-cell-0" ;;
-          cell-1)  CONFIG="infra/k3d/cell-1-cluster.yaml"; INSTALL_TASK="infra:install:cell"; export LOOPZERO_CELL_CONTEXT="k3d-loopzero-cell-1" ;;
+          cell-0)  CONFIG="infra/k3d/cell-0-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loopzero-cell-0" ;;
+          cell-1)  CONFIG="infra/k3d/cell-1-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loopzero-cell-1" ;;
           *)       echo "Unknown cluster: $CLUSTER. Use core, build, cell-0, or cell-0."; exit 1 ;;
         esac
         echo "Recreating loopzero-${CLUSTER}..."
         k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true
         k3d cluster create --config "$CONFIG"
         echo "Installing components..."
-        task "$INSTALL_TASK"
+        task "$INSTALL_TASK" ${CELL_CTX_ARG:+CELL_CTX="$CELL_CTX_ARG"}
         echo "Done. loopzero-${CLUSTER} recreated."
 
   # ---------------------------------------------------------------------------

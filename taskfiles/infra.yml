@@ -209,6 +209,12 @@ tasks:
 
   infra:install:cell:
     desc: Install platform components in workload cluster via Helmfile (T2.3 of plan 2026-05-22)
+    # `requires` e o mecanismo NATIVO do Task: a task RECUSA rodar sem CELL_CTX, em vez
+    # de cair num padrao silencioso. Um default para a cell-0 recriaria o defeito na
+    # primeira chamada que esquecesse de passar o parametro — que foi exatamente como a
+    # divergencia entre as celulas nasceu.
+    requires:
+      vars: [CELL_CTX]
     deps: [helm:repos]
     cmds:
       # Pre-sync: runtime secrets on the workload cluster. The master sync below
@@ -244,12 +250,12 @@ tasks:
       - >-
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
         -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
-        --kube-context "{{.CELL_CTX | default (env \"LOOPZERO_CELL_CONTEXT\") | required \"CELL_CTX ausente. Esta task instala a plataforma de UMA celula; um padrao silencioso instalaria sempre na mesma\"}}"
+        --kube-context "{{.CELL_CTX}}"
         sync --skip-deps
       # Post-sync: Traefik middlewares + wildcard cert + TLSStore
       # (these are non-helm CRs that depend on Traefik + cert-manager CRDs being installed)
-      - kubectl --context "{{.CELL_CTX | default (env \"LOOPZERO_CELL_CONTEXT\") | required \"CELL_CTX ausente. Esta task instala a plataforma de UMA celula; um padrao silencioso instalaria sempre na mesma\"}}" apply -f infra/helm/traefik/middlewares.yaml
-      - kubectl --context "{{.CELL_CTX | default (env \"LOOPZERO_CELL_CONTEXT\") | required \"CELL_CTX ausente. Esta task instala a plataforma de UMA celula; um padrao silencioso instalaria sempre na mesma\"}}" apply -f infra/helm/cert-manager/traefik-tls.yaml
+      - kubectl --context "{{.CELL_CTX}}" apply -f infra/helm/traefik/middlewares.yaml
+      - kubectl --context "{{.CELL_CTX}}" apply -f infra/helm/cert-manager/traefik-tls.yaml
 
   infra:install:monitoring:
     desc: |
