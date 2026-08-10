@@ -141,3 +141,32 @@ func TestEdgeConfigUsesThePublishedPorts(t *testing.T) {
 		})
 	}
 }
+
+// TestEdgeDoesNotProxyToAPortForward fecha o B-010 onde ele ficou aberto.
+//
+// O B-010 trocou o transporte do loopzero-cloud de `kubectl port-forward` para NodePort
+// publicado — mas só no droplet. O Caddyfile canônico deste repositório seguiu apontando
+// para `localhost:13002`, a porta do encaminhamento antigo, com o comentário
+// "loopzero-cloud via port-forward" ainda no cabeçalho.
+//
+// O custo apareceu em 2026-08-10: sincronizar o arquivo canônico por cima do servidor
+// REVERTEU o conserto, e `/engine/*` voltou de 401 para 502 — nada escutava na 13002.
+// Um conserto que vive só no servidor não é conserto; é uma correção esperando o próximo
+// `git pull` para ser desfeita.
+func TestEdgeDoesNotProxyToAPortForward(t *testing.T) {
+	root := repoRoot(t)
+	b, err := os.ReadFile(filepath.Clean(filepath.Join(root, "infra/local/Caddyfile")))
+	if err != nil {
+		t.Fatalf("ler Caddyfile: %v", err)
+	}
+	cfg := string(b)
+
+	if strings.Contains(cfg, "localhost:13002") {
+		t.Error("o Caddyfile encaminha para localhost:13002 — a porta do `kubectl port-forward` " +
+			"que o B-010 aposentou. Ninguém escuta nela; o cluster publica o loopzero-cloud em 3002 " +
+			"pelo loadbalancer. Sincronizar este arquivo por cima do servidor reverte o conserto.")
+	}
+	if !strings.Contains(cfg, "localhost:3002") {
+		t.Error("o Caddyfile não encaminha para localhost:3002, que é a porta publicada do loopzero-cloud")
+	}
+}

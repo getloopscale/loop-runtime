@@ -7,7 +7,7 @@
 ##   browser → Cloudflare DNS (A record) → droplet :80/:443
 ##                                          → Caddy (this file)
 ##                                            → localhost:5173  (vite dev server)
-##                                            → localhost:13002 (loopzero-cloud via port-forward)
+##                                            → localhost:3002 (loopzero-cloud via port-forward)
 ##                                            → localhost:14433 (ory-kratos-public via port-forward)
 ##
 ## Auto-HTTPS via Let's Encrypt HTTP-01 challenge on :80.
@@ -106,7 +106,7 @@ app.loopzero.example {
 
 # Cloud auth/billing service
 cloud.loopzero.example {
-  reverse_proxy localhost:13002
+  reverse_proxy localhost:3002
   encode gzip
   # Stripe webhook posts here; Caddy needs to pass through raw body for signature
   # validation (cloud's billing webhook handler reads request body before parsing
@@ -252,7 +252,7 @@ app-dev.loopzero.example {
   # loopzero.example (AUTH_COOKIE_DOMAIN) so they travel cross-subdomain
   # back to app-dev when GitHub redirects.
   handle /v1/integrations/github/* {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host app-dev.loopzero.example
     }
   }
@@ -283,7 +283,7 @@ app-dev.loopzero.example {
   # for ALL /v1/* paths so dashboard fetches against relative URLs travel cookies
   # canonical + CORS not needed. Aligns dev-public arch with MEET-040 via edge.
   handle /v1/* {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host app-dev.loopzero.example
     }
   }
@@ -307,7 +307,7 @@ app-dev.loopzero.example {
   # can render the SPA route.
   @auth_bff path /auth/login /auth/login/complete /auth/consent /auth/device
   handle @auth_bff {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host app-dev.loopzero.example
     }
   }
@@ -326,7 +326,7 @@ app-dev.loopzero.example {
   # so loopzero-cloud's host-aware middleware treats this as the canonical
   # cross-origin proxy entry).
   handle /engine/* {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host app-dev.loopzero.example
     }
   }
@@ -524,7 +524,7 @@ auth-dev.loopzero.example {
   #
   # Split into two explicit handles (was a single `@bff_register_paths`
   # named matcher). Functional behavior is identical (both paths still
-  # reverse-proxy to the loopzero-cloud BFF at localhost:13002 with the
+  # reverse-proxy to the loopzero-cloud BFF at localhost:3002 with the
   # canonical `Host: cloud-dev.loopzero.example` header); the explicit shape
   # is required by the `caddyfile-csp` gate's canonical detection
   # (`handle /self-service/registration/methods/password { ... }` +
@@ -534,12 +534,12 @@ auth-dev.loopzero.example {
   # gate-detectability (each block is 5 lines; sum 10 vs 7 with matcher
   # + 2 blocks — the matcher form is not fundamentally shorter).
   handle /self-service/registration/methods/password {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host app-dev.loopzero.example
     }
   }
   handle /self-service/registration {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host app-dev.loopzero.example
     }
   }
