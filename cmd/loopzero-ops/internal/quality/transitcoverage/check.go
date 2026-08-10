@@ -63,7 +63,7 @@ var (
 // they ARE the dispatcher's underlying primitive. Calls OUTSIDE these methods
 // (e.g., directly from Set() or ListForResync()) are violations.
 var dispatcherInternalMethods = map[string]bool{
-	"encryptForStore": true,
+	"encryptForStore":  true,
 	"decryptFromStore": true,
 	"encrypt":          true, // the AES primitive itself
 	"decrypt":          true,

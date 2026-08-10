@@ -10,12 +10,13 @@
 //
 // Why this gate exists (per MEET-2026-05-29-001 distributed-systems-engineer
 // R-DS-1):
-//   The sqlc-generated Queries struct has BOTH a pool-bound form (executes
-//   against the connection pool) and a tx-bound form (`WithTx(tx)` clone
-//   that executes inside the caller's transaction). If a caller uses the
-//   pool-bound form INSIDE a `withEnvironmentLock` block, the inner call
-//   may execute on a DIFFERENT connection than the lock holder — silent
-//   lock violation. Rule 6 + Rule 7 invariant breach.
+//
+//	The sqlc-generated Queries struct has BOTH a pool-bound form (executes
+//	against the connection pool) and a tx-bound form (`WithTx(tx)` clone
+//	that executes inside the caller's transaction). If a caller uses the
+//	pool-bound form INSIDE a `withEnvironmentLock` block, the inner call
+//	may execute on a DIFFERENT connection than the lock holder — silent
+//	lock violation. Rule 6 + Rule 7 invariant breach.
 //
 // Phase 0 baseline behavior: no sqlc-generated imports exist anywhere
 // in api/internal/{routes,services} yet, so the gate trivially passes.
@@ -135,13 +136,13 @@ func walkDir(dir string) ([]Violation, int, error) {
 // scanFile parses a single .go file and returns violations found inside it.
 //
 // Algorithm:
-//   1. Parse file via go/parser.
-//   2. Check if file imports the sqlc-generated package (`api/internal/db/generated`).
-//      If NOT, file cannot have sqlc-generated calls — skip (zero violations).
-//   3. Walk AST top-down: find any CallExpr where the callee is
-//      `withEnvironmentLock`. For each, inspect the function-literal argument's
-//      body for nested CallExpr that look like sqlc-generated calls.
-//   4. A sqlc-generated call WITHOUT `.WithTx(...)` chain is a violation.
+//  1. Parse file via go/parser.
+//  2. Check if file imports the sqlc-generated package (`api/internal/db/generated`).
+//     If NOT, file cannot have sqlc-generated calls — skip (zero violations).
+//  3. Walk AST top-down: find any CallExpr where the callee is
+//     `withEnvironmentLock`. For each, inspect the function-literal argument's
+//     body for nested CallExpr that look like sqlc-generated calls.
+//  4. A sqlc-generated call WITHOUT `.WithTx(...)` chain is a violation.
 //
 // Phase 0 baseline: no file imports generated/ yet, so all returns are empty.
 func scanFile(path string) ([]Violation, error) {

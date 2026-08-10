@@ -62,8 +62,8 @@ type Outcome struct {
 // taskfileDoc is the minimal YAML shape we parse: the `tasks:` map keys are
 // task names; `includes:` maps include-name → include spec.
 type taskfileDoc struct {
-	Tasks    map[string]yaml.Node      `yaml:"tasks"`
-	Includes map[string]includeSpec    `yaml:"includes"`
+	Tasks    map[string]yaml.Node   `yaml:"tasks"`
+	Includes map[string]includeSpec `yaml:"includes"`
 }
 
 // includeSpec is the include directive. `taskfile:` may be a string (path) or

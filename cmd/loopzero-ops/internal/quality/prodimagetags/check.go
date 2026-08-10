@@ -61,9 +61,9 @@ var (
 	// `-`/`.` so `repo:stable-v2` / `repo:stable.1` are pins that PASS; `foo-stable:v1`
 	// PASS (stable is in the repo name, before the colon).
 	overlayInlineMutableRe = regexp.MustCompile(`(image|tag):\s*["']?[^"'#]+:(stable|develop)([^a-zA-Z0-9_.-]|$)`)
-	leadWSRe          = regexp.MustCompile(`^\s*`)
-	devFileRe         = regexp.MustCompile(`dev\.ya?ml$`)
-	stagingRe         = regexp.MustCompile(`staging\.ya?ml$`)
+	leadWSRe               = regexp.MustCompile(`^\s*`)
+	devFileRe              = regexp.MustCompile(`dev\.ya?ml$`)
+	stagingRe              = regexp.MustCompile(`staging\.ya?ml$`)
 	// #232 — prod overlays live here; only these get the split-form check and
 	// have their `.gotmpl` templates scanned.
 	prodOverlayRe = regexp.MustCompile(`helmfile/values/prod/`)

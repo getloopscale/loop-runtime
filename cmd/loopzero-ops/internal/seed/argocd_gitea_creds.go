@@ -38,15 +38,15 @@ func NewArgoCDGiteaCredsSeed() *ArgoCDGiteaCredsSeed { return &ArgoCDGiteaCredsS
 func (s *ArgoCDGiteaCredsSeed) Name() string { return "argocd-gitea-creds" }
 
 const (
-	giteaAdminNamespace     = "loopzero-system"
-	giteaAdminSecretName    = "gitea-admin"
-	giteaAdminUserKey       = "username"
-	giteaAdminTokenKey      = "token"
-	argocdNamespace         = "argocd"
-	argocdRepoCredsName     = "argocd-creds-gitea"
+	giteaAdminNamespace      = "loopzero-system"
+	giteaAdminSecretName     = "gitea-admin"
+	giteaAdminUserKey        = "username"
+	giteaAdminTokenKey       = "token"
+	argocdNamespace          = "argocd"
+	argocdRepoCredsName      = "argocd-creds-gitea"
 	argocdRepoCredsTypeLabel = "argocd.argoproj.io/secret-type"
 	argocdRepoCredsTypeVal   = "repo-creds"
-	argocdGiteaURL          = "http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero"
+	argocdGiteaURL           = "http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero"
 )
 
 func (s *ArgoCDGiteaCredsSeed) Run(d Deps) Result {
@@ -111,7 +111,7 @@ func repoCredsSecretOf(user, token string) *corev1.Secret {
 			Namespace: argocdNamespace,
 			Name:      argocdRepoCredsName,
 			Labels: map[string]string{
-				argocdRepoCredsTypeLabel:      argocdRepoCredsTypeVal,
+				argocdRepoCredsTypeLabel:       argocdRepoCredsTypeVal,
 				"app.kubernetes.io/managed-by": "loopzero-ops-seed-argocd-gitea-creds",
 			},
 		},

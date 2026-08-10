@@ -78,13 +78,13 @@ type Outcome struct {
 
 // rawCRD is the minimal shape of a CustomResourceDefinition YAML doc.
 type rawCRD struct {
-	Kind     string                 `yaml:"kind"`
-	Metadata rawCRDMeta             `yaml:"metadata"`
+	Kind     string         `yaml:"kind"`
+	Metadata rawCRDMeta     `yaml:"metadata"`
 	Spec     map[string]any `yaml:"spec"`
 }
 
 type rawCRDMeta struct {
-	Name        string                 `yaml:"name"`
+	Name        string         `yaml:"name"`
 	Annotations map[string]any `yaml:"annotations,omitempty"`
 }
 

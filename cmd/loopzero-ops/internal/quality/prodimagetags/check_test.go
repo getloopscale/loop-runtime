@@ -224,14 +224,14 @@ func TestProdOverlay_Pragma_Passes(t *testing.T) {
 // prod-overlay lines are legitimate and MUST NOT trip the gate.
 func TestProdOverlay_FalsePositiveGuards(t *testing.T) {
 	cases := map[string]string{
-		"semver":            "  tag: v1.2.3\n",                    // 4
-		"sha7":              "  tag: abc1234\n",                   // 5
-		"repo_substring":    "  repository: registry.io/foo-stable\n", // 6 (stable in repo name, not tag)
-		"templated_gotmpl":  "  tag: {{ .Values.imageTag }}\n",    // 8 (templated — not a literal)
-		"word_boundary_coin": "  tag: stablecoin\n",              // 10 (stable is a prefix)
-		"word_boundary_dev":  "  tag: development\n",             // 10 (develop is a prefix)
-		"date_stamped":      "  tag: latest-20260420\n",          // latest-family but pinned; not bare mutable
-		"comment":           "  # tag: stable (example)\n",       // 7 (comment line)
+		"semver":             "  tag: v1.2.3\n",                        // 4
+		"sha7":               "  tag: abc1234\n",                       // 5
+		"repo_substring":     "  repository: registry.io/foo-stable\n", // 6 (stable in repo name, not tag)
+		"templated_gotmpl":   "  tag: {{ .Values.imageTag }}\n",        // 8 (templated — not a literal)
+		"word_boundary_coin": "  tag: stablecoin\n",                    // 10 (stable is a prefix)
+		"word_boundary_dev":  "  tag: development\n",                   // 10 (develop is a prefix)
+		"date_stamped":       "  tag: latest-20260420\n",               // latest-family but pinned; not bare mutable
+		"comment":            "  # tag: stable (example)\n",            // 7 (comment line)
 	}
 	for name, content := range cases {
 		dir := t.TempDir()

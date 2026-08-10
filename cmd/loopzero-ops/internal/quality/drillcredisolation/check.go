@@ -12,10 +12,11 @@
 // drill-skill / preflight bash invokes this as a gate before any provision.
 //
 // Faithful port of the bash exit contract:
-//   0 — isolation confirmed OR prod tokens absent (safe) OR D7' override
-//   1 — a DRILL_* token EQUALS its prod counterpart (CATASTROPHIC; abort)
-//   2 — neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN set (cannot proceed),
-//       or strict mode with DRILL_DO_TOKEN absent
+//
+//	0 — isolation confirmed OR prod tokens absent (safe) OR D7' override
+//	1 — a DRILL_* token EQUALS its prod counterpart (CATASTROPHIC; abort)
+//	2 — neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN set (cannot proceed),
+//	    or strict mode with DRILL_DO_TOKEN absent
 package drillcredisolation
 
 import (

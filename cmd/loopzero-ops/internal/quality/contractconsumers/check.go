@@ -17,14 +17,14 @@
 // those fields).
 //
 // What this gate detects:
-//   - Removed `<Field> <Type> `json:"<tag>"`` lines in tracked Go files under:
-//       api/internal/domain/types.go
-//       api/internal/routes/*.go
-//       api/internal/db/generated/*.go
+//   - Removed `<Field> <Type> `json:"<tag>"“ lines in tracked Go files under:
+//     api/internal/domain/types.go
+//     api/internal/routes/*.go
+//     api/internal/db/generated/*.go
 //   - For each removed field, greps consumers in:
-//       cloud/dashboard/src/  (TS/TSX)
-//       cli/src/              (TS)
-//       api/internal/         (Go)
+//     cloud/dashboard/src/  (TS/TSX)
+//     cli/src/              (TS)
+//     api/internal/         (Go)
 //     for `.<tag>` references (e.g., `p.apps_count`, `b.apps`,
 //     `project.last_deploy`).
 //   - Findings reported with file:line + the dropped field's JSON tag.
@@ -98,7 +98,7 @@ var consumerRoots = []string{
 	"api/internal/",
 }
 
-// jsonFieldRegex matches `Name Type `json:"tag[,opts]"`` style declarations.
+// jsonFieldRegex matches `Name Type `json:"tag[,opts]"“ style declarations.
 // Captures the JSON tag (group 1) before any comma options like `,omitempty`.
 var jsonFieldRegex = regexp.MustCompile("json:\"([^\",]+)")
 

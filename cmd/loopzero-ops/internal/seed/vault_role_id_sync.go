@@ -37,10 +37,10 @@ func NewVaultRoleIDSyncSeed() *VaultRoleIDSyncSeed { return &VaultRoleIDSyncSeed
 func (s *VaultRoleIDSyncSeed) Name() string        { return "vault-role-id-sync" }
 
 const (
-	vaultUnsealFileEnv        = "LOOPZERO_VAULT_UNSEAL_FILE"
-	vaultUnsealFileDefault    = ".loopzero/cleanroom-unseal.json"
-	vaultOpenBaoPortRemote    = 8200
-	openBaoVaultRoleIDEnvVar  = "OPENBAO_VAULT_ROLE_ID"
+	vaultUnsealFileEnv         = "LOOPZERO_VAULT_UNSEAL_FILE"
+	vaultUnsealFileDefault     = ".loopzero/cleanroom-unseal.json"
+	vaultOpenBaoPortRemote     = 8200
+	openBaoVaultRoleIDEnvVar   = "OPENBAO_VAULT_ROLE_ID"
 	vaultRoleIDReadPathLoopZeroAPI = "/v1/auth/approle/role/loopzero-api/role-id"
 )
 

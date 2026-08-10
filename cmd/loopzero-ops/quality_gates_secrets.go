@@ -17,12 +17,12 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noenvvaultsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 )
 

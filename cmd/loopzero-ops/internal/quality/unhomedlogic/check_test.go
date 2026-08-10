@@ -52,15 +52,15 @@ func TestClassify_KeepIsHomed(t *testing.T) {
 
 func TestDomainOf(t *testing.T) {
 	cases := map[string]string{
-		"infra/scripts/quality/coverage-cli.sh":           "quality",
-		"infra/scripts/governance/bias-check.sh":          "governance",
-		"infra/scripts/dr/preflight.sh":                   "drill",
-		"infra/scripts/drill-mint-jwt.sh":                 "drill",
-		"infra/scripts/chaos/run-full.sh":                 "chaos",
-		"infra/helmfile/scripts/generate-secrets.sh":      "bootstrap",
-		"infra/scripts/bootstrap-platform.sh":             "bootstrap",
-		"infra/tests/parity/validate-matrix.sh":           "test",
-		".claude/hooks/task-completed.sh":                 "harness",
+		"infra/scripts/quality/coverage-cli.sh":      "quality",
+		"infra/scripts/governance/bias-check.sh":     "governance",
+		"infra/scripts/dr/preflight.sh":              "drill",
+		"infra/scripts/drill-mint-jwt.sh":            "drill",
+		"infra/scripts/chaos/run-full.sh":            "chaos",
+		"infra/helmfile/scripts/generate-secrets.sh": "bootstrap",
+		"infra/scripts/bootstrap-platform.sh":        "bootstrap",
+		"infra/tests/parity/validate-matrix.sh":      "test",
+		".claude/hooks/task-completed.sh":            "harness",
 	}
 	for path, want := range cases {
 		if got := domainOf(path); got != want {

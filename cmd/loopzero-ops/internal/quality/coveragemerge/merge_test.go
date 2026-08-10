@@ -44,16 +44,16 @@ func TestParseProfileLine_ZeroCount(t *testing.T) {
 
 func TestParseProfileLine_Malformed(t *testing.T) {
 	for _, line := range []string{
-		"",                       // empty
-		"no-colon-here 1 1",      // no colon
-		"x.go:no-range 1 1",      // no comma in range
-		"x.go:1.0,2.0",           // missing stmts/count
-		"x.go:1.0,2.0 N C",       // non-numeric
-		"x.go:bad.0,2.0 1 1",     // non-numeric start line
-		"x.go:1.0,bad.0 1 1",     // non-numeric end line
-		"x.go:1,2 1 1",           // no dot in range
-		"x.go:0.0,2.0 1 1",       // start line 0 (invalid)
-		"x.go:5.0,3.0 1 1",       // end < start
+		"",                   // empty
+		"no-colon-here 1 1",  // no colon
+		"x.go:no-range 1 1",  // no comma in range
+		"x.go:1.0,2.0",       // missing stmts/count
+		"x.go:1.0,2.0 N C",   // non-numeric
+		"x.go:bad.0,2.0 1 1", // non-numeric start line
+		"x.go:1.0,bad.0 1 1", // non-numeric end line
+		"x.go:1,2 1 1",       // no dot in range
+		"x.go:0.0,2.0 1 1",   // start line 0 (invalid)
+		"x.go:5.0,3.0 1 1",   // end < start
 	} {
 		_, _, _, _, ok := parseProfileLine(line)
 		assert.False(t, ok, "should reject: %q", line)

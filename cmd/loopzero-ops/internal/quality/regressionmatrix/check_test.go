@@ -6,9 +6,10 @@ package regressionmatrix
 import "testing"
 
 // fabricatedMatrix mirrors the synthetic matrix from audit-golden-test.sh:
-//   row 1: token resolves
-//   row 2: token does NOT resolve, Pode Recorrer? = NÃO -> critical MISS
-//   row 3: live verify -> SKIP
+//
+//	row 1: token resolves
+//	row 2: token does NOT resolve, Pode Recorrer? = NÃO -> critical MISS
+//	row 3: live verify -> SKIP
 const fabricatedMatrix = `# Broken Matrix (golden test — synthetic)
 
 | #  | Category | Problem | Resolved By | Protection | Type | Verification | Pode Recorrer? | Exercitado por L3? |

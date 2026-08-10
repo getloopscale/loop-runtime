@@ -365,3 +365,16 @@ tasks:
   all-with-frontend:
     desc: Full quality suite including frontend bundle gate (slower; for pre-release)
     deps: [hermetic, gates, contract]
+
+  leak:live:
+    desc: |
+      Sonda LIVE que prova o fecho da borda publica — a que o gate `proxy-exposure`
+      cita no proprio cabecalho e que nao existia ate 2026-08-10.
+
+      NAO e um quality gate: todos eles sao hermeticos por contrato, e esta depende de
+      rede contra um alvo vivo. Por isso mora em `loopzero-ops leak`, ao lado de `chaos` e
+      `drill`. Nao entra em `task quality:gates`.
+
+      Alvo padrao: app-dev.loopzero.example + auth-dev.loopzero.example. Passe flags via CLI_ARGS.
+    cmds:
+      - /tmp/loopzero-ops leak live {{.CLI_ARGS}}

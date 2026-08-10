@@ -36,7 +36,7 @@ import (
 //     the chart itself lives in-tree).
 type BrokerSeed struct{}
 
-func NewBrokerSeed() *BrokerSeed { return &BrokerSeed{} }
+func NewBrokerSeed() *BrokerSeed   { return &BrokerSeed{} }
 func (s *BrokerSeed) Name() string { return "broker" }
 
 const (
@@ -178,8 +178,8 @@ func brokerMgmtSecret(token []byte) *corev1.Secret {
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			brokerTokenKey:         token,
-			brokerCanonicalEnvKey:  token,
+			brokerTokenKey:        token,
+			brokerCanonicalEnvKey: token,
 		},
 	}
 }
@@ -192,9 +192,9 @@ func brokerWorkloadSecret(token []byte) *corev1.Secret {
 			Namespace: brokerESONamespace,
 			Name:      brokerSecretName,
 			Labels: map[string]string{
-				"external-secrets.io/type":      "webhook",
-				"app.kubernetes.io/name":        brokerSecretName,
-				"app.kubernetes.io/managed-by":  "loopzero-ops-seed-broker",
+				"external-secrets.io/type":     "webhook",
+				"app.kubernetes.io/name":       brokerSecretName,
+				"app.kubernetes.io/managed-by": "loopzero-ops-seed-broker",
 			},
 		},
 		Type: corev1.SecretTypeOpaque,

@@ -104,8 +104,8 @@ func TestParseAllowlist_ParsesMarkdownTable(t *testing.T) {
 // TestCheck_NewBashWithoutAllowlist_Blocks — diff with new .sh outside allowlist → Pass=false
 func TestCheck_NewBashWithoutAllowlist_Blocks(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/existing.sh":   "#!/bin/bash\necho existing\n",
-		".allowlist.md":               "| infra/scripts/existing.sh | 1 | grandfathered |\n",
+		"infra/scripts/existing.sh": "#!/bin/bash\necho existing\n",
+		".allowlist.md":             "| infra/scripts/existing.sh | 1 | grandfathered |\n",
 	})
 	commitOn(t, root, "feature", map[string]string{
 		"infra/scripts/new-script.sh": "#!/bin/bash\necho new\n",

@@ -32,18 +32,18 @@ func NewMinioCanonicalSeed() *MinioCanonicalSeed { return &MinioCanonicalSeed{} 
 func (s *MinioCanonicalSeed) Name() string { return "minio" }
 
 const (
-	minioMgmtContext         = "k3d-loopzero-core"
-	minioBuildContext        = "k3d-loopzero-build"
-	minioNamespace           = "loopzero-system"
-	minioMainSecret          = "minio"
-	minioMainSecretKey       = "rootPassword"
-	minioLegacySecret        = "minio-credentials"
-	minioLegacySecretKey     = "secretkey"
-	minioMainDeployment      = "minio"
-	minioBuildNamespace      = "argo"
-	minioBuildSecret         = "loopzero-minio-credentials"
-	minioBuildSecretKey      = "AWS_SECRET_ACCESS_KEY"
-	minioLoopZeroAPIDeployment   = "loopzero-api"
+	minioMgmtContext              = "k3d-loopzero-core"
+	minioBuildContext             = "k3d-loopzero-build"
+	minioNamespace                = "loopzero-system"
+	minioMainSecret               = "minio"
+	minioMainSecretKey            = "rootPassword"
+	minioLegacySecret             = "minio-credentials"
+	minioLegacySecretKey          = "secretkey"
+	minioMainDeployment           = "minio"
+	minioBuildNamespace           = "argo"
+	minioBuildSecret              = "loopzero-minio-credentials"
+	minioBuildSecretKey           = "AWS_SECRET_ACCESS_KEY"
+	minioLoopZeroAPIDeployment        = "loopzero-api"
 	minioCanonicalPasswordDefault = "loopzero-dev-password"
 )
 

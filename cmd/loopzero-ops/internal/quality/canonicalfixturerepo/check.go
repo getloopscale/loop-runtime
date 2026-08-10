@@ -27,24 +27,38 @@ func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
 	if root == "" {
 		var err error
-		if root, err = os.Getwd(); err != nil { return Outcome{}, err }
+		if root, err = os.Getwd(); err != nil {
+			return Outcome{}, err
+		}
 	}
 	var violations []string
 	for _, d := range scanDirs {
 		full := filepath.Join(root, d)
-		if _, err := os.Stat(full); errors.Is(err, fs.ErrNotExist) { continue }
+		if _, err := os.Stat(full); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		// M25: fail-CLOSED — propagate the walk + read errors instead of
 		// swallowing them (a gate that cannot read files must not report clean).
 		if err := filepath.WalkDir(full, func(path string, e fs.DirEntry, walkErr error) error {
-			if walkErr != nil { return walkErr }
-			if e.IsDir() { return nil }
+			if walkErr != nil {
+				return walkErr
+			}
+			if e.IsDir() {
+				return nil
+			}
 			body, err := os.ReadFile(path)
-			if err != nil { return fmt.Errorf("%s: %w", path, err) }
+			if err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
 			for i, line := range strings.Split(string(body), "\n") {
-				if !strings.Contains(line, legacy) { continue }
+				if !strings.Contains(line, legacy) {
+					continue
+				}
 				low := strings.ToLower(line)
 				// Comments explaining the deprecation/migration are allowed
-				if isAllowlisted(low) { continue }
+				if isAllowlisted(low) {
+					continue
+				}
 				rel, _ := filepath.Rel(root, path)
 				violations = append(violations, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
 			}
@@ -53,14 +67,20 @@ func Check(cfg Config) (Outcome, error) {
 			return Outcome{}, fmt.Errorf("walk %s: %w", full, err)
 		}
 	}
-	if len(violations) > 0 { return Outcome{Violations: violations}, ErrViolations }
+	if len(violations) > 0 {
+		return Outcome{Violations: violations}, ErrViolations
+	}
 	return Outcome{}, nil
 }
 
 func isAllowlisted(low string) bool {
-	if !strings.Contains(low, "#") && !strings.Contains(low, "//") { return false }
+	if !strings.Contains(low, "#") && !strings.Contains(low, "//") {
+		return false
+	}
 	for _, m := range []string{"legacy", "deprecated", "superseded", "guard", "forbidden", "canonical"} {
-		if strings.Contains(low, m) { return true }
+		if strings.Contains(low, m) {
+			return true
+		}
 	}
 	return false
 }

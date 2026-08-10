@@ -38,7 +38,7 @@ import (
 type AdminLoopzeroDevSeed struct{}
 
 func NewAdminLoopzeroDevSeed() *AdminLoopzeroDevSeed { return &AdminLoopzeroDevSeed{} }
-func (s *AdminLoopzeroDevSeed) Name() string       { return "admin-loopzero-dev" }
+func (s *AdminLoopzeroDevSeed) Name() string        { return "admin-loopzero-dev" }
 
 // Defaults mirror bash constants line-by-line.
 const (
@@ -51,32 +51,32 @@ const (
 	// SEED_PASSWORD kept in a constant so the same value is used across seeds.
 	adminSeedPassword = "LoopZero-Seed-Admin-Pw-2026-06-08-a8s7df9as7df"
 
-	adminEmailEnv          = "EMAIL"
-	adminSeedPasswordEnv   = "SEED_PASSWORD"
-	adminPublicKratosEnv   = "PUBLIC_KRATOS_URL"
-	adminPublicCloudEnv    = "PUBLIC_CLOUD_URL"
-	adminKratosAdminEnv    = "KRATOS_ADMIN_URL"    // test override for httptest
-	adminSessionFileEnv    = "SESSION_FILE"
-	adminSessionJWTEnv     = "SESSION_JWT_FILE"
-	adminPGConnEnv         = "LOOPZERO_PG_CONN"        // reuse tenant-fixture pattern
-	adminCanonicalProject  = "seed"
+	adminEmailEnv         = "EMAIL"
+	adminSeedPasswordEnv  = "SEED_PASSWORD"
+	adminPublicKratosEnv  = "PUBLIC_KRATOS_URL"
+	adminPublicCloudEnv   = "PUBLIC_CLOUD_URL"
+	adminKratosAdminEnv   = "KRATOS_ADMIN_URL" // test override for httptest
+	adminSessionFileEnv   = "SESSION_FILE"
+	adminSessionJWTEnv    = "SESSION_JWT_FILE"
+	adminPGConnEnv        = "LOOPZERO_PG_CONN" // reuse tenant-fixture pattern
+	adminCanonicalProject = "seed"
 )
 
 // AdminLoopzeroDevConfig is the resolved input for the seed. Package-var
 // tested via the loadAdminConfig helper.
 type AdminLoopzeroDevConfig struct {
-	Email             string
-	DisplayName       string
-	Username          string
-	TenantSlug        string
-	SeedPassword      string
-	PublicKratosURL   string
-	PublicCloudURL    string
-	KratosAdminURL    string
-	SessionFile       string
-	SessionJWTFile    string
-	PGConn            string
-	CanonicalProject  string
+	Email            string
+	DisplayName      string
+	Username         string
+	TenantSlug       string
+	SeedPassword     string
+	PublicKratosURL  string
+	PublicCloudURL   string
+	KratosAdminURL   string
+	SessionFile      string
+	SessionJWTFile   string
+	PGConn           string
+	CanonicalProject string
 }
 
 // adminHTTPClient is the http.Client for cookie-jar flows.
@@ -494,4 +494,3 @@ func adminWriteSessionFile(path, cookieValue string) error {
 	}
 	return nil
 }
-

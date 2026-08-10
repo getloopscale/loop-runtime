@@ -7,9 +7,10 @@
 // read → guard(no-op) → precondition → CreateOrUpdate/patch → verify.
 //
 // The Verdict vocabulary is the parity contract with the bash seeds:
-//   PASS — the seed converged the cluster (or was already converged)
-//   SKIP — a sponsor input was absent/placeholder (SKIP-graceful semantics)
-//   FAIL — a typed error the operator must fix (bad mode, malformed input, k8s error)
+//
+//	PASS — the seed converged the cluster (or was already converged)
+//	SKIP — a sponsor input was absent/placeholder (SKIP-graceful semantics)
+//	FAIL — a typed error the operator must fix (bad mode, malformed input, k8s error)
 package seed
 
 import (

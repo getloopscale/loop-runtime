@@ -96,7 +96,7 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 		"172.20.0.20 k3d-loopzero-cell-0-serverlb", // alias
 		"172.20.0.30 k3d-loopzero-secrets-server-0",
 		"172.20.0.30 k3d-loopzero-secrets-serverlb", // alias
-		"127.0.0.1 preexisting-alias",         // preserved
+		"127.0.0.1 preexisting-alias",           // preserved
 	} {
 		if !strings.Contains(block, want) {
 			t.Errorf("NodeHosts missing %q\nGot:\n%s", want, block)
@@ -110,11 +110,11 @@ func TestNetworkingCorednsSeed_NoopWhenCanonical(t *testing.T) {
 	dockerInspectFn = func(c string) (string, error) { return "10.0.0.1", nil }
 	// Pre-seed with the exact target block.
 	canonical := renderCorednsNodeHosts(map[string]string{
-		"k3d-loopzero-build-serverlb":     "10.0.0.1",
+		"k3d-loopzero-build-serverlb":   "10.0.0.1",
 		"k3d-loopzero-cell-0-server-0":  "10.0.0.1",
 		"k3d-loopzero-cell-0-serverlb":  "10.0.0.1",
-		"k3d-loopzero-secrets-server-0":     "10.0.0.1",
-		"k3d-loopzero-secrets-serverlb":     "10.0.0.1",
+		"k3d-loopzero-secrets-server-0": "10.0.0.1",
+		"k3d-loopzero-secrets-serverlb": "10.0.0.1",
 	})
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},

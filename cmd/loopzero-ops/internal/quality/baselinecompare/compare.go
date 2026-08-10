@@ -12,8 +12,8 @@
 // Gate logic (matches bash):
 //   - Load checked-in baseline JSON + current measurement JSON.
 //   - For each pkg in `current`:
-//     - If pkg in baseline: floor = max(min_required, baseline.line - slack)
-//     - If pkg NEW:         floor = default_min (no slack)
+//   - If pkg in baseline: floor = max(min_required, baseline.line - slack)
+//   - If pkg NEW:         floor = default_min (no slack)
 //   - Fail when current.line < floor.
 //
 // EC-2 escape valve: PR can carry the `coverage-baseline-defer` label.
@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"io"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseline"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Config holds the gate inputs.

@@ -37,10 +37,10 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 // todos os .sh do repo, com Path + LOC + LastMod populados.
 func TestScanRepo_FindsAllShellScripts(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
-		"infra/scripts/a.sh":           "#!/bin/bash\necho a\n",
-		"infra/scripts/b.sh":           "#!/bin/bash\necho b\necho line3\n",
+		"infra/scripts/a.sh":            "#!/bin/bash\necho a\n",
+		"infra/scripts/b.sh":            "#!/bin/bash\necho b\necho line3\n",
 		"infra/tests/scripts/c_test.sh": "#!/bin/bash\necho c\n",
-		"README.md":                    "# not a shell script",
+		"README.md":                     "# not a shell script",
 	})
 
 	scripts, err := ScanRepo(root)
@@ -563,12 +563,12 @@ func TestIsolatedStemPresent(t *testing.T) {
 		stem string
 		want bool
 	}{
-		{"bash /foo/scripts/install.sh", "install", true},  // preceded by /
-		{"  install runs here", "install", true},            // preceded by space
-		{"\"install\" is the name", "install", true},        // preceded by "
-		{"thisinstall is embedded", "install", false},       // no isolated prefix (prev is word char)
-		{"abc", "ab", false},                                // stem too short (<4)
-		{"foo_install_bar", "install", false},               // prev=_ is word-char → no isolated prefix
+		{"bash /foo/scripts/install.sh", "install", true}, // preceded by /
+		{"  install runs here", "install", true},          // preceded by space
+		{"\"install\" is the name", "install", true},      // preceded by "
+		{"thisinstall is embedded", "install", false},     // no isolated prefix (prev is word char)
+		{"abc", "ab", false},                              // stem too short (<4)
+		{"foo_install_bar", "install", false},             // prev=_ is word-char → no isolated prefix
 	}
 	for _, c := range cases {
 		got := isolatedStemPresent(c.text, c.stem)
@@ -730,15 +730,15 @@ func TestDetectsHookRegistration(t *testing.T) {
 // TestIsCallerSearchFile — exercises all branches
 func TestIsCallerSearchFile(t *testing.T) {
 	tests := map[string]bool{
-		"Taskfile.yml":  true,
-		"workflow.yml":  true,
-		"config.yaml":   true,
-		"helper.sh":     true,
-		"chart.gotmpl":  true,
-		"Tiltfile":      true,
+		"Taskfile.yml":   true,
+		"workflow.yml":   true,
+		"config.yaml":    true,
+		"helper.sh":      true,
+		"chart.gotmpl":   true,
+		"Tiltfile":       true,
 		"Tiltfile.local": true,
-		"README.md":     false,
-		"main.go":       false,
+		"README.md":      false,
+		"main.go":        false,
 	}
 	for name, want := range tests {
 		got := isCallerSearchFile(name)

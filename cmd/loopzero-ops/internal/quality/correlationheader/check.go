@@ -9,22 +9,22 @@
 // `r.Header.Get("X-Correlation-ID")` (or `"Correlation-ID"`) literal
 // usage and flags each as a violation. Routes MUST go through
 // `api/internal/correlation.Read(r)` instead, which:
-//   1. Returns the canonical `Correlation-ID` header.
-//   2. Falls back to the deprecated `X-Correlation-ID` for one release
-//      cycle with a slog WARN.
-//   3. Is the single authoritative source for the dual-read logic.
+//  1. Returns the canonical `Correlation-ID` header.
+//  2. Falls back to the deprecated `X-Correlation-ID` for one release
+//     cycle with a slog WARN.
+//  3. Is the single authoritative source for the dual-read logic.
 //
 // Centralizing the header read into one helper guarantees that:
-//   * Distributed tracing across promote/rollback/build flows uses
+//   - Distributed tracing across promote/rollback/build flows uses
 //     a uniform header form (eliminates val-002).
-//   * The deprecation window for `X-Correlation-ID` is observable via
+//   - The deprecation window for `X-Correlation-ID` is observable via
 //     the WARN logs.
-//   * Future migration to drop the legacy header touches ONE file.
+//   - Future migration to drop the legacy header touches ONE file.
 //
 // Scope:
-//   * `api/internal/routes/*.go` (recursive) — routes are the
+//   - `api/internal/routes/*.go` (recursive) — routes are the
 //     correlation-ID-reading surface.
-//   * `*_test.go` files are excluded (fixtures may reference the
+//   - `*_test.go` files are excluded (fixtures may reference the
 //     literals for negative-path coverage).
 package correlationheader
 
@@ -59,8 +59,8 @@ const scanDir = "api/internal/routes"
 // We match by method name + arg-count rather than receiver-type
 // (avoiding full type resolution — go/types — which is overkill for
 // this narrow gate). Two false-positive guards:
-//   * arg must be a basic-lit string (skips var-named args).
-//   * literal value must match one of the gated forms.
+//   - arg must be a basic-lit string (skips var-named args).
+//   - literal value must match one of the gated forms.
 const targetMethod = "Get"
 
 // gatedLiterals are the EXACT string args that trigger a violation
@@ -109,9 +109,9 @@ func Check(cfg Config) (*Outcome, error) {
 // any CallExpr matching the pattern `<X>.Header.Get(<literal>)` where
 // the literal is in gatedLiterals. Pure structural match — no type
 // resolution required — but precise enough to avoid:
-//   * Matching `.Get(...)` on non-Header receivers (e.g. context.Get).
-//   * Matching variable-named args (e.g. `r.Header.Get(headerName)`).
-//   * Matching comment-strings (go/parser ignores comments).
+//   - Matching `.Get(...)` on non-Header receivers (e.g. context.Get).
+//   - Matching variable-named args (e.g. `r.Header.Get(headerName)`).
+//   - Matching comment-strings (go/parser ignores comments).
 func scanFile(absPath, relPath string) ([]string, error) {
 	// #nosec G304 -- absPath comes from filepath.Walk of api/internal/routes.
 	src, err := os.ReadFile(absPath)

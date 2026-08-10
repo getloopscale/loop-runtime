@@ -115,7 +115,7 @@ func TestNormalizeSpec_StripsControllerGenAnnotation(t *testing.T) {
 				"schema": map[string]interface{}{
 					"openAPIV3Schema": map[string]interface{}{
 						"controller-gen.kubebuilder.io/version": "v0.13.0",
-						"someOtherField":                         "x",
+						"someOtherField":                        "x",
 					},
 				},
 			},
@@ -128,7 +128,7 @@ func TestNormalizeSpec_StripsControllerGenAnnotation(t *testing.T) {
 				"schema": map[string]interface{}{
 					"openAPIV3Schema": map[string]interface{}{
 						"controller-gen.kubebuilder.io/version": "v0.14.0",
-						"someOtherField":                         "x",
+						"someOtherField":                        "x",
 					},
 				},
 			},
@@ -261,7 +261,7 @@ metadata:
 
 func TestCheck_CRDFilter(t *testing.T) {
 	root := setup(t, map[string]string{
-		"operators/config/crd/bases/loopzero.io_tenants.yaml":     "apiVersion: x\nkind: CustomResourceDefinition\nmetadata:\n  name: tenants.loopzero.io\nspec:\n  group: loopzero.io\n",
+		"operators/config/crd/bases/loopzero.io_tenants.yaml":      "apiVersion: x\nkind: CustomResourceDefinition\nmetadata:\n  name: tenants.loopzero.io\nspec:\n  group: loopzero.io\n",
 		"operators/config/crd/bases/loopzero.io_applications.yaml": "apiVersion: x\nkind: CustomResourceDefinition\nmetadata:\n  name: applications.loopzero.io\nspec:\n  group: loopzero.io\n",
 	})
 	override := `---

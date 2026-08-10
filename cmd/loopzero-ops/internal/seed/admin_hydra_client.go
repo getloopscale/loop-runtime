@@ -39,7 +39,7 @@ import (
 type AdminHydraClientSeed struct{}
 
 func NewAdminHydraClientSeed() *AdminHydraClientSeed { return &AdminHydraClientSeed{} }
-func (s *AdminHydraClientSeed) Name() string          { return "admin-hydra-client" }
+func (s *AdminHydraClientSeed) Name() string         { return "admin-hydra-client" }
 
 const (
 	pgDatabaseURLEnv          = "LOOPZERO_ADMIN_HYDRA_PG_URL"
@@ -183,14 +183,14 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 	}
 
 	payload := map[string]interface{}{
-		"client_id":                    clientID,
-		"client_name":                  adminCLIClientName,
-		"client_secret":                secret,
-		"grant_types":                  []string{"client_credentials"},
-		"response_types":               []string{},
-		"scope":                        adminCLIClientScope,
-		"audience":                     []string{adminCLIClientAudience},
-		"token_endpoint_auth_method":   "client_secret_post",
+		"client_id":                  clientID,
+		"client_name":                adminCLIClientName,
+		"client_secret":              secret,
+		"grant_types":                []string{"client_credentials"},
+		"response_types":             []string{},
+		"scope":                      adminCLIClientScope,
+		"audience":                   []string{adminCLIClientAudience},
+		"token_endpoint_auth_method": "client_secret_post",
 	}
 	body, _ := json.Marshal(payload)
 

@@ -87,9 +87,9 @@ func TestGrepConsumersForTag_PatternIsWordBoundary(t *testing.T) {
 		`b.apps == nil`,
 	}
 	mustNotMatch := []string{
-		`const c = p.apps_count;`,    // longer name, should not match
-		`return project.apps_spec;`,  // longer name
-		`x.appsSpec = []`,             // CamelCase variant
+		`const c = p.apps_count;`,   // longer name, should not match
+		`return project.apps_spec;`, // longer name
+		`x.appsSpec = []`,           // CamelCase variant
 	}
 	for _, line := range mustMatch {
 		if !re.MatchString(line) {

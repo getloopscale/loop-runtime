@@ -22,13 +22,13 @@ import (
 
 // stripeStub captures POST/DELETE + returns canned list responses.
 type stripeStub struct {
-	mu           sync.Mutex
-	authOK       string
-	existingURL  string // if non-empty, GET /webhook_endpoints returns one entry with this URL
-	existingID   string
-	deletions    []string
-	creations    []map[string][]string
-	createReply  stripeAPIWebhookEndpoint
+	mu          sync.Mutex
+	authOK      string
+	existingURL string // if non-empty, GET /webhook_endpoints returns one entry with this URL
+	existingID  string
+	deletions   []string
+	creations   []map[string][]string
+	createReply stripeAPIWebhookEndpoint
 }
 
 func newStripeStub(t *testing.T, token, existingURL, existingID string, reply stripeAPIWebhookEndpoint) *httptest.Server {

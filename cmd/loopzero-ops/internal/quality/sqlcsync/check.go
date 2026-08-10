@@ -62,12 +62,12 @@ type Outcome struct {
 
 // Default paths relative to RepoRoot.
 const (
-	defaultSqlcYAML       = "api/internal/db/sqlc.yaml"
-	defaultGeneratedDir   = "api/internal/db/generated"
-	defaultQueriesDir     = "api/internal/db/queries"
-	defaultSchemaFile     = "api/internal/db/schema.gen.sql"
-	expectedSqlcVersion   = "v1.31.1"
-	actionableFixMessage  = "Run `task db:generate && git add api/internal/db/generated && git commit`"
+	defaultSqlcYAML      = "api/internal/db/sqlc.yaml"
+	defaultGeneratedDir  = "api/internal/db/generated"
+	defaultQueriesDir    = "api/internal/db/queries"
+	defaultSchemaFile    = "api/internal/db/schema.gen.sql"
+	expectedSqlcVersion  = "v1.31.1"
+	actionableFixMessage = "Run `task db:generate && git add api/internal/db/generated && git commit`"
 )
 
 // Check is the gate entry point. Returns Outcome + nil error on successful

@@ -84,8 +84,8 @@ func TestNonConformantWithoutADRFails(t *testing.T) {
 func TestNonConformantWithADRPasses(t *testing.T) {
 	root := t.TempDir()
 	chart(t, root, "privileged", map[string]string{
-		"templates/deploy.yaml":   "kind: DaemonSet\nspec: {}\n",
-		adrExceptionFile:          "# ADR: this chart needs host privilege.\n",
+		"templates/deploy.yaml": "kind: DaemonSet\nspec: {}\n",
+		adrExceptionFile:        "# ADR: this chart needs host privilege.\n",
 	})
 	o, err := Check(Config{Root: root})
 	if err != nil {

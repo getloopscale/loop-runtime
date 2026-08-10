@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"gopkg.in/yaml.v3"
 )
 
 func makeKratosCreds() *Creds {
@@ -57,7 +57,7 @@ func TestPatchKratosYAML_UpdatesAllSeven(t *testing.T) {
 		CookieDomain:   kratosDefaultCookieDomain,
 		GitHubClientID: "ghid-1", GitHubSecret: "ghsec-1",
 		GoogleClientID: "ggid-2", GoogleSecret: "ggsec-2",
-		ResendAPIKey:   "re_abc",
+		ResendAPIKey: "re_abc",
 	}
 	got, err := patchKratosYAML(stubKratosYAML, cfg)
 	if err != nil {
@@ -302,9 +302,9 @@ func TestPatchKratosSeed_Name(t *testing.T) {
 
 func TestTrimTrailingSlash(t *testing.T) {
 	cases := map[string]string{
-		"http://x":    "http://x",
-		"http://x/":   "http://x",
-		"http://x//":  "http://x",
+		"http://x":   "http://x",
+		"http://x/":  "http://x",
+		"http://x//": "http://x",
 	}
 	for in, want := range cases {
 		if got := trimTrailingSlash(in); got != want {

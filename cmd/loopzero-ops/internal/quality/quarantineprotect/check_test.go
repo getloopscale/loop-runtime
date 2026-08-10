@@ -21,14 +21,14 @@ import (
 // invoking git. This makes the gate hermetically testable.
 func mockCfg(addedOrModified []string, deleted []string, prTitle string) Config {
 	return Config{
-		RepoRoot:         "/tmp/quarantineprotect-fixture",
-		ArchivePathRoot:  "archive/canonical-tests-v1",
-		BaseRef:          "origin/main",
-		HeadRef:          "HEAD",
-		PRTitle:          prTitle,
-		DiffAddedOrMod:   addedOrModified,
-		DiffDeleted:      deleted,
-		mockMode:         true,
+		RepoRoot:        "/tmp/quarantineprotect-fixture",
+		ArchivePathRoot: "archive/canonical-tests-v1",
+		BaseRef:         "origin/main",
+		HeadRef:         "HEAD",
+		PRTitle:         prTitle,
+		DiffAddedOrMod:  addedOrModified,
+		DiffDeleted:     deleted,
+		mockMode:        true,
 	}
 }
 

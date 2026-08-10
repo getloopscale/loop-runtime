@@ -6,7 +6,7 @@
 // Plan: .claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md (T1.3)
 // ADR:  docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md (D4)
 //
-// WHAT IT GUARDS
+// # WHAT IT GUARDS
 //
 // The mgmt cluster protects its boundary resources (Application, AppProject, Tenant,
 // Environment, ClusterCredential) and the CRDs that define them from unauthorized

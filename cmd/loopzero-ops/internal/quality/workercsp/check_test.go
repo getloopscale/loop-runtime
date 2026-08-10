@@ -40,8 +40,8 @@ func TestCheck(t *testing.T) {
 			wantDetail: "unsafe-inline",
 		},
 		{
-			name: "unsafe-eval is equally fatal",
-			body: `"Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-eval'"`,
+			name:       "unsafe-eval is equally fatal",
+			body:       `"Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-eval'"`,
 			wantPass:   false,
 			wantDetail: "unsafe-eval",
 		},

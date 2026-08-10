@@ -177,8 +177,8 @@ func TestKratosResolveOrCreateIdentity_CreatesWhenAbsent(t *testing.T) {
 	currentTestServer.Store(server)
 	defer server.Close()
 	cfg := AdminLoopzeroDevConfig{
-		Email:       "admin@loopzero.example",
-		DisplayName: "LoopZero Admin",
+		Email:          "admin@loopzero.example",
+		DisplayName:    "LoopZero Admin",
 		KratosAdminURL: server.URL,
 	}
 	id, err := kratosResolveOrCreateIdentity(context.Background(), cfg)
@@ -214,10 +214,10 @@ func TestKratosMintSessionCookie_ReturnsCookie(t *testing.T) {
 	currentTestServer.Store(server)
 	defer server.Close()
 	cfg := AdminLoopzeroDevConfig{
-		Email:            "admin@loopzero.example",
-		SeedPassword:     "pw",
-		PublicKratosURL:  server.URL,
-		KratosAdminURL:   server.URL,
+		Email:           "admin@loopzero.example",
+		SeedPassword:    "pw",
+		PublicKratosURL: server.URL,
+		KratosAdminURL:  server.URL,
 	}
 	cookie, err := kratosMintSessionCookie(context.Background(), cfg)
 	if err != nil {

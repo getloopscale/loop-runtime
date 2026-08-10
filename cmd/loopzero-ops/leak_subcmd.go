@@ -1,0 +1,144 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// leak subcommand group — a sonda LIVE que prova o fecho da borda pública.
+//
+// Fica fora de `quality` porque todo gate de qualidade é hermético por contrato (sem
+// rede, sem kubectl, sem helmfile) e esta sonda depende de um alvo vivo. Fica ao lado de
+// `chaos` e `drill`, que são os grupos que tocam ambiente.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
+)
+
+const leakHelpText = `loopzero-ops leak — sonda LIVE da superfície pública
+
+USAGE:
+  loopzero-ops leak live [flags]
+
+O QUE ELA PROVA:
+  Que a borda pública NEGA sem credencial (401/403) ou leva ao login (302), e que as
+  rotas públicas por especificação OIDC continuam respondendo 200. Os alvos são
+  derivados de infra/quality/proxy-exposure.txt, então a cobertura acompanha a
+  superfície por construção — uma família declarada lá sem representante concreto é
+  reportada como buraco, não silenciada.
+
+  404 NÃO conta como fecho: esconder não é negar, e aceitá-lo mascara rota quebrada
+  como se fosse proteção.
+
+O QUE ELA NÃO PROVA:
+  Que uma resposta autenticada expõe só o que devia — isso depende do corpo e está
+  registrado, por rota, na coluna de descrição do inventário.
+
+FLAGS:
+  --host        host da aplicação      (padrão: app-dev.loopzero.example)
+  --auth-host   host da identidade     (padrão: auth-dev.loopzero.example)
+  --inventory   inventário declarado   (padrão: infra/quality/proxy-exposure.txt)
+  --json        saída legível por máquina
+
+SAÍDA:
+  0 = a borda fecha    1 = algo passou sem credencial, ou uma família não é medida
+`
+
+type leakReport struct {
+	Pass     int      `json:"pass"`
+	Fail     int      `json:"fail"`
+	Skip     int      `json:"skip"`
+	Failures []string `json:"failures"`
+}
+
+func runLeak(args []string) int {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+		fmt.Print(leakHelpText)
+		return 0
+	}
+	if args[0] != "live" {
+		fmt.Fprintf(os.Stderr, "subcomando desconhecido %q (use: live)\n", args[0])
+		return 1
+	}
+
+	fs := flag.NewFlagSet("leak live", flag.ContinueOnError)
+	host := fs.String("host", "app-dev.loopzero.example", "host da aplicação")
+	authHost := fs.String("auth-host", "auth-dev.loopzero.example", "host da identidade")
+	inventory := fs.String("inventory", "infra/quality/proxy-exposure.txt", "inventário declarado")
+	asJSON := fs.Bool("json", false, "saída legível por máquina")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 1
+	}
+
+	alvos, semRepresentante, err := leak.Targets(*inventory, *host)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+	alvos = append(alvos, leak.IdentityTargets(*authHost)...)
+
+	cli := leak.DefaultClient()
+	ctx := context.Background()
+	rep := leakReport{Failures: []string{}}
+
+	for _, alvo := range alvos {
+		v := leak.Probe(ctx, cli, alvo)
+		switch {
+		case v.Skipped:
+			rep.Skip++
+			if !*asJSON {
+				fmt.Printf("  SKIP  %-46s %s\n", v.Host+v.Path, v.Reason)
+			}
+		case v.Passed:
+			rep.Pass++
+			if !*asJSON {
+				fmt.Printf("  ok    %-46s %d\n", v.Host+v.Path, v.Status)
+			}
+		default:
+			rep.Fail++
+			rep.Failures = append(rep.Failures, v.Host+v.Path+" "+v.Reason)
+			if !*asJSON {
+				fmt.Printf("  FAIL  %-46s %d\n", v.Host+v.Path, v.Status)
+			}
+		}
+	}
+
+	// Uma família declarada e não medida é buraco de cobertura. Contá-la como falha é
+	// deliberado: o modo de falha que esta sonda existe para impedir é justamente a rota
+	// nova que ninguém sonda, e um aviso silencioso reproduziria isso.
+	for _, f := range semRepresentante {
+		rep.Fail++
+		rep.Failures = append(rep.Failures,
+			fmt.Sprintf("família %q está declarada em %s e não tem representante na sonda; sem um caminho concreto ela nunca é medida",
+				f, *inventory))
+		if !*asJSON {
+			fmt.Printf("  FAIL  %-46s sem representante na sonda\n", f)
+		}
+	}
+
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(rep); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Printf("\n  PASS=%d  FAIL=%d  SKIP=%d\n", rep.Pass, rep.Fail, rep.Skip)
+	}
+
+	if rep.Fail > 0 {
+		fmt.Fprintln(os.Stderr, "\nA borda deixou passar algo sem credencial:")
+		for _, f := range rep.Failures {
+			fmt.Fprintf(os.Stderr, "  - %s\n", f)
+		}
+		return 1
+	}
+	if !*asJSON {
+		fmt.Println("  A borda fecha em tudo que exige credencial, e abre no que a especificação exige.")
+	}
+	return 0
+}

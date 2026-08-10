@@ -48,8 +48,8 @@ var corednsContainers = []string{
 // single docker inspect can publish both the canonical hostname AND a common
 // alias (matches the bash script's serverlb alias mapping).
 var corednsAliases = map[string]string{
-	"k3d-loopzero-cell-0-server-0": "k3d-loopzero-cell-0-serverlb",
-	"k3d-loopzero-secrets-server-0":    "k3d-loopzero-secrets-serverlb",
+	"k3d-loopzero-cell-0-server-0":  "k3d-loopzero-cell-0-serverlb",
+	"k3d-loopzero-secrets-server-0": "k3d-loopzero-secrets-serverlb",
 }
 
 func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {

@@ -2,10 +2,10 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package dashboardpromtool validates Grafana dashboards in two passes:
-//   1. Basic JSON syntax (ALWAYS runs) — catches accidental commits of
-//      broken dashboards.
-//   2. PromQL semantic validation via promtool (SKIP if binary missing) —
-//      verifies each panel query parses against Prometheus rules grammar.
+//  1. Basic JSON syntax (ALWAYS runs) — catches accidental commits of
+//     broken dashboards.
+//  2. PromQL semantic validation via promtool (SKIP if binary missing) —
+//     verifies each panel query parses against Prometheus rules grammar.
 //
 // T4.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md.
 package dashboardpromtool
