@@ -8,7 +8,10 @@
 #       the env uses selfsigned-issuer (declared in environments/dev-public.yaml).
 
 global:
-  registry: ghcr.io/getloopscale
+# Sobrescrevivel por LOOPZERO_PLATFORM_IMAGE_PREFIX (mesma razao registrada em
+# loopzero-api.yaml.gotmpl: o ambiente dependia sem alternativa de imagem publicada, e com o
+# token de pull expirado nao havia como reconstruir do zero). O padrao segue o GHCR.
+  registry: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" | trimSuffix "/" }}
   imagePullSecrets:
     - name: ghcr-pull
 

@@ -27,7 +27,15 @@ service:
 # sibling SoT of ~/.loopzero/gomod-token.txt per memory
 # reference_gomod_token_canonical_path).
 image:
-  repository: ghcr.io/getloopscale/loopzero-cloud
+# O prefixo do registro e sobrescrevivel por LOOPZERO_PLATFORM_IMAGE_PREFIX; o padrao continua
+# sendo o GHCR, entao quem tem token valido nao ve diferenca. Existe porque este ambiente
+# dependia SEM ALTERNATIVA de imagem publicada: medido no droplet app-dev em 2026-08-10,
+# com o token de pull expirado (HTTP 401), 13 pods ficaram em ImagePullBackOff e a
+# plataforma nao subia — embora todas estas imagens tenham Dockerfile neste repositorio e
+# sejam construiveis localmente. Um ambiente que so funciona com credencial valida para um
+# registro remoto nao tem como ser reconstruido do zero quando a credencial falha, que e
+# exatamente quando reconstruir importa (BACKLOG.md B-016).
+  repository: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopzero-cloud
   tag: develop
   pullPolicy: Always
 
