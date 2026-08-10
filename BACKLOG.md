@@ -661,3 +661,20 @@ dod:
 **Duas notas de honestidade.** O guarda nasceu com um falso positivo próprio: varria texto e contava o comentário que explica o conserto como se fosse a diretiva. Corrigido para ignorar comentários — um guarda que reprova a documentação da correção treina o time a desligá-lo. E a primeira versão do `required` quebrou o YAML: a mensagem tinha dois-pontos, e o gate de qualidade pegou antes do push.
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor sobre o desenho.
+
+## B-027 — O diagnóstico do CLI manda verificar um endereço que não existe   [ ]
+
+domain: platform-cli
+repo: loopzero-cli
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-10 ao verificar por onde o CLI fala com o motor. `src/commands/doctor.ts:124` — quando a checagem de rede falha, a ação sugerida é *"verify https://api.loopzero.example is accessible"*. Esse endereço **não resolve em DNS** (verificado com `getent hosts`, junto com `api-dev.loopzero.example`, que também não). O próprio repositório já sabe: `src/config/constants.ts:34` marca `https://api-dev.loopzero.example` como *"stale value … does NOT resolve in DNS — issue #130 lock 2026-06-21"*. A correção de junho passou pelo valor padrão e não pela mensagem de diagnóstico.
+why_now: a mensagem só aparece para quem **já está com problema de rede** — e manda a pessoa investigar um endereço inexistente, que vai falhar de novo e confirmar o diagnóstico errado. É o pior lugar possível para uma informação obsoleta: o caminho de depuração de quem já está travado. O endereço canônico hoje é `https://app-dev.loopzero.example/engine`, documentado três linhas acima no mesmo repositório.
+status: raw
+severity: baixa em impacto de sistema, alta em custo humano — ninguém perde dado, mas quem seguir a sugestão perde tempo e conclui a coisa errada sobre a própria rede.
+dod:
+  - a ação sugerida cita o endereço que o CLI realmente usa, e não um literal fixo — idealmente derivado de `getDefaultApiUrl()`, que é quem sabe para onde a requisição foi
+  - `grep -rn "api-dev.loopzero.example\|api.loopzero.example" src/` devolve zero fora de comentários que expliquem por que o valor foi aposentado
+  - existe verificação que reprova endereço fixo em mensagem de diagnóstico — a lição é que a correção de junho consertou o valor e esqueceu a mensagem
+
+> Registrado 2026-08-10 ao medir se o CLI passa pelo painel (`B-022`).
