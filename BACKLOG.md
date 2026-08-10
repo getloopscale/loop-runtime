@@ -456,7 +456,7 @@ evidence: medido no droplet app-dev em 2026-08-10, após a reconstrução total.
 why_now: a condição é anterior à reconstrução — o achado de 2026-08-09 já registrava GHCR inacessível a partir do droplet. O que mudou é que o cache local de imagens mascarava o problema: os pods rodavam com camadas puxadas meses atrás. `k3d cluster delete` levou o cache junto, e a dependência ficou exposta. **Não é regressão do rename**; é uma dependência que só aparece quando o ambiente sobe do zero, que é exatamente o que o mandato de cleanroom existe para forçar.
 status: raw
 severity: alta — sem isto, `app-dev.loopzero.example` não volta a servir. É o único item que separa a plataforma reconstruída de estar funcional.
-blocked_by: **credencial** — emitir um PAT do GitHub com escopo `read:packages` para `getloopscale` não é ação que o agente possa executar. Não há caminho técnico que contorne isso sem trocar a origem das imagens.
+**RESOLVIDO em 2026-08-10 — e a afirmação original estava errada.** Eu havia escrito que não existia caminho técnico sem a credencial. Existe: `loopzero-api` e os quatro operators têm Dockerfile **neste** repositório, e o `loopzero-cloud` tem no repo irmão. As seis imagens foram construídas localmente e publicadas no registro do k3d, e `LOOPZERO_PLATFORM_IMAGE_PREFIX` (commit `6b4669dd`, padrão inalterado no GHCR) passou a permitir apontar o ambiente para elas. O token do GHCR continua inválido — o que mudou é que ele deixou de ser condição para o ambiente subir.
 dod:
   - `~/.loopzero/ghcr-pull-token.txt` contém um token que devolve `HTTP 200` para `ghcr.io/v2/getloopscale/loopzero-api/manifests/develop`
   - `task images:ghcr:pullsecret` reprovisiona o Secret nos 4 clusters e os 4 deployments saem de `ImagePullBackOff`
@@ -464,3 +464,38 @@ dod:
   - se as imagens não estiverem publicadas no GHCR (o `401` não distingue ausente de não-autorizado), isso fica dito, porque muda o conserto de "renovar token" para "publicar imagem"
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
+
+
+## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [ ]
+
+domain: control-plane
+repo: loopzero-cloud
+suggested_mode: bug
+source: discover-live-test
+evidence: medido em 2026-08-10 ao reconstruir o app-dev sem acesso ao GHCR. `loopzero-cloud/Dockerfile.local` é o caminho documentado para quando o `gomod_token` falta (criado em 2026-06-27 por Red Team #95 P0, pela mesma razão), e **não funciona**. Dois defeitos independentes: (1) injeta um `replace` citando `getloopscale/loopzero-contracts`, mas o `go.mod` declara `getloopscale/loopzero-contracts` — o `replace` não casa e o Go cai no fetch remoto, falhando em `git ls-remote` sem credencial; (2) compila `go build -o /cloud-api ./cmd/main.go` — **um arquivo**, não o pacote —, então os arquivos irmãos de `package main` ficam de fora e o build morre com `undefined: newTrustDashboardKeyResolver` e outros. Corrigidos os dois numa cópia de build, a imagem constrói e sobe.
+why_now: o escape hatch existe justamente para o dia em que o token falta. Nesse dia ele não funcionou, e os dois defeitos são de tipos que nenhum build verde pegaria: o (1) só aparece sem credencial (com ela, o fetch remoto funciona e mascara o replace morto), e o (2) só aparece quando `main.go` passa a depender de um irmão — o que aconteceu depois que o arquivo foi escrito.
+status: raw
+severity: alta — é o caminho de recuperação, e estava quebrado exatamente no cenário para o qual foi criado.
+dod:
+  - o `replace` injetado cita o caminho de módulo atual
+  - o build compila o pacote (`./cmd`), não um arquivo
+  - existe verificação que constrói por este Dockerfile **sem** o token disponível, senão o próximo apodrecimento é invisível igual
+
+> Registrado 2026-08-10 durante a reconstrução total do app-dev. As correções foram aplicadas apenas numa cópia de build; **o repositório `loopzero-cloud` segue com os dois defeitos**.
+
+## B-018 — A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-live-test
+evidence: medido em 2026-08-10. `auth-dev.loopzero.example` devolvia `502` com Kratos e Hydra **saudáveis** no cluster: a borda encaminha para `localhost:14433` e `localhost:14444`, e os serviços `ory-kratos-public` / `ory-hydra-public` são `ClusterIP` — alcançáveis apenas por `kubectl port-forward`. Nenhuma unidade systemd os gerencia (diferente de `loopzero-cloud-dataplane-authz.service`), então eram processos manuais que morreram junto com os clusters. Restaurados em laço de reinício, `auth-dev` voltou a `200` e o fluxo de login a `303`.
+why_now: é o mesmo defeito do `B-010` — encaminhamento de porta como transporte em vez de ferramenta de depuração — noutro serviço, e sobreviveu porque ninguém havia destruído os clusters desde então. O `loopzero-cloud` ganhou NodePort; Kratos e Hydra não.
+status: raw
+severity: média — o login funciona hoje, mas por um processo que ninguém supervisiona e que qualquer reinício derruba.
+dod:
+  - Kratos e Hydra são alcançados pela borda sem `kubectl port-forward`, ou o encaminhamento é uma unidade supervisionada e declarada como as irmãs
+  - a escolha vale para os dois, e não só para o que quebrou primeiro
+  - derrubar e recriar os clusters não exige intervenção manual para o login voltar
+
+> Registrado 2026-08-10 durante a reconstrução total do app-dev.
