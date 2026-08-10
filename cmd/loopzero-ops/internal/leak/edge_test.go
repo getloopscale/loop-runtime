@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -395,5 +396,86 @@ func TestInstalarCelulaNaoFixaUmaCelula(t *testing.T) {
 			"Fixo, ela deixa a cell-1 com menos plataforma que a cell-0 — e faz "+
 			"`clusters:recreate -- cell-1` instalar no cluster errado.",
 			len(ofensoras), strings.Join(ofensoras, ", "))
+	}
+}
+
+// TestTodaCelulaApareceEmTodaListaQueAsEnumera trava a lacuna que sobrou depois do B-026.
+//
+// Consertar `infra:install:cell` fez as duas células existentes ficarem iguais — mas o
+// conserto foi de VALOR, não de ESTRUTURA. As listas de células seguem escritas à mão em
+// três lugares (`clusters:delete`, `infra:install`, `k3d:bootstrap-cells`), e uma terceira
+// célula adicionada a `infra/k3d/` entraria em algumas e não em outras. O modo de falha
+// seria o mesmo do B-026 — uma célula com menos plataforma que as outras, sem erro —, e
+// desta vez o guarda de contexto-fixo não pegaria, porque o contexto já é parâmetro.
+//
+// A fonte de verdade é `infra/k3d/cell-*-cluster.yaml`: cada arquivo é uma célula que
+// existe. Este guarda compara essa fonte com cada lista que enumera células.
+//
+// Medido em 2026-08-10: as três listas concordam com a fonte, mas por coincidência —
+// nada as amarrava.
+func TestTodaCelulaApareceEmTodaListaQueAsEnumera(t *testing.T) {
+	raiz := repoRootFromTest(t)
+
+	// Fonte de verdade: um arquivo de cluster por célula.
+	arquivos, err := filepath.Glob(filepath.Join(raiz, "infra", "k3d", "cell-*-cluster.yaml"))
+	if err != nil || len(arquivos) == 0 {
+		t.Fatalf("nenhum infra/k3d/cell-*-cluster.yaml encontrado — o guarda perdeu a fonte de verdade: %v", err)
+	}
+	var células []string
+	for _, a := range arquivos {
+		base := filepath.Base(a)
+		células = append(células, strings.TrimSuffix(base, "-cluster.yaml")) // cell-0, cell-1, …
+	}
+	sort.Strings(células)
+
+	listas := []struct {
+		arquivo string
+		task    string
+		porque  string
+	}{
+		{"taskfiles/k3d.yml", "clusters:delete", "uma célula fora daqui sobrevive ao `clean:all` e o próximo cleanroom começa sujo"},
+		{"taskfiles/infra.yml", "infra:install", "uma célula fora daqui não recebe a plataforma — é o defeito do B-026 de volta"},
+		{"Taskfile.yml", "k3d:bootstrap-cells", "uma célula fora daqui fica sem credencial de acesso"},
+	}
+
+	for _, l := range listas {
+		t.Run(l.task, func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join(raiz, l.arquivo))
+			if err != nil {
+				t.Fatalf("ler %s: %v", l.arquivo, err)
+			}
+			linhas := strings.Split(string(b), "\n")
+
+			inicio := -1
+			for i, ln := range linhas {
+				if strings.TrimSpace(ln) == strings.TrimSpace(l.task)+":" || strings.TrimSpace(ln) == strings.TrimSpace(l.task) {
+					inicio = i
+					break
+				}
+			}
+			if inicio < 0 {
+				t.Fatalf("task %q não encontrada em %s — o guarda perdeu o alvo", l.task, l.arquivo)
+			}
+
+			var bloco strings.Builder
+			for i := inicio; i < len(linhas) && i < inicio+40; i++ {
+				if i > inicio && strings.HasPrefix(linhas[i], "  ") && !strings.HasPrefix(linhas[i], "   ") &&
+					strings.HasSuffix(strings.TrimSpace(linhas[i]), ":") {
+					break
+				}
+				bloco.WriteString(linhas[i] + "\n")
+			}
+			texto := bloco.String()
+
+			for _, c := range células {
+				// aceita `cell-0`, `loopzero-cell-0`, `CELL_0_CONTEXT` — formas diferentes, mesma célula
+				envVar := "CELL_" + strings.TrimPrefix(c, "cell-") + "_"
+				if strings.Contains(texto, c) || strings.Contains(texto, envVar) {
+					continue
+				}
+				t.Errorf("a célula %q existe (infra/k3d/%s-cluster.yaml) e não aparece em `%s`.\n%s",
+					c, c, l.task, l.porque)
+			}
+		})
 	}
 }
