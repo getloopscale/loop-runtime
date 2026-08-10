@@ -77,6 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Digitar o endereço do serviço de login no navegador levava a uma página de erro em texto puro, sem
+  caminho nenhum dali. Agora leva à tela de entrada. O endereço é usado sobretudo por programas, e
+  nenhuma parte do produto mandava alguém para lá — mas um endereço público que não leva a lugar
+  nenhum é um beco sem saída para quem chega (BACKLOG.md B-020)
+
 - O serviço de login voltou a anunciar seu endereço público. Ele publica uma página que diz aos
   programas onde ficam suas próprias funções, e essa página apontava para um endereço que só existe
   dentro do servidor — inalcançável de fora, e sem criptografia. Nove endereços estavam assim,

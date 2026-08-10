@@ -259,3 +259,48 @@ func repoRootFromTest(t *testing.T) string {
 	t.Fatal("raiz do repositório não encontrada (go.work ausente)")
 	return ""
 }
+
+// TestProbeAceitaRedirecionamentoNaRotaPública trava o conserto da raiz.
+//
+// A raiz do host de identidade responde 302 para o login — de propósito, porque quem a
+// alcança é uma pessoa e o Kratos não serve página ali. Exigir 200 nas rotas públicas
+// reprovaria justamente o conserto: 200 serve o conteúdo, 302 leva a ele, e os dois
+// cumprem "esta rota leva a algum lugar". O que reprova é 404, que é não ter destino.
+func TestProbeAceitaRedirecionamentoNaRotaPública(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Redirect(w, &http.Request{}, "https://app-dev.loopzero.example/login", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	cli := srv.Client()
+	cli.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	host := strings.TrimPrefix(srv.URL, "https://")
+	v := Probe(context.Background(), cli, Target{Host: host, Path: "/", PublicBySpec: true,
+		PorQue: "quem digita o endereço é uma pessoa e precisa de um caminho para o login"})
+	if !v.Passed {
+		t.Errorf("302 para o login é destino válido numa rota pública; reprovar aqui invalidaria o "+
+			"conserto da raiz. Razão dada: %q", v.Reason)
+	}
+}
+
+// TestProbeReprova404NaRotaPública — o beco sem saída continua reprovando.
+func TestProbeReprova404NaRotaPública(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "404 page not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	cli := srv.Client()
+	cli.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	host := strings.TrimPrefix(srv.URL, "https://")
+	v := Probe(context.Background(), cli, Target{Host: host, Path: "/", PublicBySpec: true,
+		PorQue: "quem digita o endereço é uma pessoa e precisa de um caminho para o login"})
+	if v.Passed {
+		t.Error("404 numa rota pública é beco sem saída e tem de REPROVAR")
+	}
+	if !strings.Contains(v.Reason, "pessoa") {
+		t.Errorf("a razão devia dizer QUEM depende da rota, veio %q", v.Reason)
+	}
+}

@@ -94,9 +94,14 @@ func Probe(ctx context.Context, client *http.Client, t Target) Verdict {
 	v.Status = resp.StatusCode
 
 	if t.PublicBySpec {
-		if resp.StatusCode == http.StatusOK {
+		// 200 serve o conteúdo; 302/303 leva a ele. Os dois cumprem o contrato de "esta
+		// rota leva a algum lugar" — o que reprova é 404 ou 5xx, que é não ter destino.
+		// Exigir 200 aqui reprovaria o próprio conserto da raiz, que é um redirecionamento
+		// deliberado para o login.
+		if resp.StatusCode == http.StatusOK ||
+			resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusSeeOther {
 			v.Passed = true
-			v.Reason = "pública por especificação, respondeu 200"
+			v.Reason = fmt.Sprintf("respondeu %d", resp.StatusCode)
 		} else {
 			porque := t.PorQue
 			if porque == "" {
