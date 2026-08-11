@@ -237,13 +237,27 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// T2.7 of maturity-3-62-to-4-0-roadmap: if Stripe SDK is wired
-	// (production env with STRIPE_SECRET_KEY), mint a real one-time-use
-	// Portal session URL (TTL=30min, customer-scoped). Otherwise
-	// preserve legacy placeholder behavior so local dev + tests without
-	// a Stripe key keep working.
-	url := "https://billing.stripe.com/p/login/" + customerID // legacy fallback
-	if h.portalCreator != nil {
+	// SEM EMISSOR, NAO HA URL. O caminho anterior montava
+	// `https://billing.stripe.com/p/login/` + customerID e devolvia isso como se fosse a
+	// sessao do portal. Nao e sessao emitida pelo Stripe: e uma URL construida com o
+	// identificador de cobranca do cliente dentro, que trafega em historico de navegador,
+	// log de proxy e barra de enderecos.
+	//
+	// E nao era hipotese. Medido no app-dev em 2026-08-11: o Secret `loopzero-api-stripe` e
+	// `optional: true` e NAO EXISTE, entao este era o caminho ATIVO — todo
+	// `loopzero billing portal` devolvia a URL construida. O comentario original dizia que o
+	// fallback servia para "local dev + tests"; a intencao era local, o efeito era publico.
+	//
+	// Por ADR 2026-08-11, o loopzero-cloud e o unico emissor de sessao de portal. Quando o
+	// engine nao pode emitir, ele FALHA dizendo onde ir — uma URL que PARECE funcionar
+	// esconde o problema ate alguem investigar por que o portal nao abriu.
+	if h.portalCreator == nil {
+		writeErrorJSON(w, http.StatusServiceUnavailable, "BILLING_PORTAL_UNAVAILABLE",
+			"Billing is managed from the dashboard. Open it at "+h.portalReturnURL+"/billing")
+		return
+	}
+	var url string
+	{
 		realURL, sdkErr := h.portalCreator.CreateSession(r.Context(), customerID, h.portalReturnURL)
 		if sdkErr != nil {
 			h.logger.Error("billing: portal session create failed",

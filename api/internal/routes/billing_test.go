@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -135,28 +136,46 @@ func TestBilling_Portal_NoStripeCustomer_Returns400(t *testing.T) {
 	}
 }
 
-func TestBilling_Portal_WithStripeCustomer_ReturnsURL(t *testing.T) {
+// TestBilling_Portal_ComEmissor_DevolveSessaoEmitida — o caminho correto.
+//
+// Este teste afirmava que uma URL montada com o customerID era resposta valida (o
+// "legacy fallback"). Por ADR 2026-08-11 ela deixou de ser: sem emissor o engine falha,
+// e com emissor devolve o que o emissor deu. A distincao importa porque a URL construida
+// PARECE funcionar — e foi assim que ela sobreviveu no app-dev sem ninguem notar.
+func TestBilling_Portal_ComEmissor_DevolveSessaoEmitida(t *testing.T) {
 	custID := "cus_TestCustomerID"
-	h := NewBillingHandler(&fakeBillingPool{customerID: &custID})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
-	req = withAuth(req, defaultUserContext())
-	w := httptest.NewRecorder()
+	const sessaoEmitida = "https://billing.stripe.com/p/session/live_YWNjdF8xTes"
 
+	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
+		WithPortalSessionCreator(emissorFalso{url: sessaoEmitida}, "https://app.example/billing")
+
+	req := withAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), defaultUserContext())
+	w := httptest.NewRecorder()
 	h.Portal(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("com emissor configurado, queria 200; veio %d body=%s", w.Code, w.Body.String())
 	}
 	var resp PortalResponse
-	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if resp.URL == "" {
-		t.Error("expected non-empty portal URL")
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decodificar resposta: %v", err)
 	}
-	if !contains(resp.URL, custID) {
-		t.Errorf("expected URL to include customer ID %q, got %q", custID, resp.URL)
+	if resp.URL != sessaoEmitida {
+		t.Errorf("a URL tem de ser a que o emissor devolveu, e nao uma montada aqui.\n  queria %q\n  veio   %q",
+			sessaoEmitida, resp.URL)
+	}
+	if strings.Contains(resp.URL, custID) {
+		t.Errorf("a sessao emitida nao deve carregar o id de cobranca do cliente: %q", resp.URL)
 	}
 }
 
+// emissorFalso substitui o SDK do Stripe nos testes: o que importa aqui e que o handler
+// devolva o que o emissor deu, nao que ele saiba falar com o Stripe.
+type emissorFalso struct{ url string }
+
+func (e emissorFalso) CreateSession(_ context.Context, _, _ string) (string, error) {
+	return e.url, nil
+}
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
@@ -277,3 +296,36 @@ var errSDKFailure = stripeErr("test sdk failure")
 type stripeErr string
 
 func (e stripeErr) Error() string { return string(e) }
+
+// TestBilling_Portal_SemEmissorNaoConstroiURL fecha o B-032.
+//
+// MEDIDO em 2026-08-11: sem `STRIPE_SECRET_KEY`, o handler caía num caminho que montava
+// `https://billing.stripe.com/p/login/` + `customerID` e devolvia isso como se fosse a
+// sessão do portal. Não é sessão emitida pelo Stripe — é uma URL construída com o
+// identificador de cobrança do cliente dentro, que trafega em histórico de navegador, log
+// de proxy e barra de endereços.
+//
+// E não era hipótese: no app-dev o Secret `loopzero-api-stripe` é `optional: true` e não
+// existe, então esse era o caminho ATIVO. O comentário original dizia que o fallback
+// servia para "local dev + tests"; a intenção era local, o efeito era público.
+//
+// A decisão (ADR 2026-08-11) é que o `loopzero-cloud` é o único emissor. Quando o engine não
+// pode emitir, ele FALHA dizendo onde ir — uma URL que parece funcionar esconde o problema
+// até alguém investigar por que o portal não abriu.
+func TestBilling_Portal_SemEmissorNaoConstroiURL(t *testing.T) {
+	custID := "cus_TestCustomerID"
+	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}) // sem WithPortalSessionCreator
+
+	req := withAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), defaultUserContext())
+	w := httptest.NewRecorder()
+	h.Portal(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("sem emissor configurado o engine NÃO pode devolver 200 com uma URL montada — "+
+			"ela leva o id de cobrança do cliente no endereço e não é sessão emitida. "+
+			"Veio %d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), custID) {
+		t.Errorf("a resposta carrega o id de cobrança do cliente (%s): %s", custID, w.Body.String())
+	}
+}

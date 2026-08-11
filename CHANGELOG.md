@@ -87,6 +87,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- O comando que abre o portal de cobrança parou de entregar um endereço montado à mão. Quando o
+  serviço de pagamento não está configurado, ele devolvia um endereço construído com o identificador
+  de cobrança do cliente dentro — que parecia funcionar e não era uma sessão de verdade. Agora ele
+  diz que a cobrança é gerida pelo painel e informa onde abrir (BACKLOG.md B-032)
+
 - Abrir o portal de cobrança pela linha de comando passou a exigir ser dono da conta, como já era
   exigido pelo painel. A mesma ação pedia permissões diferentes conforme o caminho usado, e pelo
   caminho da linha de comando qualquer integrante do time conseguia ver fatura, meio de pagamento e
