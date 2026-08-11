@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+### Fixed
+- O portal de cobrança passa a ter um dono só: o clique em "Gerenciar plano" atravessa o painel, que
+  emite uma sessão real do Stripe. O motor deixou de emitir endereços de cobrança montados à mão, que
+  embutiam o identificador do cliente no próprio link (B-029, B-032)
+
 
 ### Changed
 

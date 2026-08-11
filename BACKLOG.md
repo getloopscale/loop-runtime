@@ -886,3 +886,29 @@ sessão sem o identificador. O passo que falta é humano: abrir o painel logado 
 
 **Estado após a validação:** sonda 11/11, 158/158 pods, painel 200, login 303, e as duas rotas de
 portal em 401 sem credencial — o engine porque agora exige `owner`, o cloud porque sempre exigiu.
+
+### O passo humano, feito — 2026-08-11
+
+Faltava a única coisa que nenhum ferramental prova: um usuário logado clicando. Feito no Chrome,
+contra `app-dev`, com a sessão do sponsor.
+
+**O que aconteceu ao clicar em `Manage Plan`:**
+
+| | observado |
+|---|---|
+| quem atendeu | `loopzero-cloud`, `GET /v1/billing/portal` às 10:28:17 |
+| o engine foi tocado? | **zero** ocorrências de `billing/portal` no `loopzero-api` |
+| para onde o navegador foi | `billing.stripe.com/p/session/test_YWNjdF8x…` — **200** |
+| a URL carrega o `cus_`? | **não** — verificado por comparação de string |
+| o portal carregou de verdade? | sim, com o titular real: nome + e-mail do sponsor |
+| o retorno funciona? | sim — "Voltar para LoopZero" leva a `app-dev.loopzero.example/billing` |
+
+O portal exibir o **titular certo** é o detalhe que fecha a cadeia: significa que o `loopzero-cloud`
+resolveu o cliente a partir do tenant autenticado, e não de um identificador vindo do pedido. Uma
+sessão emitida para o cliente errado teria carregado igual e parecido sucesso.
+
+**A duplicação, medida no lugar onde ela importava.** Antes, dois componentes sabiam falar com o
+Stripe e um deles montava o endereço à mão. Agora o clique atravessa um caminho só, e o engine —
+que ainda tem a rota, agora exigindo `owner` — não participa.
+
+O B-029 está fechado por observação, não por argumento.
