@@ -788,3 +788,23 @@ dod:
   - se o `B-029` for resolvido eliminando uma das implementações, este item fecha junto; se não for, ele fecha sozinho, porque a assimetria é defeito por si
 
 > Registrado 2026-08-11 durante a fase de planejamento do `B-029`. **Bloqueia o B-029**: unificar as duas implementações sem resolver a autorização levaria a regra mais frouxa para o lado que hoje é mais rigoroso.
+
+## B-032 — O portal do CLI devolve uma URL construída com o id do cliente   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-review
+severity: **alta** — a URL entregue ao usuário não é uma sessão emitida pelo Stripe, e o identificador do cliente vai no endereço. Não é vazamento de credencial, mas é identificador de cobrança em texto claro numa URL, que trafega em histórico de navegador, log de proxy e barra de endereços.
+evidence: medido em 2026-08-11. `api/internal/routes/billing.go:245` define o caminho sem credencial: `url := "https://billing.stripe.com/p/login/" + customerID // legacy fallback`. Ele só é substituído por uma sessão real quando `h.portalCreator != nil`, o que exige `STRIPE_SECRET_KEY`. **No app-dev o fallback está ativo**: o deployment monta o Secret `loopzero-api-stripe` com `optional: true`, e `kubectl get secret loopzero-api-stripe` devolve **NotFound**. Ou seja, hoje `loopzero billing portal` entrega ao usuário uma URL montada com o `cus_...` dele.
+why_now: apareceu ao medir se o engine realmente precisa da credencial do Stripe (fase de planejamento do `B-029`). A resposta é que ele **não precisa** — e é exatamente por isso que o problema existe: o fallback foi escrito para que dev e testes funcionassem sem chave, e virou o comportamento de produção do ambiente porque o Secret nunca foi semeado. O comentário no código diz *"otherwise preserve legacy placeholder behavior so local dev + tests without a Stripe key keep working"* — a intenção era local, o efeito é público.
+status: raw
+dod:
+  - `loopzero billing portal` devolve uma sessão emitida pelo Stripe, ou falha dizendo que o faturamento não está configurado — nunca uma URL construída
+  - o fallback, se mantido, é explicitamente restrito a ambiente de desenvolvimento e não pode ser alcançado quando o ambiente é público
+  - existe verificação que reprova URL de provedor de pagamento montada por concatenação de identificador
+  - está medido se essa URL alguma vez chegou a um usuário real, e o que ela expõe a quem a receba
+
+**Relação com o `B-029`.** Este achado **reduz** o item pai: se o engine não tem a chave do Stripe hoje, a "credencial em dois processos" é potencial e não atual — o custo real da duplicação passa a ser a divergência de comportamento entre as duas implementações, não a superfície de credencial. E confirma a direção: o engine não deveria minar sessão de portal.
+
+> Registrado 2026-08-11 durante o planejamento do `B-029`.
