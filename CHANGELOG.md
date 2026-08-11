@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   respondem "task not found" (BACKLOG.md B-001, B-005)
 
 ### Added
+- **loopzero:** backlog B-035 — o segredo que verifica pagamentos não existia no ambiente
+- **loopzero:** backlog B-036 — os seeds de cobrança pulam sem credencial e a corrente reporta verde
+- **loopzero:** backlog B-037 — o painel monta os dois segredos de cobrança como opcionais
+- **loopzero:** backlog B-038 — nenhuma camada de cobrança pode degradar em silêncio
 
 - **`GET /api/v1/health/ready`** — the ecosystem-canonical readiness name, sharing the handler behind `/api/v1/health/deep`. `deep` describes how the check is implemented; `ready` describes what it answers, which is the question an orchestrator asks before routing traffic. `deep` is unchanged: deployment probes point at it, and removal is a separate item after a deprecation deadline. (B-123)
 

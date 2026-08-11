@@ -957,3 +957,102 @@ dod:
   - o reporter enviando ao menos um registro, provado pelo lado do Stripe
   - o caso "assinatura sem item" falha alto em vez de percorrer zero linhas em silêncio
 
+## B-035 — O segredo que verifica pagamentos não existia no ambiente   [ ]
+
+> Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: human
+evidence: |
+  Medido no app-dev em 2026-08-11:
+  - `loopzero-stripe-webhook` **ausente** do namespace `loopzero-system`
+  - o Stripe, do outro lado, JÁ tinha o endpoint configurado: `we_1Tr1l5A0ZwssSKrVmQm8t67e`,
+    com o `whsec` canônico (`seed stripe-webhook-endpoint --verify` → PASS)
+  - `~/.loopzero/dev-credentials.json` no droplet tem `stripe.webhook_secret` (38 chars)
+  - `seed stripe-webhook-secret` (sem `--verify`) → **PASS, criou o Secret**
+why_now: o passo canônico funciona e nunca rodou nesta reconstrução. Enquanto isso, o Stripe
+  enviava eventos para um endpoint cujo destinatário não conseguia verificar a assinatura —
+  pagamento confirmado, upgrade de plano, falha de cobrança, todos descartados em silêncio.
+  Semear à mão fechou o sintoma hoje; o item é a causa: por que a corrente não cobriu.
+status: raw
+dod:
+  - `loopzero-stripe-webhook` presente após uma execução limpa da corrente pós-cleanroom
+  - um evento real do Stripe processado no app-dev, provado pelo lado do Stripe e pelo log
+  - a ausência do Secret deixa de ser um estado que o sistema aceita ao subir
+
+## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [ ]
+
+> Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: |
+  `cmd/loopzero-ops/internal/seed/stripe_webhook_secret.go:79` e `stripe_api_keys.go:101`
+  devolvem, ambos, `Verdict: SKIP, Reason: "dev-credentials.json absent (SKIP-graceful)"`.
+  Reproduzido: na máquina local, sem o arquivo, `seed stripe-webhook-secret --verify`
+  imprime `SKIP` e sai bem-sucedido.
+why_now: `SKIP-graceful` é a política certa para um seed opcional e a errada para a credencial
+  que autoriza cobrar. O resultado é uma corrente que passa inteira num ambiente que não
+  consegue faturar nem verificar pagamento — e um verde que afirma o contrário.
+status: raw
+dod:
+  - um ambiente que declara cobrança e não tem credencial FALHA, em vez de pular
+  - o teste que prove isso falha antes da correção
+  - a distinção fica explícita: opcional por design ≠ ausente por acidente
+
+## B-037 — O painel monta os dois segredos de cobrança como opcionais   [ ]
+
+> Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: human
+evidence: |
+  `infra/helm/loopzero-cloud/templates/deployment.yaml:123-132` e o irmão publicado
+  `charts/loopzero-cloud/templates/deployment.yaml:84-85` marcam `loopzero-stripe-webhook` e
+  `loopzero-stripe-api-keys` com `optional: true`. Medido: o pod subiu por 20h com os dois
+  ausentes, `Running`, sem um único evento que dissesse que a cobrança estava morta.
+why_now: `optional: true` é o que transforma "não temos credencial" em "subiu normalmente".
+  É a terceira camada do mesmo padrão, e a mais silenciosa: as outras duas ao menos deixam
+  uma linha de log. Esta não deixa nada.
+status: raw
+dod:
+  - um ambiente que declara cobrança não sobe sem as credenciais, ou sobe declarando-se
+    sem cobrança de forma visível — nunca as duas coisas ao mesmo tempo
+  - os dois charts irmãos corrigidos juntos (a regra dos 3 charts sobrepostos)
+  - provado no app-dev, removendo o Secret e observando o que o sistema diz
+
+## B-038 — Nenhuma camada de cobrança pode degradar em silêncio   [ ]
+
+> Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: |
+  Cinco camadas independentes, todas medidas em 2026-08-11, todas falhando para o MESMO
+  lado — não cobrar, não barrar, não verificar — e nenhuma delas dizendo isso:
+  | camada | como degrada | item |
+  |---|---|---|
+  | monte do Secret | `optional: true` → sobe sem credencial | B-037 |
+  | seed | `SKIP-graceful` → corrente verde sem credencial | B-036 |
+  | agregador de custo | `LOOPZERO_PROMETHEUS_URL` ausente → desligado | B-033 |
+  | portão de custo | nil-safe → *pass-through* | B-033 |
+  | reporte de uso | assinatura sem item → zero linhas percorridas | B-034 |
+why_now: cada uma dessas escolhas é defensável isolada. Juntas formam um sistema que, diante
+  de qualquer configuração faltante, cobra menos e barra menos — e informa isso a ninguém.
+  A direção do erro é o achado: um sistema de cobrança que erra sempre para o mesmo lado
+  não está sendo tolerante, está tendo um viés.
+status: raw
+dod:
+  - uma verificação em `loopzero-ops` que enumere as camadas de cobrança e reprove quando
+    qualquer uma esteja degradada — no espírito do registro fechado-por-padrão de portas
+  - a verificação falha hoje, contra o app-dev, e passa depois de B-033/034/035/036/037
+  - uma camada de cobrança nova nasce dentro dessa verificação, ou ela não sobe
+
