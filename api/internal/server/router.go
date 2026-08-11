@@ -95,6 +95,19 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
+	// B-123 — `/health/ready` is the ecosystem's name for this answer
+	// (loopzero-contracts/httpsurface, D5). `deep` describes HOW the check is
+	// implemented; `ready` describes what it answers, which is the question an
+	// orchestrator asks before sending traffic.
+	//
+	// Same handler, not a copy: a second implementation of "check the database and
+	// every registered service" would drift, and the half that drifts quietly is
+	// degraded-detection — what keeps traffic off a node that cannot serve.
+	//
+	// `deep` stays. Deployment probes point at it and the maintenance middleware
+	// special-cases the health prefix; renaming takes the service out of rotation
+	// the moment this deploys. Removal is its own item after a deprecation deadline.
+	r.Get("/api/v1/health/ready", health.DeepHealth)
 	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
 	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).

@@ -54,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`GET /api/v1/health/ready`** — the ecosystem-canonical readiness name, sharing the handler behind `/api/v1/health/deep`. `deep` describes how the check is implemented; `ready` describes what it answers, which is the question an orchestrator asks before routing traffic. `deep` is unchanged: deployment probes point at it, and removal is a separate item after a deprecation deadline. (B-123)
+
 - Uma verificação automática lista todas as portas que o servidor abre e reprova qualquer uma que
   apareça sem estar declarada. Antes a regra era o contrário — uma porta nova ficava aberta até
   alguém lembrar de fechá-la —, e o resultado foi que dezessete portas se tornaram alcançáveis da
