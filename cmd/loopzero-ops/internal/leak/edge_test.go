@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -477,5 +478,73 @@ func TestTodaCelulaApareceEmTodaListaQueAsEnumera(t *testing.T) {
 					c, c, l.task, l.porque)
 			}
 		})
+	}
+}
+
+// TestTodoRepoImportadoTemDominio fecha a lacuna que deixou o loopzero-forge invisível.
+//
+// A tabela de domínios em `.claude/rules/cycle-backlog.md` lista repositórios, e nada a
+// compara com o que o código realmente importa. Foi assim que `loopzero-forge` passou: 18
+// arquivos do engine dependem dele — incluindo o construtor de workflows, o coração do
+// caminho de build — e ele não aparecia na tabela, não tinha especialista e não tinha
+// checkout.
+//
+// A consequência não é estética. `route_domain.py` recusa um repositório sem domínio, e o
+// gate G1 do intake bloqueia o item: um achado no forge não teria para onde ser roteado.
+// O ecossistema simplesmente não alcançaria uma dependência central.
+//
+// A fonte de verdade aqui é o `go.mod`: o que o código importa é o que existe. Uma tabela
+// escrita à mão envelhece; uma derivada do que se importa acompanha por construção.
+func TestTodoRepoImportadoTemDominio(t *testing.T) {
+	raiz := repoRootFromTest(t)
+
+	tabela, err := os.ReadFile(filepath.Join(raiz, ".claude", "rules", "cycle-backlog.md"))
+	if err != nil {
+		t.Fatalf("ler a tabela de domínios: %v", err)
+	}
+	texto := string(tabela)
+
+	// Todo `loopzero-*` importado por qualquer go.mod deste repositório.
+	importados := map[string]bool{}
+	err = filepath.WalkDir(raiz, func(caminho string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "go.mod" {
+			return nil
+		}
+		if strings.Contains(caminho, "/vendor/") || strings.Contains(caminho, "/testdata/") {
+			return nil
+		}
+		b, rerr := os.ReadFile(caminho) // #nosec G304 -- caminho vem do walk sobre o próprio repo
+		if rerr != nil {
+			return nil
+		}
+		for _, m := range regexp.MustCompile(`loopzero[a-z]*/(loopzero-[a-z-]+)`).FindAllStringSubmatch(string(b), -1) {
+			importados[m[1]] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("varrer go.mod: %v", err)
+	}
+	if len(importados) == 0 {
+		t.Fatal("nenhum repositório irmão importado — o guarda perdeu o alvo e precisa ser revisto")
+	}
+
+	var semDominio []string
+	for repo := range importados {
+		// A tabela cita o repositório entre crases, na coluna de repositórios.
+		if strings.Contains(texto, "`"+repo+"`") {
+			continue
+		}
+		semDominio = append(semDominio, repo)
+	}
+	sort.Strings(semDominio)
+
+	if len(semDominio) > 0 {
+		t.Errorf("%d repositório(s) importado(s) sem domínio na tabela: %s\n"+
+			"Um repositório sem domínio não tem especialista e não pode receber um achado: "+
+			"route_domain.py o recusa e o gate G1 do intake bloqueia o item. Declare-o em "+
+			"`.claude/rules/cycle-backlog.md`, ou declare-o explicitamente como dependência de "+
+			"terceiros — as duas respostas servem, o silêncio não.",
+			len(semDominio), strings.Join(semDominio, ", "))
 	}
 }

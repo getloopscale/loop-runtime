@@ -720,7 +720,7 @@ dod:
 
 **A distinção que importa.** Medir consumo é do engine — ele é quem sabe quantos builds rodaram. Saber quanto custa é do plano de controle. Hoje o engine faz as duas coisas, e é a segunda que atravessa a fronteira.
 
-## B-030 — Uma dependência central não pertence a domínio nenhum   [ ]
+## B-030 — Uma dependência central não pertence a domínio nenhum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -734,5 +734,26 @@ dod:
   - `loopzero-forge` tem domínio e especialista, ou está declarado explicitamente como dependência de terceiros fora do ecossistema — as duas respostas são aceitáveis, o silêncio não
   - se for do ecossistema: tem checkout, como os outros 15
   - a tabela de domínios passa a ser verificável contra os `go.mod` — hoje ela lista repositórios, e nada reprova quando um repositório importado não está nela
+
+**RESOLVIDO em 2026-08-11**, depois que o sponsor clonou o repositório. Medido o que ele é antes de
+decidir onde encaixa: biblioteca pura (54 arquivos Go, **64** testes — mais teste que código), nenhum
+serviço (o único `main.go` é fixture em `testdata/`), importa **zero** irmãos e é importado só pelo
+engine. Isso é a posição do `loopzero-contracts`: base do grafo.
+
+Entrou em **`contracts-auth`** por essa posição, e não por assunto. O nome do domínio fala de
+contratos e autenticação; o que ele guarda é *o que todo mundo importa e que não importa ninguém* — e
+é essa propriedade que decide o roteamento, porque é ela que determina o raio de explosão de uma
+mudança. A razão ficou escrita na própria regra, para a escolha não parecer arbitrária depois.
+
+Verificado ponta a ponta: `route_domain.py loopzero-forge` devolve `domain: contracts-auth`,
+`agent: agents/contracts-auth.md`. O especialista foi estendido — roteamento sem competência seria
+meio conserto: ele não mencionava o forge, e agora explica o que a biblioteca faz e por que uma
+quebra de compatibilidade nela aparece no primeiro deploy de cliente, não como erro de compilação.
+
+**E a lacuna que o deixou invisível foi fechada**, que é o que impede o próximo:
+`TestTodoRepoImportadoTemDominio` varre todo `go.mod` do repositório e reprova qualquer `loopzero-*`
+importado sem domínio na tabela. RED antes de GREEN — ele nomeou o `loopzero-forge` antes da declaração
+existir. A fonte de verdade passou a ser **o que o código importa**; uma tabela escrita à mão
+envelhece, uma verificada contra o código não.
 
 > Ambos registrados 2026-08-11, ao medir a separação de domínios a pedido do sponsor.
