@@ -702,3 +702,37 @@ dod:
 **O crédito onde é devido.** O `loopzero-host-firewall` existe, está habilitado, e a `ALLOW_EXTERNAL` documenta cada exceção com evidência de quando e como foi medida. O defeito não é ausência de controle — é que o controle é uma lista de negação escrita à mão, e listas de negação envelhecem para o lado inseguro.
 
 > Registrado 2026-08-10, a partir da diretriz de superfície única do sponsor.
+
+## B-029 — O faturamento tem dois donos, com duas integrações diferentes   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: medido em 2026-08-11 ao mapear a separação de domínios. O `loopzero-cloud` é o dono declarado do faturamento (`cycle-backlog.md` roteia `control-plane` para ele, e ele tem `internal/billing/` com 5+ arquivos), mas **os dois repositórios falam com o Stripe, por caminhos diferentes**: o `loopzero-cloud` monta requisições HTTP à mão contra `https://api.stripe.com/v1` (`internal/billing/stripe.go:28`), enquanto o `loopzero` importa a biblioteca oficial `github.com/stripe/stripe-go/v82` e abre sessão do portal em `api/internal/services/billing/stripe_portal.go`. São duas implementações da mesma integração, em domínios diferentes. Além disso, **21 arquivos do engine** conhecem limites de plano e 6 mencionam Stripe.
+why_now: apareceu ao responder se a separação de domínios está clara. A tabela de roteamento diz que faturamento é `control-plane`; o código diz que é dos dois. Enquanto ninguém precisa mudar a integração, o custo é zero — no dia em que a API do Stripe mudar, ou uma chave rotacionar, são dois lugares a acertar, em repositórios diferentes, com o risco de acertar um só.
+status: raw
+severity: média — nada quebrado hoje. O risco é de divergência silenciosa: já aconteceu com este par (o `CLAUDE.md` documenta o bug do `Idempotency-Key` com janela de 1h no `cloud/internal/billing/stripe.go`, e o da ordem de webhooks no mesmo arquivo).
+dod:
+  - está decidido qual repositório é dono da integração com o Stripe, e o outro consome por contrato em vez de reimplementar
+  - se o engine precisa medir consumo (legítimo — `metering/` é dele), isso está separado de conhecer PREÇO (não é dele)
+  - as duas implementações não divergem em silêncio: ou existe uma só, ou existe verificação que compara o comportamento das duas
+
+**A distinção que importa.** Medir consumo é do engine — ele é quem sabe quantos builds rodaram. Saber quanto custa é do plano de controle. Hoje o engine faz as duas coisas, e é a segunda que atravessa a fronteira.
+
+## B-030 — Uma dependência central não pertence a domínio nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: medido em 2026-08-11. `api/go.mod:19` declara `github.com/getloopscale/loopzero-forge v0.6.0`, e **18 arquivos** do engine a importam — incluindo `api/internal/argo/workflow_builder.go`, que constrói os workflows de build (o coração do caminho de deploy). O `loopzero-forge` **não aparece na tabela de domínios** do `cycle-backlog.md` (zero menções), **não tem especialista** em `agents/`, e **não tem checkout no disco** (`loopzero-platform/loopzero-forge` não existe).
+why_now: a pergunta sobre separação de domínios expôs a lacuna. Todo repositório que o ecossistema mantém tem domínio e especialista — este tem 18 arquivos dependendo dele e nenhum dos dois. Um achado nele não teria para onde ser roteado: `route_domain.py` recusaria, e a regra de intake (`G1`) bloquearia o item.
+status: raw
+severity: média — a dependência funciona (versão fixada, build verde). O custo aparece quando ela precisar mudar: ninguém é dono, ninguém tem o código à mão, e o caminho de manutenção do ecossistema não a alcança.
+dod:
+  - `loopzero-forge` tem domínio e especialista, ou está declarado explicitamente como dependência de terceiros fora do ecossistema — as duas respostas são aceitáveis, o silêncio não
+  - se for do ecossistema: tem checkout, como os outros 15
+  - a tabela de domínios passa a ser verificável contra os `go.mod` — hoje ela lista repositórios, e nada reprova quando um repositório importado não está nela
+
+> Ambos registrados 2026-08-11, ao medir a separação de domínios a pedido do sponsor.
