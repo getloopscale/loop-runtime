@@ -592,3 +592,46 @@ func TestRotaDePortalExigeOMesmoPapelDosDoisLados(t *testing.T) {
 			"aplicar o middleware que já existe em middleware/roles.go.", strings.TrimSpace(linhaRota))
 	}
 }
+
+// TestSoUmComponenteFalaComOStripe fecha o B-029.
+//
+// A decisão (ADR 2026-08-11) é que o `loopzero-cloud` é o único emissor de sessão do portal.
+// Enquanto o engine mantiver a biblioteca do Stripe importada e o injetor de emissor, a
+// capacidade continua lá — basta alguém semear o Secret para ela voltar a ser usada, e a
+// duplicação que o B-029 registra reaparece sem código novo.
+//
+// O guarda mira a CAPACIDADE e não a configuração: um Secret ausente é estado de
+// ambiente, e ambientes mudam. O que não pode voltar sem decisão é o engine saber falar
+// com o Stripe.
+func TestSoUmComponenteFalaComOStripe(t *testing.T) {
+	raiz := repoRootFromTest(t)
+
+	var ofensores []string
+	err := filepath.WalkDir(filepath.Join(raiz, "api"), func(caminho string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(caminho, ".go") ||
+			strings.HasSuffix(caminho, "_test.go") {
+			return nil
+		}
+		b, rerr := os.ReadFile(caminho) // #nosec G304 -- walk sobre o próprio repo
+		if rerr != nil {
+			return nil
+		}
+		if strings.Contains(string(b), "stripe/stripe-go") {
+			rel, _ := filepath.Rel(raiz, caminho)
+			ofensores = append(ofensores, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("varrer api/: %v", err)
+	}
+	sort.Strings(ofensores)
+
+	if len(ofensores) > 0 {
+		t.Errorf("o engine importa a biblioteca do Stripe em %d arquivo(s): %s\n"+
+			"Por ADR 2026-08-11 o loopzero-cloud é o único emissor de sessão de portal. Enquanto a "+
+			"biblioteca estiver aqui, a capacidade continua no engine e basta semear o Secret para a "+
+			"duplicação voltar — sem código novo, sem revisão, sem decisão.",
+			len(ofensores), strings.Join(ofensores, ", "))
+	}
+}

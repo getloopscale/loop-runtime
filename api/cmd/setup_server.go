@@ -17,8 +17,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
 
-	"github.com/getloopscale/loopzero/api/internal/services/billing"
-
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -261,37 +259,16 @@ func buildServerConfig(
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
 			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
 		}
-		// T2.7 of maturity-3-62-to-4-0-roadmap: wire Stripe Customer
-		// Portal SDK if STRIPE_SECRET_KEY env is set. Production sets
-		// it via ESO from the prod Stripe secret. Local dev + tests
-		// without the env keep the legacy placeholder URL — no SDK
-		// call, no test pollution. Test-mode keys (sk_test_*) work
-		// fine and return real session URLs against Stripe's test
-		// dashboard, useful for staging environments.
+		// O ENGINE NAO EMITE SESSAO DE PORTAL. Por ADR 2026-08-11
+		// (docs/decisions/2026-08-11-stripe-portal-ownership-adr.md), o loopzero-cloud e o unico
+		// emissor: ele e quem CRIA o cliente Stripe quando falta (EnsureStripeCustomer), e o
+		// engine so exigia que ja existisse. Manter a capacidade aqui significava a chave do
+		// Stripe poder existir no processo que atende o CLI e o caminho critico de deploy —
+		// superficie sem contrapartida, ja que o passo anterior mora no outro lado.
 		//
-		// ADR-2026-05-27-T2.7-RAK conditional approval § "Engineering
-		// deliverables" #1 — startup assertion (6th test condition per
-		// CVP + GitOps): if LOOPZERO_ENV=production AND STRIPE_SECRET_KEY
-		// does not start with sk_live_ prefix, panic with clear message
-		// at boot. This is a defense-in-depth against silent test-mode
-		// drift in production (revenue leak invisible from cluster).
-		// Also rejects rk_live_/rk_test_ (Restricted Access Keys) at
-		// the assertion level — RAK uses the same sk_live_ prefix per
-		// Stripe docs, so the assertion correctly admits both full
-		// keys + RAKs.
-		if stripeKey := os.Getenv("STRIPE_SECRET_KEY"); stripeKey != "" {
-			if err := validateStripeKeyForEnv(cfg.Env, stripeKey); err != nil {
-				panic(err.Error())
-			}
-			returnURL := os.Getenv("BILLING_RETURN_URL")
-			if returnURL == "" {
-				returnURL = "https://app.loopzero.cloud/billing"
-			}
-			billingHandler.WithPortalSessionCreator(
-				billing.NewStripePortalSessionCreator(stripeKey),
-				returnURL,
-			)
-		}
+		// O `BillingHandler` mantem o injetor `WithPortalSessionCreator` de proposito: ele e a
+		// costura testavel do handler. O que saiu foi a IMPLEMENTACAO que fala com o Stripe.
+
 		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.

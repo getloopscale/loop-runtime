@@ -14,7 +14,6 @@ require (
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
-	github.com/stripe/stripe-go/v82 v82.5.1
 	github.com/getloopscale/loopzero/pkg v0.0.0
 	github.com/getloopscale/loopzero-forge v0.6.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0

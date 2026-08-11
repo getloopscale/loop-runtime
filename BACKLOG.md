@@ -703,7 +703,7 @@ dod:
 
 > Registrado 2026-08-10, a partir da diretriz de superfície única do sponsor.
 
-## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
+## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -772,7 +772,7 @@ envelhece, uma verificada contra o código não.
 
 > Ambos registrados 2026-08-11, ao medir a separação de domínios a pedido do sponsor.
 
-## B-031 — A mesma capacidade exige `owner` num lado e nada no outro   [ ]
+## B-031 — A mesma capacidade exige `owner` num lado e nada no outro   [x]
 
 domain: engine-go
 repo: loopzero
@@ -787,9 +787,13 @@ dod:
   - existe verificação que compara autorização entre implementações duplicadas da mesma capacidade — enquanto houver duas, elas não podem divergir em silêncio
   - se o `B-029` for resolvido eliminando uma das implementações, este item fecha junto; se não for, ele fecha sozinho, porque a assimetria é defeito por si
 
-> Registrado 2026-08-11 durante a fase de planejamento do `B-029`. **Bloqueia o B-029**: unificar as duas implementações sem resolver a autorização levaria a regra mais frouxa para o lado que hoje é mais rigoroso.
+**RESOLVIDO em 2026-08-11** — `router.go:520` passou a montar a rota com `middleware.RequireRole("owner")`, alinhando com o `loopzero-cloud`. As hierarquias já eram idênticas (`owner: 3`), então alinhar foi aplicar o middleware que já existia.
 
-## B-032 — O portal do CLI devolve uma URL construída com o id do cliente   [ ]
+**O primeiro teste que escrevi era teatro**, e registrar isso vale mais que o conserto: ele montava `RequireRole("owner")(h.Portal)` **dentro do teste** e verificava o 403 — e passava, com a rota real seguindo aberta. Provava que o middleware funciona, que ninguém duvidava, e nada sobre a rota. Um teste que constrói a própria proteção não testa a ausência dela. O guarda que ficou lê a **montagem** em `router.go`, porque é ali que a autorização vive.
+
+> Registrado 2026-08-11 durante a fase de planejamento do `B-029`.
+
+## B-032 — O portal do CLI devolve uma URL construída com o id do cliente   [x]
 
 domain: engine-go
 repo: loopzero
@@ -807,4 +811,40 @@ dod:
 
 **Relação com o `B-029`.** Este achado **reduz** o item pai: se o engine não tem a chave do Stripe hoje, a "credencial em dois processos" é potencial e não atual — o custo real da duplicação passa a ser a divergência de comportamento entre as duas implementações, não a superfície de credencial. E confirma a direção: o engine não deveria minar sessão de portal.
 
+**RESOLVIDO em 2026-08-11.** O caminho que construía a URL foi removido; sem emissor configurado o engine devolve `503 BILLING_PORTAL_UNAVAILABLE` dizendo onde abrir. Pior em conveniência, melhor em honestidade — uma URL que *parece* funcionar esconde o problema até alguém investigar, e foi assim que ela sobreviveu.
+
+**Provado no artefato em execução**, não deduzido: extraído o binário da imagem implantada no app-dev, a string `p/login/` aparece **0** vezes e `BILLING_PORTAL_UNAVAILABLE` aparece. Um teste existente afirmava que a URL construída era resposta válida; foi reescrito para provar o que deveria desde o início — com emissor, a resposta é a que o emissor deu.
+
 > Registrado 2026-08-11 durante o planejamento do `B-029`.
+
+---
+
+## Fechamento do B-029 — 2026-08-11
+
+**RESOLVIDO**, com escopo bem menor e direção diferente do que o item registrava. O ciclo completo
+está em `.claude/knowledge-base/discoveries/opportunities/stripe-portal-duplication-opportunity.md`,
+`.claude/knowledge-base/plans/stripe-portal-unification-plan.md` e
+`docs/decisions/2026-08-11-stripe-portal-ownership-adr.md`.
+
+**Três refutações, cada uma por leitura do código e não por confiança na leitura anterior:**
+
+1. *"O faturamento tem dois donos."* Não. O engine não conhece preço, plano nem catálogo — a
+   sobreposição era de **um verbo**.
+2. *"O engine repassa ao loopzero-cloud."* Inverteria a dependência: o fluxo é `cloud → engine` e não
+   existe inverso. Seria o `B-022` agravado.
+3. *"As implementações são equivalentes."* Não. O cloud **cria** o cliente Stripe quando falta; o
+   engine **exige** que exista. O cloud é um passo antes, não uma cópia.
+
+**O achado que decidiu**, e que não estava no item: o engine devolvia uma URL **construída** com o id
+de cobrança do cliente quando não tinha a chave — e não tinha, no app-dev. Virou `B-032`, fechado.
+
+**O que ficou:** o `loopzero-cloud` é o único emissor. O engine perdeu a implementação
+(`services/billing/stripe_portal.go` removido), a dependência (`stripe-go` fora do `go.mod`) e ganhou
+`RequireRole("owner")` na rota, alinhando com o cloud (`B-031`, fechado). O injetor
+`WithPortalSessionCreator` **fica** — é a costura testável do handler; o que saiu foi quem falava com
+o Stripe.
+
+**Três guardas, cada um mirando a causa:** a rota exige papel (lê a montagem em `router.go`, não um
+handler); o engine não importa `stripe-go`; e sem emissor o handler falha em vez de construir URL.
+Provado no artefato em execução: extraído o binário da imagem implantada, `p/login/` aparece **0**
+vezes e `BILLING_PORTAL_UNAVAILABLE` aparece.
