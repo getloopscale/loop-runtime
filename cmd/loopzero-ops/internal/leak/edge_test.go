@@ -548,3 +548,47 @@ func TestTodoRepoImportadoTemDominio(t *testing.T) {
 			len(semDominio), strings.Join(semDominio, ", "))
 	}
 }
+
+// TestRotaDePortalExigeOMesmoPapelDosDoisLados trava a assimetria do B-031.
+//
+// MEDIDO em 2026-08-11: a MESMA capacidade — abrir a sessão do portal de cobrança do
+// Stripe — exige papel diferente em cada implementação. O `loopzero-cloud` monta
+// `RequireRole(tenantProvisioner, "owner")`; o engine monta a rota com rate-limit e mais
+// nada, embora TENHA o middleware (hierarquia idêntica, `owner: 3`) e o use nas rotas
+// vizinhas — `tenants/bulk-delete` aplica `RequireAdmin`.
+//
+// Não é vazamento: a rota está autenticada. É escalonamento horizontal — qualquer membro
+// de um time abre o portal de cobrança dele, onde se vê fatura, meio de pagamento e
+// histórico.
+//
+// POR QUE ESTE GUARDA LÊ A MONTAGEM, e não exercita um handler. A primeira versão que
+// escrevi montava `RequireRole("owner")(h.Portal)` DENTRO do teste e verificava o 403 —
+// e passava, com a rota real seguindo aberta. Provava que o middleware funciona, que
+// ninguém duvidava, e nada sobre a rota. Um teste que constrói a própria proteção não
+// testa a ausência dela; a autorização vive na montagem da rota, então é a montagem que
+// precisa ser lida.
+func TestRotaDePortalExigeOMesmoPapelDosDoisLados(t *testing.T) {
+	raiz := repoRootFromTest(t)
+	b, err := os.ReadFile(filepath.Join(raiz, "api", "internal", "server", "router.go"))
+	if err != nil {
+		t.Fatalf("ler router.go: %v", err)
+	}
+
+	var linhaRota string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, `"/api/v1/billing/portal"`) && !strings.Contains(strings.TrimSpace(l), "//") {
+			linhaRota = l
+			break
+		}
+	}
+	if linhaRota == "" {
+		t.Fatal("rota /api/v1/billing/portal não encontrada em router.go — o guarda perdeu o alvo")
+	}
+	if !strings.Contains(linhaRota, "RequireRole") && !strings.Contains(linhaRota, "RequireOwner") {
+		t.Errorf("a rota do portal de cobrança não exige papel:\n  %s\n"+
+			"O loopzero-cloud exige `owner` para a MESMA capacidade (cmd/main.go:1572). Sem isso, "+
+			"qualquer membro autenticado do time abre o portal de cobrança dele — fatura, meio de "+
+			"pagamento e histórico. As duas hierarquias são idênticas (`owner: 3`), então alinhar é "+
+			"aplicar o middleware que já existe em middleware/roles.go.", strings.TrimSpace(linhaRota))
+	}
+}

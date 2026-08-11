@@ -517,7 +517,13 @@ func registerProtectedRoutes(
 	// loopzero billing portal hit silent 404 pre-T1.6.
 	if cfg.BillingHandler != nil {
 		r.Get("/api/v1/billing", cfg.BillingHandler.Get)
-		r.With(rateLimitMiddlewares...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+		// `owner` porque o loopzero-cloud exige o mesmo para a MESMA capacidade
+		// (loopzero-cloud/cmd/main.go:1572). A rota estava com rate-limit e mais nada, e a
+		// divergencia sobreviveu porque nenhuma leitura de UM lado so a mostraria: e
+		// escalonamento horizontal — qualquer membro do time abria o portal de cobranca
+		// dele, com fatura, meio de pagamento e historico. As duas hierarquias sao
+		// identicas (`owner: 3`), entao alinhar foi aplicar o middleware que ja existia.
+		r.With(append(rateLimitMiddlewares, middleware.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
 	}
 
 	// Environment routes

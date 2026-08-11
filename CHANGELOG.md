@@ -87,6 +87,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Abrir o portal de cobrança pela linha de comando passou a exigir ser dono da conta, como já era
+  exigido pelo painel. A mesma ação pedia permissões diferentes conforme o caminho usado, e pelo
+  caminho da linha de comando qualquer integrante do time conseguia ver fatura, meio de pagamento e
+  histórico de cobrança (BACKLOG.md B-031)
+
 - Entrar com a conta do Google voltou a funcionar. Uma reinstalação do serviço de login gravou um
   texto de exemplo no lugar das credenciais reais e terminou como se tivesse dado certo — o Google
   então recusava a entrada dizendo que o aplicativo não existe. As credenciais nunca se perderam;
