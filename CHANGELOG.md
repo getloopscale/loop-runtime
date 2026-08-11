@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+
+- O portal de cobrança passou a ser aberto por um único componente. Dois pontos do sistema pediam a
+  sessão ao provedor de pagamento por caminhos diferentes, e por isso a chave de cobrança podia
+  existir em dois processos — inclusive no que atende os comandos de implantação. Agora ela vive num
+  só, e o outro orienta ao painel quando não pode abrir. Quem usa o comando de cobrança e não tiver
+  o pagamento configurado passa a ver uma mensagem com o endereço do painel, em vez de um link
+  (BACKLOG.md B-029)
 - Hook de validação de comandos ficou mais rápido: ~6 processos por chamada de ferramenta em vez de ~50, sem mudança de comportamento
 
 - **BREAKING —** quem instala o chart `loopzero-api` e informa o kubeconfig do cluster central passa a usar
