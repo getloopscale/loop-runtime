@@ -703,7 +703,7 @@ dod:
 
 > Registrado 2026-08-10, a partir da diretriz de superfície única do sponsor.
 
-## B-029 — O faturamento tem dois donos, com duas integrações diferentes   [ ]
+## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
 
 domain: engine-go
 repo: loopzero
@@ -719,6 +719,20 @@ dod:
   - as duas implementações não divergem em silêncio: ou existe uma só, ou existe verificação que compara o comportamento das duas
 
 **A distinção que importa.** Medir consumo é do engine — ele é quem sabe quantos builds rodaram. Saber quanto custa é do plano de controle. Hoje o engine faz as duas coisas, e é a segunda que atravessa a fronteira.
+
+**MEDIDO com precisão em 2026-08-11** (a evidência acima era de varredura; esta é de leitura dos dois arquivos). A sobreposição é **exata e nominal**: os dois implementam `CreatePortalSession` para o mesmo endpoint do Stripe.
+
+| | `loopzero-cloud` (dono declarado) | `loopzero` (engine) |
+|---|---|---|
+| como fala | HTTP à mão contra `https://api.stripe.com/v1` | biblioteca oficial `stripe-go/v82` |
+| o que implementa | `CreateCustomer`, `CreateSubscription`, `CreateCheckoutSession`, **`CreatePortalSession`**, `ReportUsage` | **`CreateSession`** do portal |
+| está ligado? | sim | sim — `setup_server.go` + `routes/billing.go` |
+
+**Por que o engine tem isso, na palavra do próprio código** (`api/internal/routes/billing.go:7-16`): *"Wires GET /api/v1/billing and POST /api/v1/billing/portal so the CLI's `loopzero billing` and `loopzero billing portal` commands actually have an endpoint to call. Pre-T1.6 the CLI hit silent 404 because the routes were declared in the spec but no handler existed."*
+
+Isso reenquadra o item. **Não foi decisão de domínio — foi resposta a um 404.** O CLI fala com o engine, a rota existia na especificação sem implementação, e alguém a implementou onde o CLI já batia, em vez de no dono do assunto. O caminho mais curto na hora, e a duplicação como consequência não intencional.
+
+E há uma sutileza que decide o conserto: o engine **não** conhece preço nem plano do Stripe — ele cria uma sessão de portal a partir de um `stripe_customer_id` que já existe. Isso é bem menos grave que "dois donos do faturamento": é **um caminho de leitura duplicado**, não duas fontes de verdade sobre cobrança. O que atravessa a fronteira é a credencial do Stripe estar em dois processos, não a regra de negócio.
 
 ## B-030 — Uma dependência central não pertence a domínio nenhum   [x]
 
