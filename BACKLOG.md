@@ -771,3 +771,20 @@ existir. A fonte de verdade passou a ser **o que o código importa**; uma tabela
 envelhece, uma verificada contra o código não.
 
 > Ambos registrados 2026-08-11, ao medir a separação de domínios a pedido do sponsor.
+
+## B-031 — A mesma capacidade exige `owner` num lado e nada no outro   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: **alta** — não é vazamento (a rota está autenticada), mas é escalonamento horizontal: qualquer membro autenticado de um time abre o portal de cobrança dele, onde se vê fatura, meio de pagamento e histórico. O `loopzero-cloud` já decidiu que isso é privilégio de `owner`; o engine oferece o mesmo pela porta ao lado, sem a exigência.
+evidence: medido em 2026-08-11 ao planejar o `B-029`. As duas implementações da sessão de portal do Stripe exigem autorização **diferente** para a mesma capacidade. `loopzero-cloud/cmd/main.go:1572` monta `r.With(auth.RequireRole(tenantProvisioner, "owner")).Get("/portal", billingHandler.Portal)`. O engine, em `api/internal/server/router.go:520`, monta `r.With(rateLimitMiddlewares...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)` — **rate-limit e nada mais**. O engine **tem** o middleware: `api/internal/middleware/roles.go:26` define `RequireRole(minRole)` com a hierarquia `owner > admin > member`, e as rotas vizinhas o usam (`router.go:512` aplica `middleware.RequireAdmin` em `tenants/bulk-delete`). A de portal simplesmente não o aplica.
+why_now: apareceu ao medir a viabilidade de unificar as duas implementações — a comparação lado a lado expôs a divergência que nenhuma leitura de um lado só mostraria. É o custo típico de capacidade duplicada: as duas cópias divergem, e a que diverge para menos rigor é a que ninguém percebe.
+status: raw
+dod:
+  - `POST /api/v1/billing/portal` no engine exige o mesmo papel que o `loopzero-cloud` exige, ou está registrado por que a assimetria é deliberada
+  - existe verificação que compara autorização entre implementações duplicadas da mesma capacidade — enquanto houver duas, elas não podem divergir em silêncio
+  - se o `B-029` for resolvido eliminando uma das implementações, este item fecha junto; se não for, ele fecha sozinho, porque a assimetria é defeito por si
+
+> Registrado 2026-08-11 durante a fase de planejamento do `B-029`. **Bloqueia o B-029**: unificar as duas implementações sem resolver a autorização levaria a regra mais frouxa para o lado que hoje é mais rigoroso.
