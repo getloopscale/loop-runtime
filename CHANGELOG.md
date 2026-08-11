@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 ### Fixed
+- **loopzero:** a cobrança falha fechado — um ambiente que declara cobrar não semeia, não sobe e não reporta fingindo que ela funciona (B-034, B-035, B-036, B-037)
+- **loopzero-cloud:** o painel deixa de afirmar que a cobrança está pronta quando só metade dela está configurada (B-035)
 - O portal de cobrança passa a ter um dono só: o clique em "Gerenciar plano" atravessa o painel, que
   emite uma sessão real do Stripe. O motor deixou de emitir endereços de cobrança montados à mão, que
   embutiam o identificador do cliente no próprio link (B-029, B-032)

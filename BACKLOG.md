@@ -936,7 +936,7 @@ dod:
   - a degradação silenciosa deixa de ser silenciosa: quando o agregador não sobe, isso
     aparece como estado do sistema, não como uma linha de log no boot
 
-## B-034 — A cobrança por uso não tem para onde reportar   [ ]
+## B-034 — A cobrança por uso não tem para onde reportar   [x]
 
 domain: control-plane
 repo: loopzero-cloud
@@ -957,7 +957,7 @@ dod:
   - o reporter enviando ao menos um registro, provado pelo lado do Stripe
   - o caso "assinatura sem item" falha alto em vez de percorrer zero linhas em silêncio
 
-## B-035 — O segredo que verifica pagamentos não existia no ambiente   [ ]
+## B-035 — O segredo que verifica pagamentos não existia no ambiente   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -982,7 +982,7 @@ dod:
   - um evento real do Stripe processado no app-dev, provado pelo lado do Stripe e pelo log
   - a ausência do Secret deixa de ser um estado que o sistema aceita ao subir
 
-## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [ ]
+## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1004,7 +1004,7 @@ dod:
   - o teste que prove isso falha antes da correção
   - a distinção fica explícita: opcional por design ≠ ausente por acidente
 
-## B-037 — O painel monta os dois segredos de cobrança como opcionais   [ ]
+## B-037 — O painel monta os dois segredos de cobrança como opcionais   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1055,4 +1055,65 @@ dod:
     qualquer uma esteja degradada — no espírito do registro fechado-por-padrão de portas
   - a verificação falha hoje, contra o app-dev, e passa depois de B-033/034/035/036/037
   - uma camada de cobrança nova nasce dentro dessa verificação, ou ela não sobe
+
+### B-034..B-037 fechados — 2026-08-11
+
+**O desenho.** As quatro camadas degradavam para o mesmo lado, e cada uma isolada era
+defensável. O que faltava não era correção em quatro lugares: era a pergunta que separa os
+casos — *este ambiente prometeu cobrar?* — respondida num lugar só. `Capability` +
+`RequirementPolicy` + `Deps.MissingInput`: interface de um método, tabela em vez de
+`switch`, injeção na raiz de composição, nil-safe.
+
+**O achado que ligou dois itens.** O reporter não era silencioso — registrava WARN e
+esperava o preenchimento do item da assinatura. Mas o **único** escritor desse campo é o
+tratador de eventos do Stripe (`webhook.go:299,315`), e o webhook recusava todo evento por
+falta do segredo. A espera "transitória" era permanente, e os dois estados produziam o
+mesmo aviso de hora em hora. Por isso a correção não foi falhar de imediato — isso quebraria
+a assinatura recém-criada — e sim decidir pela **idade**: até 24h é espera, além disso é
+travamento.
+
+**A prova, no app-dev, removendo o segredo e observando:**
+
+| | o que o sistema dizia |
+|---|---|
+| antes | `INFO "billing enabled"` — com metade morta |
+| agora | `ERROR "billing NOT enabled — cobrança configurada pela metade — falta o segredo que verifica os eventos de pagamento (webhook)"` |
+
+Segredo restaurado, pod novo, `billing enabled` legítimo. 158/158 pods, sonda 11/11,
+painel 200, login 303.
+
+**O que a segurança nunca foi.** `VerifySignature` recusa segredo vazio — falha fechado,
+corretamente. Ninguém jamais pôde forjar um evento de pagamento. O que se perdeu foi a
+verdade: o sistema afirmava funcionar enquanto todo evento legítimo era recusado, e é a
+afirmação falsa que impede alguém de agir.
+
+**Dívida fechada de passagem:** o `Dockerfile.local` do `loopzero-cloud` — o B-017 — já estava
+correto no repositório; era a cópia no droplet que carregava o remendo velho. Descartada.
+
+**Dívida nova, medida:** não existe checkout canônico do `loopzero-cloud` no droplet. Ele só
+existe em dois diretórios ad-hoc criados por sessões anteriores (`.buildmeta-cloud`,
+`.b017-prova`), e um deles é um clone de refspec restrito onde `git switch workspace` falha.
+Registrado como B-039.
+
+## B-039 — O painel não tem checkout canônico no droplet   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: human
+evidence: |
+  Medido em 2026-08-11 ao implantar o conserto de cobrança:
+  - `~/loopzero-cloud` no droplet é um clone do **loopzero-workspace**, não do loopzero-cloud
+  - o código real só existe em `~/.buildmeta-cloud/loopzero-cloud` e `~/.b017-prova/loopzero-cloud`,
+    ambos criados ad-hoc por sessões anteriores
+  - o primeiro tem refspec restrito: `git fetch origin workspace` popula só `FETCH_HEAD`,
+    `origin/workspace` não existe, e `git switch workspace` falha com `invalid reference`
+why_now: implantar um conserto no painel exigiu descobrir onde o código mora, corrigir o
+  refspec e desfazer um remendo local — três passos que não estão em runbook nenhum. A
+  próxima pessoa que precisar implantar às pressas paga a mesma descoberta.
+status: raw
+dod:
+  - um caminho canônico e documentado de onde o painel é construído no droplet
+  - `git fetch && git switch workspace` funciona ali sem intervenção
+  - os diretórios ad-hoc removidos ou promovidos, não ambos coexistindo
 
