@@ -912,3 +912,48 @@ Stripe e um deles montava o endereço à mão. Agora o clique atravessa um camin
 que ainda tem a rota, agora exigindo `owner` — não participa.
 
 O B-029 está fechado por observação, não por argumento.
+
+## B-033 — O teto de custo está desligado, e o portão passa direto quando isso acontece   [ ]
+
+domain: control-plane
+repo: loopzero-cloud
+suggested_mode: live-test
+source: human
+evidence: |
+  Medido no app-dev em 2026-08-11, contra o cluster core.
+  - `loopzero-cloud` registra no boot: `"cost aggregator disabled (LOOPZERO_PROMETHEUS_URL not set)"`
+  - a variável não existe no Deployment (`env` do `loopzero-cloud`, nenhuma `PROM`/`COST`)
+  - `cost_counters`: **0 linhas**
+  - `api/internal/server/router.go:250` diz, no próprio comentário: *"Nil-safe: when
+    CostEnforcer is unset … Middleware is pass-through"*
+why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê essa tabela
+  degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
+  egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
+status: raw
+dod:
+  - `cost_counters` recebendo linhas no app-dev, com data recente
+  - um teste que prove o portão NEGANDO ao estourar, e não só permitindo
+  - a degradação silenciosa deixa de ser silenciosa: quando o agregador não sobe, isso
+    aparece como estado do sistema, não como uma linha de log no boot
+
+## B-034 — A cobrança por uso não tem para onde reportar   [ ]
+
+domain: control-plane
+repo: loopzero-cloud
+suggested_mode: review
+source: human
+evidence: |
+  Medido no banco do app-dev em 2026-08-11.
+  - `usage_records`: **0 linhas** (o escritor existe — `api/internal/db/store/metering_wrapper.go`)
+  - `subscriptions`: 1 linha — `plano=starter`, `cliente=cus_V3JXfDOr…`,
+    `assinatura=NULO`, `item=NULO`
+  - `internal/metering/reporter.go:62` seleciona `COALESCE(s.stripe_subscription_item_id, '')`
+why_now: o item de assinatura é o endereço para onde o consumo é enviado no Stripe. Sem ele,
+  a metade "quanto cobrar" da cobrança não fecha, mesmo que a medição comece a produzir
+  linhas amanhã. O cliente existe no Stripe; a assinatura, não.
+status: raw
+dod:
+  - uma conta paga no app-dev com `stripe_subscription_item_id` preenchido
+  - o reporter enviando ao menos um registro, provado pelo lado do Stripe
+  - o caso "assinatura sem item" falha alto em vez de percorrer zero linhas em silêncio
+
