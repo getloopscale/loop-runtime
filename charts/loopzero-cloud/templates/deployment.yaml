@@ -82,7 +82,7 @@ spec:
             # P4-T4.2 of same plan. cloud/internal/billing/webhook.go fail-closed.
             - secretRef:
                 name: loopzero-stripe-webhook
-                optional: true
+                optional: {{ not .Values.billing.required }}
             {{- if .Values.existingSecret }}
             # install-config-contract Slice 1 (ADR D1): operator-provided Secret supplies
             # the app's referenced secrets (Stripe API key, session token, themory key, ...).

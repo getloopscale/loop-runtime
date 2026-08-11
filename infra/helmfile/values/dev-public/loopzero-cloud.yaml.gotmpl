@@ -171,3 +171,16 @@ rag:
 # → revoke old key via loopzero-lens DELETE /v1/admin/keys/{id}.
 lens:
   externalSecretEnabled: true
+
+# dev-public DECLARA que cobra de verdade.
+#
+# É o ambiente que serve app-dev.loopzero.example — o painel com plano, preço e botão de
+# upgrade na tela. Declarado aqui, a ausência dos Secrets de cobrança deixa de ser uma
+# configuração aceitável e passa a impedir o pod de subir.
+#
+# Medido em 2026-08-11: com `optional: true` fixo, o painel rodou 20h sem
+# `loopzero-stripe-webhook`, `Running`, sem um único evento. Todo evento de pagamento que o
+# Stripe enviou nesse período foi recusado por falta do segredo que os verifica — enquanto
+# o log do boot afirmava "billing enabled".
+billing:
+  required: true

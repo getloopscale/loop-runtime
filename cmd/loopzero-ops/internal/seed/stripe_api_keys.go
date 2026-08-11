@@ -98,11 +98,11 @@ func (s *StripeAPIKeysSeed) Verify(d Deps) Result {
 
 func (s *StripeAPIKeysSeed) precondition(d Deps) (Result, bool) {
 	if d.Creds == nil {
-		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent (SKIP-graceful)"}, true
+		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
 	}
 	apiKey := d.Creds.Stripe.APIKey
 	if apiKey == "" || stripeAPIKeyPlaceholders[apiKey] {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key placeholder/absent (sponsor-blocked)"}, true
+		return d.MissingInput(CapabilityBilling, "stripe.api_key placeholder/absent"), true
 	}
 	// EC-2: prefix guard prevents publishable_key (pk_*) silently accepted.
 	if !hasStripeAPIKeyPrefix(apiKey) {

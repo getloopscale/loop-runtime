@@ -76,11 +76,11 @@ func (s *StripeWebhookSecretSeed) Verify(d Deps) Result {
 // with SKIP or FAIL. (Result{}, false) means proceed to mutation.
 func (s *StripeWebhookSecretSeed) precondition(d Deps) (Result, bool) {
 	if d.Creds == nil {
-		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent (SKIP-graceful)"}, true
+		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
 	}
 	wh := d.Creds.Stripe.WebhookSecret
 	if wh == "" || wh == stripePlaceholder || IsPlaceholder(wh) {
-		return Result{Verdict: SKIP, Reason: "stripe.webhook_secret placeholder/absent (sponsor-blocked M5)"}, true
+		return d.MissingInput(CapabilityBilling, "stripe.webhook_secret placeholder/absent"), true
 	}
 	return Result{}, false
 }

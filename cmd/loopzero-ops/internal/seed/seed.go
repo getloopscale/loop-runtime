@@ -94,6 +94,11 @@ type Deps struct {
 	CtrlClient ctrlclient.Client
 	Creds      *Creds
 	DryRun     bool
+	// Policy responde se a ausência do insumo de uma capacidade é tolerável neste
+	// ambiente. Nil = nada é exigido, que preserva o comportamento anterior a
+	// 2026-08-11 para todo chamador que não a injeta. Populada só na raiz de
+	// composição, como o resto de Deps.
+	Policy RequirementPolicy
 }
 
 // ClientFor returns the KubeClient for the given kubeconfig context name.

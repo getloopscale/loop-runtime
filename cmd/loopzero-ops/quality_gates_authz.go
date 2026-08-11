@@ -11,6 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/agplisolation"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/anonymousauth"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
@@ -326,5 +327,40 @@ func runRouteAuthCoverage(args []string) int {
 	}
 	fmt.Printf("route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
 		outcome.PassCount, outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
+	return 0
+}
+
+// runBillingSecrets reprova opcionalidade LITERAL nos segredos de cobrança.
+//
+// Medido em 2026-08-11 no app-dev: o pod do painel rodou 20h `Running` sem
+// `loopzero-stripe-webhook` e sem `loopzero-stripe-api-keys`, sem emitir um único evento —
+// porque `optional: true` é, para o Kubernetes, uma configuração perfeitamente normal.
+//
+// O gate não exige que os segredos sejam sempre obrigatórios: o hermético monta sem
+// credencial de propósito. Exige que a decisão seja um VALOR, porque um literal vale
+// igualmente para todo ambiente, e o público acaba herdando a escolha mais permissiva.
+func runBillingSecrets(args []string) int {
+	fs := flag.NewFlagSet("billing-secrets", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := billingsecrets.Check(billingsecrets.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "billing-secrets: %v\n", err)
+		return 5
+	}
+	if len(outcome.Findings) > 0 {
+		fmt.Fprintf(os.Stderr, "billing-secrets: FAIL — %d montagem(ns) de segredo de cobrança com opcionalidade literal:\n",
+			len(outcome.Findings))
+		for _, f := range outcome.Findings {
+			fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", f.File, f.Line, f.Why)
+		}
+		return 2
+	}
+	// Dizer QUANTOS arquivos foram lidos importa: um gate que não achou nada por não ter
+	// lido nada se pareceria, no log, com um gate que passou.
+	fmt.Printf("billing-secrets: PASS — %d chart(s) verificados, opcionalidade decidida por valor\n",
+		len(outcome.Scanned))
 	return 0
 }

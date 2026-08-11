@@ -46,6 +46,7 @@ var gateRegistry = []gateSpec{
 	{"agpl-isolation", "Verifies AGPL-licensed code stays isolated from proprietary import paths.", runAGPLIsolation},
 	{"alert-runbooks", "Every Prometheus alert has a linked runbook annotation.", runAlertRunbooks},
 	{"anonymous-auth", "Forbids anonymous/unauthenticated access on protected API surfaces.", runAnonymousAuth},
+	{"billing-secrets", "Segredos de cobranca nao podem ter opcionalidade literal; a decisao e por valor.", runBillingSecrets},
 	{"base-image-digest", "Base images are pinned by digest, not floating tags.", runBaseImageDigest},
 	{"baseline-compare", "Compares a captured steady-state baseline against the current state.", runBaselineCompare},
 	{"baseline-update", "Updates the committed steady-state baseline artifact.", runBaselineUpdate},
