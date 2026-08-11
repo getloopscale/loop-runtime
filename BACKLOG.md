@@ -848,3 +848,41 @@ o Stripe.
 handler); o engine não importa `stripe-go`; e sem emissor o handler falha em vez de construir URL.
 Provado no artefato em execução: extraído o binário da imagem implantada, `p/login/` aparece **0**
 vezes e `BILLING_PORTAL_UNAVAILABLE` aparece.
+
+### Validação ponta a ponta do B-029 — 2026-08-11
+
+O fechamento anterior provou que o engine **deixou de emitir**; faltava provar que o `loopzero-cloud`
+**emite**. Feito contra o Stripe real, com a credencial do app-dev.
+
+**O que faltava no ambiente, e foi semeado pelo caminho canônico.** Nenhum Secret de Stripe existia:
+`loopzero-stripe-api-keys` e `loopzero-stripe-webhook` são montados como `optional: true` e estavam ausentes.
+`loopzero-ops seed stripe-api-keys` aplicou o primeiro a partir de `~/.loopzero/dev-credentials.json`, e o
+`loopzero-cloud` reiniciou registrando **`"billing enabled"`** — antes disso ele rodava sem faturamento e
+nenhum teste teria significado.
+
+**Os quatro passos, exercitados contra `api.stripe.com`:**
+
+| passo | resultado |
+|---|---|
+| a chave é aceita | `GET /v1/account` → **200** |
+| criar cliente (o que `EnsureStripeCustomer` faz) | `cus_V3ItDFoWUMpMbM` |
+| emitir sessão de portal | `billing.stripe.com/p/session/test_YWNjdF8xU1g0…` |
+| limpeza | cliente removido → **200** |
+
+**A prova que fecha o `B-032`, lado a lado:**
+
+| | endereço |
+|---|---|
+| sessão **emitida** pelo Stripe | `…/p/session/test_YWNjdF8xU1g0aExBMFp3c3` — opaca |
+| URL **construída**, que foi removida | `…/p/login/cus_V3ItDFoWUMpMbM` — com o id de cobrança dentro |
+
+A sessão emitida **não carrega** o `cus_...`, verificado por comparação de string e não por leitura.
+É a diferença entre um endereço que o Stripe autoriza e um que qualquer um monta sabendo o id.
+
+**O que esta validação NÃO prova.** Não exercitei o fluxo pelo navegador com sessão de usuário: não
+há emissor de JWT de usuário no ferramental, e a única identidade no Kratos é a do sponsor. O que foi
+provado é a cadeia que o `loopzero-cloud` executa — chave válida, cliente criado, sessão emitida, e a
+sessão sem o identificador. O passo que falta é humano: abrir o painel logado e clicar.
+
+**Estado após a validação:** sonda 11/11, 158/158 pods, painel 200, login 303, e as duas rotas de
+portal em 401 sem credencial — o engine porque agora exige `owner`, o cloud porque sempre exigiu.
