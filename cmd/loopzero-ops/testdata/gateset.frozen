@@ -47,6 +47,7 @@ dockerfile-no-docker-hub	gates	Forbids unqualified docker.io/Docker Hub base ima
 docs-contract-refs	gates	Toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve (ou tem excecao com prazo).
 drill-creds-isolation	-	Ensures DR-drill credentials are isolated from production.
 drill-outputs-consumers	gates	Verifies drill Pulumi-output consumers use the canonical schema.
+env-prefix-parity	-	As duas declaracoes de reservedEnvKeyPrefixes (API e dockerfile-lint) tem o MESMO conjunto de prefixos — e so isso.
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.

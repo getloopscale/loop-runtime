@@ -253,3 +253,7 @@ docs/operations/loopzero-capsim*.mjs
 docs/operations/loopzero-capsim-mcp/
 .review-loop/
 .review-runs/
+
+# Binarios de build que estavam versionados por engano (B-051, 2026-08-11)
+tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint
+operators/app-operator

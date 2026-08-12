@@ -236,6 +236,14 @@ var gateWiringExemptions = map[string]wiringReason{
 	// and the gate did not follow. Exit 5, "divergence matrix not found", for a
 	// document that exists. Repair the path, then wire.
 	"divergence-matrix": brokenGate,
+	// Reprova hoje na divergencia GOOGLE_ entre api/.../build_plan.go e
+	// tools/loopzero-dockerfile-lint/main.go. Nao e wiring que falta: e a DIRECAO da
+	// correcao, que tem raio de explosao oposto — adicionar GOOGLE_ ao linter
+	// quebra build de tenant que hoje passa (o linter rejeita duro, medido ao
+	// vivo com exit 1), remover do build_plan enfraquece find_sec_004. O dado que
+	// decidiria (quantos Dockerfiles de tenant declaram GOOGLE_*) nao e visivel
+	// deste repositorio. Ver MEET-ASYNC-AMENDMENT-2026-08-11-001 e B-051.
+	"env-prefix-parity": failingGate,
 	// 9 inline encrypted secrets across infra/pulumi/Pulumi.{dev,prod}.yaml.
 	// Closing this is the T9 Vault-provider migration, on the legacy DO/Pulumi
 	// layer that the AWS re-platform is retiring (ADR 2026-06-17) — moving live
