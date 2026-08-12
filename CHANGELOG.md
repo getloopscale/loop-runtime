@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+### Added
+- Gate `helmfile-context-parity`: uma task que invoca um helmfile com `--kube-context` divergente do `kubeContext` que o helmfile declara agora reprova — e também quando o helmfile exige uma variável de ambiente que a invocação não exporta (uma variável do Task **não** é variável de ambiente; a distinção quebrou uma instalação antes de virar asserção). Medido contra helmfile 1.1.6: a flag sobrescreve o declarado **em silêncio**, sem erro nem aviso — a propriedade não é obtenível do helmfile, e por isso vem de um gate. (B-044)
+- Os quatro helmfiles de plano (core, build, cell, secrets) declaram o cluster onde instalam. Um `helmfile sync` sem `--kube-context` deixa de aterrissar no contexto ativo do kubectl. O de célula usa `requiredEnv` porque serve N células — amarrar valor fixo reproduziria o defeito do B-026. (B-044)
+- `charts/loopzero-admission-policies` passa a incluir — e a **renderizar** — `vap-tenant-cr-shape.yaml` e `cosign-version-config.yaml`. Copiar o arquivo não bastava: o guarda lê `vaps.tenantCrShape`, uma chave que o chart publicado não definia, então o template ficava inerte enquanto o gate de divergência (que compara nomes de arquivo) ficava verde. A cerca `failurePolicy: Fail` sobre CRs Tenant existia no chart de desenvolvimento e não no publicado — uma fronteira de segurança que só vale em dev é pior que nenhuma, porque faz o teste de dev passar. (B-046)
+
+### Changed
+- O allowlist do gate `helm-drift` passa a ser chaveado por **arquivo**, não por par de charts. Um par aprovado aprovava toda divergência que aquele par viesse a ter, inclusive arquivos que ninguém tinha visto — foi assim que a ValidatingAdmissionPolicy e dois ExternalSecret sumiram do chart publicado sob um gate que leva a fronteira no nome. O gate voltou ao verde e foi **ligado** em `taskfiles/quality.yml`. (B-046)
+
 ### Fixed
 - **loopzero:** a verificação de referências normativas deixa de aprovar quando não encontra referência nenhuma, e deixa de aceitar os próprios documentos de trabalho como prova de que uma decisão existe. Ela aprovava uma árvore vazia, e dava por documentado o registro de decisão que o código cita — porque o plano que criou a verificação o mencionava ao explicar que ele não existe (B-052)
 - **loopzero:** o clone do repositório encolhe 71 MB — dois binários compilados estavam versionados por engano (`operators/app-operator`, 68 MB, e `tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint`, 3,2 MB) (B-051)

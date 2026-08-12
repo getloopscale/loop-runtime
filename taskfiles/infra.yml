@@ -253,7 +253,15 @@ tasks:
       #
       # Pior: `task clusters:recreate -- cell-1` chama esta mesma task (k3d.yml), entao
       # recriar a cell-1 instalava no cluster ERRADO, sem erro.
+      # LOOPZERO_CELL_CONTEXT vem do MESMO CELL_CTX que a flag: uma origem, dois
+      # consumidores. O helmfile declara `kubeContext: {{ `{{` }} requiredEnv
+      # "LOOPZERO_CELL_CONTEXT" {{ `}}` }}` para que um `helmfile sync` sem flag
+      # NAO aterrisse no contexto ativo do kubectl (medido contra helmfile
+      # 1.1.6: sem declaracao e sem flag, o helm nao recebe --kube-context
+      # nenhum). Amarrar valor fixo ali recriaria o defeito que os comentarios
+      # acima descrevem; `requiredEnv` falha alto quando ninguem passa.
       - >-
+        LOOPZERO_CELL_CONTEXT="{{.CELL_CTX}}"
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
         -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context "{{.CELL_CTX}}"

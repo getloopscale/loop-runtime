@@ -222,7 +222,24 @@ var gateWiringExemptions = map[string]wiringReason{
 	// would have. Exit 1 today on loopzero-admission-policies:admission-policies
 	// (cosign-version-config.yaml + vap-tenant-cr-shape.yaml present in the
 	// bootstrap chart, absent from the published one). Wiring is B-046.
-	"helm-drift": failingGate,
+	// B-046 CLOSED 2026-08-12 (slice-3 T1.2 + T1.4): the two missing templates
+	// were copied into the published chart, and the allowlist was re-keyed from
+	// PAIR to PAIR:FILE — a pair-level approval used to bless every file that
+	// pair would ever drift on, which is how the VAP went missing under a gate
+	// that names the boundary. helm-drift is GREEN and WIRED; no exemption.
+
+	// Added 2026-08-12 (slice-3 T1.3). Hermetic — reads taskfiles/*.yml and
+	// infra/helmfile/*.gotmpl, nothing else. Exit 1 today naming four
+	// invocations of `task k3d:secrets:bootstrap-in-core`, which install the
+	// SECRETS helmfile into the CORE cluster — the topology violation CLAUDE.md
+	// and cleanroom-up-live-test-mandate.md both call FORBIDDEN in every tier.
+	//
+	// The gate rediscovered B-047 independently, which is the point. Its removal
+	// is already DECIDED (ADR 2026-08-12-openbao-in-core-rule-vs-task, ACCEPTED)
+	// and B-047 instructs it be the LAST step of any sequence touching it,
+	// because removing the task also breaks the openbaobootstrapincore gate that
+	// asserts the task exists. Wiring follows that removal.
+	"helmfile-context-parity": failingGate,
 	// Measured 2026-08-11: reads infra/helm/admission-policies/values.yaml and
 	// searches for an ADR; hermetic. Exit 1 — clusterImagePolicy.mode is
 	// `enforce` (a live deny-flip that rejects unsigned images at admission)
@@ -399,5 +416,49 @@ func TestGateWiringGuard_NegativeControl(t *testing.T) {
 	// inherit its wiring.
 	if gateIsWired(taskfile, "no-new-bash-extended") {
 		t.Errorf("gateIsWired matched on prefix — %q would be considered wired because %q is; orphans with a shared prefix would slip through", "no-new-bash-extended", "no-new-bash")
+	}
+}
+
+// The taxonomy is validated whole, not only the parts currently in use.
+//
+// slice-1 defined five categories and wired two, so `unwiredDebt`, `slowGate`
+// and `vacuousGate` sat unused — dead code by golangci-lint's reading, and it
+// was right. Deleting three of five would have been the easy fix and the wrong
+// one: the vocabulary exists so the NEXT gate has a name to be classified
+// under, and a vocabulary trimmed to whatever is in use today makes the next
+// classification harder precisely when it matters.
+//
+// Holding every category to the same invariant is the honest resolution: it
+// removes the dead-code finding by making the categories genuinely exercised,
+// and it means a new category cannot be added without satisfying validate().
+func TestEveryWiringCategorySatisfiesItsInvariant(t *testing.T) {
+	all := map[string]wiringReason{
+		"failingGate": failingGate,
+		"brokenGate":  brokenGate,
+		"unwiredDebt": unwiredDebt,
+		"slowGate":    slowGate,
+		"vacuousGate": vacuousGate,
+	}
+	names := make([]string, 0, len(all))
+	for n := range all {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	for _, n := range names {
+		r := all[n]
+		if err := r.validate(); err != nil {
+			t.Errorf("category %s does not satisfy its own invariant: %v", n, err)
+		}
+		if strings.TrimSpace(r.String()) == "" {
+			t.Errorf("category %s renders empty — an exemption whose reason reads as nothing is an exemption nobody can audit", n)
+		}
+	}
+
+	// operatorRun is the one category that carries an argument, and the one that
+	// can be built wrong. Its failure path is covered separately; here we only
+	// assert a well-formed one joins the family.
+	if err := operatorRunOn("um insumo nomeado").validate(); err != nil {
+		t.Errorf("a well-formed operatorRun must validate: %v", err)
 	}
 }

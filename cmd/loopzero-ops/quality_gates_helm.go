@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdiffstructural"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdrift"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmfilecontextparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmoverlapparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmtopology"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pgpdb"
@@ -165,6 +166,9 @@ func runHelmDrift(args []string) int {
 		if !o.Pass {
 			return 1
 		}
+		if o.InheritedApprovals > 0 {
+			fmt.Printf("ℹ %d approval(s) inherited from the old per-PAIR blanket, reason never measured — tracked as B-076\n", o.InheritedApprovals)
+		}
 		return 0
 	}
 
@@ -190,6 +194,14 @@ func runHelmDrift(args []string) int {
 			fmt.Printf("  Only in bootstrap: %s\n", strings.Join(d.OnlyInBootstrap, " "))
 		}
 		fmt.Printf("  STATUS: %s\n", status)
+		for _, f := range d.Unapproved {
+			fmt.Printf("  SEM APROVAÇÃO: %s\n", f)
+		}
+	}
+	// Printed on every run, green or red. A debt that lives only in a source
+	// comment is a debt nobody is reminded of.
+	if o.InheritedApprovals > 0 {
+		fmt.Printf("ℹ %d aprovação(ões) herdada(s) do allowlist antigo por PAR, cuja razão por arquivo nunca foi medida — B-076\n", o.InheritedApprovals)
 	}
 	if !o.Pass {
 		fmt.Fprintln(os.Stderr, "❌ Drifts without approving ADR detected.")
@@ -261,4 +273,37 @@ func runHelmTopologyIndex(args []string) int {
 	}
 	fmt.Fprintf(os.Stderr, "helm-topology-index: FAIL — %s\n", rep.Message)
 	return 1
+}
+
+// runHelmfileContextParity — B-044 / slice-3 T1.3.
+//
+// Obtains the property that helmfile itself does NOT provide: a task whose
+// --kube-context disagrees with the kubeContext its helmfile declares reproves.
+// Measured against helmfile 1.1.6, the flag silently overrides the declaration,
+// so declaring the context fixes the dangerous default and this gate supplies
+// the conflict.
+func runHelmfileContextParity(args []string) int {
+	fs := flag.NewFlagSet("helmfile-context-parity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := helmfilecontextparity.Check(helmfilecontextparity.Config{RepoRoot: *root})
+	fmt.Println(o.Summary())
+	for _, d := range o.Divergences {
+		fmt.Printf("  DIVERGE %s:%d — %s é invocado com --kube-context %q, mas declara %q\n",
+			d.Taskfile, d.Line, d.Helmfile, d.Invoked, d.Declared)
+	}
+	for _, m := range o.MissingEnv {
+		fmt.Printf("  VAR AUSENTE %s\n", m)
+	}
+	for _, u := range o.Undeclared {
+		fmt.Printf("  SEM CONTEXTO %s — um `helmfile sync` sem flag herdaria o contexto ativo do kubectl\n", u)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "helmfile-context-parity: %v\n", err)
+		return 1
+	}
+	fmt.Println("PASS — every literal helmfile invocation targets the cluster its helmfile declares")
+	return 0
 }

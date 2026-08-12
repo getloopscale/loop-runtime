@@ -1198,7 +1198,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `grep -rn kubeContext infra/helmfile/` devolve **um único hit, e é uma values key não relacionada**. Nenhum dos quatro helmfiles de plano (`core`, `build`, `cell`, `secrets`) declara `kubeContext`. O cluster vem do chamador — `taskfiles/infra.yml:197` e `:259` passam `--kube-context {{.BUILD_CONTEXT}}` / `{{.CELL_CTX}}`. Portanto `helmfile -f build.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core sync` **funciona hoje**, e nada — nem helmfile, nem chart, nem gate — o rejeita.
 why_now: a auditoria mediu que a separação de planos é real e vive **inteiramente em `infra/`** (5 clusters, 4 helmfiles com forma de plano). Para CORE, BUILD, WORKLOAD e SECRETS, a resposta a *"o que impede uma violação?"* é hoje **"o operador digitou a variável certa"**. Amarrar o contexto dentro do arquivo converte um sucesso silencioso em conflito de declaração, e é **o maior benefício por arquivo tocado de toda a auditoria**: 4 arquivos, 4 planos.
-status: triaged
+status: planned
+resolved_in: .claude/knowledge-base/plans/slice-3-infra-boundaries-plan.md — os 4 helmfiles declaram kubeContext (conserta o default) + gate novo helmfile-context-parity (obtem o conflito). CORRECAO POR MEDICAO: a premissa original deste item era falsa. Testado contra helmfile 1.1.6, um --kube-context divergente NAO produz erro de conflito — ele sobrescreve o declarado em silencio. A promessa nao e obtenivel do helmfile; veio do gate. Ver MEET-ASYNC-AMENDMENT-2026-08-12-003 Amendment 1.
 severity: alta — quatro dos cinco planos dependem de disciplina de digitação para não misturar cluster.
 dod:
   - cada um dos quatro helmfiles declara o `kubeContext` do seu plano
@@ -1241,7 +1242,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `charts/loopzero-admission-policies/templates/` é **subconjunto estrito** de `infra/helm/admission-policies/templates/`: 18 contra 20, nada exclusivo do lado publicado. Os dois ausentes são `cosign-version-config.yaml` e **`vap-tenant-cr-shape.yaml`** — uma `ValidatingAdmissionPolicy` com `failurePolicy: Fail` cujo próprio cabeçalho declara por que existe: *"loopzero has zero admission webhooks on its own CRDs today … so a hand-authored `kubectl apply` of a malformed Tenant bypasses the REST-layer validation — the exact class of the M2 legacy-namespace incident"*. O chart de bootstrap é instalado por `cell.helmfile:169` e `core.helmfile:753`; o publicado é dependência declarada de `charts/loopzero-platform` (`Chart.yaml:58-61`), o caminho de self-host / ArgoCD L3. Issue #282.
 why_now: **uma fronteira de segurança que existe em dev e não em produção é pior que uma que não existe em lugar nenhum — porque faz o teste de dev passar.** E o allowlist do `helm-drift` (`helmdrift/check.go:29-32`) aprova **pares de chart inteiros**, então um ADR aprova em bloco toda divergência presente e futura daquele par: foi assim que os dois `ExternalSecret` que carregam as chaves de admin de RAG e Lens também sumiram do radar.
-status: triaged
+status: planned
+resolved_in: .claude/knowledge-base/plans/slice-3-infra-boundaries-plan.md — vap-tenant-cr-shape.yaml e cosign-version-config.yaml copiados para charts/loopzero-admission-policies, e o allowlist do helm-drift re-chaveado de PAR para PAR:ARQUIVO. O gate passou a verde e foi LIGADO em taskfiles/quality.yml (estava isento como failingGate).
 severity: alta — assimetria de fronteira de segurança entre superfícies de instalação. **Incerteza declarada:** não verifiquei qual caminho a produção usa hoje; se instala por Helmfile L2, o impacto é potencial (self-host e qualquer migração para L3), não ativo.
 dod:
   - está decidido se `vap-tenant-cr-shape` vale para toda instalação ou é deliberadamente bootstrap-only — e, se for o segundo, isso está **escrito no chart publicado**, não inferido do silêncio
@@ -1751,3 +1753,58 @@ dod:
   - se o shredding ficar operator-side e o provisionamento api-side, a divergência de nome de chave (`tenant-<id>` × `loopzero-tenants-<id>`) é resolvida — hoje o operator deletaria uma chave que o `api` nunca criou
 
 > Registrado 2026-08-12 pelo review adversarial da fatia 2. O ADR foi corrigido de decisão total para parcial por causa deste achado.
+
+## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 durante a fatia slice-3. O `helm-drift` aprovava divergência **por par de charts** (`helmdrift/check.go`, mapa `approvedDrifts`): `loopzero-api:loopzero-api` e `loopzero-cloud:loopzero-cloud` apontavam para `ADR-0043`, e isso bastava para aprovar todo arquivo que aquele par viesse a divergir — inclusive arquivos que ninguém tinha visto. A fatia re-chaveou para `PAR:ARQUIVO`, o que exigiu enumerar as 21 divergências reais. Elas foram registradas com a justificativa honesta `herdado da aprovação em bloco por par; a razão por arquivo não foi medida` e o marcador `Inherited: true`.
+why_now: o re-chaveamento tornou visível uma dívida que antes não tinha onde aparecer. Enquanto as 21 entradas disserem `Inherited`, o gate protege contra a **22ª** divergência mas não afirma entender as 21 primeiras — e essa distinção só existe porque foi escrita.
+status: raw
+severity: média — nenhuma das 21 é um defeito conhecido; o risco é que uma delas seja um segundo `vap-tenant-cr-shape.yaml` e ninguém saiba.
+dod:
+  - cada uma das 21 entradas tem uma razão medida, ou é removida do allowlist porque a divergência não deveria existir
+  - nenhuma entrada resta com `Inherited: true`
+
+> Registrado 2026-08-12 pela fatia slice-3 (T1.4). O campo `Inherited` existe exatamente para que esta dívida seja contável em vez de invisível.
+
+## B-077 — A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 na revisão da fatia slice-3. `infra/helm/admission-policies/values-mgmt.yaml:37` define `tenantCrShape: false`, e `infra/helmfile/core.helmfile.yaml.gotmpl:764-769` sobrepõe `values.yaml` com `values-mgmt.yaml` no release `admission-policies-mgmt` — o último vence. A VAP fica **habilitada apenas** via `cell.helmfile.yaml.gotmpl:180-186`, ou seja nas células de workload. Mas per `CLAUDE.md` e ADR-0018 v2, os CRs `Tenant` e `Environment` vivem em `loopzero-system` no cluster **mgmt**.
+why_now: a cerca `failurePolicy: Fail` sobre a forma dos CRs Tenant roda nos clusters que não guardam CR Tenant nenhum, e está desligada no único que guarda. O plano da fatia slice-3 afirmou o contrário (`R3`: *"ela já roda em dev e em core pelo caminho L2"*) e usou isso para justificar o risco como aceitável — a premissa não se sustenta, e a revisão a derrubou.
+status: raw
+severity: alta — é uma fronteira de segurança que parece ativa e não está onde importa.
+dod:
+  - está decidido e escrito por que a VAP está desligada no mgmt, ou ela é habilitada lá
+  - a decisão é verificável por render, não por presença de arquivo
+
+> Registrado 2026-08-12 pela revisão independente da fatia slice-3 (achado H3). Foi este achado que
+> mostrou que o critério de aceitação por nome de arquivo era cego; o teste
+> `TestAdmissionPolicies_PublishedRendersWhatBootstrapRenders` mede render, mas não mede *onde* o
+> valor é sobreposto.
+
+## B-078 — O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-12. O `helmfile-context-parity` varre `Taskfile.yml` + `taskfiles/*.yml` e reporta 8 comparadas contra 20 fora de alcance estático. As 12 invocações do `Taskfile.yml` caem em "parametrizadas" porque o `cell.helmfile` declara `requiredEnv`, então nenhuma delas é comparada. E os invocadores em script — `infra/scripts/local/vault-bootstrap-dev.sh:267-268`, `infra/scripts/production/operator-cutover-execute.sh:142,204`, `infra/scripts/openbao/enable-vault-backup.sh:205` — não são varridos.
+why_now: o gate mede menos do que a leitura casual do seu nome sugere. Enquanto 20 de 28 invocações estiverem fora de alcance, a proteção é parcial — e é melhor que isso esteja escrito num item do que subentendido no `Summary()`.
+status: raw
+severity: média — o que ele compara, compara certo; o problema é a cobertura.
+dod:
+  - os invocadores em script são varridos, ou está escrito por que não são
+  - a fração fora de alcance estático é reportada de forma que ninguém a confunda com cobertura
+
+> Registrado 2026-08-12 pela revisão independente da fatia slice-3 (achado H4 residual + M3).
+> Relacionado: `cell.helmfile.yaml.gotmpl` é reusado pelo plano de BUILD em
+> `Taskfile.yml:374-375` (cert-manager + cluster-issuer, com selector restrito e motivo escrito).
+> É reúso deliberado, não violação — mas um arquivo nomeado por um plano e usado por outro é
+> exatamente o tipo de coisa que a auditoria de domínios apontou.

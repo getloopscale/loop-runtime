@@ -358,11 +358,11 @@ tasks:
       dogfood 2026-05-27: 5 of 8 Ginkgo journey failures all root-caused
       to missing ClusterIssuer.
     cmds:
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=traefik sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=external-secrets sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=argo-rollouts sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cert-manager sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cluster-issuer sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=traefik sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=external-secrets sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=argo-rollouts sync
 
   k3d:bootstrap-build-cert-manager:
     desc: |
@@ -371,8 +371,8 @@ tasks:
       Sigstore Fulcio/Rekor/CTLog precisam TLS internos via loopzero-ca-issuer.
       Idempotente — helmfile sync no-ops se já deployed.
     cmds:
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-build helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-build helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
 
   k3d:bootstrap-cell-1:
     desc: |
@@ -396,11 +396,11 @@ tasks:
       Idempotent: helmfile sync no-ops if releases match desired state.
     cmds:
       - task: k3d:heal
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cert-manager sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=traefik sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=external-secrets sync
-      - helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=argo-rollouts sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cert-manager sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cluster-issuer sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=traefik sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=external-secrets sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=argo-rollouts sync
 
   k3d:bootstrap-cells:
     desc: |

@@ -24,11 +24,70 @@ var conceptualPairs = map[string]string{
 	"loopzero-admission-policies": "admission-policies",
 }
 
-// approvedDrifts registry: "published:bootstrap" → ADR id. Drifts in this map
-// are intentional (do NOT fail the gate).
-var approvedDrifts = map[string]string{
-	"loopzero-api:loopzero-api":     "ADR-0043",
-	"loopzero-cloud:loopzero-cloud": "ADR-0043",
+// approval is one file's licence to differ between the two charts.
+type approval struct {
+	ADR    string
+	Reason string
+	// Inherited marks an entry carried over from the old per-PAIR blanket
+	// approval, whose per-file reason was never measured. It is honest debt:
+	// the entry keeps the gate green without claiming an understanding nobody
+	// has. Tracked as B-076.
+	Inherited bool
+}
+
+// approvedDriftFiles registry, keyed "published:bootstrap:filename".
+//
+// # Why the key carries the filename
+//
+// It used to be keyed by PAIR alone. A pair in that map was intentional
+// forever — every file it would ever drift on, including files nobody had
+// seen. That is precisely how `vap-tenant-cr-shape.yaml` (a fail-closed
+// ValidatingAdmissionPolicy) and two `externalsecret-*-admin-key.yaml`
+// templates went missing from published charts without the gate noticing: the
+// pair was already blessed, so it stopped looking.
+//
+// Per-file is the difference between "we know it differs and why" and "we
+// stopped looking". Deliberately no globs: a glob would re-introduce the same
+// approves-future-members defect at a smaller scale, which is the whole bug.
+var approvedDriftFiles = map[string]approval{}
+
+func init() {
+	// Inherited from ADR-0043's blanket pair approval. The pair-level decision
+	// is real; the per-file reasons below were NOT individually measured, and
+	// saying so is cheaper than inventing 21 rationales that read as verified.
+	for _, k := range []string{
+		// loopzero-api — only in the published chart
+		"loopzero-api:loopzero-api:clusterrole.yaml",
+		"loopzero-api:loopzero-api:clusterrolebinding.yaml",
+		"loopzero-api:loopzero-api:configmap.yaml",
+		"loopzero-api:loopzero-api:secret.yaml",
+		"loopzero-api:loopzero-api:service.yaml",
+		// loopzero-api — only in the bootstrap chart
+		"loopzero-api:loopzero-api:configmap-runtime.yaml",
+		"loopzero-api:loopzero-api:cronjob-day30-verify.yaml",
+		"loopzero-api:loopzero-api:cronjob-day60-aes-delete.yaml",
+		"loopzero-api:loopzero-api:ingressroute.yaml",
+		"loopzero-api:loopzero-api:secret-runtime.yaml",
+		// loopzero-cloud — only in the published chart
+		"loopzero-cloud:loopzero-cloud:configmap.yaml",
+		"loopzero-cloud:loopzero-cloud:networkpolicy.yaml",
+		"loopzero-cloud:loopzero-cloud:secret.yaml",
+		"loopzero-cloud:loopzero-cloud:service.yaml",
+		"loopzero-cloud:loopzero-cloud:serviceaccount.yaml",
+		"loopzero-cloud:loopzero-cloud:servicemonitor.yaml",
+		// loopzero-cloud — only in the bootstrap chart
+		"loopzero-cloud:loopzero-cloud:configmap-runtime.yaml",
+		"loopzero-cloud:loopzero-cloud:externalsecret-lens-admin-key.yaml",
+		"loopzero-cloud:loopzero-cloud:externalsecret-rag-admin-key.yaml",
+		"loopzero-cloud:loopzero-cloud:ingressroute.yaml",
+		"loopzero-cloud:loopzero-cloud:secret-runtime.yaml",
+	} {
+		approvedDriftFiles[k] = approval{
+			ADR:       "ADR-0043",
+			Reason:    "herdado da aprovação em bloco por par; a razão por arquivo não foi medida",
+			Inherited: true,
+		}
+	}
 }
 
 // Config drives the gate.
@@ -43,12 +102,25 @@ type Drift struct {
 	ADR             string
 	OnlyInPublished []string
 	OnlyInBootstrap []string
+	// Unapproved lists the drifted files no per-file approval covers. These are
+	// what fail the gate — the named files, not the pair.
+	Unapproved []string
+	// InheritedFiles lists approved files whose reason is inherited debt rather
+	// than a measured rationale, each carrying that reason verbatim (B-076).
+	InheritedFiles []string
 }
 
 // Outcome captures the result.
 type Outcome struct {
 	Pass   bool
 	Drifts []Drift
+	// InheritedApprovals counts drifted files whose approval was carried over
+	// from the old per-PAIR blanket, with no per-file reason ever measured.
+	//
+	// It is surfaced on every run on purpose. A debt that lives only in a source
+	// comment is a debt nobody is reminded of; printed next to the verdict, it
+	// stays countable until B-076 closes it.
+	InheritedApprovals int
 }
 
 // Check audits all loopzero-* published charts + conceptual pairs for drift.
@@ -109,10 +181,23 @@ func auditPair(repoRoot, publishedName, bootstrapName string, outcome *Outcome) 
 		OnlyInPublished: onlyPub,
 		OnlyInBootstrap: onlyBoot,
 	}
-	if adr, ok := approvedDrifts[pairKey]; ok {
-		d.Intentional = true
-		d.ADR = adr
-	} else {
+
+	// Every drifted file must carry its own approval. One unapproved file fails
+	// the pair — the pair being "known to drift" is not a licence for the next
+	// file to drift silently.
+	for _, f := range append(append([]string{}, onlyPub...), onlyBoot...) {
+		if a, ok := approvedDriftFiles[pairKey+":"+f]; ok {
+			d.ADR = a.ADR
+			if a.Inherited {
+				outcome.InheritedApprovals++
+				d.InheritedFiles = append(d.InheritedFiles, f+" — "+a.Reason)
+			}
+			continue
+		}
+		d.Unapproved = append(d.Unapproved, f)
+	}
+	d.Intentional = len(d.Unapproved) == 0
+	if !d.Intentional {
 		outcome.Pass = false
 	}
 	outcome.Drifts = append(outcome.Drifts, d)

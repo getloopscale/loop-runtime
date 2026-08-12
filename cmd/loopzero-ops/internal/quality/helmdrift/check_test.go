@@ -54,9 +54,15 @@ func TestCheck_UnapprovedDrift_Fail(t *testing.T) {
 }
 
 // TestCheck_ApprovedDrift_Pass — drift with approving ADR → PASS (intentional).
+//
+// Updated 2026-08-12 (slice-3 T1.4, ADR D2): the approval is now keyed by FILE,
+// not by pair, so this test names files the registry actually approves. The old
+// fixture used `rbac.yaml` / `monitoring.yaml` — names that never existed in
+// either chart — and passed because the PAIR was blessed. That is the exact
+// defect the change removes, and a fixture asserting it had to change with it.
 func TestCheck_ApprovedDrift_Pass(t *testing.T) {
 	root := t.TempDir()
-	mkTemplates(t, root, "charts/loopzero-api", "a.yaml", "rbac.yaml", "monitoring.yaml")
+	mkTemplates(t, root, "charts/loopzero-api", "a.yaml", "clusterrole.yaml", "service.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-api", "a.yaml")
 	o, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -123,5 +129,38 @@ func TestSetDiff(t *testing.T) {
 	}
 	if len(onlyB) != 1 || onlyB[0] != "d" {
 		t.Errorf("onlyB: expected [d], got %v", onlyB)
+	}
+}
+
+// T1.4 / B-046 RED: an ADR approving a PAIR approves every file that pair will
+// ever drift on — including files nobody has seen. That is how two ExternalSecret
+// templates and a ValidatingAdmissionPolicy left the published chart without
+// anyone noticing: the pair was already blessed, so the gate stopped looking.
+//
+// The approval must name the FILE.
+func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
+	root := t.TempDir()
+	mk := func(rel string) {
+		if err := os.MkdirAll(filepath.Join(root, rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	touch := func(rel string) {
+		if err := os.WriteFile(filepath.Join(root, rel), []byte("kind: X\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("charts/loopzero-api/templates")
+	mk("infra/helm/loopzero-api/templates")
+	touch("charts/loopzero-api/templates/service.yaml")
+	// A file that drifts and that NO per-file approval covers.
+	touch("infra/helm/loopzero-api/templates/brand-new-and-unreviewed.yaml")
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if out.Pass {
+		t.Errorf("a drifted file with no per-file approval must FAIL the gate; blessing it because the PAIR was blessed is how the VAP went missing (drifts=%+v)", out.Drifts)
 	}
 }
