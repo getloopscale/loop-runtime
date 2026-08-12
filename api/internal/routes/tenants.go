@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"time"
@@ -56,13 +57,13 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	tenantID := chi.URLParam(r, "id")
 	if tenantID == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("tenant ID is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("tenant ID is required"))
 		return
 	}
 
@@ -73,19 +74,19 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// key value against AdminAPIKey via constant-time compare.
 	isAdmin := middleware.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
 
 	// Non-admin callers must be owners
 	if !isAdmin && uc.Role != "owner" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
 
 	force := r.URL.Query().Get("force") == "true"
 	if force && !isAdmin {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
 
@@ -111,7 +112,7 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("failed to request tenant deletion",
 			"tenant", tenantID, "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -144,13 +145,13 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	tenantID := chi.URLParam(r, "id")
 	if tenantID == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("tenant ID is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("tenant ID is required"))
 		return
 	}
 
@@ -159,7 +160,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	// validates key value, not header presence.
 	isAdmin := middleware.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
 
@@ -167,7 +168,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	record, err := h.deletionStore.GetPendingDeletion(ctx, tenantID)
 	if err != nil {
 		h.logger.Error("failed to check pending deletion", "tenant", tenantID, "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if record == nil {
@@ -186,7 +187,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	// Cancel the deletion
 	if err := h.deletionStore.CancelDeletion(ctx, tenantID); err != nil {
 		h.logger.Error("failed to cancel deletion", "tenant", tenantID, "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 

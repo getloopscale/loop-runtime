@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -117,43 +118,43 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	// Parse request body
 	var req rollbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
 		return
 	}
 
 	env := req.Environment
 	if env == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
 		return
 	}
 
 	// Resolve dashboard sugar: build_id → to_release_id.
 	if req.BuildID != "" && req.ToReleaseID == "" {
 		if h.releases == nil {
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback by build_id not configured"))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback by build_id not configured"))
 			return
 		}
 		relID, lookupErr := h.releases.GetLatestReleaseForBuild(ctx, uc.TenantID, req.BuildID)
 		if lookupErr != nil {
 			slog.Error("rollback: build_id lookup failed", "build_id", req.BuildID, "err", lookupErr)
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 			return
 		}
 		if relID == "" {
-			writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("no release found for build_id"))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("no release found for build_id"))
 			return
 		}
 		req.ToReleaseID = relID
@@ -162,11 +163,11 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Look up project
 	project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -191,12 +192,12 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var loopzeroErr *loopzeroerrors.LoopZeroError
 		if errors.As(err, &loopzeroErr) {
-			writeLoopZeroError(w, loopzeroErr)
+			httpio.WriteLoopZeroError(w, loopzeroErr)
 			return
 		}
 		// Lock timeout → 409
 		if isLockTimeout(err) {
-			writeJSON(w, http.StatusConflict, map[string]string{
+			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DEPLOY_IN_PROGRESS",
 				"message": "Another operation is in progress. Try again in a moment.",
 			})
@@ -211,7 +212,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"env", env,
 			"to_release", req.ToReleaseID,
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -223,7 +224,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		URL:                result.URL,
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // isLockTimeout checks if the error is a lock timeout (advisory lock busy).

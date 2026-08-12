@@ -68,7 +68,7 @@ cd infra/tests && go test ./e2e/... -v -timeout 120m \
 
 ### Quality gates — the CI substitute
 
-GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **112 pure-logic Go checks** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
+GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **122 pure-logic Go checks** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
 
 ```bash
 task quality:gates            # full-repo scan
@@ -86,7 +86,7 @@ task db:reset                 # drop + recreate + migrate + seed
 task db:generate              # regenerate api/internal/db/generated/ via sqlc
 ```
 
-A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108; the tree carries 112 as of 2026-08-08) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
+A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108; the tree carries 122 as of 2026-08-12) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
 
 **Adding a new `.sh` file is FORBIDDEN by default** (`no-new-bash` gate, D3). New logic belongs in `cmd/loopzero-ops/internal/quality/` (Go — this is where the gates live; the old `pkg/quality/` was relocated out of the shared base at M9), `infra/helmfile/` (declarative), or `infra/tests/e2e/` (Ginkgo). The allowlist + justification contract is `.claude/rules/shell-scripts-allowlist.md`.
 

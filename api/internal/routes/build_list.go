@@ -5,6 +5,7 @@ package routes
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"strconv"
 	"time"
@@ -90,13 +91,13 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -111,11 +112,11 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.projects != nil {
 		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 		if err != nil {
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 			return
 		}
 		if project == nil {
-			writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 			return
 		}
 	}
@@ -126,7 +127,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	builds, total, err := h.builds.ListByProjectAndEnv(ctx, uc.TenantID, name, env, limit, offset)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -161,7 +162,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 		resp.Builds = append(resp.Builds, item)
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // buildEnvsResponse is the JSON shape for GET /api/v1/projects/{name}/build-envs.
@@ -187,13 +188,13 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -202,25 +203,25 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 	if h.projects != nil {
 		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 		if err != nil {
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 			return
 		}
 		if project == nil {
-			writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 			return
 		}
 	}
 
 	envs, err := h.builds.ListEnvsForProject(ctx, uc.TenantID, name)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if envs == nil {
 		envs = []string{}
 	}
 
-	writeJSON(w, http.StatusOK, buildEnvsResponse{
+	httpio.WriteJSON(w, http.StatusOK, buildEnvsResponse{
 		Envs:  envs,
 		Total: len(envs),
 	})

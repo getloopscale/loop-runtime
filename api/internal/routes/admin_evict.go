@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"os"
@@ -108,7 +109,7 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 		}
 
 		if input.DryRun {
-			writeJSON(w, http.StatusOK, AdminEvictResponse{
+			httpio.WriteJSON(w, http.StatusOK, AdminEvictResponse{
 				JobID:    "dry-run",
 				Queued:   len(matched),
 				Matched:  matched,
@@ -137,7 +138,7 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusAccepted, AdminEvictResponse{
+		httpio.WriteJSON(w, http.StatusAccepted, AdminEvictResponse{
 			JobID:    jobID,
 			Queued:   len(matched),
 			Accepted: true,
@@ -145,4 +146,5 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 	}
 }
 
-// writeJSON/jsonError already exist in the package — see projects.go.
+// jsonError lives in audit.go; the response writers moved to routes/httpio
+// (slice-5) so that no family depends on another to render a response.

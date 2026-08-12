@@ -81,7 +81,6 @@ func (m *mockAuditWriter) eventTypes() []string {
 
 // --- test helper ---
 
-
 // mockReviewer is a programmable CrossClusterTokenReviewer that satisfies the
 // real middleware interface.
 type mockReviewer struct {
@@ -230,7 +229,7 @@ func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
 		// A cell do atacante tem de ser OUTRA cell. Antes da unificacao 1:1 este par
 		// era `cell-1` x `cell-default` — dois nomes do MESMO cluster, entao o teste
 		// nunca chegou a exercer travessia de cell de verdade (ADR 2026-08-09).
-		CellID:        "cell-1", // attacker cell — distinta da cell do tenant
+		CellID: "cell-1", // attacker cell — distinta da cell do tenant
 	}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()

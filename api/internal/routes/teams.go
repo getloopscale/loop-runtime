@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"time"
@@ -55,7 +56,7 @@ func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -65,11 +66,11 @@ func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"members": members,
 	})
 }
@@ -88,7 +89,7 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -96,34 +97,34 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 	callerMember, err := h.store.GetMember(ctx, uc.TenantID, uc.UserID)
 	if err != nil {
 		slog.Error("failed to get caller member", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if callerMember == nil || (callerMember.Role != "owner" && callerMember.Role != "admin") {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only owners and admins can add team members"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only owners and admins can add team members"))
 		return
 	}
 
 	var req addMemberRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
 	}
 
 	// Validate required fields
 	if req.Username == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
 		return
 	}
 	if req.Role == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("role is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("role is required"))
 		return
 	}
 
 	// Validate role — SECURITY: "owner" cannot be assigned via API (privilege escalation).
 	// Ownership is set only during bootstrap. R-01 fix.
 	if !validRoles[req.Role] || req.Role == "owner" {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member"))
 		return
 	}
 
@@ -131,13 +132,13 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 	user, err := h.store.GetUserByUsername(ctx, req.Username)
 	if err != nil {
 		slog.Error("failed to look up user", "username", req.Username, "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if user == nil {
-		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-			Code:       "USER_NOT_FOUND",
-			Message:    "user '" + req.Username + "' not found — they must run `loopzero login` first",
+		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:    "USER_NOT_FOUND",
+			Message: "user '" + req.Username + "' not found — they must run `loopzero login` first",
 		})
 		return
 	}
@@ -148,11 +149,11 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 			"username", req.Username,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"username": req.Username,
 		"role":     req.Role,
 	})
@@ -166,13 +167,13 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	username := chi.URLParam(r, "username")
 	if username == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
 		return
 	}
 
@@ -180,11 +181,11 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	callerMember, err := h.store.GetMember(ctx, uc.TenantID, uc.UserID)
 	if err != nil {
 		slog.Error("failed to get caller member", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if callerMember == nil || (callerMember.Role != "owner" && callerMember.Role != "admin") {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only owners and admins can remove team members"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only owners and admins can remove team members"))
 		return
 	}
 
@@ -192,11 +193,11 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	targetUser, err := h.store.GetUserByUsername(ctx, username)
 	if err != nil {
 		slog.Error("failed to look up target user", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if targetUser == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"TEAM_MEMBER_NOT_FOUND",
 			fmt.Sprintf("User %q is not a team member.", username),
 			http.StatusNotFound,
@@ -208,13 +209,13 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	targetMember, err := h.store.GetMember(ctx, uc.TenantID, targetUserID)
 	if err != nil {
 		slog.Error("failed to get target member", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
 	// AUDIT-6: fail fast with 404 when user exists but is not a team member.
 	if targetMember == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"TEAM_MEMBER_NOT_FOUND",
 			fmt.Sprintf("User %q is not a team member.", username),
 			http.StatusNotFound,
@@ -224,13 +225,13 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 
 	// Owner protection: cannot remove the owner
 	if targetMember.Role == "owner" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the team owner cannot be removed"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the team owner cannot be removed"))
 		return
 	}
 
 	// Admin cannot remove another admin (only owner can)
 	if callerMember.Role == "admin" && targetMember.Role == "admin" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("admins cannot remove other admins — only the owner can"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("admins cannot remove other admins — only the owner can"))
 		return
 	}
 
@@ -240,11 +241,11 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 			"username", username,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"removed": username,
 	})
 }
@@ -266,36 +267,36 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	username := chi.URLParam(r, "username")
 	if username == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
 		return
 	}
 
 	if err := h.authorizeOwnerOnly(ctx, uc.TenantID, uc.UserID); err != nil {
-		writeLoopZeroError(w, err)
+		httpio.WriteLoopZeroError(w, err)
 		return
 	}
 
 	role, perr := parseRoleRequest(r)
 	if perr != nil {
-		writeLoopZeroError(w, perr)
+		httpio.WriteLoopZeroError(w, perr)
 		return
 	}
 
 	targetUserID, terr := h.resolveAndValidateTarget(ctx, uc.TenantID, username)
 	if terr != nil {
-		writeLoopZeroError(w, terr)
+		httpio.WriteLoopZeroError(w, terr)
 		return
 	}
 
 	if err := h.store.UpdateMemberRole(ctx, uc.TenantID, targetUserID, role); err != nil {
 		if errors.Is(err, ErrMemberNotFound) {
-			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:    "MEMBER_NOT_FOUND",
 				Message: "member '" + username + "' not found in this team",
 			})
@@ -306,11 +307,11 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 			"username", username,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"username": username,
 		"role":     role,
 	})

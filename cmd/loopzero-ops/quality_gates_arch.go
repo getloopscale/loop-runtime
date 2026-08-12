@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routesacyclic"
 	"os"
 	"path/filepath"
 	"strings"
@@ -364,5 +365,36 @@ func runDomainSinkPurity(args []string) int {
 		return 1
 	}
 	fmt.Printf("PASS — nenhum símbolo novo (persistência ou camada de aplicação) atravessa o sink (%d congelados, rastreados em B-079)\n", o.FrozenCount)
+	return 0
+}
+
+// runRoutesAcyclic — B-041 / slice-5 T1.3.
+//
+// The fence that precedes the split. B-041 states the order explicitly: a fence
+// written after the move is written to fit what was already done.
+func runRoutesAcyclic(args []string) int {
+	fs := flag.NewFlagSet("routes-acyclic", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	o, err := routesacyclic.Check(routesacyclic.Config{RepoRoot: *root})
+	fmt.Println(o.Summary())
+	for _, u := range o.Unregistered {
+		fmt.Printf("  NÃO REGISTRADO %s — uma família de handlers que ninguém decidiu\n", u)
+	}
+	for _, e := range o.Edges {
+		fmt.Printf("  ARESTA IRMÃ %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "routes-acyclic: %v\n", err)
+		fmt.Fprintln(os.Stderr, routesacyclic.ActionableFix())
+		if errors.Is(err, routesacyclic.ErrEmptyAllowList) {
+			return 5
+		}
+		return 1
+	}
+	fmt.Println("PASS — todo subpacote de routes está registrado e nenhum importa um irmão")
 	return 0
 }

@@ -4,6 +4,7 @@
 package routes
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -126,12 +127,12 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	if uc.Role != "owner" && uc.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "Only team owners and admins can connect repositories.",
 		})
@@ -153,7 +154,7 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	tenantID := uc.TenantID
 	if err := h.store.SaveInstallation(ctx, req.InstallationID, "", "User", &tenantID); err != nil {
 		slog.ErrorContext(ctx, "save installation failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 
@@ -177,7 +178,7 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	// Link (idempotent — if already linked to same project, no-op via unique constraint)
 	if err := h.store.LinkRepository(ctx, uc.TenantID, projectName, req.Repo, req.InstallationID, branch, autoDeploy); err != nil {
 		slog.ErrorContext(ctx, "link repository failed", "error", err, "repo", req.Repo)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to connect repository"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to connect repository"})
 		return
 	}
 
@@ -187,7 +188,7 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		h.triggerConnectThenDeploy(ctx, uc.TenantID, projectName, req, branch)
 	}
 
-	writeJSON(w, http.StatusOK, connectResponse{
+	httpio.WriteJSON(w, http.StatusOK, connectResponse{
 		OK:         true,
 		Project:    projectName,
 		Repo:       req.Repo,
@@ -202,11 +203,11 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 func parseConnectRequest(w http.ResponseWriter, r *http.Request) (connectRequest, string, bool) {
 	var req connectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
 		return req, "", false
 	}
 	if req.Repo == "" || req.InstallationID == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "repo and installation_id are required",
 		})
 		return req, "", false
@@ -230,11 +231,11 @@ func (h *RepositoryHandler) checkRepoLinkConflict(
 	existing, err := h.store.GetByRepo(ctx, repo)
 	if err != nil {
 		slog.ErrorContext(ctx, "repository lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return false
 	}
 	if existing != nil && (existing.TenantID != tenantID || existing.ProjectName != projectName) {
-		writeJSON(w, http.StatusConflict, map[string]string{
+		httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 			"code":    "REPO_ALREADY_LINKED",
 			"message": "Repository is already connected to another project.",
 		})
@@ -248,12 +249,12 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	if uc.Role != "owner" && uc.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "Only team owners and admins can disconnect repositories.",
 		})
@@ -268,17 +269,17 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 		// to keep routes free of a direct db package dependency (same
 		// pattern used in AUDIT-12 for environments).
 		if strings.Contains(err.Error(), "no repository linked to project") {
-			writeLoopZeroError(w, loopzeroerrors.NewRepositoryNotLinked(projectName))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewRepositoryNotLinked(projectName))
 			return
 		}
 		slog.ErrorContext(ctx, "unlink repository failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to disconnect"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to disconnect"})
 		return
 	}
 
 	slog.InfoContext(ctx, "repository disconnected", "project", projectName)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":      true,
 		"project": projectName,
 	})
@@ -289,7 +290,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -298,11 +299,11 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	repo, err := h.store.GetByProject(ctx, uc.TenantID, projectName)
 	if err != nil {
 		slog.ErrorContext(ctx, "get connection failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if repo == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{
+		httpio.WriteJSON(w, http.StatusNotFound, map[string]string{
 			"code":    "NOT_CONNECTED",
 			"message": "No repository connected to this project.",
 		})
@@ -315,7 +316,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	// UI silently kept showing the picker -- "no feedback" symptom.
 	// installation_id is included so effectiveConn does not need to merge
 	// the URL query param post-connect.
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"connected":       true,
 		"project":         repo.ProjectName,
 		"repo":            repo.RepoFullName,
@@ -344,7 +345,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
 	parts := strings.SplitN(req.Repo, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_REPO",
 			"message": "Repository must be in 'owner/name' format.",
 		})
@@ -355,14 +356,14 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 	if err := h.introspector.BranchExists(ctx, req.InstallationID, owner, name, branch); err != nil {
 		var bnf *github.BranchNotFoundError
 		if errors.As(err, &bnf) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
+			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "BRANCH_NOT_FOUND",
 				"message": "Branch \"" + branch + "\" was not found on " + req.Repo + ".",
 			})
 			return false
 		}
 		slog.ErrorContext(ctx, "branch check failed", "error", err, "repo", req.Repo, "branch", branch)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"code":    "GITHUB_UNAVAILABLE",
 			"message": "Could not verify the branch right now. Try again in a moment.",
 		})
@@ -373,14 +374,14 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 	if err != nil {
 		var fnf *github.FileNotFoundError
 		if errors.As(err, &fnf) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
+			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "MISSING_LOOPZERO_YAML",
 				"message": "loopzero.yaml not found on branch \"" + branch + "\". Run `loopzero init` locally and commit the file. Docs: https://docs.loopzero.example/config/loopzero-yaml",
 			})
 			return false
 		}
 		slog.ErrorContext(ctx, "loopzero.yaml fetch failed", "error", err, "repo", req.Repo)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"code":    "GITHUB_UNAVAILABLE",
 			"message": "Could not fetch loopzero.yaml right now. Try again in a moment.",
 		})
@@ -389,7 +390,7 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 
 	// EC-4 / EC-19: loopzero.yaml MUST parse as a non-empty YAML mapping.
 	if len(strings.TrimSpace(string(content))) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_LOOPZERO_YAML",
 			"message": "loopzero.yaml is empty. Add at least a `name:` field. Docs: https://docs.loopzero.example/config/loopzero-yaml",
 		})
@@ -397,14 +398,14 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 	}
 	var parsed map[string]interface{}
 	if err := yaml.Unmarshal(content, &parsed); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_LOOPZERO_YAML",
 			"message": "loopzero.yaml is not valid YAML: " + err.Error(),
 		})
 		return false
 	}
 	if len(parsed) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_LOOPZERO_YAML",
 			"message": "loopzero.yaml has no fields. Add at least a `name:` entry.",
 		})

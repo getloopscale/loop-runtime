@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -107,14 +108,14 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	installationID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil || installationID <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_INSTALLATION_ID",
 			"message": "installation_id must be a positive integer",
 		})
@@ -129,14 +130,14 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 	inst, err := h.store.GetInstallation(ctx, installationID)
 	if err != nil {
 		slog.ErrorContext(ctx, "installation lookup failed", "error", err, "installation_id", installationID)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{
 			"code":    "INTERNAL_ERROR",
 			"message": "internal error",
 		})
 		return
 	}
 	if inst != nil && inst.TenantID != nil && *inst.TenantID != uc.TenantID {
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "You do not have access to this installation.",
 		})
@@ -147,7 +148,7 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 	// because the upstream response is identical for any tenant -- the
 	// tenant gate above already filtered cross-tenant calls.
 	if repos, ok := h.cacheGet(installationID); ok {
-		writeJSON(w, http.StatusOK, map[string]any{"repositories": repos})
+		httpio.WriteJSON(w, http.StatusOK, map[string]any{"repositories": repos})
 		return
 	}
 
@@ -157,14 +158,14 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 	repos, err := h.lister.ListInstallationRepositories(ctx, installationID, 1)
 	if err != nil {
 		if errors.Is(err, ErrInstallationRevoked) {
-			writeJSON(w, http.StatusGone, map[string]string{
+			httpio.WriteJSON(w, http.StatusGone, map[string]string{
 				"code":    "INSTALLATION_REVOKED",
 				"message": "GitHub App access has been removed. Reinstall to continue.",
 			})
 			return
 		}
 		slog.ErrorContext(ctx, "list installation repositories failed", "error", err, "installation_id", installationID)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"code":    "GITHUB_UNAVAILABLE",
 			"message": "Could not reach GitHub. Try again in a moment.",
 		})
@@ -172,7 +173,7 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 	}
 
 	h.cachePut(installationID, repos)
-	writeJSON(w, http.StatusOK, map[string]any{"repositories": repos})
+	httpio.WriteJSON(w, http.StatusOK, map[string]any{"repositories": repos})
 }
 
 func (h *IntegrationsGitHubHandler) cacheGet(id int64) ([]InstallationRepository, bool) {
@@ -197,4 +198,3 @@ func (h *IntegrationsGitHubHandler) cachePut(id int64, repos []InstallationRepos
 		repos:     repos,
 	}
 }
-

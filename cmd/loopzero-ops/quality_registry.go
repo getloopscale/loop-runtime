@@ -87,6 +87,7 @@ var gateRegistry = []gateSpec{
 	{"helm-diff-structural", "Structural pre-sync Helm diff to catch drift before apply.", runHelmDiffStructural},
 	{"helmfile-context-parity", "A task que invoca um helmfile aponta para o cluster que o helmfile declara (B-044).", runHelmfileContextParity},
 	{"domain-sink-purity", "Ratchet: the services DAG sink must not grow its persistence surface (B-049).", runDomainSinkPurity},
+	{"routes-acyclic", "Deny-by-default fence over api/internal/routes subpackages: registered families only, no sibling edges (B-041).", runRoutesAcyclic},
 	{"helm-drift", "Detects drift between rendered Helm charts and the deployed state.", runHelmDrift},
 	{"helm-overlap-parity", "Keeps the dual Helm chart systems (infra/helm vs charts) in parity.", runHelmOverlapParity},
 	{"migration-test-coverage", "Every DB migration has corresponding test coverage.", runMigrationTestCoverage},

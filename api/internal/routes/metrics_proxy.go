@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"strings"
 	"time"
@@ -74,24 +75,26 @@ type metricsRangeResponse struct {
 //
 // Authentication: requires session ctx via middleware.GetUserContext.
 // Authorization: project ownership verified via projects.GetByName(uc.TenantID, name).
-//   Cross-tenant returns 404 NOT_FOUND (existence-leak-prevention).
+//
+//	Cross-tenant returns 404 NOT_FOUND (existence-leak-prevention).
+//
 // Prometheus call: 5s timeout per EC-5; timeout → HTTP 504; error → HTTP 502.
 // Empty result → 200 OK with `{ status: "collecting", data: [] }` per EC-8.
 func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	if h.promClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+		httpio.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error":       "prometheus_not_configured",
 			"retry_after": "30",
 		})
@@ -103,11 +106,11 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// status.go:191.
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -141,13 +144,13 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	data, err := h.promClient.QueryRange(ctx, promQL, start, end, step)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			writeJSON(w, http.StatusGatewayTimeout, map[string]string{
+			httpio.WriteJSON(w, http.StatusGatewayTimeout, map[string]string{
 				"error":       "prometheus_unreachable",
 				"retry_after": "30",
 			})
 			return
 		}
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "prometheus_invalid_response",
 		})
 		return
@@ -169,7 +172,7 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 		resp.Status = "ok"
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // buildPromQL injects mandatory tenant_id + project labels into the Prometheus

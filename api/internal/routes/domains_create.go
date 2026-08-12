@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -24,13 +25,13 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	// SEC-002 fix: only owners and admins can manage custom domains
 	if uc.Role != "owner" && uc.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "Only team owners and admins can manage custom domains.",
 		})
@@ -39,7 +40,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req domainCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
 		return
 	}
 
@@ -48,7 +49,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if req.Domain == "" || req.Project == "" || req.App == "" || req.Environment == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "domain, project, app, and environment are required",
 		})
 		return
@@ -60,7 +61,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// client-classified `INVALID_DOMAIN` code (mapped to 400 in
 	// pkg/errors/http/mapping.go).
 	if err := h.validator.Validate(req.Domain); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INVALID_DOMAIN", "message": err.Error()})
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "INVALID_DOMAIN", "message": err.Error()})
 		return
 	}
 
@@ -69,11 +70,11 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	count, err := h.store.CountByTenant(ctx, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain count failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if count >= maxDomainsPerTenant {
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"error": "Domain limit reached. You can register up to " + fmt.Sprintf("%d", maxDomainsPerTenant) + " custom domains.",
 			"code":  "DOMAIN_LIMIT_REACHED",
 		})
@@ -103,20 +104,20 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.Create(ctx, domain); err != nil {
 		if errors.Is(err, ErrDomainExists) {
-			writeJSON(w, http.StatusConflict, map[string]string{
+			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DOMAIN_ALREADY_EXISTS",
 				"message": "domain already registered",
 			})
 			return
 		}
 		slog.ErrorContext(ctx, "domain create failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to register domain"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to register domain"})
 		return
 	}
 
 	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_verification").Inc()
 
-	writeJSON(w, http.StatusCreated, domainCreateResponse{
+	httpio.WriteJSON(w, http.StatusCreated, domainCreateResponse{
 		OK:          true,
 		ID:          domain.ID,
 		Domain:      domain.Domain,

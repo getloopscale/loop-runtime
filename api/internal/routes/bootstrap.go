@@ -15,6 +15,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -43,7 +44,7 @@ type BootstrapResponse struct {
 // BootstrapHandler handles POST /internal/bootstrap.
 type BootstrapHandler struct {
 	store     BootstrapStore
-	secret    string // SEC-003: shared secret for authentication
+	secret    string              // SEC-003: shared secret for authentication
 	placement CellPlacementEngine // ADR-0008: Cell assignment
 }
 
@@ -64,9 +65,9 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		expected := "Bearer " + h.secret
 		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
-			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-				Code:       "UNAUTHORIZED",
-				Message:    "Invalid or missing bootstrap secret",
+			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+				Code:    "UNAUTHORIZED",
+				Message: "Invalid or missing bootstrap secret",
 			})
 			return
 		}
@@ -74,29 +75,29 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 
 	var req BootstrapRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
 	}
 
 	// Validate required fields at the boundary.
 	if req.AdminGitHubID == "" {
-		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-			Code:       "MISSING_FIELD",
-			Message:    "admin_github_id is required",
+		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:    "MISSING_FIELD",
+			Message: "admin_github_id is required",
 		})
 		return
 	}
 	if req.AdminLogin == "" {
-		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-			Code:       "MISSING_FIELD",
-			Message:    "admin_login is required",
+		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:    "MISSING_FIELD",
+			Message: "admin_login is required",
 		})
 		return
 	}
 	if req.TenantSlug == "" {
-		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-			Code:       "MISSING_FIELD",
-			Message:    "tenant_slug is required",
+		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:    "MISSING_FIELD",
+			Message: "tenant_slug is required",
 		})
 		return
 	}
@@ -123,11 +124,11 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	})
 	if assignErr != nil {
 		slog.Error("bootstrap failed", "error", assignErr)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, BootstrapResponse{
+	httpio.WriteJSON(w, http.StatusOK, BootstrapResponse{
 		Status:   "ok",
 		UserID:   userID,
 		TenantID: tenantID,
@@ -138,11 +139,11 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 // InMemoryBootstrapStore is a test-only implementation of BootstrapStore.
 // It tracks created records in memory to simulate ON CONFLICT DO NOTHING.
 type InMemoryBootstrapStore struct {
-	mu       sync.Mutex
-	users    map[string]bool   // keyed by github_id
-	tenants  map[string]bool   // keyed by tenant_id
-	members  map[string]bool   // keyed by "tenant_id:user_id"
-	cellIDs  map[string]string // keyed by tenant_id → cell_id (ADR-0008)
+	mu      sync.Mutex
+	users   map[string]bool   // keyed by github_id
+	tenants map[string]bool   // keyed by tenant_id
+	members map[string]bool   // keyed by "tenant_id:user_id"
+	cellIDs map[string]string // keyed by tenant_id → cell_id (ADR-0008)
 }
 
 // NewInMemoryBootstrapStore creates a new InMemoryBootstrapStore.

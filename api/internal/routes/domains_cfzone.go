@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -28,7 +29,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	zone, err := h.cfZone.CreateZone(ctx, req.Domain)
 	if err != nil {
 		slog.ErrorContext(ctx, "cf zone create failed", "domain", req.Domain, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "Failed to configure domain. Please try again.",
 			"code":  "CF_ZONE_ERROR",
 		})
@@ -56,7 +57,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		slog.ErrorContext(ctx, "cf cname create failed", "domain", req.Domain, "error", cnameErr)
 		// Rollback: delete the zone
 		_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "Failed to configure domain routing. Please try again.",
 			"code":  "CF_ZONE_ERROR",
 		})
@@ -87,7 +88,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		if errors.Is(err, ErrDomainExists) {
 			// Rollback zone
 			_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
-			writeJSON(w, http.StatusConflict, map[string]string{
+			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"error": "domain already registered",
 				"code":  "DOMAIN_ALREADY_EXISTS",
 			})
@@ -95,13 +96,13 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		}
 		slog.ErrorContext(ctx, "domain create failed", "error", err)
 		_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register domain"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register domain"})
 		return
 	}
 
 	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_ns").Inc()
 
-	writeJSON(w, http.StatusCreated, domainCreateV2Response{
+	httpio.WriteJSON(w, http.StatusCreated, domainCreateV2Response{
 		OK:                 true,
 		ID:                 domain.ID,
 		Domain:             domain.Domain,

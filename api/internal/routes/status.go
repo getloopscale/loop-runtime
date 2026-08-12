@@ -4,6 +4,7 @@
 package routes
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"log/slog"
 	"net/http"
@@ -231,13 +232,13 @@ type statusResponse struct {
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -248,11 +249,11 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -265,7 +266,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, name, 50, 0)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -273,7 +274,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	release, err := h.releases.GetActiveByEnv(r.Context(), uc.TenantID, name, env)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if release != nil {
@@ -341,7 +342,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"last_deploy_time",
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // findLastBuildForEnv returns the most recent build for `env`, formatted

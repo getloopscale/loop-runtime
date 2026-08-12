@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -80,13 +81,13 @@ type sseLogEvent struct {
 func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	buildID := chi.URLParam(r, "id")
 	if buildID == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("build ID is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("build ID is required"))
 		return
 	}
 
@@ -95,11 +96,11 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 	// pushed to DB layer via GetByIDForTenant.
 	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if build == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -142,19 +143,19 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	projectName := chi.URLParam(r, "name")
 	if projectName == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
 		return
 	}
 

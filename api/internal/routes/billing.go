@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 
@@ -134,17 +135,17 @@ type PortalResponse struct {
 func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 	if uc.TenantID == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
 
 	plan, err := h.fetchPlan(r.Context(), uc.TenantID)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if plan == "" {
@@ -218,17 +219,17 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 	if uc.TenantID == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
 
 	customerID, err := h.fetchStripeCustomerID(r.Context(), uc.TenantID)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if customerID == "" {

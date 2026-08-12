@@ -5,6 +5,7 @@ package routes
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"time"
 
@@ -80,13 +81,13 @@ func (h *BuildStatsHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	// (the #106/#111 class — RLS is not a backstop). 401, never an empty/global scan.
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	windowDays, ok := windowDaysFor(r.URL.Query().Get("window"))
 	if !ok {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("window must be one of: 7d, 30d, 90d"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("window must be one of: 7d, 30d, 90d"))
 		return
 	}
 
@@ -96,7 +97,7 @@ func (h *BuildStatsHandler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.stats.BuildStatsByDay(ctx, uc.TenantID, firstDay)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -121,7 +122,7 @@ func (h *BuildStatsHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, buildStatsResponse{
+	httpio.WriteJSON(w, http.StatusOK, buildStatsResponse{
 		WindowDays:  windowDays,
 		Timezone:    "UTC",
 		ByDay:       byDay,

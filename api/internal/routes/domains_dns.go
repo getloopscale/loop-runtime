@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -24,13 +25,13 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	// SEC-002 fix: only owners and admins can manage custom domains
 	if uc.Role != "owner" && uc.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "Only team owners and admins can manage custom domains.",
 		})
@@ -43,17 +44,17 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
 	// CRIT-02: validate transition via formal state machine
 	if !canRemove(d.Status) {
-		writeJSON(w, http.StatusConflict, map[string]string{
+		httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 			"error": "Domain cannot be removed in its current state (" + d.Status + "). Try again later.",
 			"code":  "INVALID_STATE",
 		})
@@ -63,14 +64,14 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// CRIT-01: CAS transition prevents TOCTOU race with concurrent deploy.
 	if err := h.store.TransitionStatus(ctx, d.Domain, d.Status, "removing"); err != nil {
 		slog.ErrorContext(ctx, "domain transition to removing failed", "error", err)
-		writeJSON(w, http.StatusConflict, map[string]string{
+		httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 			"code":    "CONCURRENT_MODIFICATION",
 			"message": "Domain state changed concurrently. Please retry.",
 		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, domainDeleteResponse{
+	httpio.WriteJSON(w, http.StatusOK, domainDeleteResponse{
 		OK:     true,
 		Domain: d.Domain,
 		Status: "removing",
@@ -85,7 +86,7 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -93,12 +94,12 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil || d == nil {
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
 	if !d.IsCFManaged() || h.cfZone == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "NOT_CF_MANAGED",
 			"message": "DNS records management is only available for Cloudflare-managed domains.",
 		})
@@ -108,11 +109,11 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	records, err := h.cfZone.ListDNSRecords(ctx, *d.CFZoneID)
 	if err != nil {
 		slog.ErrorContext(ctx, "cf list dns records failed", "domain", domainName, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"code": "INTERNAL_ERROR", "message": "Failed to fetch DNS records"})
+		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{"code": "INTERNAL_ERROR", "message": "Failed to fetch DNS records"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"domain":  domainName,
 		"records": records,
 		"total":   len(records),
@@ -125,12 +126,12 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	if uc.Role != "owner" && uc.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"code": "FORBIDDEN", "message": "Only team owners and admins can manage DNS records."})
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{"code": "FORBIDDEN", "message": "Only team owners and admins can manage DNS records."})
 		return
 	}
 
@@ -138,12 +139,12 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil || d == nil {
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
 	if !d.IsCFManaged() || h.cfZone == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "NOT_CF_MANAGED", "message": "DNS management only available for Cloudflare-managed domains."})
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "NOT_CF_MANAGED", "message": "DNS management only available for Cloudflare-managed domains."})
 		return
 	}
 
@@ -151,13 +152,13 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 		Records []CFDNSRecord `json:"records"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
 		return
 	}
 
 	const maxDNSRecordsPerRequest = 50
 	if len(req.Records) > maxDNSRecordsPerRequest {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": fmt.Sprintf("Too many records (max %d per request).", maxDNSRecordsPerRequest),
 			"code":  "TOO_MANY_RECORDS",
 		})
@@ -168,7 +169,7 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	for _, rec := range req.Records {
 		upperType := strings.ToUpper(rec.Type)
 		if upperType == "NS" || upperType == "SOA" {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+			httpio.WriteJSON(w, http.StatusUnprocessableEntity, map[string]string{
 				"error": fmt.Sprintf("Cannot add %s records — these are managed by the platform.", upperType),
 				"code":  "PROTECTED_RECORD",
 			})
@@ -181,7 +182,7 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 		result, err := h.cfZone.CreateDNSRecord(ctx, *d.CFZoneID, rec)
 		if err != nil {
 			slog.ErrorContext(ctx, "cf create dns record failed", "domain", domainName, "record", rec.Name, "error", err)
-			writeJSON(w, http.StatusBadGateway, map[string]string{
+			httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 				"error": fmt.Sprintf("Failed to add record %s %s: %v", rec.Type, rec.Name, err),
 			})
 			return
@@ -189,7 +190,7 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 		created = append(created, *result)
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"ok":      true,
 		"created": len(created),
 		"records": created,

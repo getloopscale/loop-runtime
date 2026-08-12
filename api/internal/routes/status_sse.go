@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -106,13 +107,13 @@ func NewStatusSSEHandler(projects StatusProjectStore, eventStore StatusSSEEventS
 func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -120,7 +121,7 @@ func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// feedback_j19_runtime_logs_stream_missing_env_param. Fail fast 400.
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
 		return
 	}
 
@@ -128,11 +129,11 @@ func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// (existence-leak-prevention). Same pattern as status.go + metrics_proxy.go.
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -142,7 +143,7 @@ func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// feedback_loopzero_cloud_sse_proxy_buffers_until_eof.
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "sse_flusher_unavailable",
 		})
 		return

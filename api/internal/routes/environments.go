@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -208,7 +209,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -218,7 +219,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -241,11 +242,11 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 					"project", projectFilter,
 					"error", perr.Error(),
 				)
-				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 				return
 			}
 			if !exists {
-				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 					"PROJECT_NOT_FOUND",
 					fmt.Sprintf("project %q not found in your account", projectFilter),
 					404,
@@ -351,7 +352,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 		envsTotal := len(envs)
 		envsLimit, envsOffset := parsePaginationParams(r)
 		envsFrom, envsTo := sliceWindow(envsTotal, envsLimit, envsOffset)
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"environments": envs[envsFrom:envsTo], // legacy (back-compat) — paginated post-T2.3
 			"permanent":    permanent,
 			"previews":     slots,
@@ -363,7 +364,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 	envsTotal := len(envs)
 	envsLimit, envsOffset := parsePaginationParams(r)
 	envsFrom, envsTo := sliceWindow(envsTotal, envsLimit, envsOffset)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"environments": envs[envsFrom:envsTo],
 		"total":        envsTotal,
 	})
@@ -392,19 +393,19 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	var req createEnvironmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
 	}
 
 	// Validate name format (RFC 1123: lowercase alphanumeric + hyphens, no leading hyphen)
 	if !rfc1123.MatchString(req.Name) {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name must be lowercase, alphanumeric, and may contain hyphens"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}
 
@@ -413,13 +414,13 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// (no project, no API request) creates a `production` env. The user
 	// cannot create (web, production) — surprise prevention.
 	if reservedEnvironmentNames[req.Name] {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name is reserved and cannot be used"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name is reserved and cannot be used"))
 		return
 	}
 
 	// M2 v1.2 T4.1 — `project` is REQUIRED.
 	if req.Project == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required: pass the project slug (not the project UUID) in the request body"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required: pass the project slug (not the project UUID) in the request body"))
 		return
 	}
 
@@ -440,13 +441,13 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 				"project", req.Project,
 				"error", perr.Error(),
 			)
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 			return
 		}
 		if !exists {
 			// 404 (not 403) — matches the existence-leak-prevention
 			// pattern already established for cross-tenant DELETE flows.
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"PROJECT_NOT_FOUND",
 				fmt.Sprintf("project %q not found in your account", req.Project),
 				404,
@@ -461,7 +462,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		// know whether they actually created the env or it already
 		// existed (concurrent dev clients, retry on 5xx flake, etc).
 		if isAlreadyExistsErrorMsg(err) {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENV_ALREADY_EXISTS",
 				fmt.Sprintf("environment %q already exists in project %q", req.Name, req.Project),
 				409,
@@ -474,11 +475,11 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"environment", req.Name,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	httpio.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"name":    req.Name,
 		"project": req.Project,
 		"status":  "active",
@@ -511,13 +512,13 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment name is required"))
 		return
 	}
 
@@ -535,7 +536,7 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		// projects so the next command can succeed.
 		var amb *domain.ErrAmbiguousEnvironment
 		if errors.As(err, &amb) {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENVIRONMENT_AMBIGUOUS",
 				fmt.Sprintf("environment '%s' exists in more than one project (%s); specify the project",
 					name, strings.Join(amb.Projects, ", ")),
@@ -548,15 +549,15 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"environment", name,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if detail == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
 		return
 	}
 
-	writeJSON(w, http.StatusOK, detail)
+	httpio.WriteJSON(w, http.StatusOK, detail)
 }
 
 // Delete handles DELETE /api/v1/environments/{name}.
@@ -567,19 +568,19 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment name is required"))
 		return
 	}
 
 	// Protect production environment from deletion
 	if name == pkgdomain.DefaultPermanentEnv {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the production environment cannot be deleted"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the production environment cannot be deleted"))
 		return
 	}
 
@@ -611,7 +612,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		// EnvironmentManager returns a sentinel that we match by message suffix
 		// — keeping routes package free of direct k8s import dependencies.
 		if strings.Contains(err.Error(), "environment not found in tenant CR") {
-			writeLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
 			return
 		}
 		slog.Error("failed to delete environment",
@@ -619,7 +620,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			"environment", name,
 			"error", err.Error(),
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -632,7 +633,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if len(warnings) > 0 {
 		resp["warnings"] = warnings
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // StubEnvironmentManager is a stub implementation of EnvironmentManager

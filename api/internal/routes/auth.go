@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -84,11 +85,11 @@ type SwitchTeamRequest struct {
 func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 	if h.activeStore == nil || h.membershipLookup == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"NOT_AVAILABLE",
 			"Team switching is not configured on this server.",
 			501,
@@ -98,12 +99,12 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 
 	var req SwitchTeamRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"INVALID_REQUEST", "Invalid JSON body", 400))
 		return
 	}
 	if req.Name == "" {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD", "Team name is required", 400))
 		return
 	}
@@ -113,7 +114,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("switch team: membership lookup failed",
 			"user_id", uc.UserID, "error", err)
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"INTERNAL", "Unable to verify team membership.", 500))
 		return
 	}
@@ -125,7 +126,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !isMember {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"NOT_MEMBER",
 			"You are not a member of team \""+req.Name+"\". Run `loopzero whoami` to see your teams.",
 			403,
@@ -136,7 +137,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if err := h.activeStore.SetActiveTenant(r.Context(), uc.UserID, req.Name); err != nil {
 		slog.Error("switch team: SetActiveTenant failed",
 			"user_id", uc.UserID, "tenant_id", req.Name, "error", err)
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"INTERNAL", "Unable to persist team selection.", 500))
 		return
 	}
@@ -161,7 +162,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 

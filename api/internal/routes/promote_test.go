@@ -47,12 +47,12 @@ func TestPromote_HappyPath(t *testing.T) {
 	}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{
-			PromotionID:    "promo-abc",
+			PromotionID:     "promo-abc",
 			SourceReleaseID: "rel-src-1",
-			NewReleaseID:   "rel-new-1",
-			FromEnv:        "staging",
-			ToEnv:          "production",
-			URL:            "https://my-api-production.dev.loopzero.example",
+			NewReleaseID:    "rel-new-1",
+			FromEnv:         "staging",
+			ToEnv:           "production",
+			URL:             "https://my-api-production.dev.loopzero.example",
 		},
 	}
 	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
@@ -346,7 +346,6 @@ func TestPromote_RegressionV10BodyShape(t *testing.T) {
 		})
 	}
 }
-
 
 // --- Fake EnvironmentEnsurer for #158 tests ---
 

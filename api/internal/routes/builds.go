@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -268,13 +269,13 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	var req createBuildRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
 	}
 
@@ -298,7 +299,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if req.ProjectID == "" {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
 			"Project name is required. Check your loopzero.yaml.",
 			400,
@@ -306,7 +307,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Environment == "" {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
 			"Environment is required",
 			400,
@@ -335,7 +336,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 				req.RedeployOf,
 			)
 		}
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
 			// Red Team loopzero-cloud#123 — when this is a fresh deploy, guide
 			// the customer to the canonical `.loopzero/services.json` (loopzerokit
@@ -350,7 +351,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Environment validation (DA-10): lowercase only
 	if !environmentRegex.MatchString(req.Environment) {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"INVALID_ENVIRONMENT",
 			"Environment names must be lowercase.",
 			400,
@@ -372,9 +373,9 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 			// Wrap non-LoopZeroError errors so the handler emits a clean response.
 			var te *loopzeroerrors.LoopZeroError
 			if errors.As(ensureErr, &te) {
-				writeLoopZeroError(w, te)
+				httpio.WriteLoopZeroError(w, te)
 			} else {
-				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 					"ENV_PROVISION_FAILED",
 					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error()),
 					500,
@@ -414,7 +415,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// loopzeroPacksDockerfileStep() and buildctl arguments.
 	for _, app := range req.Apps {
 		if err := validation.ValidateAppName(app.Name); err != nil {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"INVALID_APP_NAME",
 				fmt.Sprintf("Invalid name for app: %s", err.Error()),
 				400,
@@ -422,7 +423,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := validation.ValidateAppPath(app.Path); err != nil {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"INVALID_APP_PATH",
 				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()),
 				400,
@@ -465,7 +466,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 				secs = 1
 			}
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", secs))
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message, 429))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message, 429))
 			return
 		}
 	}
@@ -485,7 +486,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, resp)
+	httpio.WriteJSON(w, http.StatusAccepted, resp)
 }
 
 // Get handles GET /api/v1/builds/:id.
@@ -497,7 +498,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -511,7 +512,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if buildTenantID != uc.TenantID {
-		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -521,7 +522,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // Cancel handles POST /api/v1/builds/:id/cancel.
@@ -534,7 +535,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -548,7 +549,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if buildTenantID != uc.TenantID {
-		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -557,7 +558,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, map[string]string{
+	httpio.WriteJSON(w, http.StatusAccepted, map[string]string{
 		"status": "cancelled",
 	})
 }
@@ -581,14 +582,14 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.As(err, &loopzeroErr) {
 		// DA-18: Override message for DEPLOY_IN_PROGRESS
 		if errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"DEPLOY_IN_PROGRESS",
 				"A deploy is already in progress for this environment.",
 				409,
 			))
 			return
 		}
-		writeLoopZeroError(w, loopzeroErr)
+		httpio.WriteLoopZeroError(w, loopzeroErr)
 		return
 	}
 
@@ -609,7 +610,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 		// gets a "Reference: <id>. Contact support if it persists." handle
 		// to the server-side log (closes the #35 Red Team original
 		// suggestion of separating client-facing from server-side cause).
-		writeLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReasonWithTrace(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReasonWithTrace(
 			se.Reason.String(), se.Detail, correlation.Read(r)))
 		return
 	}
@@ -624,5 +625,5 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// Fallback for genuinely-unexpected errors (request decode, etc.).
 	// Sprint 6 narrowed the orchestrator surface so this only fires for
 	// errors that genuinely came from outside BuildOrchestrator.SubmitBuild.
-	writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+	httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 }

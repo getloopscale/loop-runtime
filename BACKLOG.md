@@ -1143,7 +1143,8 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-11. `api/internal/routes` pontua coesão **1/5** (a pior de 148 módulos): 43 arquivos de produção, 11.255 LOC de produção, **263 símbolos exportados contra um limiar de 20 (13×)**. Os nomes de arquivo já carregam o domínio (`secrets.go` 846L, `environments.go` 676L, `builds.go` 628L, `domains*.go` ×5) mas nenhum subpacote existe — o agrupamento por domínio é convenção que o compilador não enforça. Diferente de `db/store`, cuja planura **é** ratificada por ADR, nenhum registro justifica este pacote. **Contrapeso medido:** das 41 funções não-exportadas nos 43 arquivos, exatamente **duas** são referenciadas por mais de 3 arquivos — `writeLoopZeroError` (27) e `writeJSON` (24) — e ambas estão dentro de um arquivo de domínio (`projects.go:489` e `:473`).
 why_now: `api/internal` decompõe por **camada** (`services` 29k · `routes` 27k · `db` 22k), e **10 dos 16 domínios têm arquivo de produção nos três ao mesmo tempo**. Mexer no domínio build significa abrir os três. E a correção é barata por duas medições: o vocabulário de domínio **já está publicado e congelado** (`server/router.go` registra 15 famílias de recurso que a Regra Inquebrável 5 impede de derivar), e a decomposição **já foi feita uma camada abaixo** — `services/` tem 9 contextos, zero arquivos soltos, DAG congelado pelo gate AST `servicesacyclic`. Não é introduzir decomposição; é propagar uma que já existe e já foi ratificada.
-status: triaged
+status: planned
+resolved_in: .claude/knowledge-base/plans/slice-5-routes-transport-plan.md — 3 de 5 balas. (1) as duas funcoes de transporte sairam de projects.go para api/internal/routes/httpio, com 399 chamadas re-apontadas e o compilador verificando cada uma; (2) gate novo routes-acyclic recusa subpacote nao registrado E aresta entre irmaos, criado ANTES do primeiro arquivo mover por exigencia literal do item; (3) B-040 ja fechado na fatia slice-1. NAO ENTREGUE: o isomorfismo de `ls routes/` com as familias do router, e o router seguir a unica superficie — ambos exigem mover 43 arquivos e a superficie exportada (263 nao reproduz; ver B-080), T3, registrado como B-080 com as medicoes.
 severity: alta — é o achado central da auditoria e a resposta direta à pergunta que a originou.
 dod:
   - `ls api/internal/routes/` fica isomórfico à lista de famílias de `server/router.go` — se divergir, alguém adicionou handler sem decidir a família
@@ -1832,3 +1833,59 @@ dod:
 
 > Registrado 2026-08-12 pela fatia slice-4. O `domain-sink-purity` imprime as 4 congeladas em toda
 > execução exatamente para que este item não seja esquecido — é o mesmo desenho do `B-076`.
+
+## B-080 — Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-12 na fatia slice-5. `api/internal/routes` tem **43 arquivos de produção** e **27.298** linhas contando testes; os maiores são `secrets.go` 846, `environments.go` 676, `builds.go` 628, `scale.go` 600, `projects.go` 504. `server/router.go` registra **19 prefixos de recurso** (`/api/v1/{admin,audit,auth,billing,builds,domains,environments,health,integrations,projects,secrets,source,teams,tenants,version,webhooks}`, `/billing`, `/internal`, `/v1/version`). O bloqueio de fato foi removido nesta fatia — as três funções de transporte saíram de `projects.go` para `routes/httpio`, 399 chamadas re-apontadas — e a cerca `routes-acyclic` já existe, registrando `httpio` como folha.
+why_now: o `B-041` exige que a cerca preceda o movimento, e agora ela existe. O que resta é o movimento em si, e ele é T3: redistribui a superfície exportada — cujo tamanho **não reproduz** em 263: duas contagens independentes deram **355** (AST, incluindo métodos) e **301** (regex de declaração de topo, que subconta blocos `type (...)` agrupados). O número 263 vem do `evidence` do `B-041` e nenhuma regra o produz — está registrado aqui como não verificado em vez de repetido — e reescreve `server/router.go`, que é a **única** superfície onde o conjunto de rotas é lido — a Regra Inquebrável 5 torna a forma dessa superfície um contrato.
+status: raw
+severity: alta — é o achado central da auditoria de arquitetura, e agora está desbloqueado.
+dod:
+  - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
+  - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta
+  - `server/router.go` continua sendo o único lugar onde a superfície inteira é lida
+  - nenhuma família importa uma irmã (a cerca já reprova)
+  - a mudança passa por reunião T3 antes do primeiro arquivo mover
+
+> Registrado 2026-08-12 pela fatia slice-5, que entregou 3 das 5 balas do `B-041` e mediu esta.
+
+## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 na revisão da fatia slice-5. `httpio.WriteLoopZeroError` é pass-through puro para `errorshttp.WriteJSON` — ele não inventa vocabulário nem o filtra. Alimentado com `"ArgoCD sync failed for tenant_id tn-1; check Gitea and MinIO"`, os quatro termos banidos chegam ao corpo em `detail` **e** `message`, verbatim, e o writer está funcionando exatamente como projetado. A superfície de risco real são as **277** mensagens autoradas nos call sites, e entre os 122 gates **não existe nenhum** sobre o vocabulário delas.
+why_now: a Regra Inquebrável 3 proíbe `ArgoCD`, `GitOps`, `CRD`, `tenant_id`, `Gitea`, `MinIO`, `Kaniko` e outros em saída ao usuário, e hoje isso é honrado por disciplina. A revisão confirmou que nenhuma mensagem em `routes` carrega termo banido **hoje** — então o risco é de regressão, não presente, e um gate agora é barato porque nasce verde.
+status: raw
+severity: média — nada quebrado hoje; o que falta é o que impede a próxima mensagem de quebrar.
+dod:
+  - existe gate que varre as mensagens de erro autoradas em `routes/` (e `services/`) contra a lista da Regra 3
+  - ele nasce verde e reprova uma mensagem suja num fixture
+  - a lista de termos vive num lugar só, não duplicada entre gate e regra
+
+> Registrado 2026-08-12 pela revisão independente da fatia slice-5 (achado M1). O teste que existia
+> em `httpio` afirmava cobrir *"EVERY error the API emits"* e cobria o que um pass-through pode
+> cobrir; foi reescrito para dizer o que de fato mede, e este item guarda o que ele não mede.
+
+## B-082 — `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: observado em 2026-08-12. Um run de `task quality:gates` reprovou com `FAIL: infra/helm/loopzero-api: env LOOPZERO_VAULT_ADDR MISSING` e `FAILURES: 1/15`. O mesmo script, rodado isoladamente antes **e** depois da mudança em stash, saiu **0** nas duas vezes; e o run seguinte de `quality:gates` completo saiu **0**. A variável `LOOPZERO_VAULT_ADDR` não está no ambiente nos dois casos, então a diferença não é ambiental de forma óbvia — o teste renderiza o chart e procura a env var no resultado (`infra/tests/secrets/check-loopzero-api-vault-projected-token_test.sh:154,180`).
+why_now: `.claude/rules/testing.md` é categórico — *"testes devem ser determinísticos; se falha de forma intermitente, é um bug e deve ser corrigido ou removido"*. Um gate que reprova uma vez em N bloqueia um push por motivo que não se reproduz, e o custo real disso é ensinar o time a re-rodar até passar, que é como um gate morre.
+status: raw
+severity: média — não indica defeito de produto; indica um gate em que não se pode confiar de forma binária.
+dod:
+  - a causa da intermitência está medida (render em paralelo? cache do helm? dependência de ordem entre os 15 sub-testes?)
+  - o teste passa em 10 execuções consecutivas do `quality:gates` completo, ou é corrigido/removido
+  - se for dependência de ordem, ela é eliminada e não contornada com retry
+
+> Registrado 2026-08-12 durante a fatia slice-5. Não foi causado por ela: provado com a mudança em
+> stash — 0 antes, 0 depois, isoladamente.

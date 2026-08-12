@@ -368,8 +368,9 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 // `active_release.git_commit` MUST match the app commit_sha of the
 // build the release references (build.commit_sha), NOT the internal
 // gitops/SoT push commit. The Red Team observed:
-//   last_build.commit_sha   = e52f2f41... (app commit; user pushed)
-//   active_release.git_commit = de6b5c5b... (gitops repo commit; internal)
+//
+//	last_build.commit_sha   = e52f2f41... (app commit; user pushed)
+//	active_release.git_commit = de6b5c5b... (gitops repo commit; internal)
 //
 // The user-facing field MUST surface the user-pushed commit. The DB
 // column `releases.git_commit` keeps the gitops commit for activator
@@ -396,9 +397,9 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing
 	releases := &fakeStatusReleaseStore{
 		release: &StatusRelease{
 			ID:        "rel-1",
-			BuildID:   "bld-1",          // matches the build above
+			BuildID:   "bld-1", // matches the build above
 			Status:    "ACTIVE",
-			GitCommit: gitopsCommit,     // the internal gitops commit — MUST NOT leak as user-facing
+			GitCommit: gitopsCommit, // the internal gitops commit — MUST NOT leak as user-facing
 			CreatedAt: now,
 			EntryApp:  "web",
 		},

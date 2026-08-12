@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"io"
 	"log/slog"
 	"net/http"
@@ -97,13 +98,13 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	// Check Content-Length before parsing body (fast reject for oversized requests).
 	if r.ContentLength > maxBundleSize {
-		writeLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
 		return
 	}
 
@@ -117,7 +118,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// below re-reads from the same request.
 	if firstPartName, peekErr := peekFirstMultipartFieldName(r); peekErr == nil && firstPartName != "" {
 		if firstPartName != "services_json" {
-			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code: "MULTIPART_FIELD_ORDER",
 				Message: "multipart field order violation: expected `services_json` first, got `" + firstPartName +
 					"`. Upgrade your LoopZeroKit CLI (≥0.5.0) — see https://loopzerocloud.dev/docs/api/source-upload-wire-protocol",
@@ -130,10 +131,10 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(maxInMemoryMultipart); err != nil {
 		// MaxBytesReader returns a specific error when the body is too large.
 		if err.Error() == "http: request body too large" {
-			writeLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
 			return
 		}
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
 	}
 	defer func() {
@@ -166,7 +167,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Rejects payloads that would survive the form-level 32MB cap but blow up
 	// downstream validators / log lines / DB columns.
 	if int64(len(servicesJSONContent)) > maxServicesJSONSize {
-		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code: "SERVICES_JSON_TOO_LARGE",
 			Message: fmt.Sprintf(
 				"services.json field exceeds the %d KB cap. Reduce env var count / value length per `loopzerokit migrate services-json-v1-to-v2`.",
@@ -182,7 +183,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// driven status registry in pkg/errors/http only knows registered codes).
 	if servicesJSONContent == "" {
 		if legacy := r.FormValue("loopzero_yaml"); legacy != "" {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
 				"E-009: legacy loopzero_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
 					"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopzero-cloud` to regenerate the bundle.",
@@ -191,7 +192,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// EC-B3-7 (v3.1) — truncated/missing payload returns 422 with E-008 hint.
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"VALIDATION_FAILED",
 			"E-008: services.json is required (multipart form field `services_json`).",
 			422,
@@ -224,14 +225,14 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 					Got:      fe.Got,
 				})
 			}
-			writeLoopZeroErrorWithFieldErrors(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopZeroErrorWithFieldErrors(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
 				ve.Message,
 				422,
 			), fieldErrors)
 			return
 		}
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -239,7 +240,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// up to 1.5GB per request by writing once to disk instead of io.ReadAll).
 	bundleFile, _, err := r.FormFile("bundle")
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
 			"Bundle file is required",
 			400,
@@ -252,7 +253,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	tmpFile, err := os.CreateTemp("", "loopzero-bundle-*.tar.gz")
 	if err != nil {
 		slog.Error("source upload: failed to create temp file", "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	defer func() {
@@ -262,7 +263,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := io.Copy(tmpFile, bundleFile); err != nil {
 		slog.Error("source upload: failed to write temp file", "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -273,7 +274,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// Rewind temp file for Gitea push
 	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -287,7 +288,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, source.ErrInvalidTenantOrProject) {
 			slog.Info("source upload rejected: invalid tenant or project ID",
 				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
-			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:    "INVALID_TENANT_OR_PROJECT",
 				Message: err.Error(),
 			})
@@ -314,7 +315,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		if source.IsGiteaRaceCondition(err) {
 			slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
 				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
-			writeLoopZeroError(w, loopzeroerrors.ErrDeployInProgress)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrDeployInProgress)
 			return
 		}
 		// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3 (closes
@@ -331,14 +332,14 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			// to placeholder-only, the operator gets "Reference: <id>.
 			// Contact support if it persists." (closes #35 Red Team
 			// original suggestion).
-			writeLoopZeroError(w, loopzeroerrors.NewSourceUploadFailedFromPushReasonWithTrace(
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewSourceUploadFailedFromPushReasonWithTrace(
 				pushErr.Reason.String(), pushErr.Detail, correlation.Read(r)))
 			return
 		}
 		// Fallback: untyped failure (downstream helper that didn't get
 		// wrapped). Emit the neutral generic fallback per Sprint 4.
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
-		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
 	}
 
@@ -357,14 +358,14 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		if result.GitBundlePath != "" {
 			gitBundleFile, openErr := os.Open(result.GitBundlePath)
 			if openErr != nil {
-				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 				return
 			}
 			defer func() { _ = gitBundleFile.Close() }()
 			uploadReader = gitBundleFile
 		} else {
 			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 				return
 			}
 			uploadReader = tmpFile
@@ -381,7 +382,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		// succeeds or the request fails with ErrSourceUploadFailed.
 		if uploadErr := h.objStore.Upload(ctx, h.sourceBucket, objKey, uploadReader); uploadErr != nil {
 			slog.Error("object store upload failed", "error", uploadErr, "key", objKey)
-			writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 			return
 		}
 	}
@@ -439,4 +440,3 @@ func peekFirstMultipartFieldName(r *http.Request) (string, error) {
 	defer func() { _ = part.Close() }()
 	return part.FormName(), nil
 }
-

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -117,22 +118,22 @@ const previewRequestTimeout = 30 * time.Second
 func (h *PreviewHandler) authAndProject(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return "", "", false
 	}
 	project := chi.URLParam(r, "project")
 	if strings.TrimSpace(project) == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required"))
 		return "", "", false
 	}
 	if h.projectChecker != nil {
 		proj, err := h.projectChecker.GetByName(r.Context(), uc.TenantID, project)
 		if err != nil {
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 			return "", "", false
 		}
 		if proj == nil {
-			writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(project))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(project))
 			return "", "", false
 		}
 	}
@@ -159,7 +160,7 @@ func (h *PreviewHandler) List(w http.ResponseWriter, r *http.Request) {
 			"tenant", tenantID,
 			"project", projectID,
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -182,7 +183,7 @@ func (h *PreviewHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpio.WriteJSON(w, http.StatusOK, map[string]any{
 		"previews": previews,
 		"count":    len(previews),
 		"total":    len(previews), // legacy alias used by older CLI builds
@@ -203,18 +204,18 @@ func (h *PreviewHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	previewID := chi.URLParam(r, "id")
 	if strings.TrimSpace(previewID) == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("preview id is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("preview id is required"))
 		return
 	}
 
 	preview, err := h.store.GetByID(ctx, tenantID, previewID)
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrPreviewNotFound) {
-			writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
 			return
 		}
 		h.logger.Error("preview get failed", "error", err, "preview", previewID)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -222,11 +223,11 @@ func (h *PreviewHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// for a different project under the same tenant, return 404 — never
 	// leak across project boundaries.
 	if preview.ProjectID != projectID {
-		writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, preview)
+	httpio.WriteJSON(w, http.StatusOK, preview)
 }
 
 // Delete requests deletion of a preview environment (soft-delete).
@@ -244,7 +245,7 @@ func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	previewID := chi.URLParam(r, "id")
 	if strings.TrimSpace(previewID) == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("preview id is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("preview id is required"))
 		return
 	}
 
@@ -252,29 +253,29 @@ func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	preview, err := h.store.GetByID(ctx, tenantID, previewID)
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrPreviewNotFound) {
-			writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
 			return
 		}
 		h.logger.Error("preview lookup before delete failed", "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if preview.ProjectID != projectID {
-		writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
 		return
 	}
 
 	if err := h.store.RequestDeletion(ctx, tenantID, previewID); err != nil {
 		if errors.Is(err, loopzeroerrors.ErrPreviewNotFound) {
-			writeLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPreviewNotFound)
 			return
 		}
 		h.logger.Error("preview delete failed", "error", err, "preview", previewID)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	httpio.WriteJSON(w, http.StatusOK, map[string]string{
 		"id":     previewID,
 		"status": "deleting",
 	})
@@ -294,28 +295,28 @@ func (h *PreviewHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	if h.service == nil {
 		// No PreviewService wired — feature isn't fully online yet.
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("preview service not available"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("preview service not available"))
 		return
 	}
 
 	var body CreatePreviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("malformed JSON: "+err.Error()))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("malformed JSON: "+err.Error()))
 		return
 	}
 	// URL project takes precedence over body field (URL is canonical).
 	body.ProjectID = projectID
 
 	if body.PRNumber <= 0 {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("pr_number must be positive"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("pr_number must be positive"))
 		return
 	}
 	if strings.TrimSpace(body.Branch) == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("branch is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("branch is required"))
 		return
 	}
 	if strings.TrimSpace(body.CommitSHA) == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("commit_sha is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("commit_sha is required"))
 		return
 	}
 
@@ -326,15 +327,15 @@ func (h *PreviewHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var te *loopzeroerrors.LoopZeroError
 		if errors.As(err, &te) {
-			writeLoopZeroError(w, te)
+			httpio.WriteLoopZeroError(w, te)
 			return
 		}
 		h.logger.Error("preview create failed", "error", err)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, preview)
+	httpio.WriteJSON(w, http.StatusAccepted, preview)
 }
 
 // TenantID + SetTenantID methods now live in domain/preview_request.go alongside

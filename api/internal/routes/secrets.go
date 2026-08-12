@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -296,7 +297,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -322,7 +323,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 		results = append(results, h.bulkProcessEntry(ctx, uc, project, entry))
 	}
 
-	writeJSON(w, http.StatusOK, secretBulkResponse{Results: results})
+	httpio.WriteJSON(w, http.StatusOK, secretBulkResponse{Results: results})
 }
 
 // decodeAndValidateBulkRequest decodes the JSON body + enforces:
@@ -334,11 +335,11 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 func decodeAndValidateBulkRequest(w http.ResponseWriter, r *http.Request) (secretBulkRequest, bool) {
 	var req secretBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
 		return req, false
 	}
 	if len(req.Secrets) > secretBulkMaxKeys {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{
+		httpio.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]string{
 			"code":    "PAYLOAD_TOO_LARGE",
 			"message": fmt.Sprintf("bulk request exceeds %d keys; split into multiple uploads", secretBulkMaxKeys),
 		})
@@ -347,7 +348,7 @@ func decodeAndValidateBulkRequest(w http.ResponseWriter, r *http.Request) (secre
 	seen := make(map[string]struct{}, len(req.Secrets))
 	for _, e := range req.Secrets {
 		if _, dup := seen[e.Name]; dup {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
+			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "DUPLICATE_KEY_IN_BATCH",
 				"message": fmt.Sprintf("key %q appears more than once in the same batch", e.Name),
 			})
@@ -383,7 +384,7 @@ func (h *SecretHandler) assertSecretProjectBinding(
 				"project", project, "error", auditErr)
 		}
 	}
-	writeJSON(w, http.StatusNotFound, map[string]string{
+	httpio.WriteJSON(w, http.StatusNotFound, map[string]string{
 		"code":    "PROJECT_NOT_FOUND",
 		"message": "project not found",
 	})
@@ -416,7 +417,7 @@ func (h *SecretHandler) assertSecretPlanLimit(
 	if allowed {
 		return true
 	}
-	writeJSON(w, http.StatusPaymentRequired, map[string]any{
+	httpio.WriteJSON(w, http.StatusPaymentRequired, map[string]any{
 		"code":    "PLAN_LIMIT_EXCEEDED",
 		"message": fmt.Sprintf("plan %q allows %d secrets, currently at %d", plan, max, current),
 		"current": current,
@@ -587,7 +588,7 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -607,7 +608,7 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	secrets, err := h.store.ListNames(ctx, uc.TenantID, project, env)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -615,7 +616,7 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 		secrets = []SecretMetadata{}
 	}
 
-	writeJSON(w, http.StatusOK, secretListResponse{Secrets: secrets})
+	httpio.WriteJSON(w, http.StatusOK, secretListResponse{Secrets: secrets})
 }
 
 // Set handles POST /api/v1/secrets.
@@ -626,19 +627,19 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	var req secretSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
 		return
 	}
 
 	// Validate name format
 	if !secretNameRegex.MatchString(req.Name) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_SECRET_NAME",
 			"message": "Secret name must be uppercase with underscores (e.g., DATABASE_URL). Got: '" + req.Name + "'.",
 		})
@@ -647,15 +648,15 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if req.Value == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("value is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("value is required"))
 		return
 	}
 	if req.Environment == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
 		return
 	}
 	if req.App == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("app is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("app is required"))
 		return
 	}
 
@@ -680,7 +681,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
-			writeJSON(w, http.StatusConflict, map[string]string{
+			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DEPLOY_IN_PROGRESS",
 				"message": "Another operation is in progress for this environment. Retry shortly.",
 			})
@@ -699,7 +700,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 				"environment", req.Environment,
 				"secret_name", req.Name,
 			)
-			writeLoopZeroError(w, loopzeroerrors.ErrSecretsBackendUnavailable)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrSecretsBackendUnavailable)
 			return
 		}
 		// V9 L18: mirror mapBuildError + promote.go pattern — log unexpected
@@ -714,7 +715,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 			"app", req.App,
 			"secret_name", req.Name,
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -750,7 +751,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 			"secret_name", req.Name)
 	}
 
-	writeJSON(w, http.StatusOK, secretSetResponse{
+	httpio.WriteJSON(w, http.StatusOK, secretSetResponse{
 		Name:        req.Name,
 		Environment: req.Environment,
 		App:         req.App,
@@ -765,13 +766,13 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("secret name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("secret name is required"))
 		return
 	}
 
@@ -786,7 +787,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	// 409s, and the store.Delete matches L19 PK rows that include the
 	// empty-env slot. Mirror the Set handler validation pattern.
 	if env == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
 		return
 	}
 
@@ -805,18 +806,18 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
-			writeJSON(w, http.StatusConflict, map[string]string{
+			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DEPLOY_IN_PROGRESS",
 				"message": "Another operation is in progress for this environment. Retry shortly.",
 			})
 			return
 		}
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
 	if !deleted {
-		writeJSON(w, http.StatusNotFound, map[string]string{
+		httpio.WriteJSON(w, http.StatusNotFound, map[string]string{
 			"code":    "SECRET_NOT_FOUND",
 			"message": "Secret '" + name + "' not found.",
 		})
@@ -839,7 +840,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, secretDeleteResponse{
+	httpio.WriteJSON(w, http.StatusOK, secretDeleteResponse{
 		Name:    name,
 		Deleted: true,
 	})

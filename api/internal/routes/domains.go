@@ -4,6 +4,7 @@
 package routes
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -179,7 +180,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -189,11 +190,11 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape for contract uniformity.
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -230,7 +231,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
 // List returns all domains for the current tenant (GET /api/v1/domains).
@@ -239,7 +240,7 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -268,11 +269,11 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain list failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, domainListResponse{
+	httpio.WriteJSON(w, http.StatusOK, domainListResponse{
 		Domains: domains,
 		Total:   total,
 		Limit:   filter.Limit,

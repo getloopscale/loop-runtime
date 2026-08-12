@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -38,12 +39,12 @@ type PromoteInput struct {
 
 // PromoteOutput is the result from the promote service.
 type PromoteOutput struct {
-	PromotionID    string
+	PromotionID     string
 	SourceReleaseID string
-	NewReleaseID   string
-	FromEnv        string
-	ToEnv          string
-	URL            string
+	NewReleaseID    string
+	FromEnv         string
+	ToEnv           string
+	URL             string
 }
 
 // PromoteProjectStore abstracts project lookup for promote (DIP).
@@ -109,40 +110,40 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	// Parse request body
 	var req promoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
 		return
 	}
 
 	if req.From == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("'from' environment is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("'from' environment is required"))
 		return
 	}
 	if req.To == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("'to' environment is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("'to' environment is required"))
 		return
 	}
 
 	// Look up project
 	project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -167,14 +168,14 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, name, req.To); ensureErr != nil {
 			var loopzeroErr *loopzeroerrors.LoopZeroError
 			if errors.As(ensureErr, &loopzeroErr) {
-				writeLoopZeroError(w, loopzeroErr)
+				httpio.WriteLoopZeroError(w, loopzeroErr)
 				return
 			}
 			slog.Error("promote: EnsureEnvironment failed",
 				"error", ensureErr.Error(), "tenant_id", uc.TenantID,
 				"project", name, "to", req.To,
 			)
-			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 			return
 		}
 	}
@@ -192,12 +193,12 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var loopzeroErr *loopzeroerrors.LoopZeroError
 		if errors.As(err, &loopzeroErr) {
-			writeLoopZeroError(w, loopzeroErr)
+			httpio.WriteLoopZeroError(w, loopzeroErr)
 			return
 		}
 		// Lock timeout -> 409
 		if isPromoteLockTimeout(err) {
-			writeJSON(w, http.StatusConflict, map[string]string{
+			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DEPLOY_IN_PROGRESS",
 				"message": "Another operation is in progress. Try again in a moment.",
 			})
@@ -213,7 +214,7 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"from", req.From,
 			"to", req.To,
 		)
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 
@@ -227,7 +228,7 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		URL:           result.URL,
 	}
 
-	writeJSON(w, http.StatusAccepted, resp)
+	httpio.WriteJSON(w, http.StatusAccepted, resp)
 }
 
 // isPromoteLockTimeout checks if the error is a lock timeout.

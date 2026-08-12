@@ -4,6 +4,7 @@
 package routes
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,7 +21,7 @@ import (
 func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	// v2: TXT verification is deprecated — domains use nameserver delegation
 	if h.cfZone != nil {
-		writeJSON(w, http.StatusGone, map[string]string{
+		httpio.WriteJSON(w, http.StatusGone, map[string]string{
 			"code":    "DEPRECATED",
 			"message": "TXT verification is deprecated. Domains now use nameserver delegation. Use 'loopzero domain add' to register a new domain.",
 		})
@@ -30,7 +31,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := middleware.GetUserContext(ctx)
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -39,17 +40,17 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"code": "INTERNAL_ERROR", "message": "domain not found"})
+		httpio.WriteJSON(w, http.StatusNotFound, map[string]string{"code": "INTERNAL_ERROR", "message": "domain not found"})
 		return
 	}
 
 	// Already verified or active — return success (idempotent, MEET-033)
 	if d.Status == "verified" || d.Status == "provisioning" || d.Status == "active" {
-		writeJSON(w, http.StatusOK, domainVerifyResponse{
+		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:     d.Domain,
 			Status:     d.Status,
 			VerifiedAt: d.VerifiedAt,
@@ -59,7 +60,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 
 	// Only pending_verification and failed can be verified
 	if d.Status != "pending_verification" && d.Status != "failed" {
-		writeJSON(w, http.StatusOK, domainVerifyResponse{
+		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain: d.Domain,
 			Status: d.Status,
 		})
@@ -70,7 +71,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	verified, err := h.verifier.VerifyTXT(ctx, d.Domain, d.VerificationToken)
 	if err != nil {
 		slog.ErrorContext(ctx, "DNS verification error", "error", err, "domain", d.Domain)
-		writeJSON(w, http.StatusOK, domainVerifyResponse{
+		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:            d.Domain,
 			Status:            d.Status,
 			VerificationError: "DNS lookup failed. Please try again.",
@@ -80,7 +81,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !verified {
-		writeJSON(w, http.StatusOK, domainVerifyResponse{
+		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:            d.Domain,
 			Status:            "pending_verification",
 			VerificationError: "TXT record not found for _loopzero-verify." + d.Domain,
@@ -93,11 +94,11 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	if err := h.store.UpdateVerified(ctx, d.Domain, now); err != nil {
 		slog.ErrorContext(ctx, "domain verify update failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to update domain status"})
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to update domain status"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, domainVerifyResponse{
+	httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 		Domain:     d.Domain,
 		Status:     "verified",
 		VerifiedAt: &now,

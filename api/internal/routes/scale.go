@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 
@@ -219,41 +220,41 @@ type scaleAutoscaling struct {
 func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	req, hasFixed, hasAuto, perr := parseScaleRequest(r)
 	if perr != nil {
-		writeLoopZeroError(w, perr)
+		httpio.WriteLoopZeroError(w, perr)
 		return
 	}
 
 	planTier, terr := h.resolveTier(r.Context(), uc.TenantID)
 	if terr != nil {
-		writeLoopZeroError(w, terr)
+		httpio.WriteLoopZeroError(w, terr)
 		return
 	}
 
 	if lerr := h.enforceLimits(&req, planTier, hasAuto, uc.TenantID); lerr != nil {
-		writeLoopZeroError(w, lerr)
+		httpio.WriteLoopZeroError(w, lerr)
 		return
 	}
 
 	// Verify project exists (cross-tenant safety: GetByName scoped to tenant).
 	project, gerr := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if gerr != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -264,7 +265,7 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	// Plan T2.2 fallback: when no apply closure wired (tests), return stub
 	// 202 with the computed preview so callers still see canonical shape.
 	if h.apply == nil {
-		writeJSON(w, http.StatusAccepted, resp)
+		httpio.WriteJSON(w, http.StatusAccepted, resp)
 		return
 	}
 
@@ -554,10 +555,10 @@ func (h *ScaleHandler) applyAndLog(
 	if err != nil {
 		var te *loopzeroerrors.LoopZeroError
 		if errors.As(err, &te) {
-			writeLoopZeroError(w, te)
+			httpio.WriteLoopZeroError(w, te)
 			return
 		}
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	if changed {
@@ -576,7 +577,7 @@ func (h *ScaleHandler) applyAndLog(
 		"monthly_cost_usd", resp.MonthlyCostUSD,
 		"changed", changed,
 	)
-	writeJSON(w, http.StatusOK, *resp)
+	httpio.WriteJSON(w, http.StatusOK, *resp)
 }
 
 // defaultCPUTarget returns 80 (canonical Kubernetes HPA default) when no

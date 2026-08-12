@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"crypto/subtle"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"os"
 	"regexp"
@@ -141,26 +142,26 @@ func NewLogsHandler(builds LogBuildStore, querier LogQuerier) *LogsHandler {
 func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
 	buildID := chi.URLParam(r, "id")
 	if buildID == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("build ID is required"))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("build ID is required"))
 		return
 	}
 
 	// Verify build exists and enforce tenant isolation
 	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	// T0.4: tenant filter is now at DB level — build==nil means NotFound
 	// OR cross-tenant access (indistinguishable to the caller by design).
 	if build == nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -193,7 +194,7 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// JWT cannot enable it.
 	if r.URL.Query().Get("mode") == "debug" {
 		if !isDebugAuthorized(r) {
-			writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 			return
 		}
 		opts.Debug = true
@@ -204,7 +205,7 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Loki unavailable — return empty entries with warning instead of 500.
 		// The build may have completed but logs are not yet available.
-		writeJSON(w, http.StatusOK, logsResponse{
+		httpio.WriteJSON(w, http.StatusOK, logsResponse{
 			BuildID:    build.ID,
 			Status:     build.Status,
 			Entries:    []LogEntry{},
@@ -224,5 +225,5 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		TotalLines: len(entries),
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusOK, resp)
 }
