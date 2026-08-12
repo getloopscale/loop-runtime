@@ -1,0 +1,39 @@
+# Allowlist do gate `docs-contract-refs`.
+#
+# Formato:  kind | referencia | sunset (YYYY-MM-DD) | justificativa
+#   kind ∈ {rule, adr}
+#   sunset e INCLUSIVO — a entrada expira no dia SEGUINTE
+#
+# Uma entrada aqui NAO conserta a referencia: ela registra que a ausencia e
+# conhecida e tem prazo. Restaurar os documentos exigiria escrever o que eles
+# diziam, e parte do conteudo migrou (o gate de 95% vive hoje em
+# plan-confidence-golden-rule.md) — recria-los por adivinhacao produziria
+# documentacao inventada, que e pior que a ausencia. A decisao entre RESTAURAR e
+# REAPONTAR e do dono do repositorio (B-052 DoD), nao do implementador.
+#
+# Mesmo padrao de .claude/rules/shell-scripts-allowlist.md e de
+# rules/code-quality-allowlist.txt: excecao nomeada, com prazo, nunca um bypass.
+
+# --- os 5 contratos que CLAUDE.md:206 declara e que nao existem -------------
+rule | .claude/rules/workflow.md | 2026-11-09 | CLAUDE.md:193 o cita como o gate de 95% da Regra 11. O conteudo aparenta ter migrado para plan-confidence-golden-rule.md — confirmar e reapontar, ou restaurar (B-052)
+rule | .claude/rules/tdd-workflow.md | 2026-11-09 | declarado em CLAUDE.md:206; sem referencia individual. Decidir se e coberto por rules/testing.md (B-052)
+rule | .claude/rules/loopzero-design.md | 2026-11-09 | CLAUDE.md:159 o cita como o contrato single-status-writer. O essencial ja esta inline em CLAUDE.md:145-160 — decidir se o inline vira a fonte unica e a referencia sai (B-052)
+rule | .claude/rules/cli-output.md | 2026-11-09 | declarado em CLAUDE.md:206; o contrato de termos internos e a Regra 3 do proprio CLAUDE.md — decidir se reaponta (B-052)
+rule | .claude/rules/design-principles.md | 2026-11-09 | declarado em CLAUDE.md:206; candidato a reapontar para rules/architecture.md + parsimony-ladder.md (B-052)
+
+# --- outras referencias de regra que nao resolvem ---------------------------
+rule | .claude/rules/auto-docs.md | 2026-11-09 | citado em CLAUDE.md:215 sobre nao auto-gerar knowledge-base como efeito colateral de codigo (B-052)
+rule | ../.claude/rules/umbrella-scope.md | 2026-11-09 | CLAUDE.md:17 o chama de "the workspace contract" e ele nao existe NEM no umbrella — verificado. Depende de o umbrella ganhar a regra (B-052)
+
+# --- ADRs citados por codigo de producao e nao documentados -----------------
+adr | ADR-0024 | 2026-11-09 | citado por operators/internal/conditions/retry.go e internal/metrics/metrics.go como a autoridade que obriga migrar para UpdateStatusWithRetry. Antes deste gate, a UNICA mencao no repo era o plano que o introduziu. Ver B-055 — o helper tem zero chamadores de producao, entao a decisao e deletar ou ligar
+adr | ADR-0014 | 2026-11-09 | citado em comentario Go e sem nenhuma mencao em .md no repositorio (B-052)
+
+# --- ADRs achados pelo proprio gate, alem da medicao manual ------------------
+# A varredura por AST cobre api/ pkg/ operators/ cmd/ tools/ infra/, inclusive
+# arquivos de teste — a medicao manual que originou o B-052 olhou menos.
+adr | ADR-0047 | 2026-11-09 | citado em api/cmd/setup_background.go:319 (B-052)
+adr | ADR-0035 | 2026-11-09 | citado em pkg/naming/properties_test.go:18 (B-052)
+adr | ADR-0026 | 2026-11-09 | citado em operators/hack/validate-rbac/main.go:4 (B-052)
+adr | ADR-0027 | 2026-11-09 | citado em operators/internal/app/application_reaper.go:174 (B-052)
+adr | ADR-0042 | 2026-11-09 | citado em infra/tests/performance/load/k3d_integration_test.go:74 (B-052)
