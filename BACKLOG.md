@@ -1117,3 +1117,500 @@ dod:
   - `git fetch && git switch workspace` funciona ali sem intervenção
   - os diretórios ad-hoc removidos ou promovidos, não ambos coexistindo
 
+## B-040 — O gate que garante autenticação em toda rota pública passa enumerando zero rotas   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-11 (`9f4a4a62`) e **reproduzido**. `routeauthcoverage/check.go:27` fixa `routerPath = "api/internal/server/router.go"` e percorre o arquivo por linha; `check.go:151` reprova **apenas** quando `len(violations) > 0`, e `quality_gates_authz.go:315-329` só **imprime** `outcome.PassCount`, nunca o assere. Reproduzido reescrevendo `router.go` na forma pós-refatoração numa árvore temporária (marcadores `middleware.Auth` e `registerProtectedRoutes` presentes, registrações movidas para `Register()`): `route-auth-coverage: PASS — 0 routes`, exit 0. Hoje enumera 42 rotas e passa legitimamente. Duas das três guardas já existem — arquivo ausente reprova (`router.go not found`), arquivo stub reprova (`could not locate the middleware.Auth chi.Router`); falta só a contagem mínima. Issue #285.
+why_now: este é o **pré-requisito do B-041**. A separação de `routes` por domínio produz exatamente a única forma que passa vazia — ela desligaria a invariante de cobertura de auth sobre toda a superfície pública **no mesmo commit que a justifica**, e o gate ficaria verde.
+status: triaged
+severity: alta — nada está quebrado hoje, mas o defeito arma exatamente na mudança que o repositório quer fazer, e o modo de falha é silencioso e verde.
+dod:
+  - `route-auth-coverage` reprova quando enumera zero rotas (piso de contagem mínima)
+  - existe teste que prova o piso: uma árvore com marcadores e sem registrações **falha**
+  - o upgrade para varredura AST (que sobrevive à movimentação) fica registrado como trabalho seguinte, não como pré-requisito — o piso fecha este buraco sozinho
+
+> Registrado 2026-08-11 pela auditoria de arquitetura (`/loop-codebase-architect`). Evidência reproduzida pela thread principal, não herdada de agente.
+
+## B-041 — `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?"   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-11. `api/internal/routes` pontua coesão **1/5** (a pior de 148 módulos): 43 arquivos de produção, 11.255 LOC de produção, **263 símbolos exportados contra um limiar de 20 (13×)**. Os nomes de arquivo já carregam o domínio (`secrets.go` 846L, `environments.go` 676L, `builds.go` 628L, `domains*.go` ×5) mas nenhum subpacote existe — o agrupamento por domínio é convenção que o compilador não enforça. Diferente de `db/store`, cuja planura **é** ratificada por ADR, nenhum registro justifica este pacote. **Contrapeso medido:** das 41 funções não-exportadas nos 43 arquivos, exatamente **duas** são referenciadas por mais de 3 arquivos — `writeLoopZeroError` (27) e `writeJSON` (24) — e ambas estão dentro de um arquivo de domínio (`projects.go:489` e `:473`).
+why_now: `api/internal` decompõe por **camada** (`services` 29k · `routes` 27k · `db` 22k), e **10 dos 16 domínios têm arquivo de produção nos três ao mesmo tempo**. Mexer no domínio build significa abrir os três. E a correção é barata por duas medições: o vocabulário de domínio **já está publicado e congelado** (`server/router.go` registra 15 famílias de recurso que a Regra Inquebrável 5 impede de derivar), e a decomposição **já foi feita uma camada abaixo** — `services/` tem 9 contextos, zero arquivos soltos, DAG congelado pelo gate AST `servicesacyclic`. Não é introduzir decomposição; é propagar uma que já existe e já foi ratificada.
+status: triaged
+severity: alta — é o achado central da auditoria e a resposta direta à pergunta que a originou.
+dod:
+  - `ls api/internal/routes/` fica isomórfico à lista de famílias de `server/router.go` — se divergir, alguém adicionou handler sem decidir a família
+  - as duas funções de transporte saem do arquivo de domínio para um pacote próprio
+  - `server/router.go` continua sendo o único lugar onde a superfície inteira é lida
+  - existe gate `routesacyclic` (clone do `servicesacyclic`) recusando subpacote não registrado
+  - B-040 fechado **antes** do primeiro arquivo mover
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. Escopo já medido: fatia-piloto de 3 arquivos de produção + 4 testes + 1 pacote novo, T1. O plano detalhado (waves 1-2) sai por `/to-plan` — este item autoriza, não descreve.
+
+## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido e verificado à mão em 2026-08-11. `vault.TenantTransitClient` (`operators/internal/vault/client.go:31`) **não tem implementador de produção** — os únicos `EnsureTenantKey` em toda a árvore são dois mocks de teste. No único site de construção do reconciler (`operators/internal/tenant/tenant_controller.go:486-499`) o campo `VaultClient` **não é atribuído**, então `tenant_vault.go:33` curto-circuita em todo reconcile. **Correção importante:** as chaves *são* criadas — preguiçosamente pelo `api`, no primeiro 404 de encrypt (`pkg/vault/transit_client.go:274`). O que não existe é o fail-fast antecipado. E o alarme que o EC-15 promete não tem consumidor: zero `PrometheusRule` referencia `TransitKeyAvailable` ou `VaultQuotaExceeded`. Issue #280.
+why_now: **este item bloqueia o B-043.** Mover `pkg/vault` para dentro de `api/internal/` exclui o uso operator-side; se o provisionamento deve ser do operator, o movimento é errado e o trabalho é ligar o implementador. Não dá para fazer os dois. E o estado atual não é neutro: uma falha de policy ou quota aparece no primeiro `POST /secrets` do usuário em vez de o Tenant não chegar a ACTIVE.
+status: triaged
+severity: alta — não pelo defeito (não há perda de dado), mas porque é uma decisão de arquitetura pendente que trava a única fronteira estrutural nova disponível.
+dod:
+  - está decidido, com ADR, se o provisionamento por tenant é api-side ou operator-side
+  - se api-side: `TenantTransitClient`, `reconcileTransitKey` e a condition `TransitKeyAvailable` são deletados (mudança de contrato de CRD — T3)
+  - se operator-side: existe implementador concreto atribuído em `SetupWithManager`, e o `PrometheusRule` que o EC-15 promete passa a existir
+  - qualquer que seja: existe teste de integração que constrói o componente **pelo caminho de produção**, não injetando mock no struct — foi o mock direto no struct que deixou isto verde
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. Classificado **T3** por `pre-release-governance.md`: um dos desfechos deleta status condition de CRD.
+
+## B-043 — O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-11 lendo os importadores reais de cada pacote de `pkg/`. O kernel tem 24.300 LOC e **6.226 (25,6%) têm exatamente um módulo consumidor**: `pkg/vault` 3.663 LOC → só `api`; `pkg/shellrun` 1.241 → só `cmd/loopzero-ops`; `pkg/pulumi` 993 → só `cmd/loopzero-ops`; `pkg/events` 329 → só `api`. `pkg/vault` **é** o domínio de secrets, e é o maior pacote de consumidor único do kernel. Some-se `pkg/` não usar `internal/` — as três únicas árvores `internal/` de primeira ordem são `api`, `operators` e `cmd/loopzero-ops` — então todo o kernel, inclusive o cliente de secrets, é API pública.
+why_now: é a **única fronteira nova que o compilador consegue recusar**. Movido para `api/internal/secrets/vault`, a regra `internal/` do Go torna impossível `operators` e `cmd/loopzero-ops` importarem o cliente de secrets — sem gate, sem convenção. Dos cinco planos, só DEVELOPER tem fronteira estrutural hoje; esta adiciona exatamente uma. Custo medido: 4 arquivos consumidores, todos em `api`.
+status: triaged
+severity: média — nada quebra hoje; o ganho é converter uma convenção em impossibilidade.
+dod:
+  - B-042 decidido **antes** — se o desfecho for operator-side, este item é cancelado, não adiado
+  - `pkg/vault` mora em `api/internal/secrets/`, e um pacote de teste sob `operators/` importando o novo caminho **não compila** (controle negativo — é a única asserção que testa a afirmação)
+  - `events`, `shellrun` e `pulumi` saem do kernel para junto do seu único consumidor
+  - `api/internal/adapters/vault_transit_adapter.go` é **deletado**, não movido: o próprio doc dele diz que as assinaturas batem byte a byte e só os nomes de método diferem
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (`pkg/` + credenciais).
+
+## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `grep -rn kubeContext infra/helmfile/` devolve **um único hit, e é uma values key não relacionada**. Nenhum dos quatro helmfiles de plano (`core`, `build`, `cell`, `secrets`) declara `kubeContext`. O cluster vem do chamador — `taskfiles/infra.yml:197` e `:259` passam `--kube-context {{.BUILD_CONTEXT}}` / `{{.CELL_CTX}}`. Portanto `helmfile -f build.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core sync` **funciona hoje**, e nada — nem helmfile, nem chart, nem gate — o rejeita.
+why_now: a auditoria mediu que a separação de planos é real e vive **inteiramente em `infra/`** (5 clusters, 4 helmfiles com forma de plano). Para CORE, BUILD, WORKLOAD e SECRETS, a resposta a *"o que impede uma violação?"* é hoje **"o operador digitou a variável certa"**. Amarrar o contexto dentro do arquivo converte um sucesso silencioso em conflito de declaração, e é **o maior benefício por arquivo tocado de toda a auditoria**: 4 arquivos, 4 planos.
+status: triaged
+severity: alta — quatro dos cinco planos dependem de disciplina de digitação para não misturar cluster.
+dod:
+  - cada um dos quatro helmfiles declara o `kubeContext` do seu plano
+  - um `--kube-context` divergente produz **erro de conflito**, não sincronização silenciosa no cluster errado
+  - a semântica de `kubeContext` por release foi verificada contra o binário Helmfile instalado **antes** do commit — uma amarração errada quebra toda instalação
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (Helm + multi-cluster).
+
+## B-045 — Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11 com binário recém-compilado (`go build -o /tmp/loopzero-ops ./cmd/loopzero-ops`), **não** o `./loopzero-ops` da raiz. **27 dos 117 gates** reportam wiring `-`/`diff`; 17 não são referenciados por taskfile nenhum. Dos 10 que rodam sem argumento e sem credencial, **quatro reprovam sobre conteúdo real**: `helm-drift` (exit 1, drift sem ADR nomeando `vap-tenant-cr-shape.yaml`), `clusterimagepolicy-mode` (exit 1, `mode: enforce` em `infra/helm/admission-policies/values.yaml:36` **sem nenhum ADR/MEET referenciando o cutover de deny-flip**), `alert-runbooks` (**33** violações), `migration-test-coverage` (**43** de 59 migrations sem teste). E a causa-raiz não é esquecimento: `cmd/loopzero-ops/quality_gate_wiring_test.go:110` e `:113` classificam `helm-drift` e `clusterimagepolicy-mode` como `operatorRun` — *"need live state, a ceremony, or a cadence"* — quando ambos são verificações herméticas que rodam em sandbox. **A isenção documentou o buraco como decisão.** Os outros seis se comportam como a classificação prevê (parametrizados, dormentes, ou dependentes de credencial) — o `-` deles está correto.
+why_now: a auditoria mediu que as fronteiras de plano deste repositório são sustentadas **por gates, não por estrutura**. Isso é escolha legítima — mas só funciona se os gates rodarem. O par `helm-drift` (reprova, desligado) × `helm-overlap-parity` (roda, mede outra dimensão, passa) é o caso exemplar: o gate certo existe, funciona, reprova, e ninguém executa. O `clusterimagepolicy-mode` é o mais desconfortável: diz que uma mudança viva de postura de segurança está ativa sem o registro de governança que o próprio repositório exige.
+status: triaged
+severity: alta — não pelos quatro achados isolados, mas porque o mecanismo de defesa do repositório tem uma camada que ninguém verifica.
+dod:
+  - a classificação `operatorRun` é **provada, não aceita**: para cada gate assim marcado, o teste o roda contra árvore hermética e **falha se ele concluir sem exigir estado externo**
+  - `helm-drift` e `clusterimagepolicy-mode` reclassificados e ligados (ou a isenção justificada por escrito com o motivo medido)
+  - `security-context` para de sair 0 imprimindo `NON-CONFORMANT without ADR: 2` — ou reprova, ou é `advisory` declarado
+  - está decidido, com ADR, se `clusterImagePolicy.mode: enforce` é a postura desejada
+  - `infra/quality/environment-lock-baseline.txt` (1529 bytes, 21 caminhos de `api/internal/routes`, **zero leitores em código** — as 5 referências são documentação) é removido ou ganha consumidor; um baseline órfão parece contrato
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. Relacionado a `B-006` (o oráculo do conjunto de gates), que trata do *arquivo* do oráculo — este trata de *quais gates rodam*. Correção postada no issue #255, com pedido de reabertura.
+
+## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `charts/loopzero-admission-policies/templates/` é **subconjunto estrito** de `infra/helm/admission-policies/templates/`: 18 contra 20, nada exclusivo do lado publicado. Os dois ausentes são `cosign-version-config.yaml` e **`vap-tenant-cr-shape.yaml`** — uma `ValidatingAdmissionPolicy` com `failurePolicy: Fail` cujo próprio cabeçalho declara por que existe: *"loopzero has zero admission webhooks on its own CRDs today … so a hand-authored `kubectl apply` of a malformed Tenant bypasses the REST-layer validation — the exact class of the M2 legacy-namespace incident"*. O chart de bootstrap é instalado por `cell.helmfile:169` e `core.helmfile:753`; o publicado é dependência declarada de `charts/loopzero-platform` (`Chart.yaml:58-61`), o caminho de self-host / ArgoCD L3. Issue #282.
+why_now: **uma fronteira de segurança que existe em dev e não em produção é pior que uma que não existe em lugar nenhum — porque faz o teste de dev passar.** E o allowlist do `helm-drift` (`helmdrift/check.go:29-32`) aprova **pares de chart inteiros**, então um ADR aprova em bloco toda divergência presente e futura daquele par: foi assim que os dois `ExternalSecret` que carregam as chaves de admin de RAG e Lens também sumiram do radar.
+status: triaged
+severity: alta — assimetria de fronteira de segurança entre superfícies de instalação. **Incerteza declarada:** não verifiquei qual caminho a produção usa hoje; se instala por Helmfile L2, o impacto é potencial (self-host e qualquer migração para L3), não ativo.
+dod:
+  - está decidido se `vap-tenant-cr-shape` vale para toda instalação ou é deliberadamente bootstrap-only — e, se for o segundo, isso está **escrito no chart publicado**, não inferido do silêncio
+  - o allowlist do `helm-drift` passa a aprovar **por arquivo com justificativa**, não por par inteiro
+  - `helm-drift` ligado (ver B-045) — sem isso a decisão não fica protegida
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (Helm + fronteira de segurança).
+
+## B-047 — A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `CLAUDE.md` diz que instalar OpenBao no cluster de gestão é *"FORBIDDEN in every tier — it is a topology violation, not a shortcut"*, e `.claude/rules/cleanroom-up-live-test-mandate.md` repete como PROIBIDO em qualquer tier. A task existe em `taskfiles/k3d.yml:230` e instala a stack OpenBao inteira no core via quatro syncs `--kube-context k3d-loopzero-core`. E o gate que leva a fronteira no nome — `openbaobootstrapincore/check.go:67,:94` — **não a proíbe**: suas asserções verificam que a task *existe* e *aponta para core*. Ele **falha se a task violadora for removida**.
+why_now: é um teste de conformidade **para** a fronteira que ele deveria defender. Enquanto ele existir nessa forma, remover a task proibida quebra o `quality:gates` — ou seja, a regra e o gate se contradizem, e o gate ganha.
+status: triaged
+severity: alta — a contradição está shipada e é exercível por qualquer um que leia o Taskfile em vez da regra.
+dod:
+  - está decidido, com ADR, qual das duas é verdadeira: a regra que proíbe ou a task que oferece
+  - o gate passa a reprovar a violação em vez de validar sua forma
+  - a task é removida, ou a regra passa a declarar a exceção com o motivo
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. **T3 — ADR obrigatório**: uma regra inquebrável e uma task shipada se contradizem, e decidir qual vale é decisão de arquitetura. Deve ser **o último** passo de qualquer sequência que o toque.
+
+## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `charts/loopzero-platform` declara como dependências os componentes de control plane, build plane e workload plane e os instala **num único release**, enquanto o caminho de desenvolvimento gasta **quatro helmfiles separados** construindo exatamente essa separação. `charts/loopzero-platform/profiles/dev.yaml:53` liga `loopzero-admission-policies` por condição; o mesmo padrão vale para os demais. Nenhum documento em `infra/` ou `charts/` mapeia chart → plano: `docs/architecture/helm-topology.md:24` **diz explicitamente** que o lado `charts/` não tem essa atribuição.
+why_now: a separação de planos que a auditoria mediu como real (5 clusters, 4 helmfiles) **desaparece no caminho publicado**. Quem instalar pelo chart guarda-chuva recebe os três planos num cluster, e nada no chart diz que isso é diferente do que o desenvolvimento faz. Junto com o B-046, é o segundo caso em que a superfície publicada é mais fraca que a de dev.
+status: triaged
+severity: média — hoje o caminho publicado é pouco usado; o risco é ele virar o caminho de produção sem que a diferença esteja documentada.
+dod:
+  - está decidido se o chart guarda-chuva deve preservar a separação de planos ou se ele é deliberadamente um modo single-cluster
+  - se deliberado: está escrito no chart, com o que se perde
+  - existe um índice chart → plano em `infra/` — hoje não existe nenhum `.md` em `infra/*.md`, `infra/helm/*.md` nem `infra/helmfile/*.md`
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11, severidade ancorada no limiar `consensus` `infra_in_domain = 0`. `services/deploycontracts` se documenta como *"the pure sink of the services acyclic DAG"* e está registrado `layer=domain`. Mas `shared_contracts.go:207` expõe `WithLock(..., fn func(tx db.DBTX) error) error`; `delivery.go:37` expõe `Activate(ctx, build *db.Build, ...)`; `:55` expõe `TargetRelease *db.Release`; `manifest_builder.go:23` expõe `Apps []db.BuildAppSpec`; e `:11` importa `api/internal/manifests` (`layer=application`). **Os 10 pacotes que dependem do sink dependem transitivamente da persistência.** O `servicesacyclic` não vê isso porque só inspeciona arestas *entre os oito subpacotes de services*. O tipo `db.DBTX` (`db/query_executor.go:53`, interface moldada por strings SQL) aparece em interface (`routes/secrets.go:44`, `:670`, `:795`), domínio (`shared_contracts.go:207`) e aplicação (`services/release` 28 refs, `services/build` 12). O furo é de **uma string**: a cerca MA-7 (`dbgeneratedboundary`) proíbe `api/internal/db/generated`, não `api/internal/db` — e os 2 arquivos que exploram o furo estão ambos na superfície de secrets.
+why_now: é o vazamento de camada **medido** — o único ponto onde a auditoria recomendou mexer em camadas, tendo recusado Clean/Hexagonal por atacado duas vezes. Alargar a cerca de `db/generated` para `db` é literalmente uma string, e é o que impede o furo de crescer.
+status: triaged
+severity: alta — o sink é o ponto de maior fan-in do DAG; o que vaza por ele vaza para dez pacotes.
+dod:
+  - `dbgeneratedboundary` cobre `api/internal/db`, não só `api/internal/db/generated`
+  - `deploycontracts` deixa de expor tipos de `db` nas assinaturas públicas, ou a etiqueta `layer=domain` dele é corrigida para o que ele de fato é
+  - `db.DBTX` deixa de ser tipo de parâmetro na camada de interface
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: ciclo conceitual traçado ponta a ponta em 2026-08-11 e confirmado pelo gate de qualidade da fase 2. `api/internal/k8s/tenant_cr_manager.go:147` escreve `Tenant.Spec.Environments` → o operator lê a slice em `operators/internal/tenant/tenant_gitops.go:87` e cria o `Application` em `:333` → `api/internal/argocd/sync_client.go:190` faz sync e `:351` refresh → `api/internal/k8s/tenant_evictor.go:49` deleta `argoproj.io/applications` → o próximo reconcile recria. **Nenhum dos dois módulos Go importa o outro** (medido: 0 arquivos) — o laço fecha pelo API server do Kubernetes, invisível ao compilador. O `CLAUDE.md` já cataloga o sintoma como padrão sistêmico conhecido: *"Orphan ArgoCD Application … status Unknown forever"*.
+why_now: Go proíbe ciclo de import entre pacotes em tempo de compilação, então a ausência de ciclos **não é mérito da arquitetura** — é garantia do toolchain. Este é o único lugar onde um ciclo real conseguiu existir, e ele existe porque atravessa um runtime que o compilador não vê. O sintoma já é conhecido e tratado como operacional; a causa não está registrada em lugar nenhum.
+status: triaged
+severity: média — o efeito observado (Application órfã em `Unknown`) já tem contorno manual documentado; o custo é recorrente e o diagnóstico é caro por não haver dono declarado do recurso.
+dod:
+  - está declarado quem é o **dono** do CR `Application` — um escritor, os outros pedem
+  - a deleção órfã que o `CLAUDE.md` documenta como padrão conhecido tem correção ou dono, em vez de contorno manual entre execuções de teste
+  - se a propriedade não puder ser unificada, a razão está escrita junto ao código dos três escritores
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-11. A lista de prefixos de env reservados para injeção da plataforma existe duas vezes: `api/internal/services/deploycontracts/build_plan.go:23` tem `LOOPZERO_`, `KUBERNETES_`, `AWS_`, `DO_`, **`GOOGLE_`**; `tools/loopzero-dockerfile-lint/main.go:84` tem as mesmas menos `GOOGLE_`. O comentário do primeiro diz literalmente *"mirrors tools/loopzero-dockerfile-lint/main.go"*, e o atribui a *"T2.5 … closes find_sec_004 MEDIUM"* — é correção de segurança aplicada num caminho e não no outro. Nenhum dos 117 gates menciona o par (`grep -rl reservedEnvKeyPrefixes cmd/loopzero-ops/internal/quality/` → vazio). **Exploitabilidade verificada e declarada: latente.** Não existe injeção de `GOOGLE_*` em env de workload; as únicas ocorrências são `LOOPZERO_GOOGLE_CLIENT_ID/SECRET` no Kratos, que já caem sob `LOOPZERO_`. Issue #283.
+why_now: `tools/loopzero-dockerfile-lint` é módulo Go próprio e **não está no `go.work`** — não há caminho de import possível entre ele e `api/`, então manter a regra única exigiria dependência declarada ou gate. Não existe nenhuma das duas: sobrou um comentário, que é convenção que ninguém executa. Uma das duas listas já está errada e nada declara qual é a fonte de verdade.
+status: triaged
+severity: média — hoje não explorável, mas o defeito arma sozinho: no dia em que um prefixo novo passar a ser injetado, a segunda lista não acompanha e a descoberta é por incidente.
+dod:
+  - existe **uma** fonte de verdade importável pelos dois lados, ou um gate de paridade que faz AST-parse das duas declarações e exige conjuntos idênticos
+  - está declarado qual das duas listas está correta — hoje as duas são afirmativas e discordam
+  - `tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint` (binário ELF de 3,2 MB versionado no git) é removido do controle de versão — o irmão `gen-service-auth-ed25519/` tem só fonte, o que sugere que a assimetria foi acidental
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `CLAUDE.md:206` declara nove contratos vivendo em `.claude/rules/`; **quatro existem**. Ausentes: `workflow.md` (citado em `:193` como o gate de 95% da Regra 11), `loopzero-design.md` (citado em `:159` como o contrato de *single-status-writer*), `tdd-workflow.md`, `cli-output.md` (o contrato da Regra 3), `design-principles.md`. Nenhum existe em outro lugar do workspace. Também ausente `../.claude/rules/umbrella-scope.md`, citado em `:17` como *"the workspace contract"*, e `.claude/rules/auto-docs.md` (`:215`). O inverso confirma a causa: **36 arquivos existem em `.claude/rules/` e 20+ nunca são mencionados** — todos do cycle-kit. Não é arquivo perdido; é troca de conjunto sem atualizar o índice. Mesma classe: **`ADR-0024` não existe** em lugar nenhum, e é citado como a autoridade que obriga toda migração para `UpdateStatusWithRetry` — por comentário de produção *e* pelo texto de uma métrica Prometheus. Issue #281.
+why_now: a auditoria mediu o invariante *single-status-writer* aplicado em **2 de 8 controllers**. O contrato que definiria "aplicado" — `loopzero-design.md` — é um dos que não existem. A regra não está sendo violada por descuido: ela não está disponível para consulta.
+status: triaged
+severity: média — não quebra execução, mas todo agente e toda pessoa que seguir a tabela "Locked rules — read before the matching work" bate em arquivo inexistente exatamente antes do trabalho que a regra deveria governar.
+dod:
+  - cada contrato ausente foi **restaurado ou reapontado** — decidido caso a caso, porque parte do conteúdo migrou (o gate de 95% aparece hoje em `plan-confidence-golden-rule.md`) e recriar por adivinhação produziria documentação inventada, que é pior que a ausência
+  - existe gate: toda referência `.claude/rules/*.md` no `CLAUDE.md` resolve
+  - o mesmo cheque cobre referências `ADR-NNNN` em comentários de código Go — mesma classe, mesmo custo
+  - as três divergências menores da mesma passada: `112` gates declarados contra **125** subpacotes; clusters chamados `{mgmt,build,workload,runtime-2}` contra `{core,build,cell-0,cell-1}`+`secrets` no disco; `pkg/correlation` ausente da lista
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-053 — `/api/v1/version` responde `"dev"` em toda imagem construída   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-11 e confirmado por experimento próprio fora do repositório. `api/go.mod:1` declara o módulo `github.com/getloopscale/loopzero/api`; `api/Dockerfile:82-84` injeta `-X github.com/getloopscale/loopzero/api/internal/routes.versionTag=...` — **org errada**. O doc-comment em `version.go:22` tem o caminho certo, então os dois discordam e quem constrói a imagem é o Dockerfile. Experimento: caminho de import correto injeta o valor; caminho de org errada **sai com 0** e o default `"dev"` sobrevive. O linker não avisa, e nenhum gate cobre (`grep -rl "versionTag\|ldflags" cmd/loopzero-ops/internal/quality/` → vazio). Issue #284.
+why_now: qualquer diagnóstico que dependa de "qual versão está rodando" — triagem de incidente, confirmação de rollout, verificação de fix em app-dev — lê `dev` e não distingue duas imagens diferentes. E há um segundo efeito: mover `version.go` para outro pacote **quebra a injeção de novo, em silêncio**, mesmo depois de corrigir o typo — o que torna isto pré-requisito do B-041.
+status: triaged
+severity: média — não corrompe nada, mas apaga a única forma de saber o que está no ar.
+dod:
+  - `api/Dockerfile:82-84` usa o caminho de módulo real
+  - existe gate hermético que extrai todo `-X <path>.<símbolo>` dos Dockerfiles e valida que o path bate com o `module` do `go.mod` correspondente **e** que o símbolo existe naquele pacote via AST
+  - está verificado que nenhum consumidor faz string-match em `"dev"` — a correção muda o valor retornado
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-054 — O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `middleware/pgcircuitbreaker.go` é um portão percentual sem histerese; `admission/pg_breaker.go` é high/low-water atômico, e seu próprio doc cita **o modo de falha por flapping que o outro ainda tem**. Os dois são construídos no mesmo processo — `server/router.go:72` e `api/cmd/main.go:468`. E `pkg/circuitbreaker`, que existe no kernel compartilhado e é usado pelos operators, é importado por `api/` **zero vezes**.
+why_now: duas implementações do mesmo conceito no mesmo processo divergem em silêncio — uma já corrigiu um defeito que a outra tem, e nada força a segunda a aprender. É o mesmo padrão do B-051, uma camada acima.
+status: triaged
+severity: média — nenhum incidente conhecido; o custo é comportamento de proteção inconsistente sobre o mesmo recurso.
+dod:
+  - existe **um** breaker sobre o pool Postgres, ou está escrito por que dois são necessários e o que cada um protege
+  - se a resposta for "os dois medem coisas diferentes": os nomes passam a dizer isso (o achado sugere `PGPoolAdmissionGate` para o de saturação), porque hoje ambos se chamam circuit breaker e não são a mesma coisa
+  - fica decidido se `pkg/circuitbreaker` deve ser a primitiva compartilhada — **sem forçar**: o achado registra o contra-argumento de que os dois do `api` são medidores de saturação de pool, não contadores de falha, e podem não caber no `Execute`
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-055 — O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11 e conferido pelo gate de qualidade da fase 3. O merge-patch a partir de snapshot base — o padrão que o `CLAUDE.md:145-160` descreve como o contrato — está aplicado em **2 dos 8 controllers de CRD**. E `environment_controller.go:142` registra `DeferReadinessSummary`, que é um **segundo** escritor de status (`readiness.go:59`, `_ = c.Status().Update(ctx, latest)`), no mesmo passo em que o comentário do próprio arquivo (`:166`) diz tê-lo removido; há outros `Status().Update` crus em `:320` e em `app/application_controller.go:235`. Separadamente, `conditions.UpdateStatusWithRetry` (`operators/internal/conditions/retry.go:85`, 165 LOC) tem **zero chamadores de produção** — 24 referências, todas em `_test.go` — e seu contador Prometheus só incrementa em `metrics_test.go:38`. O ADR que o manda migrar **não existe** (ver B-052).
+why_now: o `MEET-2026-07-02-002` estabelece a decisão do merge-patch e a pré-condição de escritor único, e sua própria linha de risco diz *"a future 2nd status-writer must revisit"* — que é exatamente o defeito medido. A cobertura de 2 em 8 é extrapolação heurística: a reunião tratava do Environment e não mandatou os oito.
+status: triaged
+severity: alta — perda de escrita de status sob concorrência é o modo de falha que o merge-patch existe para evitar, e ele está garantido em um quarto dos controllers.
+dod:
+  - está decidido se o invariante vale para os oito controllers ou só para os que a reunião cobriu — e isso está escrito
+  - `DeferReadinessSummary` deixa de ser um segundo escritor, ou o comentário que diz tê-lo removido é corrigido
+  - `UpdateStatusWithRetry` ganha chamadores ou é deletado — um helper com ADR inexistente, métrica que nunca incrementa e zero uso é dívida que parece cobertura
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. Uma das três instâncias do padrão sistêmico *declarado + testado + nunca ligado* (ver B-042 e B-045).
+
+## B-056 — Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `infra/helm/loopzero-api/Chart.yaml:2` (v0.1.0) e `charts/loopzero-api/Chart.yaml:2` (v0.2.0) declaram **o mesmo `name`**; o mesmo vale para `loopzero-cloud`. São charts diferentes, com templates diferentes e ciclos de vida diferentes (bootstrap Helmfile L2 × publicado OCI L3), e nenhum é superconjunto do outro. Renomear é preservador de comportamento: o nome do release vem da chave `name:` do helmfile (`core.helmfile.yaml.gotmpl:481`), não do diretório do chart. Some-se: `loopzero-common` é dependência de 9 dos 13 charts publicados e de **zero** charts de bootstrap.
+why_now: o `CLAUDE.md:171` manda manter os pares em paridade — *"when patching one, apply the same fix to the other"* — e a única forma de saber de qual se fala é pelo caminho. Um nome ambíguo num contrato que exige edição sincronizada é armadilha de leitura, e o B-046 é o caso em que ela já custou.
+status: triaged
+severity: média — não quebra instalação; torna o contrato de paridade difícil de discutir e de auditar.
+dod:
+  - os nomes deixam de colidir, ou existe convenção escrita que diz como se refere a cada um
+  - o nome do release instalado não muda (verificado contra a chave `name:` do helmfile)
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-057 — Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-11. Existem `pkg/domain` (vocabulário de produto), `api/internal/domain` (camada DIP) e `api/internal/services/domain` (domínios **DNS**). A colisão forçou `package domainsvc` (`services/domain/domain_provisioner.go:4`) e `package placementsvc` — as **únicas duas** divergências entre nome de diretório e nome de pacote em toda a árvore Go. E `api/internal/domain` não é modelo de domínio: `types.go` (21 KB) declara `DomainStore`(:87), `TeamStore`(:147), `AuditStore`(:184), `SecretStore`(:205), `ProjectStore`(:335) e `TenantCRManager`(:353) — seis contextos sem relação num arquivo. As portas são anuladas na prática por **49 alias re-exports** em `routes`, e cada porta de consumidor único tem como único consumidor a própria linha de alias. **Positivo medido:** o pacote importa somente a stdlib — a disciplina de camada que falta em outros lugares é demonstrável nele.
+why_now: a duplicação da palavra em dois níveis é consequência direta do topo em forma de camada (B-041); resolver ali torna o rename aqui quase mecânico. E o `types.go` único é o que faz uma porta de secrets e uma porta de billing mudarem no mesmo arquivo.
+status: triaged
+severity: média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório.
+dod:
+  - `api/internal/domain` passa a ter nome que diz o que ele é (o alvo medido é `ports`), com um arquivo por contexto
+  - os 49 alias re-exports são deletados — hoje eles fazem a porta e o consumidor serem a mesma linha
+  - `domainsvc` e `placementsvc` voltam a ter nome de pacote igual ao do diretório
+  - a propriedade de importar só stdlib é preservada, e verificada
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-058 — Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-11. **`api/internal/k8s`** (coesão 3) agrupa três domínios pela biblioteca cliente que compartilham: tenancy (`tenant_cr_manager.go` 322L, `tenant_evictor.go` 333L), workload (`application_cr_manager.go`, `preview_cr_manager.go`) e secrets (`secret_k8s_manager.go` 371L). **`api/internal/adapters`** (coesão 3) é nomeado pelo padrão, então qualquer tipo-ponte qualifica — o próprio doc (`adapters.go:4`) é o critério de admissão, e por isso **não pode recusar nada**: 11 arquivos, 50 exports, cobrindo build, tenancy, release, secrets e SSE. Um deles, `vault_transit_adapter.go:9`, declara *"Signatures match byte-for-byte; only the method names differ"* — é ponte de código interno para código interno. **`services/platform`** (coesão 3) reúne 8 concerns de faxina sem par compartilhado; a propriedade comum real é "roda no binário controller", e o `servicesacyclic` agora defende esse agrupamento.
+why_now: são os três pacotes cuja regra de admissão não consegue dizer não. Enquanto ela for "usa client-go" / "é um adapter" / "é um loop de fundo", todo arquivo novo cabe — e a auditoria mediu que já cabem domínios diferentes em cada um.
+status: triaged
+severity: média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir.
+dod:
+  - `k8s` encolhe para plumbing real (cliente tipado, resolução de env), com tenancy, workload e secrets em casas próprias
+  - `adapters` é dissolvido — cada arquivo vai para junto da porta que satisfaz — ou ganha critério de admissão que consiga recusar
+  - `services/platform` ou ganha nome que diga a propriedade real (roda no controller), ou é dividido por concern
+  - `vault_transit_adapter.go` é **deletado**, não movido (as assinaturas já batem)
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-059 — O transporte carrega o schema de payload de cada domínio e faz body-snooping   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `middleware` mistura cinco concerns (autenticação, auditoria, rate limit, observabilidade, portões de política) e `audit.go:24` declara `projectIDBodyKeys = []string{"project_id","project","projectId"}` — com o comentário em `:21-23` explicando *"builds use project_id, domains use project"* — e faz buffer de até **64 KiB** do corpo da requisição para enriquecer `resource_id`. Isso é conhecimento por domínio dentro do transporte. **Refutação registrada:** a hipótese inicial de que o `CostEnforcer` misturava política em transporte **não se sustentou** — ele delega a decisão de cap para `pkg/enforcement` em `cost_enforcement.go:90`. O que sobra dele é uma heurística de negócio no caminho de cópia (`:154`, "1,5× do cap ⇒ downgrade de plano").
+why_now: o `audit.go` sabe, hoje, como cada domínio nomeia o próprio identificador de projeto — três grafias, mantidas à mão. Todo domínio novo que use uma quarta grafia perde `resource_id` no log de auditoria, em silêncio.
+status: triaged
+severity: média — o dado de auditoria degrada sem erro, que é o pior modo para dado de auditoria.
+dod:
+  - o identificador de recurso chega ao middleware de auditoria **declarado**, não adivinhado do corpo
+  - o body-snooping de 64 KiB é removido
+  - existe verificação de que toda rota mutante continua gravando linha de auditoria com `resource_id` — hoje nenhum gate assere isso, e o achado não é validável por máquina sem ela
+  - `middleware` fica agrupado pelos cinco concerns em vez de um pacote plano
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-060 — O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-11. `operators/internal/tenant` (coesão 3) é **o único lugar do codebase onde os quatro planos se tocam**, e se tocam sem costura: `tenant_build.go` (571L) + `tenant_harbor.go` (395L) para BUILD, `tenant_gitops.go` (439L) para CONTROL, `tenant_vault.go` (75L) para SECRETS, mais os recursos de tenant em `reconcilehelpers` (`limitrange.go:76`, `networkpolicy.go:34`) que são compartilhados pelos quatro binários. O tipo `loopzerov1.Tenant` é referenciado de `operators/internal/{tenant,environment,app,preview,reconcilehelpers}` — a tenancy cruza **3 dos 4 binários**. Pontuou 3 e não menos porque o agregado Tenant **é** a unidade certa: um tenant realmente precisa de todos os quatro.
+why_now: se a separação de domínio for feita só no `api` (B-041) e não aqui, os planos ficam nomeáveis de um lado da plataforma e anônimos do outro. O molde já existe no próprio repositório: os provisioners `gitea`/`argocd`/`minio`/`harbor` são facades estreitas por serviço externo, medidas como corretamente aplicadas.
+status: triaged
+severity: média — o agrupamento é defensável; o que falta é a costura que diga qual plano cada arquivo serve.
+dod:
+  - existe interface de provisioner por plano em `operators/internal/tenant`, copiando a forma que os provisioners externos já usam
+  - `reconcilehelpers` deixa de carregar política de tenant compartilhada pelos quatro binários sem dono declarado (ver B-061)
+  - o reconciler continua sendo um só — a divisão é de costura, não de binário (o split por perfil operacional dos 4 binários foi medido como deliberado e **não** deve ser desfeito)
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-061 — `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `operators/internal/reconcilehelpers` pontuou coesão **2/5** e reúne três concerns sem par: bootstrap de binário, templating de recursos de tenant (`limitrange.go:76 ApplyTenantLimitRange`, `networkpolicy.go:34 ApplyTenantNetworkPolicies`) e roteamento de cell. É o **único** pacote com nome da família "helpers" em toda a árvore Go — o limiar `consensus` `generic_folder_names = 0` é respeitado em 148 módulos e 730k LOC, e esta é a única exceção real. E o doc do pacote ainda o chama de `shared`, um nome que ele não tem mais: `go doc` renderiza um nome que não existe.
+why_now: é o pacote que os quatro binários de operator compartilham, então o que entrar nele é imposto aos quatro. Um nome que não consegue recusar nada, num pacote com esse alcance, é onde a próxima mistura entra.
+status: triaged
+severity: baixa — nenhum defeito de comportamento; é higiene com alcance grande.
+dod:
+  - os três assuntos ficam em pacotes que dizem o que guardam
+  - o doc do pacote deixa de nomear um pacote que não existe
+  - a política de tenant (LimitRange, NetworkPolicy) tem dono declarado — hoje mora no pacote compartilhado por todos
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-062 — O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-11. Um grep por `BuildKit|cosign|WorkflowSubmitter|argoproj…Workflow` bate em **15 pacotes distintos** de `api/internal` — incluindo o sink de domínio: `services/deploycontracts/shared_contracts.go:89` declara `NoCache bool // Skip BuildKit layer cache (--no-cache)`. Do lado da infra o plano é explícito (`build.helmfile`, `build-cluster.yaml`, `charts/loopzero-build-cwts`); do lado do código não há endereço. Os quatro pacotes api-side que de fato são build (`argo`, `source`, `shellgen`, `admission`) somam 10 importadores de produção.
+why_now: é a metade de código do plano que a pergunta original nomeia em segundo lugar. E o custo do gate depende disto: uma verificação que confine o vocabulário de build precisaria hoje enumerar **15 prefixos**; depois de aninhar os quatro pacotes, **3** — a diferença entre um gate mantenível e um que ninguém mantém.
+status: triaged
+severity: média — nada quebrado; é a razão de "o que é build?" não ter resposta no código.
+dod:
+  - os quatro pacotes api-side de build vivem sob um pai que diz o plano
+  - existe gate `buildplanevocabulary`: os literais de build só aparecem sob os prefixos declarados
+  - o sink de domínio deixa de declarar campo com semântica de BuildKit, ou está escrito por que ele precisa
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-063 — Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11 lendo cada `go.mod`. `infra/scripts` (`layer=infrastructure`) declara dependência `require` em `infra/tests` (`layer=test`) — `infra/scripts/go.mod:5`, consumida por `seed_e2e.go:26` que importa `infra/tests/seed`. É a **única aresta em direção a teste** no grafo dos 8 módulos do workspace, que no mais é acíclico e com a direção correta (`pkg` na base, `api` importando `operators/api` e não o contrário). Separadamente: `tools/gen-service-auth-ed25519` e `tools/loopzero-dockerfile-lint` têm `go.mod` próprios e **não estão no `go.work`** — vivem na árvore, fora do workspace que o build cobre.
+why_now: o `seed` é usado por produção de fixtures e por teste, e hoje mora do lado de teste — então o módulo de scripts arrasta a suíte inteira. E `tools/` fora do workspace é a razão estrutural de o B-051 existir: não há caminho de import possível para compartilhar a regra.
+status: triaged
+severity: baixa — compila e funciona; é direção de dependência que contraria a própria etiqueta de camada.
+dod:
+  - o pacote `seed` mora onde a direção de dependência não inverte, ou a etiqueta `layer` de um dos dois é corrigida
+  - está decidido se `tools/` entra no `go.work` — a decisão destrava o B-051 e é pré-requisito dele se a saída for fonte única compartilhada
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-064 — O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `infra/helm/loopzero-api/values.yaml:118` aponta por padrão para um nome DNS **do mesmo cluster**, e a topologia de cluster separado mantém esse literal e o **reescreve no CoreDNS** (`values/dev-public/loopzero-api.yaml.gotmpl:69-76`). Ou seja: nem o código nem o chart conseguem distinguir se estão falando com um OpenBao no mesmo cluster ou no cluster `loopzero-secrets` — a diferença vive na resolução de nomes. Junto: um `role_id` de AppRole do plano de secrets está **commitado dentro do values file do control plane** (`values/dev-public/loopzero-api.yaml.gotmpl:77`). O `secret_id` está corretamente fora — **não é comprometimento**, é observação de fronteira.
+why_now: o `CLAUDE.md` classifica instalar OpenBao no core como violação de topologia em qualquer tier (ver B-047), mas o valor padrão do chart aponta para o mesmo cluster. As duas coisas não podem estar certas ao mesmo tempo, e hoje o que decide qual vale é uma reescrita de DNS que não aparece em nenhum dos dois lugares.
+status: triaged
+severity: média — funciona hoje; o custo é que a fronteira mais forte da plataforma em infra é invisível no chart e no código.
+dod:
+  - o endereço do plano de secrets é explícito no chart em vez de depender de reescrita de resolução
+  - está decidido se o `role_id` deve viver no values do control plane ou vir junto do `secret_id`
+  - a topologia de cluster separado é legível a partir do chart, sem precisar do CoreDNS para descobri-la
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-065 — Um contexto delimitado vazio está pré-aprovado no DAG congelado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `api/internal/services/billing` é um diretório **vazio e não rastreado pelo git** — não existe num clone novo. Mas `servicesacyclic/check.go:87` o registra como contexto delimitado, folha pura, no DAG congelado. A explicação não é descuido: billing foi extraído para `../loopzero-cloud` no M4 (`CLAUDE.md:14`); o código mudou de repositório e o registro no gate ficou. Resultado: o domínio de billing hoje está em três lugares — a lógica no `loopzero-cloud`, a rota `GET /api/v1/billing` ainda servida daqui (`server/router.go:519`), e um contexto fantasma no meio.
+why_now: o `servicesacyclic` existe para que um subpacote **novo e não registrado** reprove, forçando decisão consciente. Um contexto vazio pré-registrado **gasta essa decisão adiantado**: alguém pode criar `services/billing` e começar a importar para lá sem que o gate force ninguém a pensar.
+status: triaged
+severity: baixa — sem impacto hoje; é uma folha do gate emprestada a código que não existe mais aqui.
+dod:
+  - a entrada `billing` sai do DAG congelado, ou existe código que a justifique
+  - está escrito onde o domínio de billing mora, já que a rota continua sendo servida deste repositório
+
+> Registrado 2026-08-11 pela auditoria de arquitetura. Este item é também o exemplo medido do limite de escopo: a auditoria cobriu **um** repositório, e billing é um domínio que não cabe em um.
+
+## B-066 — Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `opencostgate`, `phase2gate` e `phase3gate` vivem sob `cmd/loopzero-ops/internal/quality/` e contêm apenas `doc.go` + dois `_test.go` cada — **zero entradas no `gateRegistry`**, importados por nada. Portanto `loopzero-ops quality --list`, que o `CLAUDE.md` designa como **o oráculo** do inventário de gates, não consegue enumerá-los. Eles rodam como testes Go comuns ou não rodam; de qualquer forma, quem consultar o oráculo não sabe que existem.
+why_now: o repositório tem um mecanismo bom para esse problema — o `quality_gate_wiring_test.go` exige que todo gate registrado esteja ligado ou isento. Ele não alcança estes três porque eles nunca foram registrados. É a terceira instância do padrão *declarado, testado, nunca ligado* (as outras duas: B-042 e B-055).
+status: triaged
+severity: baixa — as asserções podem estar rodando via `go test`; o defeito é o inventário mentir por omissão.
+dod:
+  - as três suítes são registradas como gates, ou movidas para fora de `internal/quality/` para não parecerem gates
+  - o oráculo `--list` volta a enumerar tudo que vive ali
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-067 — 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11 rodando os gates desligados. `migration-test-coverage` reprova com **43 violações** — migrations `000017`..`000059` sem `api/tests/unit/migration_{NNNNNN,NNN}*_test.go` correspondente, de **59** migrations no total. `alert-runbooks` reprova com **33 violações** — alertas sem `runbook_url`, incluindo `LoopZeroUnsignedReleasePushed`, `LoopZeroTenantDeletionStuck`, `LoopZeroSecretESOSyncFailing`, `LoopZeroAttestationSaveFailing`. Os dois gates existem, funcionam e não estão ligados (ver B-045).
+why_now: são dois números que ninguém tinha porque o instrumento que os produz não roda. Migração sem teste é irreversível por desenho (o repositório é forward-only); alerta sem runbook acorda alguém às 3h sem dizer o que fazer — e três dos 33 são de assinatura de release e de vazamento de secret.
+status: triaged
+severity: média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira.
+dod:
+  - existe decisão sobre o piso: quais migrations e quais alertas precisam de cobertura, e quais têm exceção **registrada com prazo**
+  - os alertas de segurança (`LoopZeroUnsignedReleasePushed`, `LoopZeroSecretESOSyncFailing`, `LoopZeroAttestationSaveFailing`) têm runbook — estes não entram em exceção
+  - só depois disso os dois gates são ligados no `quality:gates`
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-068 — Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-11. `api/internal/argo/languages.go:231` — `dockerfileStepTemplateName` **constrói um container descartável só para ler o nome dele**, mantendo um ponto de variação que as três implementações de `LanguageStrategy` já resolvem igual: todas retornam `generate-dockerfile`. O restante do padrão foi medido como **corretamente aplicado**: lookup por registry, sem `if app.Build ==` no orquestrador, interface coesa de 8 métodos, variação real entre estratégias de linguagem e de Dockerfile do usuário.
+why_now: é o resíduo de uma variação que existiu — o `UserDockerfileStrategy` emitia `dockerfile-lint`. Enquanto o ponto de variação ficar, todo leitor precisa checar se ainda varia, e a construção descartável esconde que não.
+status: triaged
+severity: baixa — custo de leitura, sem defeito de comportamento.
+dod:
+  - o nome do template vem de onde varia, ou a variação é removida junto com a construção descartável
+  - se a variação deve voltar (por exemplo, se o `dockerfile-lint` for reintroduzido), isso está escrito no lugar em vez de mantido por um objeto descartado
+
+> Registrado 2026-08-11 pela auditoria de arquitetura.
