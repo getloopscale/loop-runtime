@@ -130,18 +130,26 @@ func TestCheck_RealTreeDivergesOnGoogle(t *testing.T) {
 
 // repoRoot walks up until it finds go.work, so the test does not depend on the
 // working directory the runner chose.
+//
+// Not finding it is a FAILURE, never a skip. A skip here would make the one test
+// that measures the REAL tree pass by not running — which is precisely the
+// vacuous-pass shape this whole slice exists to remove (see B-040:
+// `route-auth-coverage: PASS — 0 routes`). The same reasoning is already written
+// into TestOracle_MatchesFrozenBaseline: "Absence is a FAILURE, not a skip …
+// a skip would report green while the protection silently vanished."
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
+	start := dir
 	for i := 0; i < 8; i++ {
 		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
 			return dir
 		}
 		dir = filepath.Dir(dir)
 	}
-	t.Skip("go.work not found above the test directory")
+	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
 	return ""
 }
