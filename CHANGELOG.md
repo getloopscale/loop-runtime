@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 ### Fixed
+- **loopzero:** o clone do repositório encolhe 71 MB — dois binários compilados estavam versionados por engano (`operators/app-operator`, 68 MB, e `tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint`, 3,2 MB) (B-051)
+- **loopzero:** a verificação que garante autenticação em toda rota pública deixa de aprovar quando não examina rota nenhuma. Ela respondia "aprovado" com zero rotas enumeradas — e como essa verificação autoriza o `git push`, um commit que desligasse a autenticação de toda a API passaria verde (B-040)
 - **loopzero:** a cobrança falha fechado — um ambiente que declara cobrar não semeia, não sobe e não reporta fingindo que ela funciona (B-034, B-035, B-036, B-037)
 - **loopzero-cloud:** o painel deixa de afirmar que a cobrança está pronta quando só metade dela está configurada (B-035)
 - O portal de cobrança passa a ter um dono só: o clique em "Gerenciar plano" atravessa o painel, que
@@ -15,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 
 ### Changed
+
+- **loopzero:** uma verificação só pode ser dispensada de rodar se disser **de que estado externo ela depende**. A dispensa era uma etiqueta aceita sem conferência, e quatro estavam erradas: duas leem apenas arquivos do repositório (uma delas escondia, desde então, uma política de segurança ausente do pacote publicado), uma está quebrada há tempo (procura um documento no caminho antigo) e uma é hermética e verde — foi ligada (B-045)
+- **loopzero:** referências normativas passam a ser verificadas. Um documento de contrato citado pelo guia do repositório, ou um registro de decisão citado por código de produção, tem de existir — ou constar numa lista de exceções **com prazo**. Estavam quebradas 13, incluindo o registro que o código cita como a autoridade que obriga uma migração e que não existia em lugar nenhum (B-052)
 
 - O portal de cobrança passou a ser aberto por um único componente. Dois pontos do sistema pediam a
   sessão ao provedor de pagamento por caminhos diferentes, e por isso a chave de cobrança podia
