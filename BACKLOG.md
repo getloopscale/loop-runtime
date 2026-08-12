@@ -1659,3 +1659,21 @@ dod:
   - existe medição de quantos Dockerfiles de tenant estão nesse estado antes de a decisão ser aplicada (dado A2 do MEET-ASYNC-AMENDMENT-2026-08-11-001)
 
 > Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`. Medido ao vivo, não inferido.
+
+## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-11 ao rodar a validação de integração da fatia `slice-1-tripwires`. `task test:unit` sai 1 com **4 reprovações**, todas em `api/tests/unit`: `TestMigration006CellsSeedRows`, `TestMigration007ActivatesOnlyCell2`, `TestMigration007AppendsAuditNote`, `TestMigration007ReferencesADRAndPlan`. A mensagem é `seed row missing "'cell-0'"`. Bissecção: em `fbb24643` (2026-08-10, *"funde as três identidades de célula"*) o teste e a migration **concordavam** — os dois falavam `cell-0`/`cell-1`. Depois disso, `75af13c7` (*"migracoes historicas voltam ao original; so a 000061 transforma"*) reescreveu `000006_cells.up.sql` de volta para `cell-1`/`cell-2`/`cell-default` (12 inserções, 12 remoções) e **não tocou o teste**, que continua exigindo a forma nova (`git diff fbb24643 HEAD -- api/tests/unit/migration_006_cells_test.go` é vazio).
+why_now: apareceu porque a fatia `slice-1-tripwires` tem `task test:unit` verde na Global DoD e **não pôde marcá-la** — o vermelho é anterior e alheio. Enquanto ele durar, toda fatia seguinte herda um sinal que não distingue "eu quebrei" de "já estava assim", que é exatamente o que a baseline pré-migração do plano existe para evitar. E o vermelho é de **teste de migration**, num repositório com migrations forward-only: o par teste↔migration é o único lugar que documenta qual forma é a correta.
+status: triaged
+severity: alta — não pelo defeito em si (nenhuma das duas formas está em produção por causa deste teste), mas porque uma suíte vermelha por motivo alheio é como uma suíte deixa de ser lida.
+dod:
+  - está decidido qual forma é a correta — `cell-0`/`cell-1` (a fusão de identidades do `B-005`) ou `cell-1`/`cell-2`/`cell-default` (o original restaurado por `75af13c7`)
+  - o teste e a migration voltam a concordar, e a decisão está escrita onde a próxima pessoa a encontre
+  - `task test:unit` volta a sair 0 na `workspace`
+  - se as duas formas devem coexistir por um período, isso está declarado — hoje o par apenas discorda
+
+> Registrado 2026-08-11 durante a validação de integração da fatia `slice-1-tripwires`. Bissectado até o commit; **não** causado por esta fatia, que não toca `api/`.
