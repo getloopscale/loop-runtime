@@ -13,6 +13,7 @@ argo-app-identity	gates	The ArgoCD Application name is derived only from naming.
 base-image-digest	gates	Base images are pinned by digest, not floating tags.
 baseline-compare	-	Compares a captured steady-state baseline against the current state.
 baseline-update	-	Updates the committed steady-state baseline artifact.
+billing-secrets	gates	Segredos de cobranca nao podem ter opcionalidade literal; a decisao e por valor.
 caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
 caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
@@ -44,7 +45,7 @@ dev-public-loopzero-external-secrets-overlay	gates	Locks post-T1.2 workload-iden
 divergence-matrix	-	Checks the local-vs-prod divergence matrix is current.
 dockerfile-no-docker-hub	gates	Forbids unqualified docker.io/Docker Hub base images.
 drill-creds-isolation	-	Ensures DR-drill credentials are isolated from production.
-drill-outputs-consumers	-	Verifies drill Pulumi-output consumers use the canonical schema.
+drill-outputs-consumers	gates	Verifies drill Pulumi-output consumers use the canonical schema.
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
