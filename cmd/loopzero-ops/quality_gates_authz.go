@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -313,6 +314,19 @@ func runRouteAuthCoverage(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := routeauthcoverage.Check(routeauthcoverage.Config{RepoRoot: *root})
+	if errors.Is(err, routeauthcoverage.ErrNoRoutesEnumerated) {
+		// Named apart from the generic failure so the operator reads the CAUSE.
+		// "0 routes" is the one failure whose fix is never in router.go: either
+		// the registrations moved (B-041) and the walker must follow them, or
+		// the receiver was renamed and the regexp in check.go:84 no longer
+		// matches. Printing only the error would send the reader hunting for an
+		// unprotected route that does not exist.
+		fmt.Fprintf(os.Stderr, "route-auth-coverage: FAIL — %v\n", err)
+		fmt.Fprintf(os.Stderr, "  Auth group spans lines %d..%d, registerProtectedRoutes %d..%d — both located.\n",
+			outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
+		fmt.Fprintln(os.Stderr, "  Fix: point the walker at wherever the r.{Get,Post,...} calls now live, or restore them to router.go.")
+		return 1
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "route-auth-coverage: FAIL — %v\n", err)
 		if len(outcome.Violations) > 0 {

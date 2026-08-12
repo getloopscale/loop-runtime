@@ -156,3 +156,80 @@ func TestCheck_RealRepoRouterPasses(t *testing.T) {
 	}
 	t.Skip("could not locate api/internal/server/router.go within 8 parent dirs")
 }
+
+// --- B-040: the enumeration floor -----------------------------------------
+
+// synthRouter writes a router.go that keeps the STRUCTURAL markers the walker
+// keys on (the middleware.Auth group and registerProtectedRoutes) and lets the
+// caller decide what lives inside them. That is the shape B-041 produces when
+// the registrations move into per-domain Register() funcs.
+func synthRouter(t *testing.T, insideAuth, insideProtected, outsideBoth string) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "api", "internal", "server")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "package server\n\nfunc Router() {\n" +
+		"\tr.Group(func(r chi.Router) {\n" +
+		"\t\tr.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))\n" +
+		insideAuth +
+		"\t})\n}\n\n" +
+		"func registerProtectedRoutes(r chi.Router) {\n" +
+		insideProtected +
+		"}\n\n" +
+		"func publicRoutes(r chi.Router) {\n" + outsideBoth + "}\n"
+	if err := os.WriteFile(filepath.Join(dir, "router.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// The defect this closes: with the markers present and every registration moved
+// out, the walker enumerates nothing, finds no violation, and reports success.
+func TestCheck_ZeroRoutesEnumerated_IsAFailure(t *testing.T) {
+	root := synthRouter(t,
+		"\t\tprojects.Register(r, cfg)\n",
+		"\tbuilds.Register(r, cfg)\n", "")
+
+	out, err := Check(Config{RepoRoot: root})
+	if !errors.Is(err, ErrNoRoutesEnumerated) {
+		t.Fatalf("a router with the markers and zero registrations must FAIL, not pass vacuously; got err=%v outcome=%+v", err, out)
+	}
+}
+
+// EC-1 — the floor must be about ENUMERATION, not approval. PassCount counts
+// only APPROVED routes, so it is also zero when every route violates. Written
+// over PassCount alone, the gate would report "enumerated nothing" — an
+// instrumentation error — for the worst finding the repository can produce:
+// a public surface with no authentication.
+func TestCheck_AllRoutesViolating_ReportsViolationsNotEmptyEnumeration(t *testing.T) {
+	root := synthRouter(t,
+		"\t\t// nothing inside the Auth group\n",
+		"\t// nothing protected either\n",
+		"\tr.Get(\"/api/v1/alpha\", h)\n\tr.Post(\"/api/v1/beta\", h)\n\tr.Delete(\"/api/v1/gamma\", h)\n")
+
+	out, err := Check(Config{RepoRoot: root})
+	if errors.Is(err, ErrNoRoutesEnumerated) {
+		t.Fatalf("BUG: %d unprotected routes reported as an empty enumeration — the diagnosis points at the gate instead of at the unprotected surface", len(out.Violations))
+	}
+	if !errors.Is(err, ErrViolations) {
+		t.Fatalf("expected ErrViolations; got %v (outcome=%+v)", err, out)
+	}
+	if out.PassCount != 0 || len(out.Violations) == 0 {
+		t.Errorf("setup did not produce the intended state (PassCount=0, violations>0); got %+v", out)
+	}
+}
+
+// The other side of the 0/1 boundary: one enumerated route is enough.
+func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
+	root := synthRouter(t, "\t\tr.Get(\"/api/v1/only\", h)\n", "", "")
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("a single approved route must pass; got %v", err)
+	}
+	if out.PassCount != 1 {
+		t.Errorf("expected PassCount=1; got %d", out.PassCount)
+	}
+}
