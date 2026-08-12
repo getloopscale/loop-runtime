@@ -41,6 +41,16 @@ import (
 // does not exist and is not allowlisted.
 var ErrUnresolvedReferences = errors.New("at least one normative reference does not resolve")
 
+// ErrNoReferencesEnumerated means the scan found no normative reference at all.
+//
+// A gate that examined nothing has not passed — it abstained. This is the same
+// invariant B-040 added to route-auth-coverage next door, and it belongs in the
+// checker for the same reason ADR D1 gives: an assertion in a test fixture
+// protects that fixture, while the library stays able to hand a vacuous success
+// to any future consumer. It was missing here until the review measured it —
+// the slice reproduced, in a gate it authored, the exact shape it exists to remove.
+var ErrNoReferencesEnumerated = errors.New("scanned the tree and found ZERO normative references — CLAUDE.md is unreadable or the scan roots are wrong; the gate examined nothing, so it cannot vouch for anything")
+
 // ErrMalformedAllowlist means the allowlist could not be parsed. It is a hard
 // error rather than a skipped line: a line that reads as an exemption and
 // exempts nothing is the exact defect this gate exists to remove.
@@ -231,11 +241,43 @@ func (adrResolver) collect(repoRoot string) ([]Reference, error) {
 	return refs, nil
 }
 
+// cycleArtifactDirs are knowledge-base subtrees that record work ABOUT the
+// repository rather than decisions OF it. They are excluded from ADR resolution.
+//
+// Without this exclusion the gate is defeated by its own output: the plan that
+// introduced it mentions ADR-0024 while explaining that ADR-0024 does not exist,
+// and that mention alone made the gate report the ADR as documented. Measured in
+// review — the allowlist carried 14 entries and only 13 were ever consumed; the
+// dead one was ADR-0024, the flagship finding of B-052. Writing the document that
+// records an absence must not manufacture a presence.
+var cycleArtifactDirs = []string{
+	filepath.Join(".claude", "knowledge-base", "plans"),
+	filepath.Join(".claude", "knowledge-base", "reviews"),
+	filepath.Join(".claude", "knowledge-base", "audits"),
+	filepath.Join(".claude", "knowledge-base", "meetings"),
+	filepath.Join(".claude", "knowledge-base", "backlog"),
+	filepath.Join(".claude", "knowledge-base", "implementations"),
+}
+
+func isCycleArtifact(repoRoot, path string) bool {
+	rel, err := filepath.Rel(repoRoot, path)
+	if err != nil {
+		return false
+	}
+	for _, d := range cycleArtifactDirs {
+		if strings.HasPrefix(rel, d+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
 // resolves asks whether the ADR is documented ANYWHERE in the knowledge base or
-// the docs tree. The bar is deliberately the weaker one: ADRs here are filed by
-// date, not by number (`2026-04-26-...`), so requiring a filename match would
-// reject identifiers that are genuinely documented — ADR-0008 is described
-// across docs/architecture and docs/operations without a file bearing its number.
+// the docs tree, EXCLUDING the cycle artifacts above. The bar is deliberately
+// the weaker one: ADRs here are filed by date, not by number (`2026-04-26-...`),
+// so requiring a filename match would reject identifiers that are genuinely
+// documented — ADR-0008 is described across docs/architecture and docs/operations
+// without a file bearing its number.
 func (adrResolver) resolves(repoRoot string, ref Reference) bool {
 	for _, dir := range []string{".claude", "docs"} {
 		base := filepath.Join(repoRoot, dir)
@@ -253,7 +295,7 @@ func (adrResolver) resolves(repoRoot string, ref Reference) bool {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(p, ".md") {
+			if !strings.HasSuffix(p, ".md") || isCycleArtifact(repoRoot, p) {
 				return nil
 			}
 			b, rerr := os.ReadFile(p)
@@ -369,6 +411,12 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(out.Unresolved) > 0 {
 		return out, ErrUnresolvedReferences
+	}
+	// Evaluated AFTER ErrUnresolvedReferences, for the same reason the floor in
+	// routeauthcoverage is: a tree full of broken references must be reported as
+	// broken references, never as an empty scan.
+	if out.Checked == 0 {
+		return out, ErrNoReferencesEnumerated
 	}
 	return out, nil
 }

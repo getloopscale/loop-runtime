@@ -233,3 +233,37 @@ func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
 		t.Errorf("expected PassCount=1; got %d", out.PassCount)
 	}
 }
+
+// Declared by the plan (T1.1) and missing until the review caught it: the floor
+// must not change the verdict on the tree that actually ships. The acceptance
+// criterion that would have caught the omission — `go test -run '...|RealTree'`
+// — passed vacuously, because no test name matched.
+func TestCheck_RealTreeStillPasses(t *testing.T) {
+	root := repoRootOrFail(t)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("the shipping tree must still pass; got %v", err)
+	}
+	if out.PassCount != 42 {
+		t.Errorf("expected the 42 routes measured at 2026-08-11; got %d — if this changed on purpose, update the number and say why", out.PassCount)
+	}
+}
+
+// Not finding go.work is a FAILURE, never a skip — same reasoning as
+// TestOracle_MatchesFrozenBaseline and as the floor this file just added.
+func repoRootOrFail(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := dir
+	for i := 0; i < 8; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+			return dir
+		}
+		dir = filepath.Dir(dir)
+	}
+	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
+	return ""
+}

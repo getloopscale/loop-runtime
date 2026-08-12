@@ -115,9 +115,12 @@ func TestCheck_DanglingADRRefFails(t *testing.T) {
 // comment groups and not raw text.
 func TestCheck_ADRInStringLiteralIsNotACitation(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":              "x\n",
-		"pkg/a/a.go":             "package a\n\nconst URL = \"https://example.test/ADR-9999\"\n",
-		"docsrefs-allowlist.txt": "",
+		// One resolvable reference so the enumeration floor does not fire and
+		// mask the property under test.
+		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
+		".claude/rules/present.md": "x\n",
+		"pkg/a/a.go":               "package a\n\nconst URL = \"https://example.test/ADR-9999\"\n",
+		"docsrefs-allowlist.txt":   "",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("an ADR token inside a string literal is not a citation; got %v", err)
@@ -126,7 +129,8 @@ func TestCheck_ADRInStringLiteralIsNotACitation(t *testing.T) {
 
 func TestCheck_ADRDocumentedAnywhereResolves(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":                  "x\n",
+		"CLAUDE.md":                  "Read `.claude/rules/present.md`.\n",
+		".claude/rules/present.md":   "x\n",
 		"pkg/a/a.go":                 "package a\n\n// per ADR-0042.\nconst A = 1\n",
 		"docs/architecture/thing.md": "decided in ADR-0042\n",
 		"docsrefs-allowlist.txt":     "",
@@ -185,8 +189,9 @@ func TestCheck_MalformedAllowlistIsAnError(t *testing.T) {
 
 func TestCheck_AllowlistCommentsAndBlanksAreSkipped(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":              "x\n",
-		"docsrefs-allowlist.txt": "# comentario\n\n   \n",
+		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
+		".claude/rules/present.md": "x\n",
+		"docsrefs-allowlist.txt":   "# comentario\n\n   \n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("comments and blank lines are not entries; got %v", err)
@@ -224,5 +229,61 @@ func TestCheck_BareNameOnlyCountsWhenTheDirectoryIsQuoted(t *testing.T) {
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("`index.md` on a line citing a rules PATH is not a contract claim; got %v", err)
+	}
+}
+
+// --- review findings #1 and #2 --------------------------------------------
+
+// #1: an empty tree must FAIL. The gate reproduced, in its own code, the
+// PASS-with-zero shape B-040 removed next door.
+func TestCheck_EmptyTreeIsAFailure(t *testing.T) {
+	root := writeTree(t, map[string]string{"docsrefs-allowlist.txt": ""})
+	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrNoReferencesEnumerated) {
+		t.Errorf("a tree with no references must fail, not pass vacuously; got %v", err)
+	}
+}
+
+// #1b: the floor must not mask real findings. A tree whose ONLY references are
+// broken must report the broken references, never an empty scan.
+func TestCheck_BrokenRefsBeatTheEmptyScanFloor(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"CLAUDE.md":              "Read `.claude/rules/ghost.md`.\n",
+		"docsrefs-allowlist.txt": "",
+	})
+	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+		t.Errorf("broken references must be reported as such, not as an empty scan; got %v", err)
+	}
+}
+
+// #2: the gate must not accept its OWN cycle artifacts as evidence that an ADR
+// exists. Measured in review: the plan that introduced this gate mentions
+// ADR-0024 while explaining that ADR-0024 does not exist, and that mention alone
+// made the gate report it as documented.
+func TestCheck_CycleArtifactsAreNotADRDocumentation(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
+		".claude/rules/present.md": "x\n",
+		"pkg/a/a.go":               "package a\n\n// per ADR-0024.\nconst A = 1\n",
+		// The only mention lives in a plan — a document ABOUT the work, not a
+		// decision record OF the repository.
+		".claude/knowledge-base/plans/some-plan.md": "ADR-0024 does not exist anywhere\n",
+		"docsrefs-allowlist.txt":                    "",
+	})
+	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+		t.Errorf("a mention inside a plan/review/audit must not count as documentation; got %v", err)
+	}
+}
+
+// ...but a genuine decision record still counts.
+func TestCheck_DecisionRecordIsADRDocumentation(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
+		".claude/rules/present.md": "x\n",
+		"pkg/a/a.go":               "package a\n\n// per ADR-0024.\nconst A = 1\n",
+		".claude/knowledge-base/decisions/2026-01-01-thing.md": "This is ADR-0024.\n",
+		"docsrefs-allowlist.txt":                               "",
+	})
+	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
+		t.Errorf("a real decision record must resolve the ADR; got %v", err)
 	}
 }
