@@ -87,8 +87,11 @@ type Outcome struct {
 // implementation per Kind keeps the resolution rules from growing into a switch
 // that every new kind has to edit (OCP).
 type resolver interface {
-	kind() Kind
-	// collect finds every reference of this kind in the tree.
+	// collect finds every reference of this kind in the tree. Each Reference it
+	// returns carries its own Kind, so the interface deliberately does NOT
+	// expose a kind() accessor: no consumer needs to ask the resolver what it
+	// resolves, and a method nobody calls is a method every implementer is
+	// forced to carry (ISP).
 	collect(repoRoot string) ([]Reference, error)
 	// resolves reports whether the reference points at something that exists.
 	resolves(repoRoot string, ref Reference) bool
@@ -117,8 +120,6 @@ var bareNamePattern = regexp.MustCompile("`([a-z0-9._-]+\\.md)`")
 var rulesDirMention = regexp.MustCompile("`\\.\\.?/?\\.?claude/rules/`|`\\.claude/rules/`")
 
 type ruleResolver struct{}
-
-func (ruleResolver) kind() Kind { return KindRule }
 
 func (ruleResolver) collect(repoRoot string) ([]Reference, error) {
 	const src = "CLAUDE.md"
@@ -173,8 +174,6 @@ func (ruleResolver) resolves(repoRoot string, ref Reference) bool {
 var adrPattern = regexp.MustCompile(`ADR-[0-9]{4}`)
 
 type adrResolver struct{}
-
-func (adrResolver) kind() Kind { return KindADR }
 
 // collect scans Go COMMENTS only. A raw text scan would count an identifier or
 // a URL containing the token, which is the false-positive class servicesacyclic
