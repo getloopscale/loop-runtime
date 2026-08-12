@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **loopzero:** a decisão sobre a chave de criptografia por cliente ficou **parcial, de propósito**: quem cria a chave está decidido; quem a **destrói** não. O apagamento criptográfico é o mecanismo que torna os dados de um cliente irrecuperáveis quando ele pede exclusão, e a primeira versão da decisão o teria removido junto com código morto que estava na mesma interface (B-042, B-075)
+
 - **loopzero:** quatro contradições que travavam trabalho passam a ter decisão registrada, com a alternativa rejeitada e o número que a rejeita: de quem é o provisionamento de chave por tenant, se vale a regra que proíbe instalar o cofre no cluster de gestão ou a tarefa que o instala lá, se o pacote guarda-chuva preserva a separação de ambientes, e quem é o dono do recurso de sincronização (B-042, B-047, B-048, B-050)
 
 - **loopzero:** a verificação automática deixa de rodar no pull request e passa a rodar **depois do merge**, em `develop` e em `main`. O portão que impede um merge ruim neste repositório é local — roda antes de todo `git push` e bloqueia em vermelho — então o PR reexecutava o que já havia rodado na máquina de quem empurrou. A consequência: o primeiro sinal automático chega depois do merge, e uma falha se conserta com correção ou reversão
