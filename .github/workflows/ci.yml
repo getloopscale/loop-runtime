@@ -42,14 +42,21 @@ name: CI
 # isoladamente que se quebram juntos. Escopos diferentes, nao redundancia.
 on:
   workflow_call:
-  pull_request:
-    branches: [develop, main]
-    paths-ignore:
-      - '.claude/**'
-      - '**/*.md'
-      - 'docs/**'
+  # Validacao POS-MERGE, nao no PR (decisao de 2026-08-12).
+  #
+  # O portao que impede um merge ruim neste repositorio e' local: o
+  # .claude/hooks/delivery-gate.sh roda `task quality:gates` antes de todo
+  # `git push` e bloqueia em vermelho, sem bypass. Duplicar isso no PR pagaria
+  # minutos de runner por turno para reexecutar o que ja rodou na maquina de
+  # quem empurrou — e o CLAUDE.md ja declara que estes workflows NAO sao o
+  # quality gate do repo.
+  #
+  # A consequencia, dita: com o PR sem acao, o primeiro sinal de CI chega DEPOIS
+  # do merge. O conserto de uma falha em `main` e um commit de correcao ou um
+  # revert, nao um "nao mergear". Isso e' aceitavel aqui porque o gate real ja
+  # correu antes do push; deixa de ser se alguem empurrar com o hook desativado.
   push:
-    branches: [develop]
+    branches: [develop, main]
     paths-ignore:
       - '.claude/**'
       - '**/*.md'

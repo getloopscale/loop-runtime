@@ -9,11 +9,10 @@
 # se quebram juntos).
 name: workflow-hygiene
 on:
-  pull_request:
-    branches: [develop, main]
-    paths: [".github/**"]
+  # Pos-merge nas duas branches, sem acao no PR (decisao de 2026-08-12) — mesma
+  # razao do ci.yml: o portao real e' o delivery-gate local.
   push:
-    branches: [develop]
+    branches: [develop, main]
     paths: [".github/**"]
   # Disparo manual: e' o gate mais barato do repo (segundos), entao e' com ele
   # que se valida a frota apos uma migracao — o runbook do umbrella e' explicito

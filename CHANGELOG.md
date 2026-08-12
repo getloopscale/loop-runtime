@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **loopzero:** a verificação automática deixa de rodar no pull request e passa a rodar **depois do merge**, em `develop` e em `main`. O portão que impede um merge ruim neste repositório é local — roda antes de todo `git push` e bloqueia em vermelho — então o PR reexecutava o que já havia rodado na máquina de quem empurrou. A consequência: o primeiro sinal automático chega depois do merge, e uma falha se conserta com correção ou reversão
+
 - **loopzero:** uma verificação só pode ser dispensada de rodar se disser **de que estado externo ela depende**. A dispensa era uma etiqueta aceita sem conferência, e quatro estavam erradas: duas leem apenas arquivos do repositório (uma delas escondia, desde então, uma política de segurança ausente do pacote publicado), uma está quebrada há tempo (procura um documento no caminho antigo) e uma é hermética e verde — foi ligada (B-045)
 - **loopzero:** referências normativas passam a ser verificadas. Um documento de contrato citado pelo guia do repositório, ou um registro de decisão citado por código de produção, tem de existir — ou constar numa lista de exceções **com prazo**. Estavam quebradas 13, incluindo o registro que o código cita como a autoridade que obriga uma migração e que não existia em lugar nenhum (B-052)
 
