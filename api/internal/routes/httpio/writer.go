@@ -6,7 +6,7 @@
 //
 // # Why it exists as a package
 //
-// These three functions used to live in `routes/projects.go` — a DOMAIN file —
+// Three of these four used to live in `routes/projects.go` — a DOMAIN file —
 // and were called from 27 and 24 files respectively — 399 call sites across 29 files.
 // (The plan first said 402; that counted the three declarations as calls.)
 // Measured across the 41 unexported functions declared in the 43 route files,

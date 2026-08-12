@@ -92,9 +92,9 @@ func TestAdminEvict_WrongSecret_Returns403(t *testing.T) {
 func TestAdminEvict_LegacyProxySecret_Returns403(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
 		map[string]string{
-			"LOOPZERO_ADMIN_API":                  "true",
-			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET":  "canonical-admin-secret",
-			"LOOPZERO_SERVICE_AUTH_SECRET":        "legacy-proxy-secret",
+			"LOOPZERO_ADMIN_API":                          "true",
+			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET":          "canonical-admin-secret",
+			"LOOPZERO_SERVICE_AUTH_SECRET":                "legacy-proxy-secret",
 			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS": "",
 			"LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS":       "",
 		},

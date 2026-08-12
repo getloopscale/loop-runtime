@@ -23,11 +23,11 @@ import (
 // instead of swallowing the failure (per ADR D4 the env auto-create is
 // not optional — a project without a production env is half-provisioned).
 type fakeEnvEnsurer struct {
-	calls    int32
-	lastT    string
-	lastP    string
-	lastEnv  string
-	envs     []string // ordered capture of every envName ensured
+	calls     int32
+	lastT     string
+	lastP     string
+	lastEnv   string
+	envs      []string // ordered capture of every envName ensured
 	returnErr error
 }
 

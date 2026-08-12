@@ -60,10 +60,10 @@ func (f *fakeDomainStore) Delete(_ context.Context, _ string) error {
 	return f.deleteErr
 }
 
-func (f *fakeDomainStore) CreateWithCFZone(_ context.Context, _ *CustomDomain) error  { return nil }
-func (f *fakeDomainStore) UpdateCFZoneStatus(_ context.Context, _, _ string) error     { return nil }
-func (f *fakeDomainStore) FindPendingNS(_ context.Context) ([]CustomDomain, error)     { return nil, nil }
-func (f *fakeDomainStore) FindNSActive(_ context.Context) ([]CustomDomain, error)      { return nil, nil }
+func (f *fakeDomainStore) CreateWithCFZone(_ context.Context, _ *CustomDomain) error { return nil }
+func (f *fakeDomainStore) UpdateCFZoneStatus(_ context.Context, _, _ string) error   { return nil }
+func (f *fakeDomainStore) FindPendingNS(_ context.Context) ([]CustomDomain, error)   { return nil, nil }
+func (f *fakeDomainStore) FindNSActive(_ context.Context) ([]CustomDomain, error)    { return nil, nil }
 
 // --- Fake DomainVerifier ---
 

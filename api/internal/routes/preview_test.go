@@ -34,10 +34,10 @@ func withChiParams(r *http.Request, params map[string]string) *http.Request {
 
 // fakePreviewStore is a controllable PreviewStore for handler tests.
 type fakePreviewStore struct {
-	listByTenantFn   func(ctx context.Context, tenantID string) ([]domain.Preview, error)
-	listByProjectFn  func(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error)
-	getByIDFn        func(ctx context.Context, tenantID, previewID string) (*domain.Preview, error)
-	requestDeleteFn  func(ctx context.Context, tenantID, previewID string) error
+	listByTenantFn  func(ctx context.Context, tenantID string) ([]domain.Preview, error)
+	listByProjectFn func(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error)
+	getByIDFn       func(ctx context.Context, tenantID, previewID string) (*domain.Preview, error)
+	requestDeleteFn func(ctx context.Context, tenantID, previewID string) error
 }
 
 func (f *fakePreviewStore) ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error) {

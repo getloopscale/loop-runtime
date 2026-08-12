@@ -146,7 +146,7 @@ func TestSecretSet_UnrelatedErrorsStayInternal(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if code, _ := resp["code"].(string); code == "SECRETS_BACKEND_UNAVAILABLE" {
-		t.Errorf("a plain database error was reported as SECRETS_BACKEND_UNAVAILABLE — the mapping\n"+
+		t.Errorf("a plain database error was reported as SECRETS_BACKEND_UNAVAILABLE — the mapping\n" +
 			"    must key on the sentinel, not on \"the store returned an error\"")
 	}
 }

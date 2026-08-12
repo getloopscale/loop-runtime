@@ -15,15 +15,15 @@ import (
 // --- Fake TeamStore ---
 
 type fakeTeamStore struct {
-	members          []TeamMemberInfo
-	member           *TeamMemberInfo
-	user             *TeamUserInfo
-	addErr           error
-	removeErr        error
-	updateErr        error
-	listErr          error
-	getMemberFn      func(tenantID, userID string) (*TeamMemberInfo, error)
-	getUserFn        func(username string) (*TeamUserInfo, error)
+	members     []TeamMemberInfo
+	member      *TeamMemberInfo
+	user        *TeamUserInfo
+	addErr      error
+	removeErr   error
+	updateErr   error
+	listErr     error
+	getMemberFn func(tenantID, userID string) (*TeamMemberInfo, error)
+	getUserFn   func(username string) (*TeamUserInfo, error)
 }
 
 func (f *fakeTeamStore) ListMembers(_ context.Context, _ string) ([]TeamMemberInfo, error) {

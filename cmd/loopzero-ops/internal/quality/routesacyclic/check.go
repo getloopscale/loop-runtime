@@ -25,7 +25,8 @@
 //
 // # Why the transport package is registered as a leaf
 //
-// `httpio` holds the three response writers every family needs. Before slice-5
+// `httpio` holds the response writers every family needs — three moved out of a
+// domain file in slice-5, a fourth surfaced when the tenants family split. Before slice-5
 // they lived in `projects.go`, so every future family would have depended on the
 // `projects` family to render a response — the exact edge rule 2 forbids. It is
 // registered with an empty allowed-set: everyone may import it, it imports no

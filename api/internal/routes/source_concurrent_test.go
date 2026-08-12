@@ -30,10 +30,10 @@ import (
 //   - Exactly 1 goroutine sees 200 OK
 //   - The other N-1 see 409 DEPLOY_IN_PROGRESS (NOT a generic 500)
 type fakeRaceySourceStore struct {
-	mu           sync.Mutex
-	firstUpload  atomic.Bool // CAS — first writer wins
+	mu            sync.Mutex
+	firstUpload   atomic.Bool // CAS — first writer wins
 	pushCallCount atomic.Int32
-	raceErr      error
+	raceErr       error
 }
 
 func (f *fakeRaceySourceStore) PushBundle(_ context.Context, _, _ string, bundle io.Reader) (source.PushResult, error) {

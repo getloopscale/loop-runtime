@@ -32,9 +32,9 @@ func TestBuildPromQL_ErrorRate_IsRatioPercent(t *testing.T) {
 // Regression guard: the OTHER signals keep their canonical queries unchanged.
 func TestBuildPromQL_OtherSignalsIntact(t *testing.T) {
 	cases := map[string]string{
-		"uptime_24h":  "avg_over_time(up{",
-		"p95_latency": "histogram_quantile(0.95",
-		"rps":         "rate(http_requests_total{",
+		"uptime_24h":     "avg_over_time(up{",
+		"p95_latency":    "histogram_quantile(0.95",
+		"rps":            "rate(http_requests_total{",
 		"replicas_ready": "kube_deployment_status_replicas_ready{",
 	}
 	for signal, want := range cases {

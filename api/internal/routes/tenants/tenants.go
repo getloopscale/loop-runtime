@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package tenants serves `/api/v1/tenants` — the team-facing surface, including
+// the deletion request and its cancellation window.
+//
+// Second family to leave the flat `routes` package (B-041 slice-8), and the more
+// informative of the two: unlike `version` it uses the shared transport, so it
+// is the first family to declare a permitted edge to a leaf. Splitting it also
+// surfaced three requirements the first family could not — see B-080.
 package tenants
 
 import (

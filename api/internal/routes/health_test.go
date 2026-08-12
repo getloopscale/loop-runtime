@@ -29,7 +29,7 @@ type fakeServiceChecker struct {
 	err  error
 }
 
-func (f *fakeServiceChecker) Name() string                    { return f.name }
+func (f *fakeServiceChecker) Name() string                  { return f.name }
 func (f *fakeServiceChecker) Check(_ context.Context) error { return f.err }
 
 // --- Fake CellDiscoveryChecker ---

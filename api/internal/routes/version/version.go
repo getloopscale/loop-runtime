@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package version serves the build-metadata endpoints — `/api/v1/version`,
+// `/v1/version` and the fleet variant.
+//
+// First family to leave the flat `routes` package (B-041 slice-8). It was chosen
+// as the first precisely because it depends on nothing inside `routes` — not
+// even the shared transport — so the move proved the recipe without the result
+// resting on anything else moving correctly.
 package version
 
 import (
@@ -18,10 +25,17 @@ import (
 
 // Version metadata — populados via ldflags em build (ver api/Dockerfile).
 //
+// O caminho do -X é o do PACOTE, e mudou quando a família saiu de
+// `api/internal/routes` para cá (B-041 slice-8). Um -X com caminho errado é
+// DESCARTADO EM SILÊNCIO pelo linker — medido: com o caminho antigo o binário
+// reporta `versionTag="dev"`, sem aviso nenhum. Este bloco é a única referência
+// correta no repositório, e é o que o issue #284 deve copiar ao consertar o
+// Dockerfile (que erra a org, não o caminho).
+//
 //	go build -ldflags "\
-//	  -X github.com/getloopscale/loopzero/api/internal/routes.versionTag=$(git describe --tags) \
-//	  -X github.com/getloopscale/loopzero/api/internal/routes.versionCommit=$(git rev-parse HEAD) \
-//	  -X github.com/getloopscale/loopzero/api/internal/routes.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+//	  -X github.com/getloopscale/loopzero/api/internal/routes/version.versionTag=$(git describe --tags) \
+//	  -X github.com/getloopscale/loopzero/api/internal/routes/version.versionCommit=$(git rev-parse HEAD) \
+//	  -X github.com/getloopscale/loopzero/api/internal/routes/version.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var (
 	versionTag       = "dev"
 	versionCommit    = "unknown"

@@ -1375,7 +1375,7 @@ domain: engine-go
 repo: loopzero
 suggested_mode: bug
 source: discover-review
-evidence: medido em 2026-08-11 e confirmado por experimento próprio fora do repositório. `api/go.mod:1` declara o módulo `github.com/getloopscale/loopzero/api`; `api/Dockerfile:82-84` injeta `-X github.com/getloopscale/loopzero/api/internal/routes.versionTag=...` — **org errada**. O doc-comment em `version.go:22` tem o caminho certo, então os dois discordam e quem constrói a imagem é o Dockerfile. Experimento: caminho de import correto injeta o valor; caminho de org errada **sai com 0** e o default `"dev"` sobrevive. O linker não avisa, e nenhum gate cobre (`grep -rl "versionTag\|ldflags" cmd/loopzero-ops/internal/quality/` → vazio). Issue #284.
+evidence: medido em 2026-08-11 e confirmado por experimento próprio fora do repositório. `api/go.mod:1` declara o módulo `github.com/getloopscale/loopzero/api`; `api/Dockerfile:82-84` injeta `-X github.com/getloopscale/loopzero/api/internal/routes.versionTag=...` — **org errada**. O doc-comment tinha o caminho certo, então os dois discordavam e quem constrói a imagem é o Dockerfile. **Atualizado em 2026-08-12**: a fatia slice-8 moveu a família para `api/internal/routes/version`, então o caminho correto passou a ser `github.com/getloopscale/loopzero/api/internal/routes/version.versionTag` — e por um momento **nenhum lugar do repositório carregou o caminho certo**, porque o doc-comment ficou apontando para o pacote antigo. Corrigido no mesmo movimento: `api/internal/routes/version/version.go` é de novo a referência única e correta, e é dela que o conserto do Dockerfile deve copiar. O erro do Dockerfile continua sendo o de **org** (`getloopscale`), não o de caminho. Experimento: caminho de import correto injeta o valor; caminho de org errada **sai com 0** e o default `"dev"` sobrevive. O linker não avisa, e nenhum gate cobre (`grep -rl "versionTag\|ldflags" cmd/loopzero-ops/internal/quality/` → vazio). Issue #284.
 why_now: qualquer diagnóstico que dependa de "qual versão está rodando" — triagem de incidente, confirmação de rollout, verificação de fix em app-dev — lê `dev` e não distingue duas imagens diferentes. E há um segundo efeito: mover `version.go` para outro pacote **quebra a injeção de novo, em silêncio**, mesmo depois de corrigir o typo — o que torna isto pré-requisito do B-041.
 status: triaged
 severity: média — não corrompe nada, mas apaga a única forma de saber o que está no ar.
@@ -1767,7 +1767,7 @@ Medido ao tentar desbloquear o `B-043`, que depende desta decisão:
 | O campo que a receberia | `operators/internal/tenant/tenant_controller.go:102` — `VaultClient vault.TenantTransitClient` | declarado |
 | A atribuição em produção | `operators/cmd/tenant-operator/` | **não existe** — nada atribui `VaultClient` |
 | Implementação em `pkg/vault` | — | **nenhuma**. `pkg/vault` não tem método de shredding |
-| Chamada no handler api-side de exclusão | `api/internal/routes/tenants.go` | **não menciona vault** |
+| Chamada no handler api-side de exclusão | `api/internal/routes/tenants/tenants.go` (era `routes/tenants.go` na medição; a família virou subpacote na fatia slice-8) | **não menciona vault** |
 | Runbook operacional | `docs/operations/` | **nenhum** arquivo sobre exclusão de tenant / apagamento |
 
 **O único vestígio de crypto-shredding no repositório inteiro é um comentário** (`client.go:26`,
@@ -1879,12 +1879,12 @@ status: triaged
 recipe_proven: 2026-08-12 pela fatia slice-8, que moveu a PRIMEIRA familia de ponta a ponta e mediu o resto.
   A receita, percorrida: (1) `git mv` dos arquivos da familia para `routes/<familia>/` levando os testes JUNTO — deixa-los para tras criaria a unica aresta que a cerca NAO vigia (pai -> filho); (2) trocar a clausula `package`; (3) o compilador aponta cada consumidor externo — e o RED e ele, nao um teste escrito a mao; (4) re-apontar e remover import orfao; (5) REGISTRAR a familia no allow-list de `routesacyclic`, que ate la reprova com "uma familia de handlers que ninguem decidiu".
   O passo (5) foi VERIFICADO como real: antes do registro o gate saiu 1 nomeando `version`. A cerca nao e decorativa.
-  DENOMINADOR MEDIDO: `routes` declara 704 simbolos exportados, dos quais 172 sao usados de FORA, em 55 arquivos e 8 pacotes — 84 deles pela raiz de composicao (`api/cmd`). Por isso o fatiamento inteiro e T3 e uma familia por fatia: num commit unico, um erro em qualquer das 16 seria indistinguivel dos outros 15.
+  DENOMINADOR MEDIDO (CORRIGIDO 2026-08-12 pela revisao): `routes` declara **245** simbolos exportados de topo por `go doc -all` (355 contando metodos), dos quais 172 sao usados de FORA. O 704 da primeira versao era artefato de regex — ~72% dele eram funcoes `Test*`, que nao sao superficie importavel. E a MESMA falha que esta fatia diagnosticou para `tenants`, e eu corrigi o numero daquela familia sem recomputar este. O `why_now` deste item ja registrava 355 e 301 seis linhas acima, e o 704 foi acrescentado sem reconciliar, em 55 arquivos e 8 pacotes — 84 deles pela raiz de composicao (`api/cmd`). Por isso o fatiamento inteiro e T3 e uma familia por fatia: num commit unico, um erro em qualquer das 16 seria indistinguivel dos outros 15.
   A SEGUNDA FAMILIA (`tenants`) corrigiu a receita em tres pontos, todos revelados pelo COMPILADOR e nao por leitura:
   (a) enumerar simbolos por regex `^func [A-Z]` / `^type [A-Z]` SUBCONTA — perde blocos `type (...)` agrupados. `tenants` exportava 7, meu regex viu 4. Use `go doc -all ./internal/routes/<familia>` para a lista completa.
   (b) helpers privados de TRANSPORTE se escondem em arquivos de dominio. `writeErrorJSON` morava em `tenants.go` e era chamada de `billing.go`; foi para o `httpio` como quarto escritor de resposta. A medicao do B-041 contava so helpers usados por MAIS de 3 arquivos, e esta e usada por 2 — por isso escapou.
   (c) helpers de TESTE em `_test.go` nao sao importaveis entre pacotes. `withAuth` e usada por TRINTA arquivos de teste, e a familia perdeu acesso a ela ao sair. Nasceu `routes/routestest` — o irmao do `httpio` do lado dos testes, com os 4 helpers exportados; o pacote pai delega em vez de duplicar. A familia 1 (`version`) nao revelou isso porque nao tem auth.
-  ORDEM SUGERIDA, por superficie externa medida (arquivos de fora que referenciam a familia): version 2 (FEITA), tenants 2 (FEITA), billing 2, auth 3. `pagination` tem 0 mas nao e familia do router — e utilitario, e move como folha ao lado do `httpio`.
+  ORDEM SUGERIDA, por superficie externa medida (arquivos de fora que referenciam a familia): version 2 (FEITA), tenants 4 (FEITA), billing 2, auth 2. RECONTADO pela revisao: `tenants` tinha 4 consumidores externos e `auth` tem 2 — duas das quatro contagens estavam erradas, e como o criterio de ordenacao E a superficie medida, a ordem publicada nao era confiavel. `pagination` tem 0 mas nao e familia do router — e utilitario, e move como folha ao lado do `httpio`.
 severity: alta — é o achado central da auditoria de arquitetura, e agora está desbloqueado.
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
@@ -1950,3 +1950,22 @@ dod:
 > Registrado 2026-08-12 ao fechar `B-009` e `B-071`. Os dois vermelhos que o `B-009` narrava como
 > "a checklist que ninguém roda inteira" eram na verdade três: os 11 de `operators`, os 4 testes de
 > migração, e estes 88 — que só ficaram visíveis quando os outros dois saíram da frente.
+
+## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido por experimento em 2026-08-12, na revisão da fatia slice-8. `routesacyclic.Check` (`cmd/loopzero-ops/internal/quality/routesacyclic/check.go:120-140`) itera apenas subdiretórios de `api/internal/routes`; arquivos do **pacote pai** nunca são parseados. Um `routes/zz_probe.go` importando `routes/tenants` sai `4 subpackage(s), 0 unregistered, 0 sibling edge(s)` — **PASS, exit 0**. O sentido inverso (filho → pai) **é** pego, e foi verificado: reporta `ARESTA IRMÃ version → <routes-parent>`.
+why_now: hoje é benigno — a única aresta pai → filho é `routes → routestest`, para um leaf. Mas restam **14 famílias** para sair, e nada impede que `routes/billing.go` passe a importar `routes/tenants` na próxima fatia em vez de mandar o helper compartilhado para o leaf. O gate diria verde sobre exatamente o acoplamento que o fatiamento existe para remover. O commit `8d4d0ac1` reconhece o buraco em prosa; a cerca não o fecha.
+status: raw
+severity: alta — não pelo estado atual, mas porque é uma cerca que vai ser confiada por 14 movimentos e tem um lado aberto.
+dod:
+  - `routes-acyclic` parseia também os arquivos do pacote pai
+  - um fixture com `routes/x.go` importando uma família reprova, com file:line
+  - a aresta legítima `routes → routestest` continua passando, declarada
+  - fechado **antes** da terceira família sair — depois disso deixa de ser teórico
+
+> Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em
+> `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3.

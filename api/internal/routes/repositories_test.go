@@ -18,13 +18,13 @@ import (
 // --- Fake RepositoryStore ---
 
 type fakeRepoStore struct {
-	repo          *ProjectRepository
-	repoByName    *ProjectRepository
-	linkErr       error
-	unlinkErr     error
-	saveInstErr   error
-	getByRepoErr  error
-	getByProjErr  error
+	repo         *ProjectRepository
+	repoByName   *ProjectRepository
+	linkErr      error
+	unlinkErr    error
+	saveInstErr  error
+	getByRepoErr error
+	getByProjErr error
 	// Plan J-09 T3.2 — capture autoDeploy passed by handler so tests can assert
 	// the request → store mapping (otherwise we couldn't tell true-by-default
 	// from true-by-handler-default).
@@ -242,8 +242,8 @@ func TestRepositories_Disconnect_MemberForbidden(t *testing.T) {
 func TestRepositories_GetConnection_Found(t *testing.T) {
 	store := &fakeRepoStore{
 		repoByName: &ProjectRepository{
-			ProjectName:  "my-api",
-			RepoFullName: "owner/my-repo",
+			ProjectName:   "my-api",
+			RepoFullName:  "owner/my-repo",
 			DefaultBranch: "main",
 			AutoDeploy:    true,
 			Provider:      "github",
@@ -322,9 +322,9 @@ func TestRepositories_Connect_AutoDeployFalse_Persisted(t *testing.T) {
 // Plan J-09 T5.1 (2026-06-05) — loopzero.yaml validation tests.
 
 type fakeIntrospector struct {
-	branchErr   error
-	fileBytes   []byte
-	fileErr     error
+	branchErr error
+	fileBytes []byte
+	fileErr   error
 	// connect-then-deploy 2026-06-09: HEAD commit metadata for the
 	// Vercel-canonical immediate deploy on link. Nil head + nil headErr
 	// disables the deploy path silently — matches the production behavior

@@ -132,8 +132,8 @@ func TestSourceHandler_Upload_PreservesDeployInProgress_when_gitea_substring_pre
 // is clean" text — Sprint 4 #31 root cause.
 func TestSourceHandler_Upload_TypedReasons_emitSpecificMessage_not_legacy_text(t *testing.T) {
 	cases := []struct {
-		reason     source.PushBundleErrorReason
-		wantSubstr string
+		reason      source.PushBundleErrorReason
+		wantSubstr  string
 		wantBackend bool // expect "Source backend" / "remote" / "bundle" in Message
 	}{
 		{source.ReasonSourceBackendUnreachable, "Source backend is unreachable", true},

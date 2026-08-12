@@ -197,8 +197,8 @@ func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 // fixture env names FIRST (see MEET-ASYNC-AMENDMENT-2026-06-02-002).
 func TestEnvironmentRegex_AcceptsHyphensAfterRevert(t *testing.T) {
 	accepted := []string{
-		"preview-pr-42",  // preview env naming pattern
-		"j-rollout-a",    // e2e journey fixture
+		"preview-pr-42", // preview env naming pattern
+		"j-rollout-a",   // e2e journey fixture
 		"with-hyphen",
 		"a-z-end",
 	}

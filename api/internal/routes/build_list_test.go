@@ -15,11 +15,11 @@ import (
 // --- Fake BuildListStore ---
 
 type fakeBuildListStore struct {
-	builds      []BuildListItem
-	total       int
-	err         error
-	buildEnvs   []string // T2.2: ordered envs for ListEnvsForProject
-	envsErr     error
+	builds    []BuildListItem
+	total     int
+	err       error
+	buildEnvs []string // T2.2: ordered envs for ListEnvsForProject
+	envsErr   error
 }
 
 func (f *fakeBuildListStore) ListByProjectAndEnv(_ context.Context, _, _, _ string, _, _ int) ([]BuildListItem, int, error) {

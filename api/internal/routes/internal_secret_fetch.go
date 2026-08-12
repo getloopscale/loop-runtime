@@ -108,10 +108,10 @@ type SecretReadAuditEvent struct {
 
 // Common typed errors (consumed by handler + tests via errors.Is).
 var (
-	ErrSecretNotFound       = errors.New("secret not found")
-	ErrTenantNotFound       = errors.New("tenant not found")
-	ErrCellTenantBinding    = errors.New("cell does not own this tenant")
-	ErrInvalidSecretName    = errors.New("invalid secret name (EC-08: must match ^[A-Z][A-Z0-9_]*$)")
+	ErrSecretNotFound    = errors.New("secret not found")
+	ErrTenantNotFound    = errors.New("tenant not found")
+	ErrCellTenantBinding = errors.New("cell does not own this tenant")
+	ErrInvalidSecretName = errors.New("invalid secret name (EC-08: must match ^[A-Z][A-Z0-9_]*$)")
 )
 
 // NewSecretFetchHandler returns an http.HandlerFunc for T4.1.
