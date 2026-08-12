@@ -71,24 +71,33 @@ const sinkDir = "api/internal/services/deploycontracts"
 // made the extractor find NOTHING and the gate report PASS over a leak it could
 // not see. A ratchet keyed on a name a caller chooses is a ratchet the caller
 // can unlock.
-var watchedImportPaths = []string{
-	"github.com/getloopscale/loopzero/api/internal/db",
-	// db/store is persistence too, and was a blind spot of BOTH gates:
-	// dbgeneratedboundary fences only db/generated (and db in `server`), and
-	// this ratchet watched only db. Measured during review.
-	"github.com/getloopscale/loopzero/api/internal/db/store",
-	// Application-layer packages. ADR D2 promised the manifests import was
-	// frozen; it was not, and three new application imports crossed the sink
-	// with the gate green. The promise is now implemented rather than asserted.
-	"github.com/getloopscale/loopzero/api/internal/manifests",
-	"github.com/getloopscale/loopzero/api/internal/argo",
-	"github.com/getloopscale/loopzero/api/internal/gitops",
-}
+// watchedImportPaths maps an import path to the prefix its findings are keyed
+// under. The KEY is what makes the ratchet survive a rename.
+//
+// `api/internal/db/dbtx` reports under `db`, not under `dbtx`: slice-6 moved the
+// SQL access port there and left `db` re-exporting it by TYPE ALIAS, so
+// `db.DBTX` and `dbtx.DBTX` are the same type. Keyed by base name, changing one
+// import in the sink would report `db.DBTX` as GONE — which this gate's own
+// Outcome documents as "progress that should be locked in" — while the boundary
+// stayed crossed by an identical type. Measured with a fixture before the fix:
+// `Found=[] New=[] Gone=[db.DBTX] err=<nil>`.
+//
+// A ratchet that reads a rename as progress is worse than no ratchet: it goes
+// green precisely when someone routes around it.
 
-// reportedPrefixFor keys a finding by the imported package's base name rather
-// than by the local alias, so renaming an import cannot silently empty the
-// frozen set.
-func reportedPrefixFor(path string) string { return filepath.Base(path) }
+var watchedImportPaths = map[string]string{
+	"github.com/getloopscale/loopzero/api/internal/db":      "db",
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx": "db", // alias of the above — the SAME types
+	// db/store is persistence too, and was a blind spot of BOTH gates:
+	// dbgeneratedboundary fences only db/generated (and db in server/routes).
+	"github.com/getloopscale/loopzero/api/internal/db/store": "store",
+	// Application-layer packages. ADR D2 of slice-4 promised the manifests import
+	// was frozen and the first implementation did not watch them at all — three
+	// public references crossed with the gate green.
+	"github.com/getloopscale/loopzero/api/internal/manifests": "manifests",
+	"github.com/getloopscale/loopzero/api/internal/argo":      "argo",
+	"github.com/getloopscale/loopzero/api/internal/gitops":    "gitops",
+}
 
 // ErrUnqualifiedImport means a watched package is dot-imported, which makes every
 // reference to it unqualified and therefore beyond this gate's static reach.
@@ -223,13 +232,13 @@ func Check(cfg Config) (Outcome, error) {
 func collectRefs(f *ast.File, into map[string]bool) error {
 	// local identifier -> the canonical prefix findings are keyed under
 	names := map[string]string{}
-	for _, path := range watchedImportPaths {
+	for path, prefix := range watchedImportPaths {
 		locals, dotImported := localNamesFor(f, path)
 		if dotImported {
 			return fmt.Errorf("%w: %s", ErrUnqualifiedImport, path)
 		}
 		for _, l := range locals {
-			names[l] = reportedPrefixFor(path)
+			names[l] = prefix
 		}
 	}
 	if len(names) == 0 {

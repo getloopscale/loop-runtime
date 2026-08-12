@@ -3,70 +3,47 @@
 
 package db
 
-import (
-	"context"
-	"errors"
+import "github.com/getloopscale/loopzero/api/internal/db/dbtx"
+
+// The SQL access port moved to api/internal/db/dbtx so that a consumer needing
+// only the transaction handle does not import the entity package to name it.
+//
+// # These are ALIASES, and that is the whole point
+//
+// `type DBTX = dbtx.DBTX` is the SAME type under a second name. Every signature
+// that says `func(tx db.DBTX) error` — 50 of them across 103 files, including the single
+// production implementer at adapters/pgx_adapter.go and every test fake — keeps
+// matching without an edit. That is what made the move cost nothing.
+//
+// Turning any of these into a DEFINITION (`type DBTX dbtx.DBTX`) creates a
+// distinct type and breaks all 34 at once. Loud and immediate, by design — but
+// if you are reading this because a build broke, that is the cause.
+//
+// Do not "clean up" this file by deleting it: `db.DBTX` is the name the rest of
+// the tree uses, and these aliases are what keep it working.
+type (
+	// QueryExecutor runs queries returning rows.
+	QueryExecutor = dbtx.QueryExecutor
+	// Rows is the result of a multi-row query.
+	Rows = dbtx.Rows
+	// Row is the result of a single-row query.
+	Row = dbtx.Row
+	// ExecQueryExecutor runs statements returning no rows.
+	ExecQueryExecutor = dbtx.ExecQueryExecutor
+	// DBTX is the transaction handle: pool or open transaction, indistinctly.
+	DBTX = dbtx.DBTX
+	// ExecResult holds the result of an exec operation.
+	ExecResult = dbtx.ExecResult
+	// UniqueViolationError represents a PostgreSQL unique constraint violation.
+	UniqueViolationError = dbtx.UniqueViolationError
 )
 
-// ErrNoRows is returned when a query expected a single row but found none.
-// Equivalent to pgx.ErrNoRows / sql.ErrNoRows.
-var ErrNoRows = errors.New("no rows in result set")
-
-// ErrNilTxStatusMutation is returned by the read-modify-write status mutators
-// (BuildStoreSqlc / ReleaseStoreSqlc UpdateStatus) when called with a nil tx.
-// A status read-modify-write (GetByIDTx → SafeTransition → UPDATE) MUST run in
-// one transaction under withEnvironmentLock; a nil tx would split the fetch and
-// the update across two pooled auto-committed connections (no atomicity, the
-// advisory lock never held). Lock-free conditional updates must use the
-// single-statement CAS UpdateStatusIfCurrent instead. M9 5b, ADR
-// 2026-07-03-m9-5b-nil-tx-status-atomicity.
-var ErrNilTxStatusMutation = errors.New("db: status read-modify-write requires a non-nil tx (advisory-lock scope) — use UpdateStatusIfCurrent for lock-free conditional updates")
-
-// QueryExecutor abstracts pgx query methods for read operations.
-// Implemented by *pgxpool.Pool, *pgx.Conn, and test fakes.
-type QueryExecutor interface {
-	Query(ctx context.Context, sql string, args ...any) (Rows, error)
-}
-
-// Rows abstracts pgx.Rows for testability.
-type Rows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Err() error
-	Close()
-}
-
-// Row abstracts a single-row query result for testability.
-type Row interface {
-	Scan(dest ...any) error
-}
-
-// ExecQueryExecutor abstracts pgx exec methods for write operations.
-// Implemented by *pgxpool.Pool, *pgx.Conn, and test fakes.
-type ExecQueryExecutor interface {
-	Exec(ctx context.Context, sql string, args ...any) (ExecResult, error)
-}
-
-// DBTX combines Query, QueryRow, and Exec operations.
-// Implemented by both connection pools and transactions, enabling
-// stores to work transparently with either.
-type DBTX interface {
-	QueryExecutor
-	ExecQueryExecutor
-	QueryRow(ctx context.Context, sql string, args ...any) Row
-}
-
-// ExecResult holds the result of an exec operation.
-type ExecResult struct {
-	RowsAffected int64
-}
-
-// UniqueViolationError represents a PostgreSQL unique constraint violation (23505).
-// Used to detect duplicate key errors without importing pgx in business logic.
-type UniqueViolationError struct {
-	Constraint string
-}
-
-func (e *UniqueViolationError) Error() string {
-	return "unique violation: " + e.Constraint
-}
+// Sentinel errors live in the port package too — a caller comparing against
+// ErrNoRows is doing SQL access, not touching an entity. Aliased as VARIABLES
+// (not copied) so `errors.Is` keeps matching across both names.
+var (
+	// ErrNoRows is returned when a single-row query matched nothing.
+	ErrNoRows = dbtx.ErrNoRows
+	// ErrNilTxStatusMutation guards the advisory-lock scope on status writes.
+	ErrNilTxStatusMutation = dbtx.ErrNilTxStatusMutation
+)

@@ -21,7 +21,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
@@ -35,7 +35,7 @@ type lockCountingFake struct {
 	calls []string
 }
 
-func (l *lockCountingFake) WithLock(_ context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error {
+func (l *lockCountingFake) WithLock(_ context.Context, tenant, project, env string, fn func(tx dbtx.DBTX) error) error {
 	l.mu.Lock()
 	l.calls = append(l.calls, tenant+":"+project+":"+env)
 	l.mu.Unlock()
@@ -214,17 +214,17 @@ func TestSecretDelete_RejectsEmptyEnvParam(t *testing.T) {
 // 2026-06-06-dashboard-journey-j22-secrets-crud § T1.1.
 //
 // EC absorbed:
-// - EC-16 (input validation via existing secretNameRegex) — INVALID-KEY
-//   results in status="failed" without aborting the batch
-// - EC-18 (size cap 100) — TestSecretBulk_SizeCap below
+//   - EC-16 (input validation via existing secretNameRegex) — INVALID-KEY
+//     results in status="failed" without aborting the batch
+//   - EC-18 (size cap 100) — TestSecretBulk_SizeCap below
 //
 // EC absorptions deferred to subsequent iterations:
-// - EC-9 (per-key savepoint atomicity) — currently best-effort sequential Sets
-// - EC-10 (pg_advisory_xact_lock race-safe limit gate) — reuses existing
-//   SecretEnvLocker pattern in a follow-up iteration
-// - EC-11 (ESO sync_status polling) — currently always "pending"
-// - EC-14 (duplicate-key detection) — relies on store semantics
-// - EC-15 (whitespace preservation in values) — verified via Set already
+//   - EC-9 (per-key savepoint atomicity) — currently best-effort sequential Sets
+//   - EC-10 (pg_advisory_xact_lock race-safe limit gate) — reuses existing
+//     SecretEnvLocker pattern in a follow-up iteration
+//   - EC-11 (ESO sync_status polling) — currently always "pending"
+//   - EC-14 (duplicate-key detection) — relies on store semantics
+//   - EC-15 (whitespace preservation in values) — verified via Set already
 func TestSecretBulk_ShapeInvariant(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	h := NewSecretHandler(store)
@@ -503,9 +503,9 @@ func (f *fakeK8sSyncT11) DeleteSecret(_ context.Context, tenant, project, env, _
 // EC-01 (continue-best-effort) can be exercised: entry 3 of 5 fails, entries
 // 1+2+4+5 succeed.
 type fakeFailingStore struct {
-	mu          sync.Mutex
-	setCalls    int
-	failOnName  map[string]error // secret name → error to return on Set
+	mu         sync.Mutex
+	setCalls   int
+	failOnName map[string]error // secret name → error to return on Set
 }
 
 func (f *fakeFailingStore) ListNames(_ context.Context, _, _, _ string) ([]domain.SecretMetadata, error) {

@@ -17,7 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
@@ -42,7 +42,7 @@ type (
 // the legacy non-locked path. Production wiring must inject the real
 // locker; this fallback keeps unit-test fakes simple.
 type SecretEnvLocker interface {
-	WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error
+	WithLock(ctx context.Context, tenant, project, env string, fn func(tx dbtx.DBTX) error) error
 }
 
 // SecretTransit — narrow interface (ISP) for the OpenBao transit encryption
@@ -668,7 +668,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// capturing config cannot race. Falls back to non-locked path when
 	// locker is nil (tests + boot path).
 	var created bool
-	mutate := func(_ db.DBTX) error {
+	mutate := func(_ dbtx.DBTX) error {
 		var setErr error
 		created, setErr = h.store.Set(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, []byte(req.Value))
 		return setErr
@@ -793,7 +793,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: same lock as Set.
 	var deleted bool
-	mutate := func(_ db.DBTX) error {
+	mutate := func(_ dbtx.DBTX) error {
 		var delErr error
 		deleted, delErr = h.store.Delete(ctx, uc.TenantID, project, env, app, name)
 		return delErr

@@ -259,3 +259,33 @@ func TestCheck_ServicesImportingGeneratedStillFails(t *testing.T) {
 		t.Error("the generated fence must still hold in every forbidden dir — narrowing the new one must not narrow the old one")
 	}
 }
+
+// slice-6 T1.3: routes reached zero importers of the hand-written package when
+// db.DBTX moved to the dbtx leaf, so the fence lands there green.
+func TestCheck_RoutesImportingHandWrittenDBFails(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/routes", handWritten)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Errorf("the interface layer must not import the hand-written persistence package; got %+v", out.Violations)
+	}
+}
+
+// R2, and the reason the fence matches by EXACT path rather than by prefix:
+// `api/internal/db/dbtx` lives UNDER `api/internal/db`, and a prefix match would
+// have forbidden the very leaf that made this fence possible — the fix would
+// have failed the gate it enables.
+func TestCheck_ImportingTheDbtxLeafIsAllowed(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/routes", handWritten+"/dbtx")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Errorf("the SQL access port is not the entity package; forbidding it by prefix would forbid the correction itself; got %+v", out.Violations)
+	}
+}

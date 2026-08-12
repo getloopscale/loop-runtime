@@ -312,3 +312,36 @@ type Port interface {
 		t.Errorf("a blank import exposes no symbol; got %v", err)
 	}
 }
+
+// MEASURED hole, opened by slice-6 and caught by its review: the SQL access port
+// moved to `api/internal/db/dbtx` and `db` re-exports it by TYPE ALIAS, so
+// `dbtx.DBTX` IS `db.DBTX`. With findings keyed by the import's base name,
+// changing one import line in the sink produced:
+//
+//	Found=[] New=[] Gone=[db.DBTX] err=<nil>
+//
+// The frozen symbol reported as GONE — which this gate's own Outcome documents
+// as "progress that should be locked in" — while the boundary stayed crossed by
+// an identical type. A ratchet that reads a rename as progress goes green
+// precisely when someone routes around it.
+func TestCheck_AliasPathIsKeyedUnderTheCanonicalPrefix(t *testing.T) {
+	body := `package deploycontracts
+
+import "github.com/getloopscale/loopzero/api/internal/db/dbtx"
+
+type Port interface{ WithLock(fn func(tx dbtx.DBTX) error) error }
+`
+	out, err := Check(sink(t, map[string]string{"a.go": body}))
+	if err != nil {
+		t.Fatalf("the frozen set carries db.DBTX and this IS db.DBTX; got %v new=%v", err, out.New)
+	}
+	for _, g := range out.Gone {
+		if g == "db.DBTX" {
+			// db.Build is legitimately absent from this fixture; db.DBTX is not.
+			t.Errorf("importing the alias path must NOT read as removal — the type never left; got gone=%+v found=%+v", out.Gone, out.Found)
+		}
+	}
+	if len(out.Found) != 1 || out.Found[0] != "db.DBTX" {
+		t.Errorf("the finding must be keyed under the canonical prefix regardless of which path names it; got %+v", out.Found)
+	}
+}

@@ -84,9 +84,10 @@ const handWrittenDBPath = "github.com/getloopscale/loopzero/api/internal/db"
 // dirsForbiddenFromHandWrittenDB is DELIBERATELY narrower than forbiddenDirs.
 //
 // B-049's DoD asserts that widening the fence from `db/generated` to `db` is
-// "literally a string". Measured 2026-08-12, it is not: `api/internal/services`
-// carries 28 importers, `api/cmd` 14 and `api/internal/routes` 1 — 43 files that
-// would fail the day the fence widened. A gate that fails 43 files on arrival is
+// "literally a string". Measured 2026-08-12, it is not. Under the semantics this
+// gate actually uses — test files INCLUDED, see walkDir — `api/internal/services`
+// carries 51 importers and `api/cmd` 18: 69 files that would fail the day the
+// fence widened (71 before slice-6 took routes to zero). A gate that fails 43 files on arrival is
 // not a fence; it is an exemption at birth, which is the debt slice-1 spent
 // itself removing.
 //
@@ -96,6 +97,10 @@ const handWrittenDBPath = "github.com/getloopscale/loopzero/api/internal/db"
 // exemption nobody can read.
 var dirsForbiddenFromHandWrittenDB = []string{
 	"api/internal/server",
+	// Added by slice-6: routes reached ZERO importers when db.DBTX — the only
+	// symbol it used, in two files — moved to the api/internal/db/dbtx leaf.
+	// The interface layer no longer names a persistence type at all.
+	"api/internal/routes",
 }
 
 // Check is the gate entry point.
@@ -142,7 +147,7 @@ func ActionableFix() string {
 		"    api/internal/db/store/ instead.\n" +
 		"  · " + handWrittenDBPath + " — forbidden in " + strings.Join(dirsForbiddenFromHandWrittenDB, ", ") +
 		" only.\n    That fence is deliberately narrower than the generated one: the other\n" +
-		"    layers carry 71 importers today (slice-4 ADR D1), and a gate that fails on\n" +
+		"    layers — services and cmd — carry 69 importers today, and a gate that fails\n" +
 		"    arrival is an exemption at birth. Widening it is B-079."
 }
 
