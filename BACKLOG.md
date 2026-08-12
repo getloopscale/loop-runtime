@@ -1183,6 +1183,7 @@ source: discover-review
 evidence: medido em 2026-08-11 lendo os importadores reais de cada pacote de `pkg/`. O kernel tem 24.300 LOC e **6.226 (25,6%) têm exatamente um módulo consumidor**: `pkg/vault` 3.663 LOC → só `api`; `pkg/shellrun` 1.241 → só `cmd/loopzero-ops`; `pkg/pulumi` 993 → só `cmd/loopzero-ops`; `pkg/events` 329 → só `api`. `pkg/vault` **é** o domínio de secrets, e é o maior pacote de consumidor único do kernel. Some-se `pkg/` não usar `internal/` — as três únicas árvores `internal/` de primeira ordem são `api`, `operators` e `cmd/loopzero-ops` — então todo o kernel, inclusive o cliente de secrets, é API pública.
 why_now: é a **única fronteira nova que o compilador consegue recusar**. Movido para `api/internal/secrets/vault`, a regra `internal/` do Go torna impossível `operators` e `cmd/loopzero-ops` importarem o cliente de secrets — sem gate, sem convenção. Dos cinco planos, só DEVELOPER tem fronteira estrutural hoje; esta adiciona exatamente uma. Custo medido: 4 arquivos consumidores, todos em `api`.
 status: triaged
+blocked_by: B-075 — e o bloqueio foi CONFIRMADO por medição em 2026-08-12, não assumido. Se o shredding vier a ser operator-side, `operators` precisará do cliente de vault, e mover `pkg/vault` para `api/internal/secrets/` tornaria isso impossível pela regra `internal/` do Go — que é exatamente o ganho que este item busca. A DoD deste item manda decidir antes e CANCELAR, não adiar, se o desfecho for operator-side. Medido: `pkg/vault` e importado por 4 arquivos, todos em `api` (3 em `api/cmd`, 1 em `api/internal/adapters`), e ZERO arquivos de `operators` o importam — o custo do movimento nao mudou, so a permissao para faze-lo.
 severity: média — nada quebra hoje; o ganho é converter uma convenção em impossibilidade.
 dod:
   - B-042 decidido **antes** — se o desfecho for operator-side, este item é cancelado, não adiado
@@ -1751,6 +1752,32 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 no review da fatia 2. `operators/internal/vault/client.go:26-33` declara `TenantTransitClient` com **dois** métodos, e o segundo é `DeleteTenantKey` — descrito no próprio doc-comment como *"the crypto-shredding primitive … When the per-tenant key is deleted, all ciphertexts encrypted by that key become permanently unrecoverable. EC-10 MUST FIX P0: cleanup job must enforce 2-person rule + 90-day window before calling this."* Medido: **zero chamadores de produção** (só dois mocks), e o lado `api` **não tem nenhum caminho de delete de chave transit** — zero hits para `transit/keys.*delete`, `deleteKey`, `ShredKey` em `pkg/vault/` e `api/`. E `docs/wiki/decisions/2026-06-02-openbao-adoption.md:67` (§ Q5) amarra o shredding a *"GDPR/LGPD right-to-erasure native"* e ao fluxo de soft-delete de 90 dias (migração `000005`).
 why_now: a v1.0 do ADR `2026-08-12-tenant-transit-key-ownership` autorizava deletar a interface inteira, tendo medido apenas quem chama `EnsureTenantKey`. O review pegou. A v1.1 escopou a decisão ao **provisionamento** e deixou o shredding pendente — este item é esse pendente. E o argumento contrário que ninguém tinha construído: o ciclo de vida do tenant (criar → 90d → shred) é do operator e o `api` é request-scoped, então **é plausível que a seam exista porque o DELETE é do operator**, não porque esqueceram de ligar o CREATE.
+### Medição de 2026-08-12 — a pergunta do item muda de natureza
+
+Medido ao tentar desbloquear o `B-043`, que depende desta decisão:
+
+| O que | Onde | Estado |
+|---|---|---|
+| `DeleteTenantKey` | `operators/internal/vault/client.go:33` | **só declaração de interface** — o arquivo tem zero `func New` e zero `struct` |
+| O campo que a receberia | `operators/internal/tenant/tenant_controller.go:102` — `VaultClient vault.TenantTransitClient` | declarado |
+| A atribuição em produção | `operators/cmd/tenant-operator/` | **não existe** — nada atribui `VaultClient` |
+| Implementação em `pkg/vault` | — | **nenhuma**. `pkg/vault` não tem método de shredding |
+| Chamada no handler api-side de exclusão | `api/internal/routes/tenants.go` | **não menciona vault** |
+| Runbook operacional | `docs/operations/` | **nenhum** arquivo sobre exclusão de tenant / apagamento |
+
+**O único vestígio de crypto-shredding no repositório inteiro é um comentário** (`client.go:26`,
+*"is the crypto-shredding primitive"*) sobre um método que nada implementa, nada atribui e ninguém
+chama.
+
+Isso reescreve a pergunta. O item foi escrito supondo que a seam pudesse existir **porque** o DELETE
+é do operator. A medição mostra que a seam existe e **está inerte dos dois lados**: não é "quem é o
+dono do DELETE", é "o DELETE não existe". É o padrão *"implementado mas não ligado"* que o
+`CLAUDE.md` nomeia, aplicado ao primitivo que sustenta o direito ao apagamento.
+
+Consequência para a decisão: ela deixa de ser uma escolha entre duas implementações e passa a ser
+uma decisão sobre **construir** a que falta, e onde. O que não muda é o tier: continua T3, e continua
+exigindo reunião — agora com peso maior, porque o que estava em jogo era supor que existisse.
+
 status: triaged
 severity: alta — não pelo estado atual (nada chama, então nada quebra), mas porque a decisão anterior quase apagou o primitivo de conformidade por ele estar na mesma interface que um método morto.
 dod:
