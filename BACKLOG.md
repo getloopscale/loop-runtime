@@ -1161,7 +1161,8 @@ suggested_mode: bug
 source: discover-review
 evidence: medido e verificado à mão em 2026-08-11. `vault.TenantTransitClient` (`operators/internal/vault/client.go:31`) **não tem implementador de produção** — os únicos `EnsureTenantKey` em toda a árvore são dois mocks de teste. No único site de construção do reconciler (`operators/internal/tenant/tenant_controller.go:486-499`) o campo `VaultClient` **não é atribuído**, então `tenant_vault.go:33` curto-circuita em todo reconcile. **Correção importante:** as chaves *são* criadas — preguiçosamente pelo `api`, no primeiro 404 de encrypt (`pkg/vault/transit_client.go:274`). O que não existe é o fail-fast antecipado. E o alarme que o EC-15 promete não tem consumidor: zero `PrometheusRule` referencia `TransitKeyAvailable` ou `VaultQuotaExceeded`. Issue #280.
 why_now: **este item bloqueia o B-043.** Mover `pkg/vault` para dentro de `api/internal/` exclui o uso operator-side; se o provisionamento deve ser do operator, o movimento é errado e o trabalho é ligar o implementador. Não dá para fazer os dois. E o estado atual não é neutro: uma falha de policy ou quota aparece no primeiro `POST /secrets` do usuário em vez de o Tenant não chegar a ACTIVE.
-status: triaged
+status: planned
+resolved_in: docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md — api-side. A seam do operator e a condition TransitKeyAvailable sao deletadas DEPOIS de a policy loopzero-api do chart ganhar transit/keys/loopzero-tenants-* (B-072)
 severity: alta — não pelo defeito (não há perda de dado), mas porque é uma decisão de arquitetura pendente que trava a única fronteira estrutural nova disponível.
 dod:
   - está decidido, com ADR, se o provisionamento por tenant é api-side ou operator-side
@@ -1257,7 +1258,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `CLAUDE.md` diz que instalar OpenBao no cluster de gestão é *"FORBIDDEN in every tier — it is a topology violation, not a shortcut"*, e `.claude/rules/cleanroom-up-live-test-mandate.md` repete como PROIBIDO em qualquer tier. A task existe em `taskfiles/k3d.yml:230` e instala a stack OpenBao inteira no core via quatro syncs `--kube-context k3d-loopzero-core`. E o gate que leva a fronteira no nome — `openbaobootstrapincore/check.go:67,:94` — **não a proíbe**: suas asserções verificam que a task *existe* e *aponta para core*. Ele **falha se a task violadora for removida**.
 why_now: é um teste de conformidade **para** a fronteira que ele deveria defender. Enquanto ele existir nessa forma, remover a task proibida quebra o `quality:gates` — ou seja, a regra e o gate se contradizem, e o gate ganha.
-status: triaged
+status: planned
+resolved_in: docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md — a regra vence. A task sai, o gate e invertido, e os runbooks que a apresentam como caminho valido sao corrigidos. Na implementacao: cleanroom_mandate_openbao_gate_test.go:63-69 EXIGE que o mandate documente o atalho como escape hatch — precisa ser invertido junto
 severity: alta — a contradição está shipada e é exercível por qualquer um que leia o Taskfile em vez da regra.
 dod:
   - está decidido, com ADR, qual das duas é verdadeira: a regra que proíbe ou a task que oferece
@@ -1274,7 +1276,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `charts/loopzero-platform` declara como dependências os componentes de control plane, build plane e workload plane e os instala **num único release**, enquanto o caminho de desenvolvimento gasta **quatro helmfiles separados** construindo exatamente essa separação. `charts/loopzero-platform/profiles/dev.yaml:53` liga `loopzero-admission-policies` por condição; o mesmo padrão vale para os demais. Nenhum documento em `infra/` ou `charts/` mapeia chart → plano: `docs/architecture/helm-topology.md:24` **diz explicitamente** que o lado `charts/` não tem essa atribuição.
 why_now: a separação de planos que a auditoria mediu como real (5 clusters, 4 helmfiles) **desaparece no caminho publicado**. Quem instalar pelo chart guarda-chuva recebe os três planos num cluster, e nada no chart diz que isso é diferente do que o desenvolvimento faz. Junto com o B-046, é o segundo caso em que a superfície publicada é mais fraca que a de dev.
-status: triaged
+status: planned
+resolved_in: docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md — e composicao single-cluster deliberada, e isso passa a estar escrito no chart. A pergunta que fica (o chart deveria existir?) e o B-073
 severity: média — hoje o caminho publicado é pouco usado; o risco é ele virar o caminho de produção sem que a diferença esteja documentada.
 dod:
   - está decidido se o chart guarda-chuva deve preservar a separação de planos ou se ele é deliberadamente um modo single-cluster
@@ -1308,7 +1311,8 @@ suggested_mode: review
 source: discover-review
 evidence: ciclo conceitual traçado ponta a ponta em 2026-08-11 e confirmado pelo gate de qualidade da fase 2. `api/internal/k8s/tenant_cr_manager.go:147` escreve `Tenant.Spec.Environments` → o operator lê a slice em `operators/internal/tenant/tenant_gitops.go:87` e cria o `Application` em `:333` → `api/internal/argocd/sync_client.go:190` faz sync e `:351` refresh → `api/internal/k8s/tenant_evictor.go:49` deleta `argoproj.io/applications` → o próximo reconcile recria. **Nenhum dos dois módulos Go importa o outro** (medido: 0 arquivos) — o laço fecha pelo API server do Kubernetes, invisível ao compilador. O `CLAUDE.md` já cataloga o sintoma como padrão sistêmico conhecido: *"Orphan ArgoCD Application … status Unknown forever"*.
 why_now: Go proíbe ciclo de import entre pacotes em tempo de compilação, então a ausência de ciclos **não é mérito da arquitetura** — é garantia do toolchain. Este é o único lugar onde um ciclo real conseguiu existir, e ele existe porque atravessa um runtime que o compilador não vê. O sintoma já é conhecido e tratado como operacional; a causa não está registrada em lugar nenhum.
-status: triaged
+status: planned
+resolved_in: docs/wiki/decisions/2026-08-12-argocd-application-ownership.md — o dono do spec e o operator; o api opera (/sync) e despeja. O caminho que continua descoberto e o B-074
 severity: média — o efeito observado (Application órfã em `Unknown`) já tem contorno manual documentado; o custo é recorrente e o diagnóstico é caro por não haver dono declarado do recurso.
 dod:
   - está declarado quem é o **dono** do CR `Application` — um escritor, os outros pedem
@@ -1677,3 +1681,54 @@ dod:
   - se as duas formas devem coexistir por um período, isso está declarado — hoje o par apenas discorda
 
 > Registrado 2026-08-11 durante a validação de integração da fatia `slice-1-tripwires`. Bissectado até o commit; **não** causado por esta fatia, que não toca `api/`.
+
+## B-072 — A policy versionada nega ao `api` a criação de chave que o `api` faz   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-12 ao decidir o `B-042`. `infra/helm/openbao-init/values.yaml:187-201` define a policy `loopzero-api` com **apenas** `transit/encrypt/*` e `transit/decrypt/*` — **nenhuma capacidade em `transit/keys/*`**. Mas o caminho lazy do `api` cria a chave: `pkg/vault/transit_client.go:274` reage ao 404 do encrypt com um POST para `/v1/transit/keys/...` (`:380-392`). O único lugar que concede a capacidade é um script de **desenvolvimento**: `infra/scripts/local/vault-bootstrap-dev.sh:429-434`, com o comentário literal *"loopzero-api policy with transit/keys/* wildcard (catch #8 from session)"*. Não há equivalente no chart.
+why_now: a auditoria de 2026-08-11 registrou que "as chaves são criadas lazily pelo `api`" e usou isso para baixar a severidade do `B-042`. Isso vale para o ambiente de desenvolvimento; **em qualquer ambiente que carregue as policies do chart, não vale** — a criação é negada por desenho. E o erro tipado não tem tratamento a jusante: `grep ErrTransitKeyCreateFailed api/` devolve zero hits, e em `api/internal/routes/secrets.go:503-510` a negação de policy é indistinguível de timeout de rede para quem chama. O ADR `2026-08-12-tenant-transit-key-ownership` torna isto pré-requisito: a policy vem **antes** da deleção da seam do operator.
+status: triaged
+severity: alta — é o caminho de escrita de segredo de tenant, e a falha é silenciosa do ponto de vista de quem chama.
+dod:
+  - a policy `loopzero-api` do chart concede `transit/keys/loopzero-tenants-*`, ou está decidido e escrito que a criação de chave não é do `api`
+  - `ErrTransitKeyCreateFailed` deixa de ser indistinguível de erro de rede na resposta ao usuário
+  - existe verificação de que o nome de chave que o chart autoriza é o mesmo que o código usa — hoje o operator usa `tenant-<id>` e o `api` usa `loopzero-tenants-<id>`
+
+> Registrado 2026-08-12 ao escrever o ADR do `B-042`. Medido, não inferido.
+
+## B-073 — O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 ao decidir o `B-048`. Os únicos consumidores de `charts/loopzero-platform` são de teste ou template: `taskfiles/helm.yml:32,:37,:42,:108`, `infra/tests/helm/loopzero-platform/defaults_test.go`, `infra/tests/helm/envparity/envparity_test.go:51`, `infra/tests/helm/README.md:125-128`. O **bootstrap do ArgoCD não o usa** — os únicos `path: charts/*` em `infra/argocd-bootstrap/apps/` são quatro Applications, uma por operator. Zero referências em qualquer repositório irmão do workspace.
+why_now: a decisão do `B-048` foi tomada (é composição single-cluster, e isso passa a estar escrito no chart), mas ela levanta a pergunta que a evidência não fecha: **se o chart deveria existir**. Mantê-lo custa o gate `helm-overlap-parity`, os testes de envparity e a manutenção de 12 toggles. O dado que falta não é mensurável em disco — o README documenta instalação via `oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform`, e o conteúdo do registry não é visível daqui.
+status: triaged
+severity: baixa — nada quebra; é custo de manutenção de um artefato sem demanda medida.
+dod:
+  - está medido se o chart publicado em OCI é consumido fora do workspace
+  - se não for: está decidido entre manter com o custo declarado, ou remover
+  - `loopzero-monitoring` e `loopzero-dashboard` ganham plano declarado, ou fica escrito que não têm — hoje não há declaração em helmfile nem em doc
+
+> Registrado 2026-08-12 ao escrever o ADR do `B-048`.
+
+## B-074 — Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-12 ao decidir o `B-050`. `EnvironmentReconciler.reconcileDelete` (`operators/internal/environment/environment_controller.go:303-348`) deleta o Namespace (`:335`) e remove o finalizer (`:345-347`) — e **não toca na Application nem em `Tenant.Spec.Environments`**. Como a entrada permanece no spec, `expectedApplicationNames` (`operators/internal/tenant/tenant_gitops.go:146-160`) continua considerando a Application "esperada", e `pruneOrphanPreviewApps` (`:381-412`) nunca a remove. O caminho **coberto** pelo reaper é o outro: `RemoveEnvironment` (`api/internal/k8s/tenant_cr_manager.go:175-215`) tira a tupla do spec, e aí o prune alcança.
+why_now: o `CLAUDE.md` § Known Systemic Patterns descreve o sintoma "Orphan ArgoCD Application … status Unknown forever" com contorno manual — e o texto está **desatualizado**: entrou em `c6fc9671` (2026-06-10), dois dias antes de o reaper existir (`ecbabf34`, 2026-06-12), e suas citações não resolvem mais (aponta `operators/internal/tenant/environment_controller.go:235`; o arquivo está em `operators/internal/environment/` e a função em `:303`). O padrão documentado descreve um caminho que foi consertado, e não descreve o que continua quebrado.
+status: triaged
+severity: média — a órfã não corrompe nada, mas gera exit 5 em `loopzero platform status` (drift) e o contorno é manual entre execuções de teste.
+dod:
+  - deletar o Environment CR direto passa a limpar a Application, ou a remover a tupla do `Tenant.Spec.Environments` para o reaper alcançar
+  - o parágrafo do `CLAUDE.md` é corrigido: descreve o caminho que ainda quebra, com citações que resolvem
+  - o comentário em `tenant_gitops.go:352-355`, que registra que `preview_controller.go:609` afirma uma propriedade que o `api` nunca ligou, é resolvido junto
+
+> Registrado 2026-08-12 ao escrever o ADR do `B-050`.

@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **loopzero:** quatro contradições que travavam trabalho passam a ter decisão registrada, com a alternativa rejeitada e o número que a rejeita: de quem é o provisionamento de chave por tenant, se vale a regra que proíbe instalar o cofre no cluster de gestão ou a tarefa que o instala lá, se o pacote guarda-chuva preserva a separação de ambientes, e quem é o dono do recurso de sincronização (B-042, B-047, B-048, B-050)
+
 - **loopzero:** a verificação automática deixa de rodar no pull request e passa a rodar **depois do merge**, em `develop` e em `main`. O portão que impede um merge ruim neste repositório é local — roda antes de todo `git push` e bloqueia em vermelho — então o PR reexecutava o que já havia rodado na máquina de quem empurrou. A consequência: o primeiro sinal automático chega depois do merge, e uma falha se conserta com correção ou reversão
 
 - **loopzero:** uma verificação só pode ser dispensada de rodar se disser **de que estado externo ela depende**. A dispensa era uma etiqueta aceita sem conferência, e quatro estavam erradas: duas leem apenas arquivos do repositório (uma delas escondia, desde então, uma política de segurança ausente do pacote publicado), uma está quebrada há tempo (procura um documento no caminho antigo) e uma é hermética e verde — foi ligada (B-045)
