@@ -1688,12 +1688,13 @@ domain: engine-go
 repo: loopzero
 suggested_mode: bug
 source: discover-review
-evidence: medido em 2026-08-12 ao decidir o `B-042`. `infra/helm/openbao-init/values.yaml:187-201` define a policy `loopzero-api` com **apenas** `transit/encrypt/*` e `transit/decrypt/*` — **nenhuma capacidade em `transit/keys/*`**. Mas o caminho lazy do `api` cria a chave: `pkg/vault/transit_client.go:274` reage ao 404 do encrypt com um POST para `/v1/transit/keys/...` (`:380-392`). O único lugar que concede a capacidade é um script de **desenvolvimento**: `infra/scripts/local/vault-bootstrap-dev.sh:429-434`, com o comentário literal *"loopzero-api policy with transit/keys/* wildcard (catch #8 from session)"*. Não há equivalente no chart.
+evidence: medido em 2026-08-12 ao decidir o `B-042`. `infra/helm/openbao-init/values.yaml:187-201` define a policy `loopzero-api` com **apenas** `transit/encrypt/*` e `transit/decrypt/*` — **nenhuma capacidade em `transit/keys/*`**. Mas o caminho lazy do `api` cria a chave: `pkg/vault/transit_client.go:274` reage ao 404 do encrypt com um POST para `/v1/transit/keys/...` (`:380-392`). **Correção 2026-08-12 (review da fatia 2):** a redação original dizia que *"o único lugar que concede a capacidade é um script de desenvolvimento"*. **Falso.** Há pelo menos dois, e o segundo é operacional: `docs/operations/openbao-transit-cutover-runbook.md:117-133` escreve a policy `loopzero-api-approle` com `path "transit/keys/loopzero-tenants-*" { capabilities = ["create","read","update"] }`. O outro é `infra/scripts/local/vault-bootstrap-dev.sh:429-434`. Isso muda a moldura: **não é ausência de autorização, é drift entre o chart e o runbook** — alguém autorizou em dois lugares e o chart não acompanhou. A correção é a mesma; a descrição errada mandaria a próxima pessoa procurar uma decisão que já existe.
 why_now: a auditoria de 2026-08-11 registrou que "as chaves são criadas lazily pelo `api`" e usou isso para baixar a severidade do `B-042`. Isso vale para o ambiente de desenvolvimento; **em qualquer ambiente que carregue as policies do chart, não vale** — a criação é negada por desenho. E o erro tipado não tem tratamento a jusante: `grep ErrTransitKeyCreateFailed api/` devolve zero hits, e em `api/internal/routes/secrets.go:503-510` a negação de policy é indistinguível de timeout de rede para quem chama. O ADR `2026-08-12-tenant-transit-key-ownership` torna isto pré-requisito: a policy vem **antes** da deleção da seam do operator.
 status: triaged
 severity: alta — é o caminho de escrita de segredo de tenant, e a falha é silenciosa do ponto de vista de quem chama.
 dod:
-  - a policy `loopzero-api` do chart concede `transit/keys/loopzero-tenants-*`, ou está decidido e escrito que a criação de chave não é do `api`
+  - a policy `loopzero-api` do chart concede `transit/keys/loopzero-tenants-*` com `create`, `read` **e `update`** — `update` não é opcional: o POST do cliente Go usa HTTP PUT, que o OpenBao aplica com semântica de `update` mesmo quando a chave ainda não existe (nota LIVE-caught em `docs/operations/openbao-transit-cutover-runbook.md:125-131`). A redação original pedia só o path, e teria reproduzido o defeito que aquele runbook registrou
+  - o chart e o runbook deixam de divergir — hoje o runbook concede e o chart não
   - `ErrTransitKeyCreateFailed` deixa de ser indistinguível de erro de rede na resposta ao usuário
   - existe verificação de que o nome de chave que o chart autoriza é o mesmo que o código usa — hoje o operator usa `tenant-<id>` e o `api` usa `loopzero-tenants-<id>`
 
@@ -1732,3 +1733,21 @@ dod:
   - o comentário em `tenant_gitops.go:352-355`, que registra que `preview_controller.go:609` afirma uma propriedade que o `api` nunca ligou, é resolvido junto
 
 > Registrado 2026-08-12 ao escrever o ADR do `B-050`.
+
+
+## B-075 — O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 no review da fatia 2. `operators/internal/vault/client.go:26-33` declara `TenantTransitClient` com **dois** métodos, e o segundo é `DeleteTenantKey` — descrito no próprio doc-comment como *"the crypto-shredding primitive … When the per-tenant key is deleted, all ciphertexts encrypted by that key become permanently unrecoverable. EC-10 MUST FIX P0: cleanup job must enforce 2-person rule + 90-day window before calling this."* Medido: **zero chamadores de produção** (só dois mocks), e o lado `api` **não tem nenhum caminho de delete de chave transit** — zero hits para `transit/keys.*delete`, `deleteKey`, `ShredKey` em `pkg/vault/` e `api/`. E `docs/wiki/decisions/2026-06-02-openbao-adoption.md:67` (§ Q5) amarra o shredding a *"GDPR/LGPD right-to-erasure native"* e ao fluxo de soft-delete de 90 dias (migração `000005`).
+why_now: a v1.0 do ADR `2026-08-12-tenant-transit-key-ownership` autorizava deletar a interface inteira, tendo medido apenas quem chama `EnsureTenantKey`. O review pegou. A v1.1 escopou a decisão ao **provisionamento** e deixou o shredding pendente — este item é esse pendente. E o argumento contrário que ninguém tinha construído: o ciclo de vida do tenant (criar → 90d → shred) é do operator e o `api` é request-scoped, então **é plausível que a seam exista porque o DELETE é do operator**, não porque esqueceram de ligar o CREATE.
+status: triaged
+severity: alta — não pelo estado atual (nada chama, então nada quebra), mas porque a decisão anterior quase apagou o primitivo de conformidade por ele estar na mesma interface que um método morto.
+dod:
+  - está decidido de quem é o `DeleteTenantKey`, olhando o ciclo de vida de deleção de tenant e não só quem chama o método
+  - a regra de duas pessoas e a janela de 90 dias que o EC-10 declara P0 têm dono nomeado, ou está escrito que não são exigidas
+  - se o shredding ficar operator-side e o provisionamento api-side, a divergência de nome de chave (`tenant-<id>` × `loopzero-tenants-<id>`) é resolvida — hoje o operator deletaria uma chave que o `api` nunca criou
+
+> Registrado 2026-08-12 pelo review adversarial da fatia 2. O ADR foi corrigido de decisão total para parcial por causa deste achado.
