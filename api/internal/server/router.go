@@ -11,6 +11,7 @@ package server
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -111,13 +112,13 @@ func NewRouter(cfg Config) *chi.Mux {
 	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
 	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
-	r.Get("/api/v1/version", routes.VersionHandler())
+	r.Get("/api/v1/version", version.VersionHandler())
 	// Contrato da FROTA de status: o coletor do dashboard sonda `/v1/version` e
 	// le' `{version, built_at}`. Mesma verdade do endpoint acima, no formato que
 	// os outros servicos da plataforma ja' falam — sem o qual o engine nao
 	// aparece no painel /status. Publico pelo mesmo motivo: metadado de build nao
 	// e' segredo e o coletor sonda sem sessao.
-	r.Get("/v1/version", routes.FleetVersionHandler())
+	r.Get("/v1/version", version.FleetVersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {

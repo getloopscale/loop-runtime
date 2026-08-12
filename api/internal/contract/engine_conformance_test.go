@@ -5,6 +5,7 @@ package contract
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,8 +18,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // M1.4 T1.2 — producer conformance.
@@ -47,8 +46,10 @@ const (
 )
 
 // registeredRouteRE matches chi registrations in either form:
-//   r.Get("/api/v1/health", ...)
-//   r.With(mw...).Post("/api/v1/builds", ...)   (middleware-wrapped)
+//
+//	r.Get("/api/v1/health", ...)
+//	r.With(mw...).Post("/api/v1/builds", ...)   (middleware-wrapped)
+//
 // — i.e. any `.<Method>("<path>"` chain, not only the bare `r.<Method>(` form.
 var registeredRouteRE = regexp.MustCompile(`\.(Get|Post|Put|Delete|Patch)\(\s*"([^"]+)"`)
 
@@ -120,7 +121,7 @@ func TestEngineConformance_VersionResponseConformsToSpec(t *testing.T) {
 		t.Fatalf("build router from spec: %v", err)
 	}
 
-	srv := httptest.NewServer(routes.VersionHandler())
+	srv := httptest.NewServer(version.VersionHandler())
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/version", nil)

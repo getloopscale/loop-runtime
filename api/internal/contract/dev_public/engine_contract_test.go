@@ -228,7 +228,7 @@ func TestDevPublic_EngineContract_BillingSeatsFromTenantMembers(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var parsed struct {
 		Seats struct {
-			Used  int `json:"used"`
+			Used int `json:"used"`
 		} `json:"seats"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&parsed))

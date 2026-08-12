@@ -68,6 +68,10 @@ const routesImportPrefix = routesPkgPath + "/"
 // not a discovery.
 var allowed = map[string]map[string]bool{
 	"httpio": {},
+	// The first real handler family (slice-8, B-041). Empty set = imports no
+	// sibling: it does not even use httpio, which is what made it the honest
+	// first proof of the recipe. Serves /api/v1/version and /v1/version.
+	"version": {},
 }
 
 // Config drives the gate.

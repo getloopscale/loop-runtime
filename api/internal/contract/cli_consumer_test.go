@@ -37,8 +37,8 @@ var knownConsumerGaps = map[string]bool{
 var (
 	// matches a /api/v1/... literal up to a query/dynamic/quote boundary
 	apiPathRE  = regexp.MustCompile(`/api/v1/[A-Za-z0-9/_${}().:?=&-]*`)
-	tsInterp   = regexp.MustCompile(`\$\{[^}]*\}`) // ${encodeURIComponent(x)}
-	braceParm  = regexp.MustCompile(`\{[^}]*\}`)   // {id} / {name}
+	tsInterp   = regexp.MustCompile(`\$\{[^}]*\}`)       // ${encodeURIComponent(x)}
+	braceParm  = regexp.MustCompile(`\{[^}]*\}`)         // {id} / {name}
 	gluedBrace = regexp.MustCompile(`([A-Za-z0-9])\{\}`) // environments{} (query interp glued to a word)
 	cleanPath  = regexp.MustCompile(`^/api/v1/[A-Za-z0-9/{}_-]+$`)
 )
@@ -52,7 +52,7 @@ func normalizePath(raw string) string {
 	if i := strings.IndexByte(p, '?'); i >= 0 { // drop explicit query string
 		p = p[:i]
 	}
-	p = tsInterp.ReplaceAllString(p, "{}") // closed ${...} -> {}
+	p = tsInterp.ReplaceAllString(p, "{}")   // closed ${...} -> {}
 	if i := strings.Index(p, "${"); i >= 0 { // unclosed/ternary ${query ? ...} boundary
 		p = p[:i]
 	}
@@ -61,9 +61,9 @@ func normalizePath(raw string) string {
 			p = p[:i]
 		}
 	}
-	p = braceParm.ReplaceAllString(p, "{}")     // {id}/{name} -> {}
-	p = gluedBrace.ReplaceAllString(p, "$1")    // word{} (glued query interp) -> word
-	p = strings.TrimRight(p, "./")              // trailing punctuation / slash
+	p = braceParm.ReplaceAllString(p, "{}")  // {id}/{name} -> {}
+	p = gluedBrace.ReplaceAllString(p, "$1") // word{} (glued query interp) -> word
+	p = strings.TrimRight(p, "./")           // trailing punctuation / slash
 	return p
 }
 

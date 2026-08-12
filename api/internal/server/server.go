@@ -123,7 +123,7 @@ type Config struct {
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
 	BuildStatsHandler *routes.BuildStatsHandler
-	SecretK8sSync       routes.SecretK8sSync
+	SecretK8sSync     routes.SecretK8sSync
 	// SecretEnvLocker injects the environment lock into SecretHandler so
 	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.
 	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
