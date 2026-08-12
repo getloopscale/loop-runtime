@@ -1959,7 +1959,10 @@ suggested_mode: bug
 source: discover-review
 evidence: medido por experimento em 2026-08-12, na revisão da fatia slice-8. `routesacyclic.Check` (`cmd/loopzero-ops/internal/quality/routesacyclic/check.go:120-140`) itera apenas subdiretórios de `api/internal/routes`; arquivos do **pacote pai** nunca são parseados. Um `routes/zz_probe.go` importando `routes/tenants` sai `4 subpackage(s), 0 unregistered, 0 sibling edge(s)` — **PASS, exit 0**. O sentido inverso (filho → pai) **é** pego, e foi verificado: reporta `ARESTA IRMÃ version → <routes-parent>`.
 why_now: hoje é benigno — a única aresta pai → filho é `routes → routestest`, para um leaf. Mas restam **14 famílias** para sair, e nada impede que `routes/billing.go` passe a importar `routes/tenants` na próxima fatia em vez de mandar o helper compartilhado para o leaf. O gate diria verde sobre exatamente o acoplamento que o fatiamento existe para remover. O commit `8d4d0ac1` reconhece o buraco em prosa; a cerca não o fecha.
-status: raw
+status: planned
+resolved_in: .claude/knowledge-base/plans/slice-9-parent-fence-plan.md v1.1 — os quatro sentidos da cerca estao fechados, cada um sondado na arvore real com file:line. O gate le 97 arquivos (89 do pai + 8 dos subpacotes), contra 8 antes.
+  A regra e "folha sim, familia nao": o pai pode alcancar uma folha — medido, suas 29 arestas vao todas para `httpio` (28) e `routestest` (1), nenhuma para familia —, e alcancar uma familia reprova.
+  DUAS CORRECOES QUE A REVISAO FORCOU: (1) o ADR D2 rejeitava declarar as folhas e mandava DERIVAR do conjunto vazio — errado, porque `version: {}` e familia e `httpio: {}` e folha, indistinguiveis; revertido, e a razao da rejeicao virou `ErrIncoherentRegistry`, que recusa um nome declarado das duas formas ANTES de varrer. (2) o piso prometido nao existia — `routes/` vazio saia PASS —, e a primeira correcao era fraca: `parsed > len(subpacotes)` deixava passar uma mutacao que derrubava a leitura de 97 para 49. Agora reconcilia contra contagem independente.
 severity: alta — não pelo estado atual, mas porque é uma cerca que vai ser confiada por 14 movimentos e tem um lado aberto.
 dod:
   - `routes-acyclic` parseia também os arquivos do pacote pai

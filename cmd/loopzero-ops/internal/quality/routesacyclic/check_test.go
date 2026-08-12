@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -251,5 +252,241 @@ func TestCheck_ToolchainIgnoredDirsAreNotSubpackages(t *testing.T) {
 	out, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"httpio": {}}})
 	if err != nil {
 		t.Fatalf("testdata/ is not a handler family; got %v unregistered=%+v", err, out.Unregistered)
+	}
+}
+
+// MEASURED blind spot (B-084, raised by the slice-8 review): Check iterated
+// SUBDIRECTORIES only, so a file in the PARENT package importing a family passed
+// green. Probed on the real tree before the fix:
+//
+//	routes/zz_parent_probe.go: import _ ".../routes/tenants"
+//	→ 4 subpackage(s), 0 unregistered, 0 sibling edge(s)  |  PASS, exit 0
+//
+// It is the fourth of four directions, and the only one that was open. Fourteen
+// families are still to move and would have trusted it.
+func TestCheck_ParentImportingAFamilyIsAnEdge(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
+	body := "package routes\n\nimport _ \"" + routesImportPrefix + "tenants\"\n"
+	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := map[string]map[string]bool{"httpio": {}, "tenants": {}}
+	out, err := Check(Config{RepoRoot: root, Allowed: reg})
+	if !errors.Is(err, ErrSiblingEdge) {
+		t.Fatalf("the parent reaching into a family is the same coupling as a sibling edge, on the vertical; got %v edges=%+v", err, out.Edges)
+	}
+	if len(out.Edges) != 1 || out.Edges[0].From != "<routes-parent>" || out.Edges[0].To != "tenants" {
+		t.Errorf("the edge must name the parent and the family; got %+v", out.Edges)
+	}
+	if out.Edges[0].Line == 0 {
+		t.Errorf("the edge must carry a line so the import is findable; got %+v", out.Edges[0])
+	}
+}
+
+// R1 / ADR D2: the rule is "a leaf yes, a family no", not "the parent imports
+// nothing". Measured on the real tree before the fix: the parent holds 29 edges
+// and ALL of them go to leaves — 28 to httpio, 1 to routestest. Forbidding every
+// parent edge would fail 29 files the day the fence landed, which is an exemption
+// at birth.
+func TestCheck_ParentImportingALeafIsAllowed(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
+	body := "package routes\n\nimport _ \"" + routesImportPrefix + "httpio\"\n"
+	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := map[string]map[string]bool{"httpio": {}, "tenants": {}}
+	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); err != nil {
+		t.Errorf("a leaf exists to be imported by everyone, the parent included; got %v", err)
+	}
+}
+
+// A nested path under a family still belongs to that family, from the parent too.
+func TestCheck_ParentImportingANestedFamilyPathIsAnEdge(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
+	body := "package routes\n\nimport _ \"" + routesImportPrefix + "tenants/internal/detail\"\n"
+	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := map[string]map[string]bool{"httpio": {}, "tenants": {}}
+	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); !errors.Is(err, ErrSiblingEdge) {
+		t.Errorf("a nested path resolves to its family from the parent side too; got %v", err)
+	}
+}
+
+// R2, and the bug this fence shipped with for one iteration: "leaf" was DERIVED
+// from the empty allowed set. `version: {}` is a FAMILY that imports no sibling
+// and `httpio: {}` is a leaf — identical under that rule, so the parent could
+// reach `version` and the gate called it a leaf and passed.
+//
+// The plan wrote this risk down before the code repeated it, which is the part
+// worth remembering: writing a risk is not mitigating it.
+func TestCheck_AFamilyWithNoSiblingsIsNotALeaf(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil, "version": nil})
+	body := "package routes\n\nimport _ \"" + routesImportPrefix + "version\"\n"
+	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// version has an EMPTY allowed set, exactly like httpio — and is still a family.
+	cfg := Config{
+		RepoRoot: root,
+		Allowed:  map[string]map[string]bool{"httpio": {}, "version": {}},
+		Leaves:   map[string]bool{"httpio": true},
+	}
+	if _, err := Check(cfg); !errors.Is(err, ErrSiblingEdge) {
+		t.Fatalf("a family that imports no sibling is still a family; deriving leafness from the empty set let the parent reach it; got %v", err)
+	}
+}
+
+// And the declared leaf list is load-bearing: drop the entry and the 29 real
+// parent edges to httpio become findings.
+func TestCheck_RemovingALeafDeclarationMakesTheParentEdgesFail(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil})
+	body := "package routes\n\nimport _ \"" + routesImportPrefix + "httpio\"\n"
+	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{
+		RepoRoot: root,
+		Allowed:  map[string]map[string]bool{"httpio": {}},
+		Leaves:   map[string]bool{}, // httpio no longer declared a leaf
+	}
+	if _, err := Check(cfg); !errors.Is(err, ErrSiblingEdge) {
+		t.Errorf("the leaf declaration must carry weight — without it the parent edge is an edge; got %v", err)
+	}
+}
+
+// The floor the plan promised and the first implementation omitted. Measured
+// before the fix: an existing-but-empty routes/ reported `0 file(s) parsed` and
+// PASS, exit 0.
+//
+// servicesacyclic — which this package's doc calls a deliberate clone — fails
+// closed on exactly this shape and documents why in its own source. It is the
+// third lesson this lineage has lost from that file; the second was filepath.Walk.
+func TestCheck_NothingParsedIsAnError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, routesDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"httpio": {}}}); !errors.Is(err, ErrNothingParsed) {
+		t.Errorf("an empty routes/ must FAIL — a fence that read nothing has verified nothing; got %v", err)
+	}
+}
+
+// HIGH-1: two hand-maintained registries with no cross-check. Declaring a family
+// as a leaf made the parent reach it and the gate pass — silently, because the
+// lenient side wins. The plan rejected the explicit-leaf design on exactly this
+// ground, then the derived design turned out wrong and the risk arrived anyway.
+func TestCheck_AFamilyDeclaredAsALeafIsIncoherent(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
+	cfg := Config{
+		RepoRoot: root,
+		Allowed:  map[string]map[string]bool{"httpio": {}, "tenants": {"httpio": true}},
+		Leaves:   map[string]bool{"httpio": true, "tenants": true}, // contradição
+	}
+	if _, err := Check(cfg); !errors.Is(err, ErrIncoherentRegistry) {
+		t.Fatalf("a name declared both a family and a leaf must FAIL before anything is scanned; got %v", err)
+	}
+}
+
+// A leaf legitimately appears in `allowed` with an EMPTY set — that is how httpio
+// and routestest are registered. Only a leaf that ALSO declares siblings is the
+// contradiction.
+func TestCheck_ALeafWithAnEmptyAllowedEntryIsCoherent(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil})
+	cfg := Config{
+		RepoRoot: root,
+		Allowed:  map[string]map[string]bool{"httpio": {}},
+		Leaves:   map[string]bool{"httpio": true},
+	}
+	if _, err := Check(cfg); err != nil {
+		t.Errorf("that is exactly how the real leaves are registered; got %v", err)
+	}
+}
+
+// The real tree must be READ, not merely walked. Without this the count is free
+// to collapse — skipping _test.go drops 97 to 49 and every other test stays green.
+func TestCheck_RealTreeParsesBothTheParentAndTheSubpackages(t *testing.T) {
+	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	if err != nil {
+		t.Fatalf("real tree: %v", err)
+	}
+	// Reconciled against an INDEPENDENT count, not against a lower bound. The
+	// first version asserted `parsed > len(subpackages)` and a mutation that
+	// skipped _test.go — dropping the real read from 97 to 49 — sailed through it,
+	// because 49 is still greater than 4. A floor that any plausible regression
+	// clears is not a floor.
+	want := countGoFiles(t, repoRoot(t))
+	if out.FilesParsed != want {
+		t.Fatalf("the walk parsed %d Go file(s) but api/internal/routes holds %d — a confident verdict over a miscount is worth less than no verdict",
+			out.FilesParsed, want)
+	}
+}
+
+// countGoFiles counts .go files at the top of routes/ and in its subpackages,
+// deliberately naive and independent of Check's walk: two implementations of the
+// same count only agree when both are right.
+func countGoFiles(t *testing.T, repo string) int {
+	t.Helper()
+	n := 0
+	base := filepath.Join(repo, routesDir)
+	top, err := os.ReadDir(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range top {
+		if !e.IsDir() {
+			if strings.HasSuffix(e.Name(), ".go") {
+				n++
+			}
+			continue
+		}
+		if e.Name() == "testdata" || strings.HasPrefix(e.Name(), ".") || strings.HasPrefix(e.Name(), "_") {
+			continue
+		}
+		sub, err := os.ReadDir(filepath.Join(base, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range sub {
+			if !f.IsDir() && strings.HasSuffix(f.Name(), ".go") {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// MEDIUM-3: a fixture under testdata/ is never compiled by Go, so an import
+// there is not an edge. The top-level walk already skipped those directories and
+// the family-side walk did not — which would have made the first family carrying
+// a fixture into an exemption.
+func TestCheck_ToolchainIgnoredDirsUnderAFamilyAreNotEdges(t *testing.T) {
+	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil, "version": nil})
+	for _, d := range []string{"testdata", "_scratch"} {
+		dir := filepath.Join(root, routesDir, "tenants", d)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "package fixture\n\nimport _ \"" + routesImportPrefix + "version\"\n"
+		if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg := map[string]map[string]bool{"httpio": {}, "tenants": {}, "version": {}}
+	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); err != nil {
+		t.Errorf("a fixture Go never compiles is not an edge; got %v", err)
+	}
+}
+
+// MEDIUM-1: the operator-facing message must describe the rule that actually
+// fired. The parent is not a sibling and not a subpackage, and the fix for it is
+// the third bullet — move the shared helper to a leaf — which the previous text
+// did not offer at all.
+func TestActionableFix_NamesAllThreeRules(t *testing.T) {
+	fix := ActionableFix()
+	for _, want := range []string{"nobody registered", "one family reached for another", "PARENT package", "leaf"} {
+		if !strings.Contains(fix, want) {
+			t.Errorf("the fix text must cover %q — a gate is worth its actionability, and the parent case is the one this slice added; got:\n%s", want, fix)
+		}
 	}
 }
