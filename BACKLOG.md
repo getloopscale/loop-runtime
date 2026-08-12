@@ -1225,6 +1225,13 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Relacionado a `B-006` (o oráculo do conjunto de gates), que trata do *arquivo* do oráculo — este trata de *quais gates rodam*. Correção postada no issue #255, com pedido de reabertura.
 
+> **Correção 2026-08-11, ao planejar a fatia 1.** O item **superestimava**. `cmd/loopzero-ops/quality_gate_wiring_test.go` já é um ledger de isenções com sete categorias, e três dos achados já estavam nele, medidos e justificados desde 2026-08-06:
+> - `alert-runbooks` e `migration-test-coverage` estão como `failingGate` — *"funciona, e reprova num achado real; conserte o achado, depois ligue"* — com contagem registrada e um argumento que a auditoria não tinha: **as URLs de runbook que os alertas conformes já carregam devolvem 404**, então adicionar 33 links mortos compraria gate verde e nada mais.
+> - `security-context` **não** sai 0 imprimindo violação: sai 0 em modo relatório e **1 com `--gate`** (verificado: exit=1, `argo-events` e `loopzero-ci-workflows`). A auditoria rodou sem a flag e leu errado.
+>
+> **O que sobra, e é real:** `helm-drift` e `clusterimagepolicy-mode` estão classificados `operatorRun` (*"needs live cluster state"*) e são **puramente herméticos** — zero `kubectl`/`exec.Command`/`client-go` nos dois pacotes; leem apenas `charts/`, `infra/helm/` e `values.yaml`. A categoria `operatorRun` não tem prova: é a única das sete que ninguém verifica. Mais a baseline órfã. O escopo do item passa a ser esse.
+
+
 ## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
 
 domain: engine-go
@@ -1599,6 +1606,9 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
+> **Correção 2026-08-11, ao planejar a fatia 1.** Os dois números **já estavam no registro** desde 2026-08-06, em `quality_gate_wiring_test.go`, com rationale melhor do que o deste item: 42 migrations (hoje 43 — uma nova entrou) e 33 alertas, ambos classificados `failingGate`, e a observação decisiva de que os runbooks existentes **devolvem 404**, então o gate mede presença de string, não existência de runbook. O item continua válido como *dívida a pagar*, mas deixa de ser descoberta: a descoberta é anterior e melhor documentada.
+
+
 ## B-068 — Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto   [ ]
 
 domain: engine-go
@@ -1614,3 +1624,38 @@ dod:
   - se a variação deve voltar (por exemplo, se o `dockerfile-lint` for reintroduzido), isso está escrito no lugar em vez de mantido por um objeto descartado
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+## B-069 — A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-11 ao planejar o `B-051`. As duas implementações da regra `find_sec_004` não diferem só na lista de prefixos — diferem na **severidade**. Lado API (`api/internal/services/deploycontracts/build_plan.go:120-124`): chave reservada gera `slog.Warn` e `continue` — a env é **descartada em silêncio** e o deploy prossegue. Lado linter (`tools/loopzero-dockerfile-lint/main.go:296` → `:158-159`): `SeverityReject` vira `os.Exit(1)` — o **build falha**. E o linter está no caminho de build real: `api/internal/argo/languages.go:36` e `workflow_builder.go:408` emitem o passo `dockerfile-lint` para `UserDockerfileStrategy`.
+why_now: o gate `env-prefix-parity` (`B-051`) compara os dois **conjuntos de prefixos**. Conjunto igual não é regra igual — ele passaria verde com esta divergência intacta, e um gate verde é lido como *"a regra está unificada"*. Sem este item registrado, o `B-051` fecharia deixando para trás a metade que importa: qual das duas severidades é a correta.
+status: triaged
+severity: média — nenhuma quebra nova; o custo é que o usuário recebe tratamentos opostos para a mesma violação, dependendo de por qual porta ele entrou.
+dod:
+  - está decidido qual severidade é a correta para a regra — descarte silencioso ou rejeição
+  - a decisão vale para as duas portas, ou está escrito por que elas devem divergir
+  - o `env-prefix-parity` declara no doc-comment que prova conjuntos, não semântica — para verde não ser lido como mais do que é
+
+> Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`, ao verificar o desenho do gate do `B-051`.
+
+## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido **ao vivo** em 2026-08-11 executando o binário real (`GOWORK=off go run .` em `tools/loopzero-dockerfile-lint`) contra um Dockerfile com `ENV aws_region=us-east-1`: `{"rule":"RESERVED_ENV_KEY","severity":"REJECT",...}` e `exit status 1`. A causa é sensibilidade a maiúsculas divergente: o linter compara `strings.HasPrefix(strings.ToUpper(key), p)` (`main.go:491`), a API compara `k[:len(p)] == p` (`build_plan.go:36`), e o comentário em `:32-33` **documenta** a escolha da API como *"exact-prefix and case-sensitive"*. O lado do linter usa `ToUpper` **sem comentário**, e `git log -S` sobre o símbolo devolve um único commit que não separa a decisão.
+why_now: esta divergência é **ativa**, não latente — diferente do `GOOGLE_` do `B-051`, que é potencial. Um tenant que escreva `ENV aws_region` em minúsculas tem o build rejeitado hoje, com uma mensagem que nomeia prefixos em maiúsculas (`LOOPZERO_/KUBERNETES_/AWS_/DO_`) e não explica que o casamento ignora caixa. Se houver tenants nesse estado, existe quebra que ninguém atribuiu a esta regra.
+status: triaged
+severity: alta — é a única das divergências medidas que já rejeita build de terceiro hoje, e a mensagem de erro não permite ao usuário entender por quê.
+dod:
+  - está decidido se o casamento ignora caixa ou não — e os dois lados passam a concordar
+  - a mensagem de rejeição nomeia a regra de casamento, não só a lista de prefixos
+  - a lista hard-coded em prosa na mensagem (`main.go:300-301`) deixa de poder divergir do slice
+  - existe medição de quantos Dockerfiles de tenant estão nesse estado antes de a decisão ser aplicada (dado A2 do MEET-ASYNC-AMENDMENT-2026-08-11-001)
+
+> Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`. Medido ao vivo, não inferido.
