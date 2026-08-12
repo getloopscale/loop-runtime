@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package tenants
 
 import (
 	"context"
@@ -172,14 +172,14 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if record == nil {
-		writeErrorJSON(w, http.StatusNotFound, "NO_PENDING_DELETION",
+		httpio.WriteErrorJSON(w, http.StatusNotFound, "NO_PENDING_DELETION",
 			"No pending deletion found for this team")
 		return
 	}
 
 	// Check grace period
 	if record.GraceUntil != nil && time.Now().After(*record.GraceUntil) {
-		writeErrorJSON(w, http.StatusGone, "GRACE_PERIOD_EXPIRED",
+		httpio.WriteErrorJSON(w, http.StatusGone, "GRACE_PERIOD_EXPIRED",
 			"The grace period has expired. Team deletion is in progress and cannot be cancelled.")
 		return
 	}
@@ -197,15 +197,5 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		"id":      tenantID,
 		"status":  "active",
 		"message": "Team deletion cancelled. Your team is active again.",
-	})
-}
-
-// writeErrorJSON writes a JSON error response with custom code and message.
-func writeErrorJSON(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   code,
-		"message": message,
 	})
 }

@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"io"
 	"log/slog"
 	"net/http"
@@ -115,17 +116,17 @@ func (s *stubGitHubWebhookHandler) ServeHTTP(w http.ResponseWriter, _ *http.Requ
 	w.WriteHeader(http.StatusOK)
 }
 
-// stubTenantDeletionStore implements routes.TenantDeletionStore.
+// stubTenantDeletionStore implements tenants.TenantDeletionStore.
 type stubTenantDeletionStore struct{}
 
-func (s *stubTenantDeletionStore) RequestDeletion(_ context.Context, _ routes.DeletionRequest) (*routes.DeletionRecord, error) {
-	return &routes.DeletionRecord{}, nil
+func (s *stubTenantDeletionStore) RequestDeletion(_ context.Context, _ tenants.DeletionRequest) (*tenants.DeletionRecord, error) {
+	return &tenants.DeletionRecord{}, nil
 }
 func (s *stubTenantDeletionStore) CancelDeletion(_ context.Context, _ string) error { return nil }
-func (s *stubTenantDeletionStore) GetPendingDeletion(_ context.Context, _ string) (*routes.DeletionRecord, error) {
+func (s *stubTenantDeletionStore) GetPendingDeletion(_ context.Context, _ string) (*tenants.DeletionRecord, error) {
 	return nil, nil
 }
-func (s *stubTenantDeletionStore) WriteTombstone(_ context.Context, _ routes.TombstoneRecord) error {
+func (s *stubTenantDeletionStore) WriteTombstone(_ context.Context, _ tenants.TombstoneRecord) error {
 	return nil
 }
 
@@ -193,35 +194,35 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	argoCallbackHandler := routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 
 	cfg := server.Config{
-		Port:                "0",
-		Logger:              logger,
-		DB:                  &stubDBHealthChecker{},
-		TokenValidator:      &stubTokenValidator{},
-		MemberStore:         &stubMemberStore{},
-		ProjectStore:        &stubProjectStore{},
-		TenantCRMgr:         &stubTenantCRManager{},
-		SourceStore:         &stubSourceStore{},
-		IdempotencyStore:    &stubIdempotencyStore{},
-		EventStore:          &stubEventStore{},
-		BuildStoreReader:    &stubBuildReader{},
-		BootstrapStore:      &stubBootstrapStore{},
-		BootstrapSecret:     "test-bootstrap-secret",
-		BuildHandler:        buildHandler,
-		LogsHandler:         logsHandler,
-		RollbackHandler:     rollbackHandler,
-		StatusHandler:       statusHandler,
-		BuildListHandler:    buildListHandler,
-		EnvironmentHandler:  environmentHandler,
-		TeamHandler:         teamHandler,
-		DomainHandler:       domainHandler,
-		RepositoryHandler:   repositoryHandler,
+		Port:                      "0",
+		Logger:                    logger,
+		DB:                        &stubDBHealthChecker{},
+		TokenValidator:            &stubTokenValidator{},
+		MemberStore:               &stubMemberStore{},
+		ProjectStore:              &stubProjectStore{},
+		TenantCRMgr:               &stubTenantCRManager{},
+		SourceStore:               &stubSourceStore{},
+		IdempotencyStore:          &stubIdempotencyStore{},
+		EventStore:                &stubEventStore{},
+		BuildStoreReader:          &stubBuildReader{},
+		BootstrapStore:            &stubBootstrapStore{},
+		BootstrapSecret:           "test-bootstrap-secret",
+		BuildHandler:              buildHandler,
+		LogsHandler:               logsHandler,
+		RollbackHandler:           rollbackHandler,
+		StatusHandler:             statusHandler,
+		BuildListHandler:          buildListHandler,
+		EnvironmentHandler:        environmentHandler,
+		TeamHandler:               teamHandler,
+		DomainHandler:             domainHandler,
+		RepositoryHandler:         repositoryHandler,
 		IntegrationsGitHubHandler: integrationsGitHubHandler,
-		AuditHandler:        auditHandler,
-		ArgoCallbackHandler: argoCallbackHandler,
-		LogStreamHandler:    routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
-		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
-		TenantDeletionStore:  &stubTenantDeletionStore{},
-		AdminEvictor:         &stubTenantEvictor{},
+		AuditHandler:              auditHandler,
+		ArgoCallbackHandler:       argoCallbackHandler,
+		LogStreamHandler:          routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		GitHubWebhookHandler:      &stubGitHubWebhookHandler{},
+		TenantDeletionStore:       &stubTenantDeletionStore{},
+		AdminEvictor:              &stubTenantEvictor{},
 	}
 
 	router := server.NewRouter(cfg)

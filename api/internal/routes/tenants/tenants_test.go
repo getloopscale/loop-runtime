@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package tenants
 
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -56,8 +57,8 @@ func TestTenants_Delete_HappyPath(t *testing.T) {
 	h := NewTenantHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-test-123", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-test-123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-test-123")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -96,18 +97,22 @@ func TestTenants_Delete_AuthorizationMatrix(t *testing.T) {
 		},
 		{
 			name: "CrossTenantDenied", tenantID: "tn-other-tenant",
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
-			wantCode:  http.StatusForbidden,
+			setupAuth: func(req *http.Request) *http.Request {
+				return routestest.WithAuth(req, routestest.DefaultUserContext())
+			},
+			wantCode: http.StatusForbidden,
 		},
 		{
 			name: "MemberForbidden", tenantID: "tn-test-123",
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, memberUserContext()) },
+			setupAuth: func(req *http.Request) *http.Request { return routestest.WithAuth(req, routestest.MemberUserContext()) },
 			wantCode:  http.StatusForbidden,
 		},
 		{
 			name: "MissingID", tenantID: "",
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
-			wantCode:  http.StatusBadRequest,
+			setupAuth: func(req *http.Request) *http.Request {
+				return routestest.WithAuth(req, routestest.DefaultUserContext())
+			},
+			wantCode: http.StatusBadRequest,
 		},
 	}
 	for _, c := range cases {
@@ -117,7 +122,7 @@ func TestTenants_Delete_AuthorizationMatrix(t *testing.T) {
 			if c.setupAuth != nil {
 				req = c.setupAuth(req)
 			}
-			req = withChiParam(req, "id", c.tenantID)
+			req = routestest.WithChiParam(req, "id", c.tenantID)
 			w := httptest.NewRecorder()
 			h.Delete(w, req)
 			if w.Code != c.wantCode {
@@ -131,8 +136,8 @@ func TestTenants_Delete_ForceRequiresAdmin(t *testing.T) {
 	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-test-123?force=true", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-test-123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-test-123")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -153,8 +158,8 @@ func TestTenants_Restore_HappyPath(t *testing.T) {
 	h := NewTenantHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-test-123/restore", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-test-123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-test-123")
 	w := httptest.NewRecorder()
 
 	h.Restore(w, req)
@@ -169,8 +174,8 @@ func TestTenants_Restore_NoPendingDeletion(t *testing.T) {
 	h := NewTenantHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-test-123/restore", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-test-123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-test-123")
 	w := httptest.NewRecorder()
 
 	h.Restore(w, req)
@@ -191,8 +196,8 @@ func TestTenants_Restore_GraceExpired(t *testing.T) {
 	h := NewTenantHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-test-123/restore", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-test-123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-test-123")
 	w := httptest.NewRecorder()
 
 	h.Restore(w, req)
@@ -206,7 +211,7 @@ func TestTenants_Restore_Unauthenticated(t *testing.T) {
 	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-test-123/restore", nil)
-	req = withChiParam(req, "id", "tn-test-123")
+	req = routestest.WithChiParam(req, "id", "tn-test-123")
 	w := httptest.NewRecorder()
 
 	h.Restore(w, req)
@@ -220,8 +225,8 @@ func TestTenants_Restore_CrossTenantDenied(t *testing.T) {
 	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-other-tenant/restore", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-other-tenant")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-other-tenant")
 	w := httptest.NewRecorder()
 
 	h.Restore(w, req)
@@ -243,8 +248,8 @@ func TestTenants_Delete_RejectsUnvalidatedAdminKey(t *testing.T) {
 	// AdminAPIKey is unset in test context (default ""). ValidateAdminAPIKey
 	// MUST return false for any input, including the attacker's garbage value.
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-victim-tenant", nil)
-	req = withAuth(req, defaultUserContext()) // authenticated as tn-test-123 (different tenant)
-	req = withChiParam(req, "id", "tn-victim-tenant")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // authenticated as tn-test-123 (different tenant)
+	req = routestest.WithChiParam(req, "id", "tn-victim-tenant")
 	req.Header.Set("X-Admin-Key", "garbage-attacker-payload")
 	w := httptest.NewRecorder()
 
@@ -263,8 +268,8 @@ func TestTenants_Restore_RejectsUnvalidatedAdminKey(t *testing.T) {
 	h := NewTenantHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-victim-tenant/restore", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "tn-victim-tenant")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "tn-victim-tenant")
 	req.Header.Set("X-Admin-Key", "garbage-attacker-payload")
 	w := httptest.NewRecorder()
 

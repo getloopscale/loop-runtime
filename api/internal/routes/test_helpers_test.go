@@ -4,44 +4,30 @@
 package routes
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
-// withAuth injects a UserContext into the request context for tests.
+// The bodies moved to routes/routestest so that a family split into its own
+// subpackage keeps access to them — a helper in a _test.go is compiled only into
+// its own package's test binary, and the `tenants` split proved it by failing on
+// `undefined: withAuth`.
+//
+// These four remain as thin delegations rather than being rewritten across the
+// thirty test files that call them: the rename is mechanical but it is not this
+// slice's subject, and duplicating the bodies would be the DRY violation the move
+// exists to avoid. Each family that moves swaps its own calls, the way tenants did.
+
 func withAuth(r *http.Request, uc *middleware.UserContext) *http.Request {
-	ctx := context.WithValue(r.Context(), middleware.UserContextKeyPublic(), uc)
-	return r.WithContext(ctx)
+	return routestest.WithAuth(r, uc)
 }
 
-// withChiParam sets chi URL parameters on the request for tests.
 func withChiParam(r *http.Request, key, value string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, rctx)
-	return r.WithContext(ctx)
+	return routestest.WithChiParam(r, key, value)
 }
 
-// defaultUserContext returns a standard authenticated user for tests.
-func defaultUserContext() *middleware.UserContext {
-	return &middleware.UserContext{
-		UserID:   "github-testuser",
-		Email:    "test@example.com",
-		TenantID: "tn-test-123",
-		Role:     "owner",
-	}
-}
+func defaultUserContext() *middleware.UserContext { return routestest.DefaultUserContext() }
 
-// memberUserContext returns a non-admin user for permission tests.
-func memberUserContext() *middleware.UserContext {
-	return &middleware.UserContext{
-		UserID:   "github-memberuser",
-		Email:    "member@example.com",
-		TenantID: "tn-test-123",
-		Role:     "member",
-	}
-}
+func memberUserContext() *middleware.UserContext { return routestest.MemberUserContext() }

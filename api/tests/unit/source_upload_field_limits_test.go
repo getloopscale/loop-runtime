@@ -188,4 +188,3 @@ func TestSourceUpload_ServicesJSONFirstFieldOrder_NotRejectedByOrderGate(t *test
 		}
 	}
 }
-

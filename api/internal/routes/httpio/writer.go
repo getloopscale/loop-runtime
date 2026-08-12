@@ -66,3 +66,27 @@ func WriteLoopZeroError(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError
 func WriteLoopZeroErrorWithFieldErrors(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError, fieldErrors []errorshttp.FieldError) {
 	errorshttp.WriteJSONWithErrors(w, nil, err, fieldErrors)
 }
+
+// WriteErrorJSON writes a JSON error body with a caller-supplied code and
+// message, in the {"error","message"} shape.
+//
+// It is NOT the same as WriteLoopZeroError: that one renders a typed domain error as
+// RFC 9457 problem+json and preserves `body.code`, which the CLI reads and
+// Unbreakable Rule 5 makes a stability contract. This one is the older ad-hoc
+// shape, kept because two handlers already emit it and changing what they emit
+// is a contract change, not a refactor.
+//
+// It lived as an unexported helper inside `tenants.go` — a domain file — and was
+// called from `billing.go`. slice-5 moved three response writers out of a domain
+// file for exactly that reason and this one was missed: it is used by two files,
+// and the item's measurement counted only helpers used by MORE than three. The
+// split of the tenants family is what surfaced it, because the compiler refused
+// to let billing keep reaching into another family.
+func WriteErrorJSON(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   code,
+		"message": message,
+	})
+}

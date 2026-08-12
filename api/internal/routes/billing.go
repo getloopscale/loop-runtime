@@ -233,7 +233,7 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if customerID == "" {
-		writeErrorJSON(w, http.StatusBadRequest, "NO_STRIPE_CUSTOMER",
+		httpio.WriteErrorJSON(w, http.StatusBadRequest, "NO_STRIPE_CUSTOMER",
 			"This account does not yet have a payment method on file. Upgrade to a paid plan first.")
 		return
 	}
@@ -253,7 +253,7 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	// engine nao pode emitir, ele FALHA dizendo onde ir — uma URL que PARECE funcionar
 	// esconde o problema ate alguem investigar por que o portal nao abriu.
 	if h.portalCreator == nil {
-		writeErrorJSON(w, http.StatusServiceUnavailable, "BILLING_PORTAL_UNAVAILABLE",
+		httpio.WriteErrorJSON(w, http.StatusServiceUnavailable, "BILLING_PORTAL_UNAVAILABLE",
 			"Billing is managed from the dashboard. Open it at "+h.portalReturnURL+"/billing")
 		return
 	}
@@ -265,7 +265,7 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 				"tenant", uc.TenantID,
 				"customer", customerID,
 				"error", sdkErr)
-			writeErrorJSON(w, http.StatusBadGateway, "BILLING_PROVIDER_UNAVAILABLE",
+			httpio.WriteErrorJSON(w, http.StatusBadGateway, "BILLING_PROVIDER_UNAVAILABLE",
 				"The billing provider is temporarily unavailable. Try again in a few moments.")
 			return
 		}

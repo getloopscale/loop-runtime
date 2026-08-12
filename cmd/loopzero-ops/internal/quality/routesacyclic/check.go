@@ -72,6 +72,17 @@ var allowed = map[string]map[string]bool{
 	// sibling: it does not even use httpio, which is what made it the honest
 	// first proof of the recipe. Serves /api/v1/version and /v1/version.
 	"version": {},
+	// The second family (slice-8). Unlike version, it DOES depend on the shared
+	// leaf — `httpio: true` is the first permitted edge this fence has ever
+	// carried, and declaring it is what makes the leaf design real rather than
+	// hypothetical: every family may reach the transport, none may reach a peer.
+	"tenants": {"httpio": true, "routestest": true},
+	// The test-side leaf. Helpers in a _test.go are compiled only into their own
+	// package's test binary, so a family that moves out loses them — measured the
+	// instant `tenants` moved and its test failed on `undefined: withAuth`, a
+	// helper THIRTY test files share. Empty set: every family may import it, it
+	// imports none.
+	"routestest": {},
 }
 
 // Config drives the gate.

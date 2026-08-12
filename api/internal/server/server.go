@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
 	"net/http"
 	"os"
@@ -174,7 +175,7 @@ type Config struct {
 	IsProduction              bool
 	AuditWriter               middleware.AuditWriter
 	AuditHandler              *routes.AuditHandler
-	TenantDeletionStore       routes.TenantDeletionStore
+	TenantDeletionStore       tenants.TenantDeletionStore
 	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are

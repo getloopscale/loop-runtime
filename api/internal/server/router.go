@@ -11,6 +11,7 @@ package server
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"net/http"
 
@@ -507,7 +508,7 @@ func registerProtectedRoutes(
 
 	// Tenant deletion routes (MEET-052)
 	if cfg.TenantDeletionStore != nil {
-		tenantHandler := routes.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
+		tenantHandler := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/tenants/{id}", tenantHandler.Delete)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/tenants/{id}/restore", tenantHandler.Restore)
 		r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete)
