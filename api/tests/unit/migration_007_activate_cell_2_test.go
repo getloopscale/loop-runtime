@@ -41,10 +41,29 @@ func readMigration007ActivateCell2(t *testing.T) string {
 	return string(data)
 }
 
+// # Estes testes leem HISTÓRIA, não o presente
+//
+// As migrações são forward-only e imutáveis: `000007` ativou a célula que na
+// época se chamava `cell-2`, e é isso que ela diz — em todo banco onde já rodou.
+// A migração `000061` (cell_identity_unification) depois fundiu `cell-default` +
+// `cell-1` em `cell-0` e renomeou o resto, mas renomear no presente não muda o
+// que um arquivo de migração executou no passado.
+//
+// Estes testes foram reescritos com a identidade NOVA e continuaram lendo os
+// arquivos ANTIGOS, então reprovavam procurando `cell-1` num arquivo que fala de
+// `cell-2` — quatro reprovações com uma causa só (B-071).
+//
+// A correção NÃO é editar a migração: `docs/README.md` é explícito que reescrever
+// um registro datado para parecer atual destrói a única prova do que era verdade
+// então. O que estes testes protegem é a FORMA da migração histórica — que o
+// UPDATE é filtrado, que a nota de auditoria é anexada, que há referência a plano
+// e ADR. Essas propriedades valem com o nome que o arquivo carrega.
+//
+// A identidade ATUAL das células é responsabilidade de um teste sobre a `000061`.
 func TestMigration007ActivatesOnlyCell2(t *testing.T) {
 	sql := readMigration007ActivateCell2(t)
-	if !strings.Contains(sql, "WHERE cell_id = 'cell-1'") {
-		t.Fatal("expected WHERE clause filtering cell_id='cell-1' to prevent activating other cells")
+	if !strings.Contains(sql, "WHERE cell_id = 'cell-2'") {
+		t.Fatal("expected WHERE clause filtering cell_id='cell-2' — the name this migration carries — to prevent activating other cells")
 	}
 	// Defensive: the UPDATE must NOT be unbounded.
 	if strings.Contains(sql, "UPDATE cells\n   SET status = 'active'") &&
@@ -86,8 +105,8 @@ func TestMigration007AppendsAuditNote(t *testing.T) {
 		t.Fatal("expected notes appended (notes = notes || ...) to preserve audit trail")
 	}
 	// Audit note should reference this plan/task.
-	if !strings.Contains(sql, "cell-1-activation-plan T2.2") {
-		t.Fatal("expected audit note to reference cell-1-activation-plan T2.2")
+	if !strings.Contains(sql, "cell-2-activation-plan T2.2") {
+		t.Fatal("expected audit note to reference cell-2-activation-plan T2.2 — the plan as it was named")
 	}
 }
 
@@ -118,8 +137,8 @@ func TestMigration007ReferencesADRAndPlan(t *testing.T) {
 	if !strings.Contains(sql, "MEET-INFRA-NORMALIZE-T3-multi-cell") {
 		t.Fatal("expected ADR reference (MEET-INFRA-NORMALIZE-T3-multi-cell) in migration")
 	}
-	if !strings.Contains(sql, "cell-1-activation-plan") {
-		t.Fatal("expected plan reference (cell-1-activation-plan) in migration")
+	if !strings.Contains(sql, "cell-2-activation-plan") {
+		t.Fatal("expected plan reference (cell-2-activation-plan) in migration")
 	}
 }
 

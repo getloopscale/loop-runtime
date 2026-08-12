@@ -323,7 +323,8 @@ suggested_mode: review
 source: discover-review
 evidence: `task lint` sai **201** com 11 achados, todos em `operators/`: 2 de `gosec G706` (log injection via taint analysis, em `operators/internal/reconcilehelpers/pprof.go:34` e `operators/internal/tracing/tracing.go:99`) e o restante de `staticcheck ST1000` (pacote sem comentário de pacote, em `operators/internal/environment/*.go` e vizinhos). **Nenhum dos 11 arquivos foi tocado nesta sessão** — `comm -12` entre a lista de arquivos acusados e `git diff --name-only 26ba1340..HEAD` sai vazia. Medido em 2026-08-09.
 why_now: encontrado no mesmo checklist que revelou o `B-008`. Vale registrar junto porque os dois contam a mesma história: dois comandos do `CLAUDE.md § Pre-completion checklist` — `task test:unit` e `task lint` — estão vermelhos há tempo indeterminado, e nenhum dos dois vermelhos é recente. Uma checklist que ninguém roda inteira deixa de ser checklist.
-status: raw
+status: planned
+resolved_in: os 11 achados de `operators/` estao em ZERO. Os 2 `gosec G706` viraram VALIDACAO NA FRONTEIRA — `LOOPZERO_PPROF_ADDR` e `OTEL_EXPORTER_OTLP_ENDPOINT` passam por `net.SplitHostPort` e uma variavel malformada agora falha alto em vez de ser logada e usada; a taint analysis do gosec nao enxerga validacao (tentei logar a string crua e depois os componentes validados — acusa identico), entao ficou `//nolint:gosec` com a razao escrita, que e a convencao local (`operators/internal/constants/labels.go` ja a usa). Os `ST1000` viraram comentarios de pacote reais: `reconcilehelpers` dizia `Package shared` (nome anterior ao split de binarios), `platform` tinha comentario de TIPO colado na clausula, e `environment` nao tinha nenhum. Mais QF1008 (campo embutido redundante) e a funcao morta `safeName`. `golangci-lint run ./...` em `operators` sai **0 issues**.
 dod:
   - os 2 achados de `gosec G706` estão corrigidos ou allowlistados com sunset, conforme `code-quality-allowlist.txt`
   - os achados de `ST1000` estão resolvidos — é comentário de pacote, o custo é baixo
@@ -1681,8 +1682,9 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 ao rodar a validação de integração da fatia `slice-1-tripwires`. `task test:unit` sai 1 com **4 reprovações**, todas em `api/tests/unit`: `TestMigration006CellsSeedRows`, `TestMigration007ActivatesOnlyCell2`, `TestMigration007AppendsAuditNote`, `TestMigration007ReferencesADRAndPlan`. A mensagem é `seed row missing "'cell-0'"`. Bissecção: em `fbb24643` (2026-08-10, *"funde as três identidades de célula"*) o teste e a migration **concordavam** — os dois falavam `cell-0`/`cell-1`. Depois disso, `75af13c7` (*"migracoes historicas voltam ao original; so a 000061 transforma"*) reescreveu `000006_cells.up.sql` de volta para `cell-1`/`cell-2`/`cell-default` (12 inserções, 12 remoções) e **não tocou o teste**, que continua exigindo a forma nova (`git diff fbb24643 HEAD -- api/tests/unit/migration_006_cells_test.go` é vazio).
 why_now: apareceu porque a fatia `slice-1-tripwires` tem `task test:unit` verde na Global DoD e **não pôde marcá-la** — o vermelho é anterior e alheio. Enquanto ele durar, toda fatia seguinte herda um sinal que não distingue "eu quebrei" de "já estava assim", que é exatamente o que a baseline pré-migração do plano existe para evitar. E o vermelho é de **teste de migration**, num repositório com migrations forward-only: o par teste↔migration é o único lugar que documenta qual forma é a correta.
-status: triaged
+status: planned
 severity: alta — não pelo defeito em si (nenhuma das duas formas está em produção por causa deste teste), mas porque uma suíte vermelha por motivo alheio é como uma suíte deixa de ser lida.
+resolved_in: os 4 testes de migracao estao verdes, e a causa era UMA. As migracoes `000006` e `000007` sao historia imutavel e falam de `cell-default`/`cell-1`/`cell-2`; a `000061` (cell_identity_unification) depois fundiu tudo em `cell-0`/`cell-1`. Os testes foram reescritos com a identidade NOVA e continuaram lendo os arquivos ANTIGOS. A correcao NAO foi editar a migracao — `docs/README.md` e explicito que reescrever um registro datado para parecer atual destroi a unica prova do que era verdade entao. Foram os testes que voltaram a ler historia, com o porque escrito no arquivo. Bonus: o `TestMigration006CellsSeedRows` listava `'cell-0'` DUAS vezes, o que duplicava a falha e escondia que a terceira entrada nunca fora verificada. `go test ./...` em `api` sai **0 FAILs**.
 dod:
   - está decidido qual forma é a correta — `cell-0`/`cell-1` (a fusão de identidades do `B-005`) ou `cell-1`/`cell-2`/`cell-default` (o original restaurado por `75af13c7`)
   - o teste e a migration voltam a concordar, e a decisão está escrita onde a próxima pessoa a encontre
@@ -1917,3 +1919,22 @@ dod:
 
 > Registrado 2026-08-12 durante a fatia slice-5. Não foi causado por ela: provado com a mudança em
 > stash — 0 antes, 0 depois, isoladamente.
+
+## B-083 — `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12, ao fechar o `B-009`. Aquele item mediu *"11 achados, todos em `operators/`"* — e os 11 estão em zero agora. Mas `cd api && golangci-lint run ./...` devolve **88**: 44 `gosec`, 34 `staticcheck`, 7 `unused`, 1 `errorlint`, 1 `errcheck`. **Nenhum** deles está nos arquivos que a sessão de fatias tocou (`routes/secrets.go`, `routes/projects.go`, `db/query_executor.go`, `db/dbtx/`, `routes/httpio/`) — são pré-existentes. A medição original do `B-009` provavelmente parou no primeiro módulo que reprovou: `task lint` roda os módulos em comandos separados e o Task aborta no primeiro erro.
+why_now: `task lint` é uma das linhas do `CLAUDE.md § Pre-completion checklist`, e continua não-marcável — agora por um corpo diferente e maior do que o item que a explicava. O `task lint:baseline` passa (88 < 200), então há duas tasks com veredictos opostos sobre a mesma coisa, e a que aparece na checklist é a estrita.
+status: raw
+severity: média — nada quebrado; o custo é uma linha de checklist que ninguém pode marcar, que é como uma checklist deixa de ser checklist.
+dod:
+  - os 88 estão corrigidos, ou a fração irredutível está allowlistada com sunset conforme `code-quality-allowlist.txt`
+  - `task lint` e `task lint:baseline` deixam de dar veredictos opostos — ou uma some, ou a checklist nomeia qual vale
+  - o baseline de 200 (`api=140 + operators=60`) é reajustado: `operators` está em 0
+
+> Registrado 2026-08-12 ao fechar `B-009` e `B-071`. Os dois vermelhos que o `B-009` narrava como
+> "a checklist que ninguém roda inteira" eram na verdade três: os 11 de `operators`, os 4 testes de
+> migração, e estes 88 — que só ficaram visíveis quando os outros dois saíram da frente.

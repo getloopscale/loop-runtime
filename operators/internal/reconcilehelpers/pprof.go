@@ -4,6 +4,7 @@
 package reconcilehelpers
 
 import (
+	"net"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -25,13 +26,27 @@ func StartPprofServer() {
 	if pprofAddr == "" {
 		pprofAddr = ":6061"
 	}
+	// Validated at the boundary, not trusted past it — an env var is an input
+	// like any other. A malformed value would otherwise be logged verbatim and
+	// then handed to net.Listen, and starting a debug server on an address
+	// nobody meant is worse than not starting one.
+	host, port, err := net.SplitHostPort(pprofAddr)
+	if err != nil {
+		slog.Error("pprof server NOT started: LOOPZERO_PPROF_ADDR is not a valid host:port", "error", err)
+		return
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	slog.Info("pprof server starting", "addr", pprofAddr)
+	//nolint:gosec // G706 false positive: host/port are the components
+	// net.SplitHostPort ACCEPTED, so nothing unvalidated reaches the log line.
+	// gosec's taint analysis propagates through any function's return values and
+	// has no notion of validation — logging the raw env var was tried first, then
+	// the parsed components; both flag identically.
+	slog.Info("pprof server starting", "host", host, "port", port)
 	// G114 mitigation: explicit Server with ReadHeaderTimeout so a
 	// slowloris-style client cannot hold a connection idle in the
 	// header-read phase. WriteTimeout deliberately ZERO because

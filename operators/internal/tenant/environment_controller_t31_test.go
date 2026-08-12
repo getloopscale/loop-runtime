@@ -104,7 +104,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 				"staging-canary-experiment",   // 25 chars
 				"tn-very-long-tenant-name-h",  // 26 chars (rest RFC-1123 — leading lowercase + hyphens)
 			)
-			env.ObjectMeta.Name = "tn-overflow-staging-canary-experiment"
+			env.Name = "tn-overflow-staging-canary-experiment"
 			Expect(k8sClient.Create(ctx, env)).To(Succeed())
 
 			// Reconcile must NOT requeue indefinitely; assert NameTooLong condition appears.

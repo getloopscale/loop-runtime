@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package environment holds the Environment reconciler and the resources it
+// owns per environment — namespace, quota, network policy and RBAC.
+//
+// Its status has exactly ONE writer, which persists with a merge patch off a
+// base snapshot taken right after the initial Get: a merge patch carries no
+// resourceVersion, so it never 409s against a concurrent spec write by another
+// controller.
 package environment
 
 import (
