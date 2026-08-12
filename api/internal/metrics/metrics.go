@@ -514,7 +514,7 @@ var (
 	// Plan J-17 T1.3 (2026-06-06). Counts every Argo Workflow node phase
 	// transition that the argo_step_watcher service observed and emitted
 	// as an SSE event. Labels:
-	//   - step: one of pkg/events.CanonicalStepNames OR "other" (EC-16
+	//   - step: one of events.CanonicalStepNames OR "other" (EC-16
 	//     cardinality guard — non-canonical step names like custom
 	//     Dockerfile steps land in "other" so the cardinality stays at
 	//     17 canonical + 1 "other" = 18 step values * 3 statuses = 54

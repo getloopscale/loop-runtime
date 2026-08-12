@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/events"
+	"github.com/getloopscale/loopzero/api/internal/events"
 )
 
 // Plan J-17 Layer 2 (2026-06-06) — pipeline emits structured logs
@@ -33,7 +33,7 @@ import (
 //
 // Phase is derived via events.PhaseGroupForStep — same mapping the
 // frontend BuildTimelineLive uses to group steps into Clone / Install /
-// Build / Sign / Deliver / Other. Keeping the mapping in pkg/events as
+// Build / Sign / Deliver / Other. Keeping the mapping in api/internal/events as
 // the single source of truth avoids drift between pipeline and UI.
 
 // wrapWithLoopZeroMarkers wraps a bash script with start/success/error
@@ -106,7 +106,7 @@ trap __loopzero_on_exit EXIT
 }
 
 // phaseForStepFuzzy resolves a phase group from a step name, accepting
-// either the canonical full name (matches pkg/events.PhaseGroupForStep)
+// either the canonical full name (matches events.PhaseGroupForStep)
 // or a buildContainer short name (e.g. "security-scan" vs canonical
 // "security-scan-node"). When the canonical lookup misses, fall back
 // to prefix matching against the canonical sets so phase labels stay

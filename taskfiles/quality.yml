@@ -90,7 +90,7 @@ tasks:
       - /tmp/loopzero-ops quality proxy-exposure
       # mock-budget e pkg-usage-matrix saem do ledger de slowGate: estavam rotulados
       # ">25s" e medem 0.6s e 0.7s. O segundo tambem parou de publicar um falso
-      # "dead code candidate" para pkg/pulumi, que so tem sub-pacotes.
+      # "dead code candidate" para cmd/loopzero-ops/internal/pulumi, que so tem sub-pacotes.
       - /tmp/loopzero-ops quality mock-budget
       - /tmp/loopzero-ops quality pkg-usage-matrix
       - /tmp/loopzero-ops quality script-count

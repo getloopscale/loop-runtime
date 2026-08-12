@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/shellrun"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 )
 
 func mapEnv(m map[string]string) func(string) string {

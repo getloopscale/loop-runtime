@@ -83,10 +83,10 @@ type Outcome struct {
 // actually importable Go packages (excluding "tools" — explicit bash skip +
 // reserved future namespace).
 //
-// A directory holding only sub-packages is skipped. pkg/pulumi/ is the case
-// that exposed this: it has no .go of its own, only pkg/pulumi/archive/, which
+// A directory holding only sub-packages is skipped. cmd/loopzero-ops/internal/pulumi/ is the case
+// that exposed this: it has no .go of its own, only its archive/ sub-package, which
 // cmd/loopzero-ops/pulumi_subcmd.go imports. Counting imports of the exact path
-// "pkg/pulumi" found none, and the generated matrix published
+// the parent path found none, and the generated matrix published
 // "0 ⚠️ dead code candidate" for live code (measured 2026-08-06). A generated
 // document that invites deleting a package in use is worse than no document.
 func listPkgDirs(pkgRoot string) ([]string, error) {

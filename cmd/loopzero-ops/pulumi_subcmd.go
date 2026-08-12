@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/pkg/pulumi/archive"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/pulumi/archive"
 )
 
 const pulumiHelp = `loopzero-ops pulumi — Pulumi operational tooling
@@ -44,7 +44,7 @@ func runPulumi(args []string) int {
 }
 
 // runPulumiArchive replaces pulumi-archive.sh: exports Pulumi stack state to
-// encrypted S3. Shells out to pulumi/aws via pkg/shellrun (testable via mock).
+// encrypted S3. Shells out to pulumi/aws via internal/shellrun (testable via mock).
 func runPulumiArchive(args []string) int {
 	fs := flag.NewFlagSet("pulumi archive", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
