@@ -1125,7 +1125,8 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 (`9f4a4a62`) e **reproduzido**. `routeauthcoverage/check.go:27` fixa `routerPath = "api/internal/server/router.go"` e percorre o arquivo por linha; `check.go:151` reprova **apenas** quando `len(violations) > 0`, e `quality_gates_authz.go:315-329` só **imprime** `outcome.PassCount`, nunca o assere. Reproduzido reescrevendo `router.go` na forma pós-refatoração numa árvore temporária (marcadores `middleware.Auth` e `registerProtectedRoutes` presentes, registrações movidas para `Register()`): `route-auth-coverage: PASS — 0 routes`, exit 0. Hoje enumera 42 rotas e passa legitimamente. Duas das três guardas já existem — arquivo ausente reprova (`router.go not found`), arquivo stub reprova (`could not locate the middleware.Auth chi.Router`); falta só a contagem mínima. Issue #285.
 why_now: este é o **pré-requisito do B-041**. A separação de `routes` por domínio produz exatamente a única forma que passa vazia — ela desligaria a invariante de cobertura de auth sobre toda a superfície pública **no mesmo commit que a justifica**, e o gate ficaria verde.
-status: triaged
+status: planned
+resolved_in: cmd/loopzero-ops/internal/quality/routeauthcoverage/check.go — ErrNoRoutesEnumerated: enumerar zero rotas passou a ser erro tipado, nao PASS. Fatia slice-1.
 severity: alta — nada está quebrado hoje, mas o defeito arma exatamente na mudança que o repositório quer fazer, e o modo de falha é silencioso e verde.
 dod:
   - `route-auth-coverage` reprova quando enumera zero rotas (piso de contagem mínima)
@@ -1216,7 +1217,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11 com binário recém-compilado (`go build -o /tmp/loopzero-ops ./cmd/loopzero-ops`), **não** o `./loopzero-ops` da raiz. **27 dos 117 gates** reportam wiring `-`/`diff`; 17 não são referenciados por taskfile nenhum. Dos 10 que rodam sem argumento e sem credencial, **quatro reprovam sobre conteúdo real**: `helm-drift` (exit 1, drift sem ADR nomeando `vap-tenant-cr-shape.yaml`), `clusterimagepolicy-mode` (exit 1, `mode: enforce` em `infra/helm/admission-policies/values.yaml:36` **sem nenhum ADR/MEET referenciando o cutover de deny-flip**), `alert-runbooks` (**33** violações), `migration-test-coverage` (**43** de 59 migrations sem teste). E a causa-raiz não é esquecimento: `cmd/loopzero-ops/quality_gate_wiring_test.go:110` e `:113` classificam `helm-drift` e `clusterimagepolicy-mode` como `operatorRun` — *"need live state, a ceremony, or a cadence"* — quando ambos são verificações herméticas que rodam em sandbox. **A isenção documentou o buraco como decisão.** Os outros seis se comportam como a classificação prevê (parametrizados, dormentes, ou dependentes de credencial) — o `-` deles está correto.
 why_now: a auditoria mediu que as fronteiras de plano deste repositório são sustentadas **por gates, não por estrutura**. Isso é escolha legítima — mas só funciona se os gates rodarem. O par `helm-drift` (reprova, desligado) × `helm-overlap-parity` (roda, mede outra dimensão, passa) é o caso exemplar: o gate certo existe, funciona, reprova, e ninguém executa. O `clusterimagepolicy-mode` é o mais desconfortável: diz que uma mudança viva de postura de segurança está ativa sem o registro de governança que o próprio repositório exige.
-status: triaged
+status: planned
+resolved_in: cmd/loopzero-ops/quality_gate_wiring_test.go — wiringReason virou value object com invariante (operatorRun DEVE nomear o insumo externo). O invariante encontrou 4 classificacoes erradas, nao as 2 que a auditoria vira. Fatia slice-1.
 severity: alta — não pelos quatro achados isolados, mas porque o mecanismo de defesa do repositório tem uma camada que ninguém verifica.
 dod:
   - a classificação `operatorRun` é **provada, não aceita**: para cada gate assim marcado, o teste o roda contra árvore hermética e **falha se ele concluir sem exigir estado externo**
@@ -1296,7 +1298,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11, severidade ancorada no limiar `consensus` `infra_in_domain = 0`. `services/deploycontracts` se documenta como *"the pure sink of the services acyclic DAG"* e está registrado `layer=domain`. Mas `shared_contracts.go:207` expõe `WithLock(..., fn func(tx db.DBTX) error) error`; `delivery.go:37` expõe `Activate(ctx, build *db.Build, ...)`; `:55` expõe `TargetRelease *db.Release`; `manifest_builder.go:23` expõe `Apps []db.BuildAppSpec`; e `:11` importa `api/internal/manifests` (`layer=application`). **Os 10 pacotes que dependem do sink dependem transitivamente da persistência.** O `servicesacyclic` não vê isso porque só inspeciona arestas *entre os oito subpacotes de services*. O tipo `db.DBTX` (`db/query_executor.go:53`, interface moldada por strings SQL) aparece em interface (`routes/secrets.go:44`, `:670`, `:795`), domínio (`shared_contracts.go:207`) e aplicação (`services/release` 28 refs, `services/build` 12). O furo é de **uma string**: a cerca MA-7 (`dbgeneratedboundary`) proíbe `api/internal/db/generated`, não `api/internal/db` — e os 2 arquivos que exploram o furo estão ambos na superfície de secrets.
 why_now: é o vazamento de camada **medido** — o único ponto onde a auditoria recomendou mexer em camadas, tendo recusado Clean/Hexagonal por atacado duas vezes. Alargar a cerca de `db/generated` para `db` é literalmente uma string, e é o que impede o furo de crescer.
-status: triaged
+status: planned
+resolved_in: .claude/knowledge-base/plans/slice-4-layer-leak-plan.md — 3 de 4 balas. (1) o sink parou de se declarar puro e o doc-comment nomeia as 4 referencias; (2) gate novo domain-sink-purity trava o conjunto medido e reprova a quinta; (3) a cerca dbgeneratedboundary alarga para api/internal/db em api/internal/server, o unico dos quatro diretorios medido em ZERO importadores. NAO ENTREGUE: `db.DBTX` sair da camada de interface — medido em 34 call sites de WithLock, registrado como B-079 com o custo. E a premissa da DoD de que alargar a cerca era "literalmente uma string" foi MEDIDA E DESMENTIDA: 43 arquivos.
 severity: alta — o sink é o ponto de maior fan-in do DAG; o que vaza por ele vaza para dez pacotes.
 dod:
   - `dbgeneratedboundary` cobre `api/internal/db`, não só `api/internal/db/generated`
@@ -1331,7 +1334,8 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11. A lista de prefixos de env reservados para injeção da plataforma existe duas vezes: `api/internal/services/deploycontracts/build_plan.go:23` tem `LOOPZERO_`, `KUBERNETES_`, `AWS_`, `DO_`, **`GOOGLE_`**; `tools/loopzero-dockerfile-lint/main.go:84` tem as mesmas menos `GOOGLE_`. O comentário do primeiro diz literalmente *"mirrors tools/loopzero-dockerfile-lint/main.go"*, e o atribui a *"T2.5 … closes find_sec_004 MEDIUM"* — é correção de segurança aplicada num caminho e não no outro. Nenhum dos 117 gates menciona o par (`grep -rl reservedEnvKeyPrefixes cmd/loopzero-ops/internal/quality/` → vazio). **Exploitabilidade verificada e declarada: latente.** Não existe injeção de `GOOGLE_*` em env de workload; as únicas ocorrências são `LOOPZERO_GOOGLE_CLIENT_ID/SECRET` no Kratos, que já caem sob `LOOPZERO_`. Issue #283.
 why_now: `tools/loopzero-dockerfile-lint` é módulo Go próprio e **não está no `go.work`** — não há caminho de import possível entre ele e `api/`, então manter a regra única exigiria dependência declarada ou gate. Não existe nenhuma das duas: sobrou um comentário, que é convenção que ninguém executa. Uma das duas listas já está errada e nada declara qual é a fonte de verdade.
-status: triaged
+status: planned
+resolved_in: cmd/loopzero-ops/internal/quality/envprefixparity/ — gate AST que compara reservedEnvKeyPrefixes entre os dois sitios como CONJUNTOS. Entra reprovando, por decisao do dono sobre a direcao (B-069/B-070). Fatia slice-1.
 severity: média — hoje não explorável, mas o defeito arma sozinho: no dia em que um prefixo novo passar a ser injetado, a segunda lista não acompanha e a descoberta é por incidente.
 dod:
   - existe **uma** fonte de verdade importável pelos dois lados, ou um gate de paridade que faz AST-parse das duas declarações e exige conjuntos idênticos
@@ -1348,7 +1352,8 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `CLAUDE.md:206` declara nove contratos vivendo em `.claude/rules/`; **quatro existem**. Ausentes: `workflow.md` (citado em `:193` como o gate de 95% da Regra 11), `loopzero-design.md` (citado em `:159` como o contrato de *single-status-writer*), `tdd-workflow.md`, `cli-output.md` (o contrato da Regra 3), `design-principles.md`. Nenhum existe em outro lugar do workspace. Também ausente `../.claude/rules/umbrella-scope.md`, citado em `:17` como *"the workspace contract"*, e `.claude/rules/auto-docs.md` (`:215`). O inverso confirma a causa: **36 arquivos existem em `.claude/rules/` e 20+ nunca são mencionados** — todos do cycle-kit. Não é arquivo perdido; é troca de conjunto sem atualizar o índice. Mesma classe: **`ADR-0024` não existe** em lugar nenhum, e é citado como a autoridade que obriga toda migração para `UpdateStatusWithRetry` — por comentário de produção *e* pelo texto de uma métrica Prometheus. Issue #281.
 why_now: a auditoria mediu o invariante *single-status-writer* aplicado em **2 de 8 controllers**. O contrato que definiria "aplicado" — `loopzero-design.md` — é um dos que não existem. A regra não está sendo violada por descuido: ela não está disponível para consulta.
-status: triaged
+status: planned
+resolved_in: cmd/loopzero-ops/internal/quality/docsrefs/ — gate que resolve referencias normativas (.claude/rules/*.md e ADR-NNNN) com allowlist datado. Fatia slice-1.
 severity: média — não quebra execução, mas todo agente e toda pessoa que seguir a tabela "Locked rules — read before the matching work" bate em arquivo inexistente exatamente antes do trabalho que a regra deveria governar.
 dod:
   - cada contrato ausente foi **restaurado ou reapontado** — decidido caso a caso, porque parte do conteúdo migrou (o gate de 95% aparece hoje em `plan-confidence-golden-rule.md`) e recriar por adivinhação produziria documentação inventada, que é pior que a ausência
@@ -1808,3 +1813,22 @@ dod:
 > `Taskfile.yml:374-375` (cert-manager + cluster-issuer, com selector restrito e motivo escrito).
 > É reúso deliberado, não violação — mas um arquivo nomeado por um plano e usado por outro é
 > exatamente o tipo de coisa que a auditoria de domínios apontou.
+
+## B-079 — Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-12 na fatia slice-4. Quatro símbolos de `api/internal/db` atravessam a superfície pública de `services/deploycontracts` — `shared_contracts.go:207` (`WithLock(..., fn func(tx db.DBTX) error)`), `delivery.go:37` (`Activate(ctx, build *db.Build, ...)`), `delivery.go:55` (`TargetRelease *db.Release`) e `manifest_builder.go:23` (`Apps []db.BuildAppSpec`). **35 arquivos, em 10 pacotes, dependem do sink**, logo dependem transitivamente da persistência. Custo de remoção, contado: `WithLock` **34** call sites, `db.BuildAppSpec` **18**, `TargetRelease` **6**, `Activate(ctx` **5** — **63** no total (linhas fora de `_test.go` em `api/`, regra única; a primeira contagem citou 57 misturando três regras, e a revisão a desmentiu). Mais o alargamento da cerca `dbgeneratedboundary` para `api/internal/db`, que atingiria **71** arquivos (`services` 51, `cmd` 18, `routes` 2) sob a semântica do gate, que inclui `_test.go` de propósito — a DoD do `B-049` afirmava que isso era *"literalmente uma string"*, e a medição desmente.
+why_now: a fatia slice-4 travou o vazamento com o gate `domain-sink-purity`, mas travar não é fechar. Enquanto os 4 estiverem lá, os 35 dependentes carregam persistência que não pediram — e `WithLock` é o primitivo do environment-lock que a Regra Inquebrável 6 põe em toda mutação, então mexer nele exige o cleanroom que `cleanroom-up-live-test-mandate.md` torna obrigatório para validação LIVE.
+status: raw
+severity: média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde.
+dod:
+  - os 4 símbolos saem da superfície pública do sink, ou cada um que fica tem razão escrita
+  - `FrozenDefault` em `domainsinkpurity` encolhe na mesma medida — o gate reporta `REMOVIDO` para guiar
+  - a cerca alarga para `services`, `cmd` e `routes`, ou o custo de 43 arquivos é reavaliado com números novos
+  - a mudança em `WithLock` é validada contra um Cleanroom, não só contra a suíte
+
+> Registrado 2026-08-12 pela fatia slice-4. O `domain-sink-purity` imprime as 4 congeladas em toda
+> execução exatamente para que este item não seja esquecido — é o mesmo desenho do `B-076`.

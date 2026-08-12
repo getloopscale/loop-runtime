@@ -6,7 +6,8 @@
 // .claude/knowledge-base/decisions/2026-07-03-m9-db-store-subpackage-topology.md).
 //
 // Invariant (Gate A): NO file under api/internal/{services,routes,server}
-// imports the sqlc-generated package api/internal/db/generated.
+// imports the sqlc-generated package api/internal/db/generated — and, in the
+// layers measured free of it, the hand-written api/internal/db as well.
 //
 // Why this gate exists:
 //
@@ -76,6 +77,27 @@ var forbiddenDirs = []string{
 	"api/cmd",
 }
 
+// handWrittenDBPath is the hand-written persistence package — db.Build,
+// db.Release, db.DBTX — as distinct from the sqlc-generated one above.
+const handWrittenDBPath = "github.com/getloopscale/loopzero/api/internal/db"
+
+// dirsForbiddenFromHandWrittenDB is DELIBERATELY narrower than forbiddenDirs.
+//
+// B-049's DoD asserts that widening the fence from `db/generated` to `db` is
+// "literally a string". Measured 2026-08-12, it is not: `api/internal/services`
+// carries 28 importers, `api/cmd` 14 and `api/internal/routes` 1 — 43 files that
+// would fail the day the fence widened. A gate that fails 43 files on arrival is
+// not a fence; it is an exemption at birth, which is the debt slice-1 spent
+// itself removing.
+//
+// `api/internal/server` was measured at ZERO, so the fence lands there green and
+// permanent: from today the first persistence import into the server layer is
+// refused. The other three carry their counts in the backlog rather than an
+// exemption nobody can read.
+var dirsForbiddenFromHandWrittenDB = []string{
+	"api/internal/server",
+}
+
 // Check is the gate entry point.
 func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
@@ -86,6 +108,11 @@ func Check(cfg Config) (Outcome, error) {
 	var missing []string
 	scanned := 0
 
+	handWritten := map[string]bool{}
+	for _, d := range dirsForbiddenFromHandWrittenDB {
+		handWritten[d] = true
+	}
+
 	for _, sub := range forbiddenDirs {
 		dir := filepath.Join(cfg.RepoRoot, sub)
 		if _, err := os.Stat(dir); err != nil {
@@ -95,7 +122,7 @@ func Check(cfg Config) (Outcome, error) {
 			missing = append(missing, sub)
 			continue
 		}
-		v, n, err := walkDir(dir)
+		v, n, err := walkDir(dir, handWritten[sub])
 		if err != nil {
 			return Outcome{}, err
 		}
@@ -108,17 +135,21 @@ func Check(cfg Config) (Outcome, error) {
 
 // ActionableFix returns the operator-facing message for FAIL output.
 func ActionableFix() string {
-	return "An outer layer (services/routes/server/cmd) imports " +
-		generatedImportPath + " directly, bypassing the db-store adapter's " +
-		"read-modify-write + advisory-lock scope (MA-7 Gate A). Route the access " +
-		"through the entity's Store adapter in api/internal/db/store/ instead of " +
-		"importing the generated package."
+	return "An outer layer imports a persistence package it must not.\n" +
+		"  · " + generatedImportPath + " — forbidden in services/routes/server/cmd. It\n" +
+		"    bypasses the db-store adapter's read-modify-write + advisory-lock scope\n" +
+		"    (MA-7 Gate A). Route the access through the entity's Store adapter in\n" +
+		"    api/internal/db/store/ instead.\n" +
+		"  · " + handWrittenDBPath + " — forbidden in " + strings.Join(dirsForbiddenFromHandWrittenDB, ", ") +
+		" only.\n    That fence is deliberately narrower than the generated one: the other\n" +
+		"    layers carry 71 importers today (slice-4 ADR D1), and a gate that fails on\n" +
+		"    arrival is an exemption at birth. Widening it is B-079."
 }
 
 // walkDir walks dir for .go files (test files INCLUDED — a test that imports
 // generated from an outer layer is still a boundary breach) and collects
 // forbidden imports.
-func walkDir(dir string) ([]Violation, int, error) {
+func walkDir(dir string, alsoHandWritten bool) ([]Violation, int, error) {
 	var violations []Violation
 	count := 0
 
@@ -133,7 +164,7 @@ func walkDir(dir string) ([]Violation, int, error) {
 			return nil
 		}
 		count++
-		v, err := scanFile(path)
+		v, err := scanFile(path, alsoHandWritten)
 		if err != nil {
 			return err
 		}
@@ -146,7 +177,7 @@ func walkDir(dir string) ([]Violation, int, error) {
 
 // scanFile parses a single .go file and returns a violation per forbidden
 // import found. Import-only parse (no function bodies) keeps it fast.
-func scanFile(path string) ([]Violation, error) {
+func scanFile(path string, alsoHandWritten bool) ([]Violation, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 	if err != nil {
@@ -158,11 +189,22 @@ func scanFile(path string) ([]Violation, error) {
 		if imp.Path == nil {
 			continue
 		}
-		if strings.Trim(imp.Path.Value, `"`) == generatedImportPath {
-			pos := fset.Position(imp.Pos())
+		imported := strings.Trim(imp.Path.Value, `"`)
+		// The hand-written package is fenced only in the layers measured free of
+		// it — see dirsForbiddenFromHandWrittenDB for why the fence is narrower
+		// than the generated one.
+		if alsoHandWritten && imported == handWrittenDBPath {
 			violations = append(violations, Violation{
 				File:   path,
-				Line:   pos.Line,
+				Line:   fset.Position(imp.Pos()).Line,
+				Import: handWrittenDBPath,
+			})
+			continue
+		}
+		if imported == generatedImportPath {
+			violations = append(violations, Violation{
+				File:   path,
+				Line:   fset.Position(imp.Pos()).Line,
 				Import: generatedImportPath,
 			})
 		}

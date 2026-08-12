@@ -197,3 +197,65 @@ func TestCheck_StoreLayerNotForbidden(t *testing.T) {
 		t.Errorf("db/store importing generated is sanctioned; Gate A must not flag it, got: %+v", out.Violations)
 	}
 }
+
+// mkGo writes one Go file importing the given path, under the given dir.
+func mkGo(t *testing.T, root, dir, imported string) {
+	t.Helper()
+	full := filepath.Join(root, dir)
+	if err := os.MkdirAll(full, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "package x\n\nimport _ \"" + imported + "\"\n"
+	if err := os.WriteFile(filepath.Join(full, "x.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const handWritten = "github.com/getloopscale/loopzero/api/internal/db"
+
+// slice-4 T1.3: the server layer was measured at ZERO importers of the
+// hand-written persistence package, so the fence lands there green.
+func TestCheck_ServerImportingHandWrittenDBFails(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/server", handWritten)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Errorf("the server layer must not import the hand-written persistence package; got %+v", out.Violations)
+	}
+	if len(out.Violations) != 1 || out.Violations[0].Import != handWritten {
+		t.Errorf("the violation must NAME the hand-written path, not the generated one; got %+v", out.Violations)
+	}
+}
+
+// The negative control the ADR demands. `services` carries 28 importers today;
+// fencing it would fail 43 files on arrival — an exemption at birth, which is
+// the shape slice-1 spent itself removing. This test locks the DELIBERATE
+// narrowness so a later widening is a conscious act with its own measurement,
+// not an accident.
+func TestCheck_ServicesImportingHandWrittenDBStillPasses(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/services", handWritten)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Errorf("the fence over the hand-written package is deliberately narrower than the generated one — widening it to services is B-079, measured at 28 files; got %+v", out.Violations)
+	}
+}
+
+// And the generated fence is unchanged everywhere.
+func TestCheck_ServicesImportingGeneratedStillFails(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/services", handWritten+"/generated")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Error("the generated fence must still hold in every forbidden dir — narrowing the new one must not narrow the old one")
+	}
+}

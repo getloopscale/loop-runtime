@@ -5,8 +5,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,5 +331,38 @@ func runServicesAcyclic(args []string) int {
 		return 1
 	}
 	fmt.Printf("services-acyclic: PASS \u2014 %d .go files scanned; services bounded-context import graph is the frozen acyclic DAG (M9 Step 6)\n", outcome.Scanned)
+	return 0
+}
+
+// runDomainSinkPurity — B-049 / slice-4 T1.1.
+//
+// A ratchet, not a fence: it freezes the persistence symbols measured crossing
+// the services DAG sink and refuses the next one. Removing them costs 63
+// call sites (B-079); stopping the growth costs this.
+func runDomainSinkPurity(args []string) int {
+	fs := flag.NewFlagSet("domain-sink-purity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	o, err := domainsinkpurity.Check(domainsinkpurity.Config{RepoRoot: *root})
+	fmt.Println(o.Summary())
+	for _, s := range o.New {
+		fmt.Printf("  NOVO VAZAMENTO %s — atravessa a fronteira do sink e alcança os 35 arquivos, em 10 pacotes, que dependem dele\n", s)
+	}
+	for _, s := range o.Gone {
+		fmt.Printf("  REMOVIDO %s — aperte o conjunto congelado em FrozenDefault para travar o ganho\n", s)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "domain-sink-purity: %v\n", err)
+		// 5 = could not measure; 1 = measured and found a violation. Collapsing
+		// the two is exactly the distinction B-040 cost this repo.
+		if errors.Is(err, domainsinkpurity.ErrSinkNotFound) || errors.Is(err, domainsinkpurity.ErrUnqualifiedImport) {
+			return 5
+		}
+		return 1
+	}
+	fmt.Printf("PASS — nenhum símbolo novo (persistência ou camada de aplicação) atravessa o sink (%d congelados, rastreados em B-079)\n", o.FrozenCount)
 	return 0
 }
