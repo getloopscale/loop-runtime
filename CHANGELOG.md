@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 ### Fixed
+- **loopzero:** a verificação de referências normativas deixa de aprovar quando não encontra referência nenhuma, e deixa de aceitar os próprios documentos de trabalho como prova de que uma decisão existe. Ela aprovava uma árvore vazia, e dava por documentado o registro de decisão que o código cita — porque o plano que criou a verificação o mencionava ao explicar que ele não existe (B-052)
 - **loopzero:** o clone do repositório encolhe 71 MB — dois binários compilados estavam versionados por engano (`operators/app-operator`, 68 MB, e `tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint`, 3,2 MB) (B-051)
 - **loopzero:** a verificação que garante autenticação em toda rota pública deixa de aprovar quando não examina rota nenhuma. Ela respondia "aprovado" com zero rotas enumeradas — e como essa verificação autoriza o `git push`, um commit que desligasse a autenticação de toda a API passaria verde (B-040)
 - **loopzero:** a cobrança falha fechado — um ambiente que declara cobrar não semeia, não sobe e não reporta fingindo que ela funciona (B-034, B-035, B-036, B-037)
