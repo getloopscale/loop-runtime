@@ -242,8 +242,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	// searches for an ADR; hermetic. Exit 1 — clusterImagePolicy.mode is
 	// `enforce` (a live deny-flip that rejects unsigned images at admission)
 	// with no ADR/MEET record referencing the cutover. Deciding that posture is
-	// B-045's DoD, not a wiring change.
-	"clusterimagepolicy-mode": failingGate,
 	// Measured 2026-08-11: hermetic (--root only), and BROKEN rather than
 	// operator-run. It looks for the matrix at
 	// .claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md
