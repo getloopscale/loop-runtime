@@ -2201,6 +2201,24 @@ dod:
 > identidade `owner`. Provado por mutação: a import em `repositories.go` de produção deixava a árvore
 > real GREEN em `0 sibling edge(s)`. `tenants` carregava a mesma declaração desde a fatia 8.
 
+## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13, quando o gate bloqueou o push da fatia 19. Dois limites, ambos por trabalhar com **nome** em vez de referência. (1) `cmd/loopzero-ops/internal/quality/contractconsumers/check.go:212` — `tagExistsAt` pergunta se a tag existe em **qualquer** struct do conjunto rastreado. `api/internal/routes/repositories/repositories.go:105,117` declara `json:"repo"` duas vezes, então remover de uma é invisível. Coberto pelo teste `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop`, que documenta o limite e diz para atualizá-lo — não apagá-lo — quando fechar. (2) `check.go:242` — `grepConsumersForTag` casa `\.<tag>\b`, o que pega **campo de struct homônimo** e **literal de string**: na ocorrência real, dos 9 "consumidores" de `repo`, 8 eram `p.repo.RepoURL(...)` (`p.repo` é `*gitclient.GiteaRepoManager` — `api/internal/gitops/gitea_pusher.go:45`) e 1 era `attribute.String("loopzero.github.repo", ...)`. Zero liam a tag.
+why_now: é o **mesmo defeito** que o review da fatia 19 achou na minha tabela de acoplamento — contar ocorrência de nome como referência — e nesta sessão ele apareceu de forma independente em dois lugares. Aqui ele custa: o gate bloqueou um push que não mudava contrato nenhum, e um gate que erra assim é um gate que as pessoas aprendem a contornar.
+status: triaged
+severity: média — não deixa contrato quebrado passar (o caminho de detecção continua fechado para a última declaração sair); gera ruído, que é como um gate perde autoridade
+dod:
+  - a existência da tag é verificada na struct de onde ela saiu, não em qualquer uma do conjunto — e `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop` é reescrito para exigir o contrário do que exige hoje
+  - um campo Go homônimo (`p.repo`) e um literal de string (`"loopzero.github.repo"`) deixam de ser reportados como consumidores, provado com estes dois casos exatos
+  - a detecção de consumidor em TypeScript continua funcionando — ali `.repo` é de fato o acesso à propriedade, e estreitar demais mataria o lado que motivou o gate
+
+> Registrado 2026-08-13, pela fatia 19: o gate reprovou o push porque `gofmt -w` reduziu o espaçamento antes de um comentário de fim de linha, e uma linha *modificada* contendo a tag era lida como tag *removida*. Essa parte foi corrigida na mesma fatia; o que fica aqui é a granularidade de nome, dos dois lados.
+
+
 ## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
 
 domain: engine-go

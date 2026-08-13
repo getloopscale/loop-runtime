@@ -4,6 +4,9 @@
 package contractconsumers
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -172,5 +175,289 @@ func TestConfig_DefaultsApplied(t *testing.T) {
 	}
 	if out.CommandError == "" {
 		t.Error("expected CommandError on non-existent root, got empty")
+	}
+}
+
+// gitTree builds a throwaway repository so the diff path can be exercised for
+// real. The gate shells out to `git diff`; a fake would test the fake.
+func gitTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "gate@test"},
+		{"config", "user.name", "gate"},
+		{"config", "commit.gpgsign", "false"},
+	} {
+		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	return root
+}
+
+func git(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v (%s)", args, err, out)
+	}
+}
+
+// Moving a file is not dropping its fields.
+//
+// `git diff` without rename detection renders a `git mv` as a whole-file
+// deletion plus a whole-file addition, so EVERY json tag in the moved file
+// appears on a removed line. The gate then hunts consumers for tags that were
+// never dropped, and blocks the push.
+//
+// Measured on the routes split (B-080): moving repositories.go into its own
+// subpackage — a pure rename, byte-identical struct — reported `json:"repo"`
+// as dropped and named 9 "consumers". Thirteen more families are queued behind
+// that move, so this fires on each of them.
+func TestCollectDroppedJSONTags_PureRenameDropsNothing(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "repositories.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+
+	sub := filepath.Join(dir, "repositories")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "mv", "api/internal/routes/repositories.go", "api/internal/routes/repositories/repositories.go")
+	git(t, root, "commit", "-qm", "move")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Errorf("a pure rename drops no field — the struct is byte-identical and the tag still exists at HEAD; got dropped=%v", tags)
+	}
+}
+
+// The other half: a REAL drop must still be caught. Without this, the fix above
+// could be "never report anything", which is the failure mode a gate that
+// stopped working looks like from the outside.
+func TestCollectDroppedJSONTags_RealDropIsStillCaught(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "repositories.go")
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`\n\tGone string `json:\"gone\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "commit", "-aqm", "drop gone")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 1 || tags[0] != "gone" {
+		t.Errorf("a field deleted from the struct is exactly what this gate exists to catch; got %v", tags)
+	}
+}
+
+// And a rename that ALSO drops a field reports the drop and nothing else.
+// This is the case that separates "detect renames" from "ignore renamed files":
+// the second would be a hole big enough to move a contract through.
+func TestCollectDroppedJSONTags_RenameWithARealDropReportsOnlyTheDrop(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "repositories.go"),
+		[]byte("package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`\n\tGone string `json:\"gone\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+
+	sub := filepath.Join(dir, "repositories")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "mv", "api/internal/routes/repositories.go", "api/internal/routes/repositories/repositories.go")
+	if err := os.WriteFile(filepath.Join(sub, "repositories.go"),
+		[]byte("package repositories\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "move and drop")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 1 || tags[0] != "gone" {
+		t.Errorf("the rename must be seen through, not skipped: `gone` really left the contract, `repo` did not; got %v", tags)
+	}
+}
+
+// A removed LINE is not a removed TAG.
+//
+// The gate reads json tags off the "-" side of the diff and never asks whether
+// the tag still exists. So any edit that rewrites the line — a comment, a
+// rename of the Go field, or gofmt realigning the trailing comment — reports
+// the field as dropped.
+//
+// Measured on the routes split (B-080), and by the most ordinary cause there
+// is: `gofmt -w` collapsed the padding before a trailing comment, changing
+//
+//   - Repo string `json:"repo"`            // "owner/repo"
+//   - Repo string `json:"repo"` // "owner/repo"
+//
+// The gate declared `repo` dropped and blocked the push, naming nine
+// "consumers" — none of which read the tag. Whitespace cannot break a wire
+// contract, and a gate that says it can teaches people to push past it.
+func TestCollectDroppedJSONTags_ReformattingTheLineDropsNothing(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "repositories.go")
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`            // owner/repo\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+
+	// The exact gofmt change: padding collapsed, tag untouched.
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"` // owner/repo\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "commit", "-aqm", "gofmt")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Errorf("gofmt cannot break a wire contract — the tag is still in the struct at HEAD; got dropped=%v", tags)
+	}
+}
+
+// Renaming the Go field while keeping the tag is the same shape: the wire
+// contract is what the tag says, and it did not move.
+func TestCollectDroppedJSONTags_RenamingTheGoFieldKeepsTheTag(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "repositories.go")
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype Repo struct {\n\tRepo string `json:\"repo\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype Repo struct {\n\tFullName string `json:\"repo\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "commit", "-aqm", "rename field")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Errorf("the wire contract is the tag, and it is unchanged; got dropped=%v", tags)
+	}
+}
+
+// The existence check is tag-name-global, and that is a REAL limit, recorded
+// here rather than left for someone to discover as a silent miss.
+//
+// If two structs in the tracked set declare the same tag and one of them drops
+// it, the survivor answers "still exists" and the drop goes unreported.
+// Measured while verifying this fix: repositories.go declares `json:"repo"`
+// TWICE, so renaming one of them was invisible to the gate.
+//
+// It is not a regression — the whole gate already works at tag-name
+// granularity, greping consumers for `.tag` with no idea which struct they
+// read. Narrowing it needs type information on both sides, which is a
+// different gate. Registered as B-100.
+func TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "repositories.go")
+	two := "package routes\n\ntype A struct {\n\tRepo string `json:\"repo\"`\n}\n\ntype B struct {\n\tRepo string `json:\"repo\"`\n}\n"
+	if err := os.WriteFile(path, []byte(two), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+
+	one := "package routes\n\ntype A struct {\n\tRepo string `json:\"repo\"`\n}\n\ntype B struct {\n\tRepo string `json:\"repository\"`\n}\n"
+	if err := os.WriteFile(path, []byte(one), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "commit", "-aqm", "rename one of them")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 0 {
+		t.Fatalf("this test DOCUMENTS the limit; if it starts failing the gate got struct-scoped and B-100 is closed — update it, do not delete it. got %v", tags)
+	}
+}
+
+// And the drop the gate exists for is still caught: the LAST declaration of a
+// tag leaving the tracked set. Without this the fix would be indistinguishable
+// from switching the gate off.
+func TestCollectDroppedJSONTags_LastDeclarationLeavingIsCaught(t *testing.T) {
+	root := gitTree(t)
+	dir := filepath.Join(root, "api", "internal", "routes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "repositories.go")
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype A struct {\n\tRepo string `json:\"repo\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+	if err := os.WriteFile(path,
+		[]byte("package routes\n\ntype A struct {\n\tRepo string `json:\"repository\"`\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "commit", "-aqm", "rename the only one")
+
+	tags, err := collectDroppedJSONTags(root, "HEAD~1", "HEAD")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(tags) != 1 || tags[0] != "repo" {
+		t.Errorf("the last declaration leaving IS the wire break this gate exists for; got %v", tags)
 	}
 }
