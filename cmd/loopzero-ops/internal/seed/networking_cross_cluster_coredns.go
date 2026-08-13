@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 )
 
 // NetworkingCrossClusterCorednsSeed is the Go port of
@@ -81,7 +80,7 @@ func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, corednsNamespace, corednsDeployment); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", corednsNamespace, corednsDeployment, err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, corednsNamespace, corednsDeployment, 60*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, corednsNamespace, corednsDeployment, d.settleTimeout(corednsSettle))
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("CoreDNS NodeHosts patched (%d canonical entries) + rolled out", len(hosts))}
 }
 

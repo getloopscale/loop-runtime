@@ -16,6 +16,7 @@ package seed
 import (
 	"context"
 	"errors"
+	"time"
 
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -99,6 +100,32 @@ type Deps struct {
 	// 2026-08-11 para todo chamador que não a injeta. Populada só na raiz de
 	// composição, como o resto de Deps.
 	Policy RequirementPolicy
+	// RolloutSettleTimeout é quanto um seed espera um Deployment assentar antes
+	// de seguir. Zero (ou negativo) = o default do próprio seed, que preserva o
+	// comportamento anterior a 2026-08-13 para todo chamador que não a injeta —
+	// o mesmo contrato de `Policy` acima, e pela mesma razão.
+	//
+	// Existe porque a espera é política do AMBIENTE, não do seed: contra um
+	// cluster real, 120 s é o certo; contra o cliente falso de um teste
+	// hermético, o Deployment nunca assenta e o valor vira puro relógio de
+	// parede. Medido: quatro testes de `internal/seed` gastavam 390 s dos 408 s
+	// da suíte inteira de `cmd/loopzero-ops`, e era esse custo que mantinha os
+	// testes dos gates fora do caminho de push (B-101, e a bala 2 do B-088).
+	RolloutSettleTimeout time.Duration
+}
+
+// settleTimeout resolve a espera efetiva: o injetado vence, o zero cai no
+// default que o seed passa.
+//
+// O default é ARGUMENTO, não constante do pacote, porque os defaults divergem
+// de propósito — `loopzero-api` espera 120 s e o CoreDNS 60 s. Um default único
+// dobraria silenciosamente a espera do CoreDNS, que seria uma mudança de
+// comportamento em produção contrabandeada dentro de uma aceleração de teste.
+func (d Deps) settleTimeout(seedDefault time.Duration) time.Duration {
+	if d.RolloutSettleTimeout <= 0 {
+		return seedDefault
+	}
+	return d.RolloutSettleTimeout
 }
 
 // ClientFor returns the KubeClient for the given kubeconfig context name.

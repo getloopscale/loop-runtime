@@ -78,7 +78,7 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("set env: %v", err)}
 	}
 	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, 120*time.Second); err != nil {
+		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout: %v", err)}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical role_id synced (first 8=%s…)", roleID[:8])}

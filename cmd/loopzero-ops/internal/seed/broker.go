@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -106,7 +105,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, "loopzero-system", "loopzero-api"); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 4 rollout loopzero-api: %v", err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", 120*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle))
 
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical broker chain seeded (%s token; apiURL=%s)", tokenAction(reused), apiURL)}
 }

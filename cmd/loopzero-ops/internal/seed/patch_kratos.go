@@ -97,7 +97,7 @@ func (s *PatchKratosSeed) Run(d Deps) Result {
 	if err := rolloutStatefulSet(d.Ctx, d.CtrlClient, kratosNamespace, kratosCourierStatefulSet); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout statefulset %s: %v", kratosCourierStatefulSet, err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, kratosNamespace, kratosDeployment, 90*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, kratosNamespace, kratosDeployment, d.settleTimeout(kratosSettle))
 	return Result{Verdict: PASS, Reason: "kratos ConfigMap patched (7 fixes) + kratos + courier rolled out"}
 }
 

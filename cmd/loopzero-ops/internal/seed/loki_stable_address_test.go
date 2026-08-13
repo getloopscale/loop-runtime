@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -73,10 +74,11 @@ func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
 	deps := Deps{
-		Ctx:        context.Background(),
-		Kube:       NewKubeClient(mgmtC),
-		CtrlClient: mgmtC,
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmtC),
+		CtrlClient:           mgmtC,
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	}
 
 	// Act
@@ -133,10 +135,11 @@ func TestLokiCrossCluster_FalhaAltoQuandoOGatewayNaoResolve(t *testing.T) {
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
 	got := NewLokiCrossClusterSeed().Run(Deps{
-		Ctx:        context.Background(),
-		Kube:       NewKubeClient(mgmtC),
-		CtrlClient: mgmtC,
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmtC),
+		CtrlClient:           mgmtC,
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	})
 
 	if got.Verdict != FAIL {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +20,7 @@ func TestBrokerAcquireToken_ReusesExisting(t *testing.T) {
 		Data:       map[string][]byte{brokerTokenKey: []byte("canonical-token")},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(existing).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
 
 	tok, reused, err := brokerAcquireToken(deps)
 
@@ -33,7 +34,7 @@ func TestBrokerAcquireToken_ReusesExisting(t *testing.T) {
 
 func TestBrokerAcquireToken_GeneratesWhenAbsent(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
 
 	tok, reused, err := brokerAcquireToken(deps)
 
@@ -68,9 +69,10 @@ func TestBrokerSeed_Name(t *testing.T) {
 func TestBrokerSeed_Run_DryRunReports(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	deps := Deps{
-		Ctx:    context.Background(),
-		Kube:   NewKubeClient(c),
-		DryRun: true,
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(c),
+		DryRun:               true,
 	}
 	got := NewBrokerSeed().Run(deps)
 	if got.Verdict != PASS {
@@ -84,7 +86,7 @@ func TestBrokerSeed_Run_DryRunReports(t *testing.T) {
 func TestBrokerSeed_Run_FailsWhenClientCtorMissing(t *testing.T) {
 	// mgmt Kube present but no ClientCtor → workload resolution fails at Layer 2.
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
 	got := NewBrokerSeed().Run(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -97,7 +99,7 @@ func TestBrokerSeed_Run_FailsWhenClientCtorMissing(t *testing.T) {
 
 func TestBrokerSeed_Verify_FailWhenMgmtSecretAbsent(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
 	got := NewBrokerSeed().Verify(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -111,7 +113,7 @@ func TestBrokerSeed_Verify_FailWhenCanonicalKeyMissing(t *testing.T) {
 		Data:       map[string][]byte{brokerTokenKey: []byte("legacy-token-no-canonical")},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(legacy).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
 	got := NewBrokerSeed().Verify(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)

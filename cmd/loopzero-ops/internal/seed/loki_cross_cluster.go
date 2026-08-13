@@ -122,7 +122,7 @@ func (s *LokiCrossClusterSeed) Run(d Deps) Result {
 			"loopzero-system", "loopzero-api", lokiLoopZeroAPILokiURLEnvVar, canonicalURL); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 set env: %v", err)}
 		}
-		_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", 120*time.Second)
+		_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle))
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical Loki cross-cluster chain (LOKI_URL=%s)", canonicalURL)}
 }

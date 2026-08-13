@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -122,10 +123,11 @@ func TestVaultCrossClusterAddr_HappyPath_SetsEnv(t *testing.T) {
 		WithObjects(makeVaultService(30443)).Build()
 
 	deps := Deps{
-		Ctx:        context.Background(),
-		Kube:       NewKubeClient(mgmt),
-		CtrlClient: mgmt,
-		Clients:    map[string]KubeClient{vaultContextName: NewKubeClient(vault)},
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmt),
+		CtrlClient:           mgmt,
+		Clients:              map[string]KubeClient{vaultContextName: NewKubeClient(vault)},
 	}
 	got := NewVaultCrossClusterAddrSeed().Run(deps)
 
@@ -147,10 +149,11 @@ func TestVaultCrossClusterAddr_FailWhenVaultServiceMissing(t *testing.T) {
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	vault := fake.NewClientBuilder().WithScheme(newScheme(t)).Build() // no Service
 	deps := Deps{
-		Ctx:        context.Background(),
-		Kube:       NewKubeClient(mgmt),
-		CtrlClient: mgmt,
-		Clients:    map[string]KubeClient{vaultContextName: NewKubeClient(vault)},
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmt),
+		CtrlClient:           mgmt,
+		Clients:              map[string]KubeClient{vaultContextName: NewKubeClient(vault)},
 	}
 
 	got := NewVaultCrossClusterAddrSeed().Run(deps)

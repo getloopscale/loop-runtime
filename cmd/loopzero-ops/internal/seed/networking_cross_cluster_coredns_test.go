@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -80,7 +81,7 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 	}
 	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"}}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm, dep).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 
@@ -121,7 +122,7 @@ func TestNetworkingCorednsSeed_NoopWhenCanonical(t *testing.T) {
 		Data:       map[string]string{"NodeHosts": canonical},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 
@@ -144,7 +145,7 @@ func TestNetworkingCorednsSeed_FailWhenNoContainers(t *testing.T) {
 		Data:       map[string]string{"NodeHosts": ""},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 

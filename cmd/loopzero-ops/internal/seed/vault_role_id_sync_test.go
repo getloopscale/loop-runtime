@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -169,10 +170,11 @@ func TestVaultRoleIDSync_HappyPath(t *testing.T) {
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).
 		WithObjects(makeLoopZeroAPIDeploymentWithEnv(nil)).Build()
 	deps := Deps{
-		Ctx:             context.Background(),
-		Kube:            NewKubeClient(mgmt),
-		CtrlClient:      mgmt,
-		PortForwardCtor: pfCtorPointingAtTLS(server),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmt),
+		CtrlClient:           mgmt,
+		PortForwardCtor:      pfCtorPointingAtTLS(server),
 	}
 
 	got := NewVaultRoleIDSyncSeed().Run(deps)

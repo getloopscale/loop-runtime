@@ -75,7 +75,7 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 
 	// EC-2 absorption: wait for any in-progress rollout to settle before
 	// triggering the env change (avoids double-rollout race).
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, 120*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle))
 
 	// Step 3 — set env on loopzero-api Deployment.
 	if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
@@ -83,7 +83,7 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("set env on loopzero-api: %v", err)}
 	}
 	// Rollout settle post-change.
-	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, 60*time.Second); err != nil {
+	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPIResettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("loopzero-api rollout: %v", err)}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("wired %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore)}
@@ -216,6 +216,29 @@ func getDeploymentContainerEnv(ctx context.Context, cli ctrlclient.Client,
 	}
 	return "", nil
 }
+
+// Os prazos de espera de rollout, nomeados. Eles DIVERGEM de propósito, e cada
+// divergência tem uma razão que só sobrevive se estiver escrita:
+//
+//   - loopzeroAPISettle — o loopzero-api sobe pesado (migrações + conexão a vários
+//     clusters), então é o mais longo.
+//   - loopzeroAPIResettle — a segunda espera do MESMO seed, depois da mudança de env
+//     já ter sido aplicada. É metade porque o Deployment acabou de assentar na
+//     primeira; se demorar mais que isso, esperar não vai resolver.
+//   - kratosSettle — Deployment + StatefulSet, mais leves que o loopzero-api.
+//   - corednsSettle — o mais curto: um Deployment de sistema, leve e sem estado,
+//     que reinicia rápido.
+//
+// Antes eram sete literais espalhados por seis arquivos, e um oitavo chamador
+// escreveria o seu — a forma se propaga por ser lida. Nenhum deles é o prazo
+// EFETIVO: quem resolve é Deps.settleTimeout, para que um ambiente hermético
+// possa injetar o seu sem que o valor de produção mude.
+const (
+	loopzeroAPISettle   = 120 * time.Second
+	loopzeroAPIResettle = 60 * time.Second
+	kratosSettle    = 90 * time.Second
+	corednsSettle   = 60 * time.Second
+)
 
 // waitForRolloutSettled polls the Deployment until readyReplicas == desired
 // OR timeout. Errors are non-fatal on timeout: the seed can proceed and Kubernetes
