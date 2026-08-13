@@ -1242,6 +1242,33 @@ dod:
 > **O que sobra, e é real:** `helm-drift` e `clusterimagepolicy-mode` estão classificados `operatorRun` (*"needs live cluster state"*) e são **puramente herméticos** — zero `kubectl`/`exec.Command`/`client-go` nos dois pacotes; leem apenas `charts/`, `infra/helm/` e `values.yaml`. A categoria `operatorRun` não tem prova: é a única das sete que ninguém verifica. Mais a baseline órfã. O escopo do item passa a ser esse.
 
 
+> **2026-08-12 (fatia `slice-13`):** duas balas medidas, uma fechada.
+>
+> **Fechada — a baseline órfã.** `infra/quality/environment-lock-baseline.txt` foi **removida**.
+> Medido antes: zero referências em `*.go`/`*.yml`/`*.md`/`*.sh` (as 5 de documentação que o item
+> registra já não existiam), nenhum gate `environment-lock` no inventário, e **2 dos 21 caminhos**
+> já ausentes — `api/internal/routes/tenants.go` e seu teste viraram subpacote na fatia 8.
+>
+> **Medida, não fechada — a classificação `operatorRun`.** A bala pede prová-la em vez de aceitá-la.
+> O desenho atual argumenta (`quality_gate_wiring_test.go:48-58`) que detectar é inviável porque uma
+> sonda **estática** produz falso-positivo. Correto para sonda estática — mas uma sonda
+> **comportamental** (rodar o gate com o insumo ausente) discrimina, e eu rodei as cinco:
+>
+> | gate | com o insumo ausente | prova? |
+> |---|---|---|
+> | `drill-creds-isolation` | `ERROR: neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN...` | **sim** |
+> | `runtime-slo` | não aceita `--root` (CLI própria) | inconclusivo |
+> | `spotcheck-dimension` | não aceita `--root` (CLI própria) | inconclusivo |
+> | `cosign-cutover` | `pre-GA — marker absent. Check is dormant.` — **conclui** | **não** |
+> | `service-auth-rotation` | `no rotation marker — check is dormant` — **conclui** | **não** |
+>
+> Os dois últimos citam como insumo externo *"the wall-clock date"*, mas o marcador que eles comparam
+> vive **dentro** do repositório (`.github/v1.0-ga-date.txt`), e sem ele concluem sozinhos. Isso
+> sugere duas espécies distintas de "estado externo" — o que pode faltar (provável por ausência) e o
+> ambiente que está sempre presente (improvável por ausência) —, e a classificação atual as trata
+> igual. Fechar isto é a próxima fatia, e exige decidir se as duas ratchets de data continuam
+> `operatorRun`.
+
 ## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
 
 domain: engine-go
@@ -2181,3 +2208,20 @@ dod:
 
 > Registrado 2026-08-12 pela revisão da fatia `slice-11`. As seis variantes estão enumeradas no
 > doc-comment de `casematch.go` — foram documentadas em vez de implicadas inexistentes.
+
+## B-091 — `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 na fatia `slice-13`, ao remover a baseline órfã que o `B-045` nomeia. Dos quatro arquivos em `infra/quality/`, `coverage-baseline.json` e `host-ports.txt` têm 3 leitores em código cada; `dry-run-baseline.txt` tem **zero** — nenhuma referência em `*.go`, `*.yml` ou `*.sh`. É a mesma classe do `environment-lock-baseline.txt` removido nesta fatia.
+why_now: o `B-045` nomeou uma baseline órfã e ela era duas. Um arquivo em `infra/quality/` é lido como insumo de gate; sem leitor, ele parece contrato e não é.
+status: raw
+severity: baixa — não quebra nada; é ruído que se disfarça de garantia. Mesmo argumento do `B-045`.
+dod:
+  - `dry-run-baseline.txt` é removido ou ganha consumidor
+  - existe asserção de que todo arquivo em `infra/quality/` tem pelo menos um leitor em código
+
+> Registrado 2026-08-12 pela fatia `slice-13`. Fora da DoD do `B-045`, que nomeia só a baseline de
+> environment-lock — registrado em vez de removido junto, para não ampliar escopo em silêncio.
