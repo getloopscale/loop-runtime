@@ -128,8 +128,6 @@ var (
 	//   - ReconcileQueueDepth: surface by `controller_runtime_active_workers`
 	//                         saturation; T5.2 adds the LoopZero-flavored gauge
 	//                         for cross-binary aggregation.
-	//   - StatusUpdateConflictsTotal: per ADR-0024 SRE condition #3 — observe
-	//                                 retry helper effectiveness.
 
 	// SelfHealTotal counts in-process self-heal events (ADR-0027 L5
 	// evidence). Examples: application_reaper transition; preview
@@ -175,18 +173,6 @@ var (
 		[]string{"controller"},
 	)
 
-	// StatusUpdateConflictsTotal counts conflict errors hit by
-	// UpdateStatusWithRetry (ADR-0024 SRE condition #3). Sustained high
-	// rate indicates contention pressure that the retry helper is masking
-	// — prompts capacity planning conversation.
-	StatusUpdateConflictsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "loopzero_status_update_conflicts_total",
-			Help: "Status().Update conflicts retried via conditions.UpdateStatusWithRetry (ADR-0024).",
-		},
-		[]string{"controller"},
-	)
-
 	// ClusterCredentialCAFetchTotal counts live CA fetch attempts in
 	// ClusterCredentialReconciler.reconcileArgoCDClusterSecret (plan
 	// 2026-05-25-live-ca-fetch-clustercredential, Op B). result:
@@ -220,7 +206,6 @@ func init() {
 		OrphanCRTotal,
 		FinalizerBlockedSeconds,
 		ReconcileQueueDepth,
-		StatusUpdateConflictsTotal,
 		// Op B (plan 2026-05-25-live-ca-fetch-clustercredential):
 		ClusterCredentialCAFetchTotal,
 	)

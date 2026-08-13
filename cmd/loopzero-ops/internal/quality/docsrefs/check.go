@@ -12,9 +12,13 @@
 //     single-status-writer contract) and workflow (cited at :193 as the 95%
 //     confidence gate) — both named as sources of Unbreakable Rules.
 //   - operators/internal/conditions/retry.go and internal/metrics/metrics.go
-//     cite ADR-0024 as the authority mandating migration to
+//     cited ADR-0024 as the authority mandating migration to
 //     UpdateStatusWithRetry. Before this gate was written, the only mention of
 //     ADR-0024 anywhere in the repository was the plan that introduced the gate.
+//     RESOLVED 2026-08-12 (ADR 2026-08-12-status-writer-contract): the phantom
+//     ADR mandated the very pattern CLAUDE.md forbids, so the helper it pointed
+//     at was deleted along with all eight citations, and the allowlist entry that
+//     covered them was retired with them. Kept here as the motivating case.
 //
 // A reference that does not resolve is worse than no reference: it is followed.
 // The gate does NOT try to restore the missing documents — part of their content

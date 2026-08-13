@@ -191,7 +191,7 @@ func Test_SetReadinessSummary_UnknownStatusIsReconciling(t *testing.T) {
 }
 
 // Test_SetReadinessSummary_DegradedIsStalled — Degraded reason
-// classified as failure (per ADR-0024 ReasonDegraded constant).
+// classified as failure (kstatus Stalled; ReasonDegraded constant).
 func Test_SetReadinessSummary_DegradedIsStalled(t *testing.T) {
 	gen := int64(1)
 	conds := []metav1.Condition{

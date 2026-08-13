@@ -1411,7 +1411,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11 e conferido pelo gate de qualidade da fase 3. O merge-patch a partir de snapshot base — o padrão que o `CLAUDE.md:145-160` descreve como o contrato — está aplicado em **2 dos 8 controllers de CRD**. E `environment_controller.go:142` registra `DeferReadinessSummary`, que é um **segundo** escritor de status (`readiness.go:59`, `_ = c.Status().Update(ctx, latest)`), no mesmo passo em que o comentário do próprio arquivo (`:166`) diz tê-lo removido; há outros `Status().Update` crus em `:320` e em `app/application_controller.go:235`. Separadamente, `conditions.UpdateStatusWithRetry` (`operators/internal/conditions/retry.go:85`, 165 LOC) tem **zero chamadores de produção** — 24 referências, todas em `_test.go` — e seu contador Prometheus só incrementa em `metrics_test.go:38`. O ADR que o manda migrar **não existe** (ver B-052).
 why_now: o `MEET-2026-07-02-002` estabelece a decisão do merge-patch e a pré-condição de escritor único, e sua própria linha de risco diz *"a future 2nd status-writer must revisit"* — que é exatamente o defeito medido. A cobertura de 2 em 8 é extrapolação heurística: a reunião tratava do Environment e não mandatou os oito.
-status: triaged
+status: planned
 severity: alta — perda de escrita de status sob concorrência é o modo de falha que o merge-patch existe para evitar, e ele está garantido em um quarto dos controllers.
 dod:
   - está decidido se o invariante vale para os oito controllers ou só para os que a reunião cobriu — e isso está escrito
@@ -1419,6 +1419,29 @@ dod:
   - `UpdateStatusWithRetry` ganha chamadores ou é deletado — um helper com ADR inexistente, métrica que nunca incrementa e zero uso é dívida que parece cobertura
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Uma das três instâncias do padrão sistêmico *declarado + testado + nunca ligado* (ver B-042 e B-045).
+>
+> **Fechado 2026-08-12** pela fatia `slice-10-status-writer-contract`, ADR
+> `docs/wiki/decisions/2026-08-12-status-writer-contract.md`, ata `MEET-ASYNC-AMENDMENT-2026-08-12-006`.
+> As três balas: (1) decidido e escrito — o invariante vale para os oito, e a regra que perdeu foi
+> apagada porque citava um ADR inexistente; (2) `DeferReadinessSummary` deixou de usar o padrão
+> proibido e parou de descartar o erro; (3) `UpdateStatusWithRetry` deletado com o contador morto e
+> as 8 citações a `ADR-0024`.
+>
+> **Três correções à evidência acima.** O helper é registrado em **cinco** controllers, não em um:
+> `clustercredential:97`, `gitrepositorybinding:85`, `platformbootstrap:105`, `environment:149`,
+> `preview:180` — o item cita `:142`, que é `:149`. E a medição de que *"o comentário do próprio
+> arquivo diz tê-lo removido"* não se reproduziu: o doc-comment descreve o helper como ativo e
+> nomeia os cinco consumidores (errando só um caminho, corrigido aqui). E *"24 referências, todas em
+> `_test.go`"* subconta: havia 7 fora de teste (5 em `retry.go`, 2 em `metrics.go`).
+>
+> A migração dos 6 controllers restantes (**25** chamadas; 27 no repositório todo) segue aberta em
+> **B-085**. O `B-086` mudou de assunto: a revisão desta fatia mediu que o gate `docs-contract-refs`
+> **já varre Go** — eu havia afirmado o contrário sem medir —, e o achado real é outro.
+>
+> **A revisão independente rodou antes do commit e encontrou um HIGH de corretude** que teria
+> passado: o merge-patch simples carrega o array de conditions inteiro (RFC 7386 trata array como
+> escalar), então apagaria a escrita de outro ator. Corrigido com
+> `MergeFromWithOptimisticLock` e um teste que encena a corrida — mesma lição da fatia slice-9.
 
 ## B-056 — Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos   [ ]
 
@@ -1972,3 +1995,46 @@ dod:
 
 > Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em
 > `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3.
+
+## B-085 — Seis controllers escrevem `.status` fora do contrato, em 25 pontos   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12, durante a fatia `slice-10`. Com o contrato decidido pelo ADR `2026-08-12-status-writer-contract` (merge-patch a partir de snapshot), a contagem por controller é: `app/exposure_controller.go` **3**, `platform/clustercredential_controller.go` **5**, `platform/gitrepositorybinding_controller.go` **3**, `platform/platformbootstrap_controller.go` **5**, `preview/preview_controller.go` **6**, `tenant/tenant_controller.go` **3**, mais **1** em `app/application_controller.go` e **1** em `environment/environment_controller.go` (estes dois já usam merge-patch no caminho principal). Total **25** chamadas cruas a `Status().Update` nesses seis; 27 no repositório todo, contando 1 em `application` e 1 em `environment`, que já usam merge-patch no caminho principal. Os dois que seguem o contrato — `environment` (5 merge-patch) e `application` (1) — são o modelo, e `environment_controller_conflict_test.go` é o molde de teste determinístico por interceptor.
+why_now: até 2026-08-12 havia **duas** regras mandando o oposto sobre como escrever status, então não existia alvo único de migração. O ADR desta data escolheu uma; estes 27 pontos são o que falta para o invariante ser um invariante em vez de uma descrição de dois controllers.
+status: raw
+severity: alta — é o mesmo modo de falha do B-055 (perda de escrita sob concorrência), agora sem ambiguidade sobre qual é o padrão certo.
+dod:
+  - os 25 pontos persistem por merge-patch a partir de um snapshot tirado logo após o `Get`
+  - nenhum retorna `ctrl.Result{}, nil` numa falha de escrita de status — o contrato manda erro e requeue
+  - cada controller migrado ganha um teste de conflito determinístico no molde de `environment_controller_conflict_test.go`
+  - um gate estático recusa `Status().Update` novo nos operators — sem ele a migração é reversível por descuido
+  - onde houver mais de um escritor, o patch usa `MergeFromWithOptimisticLock`: o RFC 7386 trata array como escalar, então um merge-patch de `conditions` carrega o array inteiro e sem o lock apaga a escrita alheia (medido na `slice-10`)
+
+> Registrado 2026-08-12 pela fatia `slice-10` (ADR D3). Deliberadamente **não** feito junto com a
+> decisão de contrato: são seis fluxos de reconcile independentes, e juntar a escolha da regra com
+> sua aplicação em 25 pontos torna impossível saber qual dos dois quebrou.
+
+## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 pela revisão independente da fatia `slice-10`. O resolvedor de ADR do gate `docs-contract-refs` aceita como documentação qualquer `.md` sob `docs/` ou `.claude/` que **não** esteja em `cycleArtifactDirs` (`cmd/loopzero-ops/internal/quality/docsrefs/check.go:258-265`, `:286-317`) — e `docs/wiki/decisions/` não está na lista. O ADR `docs/wiki/decisions/2026-08-12-status-writer-contract.md` cita `ADR-0024` cinco vezes **para dizer que ele não existe**, e com isso `ADR-0024` passou a resolver. É textualmente o que o comentário do gate proíbe em `check.go:256` — *"Writing the document that records an absence must not manufacture a presence"* — e o que `TestCheck_CycleArtifactsAreNotADRDocumentation` (`check_test.go:257-275`) fecha para `.claude/knowledge-base/`, um diretório ao lado. Sem efeito hoje: nenhum comentário Go cita mais `ADR-0024`, e a isenção que os cobria foi retirada do allowlist na mesma fatia.
+why_now: a fatia `slice-10` deletou as 8 citações que o `B-052` registrou, então o gate ficou sem nada para resolver — e a armadilha ficou latente em vez de visível. A próxima citação a um ADR fantasma que já tenha sido tema de um ADR passa despercebida.
+status: raw
+severity: média — latente, não ativa. Vira alta na primeira citação nova a um id de ADR que algum documento de decisão já mencione.
+dod:
+  - uma menção a `ADR-NNNN` dentro de um documento que **decide sobre** esse ADR deixa de contar como documentação dele
+  - o critério que distingue "documenta" de "cita para decidir" está escrito, não inferido do diretório — `docs/wiki/decisions/` legítimo continua resolvendo os ADRs que ele de fato define
+  - uma fixture reproduz o caso: um `.go` citando `ADR-XXXX` mais um ADR que só fala sobre `ADR-XXXX` reprova
+  - o teste de não-regressão continua verde: um ADR real em `docs/wiki/decisions/` resolve normalmente
+
+> Registrado 2026-08-12 pela fatia `slice-10` (`MEET-ASYNC-AMENDMENT-2026-08-12-006` amendment 2).
+> **Substitui** a versão anterior deste item, que afirmava que o gate varria apenas markdown — falso,
+> medido: `check.go:193-219` varre **comentários Go** sobre `api pkg operators cmd tools infra`, e as
+> fixtures em `check_test.go:266` e `:282` já são arquivos `.go`. A afirmação errada era minha, feita
+> sem medir, numa fatia cujo objeto é apagar afirmações normativas que não se sustentam.

@@ -165,7 +165,8 @@ func analyzeFile(fset *token.FileSet, path string, exit *errExit, strict bool) e
 		}
 		// Match r.<verb>(...) directly (TenantReconciler embeds client.Client).
 		// r.Client.<verb>(...) and r.Status() are not flagged here; status
-		// updates have a separate review (ADR-0024).
+		// writes are governed by the single-status-writer invariant
+		// (CLAUDE.md; ADR 2026-08-12-status-writer-contract), not by RBAC.
 		ident, ok := sel.X.(*ast.Ident)
 		if !ok || ident.Name != "r" {
 			return true

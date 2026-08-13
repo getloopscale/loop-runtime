@@ -33,10 +33,6 @@ func Test_LevelIVMetrics_Registered(t *testing.T) {
 			name: "loopzero_reconcile_queue_depth",
 			emit: func() { ReconcileQueueDepth.WithLabelValues("tenant").Set(5) },
 		},
-		{
-			name: "loopzero_status_update_conflicts_total",
-			emit: func() { StatusUpdateConflictsTotal.WithLabelValues("tenant").Inc() },
-		},
 	}
 
 	for _, tc := range cases {

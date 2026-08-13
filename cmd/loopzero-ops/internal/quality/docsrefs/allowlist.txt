@@ -26,7 +26,6 @@ rule | .claude/rules/auto-docs.md | 2026-11-09 | citado em CLAUDE.md:215 sobre n
 rule | ../.claude/rules/umbrella-scope.md | 2026-11-09 | CLAUDE.md:17 o chama de "the workspace contract" e ele nao existe NEM no umbrella — verificado. Depende de o umbrella ganhar a regra (B-052)
 
 # --- ADRs citados por codigo de producao e nao documentados -----------------
-adr | ADR-0024 | 2026-11-09 | citado por operators/internal/conditions/retry.go e internal/metrics/metrics.go como a autoridade que obriga migrar para UpdateStatusWithRetry. Antes deste gate, a UNICA mencao no repo era o plano que o introduziu. Ver B-055 — o helper tem zero chamadores de producao, entao a decisao e deletar ou ligar
 adr | ADR-0014 | 2026-11-09 | citado em comentario Go e sem nenhuma mencao em .md no repositorio (B-052)
 
 # --- ADRs achados pelo proprio gate, alem da medicao manual ------------------
