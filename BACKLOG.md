@@ -2219,6 +2219,24 @@ dod:
 > Registrado 2026-08-13, pela fatia 19: o gate reprovou o push porque `gofmt -w` reduziu o espaçamento antes de um comentário de fim de linha, e uma linha *modificada* contendo a tag era lida como tag *removida*. Essa parte foi corrigida na mesma fatia; o que fica aqui é a granularidade de nome, dos dois lados.
 
 
+## B-101 — Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13. `cd cmd/loopzero-ops && go test ./... -short -count=1` leva **408 s**, dos quais **392 s** são de `internal/seed` — e o `-short` não muda nada, porque nenhum teste do pacote o consulta (`grep -c 'testing.Short()' cmd/loopzero-ops/internal/seed/*.go` → 0). Quatro testes respondem por 390 s: `TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer` (120 s), `TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL` (120 s), `TestPatchKratosSeed_Run_PatchesAndRolloutsBoth` (90 s) e `TestNetworkingCorednsSeed_HappyPath` (60 s). Nenhum toca cluster — usam `fake.NewClientBuilder()`. Eles pagam o prazo inteiro de `waitForRolloutSettled` (`cmd/loopzero-ops/internal/seed/vault_cross_cluster_addr.go:223`), cujo valor está **cravado na chamada**: `120*time.Second` em `broker.go:109`, `loki_cross_cluster.go:125` e `vault_role_id_sync.go:81`, `60*time.Second` em `networking_cross_cluster_coredns.go:84`. Com cliente falso o Deployment nunca assenta, então o laço espera até o fim.
+why_now: é o obstáculo concreto da bala 2 do DoD do `B-088` — o `delivery-gate.sh` roda `task quality:gates`, que **não** chama `quality:hermetic`, que é onde `cd cmd/loopzero-ops && go test ./...` vive. Medido: `gates` tem `deps: [build]` e nada mais. Ou seja, os testes que provam que um gate reprova o que deve reprovar não estão no caminho de push — e ninguém os colocou lá porque custariam ~7 min por push. Some o custo e a bala fica trivial.
+status: triaged
+severity: média — não há defeito de produção; o custo é que a rede de proteção dos gates fica fora do único ponto que é obrigatório
+dod:
+  - o prazo de espera de rollout é injetável pela raiz de composição, como `Policy` já é em `Deps` (`seed.go:101`), com o zero preservando o valor de hoje
+  - os quatro testes passam a injetar um prazo curto, e `cd cmd/loopzero-ops && go test ./... -short` cai para a ordem de segundos
+  - o valor cravado deixa de aparecer no ponto de chamada de cada seed
+
+> Registrado 2026-08-13, ao medir o `B-088` para fechá-lo. `.claude/rules/testing.md § 6` nomeia isto: *"Time/randomness in unit tests — inject a clock/RNG so the test is deterministic"*.
+
+
 ## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
 
 domain: engine-go
@@ -2402,7 +2420,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. `taskfiles/quality.yml:58-62` define `quality:hermetic`, cujo primeiro comando é `cd pkg && go test ./quality/...`. O pacote `pkg/quality` **foi relocado no M9** para `cmd/loopzero-ops/internal/quality/`. Rodando: `pattern ./quality/...: lstat ./quality/: no such file or directory` → `task: Failed`. E `quality:all` é `deps: [hermetic, gates, contract]` (`quality.yml:368-370`), então **o alvo agregado inteiro aborta no primeiro passo**. Só `quality:gates` sozinho é verde — que é o que o `delivery-gate.sh` roda, e por isso ninguém percebeu.
 why_now: o `CLAUDE.md` documenta `task quality:all` como "hermetic tests + full scan + contract gates". Quem seguir a documentação recebe uma falha imediata e pode concluir que o repositório está quebrado. E os testes hermeticos que o alvo prometia rodar **não rodam desde o M9**.
-status: raw
+status: shipped
 severity: alta — um alvo de qualidade documentado que aborta é pior que um ausente: ele parece cobertura.
 dod:
   - `task quality:all` completa, com exit code real
@@ -2420,6 +2438,13 @@ dod:
 > A terceira bala (*"asserção de que um alvo não referencia diretório inexistente"*) é coberta pelo
 > gate `test-target-coverage` do `B-088`: um diretório que não existe não tem `go.mod`, e um módulo
 > que existe sem alvo reprova.
+
+> **Fechado — verificado 2026-08-13.** `task quality:all` completa com **exit 0** e executa **121**
+> passos (`grep -c '^task: \[' `). As três balas: o alvo completa com código real; `quality:hermetic`
+> passou a rodar `cd cmd/loopzero-ops && go test ./... -count=1` em vez de só `go build`; e
+> `TestTaskfilesDoNotCdIntoMissingDirs` existe e roda — ela é a asserção de que um alvo não referencia
+> diretório inexistente, que era a família do defeito. O conserto veio em fatia anterior; o item ficou
+> `raw` até esta medição, que é o inverso do defeito que ele mesmo descreve.
 
 ## B-088 — Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task   [ ]
 
@@ -2460,6 +2485,17 @@ dod:
 > Nota sobre a bala do `delivery-gate`: ele chama `quality:gates`, não `quality:all`. Com o gate
 > dentro do `quality:gates`, o hook passa a **verificar a cobertura**; executar os testes continua
 > sendo do `test:unit`. A diferença está dita porque a bala pede o hook.
+
+> **Medido 2026-08-13 — duas balas fechadas, uma não.** Fechadas: `cmd/loopzero-ops` e os dois binários de
+> `tools/` entram em `task test:unit` (`taskfiles/test.yml:120-124`, com `GOWORK=off` para os de fora
+> do workspace); e a asserção de que todo módulo está em algum alvo existe e passa — `test-target-coverage`
+> devolve *"9 module(s): 8 named by a test target, 1 exempt with a dated reason"*.
+>
+> **Aberta: a bala 2.** O `delivery-gate.sh` roda `task quality:gates`, e `gates` tem `deps: [build]` e
+> mais nada — `quality:hermetic`, onde `cd cmd/loopzero-ops && go test ./...` vive, **não** é chamado. Os
+> testes que provam que um gate reprova o que deve reprovar seguem fora do único ponto obrigatório.
+> Ninguém os pôs lá porque custam **408 s**, dos quais 392 s são quatro testes herméticos que esperam
+> relógio real — ver `B-101`, que é o que destrava esta bala.
 
 ## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [ ]
 
