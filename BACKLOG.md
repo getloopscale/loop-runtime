@@ -1876,6 +1876,54 @@ dod:
 
 > Registrado 2026-08-12 ao escrever o ADR do `B-042`. Medido, não inferido.
 
+> **NÃO fechado. A fatia `slice-17` avançou e a revisão mostrou que não basta.** ADR
+> `docs/wiki/decisions/2026-08-13-transit-key-policy.md`, ata `MEET-ASYNC-AMENDMENT-2026-08-13-004`.
+>
+> **Dois BLOCKERs medidos pela revisão, antes do commit, e ambos anulam o efeito em runtime:**
+>
+> 1. O `TransitClient` autentica **exclusivamente por AppRole**, e o chart **não declara AppRole
+>    nenhum**. A policy que corrigi está ligada só ao role de k8s-auth, cujo cliente
+>    (`pkg/vault.NewClient`) tem **zero** chamadores de produção. As três fontes não são três versões
+>    de uma policy: o runbook escreve `loopzero-api-approle`, as outras duas escrevem `loopzero-api`, e são
+>    consumidas por **mounts diferentes**. Minha moldura no ADR estava errada.
+> 2. `vault-bootstrap-dev.sh` aplica o chart (passo 5) e **sobrescreve a mesma policy** (passo 6-7)
+>    com a versão larga, incondicionalmente. Último escritor vence — e esse script é o passo 1 da
+>    cadeia canônica pós-Cleanroom.
+>
+> Corrigir o chart era **necessário e não suficiente**. O que a fatia entregou e que fica de pé: a
+> policy versionada descreve o que o cliente pede; o teste que **deriva** os caminhos das constantes
+> do cliente; o doc-comment que descrevia o caminho rejeitado pelo transit (em quatro lugares, não
+> um); e a distinção entre negação permanente e falha transitória, extraída em função testável.
+>
+> **Um erro meu que o teste pegou:** meu primeiro patch caiu na policy errada
+> (`loopzero-api-transit-encrypt`), porque há quatro entradas de nome parecido e uma delas é um *role*.
+>
+> O que falta para fechar está em **B-099**.
+>
+> Escolhida a versão do **runbook** — a mais estreita das três e a única com prova de execução. Ela
+> carrega duas lições medidas ao vivo em 2026-06-10 que as outras não têm: `update` é exigido junto
+> de `create` (o POST do cliente Go é HTTP PUT, que o OpenBao trata como update mesmo sem a chave
+> existir — com `["create","read"]` o token reportava as duas e o PUT devolvia **403**), e a
+> convenção é **hífen**, porque com barra o transit devolve 404 *"unsupported path"*.
+>
+> `encrypt`/`decrypt` foram **estreitados** de `+` para `loopzero-tenants-*`: `+` casa qualquer segmento
+> único, e a única chave que o `api` nomeia vem de `tenantKeyName`. A policy sai desta fatia mais
+> larga em um eixo e mais estreita em dois.
+>
+> **O teste deriva os caminhos das constantes do cliente**, não do runbook — prosa envelhece; o
+> `tenantKeyPrefix` é o que executa. Terceira vez nesta série que o remédio para drift é comparar
+> contra a fonte que executa, em vez de manter duas listas.
+>
+> **Um erro meu que o teste pegou:** meu primeiro patch caiu na policy **errada**
+> (`loopzero-api-transit-encrypt`, não `loopzero-api`) — havia quatro declarações com nome parecido, e uma
+> delas é um *role*. Sem o teste, eu teria commitado uma policy que não muda nada.
+>
+> `ErrTransitKeyCreateFailed` tinha **zero** leitores fora da declaração e do teste; agora
+> `secrets.go` distingue negação (`"denied"`) de falha transitória (`"failed"`) — são fatos opostos
+> para quem está de plantão, e colapsá-los é o que a Regra 8 chama de tratar todo erro igual.
+>
+> Achado no caminho: **`B-098`** — duas policies declaradas e nunca ligadas a role nenhum.
+
 ## B-073 — O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa   [ ]
 
 domain: engine-go
@@ -2476,3 +2524,43 @@ dod:
   - está decidido se o remédio manual continua existindo
 
 > Registrado 2026-08-13 pela revisão da fatia `slice-16`.
+
+## B-098 — Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 na fatia `slice-17`. `infra/helm/openbao-init/values.yaml` declara quatro entradas com nome parecido: `loopzero-api-read` (:126), `loopzero-api-transit-encrypt` (:131), `loopzero-api` (:188 — a policy) e `loopzero-api` (:328 — um **role** no mount `k8s-core`). Só a terceira é referenciada: o role em `:334-335` lista `policies: [loopzero-api]`. **nenhum role neste arquivo as liga** — treze roles declaram `policies:`, e o único que nomeia uma policy `loopzero-api-*` é o de k8s-core, que liga `loopzero-api`. (A redação anterior dizia que um `grep` repo-wide devolvia zero; **falso** — `docs/operations/vault-cluster-local-runbook.md:202` liga `loopzero-api-read` a um role, e há outras menções em runbooks e auditorias. A afirmação certa é sobre este arquivo, e é ela que o item precisa.) Duas policies existem, são aplicadas pelo `helmfile sync`, e nenhuma identidade as carrega.
+why_now: ao corrigir o `B-072` eu apliquei o patch na policy errada — `loopzero-api-transit-encrypt`, porque o padrão casou primeiro. Só o teste novo pegou. Quatro nomes parecidos, dois deles inertes, e um que é um role: quem for editar a policy do `api` tem quatro candidatos e três estão errados.
+status: raw
+severity: média — não há risco de segurança (uma policy sem role não concede nada a ninguém); o custo é o mesmo do `B-055` e do `B-045`, dívida que parece cobertura, e neste caso já custou um patch no lugar errado.
+dod:
+  - está decidido se as duas são removidas ou ligadas a alguma identidade
+  - se removidas, o `loopzero-api-read` e o `loopzero-api-transit-encrypt` saem do `values.yaml`
+  - existe asserção de que toda policy declarada é referenciada por ao menos um role
+
+> Registrado 2026-08-13 pela fatia `slice-17`. Quarta instância nesta série do padrão *declarado e
+> nunca ligado* — as outras: `B-055` (helper sem chamador), `B-045` (gates que não rodam), `B-094`
+> (regra que percorre campo não populado).
+
+## B-099 — A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão da fatia `slice-17`. **(a)** `TransitClient` autentica exclusivamente por AppRole — `pkg/vault/transit_client.go:584` é o único login do arquivo (`POST /v1/auth/approle/login`), e `api/cmd/setup_transit.go:47-52` é o único ponto de construção, passando `RoleID`/`SecretID`. O chart `infra/helm/openbao-init` **não declara AppRole**: a policy `loopzero-api` está ligada só ao role de mount `k8s-core` (`values.yaml:329-336`), cujo cliente `pkg/vault.NewClient` tem **zero** chamadores de produção. **(b)** `infra/scripts/local/vault-bootstrap-dev.sh` aplica o chart no passo 5 (`helmfile sync --selector name=openbao-init`) e, nos passos 6-7 (`:429-445`), faz `bao policy write loopzero-api` com `transit/keys/*` incluindo `delete` e `list`, e liga o AppRole a `token_policies=loopzero-api`. Mesmo nome, escrita incondicional, último escritor vence — e o script é o passo 1 de `seed-post-cleanroom-all.sh:151`. **(c)** O runbook (`openbao-transit-cutover-runbook.md:144`) liga o AppRole a `loopzero-api-approle`, um **terceiro nome** que o chart não declara.
+why_now: a fatia `slice-17` corrigiu a policy do chart e mediu que isso **não tem efeito em runtime** por (a) e (b). Sem este item, o `B-072` pareceria fechado — a policy versionada está certa, e nada a carrega.
+status: raw
+severity: alta — é o mesmo defeito do `B-072` (criação de chave de tenant negada), com a diferença de que agora a correção existe e não alcança. Uma correção que não alcança é pior que a ausência dela, porque parece cobertura.
+dod:
+  - está decidido onde o AppRole do `loopzero-api` é declarado — no chart, ou fora dele com o chart ciente
+  - o `vault-bootstrap-dev.sh` para de sobrescrever a policy que o chart aplica, ou o chart para de declará-la
+  - os três nomes (`loopzero-api`, `loopzero-api-approle`, e a policy do script) são reconciliados num só
+  - `transit/keys/loopzero-tenants-*` é estreitado para não alcançar `/config` e `/rotate` — escrever `min_decryption_version` em `/config` inutiliza permanentemente ciphertext existente do tenant — **com verificação LIVE da semântica de `+` em segmento parcial**
+  - existe asserção de que a policy que a identidade do cliente carrega é a que tem a concessão
+
+> Registrado 2026-08-13 pela revisão da fatia `slice-17`. Quinta instância nesta série do padrão
+> *declarado e nunca ligado*, e a primeira em que **eu** a produzi: a policy corrigida existe, está
+> versionada, e nenhuma identidade a carrega.

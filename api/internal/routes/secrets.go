@@ -7,8 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -106,6 +108,27 @@ type SecretHandler struct {
 }
 
 // NewSecretHandler creates a new SecretHandler.
+// transitFailureStatus classifies an encryption failure for the per-environment
+// sync status.
+//
+// A policy denial and a network timeout are opposite facts for whoever is on
+// call: the denial is PERMANENT and needs an operator to widen a Vault policy;
+// the timeout is transient and clears itself. Both reported "failed" until
+// 2026-08-13, so the operator waited for something that was never going to
+// improve — the treat-every-error-alike shape Rule 8 forbids (B-072).
+//
+// The typed error already existed and had no reader: ErrTransitKeyCreateFailed
+// appeared nowhere outside its own declaration and its own test.
+//
+// Extracted as a function so the classification is testable without staging a
+// whole bulk upload — the branch shipped untested in its first version.
+func transitFailureStatus(err error) string {
+	if errors.Is(err, loopzerovault.ErrTransitKeyCreateFailed) {
+		return "denied"
+	}
+	return "failed"
+}
+
 func NewSecretHandler(store SecretStore) *SecretHandler {
 	return &SecretHandler{store: store}
 }
@@ -505,7 +528,16 @@ func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *middleware.User
 				if aggs.firstErr == nil {
 					aggs.firstErr = terr
 				}
-				aggs.syncStatusPerEnv[env] = "failed"
+				// A policy denial and a network timeout are opposite facts for
+				// whoever is on call: the denial is PERMANENT and needs an
+				// operator, the timeout is transient and clears itself. Both
+				// reported "failed" until 2026-08-13, so the operator waited for
+				// something that was never going to improve — the
+				// treat-every-error-alike shape Rule 8 forbids (B-072).
+				//
+				// The typed error existed and had no reader: ErrTransitKeyCreateFailed
+				// appeared nowhere outside its own declaration and its test.
+				aggs.syncStatusPerEnv[env] = transitFailureStatus(terr)
 				aggs.storeFailures++
 				continue
 			}

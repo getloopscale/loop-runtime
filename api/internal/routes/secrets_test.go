@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1190,5 +1192,22 @@ func TestSecretHandler_List_ExistingProject_AllowsThrough_RedTeam92(t *testing.T
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200 OK for owned project, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// B-072: a policy denial and a transient failure are opposite facts for whoever
+// is on call, and both reported "failed" until 2026-08-13. The branch that now
+// separates them shipped untested in its first version — an independent review
+// measured that no test asserted "denied".
+func TestTransitFailureStatus_SeparatesDenialFromTransient(t *testing.T) {
+	if got := transitFailureStatus(fmt.Errorf("wrapped: %w", loopzerovault.ErrTransitKeyCreateFailed)); got != "denied" {
+		t.Errorf("policy denial classified as %q; it is PERMANENT and needs an operator, so it must "+
+			"not read like a timeout that clears itself (Rule 8)", got)
+	}
+	if got := transitFailureStatus(context.DeadlineExceeded); got != "failed" {
+		t.Errorf("a transient failure classified as %q; only ErrTransitKeyCreateFailed is a denial", got)
+	}
+	if got := transitFailureStatus(errors.New("boom")); got != "failed" {
+		t.Errorf("an unclassified error became %q; the default must be the recoverable one", got)
 	}
 }

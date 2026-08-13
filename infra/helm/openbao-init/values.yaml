@@ -128,6 +128,10 @@ policies:
       path "secret/data/loopzero/+/*" {
         capabilities = ["read"]
       }
+  # ORPHAN, measured 2026-08-13: no role in THIS file binds it. Thirteen roles
+  # declare `policies:`, and the only one naming a `loopzero-api-*` policy is the
+  # k8s-core role below, which binds `loopzero-api`. Kept as-is by this slice
+  # (B-072 scopes the bound policy); registered as B-098.
   - name: loopzero-api-transit-encrypt
     ruleHcl: |
       path "transit/encrypt/+" {
@@ -136,9 +140,6 @@ policies:
       path "transit/decrypt/+" {
         capabilities = ["update"]
       }
-  # Phase 3.1 of plan 2026-06-02-loopzero-api-vault-integration v1.7 (D11):
-  # ESO reads ALL LoopZero paths to populate K8s Secrets via ExternalSecret CRs.
-  # Recursive read on secret/data/loopzero/* covers api/cloud/operators per D6.
   - name: eso-read
     ruleHcl: |
       path "secret/data/loopzero/*" {
@@ -192,11 +193,44 @@ policies:
       path "secret/metadata/loopzero/+/api/*" {
         capabilities = ["read", "list"]
       }
-      path "transit/encrypt/+" {
+      # Scoped to the prefix the client actually names. `+` matched ANY single
+      # segment, letting the api encrypt with any key in the engine; the only key
+      # it ever names comes from tenantKeyName (pkg/vault/transit_client.go:133).
+      path "transit/encrypt/loopzero-tenants-*" {
         capabilities = ["update"]
       }
-      path "transit/decrypt/+" {
+      path "transit/decrypt/loopzero-tenants-*" {
         capabilities = ["update"]
+      }
+      # ATTENTION, measured 2026-08-13: this grant does NOT reach the client
+      # today. TransitClient authenticates by APPROLE (transit_client.go, POST
+      # /v1/auth/approle/login), and this chart declares no AppRole — this policy
+      # is bound only to the k8s-core role below, whose client (pkg/vault.NewClient)
+      # has zero production callers. The AppRole is created outside the chart, and
+      # the dev bootstrap OVERWRITES this same policy name minutes after applying
+      # it. Fixing the chart was necessary and is not sufficient; see B-099.
+      #
+      # Scope note: `*` in a Vault policy matches any number of characters
+      # INCLUDING `/`, so this also grants update on .../config and .../rotate.
+      # Kept as the runbook's form because that is the one with execution
+      # evidence; narrowing it is part of the LIVE-validated fix, not a guess.
+      #
+      # Lazy key creation: Encrypt reacts to a 404 by POSTing to
+      # /v1/transit/keys/loopzero-tenants-<id> (createTransitKey). This path was
+      # ABSENT until 2026-08-13, so that create was denied by design in every
+      # environment loading this chart — while the cutover runbook and the dev
+      # script both granted it. Drift, not a missing decision (B-072).
+      #
+      # `update` is required IN ADDITION to `create`: the Go client's POST is an
+      # HTTP PUT, which OpenBao policy-enforces as update semantics even when the
+      # key does not exist. LIVE-caught 2026-06-10 (J-22) — with ["create","read"]
+      # the token reported both and the PUT still returned 403.
+      #
+      # The separator is a HYPHEN. `loopzero-tenants/<id>` makes transit return 404
+      # "unsupported path": the engine reads the slash as an endpoint delimiter.
+      # Same walkthrough.
+      path "transit/keys/loopzero-tenants-*" {
+        capabilities = ["create", "read", "update"]
       }
   # T5.6 of openbao-adoption v1.3 — loopzero-tenant-operator with cross-binary
   # READ access to api/ paths (D6 shared secrets per vault-INT plan: gitea/
