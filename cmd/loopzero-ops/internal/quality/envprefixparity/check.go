@@ -38,13 +38,15 @@
 //   - The SET axis is watched but admits DATED exemptions (allowlist.txt).
 //   - The CASE axis is watched since B-070, with the evasions listed honestly in
 //     casematch.go rather than implied not to exist.
-//   - There is a THIRD declaration this gate does NOT watch:
-//     api/internal/source/validator_env.go:46, holding a different set
-//     (DYLD_/KUBERNETES_/LOOPZERO_) over the user services.json env. It is WIRED
-//     (validator_services.go) — unlike tools/loopzero-dockerfile-lint, whose caller
-//     was removed with the BYO-Dockerfile path. Adding it here is not a config
-//     line: three sets that disagree need a decision about which is the rule.
-//     Registered as its own item.
+//   - api/internal/source declares a similar-looking list that is NOT a copy and
+//     is deliberately out of scope. Measured 2026-08-13: it blocks PROCESS
+//     HIJACK — LD_PRELOAD and DYLD_* load an attacker's library before the real
+//     one, PATH/SHELL redirect what runs — while find_sec_004 blocks SHADOWING
+//     of platform-injected config. Two threats, overlapping on LOOPZERO_ and
+//     KUBERNETES_ for different reasons. Comparing them here would need four
+//     exemptions, each asserting a divergence that is not one. It carried the
+//     same symbol name until 2026-08-13, and that collision is what made it read
+//     as a third copy (B-089, ADR 2026-08-13-reserved-env-two-rules).
 //
 // Saying all of this here is cheaper than a green gate that quietly overstates
 // itself, which is the exact defect the slice this gate belongs to exists to
@@ -94,11 +96,14 @@ type Declaration struct {
 // discovery mechanism is the speculative generality rung 1 of the parsimony
 // ladder refuses, and adding a site is a decision, not a lookup.
 //
-// The original text here claimed "exactly two copies today (measured)". That was
-// wrong — a third exists at api/internal/source/validator_env.go:46 with a
-// DIFFERENT set. It is not listed in DefaultSites because listing it would fail
-// the gate on four prefixes at once, and which of the three sets is THE rule is
-// an open decision, not an omission.
+// The original text here claimed "exactly two copies today (measured)". Two
+// corrections, in this order. First it was called wrong, because a third
+// declaration of the same NAME exists in api/internal/source. Then that was
+// corrected in turn: the two ARE the only copies — the third is a different rule
+// (process hijack, not shadowing), and it shared the name until 2026-08-13. See
+// ADR docs/wiki/decisions/2026-08-13-reserved-env-two-rules.md and the file
+// header above. Listing it here would need four exemptions, each asserting a
+// divergence that is not one.
 type Config struct {
 	RepoRoot string
 	Sites    []Site

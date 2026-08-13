@@ -115,8 +115,7 @@ func runEnvPrefixParity(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "This gate proves the two PREFIX SETS match, and nothing else. The same rule also")
 		fmt.Fprintln(os.Stderr, "diverges on severity (B-069: silent discard vs hard build failure) and on case")
-		fmt.Fprintln(os.Stderr, "matching (B-070) and on the third, unwatched copy at")
-		fmt.Fprintln(os.Stderr, "api/internal/source/validator_env.go (B-089). Green here does not mean unified.")
+		fmt.Fprintln(os.Stderr, "matching (B-070). Green here does not mean the rule is unified.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "If this divergence is a KNOWN gap, it belongs in")
 		fmt.Fprintln(os.Stderr, "cmd/loopzero-ops/internal/quality/envprefixparity/allowlist.txt with a sunset —")
@@ -130,13 +129,14 @@ func runEnvPrefixParity(args []string) int {
 	// nobody sees on a passing run is a gap nobody retires — which is how the
 	// 21 inherited approvals of helm-drift (B-076) became invisible.
 	if len(out.Exempted) > 0 {
-		fmt.Printf("env-prefix-parity: PASS — %d of 3 declarations watched; they agree on case "+
-			"matching; %d prefix(es) exempt with a sunset: %v. NOT watched: "+
-			"api/internal/source/validator_env.go, a third copy with a different set (B-089).\n",
+		fmt.Printf("env-prefix-parity: PASS — the %d find_sec_004 copies agree on case matching; "+
+			"%d prefix(es) exempt with a sunset: %v. This compares the two copies to each other and "+
+			"says nothing about whether the rule is reachable (B-094).\n",
 			len(out.Declarations), len(out.Exempted), out.Exempted)
 		return 0
 	}
-	fmt.Printf("env-prefix-parity: PASS — %d of 3 declarations watched; same prefix set and same "+
-		"case matching. NOT watched: api/internal/source/validator_env.go (B-089).\n", len(out.Declarations))
+	fmt.Printf("env-prefix-parity: PASS — the %d find_sec_004 copies hold the same prefix set and "+
+		"the same case matching. This compares them to each other and says nothing about whether "+
+		"the rule is reachable (B-094).\n", len(out.Declarations))
 	return 0
 }

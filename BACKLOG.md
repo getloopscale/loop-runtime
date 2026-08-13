@@ -2253,7 +2253,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. Além de `api/internal/services/deploycontracts/build_plan.go:23` (5 prefixos) e `tools/loopzero-dockerfile-lint/main.go:84` (4), existe `api/internal/source/validator_env.go:46` com um **terceiro** conjunto — `DYLD_`, `KUBERNETES_`, `LOOPZERO_` — e seu próprio `isReservedEnvKey` (`:68`), sobre o env do `services.json` do usuário, ligado em `validator_services.go:156`. O resultado é que `DYLD_*` é bloqueado por uma cópia e permitido pelas outras duas, e `AWS_*` o inverso. E das três, a que **não** tem chamador é justamente a que o gate `env-prefix-parity` compara contra a API.
 why_now: o gate passou a rodar em 2026-08-12 (`B-070`) e imprime `PASS — 2 declarations`. Duas de três. Um verde que cobre dois terços de uma regra de segurança é lido como cobertura da regra.
-status: raw
+status: planned
 severity: alta — três respostas diferentes para "o tenant pode declarar esta variável?", e a decisão de qual vale nunca foi tomada.
 dod:
   - está decidido qual conjunto é a regra, e por quê (os três diferem em `DYLD_`, `AWS_`, `DO_`, `GOOGLE_`)
@@ -2262,6 +2262,28 @@ dod:
 
 > Registrado 2026-08-12 pela revisão da fatia `slice-11`, que corrigiu a afirmação `exactly two
 > copies today (measured)` do próprio gate. Relacionado a `B-051` e `B-069`.
+
+> **Fechado 2026-08-13** pela fatia `slice-15`, ADR
+> `docs/wiki/decisions/2026-08-13-reserved-env-two-rules.md`, ata
+> `MEET-ASYNC-AMENDMENT-2026-08-13-002`.
+>
+> **A premissa deste item estava errada, e quem a escreveu fui eu.** Não são três cópias de uma
+> regra — são **duas regras** que compartilhavam nome de símbolo. `validator_env.go:20-25` enumera
+> as ameaças dele em prosa: *dynamic linker hijack* (`LD_PRELOAD`, `LD_LIBRARY_PATH`), o equivalente
+> macOS (`DYLD_*`), *shell/process discovery hijack* (`PATH`, `HOME`, `USER`, `SHELL`). Nada disso é
+> sombreamento da injeção da plataforma, que é o que o `find_sec_004` trata. A interseção `LOOPZERO_` +
+> `KUBERNETES_` existe porque as duas ameaças a exigem, por razões distintas.
+>
+> Eu registrei o item olhando três símbolos homônimos logo depois de medir os outros dois eixos da
+> mesma regra — o nome produziu a conclusão errada em quem estava com o contexto fresco.
+>
+> As três balas: (1) decidido — a pergunta *"qual conjunto é a regra"* pressupõe uma regra só;
+> unificar faria o validador parar de bloquear `LD_PRELOAD` **ou** o `build_plan` bloquear `DYLD_`
+> num runtime Linux; (2) e (3) o gate declara por que a outra fica fora, nomeando a **ameaça**, e a
+> saída deixou de dizer `2 of 3` — que trocava um exagero por outro, sugerindo que a terceira
+> deveria entrar.
+>
+> Nenhum prefixo entrou ou saiu de nenhuma lista. A lacuna que fica aberta é o **B-093**.
 
 ## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [ ]
 
@@ -2316,3 +2338,45 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-14`. `helm/` foi ligado na mesma fatia por estar
 > verde; os dois vermelhos ficam de fora porque adicioná-los deixaria `task test:unit` vermelho sem
 > consertar o que acusam — e um alvo vermelho vira alvo desligado, que é o defeito de origem.
+
+## B-093 — O validador do `services.json` não bloqueia os prefixos que a plataforma injeta   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 na fatia `slice-15`. `api/internal/source/validator_env.go` bloqueia sequestro de processo (`LD_PRELOAD`, `DYLD_*`, `PATH`, `SHELL`) mais `LOOPZERO_` e `KUBERNETES_`. Ele **não** bloqueia `AWS_`, `DO_` nem `GOOGLE_` — os prefixos que `api/internal/services/deploycontracts/build_plan.go` reserva porque a plataforma os injeta. Um tenant que declare `AWS_ACCESS_KEY_ID` no `services.json` passa pelo validador. Verificado por teste de não-regressão (`TestReservedEnv_ThreatsBlockedAreUnchanged`), que trava o estado atual de propósito para que fechar isto seja uma decisão e não um efeito colateral.
+why_now: o ADR `2026-08-13-reserved-env-two-rules` separou as duas regras e, ao fazê-lo, deixou visível que a fronteira de sombreamento tem um lado desguarnecido. Enquanto as duas eram lidas como cópias, a lacuna parecia divergência de conjunto.
+status: raw
+severity: média — **rebaixada na revisão da mesma fatia.** A metade alcançável está medida: o env do `services.json` chega ao contêiner do workload (`validator_services.go:58` → `services_input_mapping.go:158` → `renderer_deployment.go:77-84`). A outra metade **não se sustenta**: para haver sombreamento, a plataforma teria de injetar `AWS_`/`DO_`/`GOOGLE_` **naquele mesmo contêiner**, e `renderer_deployment.go:51-53` injeta apenas `PORT` mais um `envFrom` do Secret do usuário. O `B-051` já media que não existe injeção de `GOOGLE_*` em env de workload. Vira alta se alguma injeção desse tipo aparecer.
+dod:
+  - está medido se o env do `services.json` alcança o mesmo processo que recebe a injeção da plataforma
+  - se alcançar, os três prefixos entram — com a contagem de quantos payloads de tenant seriam rejeitados hoje
+  - se não alcançar, isso está escrito, e o teste de não-regressão passa a citar a razão em vez do estado
+
+> Registrado 2026-08-13 pela fatia `slice-15` (ADR D2). Fechá-lo **rejeita payload que hoje é
+> aceito**, então o raio de explosão aponta para fora — mesma forma do eixo do conjunto do `B-051`.
+>
+> **Correção da revisão:** eu escrevi que *"o dado que decide não é visível deste repositório"*.
+> Metade dele é, e a revisão a mediu em três greps — o env do `services.json` alcança o contêiner. O
+> que falta é a outra metade, e ela aponta contra o item: não há injeção de `AWS_`/`DO_`/`GOOGLE_`
+> naquele contêiner, então não há o que sombrear hoje. Severidade rebaixada.
+
+## B-094 — A metade API do `find_sec_004` guarda um campo que ninguém popula   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão da fatia `slice-15`. `api/internal/services/deploycontracts/build_plan.go:120` chama `isReservedEnvKey` dentro de `for k, v := range unit.Env` (`:114`). `unit.Env` vem de `app_unit.go:130` ← `raw.Env` ← `AppSpec.Env` (`shared_contracts.go:32`). **Nenhum site de produção popula esse campo**, e o tipo de fronteira HTTP `routes.AppInput` (`builds.go:53-67`) sequer o declara — verificado também em `adapters/build_adapter.go:39-52`, `api/cmd/autodeploy_adapters.go:131-137`, `loopzero_yaml_apps.go`, `workflow_builder.go` e `languages.go`. O laço nunca itera; a regra não dispara.
+why_now: três artefatos afirmavam, no presente, que essa regra **impede** sombreamento — o doc-comment de `validator_env.go`, o ADR `2026-08-13-reserved-env-two-rules` e a saída do gate `env-prefix-parity`. As três foram corrigidas na mesma fatia, mas o código continua: uma regra de segurança inalcançável que parece cobertura, e um gate verde comparando duas cópias dela.
+status: raw
+severity: média — não há vulnerabilidade aberta (o caminho que ela guardaria também não existe); o custo é a aparência de proteção, que é a classe do `B-055` e do `B-045`.
+dod:
+  - está decidido se `AppSpec.Env` deve ser populado (e então a regra passa a valer) ou removido (e então a regra sai com ele)
+  - se for removido, o gate `env-prefix-parity` e o linter acompanham a decisão
+  - a saída do gate deixa de sugerir cobertura de uma regra que não roda
+
+> Registrado 2026-08-13 pela revisão da fatia `slice-15`. É a terceira instância nesta série do padrão
+> *declarado + testado + nunca ligado* — as outras duas são `B-055` (helper sem chamador) e `B-045`
+> (gates que não rodam).

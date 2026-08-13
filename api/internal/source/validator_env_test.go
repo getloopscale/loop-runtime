@@ -8,6 +8,9 @@ package source
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 )
@@ -155,5 +158,88 @@ func TestValidateServicesJSON_EmptyMode_DefaultsToEnforce(t *testing.T) {
 	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("empty mode must default to enforce, expected error, got nil")
+	}
+}
+
+// B-089 / ADR 2026-08-13-reserved-env-two-rules: this package's blocklist and
+// the find_sec_004 blocklist are DIFFERENT RULES that happened to share a symbol
+// name, and the collision produced a wrong conclusion — a backlog item filed
+// claiming three copies of one rule.
+//
+// This package blocks keys that would COMPROMISE THE RUNTIME CONTAINER (linker
+// hijack via LD_PRELOAD/DYLD_*, process hijack via PATH/SHELL). find_sec_004
+// blocks keys that would SHADOW what the platform injects. Sharing a name makes
+// a reader — and a parity gate — treat them as copies to reconcile.
+func TestReservedEnv_SymbolNameDoesNotCollideWithFindSec004(t *testing.T) {
+	// AST over the WHOLE package, not a substring over one file. A review proved
+	// both evasions on the first version of this test: a plain `var (...)`
+	// grouping restored the colliding symbol under a green suite, and a
+	// declaration in any other file of the package was invisible. It is the same
+	// evasion class already registered as B-090 for the parity gate — applying
+	// the lesson here rather than repeating it.
+	//
+	// The DECLARATION is what collides, not a mention: the doc-comment names the
+	// sibling rule on purpose, and forbidding that would remove the very sentence
+	// that keeps the next reader from confusing them.
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scanned int
+	for _, pkg := range pkgs {
+		for name, f := range pkg.Files {
+			scanned++
+			for _, d := range f.Decls {
+				gd, ok := d.(*ast.GenDecl)
+				if !ok || gd.Tok != token.VAR {
+					continue
+				}
+				for _, spec := range gd.Specs {
+					vs, ok := spec.(*ast.ValueSpec)
+					if !ok {
+						continue
+					}
+					for _, id := range vs.Names {
+						if id.Name == "reservedEnvKeyPrefixes" {
+							t.Errorf("%s declares `reservedEnvKeyPrefixes`, the same name find_sec_004 "+
+								"uses in build_plan.go and loopzero-dockerfile-lint. They are different rules "+
+								"blocking different threats; the shared name is what made them read as "+
+								"diverging copies (B-089).", name)
+						}
+					}
+				}
+			}
+		}
+	}
+	if scanned == 0 {
+		t.Error("no file parsed; a check that inspected nothing verified nothing")
+	}
+}
+
+// Non-regression: the threats this package actually blocks stay blocked, and the
+// find_sec_004 prefixes it does NOT block stay unblocked — that gap is real,
+// measured, and registered as its own item rather than closed by accident here.
+// NOTE ON WHAT find_sec_004 ACTUALLY PROTECTS, measured 2026-08-13 by a review.
+//
+// Its API half (`build_plan.go`) iterates `unit.Env`, which traces back to
+// `AppSpec.Env` — a field NO production site populates, and which the HTTP
+// boundary type `routes.AppInput` does not even declare. So that loop never runs
+// in production today. It does not weaken the two-rules thesis (it reinforces
+// it: the two never met), but the first version of this file, of the ADR and of
+// the gate line asserted live protection that cannot be there. Registered as its
+// own item; the claims were corrected rather than left standing.
+func TestReservedEnv_ThreatsBlockedAreUnchanged(t *testing.T) {
+	for _, k := range []string{"LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "PATH", "LOOPZERO_X", "KUBERNETES_SERVICE_HOST"} {
+		if !isReservedEnvKey(k) {
+			t.Errorf("%q must stay blocked — it is a runtime-container compromise vector", k)
+		}
+	}
+	for _, k := range []string{"AWS_ACCESS_KEY_ID", "DO_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS"} {
+		if isReservedEnvKey(k) {
+			t.Errorf("%q became blocked here; this package does NOT cover find_sec_004 shadowing, "+
+				"and closing that gap rejects payloads accepted today — it is a decision, not a "+
+				"side effect (ADR 2026-08-13-reserved-env-two-rules)", k)
+		}
 	}
 }
