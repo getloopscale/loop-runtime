@@ -1269,6 +1269,23 @@ dod:
 > igual. Fechar isto é a próxima fatia, e exige decidir se as duas ratchets de data continuam
 > `operatorRun`.
 
+> **2026-08-12 — duas correções a medições MINHAS, no mesmo dia.**
+>
+> (a) Afirmei que `loopzero-ci-workflows` não tinha contêiner e que a classificação seria falso positivo.
+> **Errado**: meu grep procurou `containers:` no plural e o Argo usa `container:` no singular.
+> `cronworkflows.yaml` e `workflowtemplate-quality-gate.yaml` declaram contêineres reais. São **dois
+> achados reais**, não um e um falso positivo.
+>
+> (b) Afirmei que o `security-context` "sai 0 imprimindo NON-CONFORMANT". Ele sai **1 com `--gate`**
+> — verificado agora: `--gate` → exit 1, sem a flag → exit 0. O modo sem flag é **relatório**, e a
+> auditoria que gerou esta bala rodou sem a flag e leu errado. A linha `:1240` deste próprio item já
+> registrava isso, e eu repeti o erro sem ler.
+>
+> **O que a bala 3 realmente pede, então, é wiring**: `grep -c security-context taskfiles/quality.yml`
+> → **0**. O gate sabe reprovar e ninguém o chama. Ligá-lo com `--gate` reprova os dois charts hoje,
+> então exige antes endurecer `argo-events` (wrapper de chart upstream) e `loopzero-ci-workflows`
+> (nosso), ou registrar exceção por ADR — que é T2 sobre workload em execução.
+
 ## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
 
 domain: engine-go
