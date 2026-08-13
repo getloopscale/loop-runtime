@@ -21,6 +21,19 @@ vaps:
   # ADR D3 — Warn until T2.3 flips it, gated on the observation window.
   protectPlatformDeletesAction: Warn
 
+  # loopzero-tenant-cr-shape: ON here, and ONLY here. It matches `loopzero.io/v1 tenants`,
+  # which exist in loopzero-system on THIS cluster and nowhere else. It was OFF until
+  # 2026-08-13, grouped with the runtime-only list below by name association with
+  # `tenantNamespace` — but neither reason for that list applies to it: it guards
+  # a PLATFORM CR, not a workload, and it is a native ValidatingAdmissionPolicy,
+  # so it emits no sigstore object into a cluster with no policy-controller.
+  #
+  # failurePolicy: Fail is safe here by measurement, not optimism — the only two
+  # writers of Tenant CRs (EnsureTenant, patchTenantCR) run in the api process,
+  # whose SA the CEL exempts, and no operator writes them. See ADR
+  # docs/wiki/decisions/2026-08-13-tenant-cr-fence-placement.md (B-077).
+  tenantCrShape: true
+
   # Runtime-only policies: OFF on mgmt. Every one of these guards a workload concern
   # (image provenance, resource limits, tenant namespaces) that has no meaning on the
   # management cluster, and requireImageDigest additionally emits a policy binding that
@@ -34,7 +47,6 @@ vaps:
   noRuntimeImageMutations: false
   protectPlatformNetworkpolicies: false
   argocdManagedBy: false
-  tenantCrShape: false
   tenantNamespace: false
 
 # ClusterImagePolicy is a sigstore/policy-controller CRD. The mgmt cluster runs no

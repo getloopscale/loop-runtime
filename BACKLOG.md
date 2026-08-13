@@ -1978,7 +1978,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 na revisão da fatia slice-3. `infra/helm/admission-policies/values-mgmt.yaml:37` define `tenantCrShape: false`, e `infra/helmfile/core.helmfile.yaml.gotmpl:764-769` sobrepõe `values.yaml` com `values-mgmt.yaml` no release `admission-policies-mgmt` — o último vence. A VAP fica **habilitada apenas** via `cell.helmfile.yaml.gotmpl:180-186`, ou seja nas células de workload. Mas per `CLAUDE.md` e ADR-0018 v2, os CRs `Tenant` e `Environment` vivem em `loopzero-system` no cluster **mgmt**.
 why_now: a cerca `failurePolicy: Fail` sobre a forma dos CRs Tenant roda nos clusters que não guardam CR Tenant nenhum, e está desligada no único que guarda. O plano da fatia slice-3 afirmou o contrário (`R3`: *"ela já roda em dev e em core pelo caminho L2"*) e usou isso para justificar o risco como aceitável — a premissa não se sustenta, e a revisão a derrubou.
-status: raw
+status: planned
 severity: alta — é uma fronteira de segurança que parece ativa e não está onde importa.
 dod:
   - está decidido e escrito por que a VAP está desligada no mgmt, ou ela é habilitada lá
@@ -1988,6 +1988,49 @@ dod:
 > mostrou que o critério de aceitação por nome de arquivo era cego; o teste
 > `TestAdmissionPolicies_PublishedRendersWhatBootstrapRenders` mede render, mas não mede *onde* o
 > valor é sobreposto.
+
+> **Fechado 2026-08-13** pela fatia `slice-16`, ADR
+> `docs/wiki/decisions/2026-08-13-tenant-cr-fence-placement.md`, ata
+> `MEET-ASYNC-AMENDMENT-2026-08-13-003`.
+>
+> **Medido por render, que é o que a segunda bala pede.** Antes: o values base (o que as células
+> recebem) renderizava 8 VAPs **incluindo** a `loopzero-tenant-cr-shape`; o do mgmt renderizava **1**, e
+> não era ela. E o CRD `tenants` vem do `loopzero-crds`, que aparece **6 vezes** no `core.helmfile` e
+> **zero** no `cell.helmfile`. A cerca renderizava onde o recurso não existe e faltava onde existe.
+>
+> **Os dois motivos escritos no overlay eram falsos para ela.** `values-mgmt.yaml:24-26` a agrupava
+> como *"runtime-only… guards a workload concern"* — mas o `matchConstraints` casa um CR de
+> plataforma. E a justificativa geral (*"emitiria objetos sigstore num cluster sem
+> policy-controller"*) não se aplica a uma VAP **nativa**, o que o próprio cabeçalho do arquivo
+> reconhece. Ela entrou no balde por **associação de nome** com `tenantNamespace`.
+>
+> **Habilitar é seguro por medição:** os dois únicos escritores de CR Tenant (`EnsureTenant`,
+> `tenant_cr_manager.go:68`; `patchTenantCR`, `cell_pinner.go:198`) rodam no processo `api`, cuja SA
+> o CEL isenta, e `grep` por escrita de Tenant nos operators devolve **zero**. O CEL já cobre as três
+> armadilhas do `CLAUDE.md` (só CREATE/UPDATE, `has()`-guarded, isenções não-vazias), e
+> `environments: []` passa vacuamente porque o tipo declara `MinItems=0`.
+>
+> **Fica declarado, não resolvido: não há validação LIVE nesta sessão.** A prova disponível é o
+> render. A obrigação LIVE está no ADR **com a armadilha nomeada** — o kubeconfig do e2e é
+> `system:masters`, *grupo que esta política isenta*, então um teste assim passa por isenção e não
+> por funcionamento; validar exige SA sem isenção **e com RBAC**, senão o `Forbidden` vem do RBAC.
+>
+> A Q1 (`vap-tenant-namespace` renderiza em lugar nenhum) virou **B-095**.
+
+> **Correção da revisão, e é a mais importante desta fatia.** Eu afirmei — no ADR e na ata — que
+> *"nenhum operator escreve CR Tenant"*, com base num `grep`. **Errado, em quatro sites**: as
+> escritas são `r.Update(ctx, tenant)`, sem `&`, e uma está atrás de `EnsureFinalizer`, então
+> procurar por `&loopzerov1.Tenant` não encontra nenhuma.
+>
+> E `tenant_deletion.go:215` é a escrita que **remove o finalizer e completa a deleção**. Habilitar
+> a cerca sem isentar o operator deixaria qualquer Tenant cuja forma armazenada não satisfaça o CEL
+> **permanentemente indeletável** — a classe de deadlock que o próprio cabeçalho da política afirma
+> evitar. A pista estava no mesmo chart: `vap-protect-platform-deletes.yaml:84` já isentava os
+> operators.
+>
+> Corrigido nos dois charts, e com um teste que **compara as isenções das duas políticas** em vez de
+> reenumerar escritores — uma lista à mão erra de novo; a comparação pega a divergência. O mutante
+> que remove a isenção reprova.
 
 ## B-078 — O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado   [ ]
 
@@ -2380,3 +2423,56 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-15`. É a terceira instância nesta série do padrão
 > *declarado + testado + nunca ligado* — as outras duas são `B-055` (helper sem chamador) e `B-045`
 > (gates que não rodam).
+
+## B-095 — A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 na fatia `slice-16`. `infra/helm/admission-policies/templates/vap-tenant-namespace.yaml:26-29` casa `loopzero.io` `tenants` **e** `environments` — os mesmos recursos que a `vap-tenant-cr-shape`, portanto também exclusivos do cluster mgmt. Mas `tenantNamespace` é `false` no `values.yaml` base **e** no `values-mgmt.yaml`, então ela não renderiza em cluster nenhum. O comentário do base diz *"Default OFF: toggle on via overlay AFTER T3.3 migration ran successfully"* — e o overlay que ligaria é justamente o do mgmt, onde ela está `false`.
+why_now: a fatia `slice-16` mediu a colocação da cerca irmã e, ao fazê-lo, tornou visível que esta não está em lugar nenhum. Enquanto a `tenantCrShape` estava desligada no mgmt, as duas pareciam ter o mesmo estado; agora só uma está resolvida.
+status: raw
+severity: média — não há regressão nova (ela nunca renderizou), e o comentário indica uma migração como pré-condição. Vira alta se a T3.2/T3.3 do ADR-0018 v2 já tiver rodado, porque então a cerca está pronta e desligada.
+dod:
+  - está medido se a migração T3.3 que ela aguarda já rodou
+  - se rodou, ela é habilitada no overlay do mgmt — e o teste de render passa a cobri-la
+  - se não rodou, isso está escrito no `values-mgmt.yaml`, e não só no base
+
+> Registrado 2026-08-13 pela fatia `slice-16` (Q1 do plano). O teste
+> `infra/tests/helm/tenant_cr_fence_placement_test.go` já está no molde para cobri-la — basta a
+> decisão.
+
+## B-096 — O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão da fatia `slice-16`. `charts/loopzero-api/templates/deployment.yaml:35` deriva a SA de `loopzero-common.fullname` (`charts/loopzero-common/templates/_helpers.tpl:170-176`) com `serviceAccount.name: ""` (`charts/loopzero-api/values.yaml:189-191`). `helm template t charts/loopzero-api` rende `t-loopzero-api`; como subchart de `charts/loopzero-platform` sob o release `loopzero-platform`, a regra de colapso (`_helpers.tpl:29-32`) não dispara e a SA vira `loopzero-platform-loopzero-api`. As VAPs isentam `system:serviceaccount:loopzero-system:loopzero-api` — **nenhum desses dois nomes**. O chart de bootstrap (`infra/helm/loopzero-api/templates/deployment.yaml:48`) usa o nome fixo e está correto.
+why_now: a fatia `slice-16` ligou a `loopzero-tenant-cr-shape` no mgmt, cuja validação de imutabilidade de `cellID` isenta o `loopzero-api`. Se algum dia o deploy passar pelo chart publicado, `cell_pinner.go:163` é negado — e `:170` registra um Warn **sem reverter o banco**, que é exatamente o split-brain DB/CR que o comentário da isenção existe para evitar.
+status: raw
+severity: média — **latente**: nenhum caminho de deploy usa o chart publicado para o `loopzero-api` hoje. Vira alta no dia em que usar.
+dod:
+  - a SA renderizada pelo chart publicado é a mesma que as VAPs isentam, ou as VAPs cobrem as duas formas
+  - existe asserção que compara a SA renderizada com a lista de isenção, em vez de as duas serem mantidas à mão
+  - está decidido se `cell_pinner.go:170` deve reverter o banco quando o patch do CR é negado
+
+> Registrado 2026-08-13 pela revisão da fatia `slice-16`. Mesma família do `B-046`: os dois charts
+> divergem numa propriedade que só aparece no render.
+
+## B-097 — O CLI documenta um `kubectl patch` que a nova cerca nega   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão da fatia `slice-16`. `api/internal/services/placement/cell_pinner.go:172` emite, como remédio manual, `kubectl -n loopzero-system patch tenant <id> --type=merge -p '{"spec":{"cellID":...}}'`. A validação de imutabilidade da `loopzero-tenant-cr-shape` (`vap-tenant-cr-shape.yaml:58-61`) nega exatamente isso, exceto para `system:masters` ou a SA do `loopzero-api`.
+why_now: a cerca foi habilitada no mgmt em 2026-08-13. O comportamento é provavelmente o desejado — a mensagem da própria política diz *"Use 'loopzero admin tenants pin' to move a team"* —, mas o código emite um remédio que a política bloqueia, e quem o seguir com um kubeconfig sem privilégio recebe um `Denied` sem entender por quê.
+status: raw
+severity: baixa — quem opera o mgmt normalmente tem kubeconfig admin (`system:masters`), que é isento; o custo é uma mensagem que engana.
+dod:
+  - a mensagem de `cell_pinner.go:172` diz que o patch direto é negado pela política, ou deixa de oferecê-lo
+  - está decidido se o remédio manual continua existindo
+
+> Registrado 2026-08-13 pela revisão da fatia `slice-16`.

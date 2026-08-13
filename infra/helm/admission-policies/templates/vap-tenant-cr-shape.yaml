@@ -29,6 +29,25 @@ spec:
         resources: ["tenants"]
   matchConditions:
     # Anti-B33: never gate the platform's own controllers / kube system actors.
+    #
+    # THE TENANT OPERATOR IS HERE BECAUSE IT WRITES THIS RESOURCE. Added
+    # 2026-08-13 after an independent review measured four sites the first
+    # enumeration missed — they are `r.Update(ctx, tenant)` (no `&`) and one sits
+    # behind a helper, so a grep for `&loopzerov1.Tenant` found none of them:
+    #
+    #   tenant_controller.go:200 -> reconcilehelpers.EnsureFinalizer -> c.Update
+    #   tenant_deletion.go:185, :196  (retry-count annotation)
+    #   tenant_deletion.go:215        (Update AFTER RemoveFinalizer)
+    #
+    # The last one is the write that COMPLETES DELETION. Denying it leaves the
+    # Tenant permanently undeletable — the finalizer can never be removed and the
+    # operator's requeue never converges. That is the B33 deadlock class this very
+    # header claims the policy avoids, and it would have been reached by any
+    # Tenant whose stored shape no longer satisfies the CEL.
+    #
+    # The identity list mirrors vap-protect-platform-deletes.yaml, which already
+    # exempted the operators. Two names because the SA differs by install path:
+    # `loopzero-tenant-operator` in prod/ArgoCD, `tenant-operator` under Tilt.
     # vap-pinpath-exemption: also exempt the loopzero-api control-plane SA — it is the
     # ONLY sanctioned cell-move writer (`loopzero admin tenants pin` →
     # api/internal/services/placement/cell_pinner.go patchTenantCR runs as this SA
@@ -40,7 +59,11 @@ spec:
       expression: >
         !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:')) &&
         request.userInfo.username != 'system:kube-controller-manager' &&
-        request.userInfo.username != 'system:serviceaccount:loopzero-system:loopzero-api' &&
+        !(request.userInfo.username in [
+          'system:serviceaccount:loopzero-system:loopzero-api',
+          'system:serviceaccount:loopzero-system:loopzero-tenant-operator',
+          'system:serviceaccount:loopzero-system:tenant-operator'
+        ]) &&
         !('system:masters' in request.userInfo.groups)
   validations:
     # EC-1: has()-guard before iterating so a missing field denies cleanly.

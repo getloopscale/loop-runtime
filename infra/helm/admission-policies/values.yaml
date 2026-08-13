@@ -93,9 +93,14 @@ vaps:
   # M14 gap #2 — validate loopzero.io Tenant CR shape at the API-server boundary
   # (CEL VAP, plan ADR D1). Closes the M2 legacy-namespace incident class where
   # a direct kubectl apply created a CR the REST layer would have rejected.
-  # Default ON: shape + immutability invariants are always desirable, unlike the
-  # migration-gated tenantNamespace/noRuntimeImageMutations toggles below.
-  tenantCrShape: true
+  # Default OFF: this fence matches `loopzero.io/v1 tenants`, and the CRD that
+  # defines them is installed by `loopzero-crds` — which appears 6 times in
+  # core.helmfile.yaml.gotmpl and ZERO times in cell.helmfile.yaml.gotmpl. The
+  # base values are what the CELL clusters receive, and a policy matching a
+  # resource that does not exist there can never fire while reading as coverage.
+  # Turned ON in values-mgmt.yaml, where the Tenants live (B-077, ADR
+  # 2026-08-13-tenant-cr-fence-placement).
+  tenantCrShape: false
   # ADR-0018 v2 / T3.2 — Tenant + Environment CRs MUST live in `loopzero-system`.
   # Default OFF: toggle on via overlay AFTER T3.3 migration ran successfully
   # (mandatory deployment order C4 in MEET-ADR-0018 rollout runbook).
