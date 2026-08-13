@@ -2247,6 +2247,60 @@ dod:
 > decisão de contrato: são seis fluxos de reconcile independentes, e juntar a escolha da regra com
 > sua aplicação em 25 pontos torna impossível saber qual dos dois quebrou.
 
+> **Um dos seis feito — 2026-08-13, fatia `slice-18`**, executando a D3 do ADR
+> `2026-08-12-status-writer-contract` (ata `MEET-ASYNC-AMENDMENT-2026-08-13-005`). O item **continua
+> aberto**.
+>
+> **A medição mudou o escopo: as 25 chamadas não são uniformes.** Classificadas por forma:
+>
+> | Controller | *refetch dance* | readiness inline | usa o helper | estado |
+> |---|---:|---:|---|---|
+> | `tenant/tenant_controller.go` | 2 | 1 | não | **migrado** |
+> | `tenant/tenant_deletion.go` | 0 | 0 | — | **pendente** — 2 `Update` nus em `reconcileDelete`, chamado do mesmo `Reconcile` |
+> | `app/exposure_controller.go` | 0 | 1 | não | pendente — mesma forma do `tenant`, menor |
+> | `platform/clustercredential_controller.go` | 0 | 2 | sim | pendente — só merge-patch |
+> | `platform/gitrepositorybinding_controller.go` | 0 | 0 | sim | pendente — só merge-patch |
+> | `platform/platformbootstrap_controller.go` | 0 | 0 | sim | pendente — só merge-patch |
+> | `preview/preview_controller.go` | 0 | 0 | sim | pendente — só merge-patch |
+>
+> Quatro dos seis já delegam ao `DeferReadinessSummary`; para eles resta só trocar `Update` por
+> merge-patch. Dois o reimplementavam à mão, e o `tenant` era o único com as **duas** formas
+> proibidas — por isso foi o primeiro, por medição e não por ordem.
+>
+> **Três correções, duas delas a erros meus que a revisão mediu antes do commit.**
+>
+> (a) Eu escrevi "4 danças" no plano; são **2** (o `grep` de `savedStatus` conta duas linhas por dança).
+>
+> (b) **A mais grave.** Eu capturei o snapshot **antes** do `EnsureFinalizer`. `client.MergeFrom`
+> diferencia o objeto **inteiro**, e o `EnsureFinalizer` faz Update+Get, avançando o `resourceVersion`
+> na primeira reconciliação de **todo** Tenant — então o patch embarcava uma trava otimista
+> **obsoleta**, que a revisão mediu contra um apiserver real devolvendo **409**. Pior: o refetch que
+> removi acontecia **imediatamente antes** da escrita, então sua janela de conflito era quase zero; a
+> minha teria a duração do reconcile inteiro, com oito passos de rede no meio. Era regressão de
+> confiabilidade vestida de correção de contrato. O `environment_controller.go:176` documenta o
+> posicionamento certo **de propósito** — eu li a linha e coloquei o meu no lugar errado.
+>
+> (c) O escopo estava **superafirmado**: `tenant_deletion.go` tem 2 `Update` nus em `reconcileDelete`,
+> chamado do mesmo `Reconcile`. O arquivo está migrado; o **controller** não. A tabela agora diz isso,
+> e uma catraca no teste trava a contagem.
+>
+> **O teste que teria pego (b) não é caro:** `client.MergeFrom(base).Data(obj)` é função pura, e
+> asserir que os bytes emitidos não contêm `resourceVersion` são ~40 linhas sem infraestrutura
+> nenhuma. Quatro asserções estruturais passavam com o defeito presente. O par de testes agora inclui
+> o inverso — um snapshot obsoleto **produz** o RV —, senão a primeira asserção não estaria medindo
+> nada.
+>
+> **A asserção é estrutural, e isso é deliberado.** O traço definidor da dança é a **forma** — um
+> `Get` cujo único propósito é obter uma versão que não conflita. Nenhuma asserção de runtime
+> distingue "releu e sobrescreveu" de "escreveu uma vez" quando não há mais ninguém escrevendo; a
+> forma é a evidência. Um teste de conflito comportamental para o `tenant` exigiria montar o
+> reconciler com Harbor/Gitea/MinIO, e fica para quando o gate estático entrar.
+>
+> **O gate estático da quarta bala fica de fora de propósito.** Criado agora, nasceria com **cinco**
+> isenções — e esta série mediu quatro vezes o que acontece com um gate cuja única falha é uma
+> isenção conhecida: ele não é ligado, e então não vigia nada (`B-045`, `B-051`, `B-072`, `B-077`).
+> Ele entra quando os seis estiverem migrados, sem isenção nenhuma.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go

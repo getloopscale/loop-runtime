@@ -284,8 +284,7 @@ func contextWithSink(s *recordingSink) context.Context {
 func TestDeferReadinessSummary_ConcurrentWriteIsRejectedNotErased(t *testing.T) {
 	const rival = "RivalWriterCondition"
 
-	var c client.Client
-	c = fake.NewClientBuilder().
+	var c client.Client = fake.NewClientBuilder().
 		WithScheme(readinessScheme(t)).
 		WithObjects(readinessEnv()).
 		WithStatusSubresource(&loopzerov1.Environment{}).

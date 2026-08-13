@@ -28,16 +28,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
-	"github.com/getloopscale/loopzero/operators/internal/vault"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
 	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/vault"
 	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -90,8 +90,8 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
-	BuildClient        client.Client               // targets the build cluster
-	RuntimeClient      client.Client               // targets the runtime cluster
+	BuildClient        client.Client // targets the build cluster
+	RuntimeClient      client.Client // targets the runtime cluster
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
@@ -108,14 +108,14 @@ type TenantReconciler struct {
 
 // TenantControllerConfig holds configuration for the TenantController.
 type TenantControllerConfig struct {
-	GiteaURL               string
-	WorkloadClusterURL     string
-	MinIOProvisioner       miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-	HarborClient           harbor.Provisioner           // nil disables Harbor integration
-	HarborRegistryHost     string                       // e.g. "harbor.dev.loopzero.example"
-	Credentials            BuildCredentials             // storage + registry credentials
-	RegistryCIDRs          []string                     // CIDR ranges for container registry (RISK-007)
-	MaxConcurrentReconciles int                         // 0 defaults to 5 (MEET-052: backpressure for bulk deletion)
+	GiteaURL                string
+	WorkloadClusterURL      string
+	MinIOProvisioner        miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
+	HarborClient            harbor.Provisioner           // nil disables Harbor integration
+	HarborRegistryHost      string                       // e.g. "harbor.dev.loopzero.example"
+	Credentials             BuildCredentials             // storage + registry credentials
+	RegistryCIDRs           []string                     // CIDR ranges for container registry (RISK-007)
+	MaxConcurrentReconciles int                          // 0 defaults to 5 (MEET-052: backpressure for bulk deletion)
 }
 
 // tenantDetailTypes are the per-step conditions that SetReadinessSummary
@@ -170,26 +170,20 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// kstatus universal: SetReadinessSummary MUST be the LAST status
 	// mutation per ADR-0025 D3 condition #1. Defer ensures it runs even
 	// on early return / panic from internal helpers.
-	defer func() {
-		latest := &loopzerov1.Tenant{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		// Adjust detailTypes for DOCR mode (HarborClient nil → skip Harbor).
-		dt := tenantDetailTypes
-		if r.HarborClient == nil {
-			dt = dt[:len(dt)-1] // drop trailing TypeHarborProjectReady
-		}
-		// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegate to
-		// pkg/conditions via adapter so the algorithmic core is shared
-		// across modules. Behavior identical to operator-local
-		// SetReadinessSummary (same algorithm).
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, dt)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	// Adjust detailTypes for DOCR mode (HarborClient nil → skip Harbor).
+	dt := tenantDetailTypes
+	if r.HarborClient == nil {
+		dt = dt[:len(dt)-1] // drop trailing TypeHarborProjectReady
+	}
+	// Delegated to the shared helper (B-085). This was an inlined copy of it that
+	// persisted with `_ = r.Status().Update(...)` — the forbidden pattern, with the
+	// error discarded. Four sibling controllers already delegate, and slice-10
+	// fixed the helper to use a locked merge patch and to log the failure; keeping
+	// a local copy meant it silently diverged from the fixed one.
+	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.Tenant { return &loopzerov1.Tenant{} },
+		func(t *loopzerov1.Tenant) *[]metav1.Condition { return &t.Status.Conditions },
+		dt)()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !tenant.DeletionTimestamp.IsZero() {
@@ -200,6 +194,30 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &tenant, tenantFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Single-status-writer merge-patch base (CLAUDE.md; ADR
+	// 2026-08-12-status-writer-contract). Replaces two re-fetch-then-restore
+	// sites (B-085), which re-read the Tenant purely to obtain a resourceVersion
+	// that would not conflict and put the stale status back on top — so a write
+	// landing in between vanished with no 409 and no log.
+	//
+	// THE PLACEMENT IS THE WHOLE POINT, and an earlier version of this change put
+	// it above EnsureFinalizer, which is wrong. `client.MergeFrom` diffs the whole
+	// object, so any field that changed between the snapshot and the write lands
+	// in the patch body — including `metadata.resourceVersion`. EnsureFinalizer
+	// does Update+Get, bumping the RV on the FIRST reconcile of every Tenant, so a
+	// snapshot taken before it ships a STALE optimistic lock: measured against a
+	// real apiserver, the stale RV is honoured and returns 409.
+	//
+	// Worse than merely wrong: the old re-fetch happened immediately before the
+	// write, so its conflict window was near zero. A snapshot taken before the
+	// eight network-bound steps below would widen that window to the whole
+	// reconcile — a reliability regression dressed as a contract fix.
+	//
+	// Captured HERE: after EnsureFinalizer's metadata write, before any status
+	// mutation. Same placement, for the same reason, as
+	// environment_controller.go, which documents it.
+	base := tenant.DeepCopy()
 
 	// Set Phase to Provisioning if empty (via state machine)
 	if tenant.Status.Phase == "" {
@@ -224,7 +242,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		{conditions.TypeTransitKeyAvailable, func() error { return r.reconcileTransitKey(ctx, &tenant) }},
 		{"", func() error { return r.reconcileEnvironmentCRs(ctx, &tenant) }},
 	}
-	if err := r.runSteps(ctx, req, &tenant, steps); err != nil {
+	if err := r.runSteps(ctx, &tenant, base, steps); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -236,17 +254,14 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 	tenant.Status.ObservedGeneration = tenant.Generation
 
-	// Re-fetch to get latest resourceVersion before final status update.
-	// Intermediate operations (CreateOrUpdate on child resources) may have triggered
-	// concurrent reconciles that bumped the Tenant's resourceVersion.
-	savedStatus := tenant.Status
-	if err := r.Get(ctx, req.NamespacedName, &tenant); err != nil {
-		return ctrl.Result{}, err
-	}
-	tenant.Status = savedStatus
-
-	// Update status
-	if err := r.Status().Update(ctx, &tenant); err != nil {
+	// Final status write. No re-fetch: the patch names only the fields that
+	// changed since `base`, so it does not overwrite a concurrent write to fields
+	// it never read — which is what the restore-on-top used to do.
+	//
+	// It carries no resourceVersion only BECAUSE `base` is captured after the
+	// finalizer write; see the snapshot comment above. That is asserted by
+	// TestTenantStatusPatch_CarriesNoResourceVersion, on the emitted bytes.
+	if err := r.Status().Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -262,9 +277,13 @@ type reconcileStep struct {
 }
 
 // runSteps executes reconcile steps sequentially, setting conditions on failure.
-// On error it re-fetches the resource to get the latest resourceVersion before
-// updating status (best-effort) and returns the error.
-func (r *TenantReconciler) runSteps(ctx context.Context, req ctrl.Request, tenant *loopzerov1.Tenant, steps []reconcileStep) error {
+// On error it writes the condition with a merge patch (best-effort) and returns
+// the error. It used to re-fetch first, to dodge a stale resourceVersion; the
+// patch has none, so the re-fetch went with it (B-085).
+// `base` is the snapshot taken by Reconcile right after its Get. It is a
+// parameter rather than something re-derived here: deriving it inside would mean
+// a second read, which is the re-fetch this migration removed.
+func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopzerov1.Tenant, steps []reconcileStep) error {
 	logger := log.FromContext(ctx)
 	for _, step := range steps {
 		if err := step.fn(); err != nil {
@@ -272,15 +291,12 @@ func (r *TenantReconciler) runSteps(ctx context.Context, req ctrl.Request, tenan
 				conditions.SetCondition(&tenant.Status.Conditions, step.condType,
 					metav1.ConditionFalse, "ReconcileFailed", err.Error(), tenant.Generation)
 			}
-			// Re-fetch to avoid stale resourceVersion from concurrent reconciles
-			// triggered by child resource CreateOrUpdate operations.
-			savedStatus := tenant.Status
-			if refetchErr := r.Get(ctx, req.NamespacedName, tenant); refetchErr != nil {
-				logger.Error(refetchErr, "failed to re-fetch tenant for status update", "tenant", tenant.Name)
-				return err
-			}
-			tenant.Status = savedStatus
-			if statusErr := r.Status().Update(ctx, tenant); statusErr != nil {
+			// Best-effort status write on the failure path. The re-fetch that
+			// stood here existed only to dodge a stale resourceVersion; the patch
+			// names only what changed, so there is nothing stale to dodge — see
+			// the snapshot comment in Reconcile for why the placement of `base`
+			// is what makes that true (B-085).
+			if statusErr := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 			}
 			return err
@@ -311,7 +327,6 @@ func (r *TenantReconciler) requiredProvisioningConditions() []string {
 	}
 	return required
 }
-
 
 // reconcileEnvironmentCRs creates/updates Environment CRs for each spec.environments[],
 // then garbage-collects orphaned Environment CRs that are no longer in the spec.
