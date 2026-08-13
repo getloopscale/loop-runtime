@@ -28,11 +28,27 @@
 //	case matching   case-SENSITIVE (k[:len(p)] == p)   case-INSENSITIVE   <- B-070
 //	                                                   (strings.ToUpper)
 //
-// Equal sets are not an equal rule. A reader who sees this gate green must not
-// conclude "the rule is unified" — two thirds of the divergence is out of its
-// scope, tracked as B-069 and B-070. Saying so here is cheaper than a green
-// gate that quietly overstates itself, which is the exact defect the slice this
-// gate belongs to exists to remove.
+// Equal sets are not an equal rule, and TWO watched copies are not the whole
+// rule. A reader who sees this gate green must not conclude "the rule is
+// unified". Corrected 2026-08-12 after an independent review measured what the
+// original text got wrong:
+//
+//   - The SEVERITY axis is out of scope (B-069): one copy discards silently, the
+//     other kills the build.
+//   - The SET axis is watched but admits DATED exemptions (allowlist.txt).
+//   - The CASE axis is watched since B-070, with the evasions listed honestly in
+//     casematch.go rather than implied not to exist.
+//   - There is a THIRD declaration this gate does NOT watch:
+//     api/internal/source/validator_env.go:46, holding a different set
+//     (DYLD_/KUBERNETES_/LOOPZERO_) over the user services.json env. It is WIRED
+//     (validator_services.go) — unlike tools/loopzero-dockerfile-lint, whose caller
+//     was removed with the BYO-Dockerfile path. Adding it here is not a config
+//     line: three sets that disagree need a decision about which is the rule.
+//     Registered as its own item.
+//
+// Saying all of this here is cheaper than a green gate that quietly overstates
+// itself, which is the exact defect the slice this gate belongs to exists to
+// remove — and which this very doc-comment committed in its first version.
 package envprefixparity
 
 import (
@@ -44,7 +60,19 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
+
+// dedupe collapses repeats in a sorted slice.
+func dedupe(in []string) []string {
+	var out []string
+	for i, v := range in {
+		if i == 0 || in[i-1] != v {
+			out = append(out, v)
+		}
+	}
+	return out
+}
 
 // ErrPrefixSetsDiverge means the two declarations do not hold the same set.
 var ErrPrefixSetsDiverge = errors.New("the two reservedEnvKeyPrefixes declarations hold different prefix sets")
@@ -62,13 +90,22 @@ type Declaration struct {
 	Prefixes []string
 }
 
-// Config is the gate input. The two paths are explicit rather than discovered:
-// there are exactly two copies today (measured), and a discovery mechanism for
-// a set of two would be the speculative generality rung 1 of the parsimony
-// ladder refuses. If a third copy appears, it is added here — consciously.
+// Config is the gate input. The paths are explicit rather than discovered: a
+// discovery mechanism is the speculative generality rung 1 of the parsimony
+// ladder refuses, and adding a site is a decision, not a lookup.
+//
+// The original text here claimed "exactly two copies today (measured)". That was
+// wrong — a third exists at api/internal/source/validator_env.go:46 with a
+// DIFFERENT set. It is not listed in DefaultSites because listing it would fail
+// the gate on four prefixes at once, and which of the three sets is THE rule is
+// an open decision, not an omission.
 type Config struct {
 	RepoRoot string
 	Sites    []Site
+	// AllowlistPath overrides DefaultAllowlistRelPath (tests).
+	AllowlistPath string
+	// Now overrides the clock for sunset evaluation (tests). Zero means real time.
+	Now time.Time
 }
 
 // Site names where a declaration is expected to live.
@@ -90,6 +127,12 @@ type Outcome struct {
 	Declarations []Declaration
 	// OnlyIn maps a site's RelPath to the prefixes present only there.
 	OnlyIn map[string][]string
+	// Exempted lists set-axis divergences covered by an unexpired allowlist
+	// entry. Reported rather than hidden: an exemption nobody sees is a
+	// divergence nobody retires.
+	Exempted []string
+	// CaseFindings lists case-folding calls inside a prefix-matching loop.
+	CaseFindings []CaseFinding
 }
 
 // extractPrefixes parses a Go file and returns the string literals of the named
@@ -168,6 +211,15 @@ func Check(cfg Config) (Outcome, error) {
 		cfg.Sites = DefaultSites()
 	}
 
+	now := cfg.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	exempt, _, aerr := loadExemptions(cfg.RepoRoot, cfg.AllowlistPath, now)
+	if aerr != nil {
+		return Outcome{}, aerr
+	}
+
 	var out Outcome
 	sets := map[string]map[string]bool{}
 	union := map[string]bool{}
@@ -201,15 +253,34 @@ func Check(cfg Config) (Outcome, error) {
 					missingElsewhere = true
 				}
 			}
-			if missingElsewhere {
-				only = append(only, p)
+			if !missingElsewhere {
+				continue
 			}
+			if exempt[p] {
+				out.Exempted = append(out.Exempted, p)
+				continue
+			}
+			only = append(only, p)
 		}
 		if len(only) > 0 {
 			sort.Strings(only)
 			out.OnlyIn[path] = only
 			diverged = true
 		}
+	}
+	// The CASE axis has no exemption: it was decided, and a decided axis that
+	// nothing watches is one edit away from being undecided again.
+	caseFindings, cerr := checkCaseMatching(cfg.RepoRoot, cfg.Sites)
+	if cerr != nil {
+		return out, cerr
+	}
+	out.CaseFindings = caseFindings
+
+	sort.Strings(out.Exempted)
+	out.Exempted = dedupe(out.Exempted)
+
+	if len(out.CaseFindings) > 0 {
+		return out, ErrCaseFoldingInMatch
 	}
 	if diverged {
 		return out, ErrPrefixSetsDiverge

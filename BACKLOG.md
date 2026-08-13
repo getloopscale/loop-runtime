@@ -1350,6 +1350,13 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
+> **2026-08-12 (fatia `slice-11`, `B-070`):** o gate que este item criou saiu do estado desligado.
+> A divergência `GOOGLE_` que o mantinha mudo passou a **isenção datada** (sunset 2026-11-09) em
+> `cmd/loopzero-ops/internal/quality/envprefixparity/allowlist.txt`, e o gate entrou em
+> `task quality:gates`. A decisão de direção continua **aberta e sua** — o dado A2 segue invisível
+> daqui. O que mudou é que a lacuna agora tem prazo e aparece impressa em toda execução verde, em
+> vez de invisível por o gate inteiro estar desligado.
+
 ## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [ ]
 
 domain: engine-go
@@ -1682,6 +1689,11 @@ dod:
 
 > Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`, ao verificar o desenho do gate do `B-051`.
 
+> **2026-08-12 (fatia `slice-11`, `B-070`):** o eixo da **caixa** foi decidido e passou a ser
+> vigiado pelo gate. Este item — o eixo da **severidade** — segue aberto, e pela mesma razão do eixo
+> do conjunto: tornar o descarte silencioso da API explícito muda o resultado de deploys que hoje
+> sucedem. Continua sendo a única das três divergências em que nenhum lado é obviamente o certo.
+
 ## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [ ]
 
 domain: engine-go
@@ -1690,8 +1702,8 @@ suggested_mode: bug
 source: discover-review
 evidence: medido **ao vivo** em 2026-08-11 executando o binário real (`GOWORK=off go run .` em `tools/loopzero-dockerfile-lint`) contra um Dockerfile com `ENV aws_region=us-east-1`: `{"rule":"RESERVED_ENV_KEY","severity":"REJECT",...}` e `exit status 1`. A causa é sensibilidade a maiúsculas divergente: o linter compara `strings.HasPrefix(strings.ToUpper(key), p)` (`main.go:491`), a API compara `k[:len(p)] == p` (`build_plan.go:36`), e o comentário em `:32-33` **documenta** a escolha da API como *"exact-prefix and case-sensitive"*. O lado do linter usa `ToUpper` **sem comentário**, e `git log -S` sobre o símbolo devolve um único commit que não separa a decisão.
 why_now: esta divergência é **ativa**, não latente — diferente do `GOOGLE_` do `B-051`, que é potencial. Um tenant que escreva `ENV aws_region` em minúsculas tem o build rejeitado hoje, com uma mensagem que nomeia prefixos em maiúsculas (`LOOPZERO_/KUBERNETES_/AWS_/DO_`) e não explica que o casamento ignora caixa. Se houver tenants nesse estado, existe quebra que ninguém atribuiu a esta regra.
-status: triaged
-severity: alta — é a única das divergências medidas que já rejeita build de terceiro hoje, e a mensagem de erro não permite ao usuário entender por quê.
+status: planned
+severity: média (rebaixada de alta em 2026-08-12) — a premissa de 'já rejeita build de terceiro hoje' NAO se sustentou: a revisão da fatia `slice-11` mediu que o linter nao e invocado, porque o caminho BYO-Dockerfile foi removido como superficie de RCE (`api/internal/argo/languages.go:138-143`, `UserDockerfileStrategy` com zero definicoes). A medicao original era do binario ISOLADO. Resta divergencia real entre duas implementacoes da mesma regra, uma delas sem chamador.
 dod:
   - está decidido se o casamento ignora caixa ou não — e os dois lados passam a concordar
   - a mensagem de rejeição nomeia a regra de casamento, não só a lista de prefixos
@@ -1699,6 +1711,33 @@ dod:
   - existe medição de quantos Dockerfiles de tenant estão nesse estado antes de a decisão ser aplicada (dado A2 do MEET-ASYNC-AMENDMENT-2026-08-11-001)
 
 > Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`. Medido ao vivo, não inferido.
+>
+> **Fechado 2026-08-12** pela fatia `slice-11-reserved-env-case`, ADR
+> `docs/wiki/decisions/2026-08-12-reserved-env-case-matching.md`, ata
+> `MEET-ASYNC-AMENDMENT-2026-08-12-007`. Binário real medido antes e depois: `ENV aws_region` saía
+> **1** e passa a sair **0**; `ENV AWS_REGION` continua saindo **1**.
+>
+> As quatro balas: (1) decidido — casamento sensível a caixa, muda o linter, porque a colisão que a
+> rejeição previne não é possível no Linux e a direção só relaxa; (2) e (3) a mensagem nomeia a regra
+> de casamento e deriva a lista do slice; (4) **respondida, não cumprida** — a contagem de
+> Dockerfiles de tenant nesse estado não é visível deste repositório, e para **este** eixo ela não
+> altera a decisão, porque relaxar não quebra caso nenhum. Continua bloqueante para o eixo do
+> conjunto.
+>
+> **Duas correções de premissa, achadas pela revisão independente antes do commit.** (a) O linter
+> **não está** no caminho de build: as duas citações que eu usava como prova são *comentários*, e o
+> código logo abaixo diz o oposto. Severidade rebaixada, e o CHANGELOG deixou de prometer um
+> conserto que não pode acontecer. (b) Existe uma **terceira** implementação da regra —
+> `api/internal/source/validator_env.go:46`, conjunto diferente (`DYLD_`/`KUBERNETES_`/`LOOPZERO_`), e
+> **essa está ligada**. O gate afirmava paridade sobre 2 de 3; o texto dele foi corrigido e a
+> terceira virou item próprio.
+>
+> **Uma correção ao próprio plano, achada pelo RED:** eu havia previsto que `AWS_region` deixaria de
+> casar. Errado — ele *começa* com `AWS_`, e a API o reserva também (`k[:4] == "AWS_"`). Asserir o
+> contrário abriria divergência **nova**. O que muda é a caixa do prefixo, não a do sufixo.
+>
+> Efeito colateral no `B-051`: o gate que ele criou saiu do estado desligado. A divergência
+> `GOOGLE_` virou isenção datada (2026-11-09) em vez de manter os três eixos sem guarda.
 
 ## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [ ]
 
@@ -2038,3 +2077,74 @@ dod:
 > medido: `check.go:193-219` varre **comentários Go** sobre `api pkg operators cmd tools infra`, e as
 > fixtures em `check_test.go:266` e `:282` já são arquivos `.go`. A afirmação errada era minha, feita
 > sem medir, numa fatia cujo objeto é apagar afirmações normativas que não se sustentam.
+
+## B-087 — `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. `taskfiles/quality.yml:58-62` define `quality:hermetic`, cujo primeiro comando é `cd pkg && go test ./quality/...`. O pacote `pkg/quality` **foi relocado no M9** para `cmd/loopzero-ops/internal/quality/`. Rodando: `pattern ./quality/...: lstat ./quality/: no such file or directory` → `task: Failed`. E `quality:all` é `deps: [hermetic, gates, contract]` (`quality.yml:368-370`), então **o alvo agregado inteiro aborta no primeiro passo**. Só `quality:gates` sozinho é verde — que é o que o `delivery-gate.sh` roda, e por isso ninguém percebeu.
+why_now: o `CLAUDE.md` documenta `task quality:all` como "hermetic tests + full scan + contract gates". Quem seguir a documentação recebe uma falha imediata e pode concluir que o repositório está quebrado. E os testes hermeticos que o alvo prometia rodar **não rodam desde o M9**.
+status: raw
+severity: alta — um alvo de qualidade documentado que aborta é pior que um ausente: ele parece cobertura.
+dod:
+  - `task quality:all` completa, com exit code real
+  - `quality:hermetic` aponta para onde os testes vivem hoje, ou deixa de prometer o que não roda
+  - existe asserção de que um alvo do Taskfile não referencia diretório inexistente
+
+> Registrado 2026-08-12 pela revisão da fatia `slice-11`. Pré-existente, não introduzido pela fatia.
+
+## B-088 — Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. `taskfiles/test.yml:107-111` (`test:unit`) roda `pkg`, `operators`, `api` e `infra/tests` — **não** `cmd/loopzero-ops`, **não** `tools/`. `quality:hermetic` faz `cd cmd/loopzero-ops && go build ./...` — **build, não test**. E `grep -rn "loopzero-dockerfile-lint" taskfiles/ Taskfile.yml .github/` devolve **zero**. Consequência medida na própria fatia: os 12 testes que ela escreveu (6 no linter, 6 no gate) **nunca executam** por nenhum caminho automatizado.
+why_now: `cmd/loopzero-ops` é onde vivem os 123 quality gates — a substituição declarada do CI. Os testes que provam que um gate reprova o que deve reprovar não rodam em lugar nenhum, o que torna cada gate uma afirmação não verificada. É a mesma forma do `B-045` (gate que existe e não roda), um nível acima: o **teste** do gate que existe e não roda.
+status: raw
+severity: alta — um teste que nunca executa não é teste, e aqui são os testes do mecanismo que substitui o CI.
+dod:
+  - `cmd/loopzero-ops` e `tools/loopzero-dockerfile-lint` entram num alvo que roda de fato
+  - o `delivery-gate.sh` (ou o alvo que ele chama) cobre esses testes, senão eles seguem opcionais
+  - existe asserção de que todo módulo do repositório está em algum alvo de teste
+
+> Registrado 2026-08-12 pela revisão da fatia `slice-11`. Pré-existente. Depende do `B-087` — o alvo
+> agregado que os incluiria é justamente o que aborta.
+
+## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. Além de `api/internal/services/deploycontracts/build_plan.go:23` (5 prefixos) e `tools/loopzero-dockerfile-lint/main.go:84` (4), existe `api/internal/source/validator_env.go:46` com um **terceiro** conjunto — `DYLD_`, `KUBERNETES_`, `LOOPZERO_` — e seu próprio `isReservedEnvKey` (`:68`), sobre o env do `services.json` do usuário, ligado em `validator_services.go:156`. O resultado é que `DYLD_*` é bloqueado por uma cópia e permitido pelas outras duas, e `AWS_*` o inverso. E das três, a que **não** tem chamador é justamente a que o gate `env-prefix-parity` compara contra a API.
+why_now: o gate passou a rodar em 2026-08-12 (`B-070`) e imprime `PASS — 2 declarations`. Duas de três. Um verde que cobre dois terços de uma regra de segurança é lido como cobertura da regra.
+status: raw
+severity: alta — três respostas diferentes para "o tenant pode declarar esta variável?", e a decisão de qual vale nunca foi tomada.
+dod:
+  - está decidido qual conjunto é a regra, e por quê (os três diferem em `DYLD_`, `AWS_`, `DO_`, `GOOGLE_`)
+  - o gate compara as três declarações, ou declara explicitamente por que uma fica fora
+  - a saída do gate deixa de dizer um número que sugere cobertura total
+
+> Registrado 2026-08-12 pela revisão da fatia `slice-11`, que corrigiu a afirmação `exactly two
+> copies today (measured)` do próprio gate. Relacionado a `B-051` e `B-069`.
+
+## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`, rodando seis variantes contra `Check` numa árvore temporária — **todas as seis** devolveram `err=nil`: `ToUpper` içado para ACIMA do range e usado dentro dele (a que um refactor normal produz); laço por índice em vez de `range`; `range` sobre uma variável que aliasa o slice; `slices.ContainsFunc`; `import str "strings"`; `bytes.ToUpper`. `casematch.go` só inspeciona `*ast.RangeStmt` cujo `X` é o identificador do símbolo.
+why_now: o eixo da caixa acabou de ser decidido (`B-070`) e a asserção que o protege tem uma porta larga. A variante içada restaura exatamente o comportamento que o ADR proíbe, e o gate segue verde.
+status: raw
+severity: média — o passo vazio (site sem loop) já foi fechado, e o teste comportamental do linter pega todas as seis; mas esse teste não roda (`B-088`), e a cópia vigiada é código morto (`B-070`).
+dod:
+  - a variante içada é detectada, ou está escrito por que não é
+  - a asserção acompanha a expressão comparada, não a forma do laço
+  - as seis variantes viram fixtures
+
+> Registrado 2026-08-12 pela revisão da fatia `slice-11`. As seis variantes estão enumeradas no
+> doc-comment de `casematch.go` — foram documentadas em vez de implicadas inexistentes.

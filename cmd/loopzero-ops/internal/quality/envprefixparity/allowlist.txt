@@ -1,0 +1,16 @@
+# Allowlist do gate `env-prefix-parity`.
+#
+# Formato:  prefixo | sunset (YYYY-MM-DD) | justificativa
+#   sunset e INCLUSIVO — a entrada expira no dia SEGUINTE
+#
+# Uma entrada aqui isenta UM PREFIXO do eixo do CONJUNTO. Ela nao isenta o eixo:
+# um sexto prefixo divergente reprova, e o eixo da CAIXA nao tem isencao nenhuma.
+#
+# Por que existe: sem ela o gate ficaria vermelho no dia 1 por uma decisao que
+# este repositorio ja registrou como nao-tomavel daqui — e um gate vermelho
+# permanente vira ruido e depois vira desligamento. Foi exatamente o que
+# aconteceu: o gate nasceu no B-051 e passou a existir DESLIGADO, de modo que
+# NENHUM dos tres eixos era vigiado. A isencao datada troca "invisivel porque o
+# gate esta mudo" por "visivel e com prazo".
+
+GOOGLE_ | 2026-11-09 | declarado so em api/internal/services/deploycontracts/build_plan.go; ausente em tools/loopzero-dockerfile-lint/main.go. A direcao da correcao tem raio de explosao OPOSTO — acrescentar ao linter quebra build de tenant que hoje passa (rejeicao dura, medida ao vivo com exit 1); remover da API enfraquece find_sec_004. O dado que decidiria (quantos Dockerfiles de tenant declaram GOOGLE_*) NAO e visivel deste repositorio. Ver B-051, MEET-ASYNC-AMENDMENT-2026-08-11-001 dado A2, e quality_gate_wiring_test.go:256-263.

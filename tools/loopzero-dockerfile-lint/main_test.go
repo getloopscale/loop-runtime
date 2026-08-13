@@ -429,3 +429,90 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+// --- B-070: reserved-env prefix matching is case-SENSITIVE ------------------
+//
+// ADR 2026-08-12-reserved-env-case-matching. The rule exists to stop a tenant
+// SHADOWING what LoopZero injects at runtime. Environment variables on Linux are
+// case-sensitive, and every name LoopZero injects is uppercase (measured across
+// api/internal/: AWS_ACCESS_KEY_ID, DO_TOKEN, KUBERNETES_SERVICE_HOST, LOOPZERO_*).
+// So `aws_region` cannot shadow `AWS_REGION`, and rejecting it refuses a build
+// over a collision the operating system does not permit.
+//
+// The instruction keyword (`ARG `/`ENV `) stays case-INSENSITIVE — Dockerfile
+// instructions are case-insensitive by specification. Only the KEY comparison
+// is case-sensitive. These two live one line apart, so the distinction is
+// pinned by TestReservedEnvKey_InstructionKeywordStaysCaseInsensitive below.
+
+func TestReservedEnvKey_LowercaseIsNotReserved(t *testing.T) {
+	for _, line := range []string{
+		"ENV aws_region=us-east-1",
+		"ENV loopzero_debug=1",
+		"ARG do_token=x",
+		"ENV kubernetes_service_host=127.0.0.1",
+	} {
+		if hit, key := containsReservedEnvKey(line); hit {
+			t.Errorf("%q flagged as reserved (key %q); a lowercase name cannot shadow the "+
+				"uppercase name LoopZero injects — env vars are case-sensitive on Linux", line, key)
+		}
+	}
+}
+
+func TestReservedEnvKey_UppercaseIsStillReserved(t *testing.T) {
+	for _, line := range []string{
+		"ENV AWS_REGION=us-east-1",
+		"ENV LOOPZERO_ADMIN=1",
+		"ARG DO_TOKEN=x",
+		"ENV KUBERNETES_SERVICE_HOST=127.0.0.1",
+	} {
+		if hit, _ := containsReservedEnvKey(line); !hit {
+			t.Errorf("%q NOT flagged; this is the shadowing the rule exists to stop", line)
+		}
+	}
+}
+
+// What changes is the case of the PREFIX, not of the suffix. `AWS_region`
+// literally begins with `AWS_`, so exact-prefix matching reserves it — and the
+// API does the same (`k[:len(p)] == p`, build_plan.go:36). Asserting otherwise
+// would open a NEW divergence, which is the defect this slice closes; an earlier
+// draft of this test did exactly that and the run caught it.
+func TestReservedEnvKey_UppercasePrefixWithLowercaseSuffixIsReserved(t *testing.T) {
+	if hit, _ := containsReservedEnvKey("ENV AWS_region=us-east-1"); !hit {
+		t.Error("AWS_region NOT flagged; it begins with the reserved prefix AWS_, and the API " +
+			"side reserves it too — the two must agree")
+	}
+}
+
+// The keyword and the key are matched on different rules, one line apart. This
+// pins the half that must NOT change.
+func TestReservedEnvKey_InstructionKeywordStaysCaseInsensitive(t *testing.T) {
+	for _, line := range []string{"env AWS_REGION=x", "Env AWS_REGION=x", "arg DO_TOKEN=x"} {
+		if hit, _ := containsReservedEnvKey(line); !hit {
+			t.Errorf("%q NOT flagged; Dockerfile instructions are case-insensitive by spec, "+
+				"so a lowercase `env` keyword must still be parsed", line)
+		}
+	}
+}
+
+// The prefix list in the rejection message must be DERIVED from the slice.
+// A literal in prose can drift from the slice in its own file, which is the
+// smaller sibling of the drift the env-prefix-parity gate watches across files.
+func TestReservedEnvKey_MessageListsEveryPrefixFromTheSlice(t *testing.T) {
+	msg := reservedEnvKeyMessage("aws_thing")
+	for _, p := range reservedEnvKeyPrefixes {
+		if !strings.Contains(msg, p) {
+			t.Errorf("prefix %q is in reservedEnvKeyPrefixes but absent from the rejection "+
+				"message; the message must be derived from the slice, not retyped.\nmsg: %s", p, msg)
+		}
+	}
+}
+
+// The user who hit this rule needs to know WHY their key matched. Naming the
+// prefixes without naming the matching rule is what made `aws_region` look like
+// an arbitrary rejection.
+func TestReservedEnvKey_MessageNamesTheMatchingRule(t *testing.T) {
+	msg := reservedEnvKeyMessage("aws_thing")
+	if !strings.Contains(strings.ToLower(msg), "case-sensitive") {
+		t.Errorf("rejection message does not state that matching is case-sensitive:\n%s", msg)
+	}
+}

@@ -62,6 +62,16 @@ func runEnvPrefixParity(args []string) int {
 
 	out, err := envprefixparity.Check(envprefixparity.Config{RepoRoot: *root})
 	switch {
+	case errors.Is(err, envprefixparity.ErrCaseFoldingInMatch):
+		fmt.Fprintln(os.Stderr, "env-prefix-parity: FAIL — a reserved-prefix comparison folds case:")
+		fmt.Fprint(os.Stderr, envprefixparity.FormatCaseFindings(out.CaseFindings))
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Matching is exact per ADR 2026-08-12-reserved-env-case-matching: env vars are")
+		fmt.Fprintln(os.Stderr, "case-sensitive on Linux and every name LoopZero injects is uppercase, so a lowercase")
+		fmt.Fprintln(os.Stderr, "key cannot shadow one. Folding rejects builds over a collision the OS forbids.")
+		fmt.Fprintln(os.Stderr, "The INSTRUCTION keyword (ARG/ENV) may still be folded — this looks only inside")
+		fmt.Fprintln(os.Stderr, "the loop over the prefix slice.")
+		return 1
 	case errors.Is(err, envprefixparity.ErrPrefixSetsDiverge):
 		fmt.Fprintln(os.Stderr, "env-prefix-parity: FAIL — the two reservedEnvKeyPrefixes declarations hold different sets:")
 		for _, d := range out.Declarations {
@@ -73,12 +83,28 @@ func runEnvPrefixParity(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "This gate proves the two PREFIX SETS match, and nothing else. The same rule also")
 		fmt.Fprintln(os.Stderr, "diverges on severity (B-069: silent discard vs hard build failure) and on case")
-		fmt.Fprintln(os.Stderr, "matching (B-070: sensitive vs insensitive). Green here does not mean unified.")
+		fmt.Fprintln(os.Stderr, "matching (B-070) and on the third, unwatched copy at")
+		fmt.Fprintln(os.Stderr, "api/internal/source/validator_env.go (B-089). Green here does not mean unified.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "If this divergence is a KNOWN gap, it belongs in")
+		fmt.Fprintln(os.Stderr, "cmd/loopzero-ops/internal/quality/envprefixparity/allowlist.txt with a sunset —")
+		fmt.Fprintln(os.Stderr, "an entry there may also have EXPIRED, which is why a gap can reappear.")
 		return 1
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "env-prefix-parity: %v\n", err)
 		return 2
 	}
-	fmt.Printf("env-prefix-parity: PASS — %d declarations hold the same prefix set\n", len(out.Declarations))
+	// An exemption is PRINTED on the green path, not swallowed by it. A gap
+	// nobody sees on a passing run is a gap nobody retires — which is how the
+	// 21 inherited approvals of helm-drift (B-076) became invisible.
+	if len(out.Exempted) > 0 {
+		fmt.Printf("env-prefix-parity: PASS — %d of 3 declarations watched; they agree on case "+
+			"matching; %d prefix(es) exempt with a sunset: %v. NOT watched: "+
+			"api/internal/source/validator_env.go, a third copy with a different set (B-089).\n",
+			len(out.Declarations), len(out.Exempted), out.Exempted)
+		return 0
+	}
+	fmt.Printf("env-prefix-parity: PASS — %d of 3 declarations watched; same prefix set and same "+
+		"case matching. NOT watched: api/internal/source/validator_env.go (B-089).\n", len(out.Declarations))
 	return 0
 }

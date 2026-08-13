@@ -37,9 +37,9 @@ import (
 type Severity string
 
 const (
-	SeverityReject  Severity = "REJECT"  // hard fail, exit 1
-	SeverityWarn    Severity = "WARN"    // log only, exit 0
-	SeverityInfo    Severity = "INFO"    // diagnostic
+	SeverityReject Severity = "REJECT" // hard fail, exit 1
+	SeverityWarn   Severity = "WARN"   // log only, exit 0
+	SeverityInfo   Severity = "INFO"   // diagnostic
 )
 
 // Finding is one structured event emitted to stdout.
@@ -297,8 +297,7 @@ func lintDockerfile(appName, file, content string, allowedRegistryPrefixes []str
 					App:      appName,
 					File:     file,
 					Line:     lineNum,
-					Msg: fmt.Sprintf("ARG/ENV key %q uses a reserved prefix (LOOPZERO_/KUBERNETES_/AWS_/DO_). "+
-						"These names are reserved for LoopZero's runtime injection.", key),
+					Msg:      reservedEnvKeyMessage(key),
 				})
 			}
 		}
@@ -471,6 +470,16 @@ func containsBindMountEscapingContext(line string) (bool, string) {
 	return false, ""
 }
 
+// reservedEnvKeyMessage builds the rejection text for a reserved key. The
+// prefix list is DERIVED from reservedEnvKeyPrefixes so the two cannot drift,
+// and the text names the matching rule so the user can tell why their key
+// matched (ADR 2026-08-12-reserved-env-case-matching).
+func reservedEnvKeyMessage(key string) string {
+	return fmt.Sprintf("ARG/ENV key %q uses a reserved prefix (%s). Matching is exact and "+
+		"case-sensitive, so only these uppercase forms are reserved. These names are reserved "+
+		"for LoopZero's runtime injection.", key, strings.Join(reservedEnvKeyPrefixes, "/"))
+}
+
 func containsReservedEnvKey(line string) (bool, string) {
 	t := strings.TrimSpace(line)
 	upper := strings.ToUpper(t)
@@ -487,8 +496,14 @@ func containsReservedEnvKey(line string) (bool, string) {
 			}
 		}
 		key = strings.TrimSpace(key)
+		// Case-SENSITIVE by ADR 2026-08-12-reserved-env-case-matching: env vars
+		// are case-sensitive on Linux and every name LoopZero injects is uppercase,
+		// so `aws_region` cannot shadow `AWS_REGION`. Upper-casing here rejected
+		// builds over a collision the OS does not permit. Note the instruction
+		// keyword above IS matched case-insensitively — Dockerfile instructions
+		// are case-insensitive by spec. The two rules differ on purpose.
 		for _, p := range reservedEnvKeyPrefixes {
-			if strings.HasPrefix(strings.ToUpper(key), p) {
+			if strings.HasPrefix(key, p) {
 				return true, key
 			}
 		}
