@@ -28,6 +28,7 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -60,6 +61,9 @@ const qualityTaskfileRelPath = "../../taskfiles/quality.yml"
 type wiringReason struct {
 	category      string
 	externalInput string // REQUIRED when category == categoryOperatorRun
+	// ambient marks external state that is always available (the wall clock),
+	// and therefore cannot be proven by running the gate without it.
+	ambient bool
 }
 
 // String keeps the ledger's error messages readable and makes wiringReason
@@ -96,8 +100,32 @@ const categoryOperatorRun = "operator-run — needs live cluster state / a cerem
 // operatorRunOn builds the only exemption that requires an argument. A named
 // constructor makes the requirement impossible to forget at the call site,
 // which a struct literal with an optional field would not.
+//
+// It marks the input as ABSENT-ABLE: a file or an environment variable that can
+// be missing. That is what makes the claim testable — run the gate with the
+// input gone, and a gate that truly depends on it cannot reach a verdict.
+// TestOperatorRun_AbsentableInputsAreProven does exactly that.
 func operatorRunOn(externalInput string) wiringReason {
-	return wiringReason{category: categoryOperatorRun, externalInput: externalInput}
+	return wiringReason{category: categoryOperatorRun, externalInput: externalInput, ambient: false}
+}
+
+// operatorRunOnAmbient is for external state that is ALWAYS present and
+// therefore cannot be proven by absence — the wall-clock date being the only
+// instance measured (2026-08-12, B-045 bullet 1).
+//
+// The distinction is not bureaucracy. The bullet asked for the operatorRun claim
+// to be PROVEN rather than accepted, and a behavioural probe answers that for a
+// missing file or an unset variable: `drill-creds-isolation` errors out without
+// its tokens, which is proof. Probing `cosign-cutover` the same way returns
+// "marker absent. Check is dormant." — a clean verdict, because you cannot take
+// the calendar away from a process.
+//
+// So the honest split is between claims a probe can settle and claims it cannot,
+// and naming which is which is what keeps the second group from hiding inside
+// the first. Two entries are ambient today; every other operatorRun exemption
+// must survive the probe.
+func operatorRunOnAmbient(externalInput string) wiringReason {
+	return wiringReason{category: categoryOperatorRun, externalInput: externalInput, ambient: true}
 }
 
 var (
@@ -169,9 +197,9 @@ var gateWiringExemptions = map[string]wiringReason{
 	// Each MUST name the external state (wiringReason.validate). Measured
 	// 2026-08-11 by reading each gate's Run func, not by trusting the label —
 	// which is how four of the nine below turned out to be misfiled.
-	"cosign-cutover": operatorRunOn(
+	"cosign-cutover": operatorRunOnAmbient(
 		"the wall-clock date, compared against the GA marker .github/v1.0-ga-date.txt — a deadline ratchet has no verdict without knowing what day it is"),
-	"service-auth-rotation": operatorRunOn(
+	"service-auth-rotation": operatorRunOnAmbient(
 		"the wall-clock date, compared against .github/service-auth-ed25519-rotation-date.txt — same ratchet shape as cosign-cutover; it reports on a deadline, it does not rotate anything"),
 	"spotcheck-dimension": operatorRunOn(
 		"SPOTCHECK_SEED in the environment — the sample is chosen by the operator running the spot check"),
@@ -213,8 +241,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	// Both are real releases in build.helmfile.yaml.gotmpl, not dead POCs. The
 	// fix is a securityContext on charts whose workloads (argo-events/NATS, the
 	// Argo WorkflowTemplate containers) can break under readOnlyRootFilesystem,
-	// which makes it a T2 change requiring LIVE validation on a cluster.
-	"security-context": failingGate,
 	// Measured 2026-08-11: reads charts/<name>/templates and infra/helm/<name>/
 	// templates and NOTHING else — zero exec.Command / kubectl / client-go. It
 	// was filed operatorRun, which is why the missing vap-tenant-cr-shape.yaml
@@ -449,4 +475,90 @@ func TestEveryWiringCategorySatisfiesItsInvariant(t *testing.T) {
 	if err := operatorRunOn("um insumo nomeado").validate(); err != nil {
 		t.Errorf("a well-formed operatorRun must validate: %v", err)
 	}
+}
+
+// TestOperatorRun_AbsentableInputsAreProven turns the operatorRun claim from a
+// DECLARATION into a DETECTION, which is what B-045 bullet 1 asked for.
+//
+// The package doc argues, correctly, that a STATIC probe cannot do this: the
+// external input lives in package main, and inspecting code for it produces
+// false positives. This is a BEHAVIOURAL probe instead — it runs the gate
+// against an empty tree with the named input removed, and asserts the gate
+// cannot reach a verdict. It inspects nothing; it observes.
+//
+// A gate that concludes cleanly with its input gone did not need it, and the
+// exemption that kept it out of quality:gates was resting on a false claim.
+// That is precisely the failure this test exists to make impossible: two
+// entries (`helm-drift`, `clusterimagepolicy-mode`) had already turned out to
+// be hermetic comparisons wearing an operatorRun label.
+//
+// Ambient inputs are excluded BY NAME, not by silence — see operatorRunOnAmbient.
+func TestOperatorRun_AbsentableInputsAreProven(t *testing.T) {
+	// The binary is BUILT rather than skipped-on-absence. A skip here would make
+	// the proof vanish exactly where it is least likely to be noticed — on a
+	// machine that never ran `task quality:build` — and a probe that silently
+	// does not run is the defect this whole item is about.
+	bin := filepath.Join(t.TempDir(), "loopzero-ops-probe")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building the gate binary for the probe: %v\n%s", err, out)
+	}
+
+	// The variables an operatorRun gate may name. Cleared so "absent" is real.
+	cleared := []string{
+		"SPOTCHECK_SEED", "DRILL_DO_TOKEN", "DIGITALOCEAN_TOKEN",
+		"DO_TOKEN", "DRILL_PULUMI_TOKEN",
+	}
+
+	var probed int
+	for name, reason := range gateWiringExemptions {
+		if reason.category != categoryOperatorRun || reason.ambient {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			probed++
+			cmd := exec.Command(bin, "quality", name, "--root", t.TempDir())
+			cmd.Env = os.Environ()
+			for _, v := range cleared {
+				cmd.Env = append(cmd.Env, v+"=")
+			}
+			out, err := cmd.CombinedOutput()
+
+			// A clean exit 0 means the gate reached a PASS verdict with its
+			// declared input gone. Either the input is not required, or it is
+			// not the input named — both make the exemption a false claim.
+			if err == nil && !mentionsMissingInput(string(out)) {
+				t.Errorf("`%s` is exempted as operatorRun on %q, but it reached a verdict with that "+
+					"input absent (exit 0). Either it is hermetic and belongs in quality:gates, or "+
+					"the named input is the wrong one.\noutput: %s",
+					name, reason.externalInput, truncate(string(out)))
+			}
+		})
+	}
+
+	// Floor: a loop that probed nothing would pass silently, which is the
+	// `PASS — 0 routes` shape this repository has paid for once (B-040).
+	if probed == 0 {
+		t.Error("no absent-able operatorRun gate was probed; either the registry is empty or the " +
+			"filter is wrong — a probe that ran zero times proves nothing")
+	}
+}
+
+// mentionsMissingInput reports whether the output says the gate could not
+// proceed. A gate may exit 0 while SKIPping, which is not a verdict.
+func mentionsMissingInput(out string) bool {
+	low := strings.ToLower(out)
+	for _, marker := range []string{"skip", "not set", "absent", "missing", "no such file", "error:", "required"} {
+		if strings.Contains(low, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func truncate(s string) string {
+	if len(s) > 400 {
+		return s[:400] + "…"
+	}
+	return s
 }

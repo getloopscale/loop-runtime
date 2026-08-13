@@ -1286,6 +1286,29 @@ dod:
 > então exige antes endurecer `argo-events` (wrapper de chart upstream) e `loopzero-ci-workflows`
 > (nosso), ou registrar exceção por ADR — que é T2 sobre workload em execução.
 
+> **2026-08-12 — as cinco balas fechadas.**
+>
+> **1. `operatorRun` provado.** O desenho anterior argumentava que detectar era inviável porque uma
+> sonda **estática** dá falso-positivo — correto, e é por isso que a prova é **comportamental**: roda
+> o gate com o insumo ausente e exige que ele não conclua. Ela não inspeciona nada; observa. Provada
+> por mutante: rotular `alert-runbooks` (hermético) como `operatorRun` faz o teste reprovar nomeando
+> a razão — a mesma falsidade que `helm-drift` e `clusterimagepolicy-mode` carregaram.
+>
+> A medição também separou **duas espécies** de estado externo, que a classificação tratava igual: o
+> **ausentável** (arquivo, variável — provável por ausência) e o **ambiente** (o relógio — não se
+> tira o calendário de um processo). `cosign-cutover` e `service-auth-rotation` são ambiente e agora
+> se declaram como tal por construtor próprio, em vez de se esconderem entre os provados.
+>
+> **3. `security-context` ligado**, com `--gate`. Os dois charts ganharam exceção **datada** pelo
+> mecanismo que o próprio gate desenhou (`ADR-securitycontext-exception.md` por chart), cada uma com
+> condição de saída: `argo-events` é wrapper de chart upstream, e endurecê-lo às cegas produz
+> garantia falsa quando o esquema de valores muda; `loopzero-ci-workflows` é nosso e tem contêineres
+> reais, mas `readOnlyRootFilesystem: true` quebra o `loopzero-ops`, que escreve — fechar exige
+> `emptyDir` em `/tmp` e validação LIVE dos quatro CronWorkflows, que é T2 com reunião.
+>
+> **4. ADR do deny-flip** escrito, e o gate ligado. **5. baseline órfã** removida.
+> **2. `helm-drift` e `clusterimagepolicy-mode`** ligados.
+
 ## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
 
 domain: engine-go
