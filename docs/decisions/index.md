@@ -18,3 +18,25 @@
 * [ADR 2026-06-15 — LoopZeroCloud deploy supports only the fixed LoopZeroKit stack (python + node)](2026-06-15-deploy-fixed-loopzerokit-stack.md)
 * [J-06 Overview backend: read-model boundaries + price source of truth](2026-07-03-j06-overview-backend-read-model-boundaries.md)
 * [Cluster API como ciclo de vida de cluster para BYOC multi-cloud e multi-país](2026-08-07-capi-byoc-cluster-lifecycle-adr.md) — **PROPOSED** (T3, aguarda reunião)
+
+---
+
+## Decisões da camada de dados — migradas para `loopzero-data-cells`
+
+Em **2026-08-13** foram criadas seis decisões sobre a camada de dados dos produtos (shards, backup,
+escala, resiliência). Elas viviam aqui e **foram movidas** para o repositório
+[`loopzero-data-cells`](../../../loopzero-data-cells/docs/decisions/index.md) quando ele nasceu, porque o
+sistema que decidem tem repositório próprio.
+
+| Decisão | Onde está | Toca este repositório? |
+|---|---|---|
+| CloudNativePG como operator dos shards (motor, storage, failover) | `loopzero-data-cells` | o chart `loopzero-data-cell` nasce em `loopzero/charts/` |
+| Onde o código do cell de dados mora | `loopzero-data-cells` | idem |
+| O plano de controle de dados como sistema separado | `loopzero-data-cells` | não |
+| Escala horizontal, headroom e backup | `loopzero-data-cells` | não |
+| **Guardrail de `DELETE` estendido a `postgresql.cnpg.io`** | `loopzero-data-cells` | **sim — a mudança é em `charts/loopzero-admission-policies`**, e é pré-requisito bloqueante do primeiro shard |
+| Política de resiliência da camada de dados | `loopzero-data-cells` | as métricas de banco ausentes são trabalho daqui (`#287`) |
+
+**Duas decisões deste repositório são pressupostas por elas** e permanecem aqui:
+[`capi-byoc-cluster-lifecycle`](2026-08-07-capi-byoc-cluster-lifecycle-adr.md) (§ D3, D12, D15) e
+[`cell-cluster-unification`](2026-08-09-cell-cluster-unification-adr.md).
