@@ -2195,6 +2195,16 @@ dod:
 
 > Registrado 2026-08-12 pela revisão da fatia `slice-11`. Pré-existente, não introduzido pela fatia.
 
+> **Fechado 2026-08-13** pela fatia `slice-14`. `quality:hermetic` passou a rodar
+> `cd cmd/loopzero-ops && go test ./internal/quality/...` — restaurando o que o `desc` do alvo declara
+> ("Run quality-gate hermetic Go tests"), que ele deixou de fazer no M9. Rejeitada a saída de apenas
+> **remover** o comando quebrado: faria `quality:all` completar trocando um abort visível por um
+> verde vazio.
+>
+> A terceira bala (*"asserção de que um alvo não referencia diretório inexistente"*) é coberta pelo
+> gate `test-target-coverage` do `B-088`: um diretório que não existe não tem `go.mod`, e um módulo
+> que existe sem alvo reprova.
+
 ## B-088 — Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task   [ ]
 
 domain: engine-go
@@ -2212,6 +2222,28 @@ dod:
 
 > Registrado 2026-08-12 pela revisão da fatia `slice-11`. Pré-existente. Depende do `B-087` — o alvo
 > agregado que os incluiria é justamente o que aborta.
+
+> **Fechado 2026-08-13** pela fatia `slice-14`. Medido: **9 módulos** no disco, `test:unit` nomeava
+> **4 linhas**. Entraram `operators/api`, `cmd/loopzero-ops` e os dois de `tools/` (estes com
+> `GOWORK=off`, por estarem fora do `go.work`). `infra/scripts` ficou **isento com razão medida**:
+> zero `*_test.go`, e um alvo rodando `go test` sobre módulo sem teste reporta um verde que não
+> significa nada.
+>
+> A terceira bala virou o gate `test-target-coverage`, e ele é o ponto da fatia: os dois itens eram
+> a segunda e a terceira manifestação do mesmo descuido — **uma lista escrita à mão nunca comparada
+> com o disco**. Consertar as listas sem a comparação deixaria o defeito armado para o quarto módulo.
+>
+> Provado por mutante: remover `cmd/loopzero-ops` dos dois taskfiles reprova nomeando-o, e trocar
+> `go test` por `go build` reprova também — que é **o falso-positivo original**, o mesmo que fez o
+> módulo parecer coberto.
+>
+> **Uma correção ao meu próprio mutante:** a primeira tentativa não falhou, e eu ia concluir que o
+> gate era vazio. Não era — eu havia removido a cobertura de só um dos dois arquivos, e o outro
+> ainda cobria. O mutante estava errado, não o gate.
+>
+> Nota sobre a bala do `delivery-gate`: ele chama `quality:gates`, não `quality:all`. Com o gate
+> dentro do `quality:gates`, o hook passa a **verificar a cobertura**; executar os testes continua
+> sendo do `test:unit`. A diferença está dita porque a bala pede o hook.
 
 ## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [ ]
 
@@ -2265,3 +2297,22 @@ dod:
 
 > Registrado 2026-08-12 pela fatia `slice-13`. Fora da DoD do `B-045`, que nomeia só a baseline de
 > environment-lock — registrado em vez de removido junto, para não ampliar escopo em silêncio.
+
+## B-092 — 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão da fatia `slice-14`. `taskfiles/test.yml` roda `cd infra/tests && go test ./unit/...`, o que deixa três subárvores fora: `helm/` (27 arquivos de teste, **verde** — ligado nesta fatia), `scripts/` (11, **vermelho**) e `config/` (5, **vermelho**). Os dois vermelhos acusam coisas reais: `TestLoopZeroCloudImageOverlayUsesGHCRCanonical` (`loopzero_cloud_ghcr_canonical_test.go:62`) diz que `infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl` não referencia `ghcr.io/getloopscale/loopzero-cloud` (issue #104), e `TestB31ImageTagsPinned` (`regression_bugs_early_test.go:245`) diz que a tag em `infra/helm/loopzero-api/values.yaml` viola o ADR-0020 D1.
+why_now: são 16 testes que ninguém executa e que estão reprovando — a forma exata do `B-088` um nível abaixo do módulo. O gate `test-target-coverage` criado na mesma fatia **não os vê**: a granularidade dele é o módulo, e `infra/tests` conta como coberto por causa do `./unit/...`.
+status: raw
+severity: alta — dois testes de regressão estão vermelhos há tempo indeterminado, e o que eles acusam (imagem apontando para registro errado, tag fora do contrato) é a classe que o `B-016` já mostrou custar cluster parado.
+dod:
+  - `scripts/` e `config/` entram num alvo que roda
+  - os dois testes vermelhos passam, ou o que eles acusam vira decisão registrada
+  - está decidido se o `test-target-coverage` passa a granularidade de pacote, ou se a granularidade de módulo fica declarada como o limite dele
+
+> Registrado 2026-08-13 pela revisão da fatia `slice-14`. `helm/` foi ligado na mesma fatia por estar
+> verde; os dois vermelhos ficam de fora porque adicioná-los deixaria `task test:unit` vermelho sem
+> consertar o que acusam — e um alvo vermelho vira alvo desligado, que é o defeito de origem.

@@ -56,9 +56,18 @@ tasks:
         echo "registered=$total wired=$((total - unwired)) unwired=$unwired"
 
   hermetic:
-    desc: Run quality-gate hermetic Go tests + verify both modules build
+    desc: Run quality-gate hermetic Go tests + verify the gate module builds
     cmds:
-      - cd pkg && go test ./quality/...
+      # Apontava para `pkg/quality`, relocado no M9 para cmd/loopzero-ops/internal/quality.
+      # O alvo abortava (exit 201) e derrubava `quality:all` no primeiro deps —
+      # so `quality:gates` sozinho era verde, que e o que o delivery-gate roda, e
+      # por isso ninguem viu. B-087.
+      # `./...`, nao `./internal/quality/...`: o pacote `main` de cmd/loopzero-ops
+      # NAO esta em ./internal/..., e e onde vivem TestOracle_MatchesFrozenBaseline,
+      # TestEveryGateIsWiredOrExempted, TestNoStalePkgQualityPath e
+      # TestTaskfilesDoNotCdIntoMissingDirs. Os dois ultimos sao guardas contra
+      # exatamente a familia de defeito do B-087 — e nao rodavam. Custo: ~12s.
+      - cd cmd/loopzero-ops && go test ./... -count=1
       - cd cmd/loopzero-ops && go build ./...
 
   gates:
@@ -262,6 +271,7 @@ tasks:
       - /tmp/loopzero-ops quality no-cloud-dev-default                              # M16 T2.3 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-no-cloud-dev-default_test.sh (T1.1 Caddy 301 redirect trap guard: no test/seed script may default to cloud-dev.loopzero.example; webhook handler /api/v1/webhooks/github is single exception).
       - /tmp/loopzero-ops quality docs-contract-refs                                # B-052 (2026-08-11): toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve, ou tem excecao datada. Uma referencia normativa que nao resolve e pior que nenhuma: ela e seguida.
       - /tmp/loopzero-ops quality env-prefix-parity                                 # B-070 (2026-08-12): a regra de env reservada tem duas implementacoes; este gate vigia que elas casem prefixo do MESMO jeito (exato, sensivel a caixa - ADR 2026-08-12-reserved-env-case-matching) e que o conjunto de prefixos so divirja no que tem isencao datada. Nasceu no B-051 DESLIGADO porque um eixo indecidivel reprovava tudo; a isencao troca 'invisivel' por 'com prazo'.
+      - /tmp/loopzero-ops quality test-target-coverage                                # B-087/B-088 (2026-08-13): 5 dos 9 modulos nao tinham teste rodando por task nenhuma, e o alvo que os agregaria abortava desde o M9. A causa nos dois foi uma lista escrita a mao nunca comparada com o disco; este gate e essa comparacao.
       - /tmp/loopzero-ops quality drill-outputs-consumers                           # B-045 (2026-08-11): estava isento como operator-run e nao e — le apenas infra/pulumi-drill/src e docs; hermetico e verde. Sem categoria de isencao valida, a resposta e ligar.
       - /tmp/loopzero-ops quality loki-vault-retention                               # M16 T3.1 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-vault-retention_test.sh (T8.2 + T8.5 Loki per-NS retention + archive CronJob hardening; 14 assertions).
       - /tmp/loopzero-ops quality loki-retention-schema                              # M16 T3.2 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-retention-schema_test.sh (trio-compat schema regression: SingleBinary + retention_stream secrets-system + priority int; 7 assertions).

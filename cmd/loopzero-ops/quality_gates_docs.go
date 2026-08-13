@@ -14,6 +14,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/envprefixparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testtargetcoverage"
 )
 
 func runDocsContractRefs(args []string) int {
@@ -49,6 +50,37 @@ func runDocsContractRefs(args []string) int {
 	}
 	fmt.Printf("docs-contract-refs: PASS — %d normative reference(s) resolve (%d allowlisted with a sunset)\n",
 		out.Checked, out.Allowlisted)
+	return 0
+}
+
+func runTestTargetCoverage(args []string) int {
+	fs := flag.NewFlagSet("test-target-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+
+	out, err := testtargetcoverage.Check(testtargetcoverage.Config{RepoRoot: *root})
+	switch {
+	case errors.Is(err, testtargetcoverage.ErrModuleUncovered):
+		fmt.Fprintf(os.Stderr, "test-target-coverage: FAIL — %d module(s) with no Taskfile target running their tests:\n", len(out.Uncovered))
+		for _, m := range out.Uncovered {
+			fmt.Fprintf(os.Stderr, "  %s\n", m)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Add `cd <module> && go test ./...` to taskfiles/test.yml (GOWORK=off for")
+		fmt.Fprintln(os.Stderr, "modules outside go.work), OR add a NAMED exemption with a reason in")
+		fmt.Fprintln(os.Stderr, "internal/quality/testtargetcoverage. `go build` does not count: that is")
+		fmt.Fprintln(os.Stderr, "exactly how cmd/loopzero-ops looked covered while no test of it ever ran (B-088).")
+		return 1
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "test-target-coverage: %v\n", err)
+		return 2
+	}
+	fmt.Printf("test-target-coverage: PASS — %d module(s): %d named by a test target, %d exempt with a "+
+		"dated reason. Granularity is the MODULE, not the package (B-092).\n",
+		len(out.Modules), len(out.Covered), len(out.Exempt))
 	return 0
 }
 

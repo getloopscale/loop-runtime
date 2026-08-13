@@ -57,6 +57,7 @@ var gateRegistry = []gateSpec{
 	{"helm-topology-index", "Index of which chart runs on which cluster, derived from the helmfiles (never a hand-written second copy).", runHelmTopologyIndex},
 	{"worker-csp", "Cloudflare static worker CSP must not permit inline/eval script (#235).", runWorkerCSP},
 	{"tenant-csp-passthrough", "Static-CSP Traefik middleware must not be attached to tenant routes (#59).", runTenantCSPPassthrough},
+	{"test-target-coverage", "Todo modulo Go do disco tem seus testes rodados por um alvo do Taskfile, ou uma isencao NOMEADA com razao. `go build` nao conta (B-087/B-088).", runTestTargetCoverage},
 	{"env-prefix-parity", "As duas declaracoes de reservedEnvKeyPrefixes (API e dockerfile-lint) casam prefixo do MESMO jeito (exato, sensivel a caixa) e so divergem de conjunto no que tem isencao datada.", runEnvPrefixParity},
 	{"docs-contract-refs", "Toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve (ou tem excecao com prazo).", runDocsContractRefs},
 	{"chart-default-tags", "loopzero-owned charts must not default their image tag to a mutable ref (#232).", runChartDefaultTags},
