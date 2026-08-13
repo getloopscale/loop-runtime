@@ -183,31 +183,41 @@ loopzero-api runs in `k3d-loopzero-core`. Reaching openbao in `k3d-loopzero-secr
 |---|---|---|
 | (a) Shared Docker network DNS | Override `OPENBAO_VAULT_ADDR` to `https://k3d-loopzero-secrets-server-0:NODEPORT/` | Works for k3d only; not portable to prod (DOKS); SPKI pin breaks because hostname doesn't match cert SAN |
 | (b) NodePort + host networking | Expose openbao Service as NodePort, point loopzero-api at `k3d-loopzero-secrets-serverlb:NODEPORT` | k3d-specific; same SPKI issue |
-| (c) Deploy OpenBao in mgmt cluster's secrets-system ns | Override `task k3d:secrets:bootstrap --kube-context k3d-loopzero-core`. Or create a parallel helmfile release in mgmt's helmfile chain. | Simplest reachability; loses isolation between control plane and secret storage; deviates from canonical 5-cluster topology |
+| ~~(c) Deploy OpenBao in mgmt cluster's secrets-system ns~~ | **PROIBIDA desde 2026-08-12** (`B-047`) | violação de topologia em **todo** tier, não atalho |
 | (d) Add a Service-of-services bridge | Create a Service in mgmt with `type: ExternalName` pointing at the k3d-loopzero-secrets container hostname | Requires manual port-forward maintenance OR cluster-spanning network policy work |
 
-**Sponsor decision needed before LIVE step 1:**
+## A opção (c) está fechada — não é mais uma decisão em aberto
 
-Recommended for dev-public iter 1 LIVE: **option (c)** — single-cluster reachability is the lowest-risk path. The 5-cluster isolation pattern is canonical for prod but adds operational complexity that LIVE test 1 doesn't need to validate. Promote to multi-cluster (option a or d) when J-22 promotes from dev to staging.
+O texto abaixo desta seção descrevia a escolha entre (a)-(d) como pendente de sponsor, e
+**recomendava a (c)**. Ela foi decidida e **fechada** em 2026-08-12 pelo ADR
+`docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md` (`B-047`): instalar o OpenBao no
+cluster de gerenciamento é proibido em **todo** tier, incluindo dev-public, e a task de atalho foi
+removida.
 
-**If sponsor picks option (c):** a turn-key task shortcut shipped iter 24 collapses step 1.1 (~5min) into one command:
+Isto vale também para o **override por linha de comando** que a linha (c) oferecia
+(`task k3d:secrets:bootstrap --kube-context k3d-loopzero-core`): nenhum gate pega um override digitado
+no terminal, e é por isso que ele está dito aqui em vez de apenas travado em código.
+
+O gate `openbao-bootstrap-in-core-task` foi **invertido** — em vez de travar a *forma* do atalho com
+18 asserções, ele reprova qualquer task que instale o plano de secrets no cluster mgmt, inclusive
+sob outro nome, porque a checagem é pelo **efeito**. O `helmfile-context-parity`, ligado na mesma
+mudança, cobre a divergência de contexto que a checagem por linha não alcança.
+
+### Passo 1.1 — caminho canônico
 
 ```bash
-task k3d:secrets:bootstrap-in-core
+task k3d:secrets:create && task k3d:secrets:bootstrap   # instala em k3d-loopzero-secrets
 
-# Then the operator Shamir init ceremony (unchanged from canonical):
+# Depois, a cerimônia de Shamir do operador (inalterada):
 # bao operator init -key-shares=5 -key-threshold=3 -format=json
 # bao operator unseal <shard1> <shard2> <shard3>
 # kubectl create secret generic openbao-init-token --from-literal=BAO_TOKEN=<root>
 
-helmfile sync --selector name=openbao-init   # T5.1-T5.9 provisioning
-                                              # NOTE: under option (c) the
-                                              # default kube-context already
-                                              # points at mgmt, so this works
-                                              # without --kube-context override
+# O provisionamento T5.1-T5.9 exige AS DUAS flags — o contexto default NÃO
+# aponta para o cluster de secrets:
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl \
+  --kube-context k3d-loopzero-secrets --selector name=openbao-init sync
 ```
-
-The shortcut is contract-locked via `infra/tests/check-openbao-bootstrap-in-core-task_test.sh` (18 hermetic assertions). When the upstream `task k3d:secrets:bootstrap` evolves, the test fails so the shortcut catches up.
 
 Until sponsor decides, steps 2-4 below assume reachability is handled — they take `OPENBAO_VAULT_ADDR` as an opaque URL.
 
@@ -404,7 +414,8 @@ Run only scenarios A + D + E that validate the canonical "no plaintext at rest" 
 
 ```bash
 # Pre-requisite: scenarios A+D+E require:
-#   1. OpenBao in mgmt cluster (task k3d:secrets:bootstrap-in-core — runbook step 1.1)
+#   1. OpenBao no cluster loopzero-secrets (task k3d:secrets:create + k3d:secrets:bootstrap)
+#      — a variante em cluster mgmt foi removida em 2026-08-12 (B-047)
 #   2. AppRole configured (runbook steps 1.2-1.4)
 #   3. K8s Secret loopzero-openbao-approle in loopzero-system ns (runbook step 2.1)
 #   4. OPENBAO_TRANSIT_ENABLED=true + 4 env vars on loopzero-api (runbook step 2.2)

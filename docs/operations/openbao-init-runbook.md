@@ -18,10 +18,11 @@ title: "Runbook: OpenBao Init Ceremony"
 > do **Sub-step 2.5** do mandate canonical
 > ``/.claude/rules/cleanroom-up-live-test-mandate.md § Sub-step 2.5`` *(removido do versionamento)*.
 > Disparado SEMPRE que `LOOPZERO_HELMFILE_ENV=dev-public` durante a chain
-> Cleanroom canonical. Standalone-multi usa o shortcut
-> `task k3d:secrets:bootstrap-in-core` (sem Shamir, sem sponsor JUNTOS) —
-> consulte memory `check-openbao-bootstrap-in-core-task_test.sh` para
-> trade-offs entre os dois paths.
+> Cleanroom canonical. Standalone-multi usava o shortcut
+> ~~`task k3d:secrets:bootstrap-in-core`~~ — **removida em 2026-08-12** (`B-047`). Instalar o
+> OpenBao no cluster mgmt e PROIBIDO em todo tier; use `task k3d:secrets:create` +
+> `task k3d:secrets:bootstrap` em todo tier. Histórico da decisão e trade-offs entre os dois
+> caminhos: `docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md`.
 
 ## Pre-flight (block ceremony if any fail)
 

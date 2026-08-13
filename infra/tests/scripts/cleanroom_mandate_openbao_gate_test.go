@@ -60,12 +60,20 @@ func TestCleanroomMandateOpenBaoSponsorJUNTOSGateDocumented(t *testing.T) {
 		t.Error("mandate does not cross-link `docs/operations/openbao-init-runbook.md` — issue #101 traceability requirement")
 	}
 
-	// T4. The mandate MUST document the standalone-multi escape hatch
-	// (`task k3d:secrets:bootstrap-in-core`) — without this, operators
-	// reading the mandate might assume Shamir init is mandatory in ALL
-	// envs and block standalone Cleanroom flows.
+	// T4. The mandate MUST name `bootstrap-in-core` — as a PROHIBITION.
+	//
+	// The assertion is unchanged; its INTENT was inverted on 2026-08-12
+	// (B-047, ADR docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md).
+	// It used to ask the mandate to document the shortcut as a
+	// standalone-multi ESCAPE HATCH. The mandate documents it to FORBID it,
+	// in every tier — the two read the same string with opposite purposes,
+	// and this one was wrong. The task itself no longer exists.
+	//
+	// The assertion survives because a prohibition nobody verifies is written
+	// is exactly the defect B-047 found: a rule that forbade while the
+	// taskfile offered.
 	if !strings.Contains(mandate, "bootstrap-in-core") {
-		t.Error("mandate does not document the standalone-multi escape hatch `task k3d:secrets:bootstrap-in-core` — Cleanroom for standalone-multi might block on missing gate")
+		t.Error("mandate does not name `k3d:secrets:bootstrap-in-core` as FORBIDDEN — the prohibition must be written where operators read it (B-047)")
 	}
 
 	// T5. Mandate MUST cite the env gate condition explicitly so a

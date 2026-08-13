@@ -238,8 +238,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	// is already DECIDED (ADR 2026-08-12-openbao-in-core-rule-vs-task, ACCEPTED)
 	// and B-047 instructs it be the LAST step of any sequence touching it,
 	// because removing the task also breaks the openbaobootstrapincore gate that
-	// asserts the task exists. Wiring follows that removal.
-	"helmfile-context-parity": failingGate,
 	// Measured 2026-08-11: reads infra/helm/admission-policies/values.yaml and
 	// searches for an ADR; hermetic. Exit 1 — clusterImagePolicy.mode is
 	// `enforce` (a live deny-flip that rejects unsigned images at admission)

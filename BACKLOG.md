@@ -1278,6 +1278,39 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. **T3 — ADR obrigatório**: uma regra inquebrável e uma task shipada se contradizem, e decidir qual vale é decisão de arquitetura. Deve ser **o último** passo de qualquer sequência que o toque.
 
+> **Cumprido 2026-08-12** pela fatia `slice-12`. O ADR `2026-08-12-openbao-in-core-rule-vs-task.md`
+> estava escrito desde 2026-08-12 e **integralmente não implementado** — o item foi marcado
+> `planned` tendo entregue só a decisão, que é a forma inversa do defeito que ele registra: antes
+> havia regra sem cumprimento, depois decisão sem cumprimento.
+>
+> As três consequências que o ADR nomeia: a task removida (56 linhas, junto com o irmão
+> `status-in-core`, que só existia para observar o deployment proibido); o gate invertido — e
+> invertido **por efeito**, não por nome, senão a proibição seria evadível renomeando; os dois
+> runbooks corrigidos. A asserção do `cleanroom_mandate_openbao_gate_test.go` foi mantida e sua
+> **mensagem** invertida: ela pedia que o mandate documentasse um *escape hatch*, e o mandate
+> documenta uma proibição — os dois liam a mesma string com propósitos opostos, como o ADR já
+> tinha medido.
+>
+> RED medido antes: o gate novo achou **5** violações na árvore (o alvo + 4 linhas de efeito).
+>
+> **A revisão independente, antes do commit, achou quatro HIGH e todos foram corrigidos.** (a) Eu
+> corrigi só o bloco de comando do runbook de cutover; a prosa acima dele continuava **recomendando**
+> a opção proibida e oferecendo um override por linha de comando que nenhum gate pega — a seção foi
+> reescrita e o override está dito. (b) Um comentário retido dizia ao operador que não precisava de
+> `--kube-context`, o que ficou ativamente errado depois da troca do comando. (c) A checagem "por
+> efeito" era evadível por seis formas, três delas o estilo dominante do próprio repositório
+> (variável de template, continuação de linha, forma com `=`); as cinco baratas foram fechadas com
+> fixture, o gate passou a varrer `taskfiles/*.yml` em vez de um arquivo, e as duas que exigem
+> dataflow estão **declaradas** no gate em vez de implicadas inexistentes. (d) `quality_registry.go`
+> e `gateset.frozen` ainda descreviam o gate antigo — o ADR tinha nomeado o segundo e eu não o
+> atualizei.
+>
+> **E a remoção destravou o `B-044`:** o `helmfile-context-parity` estava desligado porque esta task
+> produzia 4 divergências, e o teste de wiring dizia *"wiring follows that removal"*. Removida a
+> task, ele foi a 0 divergências e **foi ligado** — é ele que cobre o que a checagem por linha não
+> alcança. A asserção de reconciliação que escrevi na fatia 3 pegou, no caminho, um comentário meu
+> que continha a string da flag e desalinhava a contagem em 1.
+
 ## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [ ]
 
 domain: engine-go
