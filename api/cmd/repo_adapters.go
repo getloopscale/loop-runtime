@@ -12,9 +12,10 @@ import (
 
 	gh "github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 )
 
-// repoStoreAdapter bridges store.PostgresRepositoryStore → routes.RepositoryStore.
+// repoStoreAdapter bridges store.PostgresRepositoryStore → repositories.RepositoryStore.
 type repoStoreAdapter struct {
 	store *store.PostgresRepositoryStore
 }
@@ -27,12 +28,12 @@ func (a *repoStoreAdapter) UnlinkRepository(ctx context.Context, tenantID, proje
 	return a.store.UnlinkRepository(ctx, tenantID, projectName)
 }
 
-func (a *repoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (*routes.ProjectRepository, error) {
+func (a *repoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (*repositories.ProjectRepository, error) {
 	r, err := a.store.GetByProject(ctx, tenantID, projectName)
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &routes.ProjectRepository{
+	return &repositories.ProjectRepository{
 		ID:             r.ID,
 		TenantID:       r.TenantID,
 		ProjectName:    r.ProjectName,
@@ -45,12 +46,12 @@ func (a *repoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectNa
 	}, nil
 }
 
-func (a *repoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (*routes.ProjectRepository, error) {
+func (a *repoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (*repositories.ProjectRepository, error) {
 	r, err := a.store.GetByRepo(ctx, repoFullName)
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &routes.ProjectRepository{
+	return &repositories.ProjectRepository{
 		ID:             r.ID,
 		TenantID:       r.TenantID,
 		ProjectName:    r.ProjectName,

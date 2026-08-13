@@ -385,6 +385,13 @@ func runRoutesAcyclic(args []string) int {
 		fmt.Printf("  NÃO REGISTRADO %s — uma família de handlers que ninguém decidiu\n", u)
 	}
 	for _, e := range o.Edges {
+		// The two kinds need different fixes — one moves shared code into a
+		// leaf, the other moves the CALL into a _test.go — so a single label
+		// for both would point the reader at the wrong remedy.
+		if e.TestOnly {
+			fmt.Printf("  LEAF SÓ-DE-TESTE em produção %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
+			continue
+		}
 		fmt.Printf("  ARESTA IRMÃ %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
 	}
 	if err != nil {

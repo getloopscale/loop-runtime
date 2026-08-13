@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package repositories
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -102,7 +102,7 @@ func (h *RepositoryHandler) WithAutoDeployer(d Autodeployer) *RepositoryHandler 
 }
 
 type connectRequest struct {
-	Repo           string `json:"repo"`            // "owner/repo"
+	Repo           string `json:"repo"` // "owner/repo"
 	InstallationID int64  `json:"installation_id"`
 	Branch         string `json:"branch,omitempty"` // default: "main"
 	// Plan J-09 T3.2 (2026-06-05) — explicit auto_deploy toggle (column

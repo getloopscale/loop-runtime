@@ -2148,6 +2148,59 @@ dod:
 
 > Registrado 2026-08-12 pela fatia slice-5, que entregou 3 das 5 balas do `B-041` e mediu esta.
 
+> **Terceira família extraída — 2026-08-13, fatia `slice-19`.** O item **continua aberto**.
+>
+> Estado: **5** subpacotes (`httpio`, `routestest`, `version`, `tenants`, `repositories`), **40**
+> arquivos de produção no pai.
+>
+> **A tabela que eu tinha publicado aqui media ocorrência de nome, não referência — o review a
+> refutou.** Ela contava comentários, literais e, decisivamente, **métodos homônimos de outros
+> tipos**: `domains` exporta `Get`/`List`/`Create`/`Delete`/`Verify`, então
+> `r.URL.Query().Get("action")` e `func (h *BillingHandler) Get(...)` viravam "arestas" para ela. Os
+> números eram 2 / 9 / 24 / 28 para `scale` / `rollback` / `status` / `domains`.
+>
+> **A medição correta é mover de verdade e perguntar ao compilador** — copiar a árvore, `git mv` a
+> família para um subpacote, `go build` **dos dois lados**, ler os símbolos indefinidos:
+>
+> | Candidata | linhas · arq. | pai perde | família perde | veredito |
+> |---|---|---|---|---|
+> | **`domains`** | 886 · 5 | — | — | **próxima** — zero nos dois sentidos, e a maior |
+> | `scale` | 601 · 1 | — | `ProjectResult` | alias; uma linha de import |
+> | `rollback` | 236 · 2 | — | `ProjectResult` | alias; uma linha de import |
+> | `status` | 728 · 2 | `StatusProjectStore` | `ProjectResult` | o único acoplamento real restante |
+> | `repositories` | 469 · 1 | — | — | extraída nesta fatia |
+>
+> `ProjectResult` não é tipo compartilhado: é **alias** (`projects.go:37`) para
+> `domain.ProjectResult`, que `preview.go` e `secrets.go` já importam qualificado.
+>
+> A extração de `repositories` continua correta — uma contagem super-inclusiva devolvendo ~0 é prova
+> sólida de **ausência**. O que não sobreviveu foi a **rejeição** das outras: `domains` era a melhor
+> candidata disponível e o artefato foi o que a rejeitou. A referência que sobrou era prosa:
+> `integrations_github.go:61,63` menciona `RepositoryStore` para **explicar** por que declara a
+> própria `InstallationLookup` — ele já aplicava ISP.
+>
+> **O probe quase mediu o vazio, e isso vale mais registrado do que a tabela.** A primeira execução
+> devolveu zero para tudo nos dois sentidos, porque o `go.work` referencia o irmão
+> `../loopzero-contracts`, ausente na cópia — nada compilou. É a aprovação vácua que esta sessão vinha
+> consertando em gates, prestes a entrar como *correção* de uma tabela falsa. O probe só vale com um
+> sanity-check de que a árvore **intacta** compila.
+>
+> **A receita da fatia 8 aplicou-se inteira, incluindo a falha que ela previu.** O teste quebrou com
+> `undefined: withAuth` no instante em que o arquivo saiu — o mesmo helper, o mesmo erro que o
+> comentário da cerca registra nominalmente. O leaf `routestest`, criado naquela fatia exatamente
+> para isso, resolveu.
+>
+> **E a cerca recusou dois registros meus antes de aceitar o terceiro:** declarei conjunto vazio
+> (supondo que a família tinha escritores próprios), depois só `httpio`, e ela reprovou os dois. É o
+> registro sendo explícito em vez de derivado — a decisão que a fatia 9 tomou depois de a derivação
+> se revelar ambígua.
+>
+> **A cerca ganhou uma quarta regra nesta fatia**, também vinda do review: `routestest` passou a ser
+> um leaf **só-de-teste**. Declará-lo — o que toda família com teste precisa fazer — licenciava o
+> código de **produção** da família a importá-lo, e `routestest.DefaultUserContext` devolve uma
+> identidade `owner`. Provado por mutação: a import em `repositories.go` de produção deixava a árvore
+> real GREEN em `0 sibling edge(s)`. `tenants` carregava a mesma declaração desde a fatia 8.
+
 ## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
 
 domain: engine-go

@@ -18,6 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -168,7 +169,7 @@ type Config struct {
 	ActiveTeamStore      routes.ActiveTeamStore
 	DomainHandler        *routes.DomainHandler
 	GitHubWebhookHandler http.Handler
-	RepositoryHandler    *routes.RepositoryHandler
+	RepositoryHandler    *repositories.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
 	IntegrationsGitHubHandler *routes.IntegrationsGitHubHandler
 	PreviewHandler            *routes.PreviewHandler // Sprint 5 / T2.3 — preview environments

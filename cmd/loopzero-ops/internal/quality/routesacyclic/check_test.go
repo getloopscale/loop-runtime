@@ -482,11 +482,142 @@ func TestCheck_ToolchainIgnoredDirsUnderAFamilyAreNotEdges(t *testing.T) {
 // fired. The parent is not a sibling and not a subpackage, and the fix for it is
 // the third bullet — move the shared helper to a leaf — which the previous text
 // did not offer at all.
-func TestActionableFix_NamesAllThreeRules(t *testing.T) {
+func TestActionableFix_NamesAllFourRules(t *testing.T) {
 	fix := ActionableFix()
-	for _, want := range []string{"nobody registered", "one family reached for another", "PARENT package", "leaf"} {
+	for _, want := range []string{"nobody registered", "one family reached for another", "PARENT package", "leaf", "test-only leaf", "_test.go"} {
 		if !strings.Contains(fix, want) {
 			t.Errorf("the fix text must cover %q — a gate is worth its actionability, and the parent case is the one this slice added; got:\n%s", want, fix)
 		}
+	}
+	// The count in the opening line is part of the message: saying "three"
+	// while listing four is the text drifting from the rules it describes,
+	// which is precisely what this gate exists to stop elsewhere.
+	if !strings.Contains(fix, "One of four things") {
+		t.Errorf("the opening count must match the number of rules listed; got:\n%s", fix)
+	}
+}
+
+// writeFile puts one file with a chosen NAME inside a subpackage, which `tree`
+// cannot do: it always writes x.go. The distinction between x.go and x_test.go
+// is the whole subject of the two tests below.
+func writeFile(t *testing.T, root, pkg, name string, imports ...string) {
+	t.Helper()
+	dir := filepath.Join(root, routesDir, pkg)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "package " + pkg + "\n"
+	if strings.HasSuffix(name, "_test.go") {
+		body = "package " + pkg + "_test\n"
+	}
+	if len(imports) > 0 {
+		body += "\nimport (\n"
+		for _, i := range imports {
+			body += "\t_ \"" + i + "\"\n"
+		}
+		body += ")\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Rule 5: a TEST-ONLY leaf may be reached only from a _test.go.
+//
+// routestest exists to be imported by tests, and `permitted` could not tell the
+// two kinds of file apart: scanPackage HAD info.Name() and never consulted it.
+// So declaring `routestest: true` — which every family with a test must do —
+// also licensed PRODUCTION code to import it.
+//
+// What is behind that door is not stylistic. routestest.DefaultUserContext
+// returns an owner-role identity for a fixed tenant; a production path reaching
+// it is auth-shaped, and this fence is the mechanism meant to catch that class.
+//
+// Measured by the review of slice-19: adding the import to production
+// repositories.go left the real tree GREEN at "0 sibling edge(s)".
+func TestCheck_ProductionFileImportingATestOnlyLeafIsAnEdge(t *testing.T) {
+	reg := map[string]map[string]bool{
+		"routestest": {},
+		"secrets":    {"routestest": true}, // declared, as every family with tests must
+	}
+	root := t.TempDir()
+	writeFile(t, root, "routestest", "helpers.go")
+	writeFile(t, root, "secrets", "secrets.go", routesImportPrefix+"routestest")
+
+	out, err := Check(Config{RepoRoot: root, Allowed: reg})
+	if err == nil {
+		t.Fatalf("production code reaching the test-only leaf must fail even when the family declares it; got PASS: %+v", out)
+	}
+
+	if !errors.Is(err, ErrTestOnlyLeafFromProduction) {
+		t.Errorf("the message must name the ACTUAL rule: ErrSiblingEdge says \"families are peers\",\n"+
+			"which would send the reader hunting a coupling that is not there — the target IS a\n"+
+			"declared leaf and the family DID declare the edge; got %v", err)
+	}
+	// The file:line lives on the Outcome, which is what the CLI prints. An
+	// operator cannot act on a rule name alone.
+	if len(out.Edges) != 1 || !out.Edges[0].TestOnly || !strings.HasSuffix(out.Edges[0].File, "secrets.go") {
+		t.Errorf("the edge must name the production file and carry its kind; got %+v", out.Edges)
+	}
+}
+
+// The other half: the permission is real for the file kind it was declared for.
+// Without this, the fix above could be "forbid routestest entirely", which would
+// break every family that moved out and lost its shared helpers.
+func TestCheck_TestFileImportingATestOnlyLeafIsAllowed(t *testing.T) {
+	reg := map[string]map[string]bool{
+		"routestest": {},
+		"secrets":    {"routestest": true},
+	}
+	root := t.TempDir()
+	writeFile(t, root, "routestest", "helpers.go")
+	writeFile(t, root, "secrets", "secrets.go")
+	writeFile(t, root, "secrets", "secrets_test.go", routesImportPrefix+"routestest")
+
+	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); err != nil {
+		t.Errorf("a _test.go reaching the test-only leaf is precisely why the leaf exists; got %v", err)
+	}
+}
+
+// The parent obeys the same rule, and it matters more there than anywhere: the
+// parent is the LARGEST body of production code under this fence — 40 files at
+// slice-19 against a family's one or two. A rule that covered the families and
+// exempted the parent would exempt the bulk of what it guards.
+//
+// It passes today only by accident of history: the package doc records that the
+// parent's single routestest edge happens to live in a _test.go. Accident is not
+// a guarantee, and the next helper someone reaches for from a production file
+// would have been silent.
+func TestCheck_ParentProductionFileImportingATestOnlyLeafIsAnEdge(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "routestest", "helpers.go")
+	dir := filepath.Join(root, routesDir)
+	if err := os.WriteFile(filepath.Join(dir, "projects.go"),
+		[]byte("package routes\n\nimport (\n\t_ \""+routesImportPrefix+"routestest\"\n)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"routestest": {}}})
+	if !errors.Is(err, ErrTestOnlyLeafFromProduction) {
+		t.Fatalf("the parent's production files are as barred as a family's; got %v (%+v)", err, out.Edges)
+	}
+	if len(out.Edges) != 1 || out.Edges[0].From != "<routes-parent>" || !out.Edges[0].TestOnly {
+		t.Errorf("the edge must be attributed to the parent and carry its kind; got %+v", out.Edges)
+	}
+}
+
+// And the parent keeps the permission it actually uses — the real tree's one
+// routestest import. Without this the fix could be "bar the parent outright",
+// which would fail the tree the day it landed.
+func TestCheck_ParentTestFileImportingATestOnlyLeafIsAllowed(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "routestest", "helpers.go")
+	dir := filepath.Join(root, routesDir)
+	if err := os.WriteFile(filepath.Join(dir, "projects_test.go"),
+		[]byte("package routes_test\n\nimport (\n\t_ \""+routesImportPrefix+"routestest\"\n)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"routestest": {}}}); err != nil {
+		t.Errorf("the parent's _test.go is exactly the edge the real tree carries; got %v", err)
 	}
 }

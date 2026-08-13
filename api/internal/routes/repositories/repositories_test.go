@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package repositories
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // --- Fake RepositoryStore ---
@@ -61,8 +62,8 @@ func TestRepositories_Connect_HappyPath(t *testing.T) {
 
 	body := `{"repo":"owner/my-repo","installation_id":12345}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -92,8 +93,8 @@ func TestRepositories_Connect_CustomBranch(t *testing.T) {
 
 	body := `{"repo":"owner/my-repo","installation_id":12345,"branch":"develop"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -116,8 +117,8 @@ func TestRepositories_Connect_MissingRepo(t *testing.T) {
 
 	body := `{"installation_id":12345}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -138,8 +139,8 @@ func TestRepositories_Connect_AlreadyLinkedToOtherProject(t *testing.T) {
 
 	body := `{"repo":"owner/my-repo","installation_id":12345}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -154,8 +155,8 @@ func TestRepositories_Connect_MemberForbidden(t *testing.T) {
 
 	body := `{"repo":"owner/my-repo","installation_id":12345}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, memberUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.MemberUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -170,7 +171,7 @@ func TestRepositories_Connect_Unauthenticated(t *testing.T) {
 
 	body := `{"repo":"owner/my-repo","installation_id":12345}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -185,8 +186,8 @@ func TestRepositories_Disconnect_HappyPath(t *testing.T) {
 	h := NewRepositoryHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api/connect", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Disconnect(w, req)
@@ -208,8 +209,8 @@ func TestRepositories_Disconnect_NotLinked_Returns404(t *testing.T) {
 	h := NewRepositoryHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api/connect", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Disconnect(w, req)
@@ -228,8 +229,8 @@ func TestRepositories_Disconnect_MemberForbidden(t *testing.T) {
 	h := NewRepositoryHandler(&fakeRepoStore{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api/connect", nil)
-	req = withAuth(req, memberUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.MemberUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Disconnect(w, req)
@@ -252,8 +253,8 @@ func TestRepositories_GetConnection_Found(t *testing.T) {
 	h := NewRepositoryHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/connect", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.GetConnection(w, req)
@@ -268,8 +269,8 @@ func TestRepositories_GetConnection_NotFound(t *testing.T) {
 	h := NewRepositoryHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/connect", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.GetConnection(w, req)
@@ -283,7 +284,7 @@ func TestRepositories_GetConnection_Unauthenticated(t *testing.T) {
 	h := NewRepositoryHandler(&fakeRepoStore{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/connect", nil)
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.GetConnection(w, req)
@@ -301,8 +302,8 @@ func TestRepositories_Connect_AutoDeployFalse_Persisted(t *testing.T) {
 
 	body := `{"repo":"owner/r","installation_id":42,"auto_deploy":false}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)
@@ -353,8 +354,8 @@ func (f *fakeIntrospector) GetHeadCommit(_ context.Context, _ int64, _, _, _ str
 
 func connectReq(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	return req
 }
 
@@ -436,8 +437,8 @@ func TestRepositories_Connect_AutoDeployOmitted_DefaultsTrue(t *testing.T) {
 
 	body := `{"repo":"owner/r","installation_id":42}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Connect(w, req)

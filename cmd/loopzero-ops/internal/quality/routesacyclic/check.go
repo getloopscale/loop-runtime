@@ -67,6 +67,16 @@ var ErrUnregisteredSubpackage = errors.New("a subpackage of api/internal/routes 
 // ErrSiblingEdge means one family imports another.
 var ErrSiblingEdge = errors.New("a routes package reaches a family it must not — families are peers, and neither a sibling nor the parent package may depend on one; that is the coupling the split exists to remove")
 
+// ErrTestOnlyLeafFromProduction means production code reaches a leaf that only
+// tests may use.
+//
+// It gets a sentinel of its own because ErrSiblingEdge would MISLEAD here: it
+// says "families are peers", and this violation is not about peers at all — the
+// target IS a declared leaf and the family DID declare the edge. Reading that
+// message, an operator would go looking for a coupling that is not there. What
+// actually failed is the kind of FILE doing the importing.
+var ErrTestOnlyLeafFromProduction = errors.New("production code imports a test-only leaf — routestest hands back an owner-role identity for a fixed tenant, so the import is auth-shaped; move the call into a _test.go, or move the helper it needs into a leaf production may use")
+
 // ErrEmptyAllowList means the registered set is empty. A fence that does not
 // know what it permits permits nothing on purpose, and passing green in that
 // state is the vacuous-pass shape B-040 measured.
@@ -122,6 +132,35 @@ var leaves = map[string]bool{
 	"routestest": true, // test request helpers (slice-8)
 }
 
+// testOnlyLeaves are leaves that only a _test.go may reach.
+//
+// The registry above answers WHO may import a leaf; it could not answer FROM
+// WHICH KIND OF FILE. scanPackage held info.Name() and never consulted it, so
+// `routestest: true` — which every family carrying a test must declare — also
+// licensed that family's PRODUCTION code to import it.
+//
+// Which is not a stylistic gap. routestest.DefaultUserContext hands back an
+// owner-role identity for a fixed tenant; production code reaching it is
+// auth-shaped, and this fence is the mechanism meant to catch that class.
+//
+// Found by the review of slice-19, by mutation on a copy of the tree: adding
+// the import to production repositories.go left the real gate GREEN at "0
+// sibling edge(s)". `tenants` carried the same declaration since slice-8 and
+// nothing violated it — but the recipe was already written down for the
+// thirteen families still to move, which is when a latent gap becomes
+// structural.
+var testOnlyLeaves = map[string]bool{
+	"routestest": true,
+}
+
+// isProduction reports whether a file compiles into the package proper.
+//
+// The Go toolchain's own rule, and the only one that matters here: _test.go is
+// compiled solely into the test binary.
+func isProduction(fileName string) bool {
+	return !strings.HasSuffix(fileName, "_test.go")
+}
+
 var allowed = map[string]map[string]bool{
 	"httpio": {},
 	// The first real handler family (slice-8, B-041). Empty set = imports no
@@ -139,6 +178,36 @@ var allowed = map[string]map[string]bool{
 	// helper THIRTY test files share. Empty set: every family may import it, it
 	// imports none.
 	"routestest": {},
+	// The third family (slice-19, B-080). It has zero coupling to the parent in
+	// both directions — measured by MOVING it in a scratch copy and asking the
+	// compiler, which is the only oracle that cannot be fooled here.
+	//
+	// The first version of this comment ranked the candidates by `grep -lw` over
+	// exported names and claimed `domains` and `status` carried 28 and 24 edges,
+	// "dominated by untangling rather than moving". That was WRONG, and wrong in
+	// the direction that flatters the choice already made: the method counts
+	// comments, string literals and — decisively — identically-named methods on
+	// other types. `domains` exports Get/List/Create/Delete/Verify, so
+	// `r.URL.Query().Get("action")` and `func (h *BillingHandler) Get(...)` were
+	// being counted as edges to it.
+	//
+	// Re-measured with the compiler, `domains` has ZERO coupling in both
+	// directions and is the LARGEST candidate — it was the best choice available
+	// and the artifact is what rejected it. Extracting `repositories` was still
+	// safe (an over-inclusive count returning ~0 is a sound proof of absence),
+	// but the ranking it published for the next thirteen slices was not.
+	//
+	// The honest method, and the one the next slice should use: copy the tree,
+	// `git mv` the family into a subpackage, `go build` both sides, and read the
+	// undefined symbols. Both directions matter. Anything cheaper measures name
+	// collisions.
+	//
+	// It reaches both leaves, like tenants: httpio because the family writes HTTP
+	// responses, routestest because its test file uses the shared request helpers.
+	// Two earlier drafts of this entry were wrong — first an EMPTY set, then
+	// httpio alone — and the gate rejected both. That is the registry being
+	// explicit rather than derived: a guess does not survive it.
+	"repositories": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.
@@ -156,6 +225,10 @@ type Edge struct {
 	To   string
 	File string
 	Line int
+	// TestOnly marks the violation as "production file reached a test-only
+	// leaf" rather than "reached a peer". The two need different fixes, so
+	// collapsing them into one kind would make the output misleading.
+	TestOnly bool
 }
 
 // Outcome is the summary.
@@ -244,6 +317,20 @@ func Check(cfg Config) (Outcome, error) {
 		return out, ErrUnregisteredSubpackage
 	}
 	if len(out.Edges) > 0 {
+		// The specific sentinel only when EVERY edge is of that kind. A mixed
+		// run reports the peer coupling, because that is the one the reader
+		// would not otherwise infer — and each edge is printed with its own
+		// kind and file:line regardless, so nothing is lost either way.
+		allTestOnly := true
+		for _, e := range out.Edges {
+			if !e.TestOnly {
+				allTestOnly = false
+				break
+			}
+		}
+		if allTestOnly {
+			return out, ErrTestOnlyLeafFromProduction
+		}
 		return out, ErrSiblingEdge
 	}
 	return out, nil
@@ -313,6 +400,13 @@ func scanPackage(dir, self string, permitted map[string]bool) ([]Edge, int, erro
 			// The sibling is the FIRST path element after the prefix: a nested
 			// package under a family still belongs to that family.
 			target := strings.SplitN(strings.TrimPrefix(p, routesImportPrefix), "/", 2)[0]
+			// A test-only leaf is permitted ONLY from a _test.go. The permission
+			// is checked before the allow-list on purpose: the family DID declare
+			// the edge, and declaring it must not buy the production half.
+			if testOnlyLeaves[target] && isProduction(info.Name()) {
+				edges = append(edges, Edge{From: self, To: target, File: path, Line: fset.Position(imp.Pos()).Line, TestOnly: true})
+				continue
+			}
 			if target == self || permitted[target] {
 				continue
 			}
@@ -384,10 +478,15 @@ func scanParent(root string, leafSet map[string]bool) ([]Edge, int, error) {
 			// else — a family, or a directory nobody registered — is an edge,
 			// and naming the file that reaches for it is more useful than
 			// staying silent.
-			if leafSet[target] {
+			// ...unless the leaf is test-only, in which case the parent's
+			// production files are as barred as a family's. The parent is the
+			// LARGEST body of production code under this fence — leaving it out
+			// of the rule would be exempting the biggest surface from it.
+			testOnlyFromProd := testOnlyLeaves[target] && isProduction(e.Name())
+			if leafSet[target] && !testOnlyFromProd {
 				continue
 			}
-			edges = append(edges, Edge{From: "<routes-parent>", To: target, File: path, Line: fset.Position(imp.Pos()).Line})
+			edges = append(edges, Edge{From: "<routes-parent>", To: target, File: path, Line: fset.Position(imp.Pos()).Line, TestOnly: testOnlyFromProd})
 		}
 	}
 	return edges, count, nil
@@ -395,20 +494,43 @@ func scanParent(root string, leafSet map[string]bool) ([]Edge, int, error) {
 
 // Summary renders the one-line verdict.
 func (o Outcome) Summary() string {
-	return fmt.Sprintf("%d subpackage(s) under %s, %d file(s) parsed, %d unregistered, %d sibling edge(s)",
-		len(o.Subpackages), routesDir, o.FilesParsed, len(o.Unregistered), len(o.Edges))
+	// The two kinds are counted apart. Folding a test-only violation into
+	// "sibling edge(s)" would report a number the reader then misreads as
+	// coupling — the same conflation the dedicated sentinel exists to avoid.
+	sibling, testOnly := 0, 0
+	for _, e := range o.Edges {
+		if e.TestOnly {
+			testOnly++
+			continue
+		}
+		sibling++
+	}
+	out := fmt.Sprintf("%d subpackage(s) under %s, %d file(s) parsed, %d unregistered, %d sibling edge(s)",
+		len(o.Subpackages), routesDir, o.FilesParsed, len(o.Unregistered), sibling)
+	if testOnly > 0 {
+		out += fmt.Sprintf(", %d test-only-leaf import(s) from production", testOnly)
+	}
+	return out
 }
 
 // ActionableFix is the operator-facing message for a FAIL.
 func ActionableFix() string {
-	return "One of three things:\n" +
+	return "One of four things:\n" +
 		"  · a subpackage nobody registered — decide the family and add it to the\n" +
 		"    allow-list with the router prefix it serves;\n" +
 		"  · one family reached for another — families are peers;\n" +
 		"  · the PARENT package reached for a family — same coupling, on the\n" +
-		"    vertical, and the usual cause is a helper that both need.\n" +
-		"In the last two cases the fix is the same: move the shared code into a leaf\n" +
-		"every family may import, the way httpio holds the response writers that used\n" +
-		"to live inside the projects family, and routestest holds the request helpers\n" +
-		"that used to live in a _test.go of the parent."
+		"    vertical, and the usual cause is a helper that both need;\n" +
+		"  · a PRODUCTION file reached a test-only leaf — routestest is declared\n" +
+		"    for _test.go and nothing else, because its helpers mint an\n" +
+		"    owner-role identity.\n" +
+		"For the two COUPLING cases (family→family, parent→family) the fix is the\n" +
+		"same: move the shared code into a leaf every family may import, the way\n" +
+		"httpio holds the response writers that used to live inside the projects\n" +
+		"family, and routestest holds the request helpers that used to live in a\n" +
+		"_test.go of the parent.\n" +
+		"The test-only case is NOT that fix: the code is already in the right leaf\n" +
+		"and the wrong kind of file is calling it. Move the CALL into a _test.go —\n" +
+		"or, if production genuinely needs the helper, move that one helper into a\n" +
+		"leaf production may use, which is a decision about identity, not layout."
 }
