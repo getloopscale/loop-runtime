@@ -208,6 +208,18 @@ var allowed = map[string]map[string]bool{
 	// httpio alone — and the gate rejected both. That is the registry being
 	// explicit rather than derived: a guess does not survive it.
 	"repositories": {"httpio": true, "routestest": true},
+	// The fourth family (slice-27, B-080), and the first chosen by the COMPILER
+	// rather than by counting names. Measured by moving it in a scratch copy and
+	// reading what each side stops compiling: the parent loses nothing, the family
+	// loses nothing from production. Only its tests lost `withAuth` and friends —
+	// the same helpers, by name, that slice-8 predicted and built routestest for.
+	//
+	// It is the LARGEST candidate (886 lines, 5 production files), and the
+	// grep-based table published in slice-19 ranked it last with "28 edges" —
+	// every one of which was a method named Get/List/Create/Delete on another
+	// type. The compiler ranked it first. Mutation-verified: dropping httpio from
+	// this entry reports 5 sibling edges.
+	"domains": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

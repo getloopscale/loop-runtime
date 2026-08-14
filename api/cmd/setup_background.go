@@ -31,7 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -160,7 +160,7 @@ func setupCellRouter(
 
 // DomainDeps holds domain-related components created during background setup.
 type DomainDeps struct {
-	DomainHandler *routes.DomainHandler
+	DomainHandler *domains.DomainHandler
 }
 
 // setupDomains creates the domain handler, provisioner, and health checker.
@@ -170,11 +170,11 @@ func setupDomains(
 	workflows *WorkflowDeps,
 	cfg config.Config,
 	logger *slog.Logger,
-) (*routes.DomainHandler, *domainsvc.DomainProvisioner, *domainsvc.DomainHealthChecker, *cfzone.Client) {
+) (*domains.DomainHandler, *domainsvc.DomainProvisioner, *domainsvc.DomainHealthChecker, *cfzone.Client) {
 	cnameTarget := "cname." + cfg.BaseDomain
 	domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
 	dnsVerifier := &domain.DNSVerifier{}
-	domainHandler := routes.NewDomainHandler(stores.DomainStore, dnsVerifier, domainValidator, cnameTarget)
+	domainHandler := domains.NewDomainHandler(stores.DomainStore, dnsVerifier, domainValidator, cnameTarget)
 
 	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
 	if cfg.CFZoneManagement && cfZoneClient != nil {

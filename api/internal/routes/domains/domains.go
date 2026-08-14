@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package domains
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -36,14 +36,14 @@ func generateVerificationToken() string {
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	CustomDomain    = domain.CustomDomain
+	CustomDomain     = domain.CustomDomain
 	DomainListFilter = domain.DomainListFilter
-	CFZoneResult    = domain.CFZoneResult
-	CFDNSRecord     = domain.CFDNSRecord
-	DomainStore     = domain.DomainStore
-	DomainVerifier  = domain.DomainVerifier
-	DomainValidator = domain.DomainValidator
-	CFZoneManager   = domain.CFZoneManager
+	CFZoneResult     = domain.CFZoneResult
+	CFDNSRecord      = domain.CFDNSRecord
+	DomainStore      = domain.DomainStore
+	DomainVerifier   = domain.DomainVerifier
+	DomainValidator  = domain.DomainValidator
+	CFZoneManager    = domain.CFZoneManager
 )
 
 // domainMachine is the formal domain state machine (CRIT-02 fix).
@@ -98,30 +98,30 @@ type domainCreateRequest struct {
 }
 
 type domainCreateResponse struct {
-	OK           bool                      `json:"ok"`
-	ID           string                    `json:"id"`
-	Domain       string                    `json:"domain"`
-	Project      string                    `json:"project"`
-	App          string                    `json:"app"`
-	Environment  string                    `json:"environment"`
-	Status       string                    `json:"status"`
-	Verification *domainVerificationInfo   `json:"verification,omitempty"`
-	CNAMETarget  string                    `json:"cname_target,omitempty"`
+	OK           bool                    `json:"ok"`
+	ID           string                  `json:"id"`
+	Domain       string                  `json:"domain"`
+	Project      string                  `json:"project"`
+	App          string                  `json:"app"`
+	Environment  string                  `json:"environment"`
+	Status       string                  `json:"status"`
+	Verification *domainVerificationInfo `json:"verification,omitempty"`
+	CNAMETarget  string                  `json:"cname_target,omitempty"`
 }
 
 // domainCreateV2Response is returned when CF Zone Management (v2) is active.
 type domainCreateV2Response struct {
-	OK                 bool         `json:"ok"`
-	ID                 string       `json:"id"`
-	Domain             string       `json:"domain"`
-	Project            string       `json:"project"`
-	App                string       `json:"app"`
-	Environment        string       `json:"environment"`
-	Status             string       `json:"status"`
-	Nameservers        []string     `json:"nameservers"`
-	DNSRecordsImported int          `json:"dns_records_imported"`
+	OK                 bool          `json:"ok"`
+	ID                 string        `json:"id"`
+	Domain             string        `json:"domain"`
+	Project            string        `json:"project"`
+	App                string        `json:"app"`
+	Environment        string        `json:"environment"`
+	Status             string        `json:"status"`
+	Nameservers        []string      `json:"nameservers"`
+	DNSRecordsImported int           `json:"dns_records_imported"`
 	DNSRecords         []CFDNSRecord `json:"dns_records,omitempty"`
-	ActionRequired     string       `json:"action_required"`
+	ActionRequired     string        `json:"action_required"`
 }
 
 type domainVerificationInfo struct {
@@ -148,8 +148,8 @@ type domainStatusResponse struct {
 	TLS          *domainTLSInfo          `json:"tls,omitempty"`
 	Verification *domainVerificationInfo `json:"verification,omitempty"`
 	CNAMETarget  string                  `json:"cname_target,omitempty"`
-	Nameservers  []string                `json:"nameservers,omitempty"`  // v2: CF nameservers
-	CFManaged    bool                    `json:"cf_managed,omitempty"`   // v2: true if CF zone
+	Nameservers  []string                `json:"nameservers,omitempty"` // v2: CF nameservers
+	CFManaged    bool                    `json:"cf_managed,omitempty"`  // v2: true if CF zone
 	CreatedAt    time.Time               `json:"created_at"`
 	VerifiedAt   *time.Time              `json:"verified_at,omitempty"`
 }

@@ -2350,6 +2350,50 @@ dod:
 > identidade `owner`. Provado por mutação: a import em `repositories.go` de produção deixava a árvore
 > real GREEN em `0 sibling edge(s)`. `tenants` carregava a mesma declaração desde a fatia 8.
 
+> **Fatia `slice-27` — a quarta família saiu: `domains`.** **6** subpacotes, **35** arquivos de
+> produção no pai (eram 40).
+>
+> **Foi a primeira escolhida pelo compilador, e ela refuta diretamente a tabela que a fatia 19
+> publicou.** Aquela tabela, por `grep -lw`, ranqueava `domains` em **último** com "28 arestas" — cada
+> uma das quais era um método chamado `Get`/`List`/`Create`/`Delete` em **outro tipo**. Medida movendo
+> a família numa cópia e lendo o que cada lado deixa de compilar: **o pai não perde nada, a família não
+> perde nada de produção**. É a maior das candidatas (886 linhas, 5 arquivos), e era a melhor o tempo
+> todo.
+>
+> O sanity-check do probe foi feito antes: a árvore intacta compila. Sem ele, "zero erros" e "zero
+> medições" são indistinguíveis — foi o que quase aconteceu na fatia 19.
+>
+> **O único acoplamento real eram os helpers de teste**, e os quatro (`withAuth`,
+> `defaultUserContext`, `memberUserContext`, `withChiParam`) já viviam no leaf `routestest` que a fatia
+> 8 criou por prever exatamente isto.
+>
+> **E migrar consumidor por consumidor foi errado três vezes seguidas.** Meu primeiro `grep` de
+> símbolos pegou funções de teste e perdeu tipos declarados em bloco `type (...)`; depois persegui um
+> arquivo por vez enquanto o compilador apontava o próximo. O que resolveu foi uma varredura única
+> sobre todos os consumidores, e ela pegou `internal/domain/validation.go`, que eu não tinha visto.
+> **Deixar o compilador enumerar é mais barato que adivinhar, e é a mesma lição da tabela.**
+>
+> **O review não achou defeito na extração** — refez o probe do zero (com o sanity-check) e bateu; a
+> cerca é mínima (sem `httpio` → 5 arestas, sem `routestest` → 2); os 33 testes migraram com nomes
+> idênticos e o de rate-limit ficou **byte-idêntico** depois de desfazer o `routestest.`; o router não
+> foi tocado. O que ele achou foi higiene, e duas coisas valem registro.
+>
+> **91 arquivos de puro `gofmt` estavam enterrando as 18 edições reais.** Meu `gofmt -w` alcançou o
+> módulo e normalizou sujeira pré-existente do HEAD — não escondia nada (provado arquivo a arquivo),
+> mas derrota a coesão de diff que o `cycle-implement § 4.7` exige. Revertidos; o diff é 18 arquivos,
+> 7 da família e 11 consumidores.
+>
+> **E um arquivo alheio apareceu na árvore durante a revisão** — uma auditoria de RLS de sessão
+> anterior, nunca commitada, com 3 `t.Skip` sem issue. Ela deixava `quality:all` vermelho, e um
+> `git add -A` a teria levado junto, fazendo o push falhar por motivo que pareceria desta fatia.
+> Isolada.
+>
+> **Fica registrado o que NÃO é desta fatia:** `api/internal/routes/projects.go` continua sem `gofmt`
+> (estava assim no HEAD), e 5 símbolos exportados da família não têm consumidor externo — são aliases
+> cujo comentário fala em "backward compatibility" com um nome que esta mudança já aposentou. Nenhum é
+> código morto (todos usados dentro do pacote), mas a superfície do pacote merece decisão na próxima
+> fatia que tocar `domains`.
+
 ## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
 
 domain: engine-go
@@ -3215,4 +3259,22 @@ dod:
   - a asserção do `B-085` deixa de pontuar por chamada e passa a pontuar por âncora, ou fica escrito que ela não distingue as duas coisas
 
 > Registrado 2026-08-14 pelo review da fatia 25, corrigindo uma isenção que eu tinha justificado errado.
+
+## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-14 pelo review da fatia `slice-27`. `infra/quality/test-inventory.json` declara **582** caminhos de arquivo de teste; **215** deles (**37%**) não existem no disco. A causa não é única: repositórios extraídos (`cloud/…` foi para `loopzero-cloud` no M4), testes movidos por fatias de decomposição, e arquivos simplesmente apagados (`operators/internal/conditions/retry_test.go` saiu com o helper proibido na fatia 10). O inventário é **config viva**, lida por `cmd/loopzero-ops/quality_gates_testgov.go:158` — não é trilha de auditoria —, e o gate passa porque **nunca valida existência de caminho**.
+why_now: o review achou isto porque a fatia 19 moveu `repositories_test.go` e não atualizou o inventário; a 27 repetiu com `domains_test.go`. Os dois foram corrigidos nessa fatia, e a medição do resto revelou que eles eram 2 de 217. Um inventário em que 37% dos caminhos são fantasmas não descreve mais a suíte — ele descreve o que a suíte era em algum momento, e nenhum gate percebe a diferença.
+status: triaged
+severity: média — nada quebra hoje; o custo é um gate de governança de testes que mede uma lista que não corresponde à realidade, e que por isso não pode acusar cobertura perdida
+dod:
+  - o gate que lê o inventário passa a reprovar caminho inexistente, ou o inventário deixa de listar caminho e passa a ser derivado da árvore
+  - os 215 são triados por causa — extraído para repo irmão, movido, apagado — e cada grupo tem destino decidido
+  - existe verificação de que mover um arquivo de teste sem atualizar o inventário reprova, senão a deriva recomeça na próxima fatia
+
+> Registrado 2026-08-14 pelo review da fatia 27. Os 2 caminhos de `routes/` foram corrigidos naquela
+> fatia; os outros 215 são anteriores a ela e não são dela.
 

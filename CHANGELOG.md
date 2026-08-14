@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- A quarta família de rotas — a de domínios personalizados — saiu do pacote plano. Ela era a maior das candidatas e vinha classificada como a mais acoplada; medida movendo-a de verdade, não tem acoplamento nenhum com o resto. O critério de escolha das próximas passou a ser esse. (B-080)
+
 ## [0.66.0] - 2026-08-14
 
 ### Added

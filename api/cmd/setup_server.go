@@ -33,6 +33,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -64,7 +65,7 @@ func buildServerConfig(
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
 	cellStore *store.PostgresCellStore,
-	domainHandler *routes.DomainHandler,
+	domainHandler *domains.DomainHandler,
 	buildHandler *routes.BuildHandler,
 	healthServices []routes.ServiceHealthChecker,
 	tokenValidator middleware.TokenValidator,

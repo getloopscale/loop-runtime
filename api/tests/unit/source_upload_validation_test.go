@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/source"
@@ -108,7 +109,7 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
 		TeamHandler:          routes.NewTeamHandler(nil),
-		DomainHandler:        routes.NewDomainHandler(nil, nil, nil, "test.local"),
+		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         routes.NewAuditHandler(nil),
 		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),

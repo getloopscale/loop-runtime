@@ -18,6 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/source"
@@ -185,7 +186,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	buildListHandler := routes.NewBuildListHandler(nil)
 	environmentHandler := routes.NewEnvironmentHandler(nil)
 	teamHandler := routes.NewTeamHandler(nil)
-	domainHandler := routes.NewDomainHandler(nil, nil, nil, "test.local")
+	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
 	repositoryHandler := repositories.NewRepositoryHandler(nil)
 	// Plan J-09 T2.1: dashboard repo picker -- wired with nil lister/store
 	// because router-level test only verifies route registration, never

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package domains
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -94,7 +95,7 @@ func TestDomains_Create_HappyPath_V1(t *testing.T) {
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -123,7 +124,7 @@ func TestDomains_Create_MemberForbidden(t *testing.T) {
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, memberUserContext())
+	req = routestest.WithAuth(req, routestest.MemberUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -138,7 +139,7 @@ func TestDomains_Create_MissingFields(t *testing.T) {
 
 	body := `{"domain":"example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -155,7 +156,7 @@ func TestDomains_Create_InvalidDomainFormat(t *testing.T) {
 
 	body := `{"domain":"not a domain","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -173,7 +174,7 @@ func TestDomains_Create_AlreadyExists(t *testing.T) {
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -189,7 +190,7 @@ func TestDomains_Create_QuotaExceeded(t *testing.T) {
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -209,7 +210,7 @@ func TestDomains_List_HappyPath(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -239,8 +240,8 @@ func TestDomains_Get_Found(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -255,8 +256,8 @@ func TestDomains_Get_NotFound(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/nonexistent.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "nonexistent.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "nonexistent.com")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -278,8 +279,8 @@ func TestDomains_Verify_TXTMatch(t *testing.T) {
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -309,8 +310,8 @@ func TestDomains_Verify_TXTNotFound(t *testing.T) {
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -333,8 +334,8 @@ func TestDomains_Verify_DomainNotFound(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/nonexistent.com/verify", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "nonexistent.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "nonexistent.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -356,8 +357,8 @@ func TestDomains_Verify_AlreadyVerified(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -378,8 +379,8 @@ func TestDomains_Delete_HappyPath(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -401,15 +402,17 @@ func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
 		wantCode  int
 	}{
 		{
-			name:      "NotFound",
-			store:     &fakeDomainStore{domain: nil},
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
-			wantCode:  http.StatusNotFound,
+			name:  "NotFound",
+			store: &fakeDomainStore{domain: nil},
+			setupAuth: func(req *http.Request) *http.Request {
+				return routestest.WithAuth(req, routestest.DefaultUserContext())
+			},
+			wantCode: http.StatusNotFound,
 		},
 		{
 			name:      "MemberForbidden",
 			store:     &fakeDomainStore{domain: &CustomDomain{Domain: "example.com", Status: "active"}},
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, memberUserContext()) },
+			setupAuth: func(req *http.Request) *http.Request { return routestest.WithAuth(req, routestest.MemberUserContext()) },
 			wantCode:  http.StatusForbidden,
 		},
 		{
@@ -418,14 +421,18 @@ func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
 				domain:   &CustomDomain{Domain: "example.com", Status: "active"},
 				transErr: errors.New("concurrent modification"),
 			},
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
-			wantCode:  http.StatusConflict,
+			setupAuth: func(req *http.Request) *http.Request {
+				return routestest.WithAuth(req, routestest.DefaultUserContext())
+			},
+			wantCode: http.StatusConflict,
 		},
 		{
-			name:      "InvalidState",
-			store:     &fakeDomainStore{domain: &CustomDomain{Domain: "example.com", Status: "removing"}},
-			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
-			wantCode:  http.StatusConflict,
+			name:  "InvalidState",
+			store: &fakeDomainStore{domain: &CustomDomain{Domain: "example.com", Status: "removing"}},
+			setupAuth: func(req *http.Request) *http.Request {
+				return routestest.WithAuth(req, routestest.DefaultUserContext())
+			},
+			wantCode: http.StatusConflict,
 		},
 		{
 			name:      "Unauthenticated",
@@ -441,7 +448,7 @@ func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
 			if c.setupAuth != nil {
 				req = c.setupAuth(req)
 			}
-			req = withChiParam(req, "domain", "example.com")
+			req = routestest.WithChiParam(req, "domain", "example.com")
 			w := httptest.NewRecorder()
 			h.Delete(w, req)
 			if w.Code != c.wantCode {
@@ -471,7 +478,7 @@ func TestDomains_Get_Unauthenticated(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -499,7 +506,7 @@ func TestDomains_Create_InvalidJSON(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString("not-json"))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -513,7 +520,7 @@ func TestDomains_Verify_Unauthenticated(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -537,8 +544,8 @@ func TestDomains_Get_CFManagedDomain(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -571,8 +578,8 @@ func TestDomains_Get_PendingVerificationShowsToken(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, defaultUserContext()) // owner
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // owner
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -601,7 +608,7 @@ func TestDomains_List_WithPagination(t *testing.T) {
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains?limit=10&offset=5&project=my-api", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -634,8 +641,8 @@ func TestDomains_Verify_DNSLookupError(t *testing.T) {
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -659,8 +666,8 @@ func TestDomains_Verify_DeprecatedWhenCFZone(t *testing.T) {
 	h.cfZone = &fakeCFZoneManager{}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.Verify(w, req)
@@ -713,8 +720,8 @@ func TestDomains_DNS_ListRecords_NotCFManaged(t *testing.T) {
 	h.cfZone = &fakeCFZoneManager{}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.ListDNSRecords(w, req)
@@ -743,8 +750,8 @@ func TestDomains_DNS_ListRecords_CFManaged(t *testing.T) {
 	h.cfZone = cfZone
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.ListDNSRecords(w, req)
@@ -758,7 +765,7 @@ func TestDomains_DNS_ListRecords_Unauthenticated(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.ListDNSRecords(w, req)
@@ -774,8 +781,8 @@ func TestDomains_DNS_AddRecords_MemberForbidden(t *testing.T) {
 
 	body := `{"records":[{"type":"A","name":"sub","content":"1.2.3.4"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/dns-records", bytes.NewBufferString(body))
-	req = withAuth(req, memberUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.MemberUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.AddDNSRecords(w, req)
@@ -799,8 +806,8 @@ func TestDomains_DNS_AddRecords_ProtectedType(t *testing.T) {
 
 	body := `{"records":[{"type":"NS","name":"example.com","content":"ns1.example.com"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/dns-records", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
 	h.AddDNSRecords(w, req)
@@ -824,7 +831,7 @@ func TestDomains_Create_V2_CFZone_HappyPath(t *testing.T) {
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package domains
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,7 +59,7 @@ func TestVerifyRateLimit_IntegrationFirstAllowedSecondDenied(t *testing.T) {
 
 	router := mountVerifyRoute(t, vrl, h)
 	ctx := context.WithValue(context.Background(),
-		middleware.UserContextKeyPublic(), defaultUserContext())
+		middleware.UserContextKeyPublic(), routestest.DefaultUserContext())
 
 	// 1st call — passes middleware, reaches handler
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil).WithContext(ctx)
@@ -108,7 +109,7 @@ func TestVerifyRateLimit_IntegrationPerDomainIsolation(t *testing.T) {
 
 	router := mountVerifyRoute(t, vrl, h)
 	ctx := context.WithValue(context.Background(),
-		middleware.UserContextKeyPublic(), defaultUserContext())
+		middleware.UserContextKeyPublic(), routestest.DefaultUserContext())
 
 	for _, domain := range []string{"a.example.com", "b.example.com"} {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/"+domain+"/verify", nil).WithContext(ctx)

@@ -18,6 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -167,7 +168,7 @@ type Config struct {
 	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
 	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
 	ActiveTeamStore      routes.ActiveTeamStore
-	DomainHandler        *routes.DomainHandler
+	DomainHandler        *domains.DomainHandler
 	GitHubWebhookHandler http.Handler
 	RepositoryHandler    *repositories.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.

@@ -28,6 +28,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/tracing"
 
@@ -193,7 +194,7 @@ func main() {
 	var bgWg sync.WaitGroup
 	var cellRouter placement.Router
 	var cellStore *store.PostgresCellStore
-	var domainHandler *routes.DomainHandler
+	var domainHandler *domains.DomainHandler
 
 	if dbAdapter != nil && stores != nil && workflows != nil {
 		cellRouter = setupCellRouter(cfg, shutdownCtx, &bgWg, logger)
