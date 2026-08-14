@@ -24,6 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/loki"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -78,7 +79,7 @@ type OrchestratorDeps struct {
 	StatusHandler       *routes.StatusHandler
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
-	ScaleHandler        *routes.ScaleHandler
+	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *routes.BuildListHandler
 	BuildStatsHandler   *routes.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      routes.ProjectDeleter
@@ -247,7 +248,7 @@ func setupOrchestrator(
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
-	// The closure adapts routes.ScaleConfigInput ↔ store.ScalingConfig (avoids circular import).
+	// The closure adapts scale.ScaleConfigInput ↔ store.ScalingConfig (avoids circular import).
 	// scalingStore declared above (before BuildOrchestrator) — single instance
 	// shared by scaleApply (write path) and ScalingResolver (read path).
 	// T7.1 of deep-review-remediation-plan (closes find_data_003 HIGH).
@@ -257,7 +258,7 @@ func setupOrchestrator(
 	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
-	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
+	scaleApply := func(ctx context.Context, in scale.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
 			c := &store.ScalingConfig{
@@ -280,7 +281,7 @@ func setupOrchestrator(
 		})
 		return changed, err
 	}
-	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	scaleHandler := scale.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).

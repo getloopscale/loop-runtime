@@ -2511,6 +2511,19 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > compilador passou a casar `routes.` seguido de quebra e do símbolo, então ela não custa mais
 > iteração nenhuma.
 
+> **Fatia 31 — `scale` extraída (2026-08-14).** Pai de 30 para **29**; cerca com **10 subpacotes**,
+> 100 arquivos, 0 não registrados, 0 arestas irmãs; lint do pacote novo em 0.
+>
+> **Primeira família cujo compilador acusou um símbolo do pai:** `ProjectResult`. Parecia acoplamento
+> real — e é **alias de tipo** que o pai reexporta de `internal/domain`. A família passou a apontar
+> para o tipo real e o acoplamento nunca existiu. A cerca não teria feito essa distinção: ela mede
+> **import**, e um alias se esconde atrás do pacote que o declara.
+>
+> Terceira vez que o `gofmt -w` sobre um diretório alcançou os mesmos quatro arquivos alheios
+> (`environments_test.go`, `projects.go`, `rollback.go`, `status.go` — todos com formatação anterior
+> pendente). Revertidos as três vezes. Formatar por diretório num repositório com dívida de formatação
+> pré-existente **sempre** mistura o alheio com o próprio.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

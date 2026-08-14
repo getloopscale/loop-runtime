@@ -18,6 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
@@ -124,7 +125,7 @@ type Config struct {
 	// aggregator.SSEEventSink-backed PostgresEventStore that satisfies
 	// the DeployTimelineEventStore contract.
 	DeployTimelineStore routes.DeployTimelineEventStore
-	ScaleHandler        *routes.ScaleHandler
+	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *routes.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.

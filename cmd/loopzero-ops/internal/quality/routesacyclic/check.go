@@ -242,6 +242,8 @@ var allowed = map[string]map[string]bool{
 	"preview": {"httpio": true, "routestest": true},
 	// The seventh family (slice-30, B-080). Serves /api/v1/billing.
 	"billing": {"httpio": true, "routestest": true},
+	// The eighth family (slice-31, B-080). Serves /api/v1/scale.
+	"scale": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

@@ -1,12 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package scale serves the scaling endpoints under /api/v1/scale: reading and
+// changing the replica and resource envelope of a deployed service, bounded by
+// the tenant's plan tier.
+//
+// Eighth family to leave the flat `routes` package (B-080, slice-31), and the
+// first whose extraction hit a real symbol of the parent: `ProjectResult`. It
+// turned out to be a type ALIAS the parent re-exports from `internal/domain`, so
+// the family points at the real type and the coupling never existed — a
+// distinction the fence could not have made, because it measures imports and an
+// alias hides behind the package that declares it.
+//
+// Depends on two leaves and no sibling family: `httpio` for the response writers,
+// `routestest` for request helpers, and that one only from _test.go.
+package scale
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
@@ -42,7 +56,7 @@ const DefaultPodCostPerHour float64 = 0.05
 
 // ScaleProjectStore abstracts project lookup for scale (DIP).
 type ScaleProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
 }
 
 // ScaleConfigInput is the routes-local mirror of store.ScalingConfig fields the
