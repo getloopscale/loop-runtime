@@ -114,6 +114,28 @@ BEGIN
                   USING (true) WITH CHECK (true)
             $f$, t || '_worker_cross_tenant', t);
         END IF;
+
+        -- The owner keeps cross-tenant reach, and this is deliberate.
+        --
+        -- FORCE ROW LEVEL SECURITY does subject an owner to its own policies,
+        -- but that is not a security boundary: the owner holds DDL and can
+        -- simply run `ALTER TABLE ... NO FORCE` or rewrite the policy. A
+        -- constraint the constrained party can lift is documentation, not
+        -- enforcement — and pretending otherwise would misreport the posture
+        -- to an auditor.
+        --
+        -- The real boundary is that the request path does not connect as the
+        -- owner. That is enforced where it can actually hold: `loopzero_api` is a
+        -- non-owner role (isolated by the policy above), and
+        -- db.AssertRequestPoolIsolated refuses to boot a request pool whose
+        -- role can bypass RLS. FORCE stays on because it still binds every
+        -- non-owner role, including any added later without review.
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_owner_maintenance', t);
+        EXECUTE format($f$
+            CREATE POLICY %I ON public.%I
+              TO CURRENT_USER
+              USING (true) WITH CHECK (true)
+        $f$, t || '_owner_maintenance', t);
     END LOOP;
 END $$;
 
@@ -140,6 +162,9 @@ BEGIN
               TO loopzero_worker
               USING (true) WITH CHECK (true);
         END IF;
+
+        DROP POLICY IF EXISTS tenants_owner_maintenance ON public.tenants;
+        EXECUTE format('CREATE POLICY tenants_owner_maintenance ON public.tenants TO %I USING (true) WITH CHECK (true)', CURRENT_USER);
     END IF;
 END $$;
 

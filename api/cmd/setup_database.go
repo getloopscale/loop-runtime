@@ -60,6 +60,20 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		return nil, err
 	}
 
+	// Tenant isolation is a boot precondition, not a runtime hope.
+	//
+	// This pool serves HTTP requests. If its role can bypass RLS — by holding
+	// BYPASSRLS, or by owning the tables while FORCE is off — then every
+	// isolation policy is inert and a missing WHERE clause silently returns
+	// another tenant's rows. That was the measured state on 2026-08-14, and it
+	// survived review precisely because nothing observable changed.
+	//
+	// Failing to start is loud and fixed in seconds by pointing DATABASE_URL at
+	// loopzero_api. Serving cross-tenant data is neither.
+	if err := db.AssertRequestPoolIsolated(context.Background(), poolCfg.Pool); err != nil {
+		return nil, err
+	}
+
 	// PG pool stats collector — exports connection metrics every 15s.
 	poolCollector := metrics.NewPoolStatsCollector(poolCfg.Pool, logger)
 	poolCollector.Start(context.Background(), 15*time.Second)

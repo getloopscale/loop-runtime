@@ -42,6 +42,7 @@ BEGIN
 
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_tenant_isolation', t);
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_worker_cross_tenant', t);
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_owner_maintenance', t);
         EXECUTE format('ALTER TABLE public.%I NO FORCE ROW LEVEL SECURITY', t);
     END LOOP;
 END $$;
@@ -54,6 +55,7 @@ BEGIN
     ) THEN
         DROP POLICY IF EXISTS tenants_self_isolation ON public.tenants;
         DROP POLICY IF EXISTS tenants_worker_cross_tenant ON public.tenants;
+        DROP POLICY IF EXISTS tenants_owner_maintenance ON public.tenants;
         ALTER TABLE public.tenants NO FORCE ROW LEVEL SECURITY;
         ALTER TABLE public.tenants DISABLE ROW LEVEL SECURITY;
     END IF;

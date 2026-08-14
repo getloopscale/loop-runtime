@@ -247,3 +247,171 @@ jobs:
             (cd "$m" && go test ./... -count=1)
             echo "::endgroup::"
           done
+
+  # ---------------------------------------------------------------------------
+  # Tenant isolation — the gate that did not exist.
+  #
+  # This repository already carried tests asserting tenant isolation. They were
+  # green for five months without ever running: `build-and-test` executes
+  # `go test ./...` with no `services:` block, so every integration test hit an
+  # unreachable database and called t.Skip. A skipped test is indistinguishable
+  # from a passing one in the run summary, and on 2026-08-14 the property they
+  # claimed to protect turned out to be false — a connection scoped to one
+  # tenant read another tenant's rows.
+  #
+  # This job exists so that cannot recur silently. It provisions a real
+  # PostgreSQL, applies the schema and migration 000062, and runs the isolation
+  # suite with LOOPZERO_RLS_AUDIT_REQUIRE=1 — which turns "cannot connect" from a
+  # skip into a failure.
+  #
+  # SCOPE IS DELIBERATE. It runs the isolation and hardening tests, not the whole
+  # integration suite: 16 of those tests were already failing against a real
+  # database before this work (fixtures that predate the cell_id trigger added by
+  # migration 000061, plus a pre-existing find_data_004 FK regression). Widening
+  # this job would mix a security gate with unrelated debt and give a reason to
+  # disable it. That debt is tracked separately.
+  # ---------------------------------------------------------------------------
+  tenant-isolation:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 15
+
+    env:
+      GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: loopzero_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          path: loopzero
+
+      - name: Deploy key para o modulo privado
+        env:
+          GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOMOD_SSH_KEY:-}" ]; then
+            echo "::error::GOMOD_SSH_KEY vazio — api/go.mod requer github.com/getloopscale/loopzero-contracts (privado)."
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printenv GOMOD_SSH_KEY > ~/.ssh/gomod_key
+          chmod 600 ~/.ssh/gomod_key
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<'SSHCFG'
+          Host github.com
+            IdentityFile ~/.ssh/gomod_key
+            IdentitiesOnly yes
+            IdentityAgent none
+          SSHCFG
+          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
+          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
+
+      - name: Resolver a versao de loopzero-contracts exigida pelo go.mod
+        id: contracts
+        run: |
+          set -euo pipefail
+          api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          if [ -z "$api_v" ]; then
+            echo "::error::loopzero/api/go.mod nao declara loopzero-contracts."
+            exit 1
+          fi
+          echo "ref=$api_v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          repository: getloopscale/loopzero-contracts
+          ref: ${{ steps.contracts.outputs.ref }}
+          path: loopzero-contracts
+          ssh-key: ${{ secrets.GOMOD_SSH_KEY }}
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
+        with:
+          go-version-file: loopzero/api/go.mod
+          cache-dependency-path: loopzero/api/go.sum
+
+      # The role split is the point. Applying the schema as `loopzero` makes that
+      # role the table owner, exactly as in production, so the tests measure the
+      # real posture instead of a convenient one.
+      - name: Provisionar o banco com a separacao de papeis de producao
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+          echo "::group::papeis"
+          PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
+            -f loopzero/api/internal/db/testdata/test-roles.sql
+          echo "::endgroup::"
+
+          # The dump replays a few metering helpers out of dependency order.
+          # Those errors are tolerated here and the outcome is asserted below —
+          # a count is a stronger check than a clean-looking log.
+          echo "::group::schema (como owner loopzero)"
+          PGPASSWORD=loopzero psql -U loopzero -d loopzero_test \
+            -f loopzero/api/internal/db/schema.gen.sql 2>&1 | tail -5
+          echo "::endgroup::"
+
+          echo "::group::migrations de isolamento"
+          # Applied by name rather than by a glob over the whole directory: the
+          # rest of the migration chain is not replayable against a schema dump
+          # (the dump already carries its result), and a glob would silently
+          # start including the next migration somebody adds.
+          for m in 000062_rls_fail_closed 000063_cloud_named_role; do
+            echo "-- $m"
+            PGPASSWORD=loopzero psql -U loopzero -d loopzero_test -v ON_ERROR_STOP=1 \
+              -f "loopzero/api/internal/db/migrations/$m.up.sql"
+          done
+          echo "::endgroup::"
+
+      # Asserted before the tests run: if the migration silently did less than
+      # it claims, fail here with a number rather than let a downstream test
+      # produce a confusing error.
+      - name: Verificar a postura no catalogo
+        run: |
+          set -euo pipefail
+          read -r rls forced open <<< "$(PGPASSWORD=postgres psql -U postgres -h localhost -d loopzero_test -tAF' ' -c "
+            SELECT
+              (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity),
+              (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='public' AND c.relkind='r' AND c.relforcerowsecurity),
+              (SELECT count(*) FROM pg_policy p
+                WHERE pg_get_expr(p.polqual, p.polrelid) LIKE '%IS NULL%'
+                   OR pg_get_expr(p.polqual, p.polrelid) LIKE '%''''::text%');")"
+          echo "rls_enabled=$rls forced=$forced fail_open_policies=$open"
+          if [ "$open" -ne 0 ]; then
+            echo "::error::$open policy(ies) ainda aceitam contexto vazio — o disjunto fail-open voltou."
+            exit 1
+          fi
+          if [ "$rls" -lt 30 ] || [ "$forced" -lt 30 ]; then
+            echo "::error::esperado >=30 tabelas com RLS e FORCE, medido rls=$rls forced=$forced."
+            exit 1
+          fi
+
+      - name: Isolamento de tenant (falha se o banco sumir, nunca pula)
+        env:
+          DATABASE_URL: postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable
+          LOOPZERO_API_DATABASE_URL: postgres://loopzero_api:loopzero-api@localhost:5432/loopzero_test?sslmode=disable
+          LOOPZERO_WORKER_DATABASE_URL: postgres://loopzero_worker:loopzero-worker@localhost:5432/loopzero_test?sslmode=disable
+          LOOPZERO_RLS_AUDIT_SUPERUSER_URL: postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable
+          LOOPZERO_RLS_AUDIT_REQUIRE: "1"
+        run: |
+          set -euo pipefail
+          cd loopzero/api
+          go test ./tests/integration/ -count=1 -v \
+            -run 'TenantIsolation|RLSGuard|RLSOnAllTenantTables|RolesExist|LoopZeroApiCannotDDL|AuditLogAppendOnly|ReconciliationQueriesWithRLS'
