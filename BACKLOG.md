@@ -605,7 +605,7 @@ dod:
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor.
 
-## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [x]
+## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [ ]
 
 domain: engine-go
 repo: loopzero
@@ -613,8 +613,38 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido em 2026-08-10 ao investigar o `cloud-dev`. `POST /api/v1/webhooks/github` devolve **404** por `app-dev` e direto no `loopzero-api` (`localhost:13001`), enquanto `POST /api/v1/health` devolve **405** — ou seja, a rota do webhook nem chega a ser registrada, não é erro de roteamento. O log do `loopzero-api` confirma: *"github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)"*. A causa está em `api/cmd/setup_github.go:152-158`: sem o segredo, `WebhookHandler` fica nil e o roteador não registra a rota. O seed que provisiona o segredo (`5-seed-github-app-dev`) reprovou com `namespaces "loopzero-system" not found` — ele rodou antes do namespace existir, durante a reconstrução.
 why_now: enquanto o segredo existiu no cluster, isto era invisível. A reconstrução total o apagou junto com tudo, e o seed que o recria falhou por ordem. **A consequência é que auto-deploy a partir do GitHub não funciona** — um `git push` no repositório de um cliente não dispara build nenhum. Não apareceu antes porque as sondagens de verificação cobriam `/engine/*` e os fluxos de login, e o webhook é a única superfície que não se testa com um GET.
-status: shipped
+status: triaged
 severity: alta — é uma jornada inteira do produto (conectar repositório → push → deploy) que está morta, e ela falha em silêncio: o GitHub recebe 404 e o usuário não vê erro nenhum no painel.
+
+> **CORREÇÃO 2026-08-14 — a auditoria adversarial de fechamento reprovou este item, e tinha razão.**
+> O commit que o fechou (`876ad663`) toca **apenas** `BACKLOG.md` e `CHANGELOG.md`: zero código, zero
+> teste, zero mudança de ordem. A evidência era um host que ninguém pode re-executar, e as duas balas
+> que **tinham** artefato possível não ganharam nenhum.
+>
+> **Bala da ordem dos seeds — fechada com artefato.** A causa medida é de ordem, não de código: numa
+> sala limpa o seed rodou antes de `loopzero-system` existir, falhou no pré-requisito, o segredo do webhook
+> nunca foi gravado, o handler ficou `nil`, a rota nunca foi registrada — e o único sintoma foi um
+> `404` no log de entrega do **GitHub**. A cadeia inteira silenciosa. `github_app_dev.go` passou a
+> garantir o namespace antes de gravar, reusando o `ensureNamespace` que o `broker.go` já usava, com
+> asserção estrutural em `namespace_precondition_test.go` — estrutural porque o helper é no-op contra
+> o cliente falso dos testes, e isso está escrito no teste em vez de escondido.
+>
+> Medindo para consertar, apareceu a classe: **sete** seeds gravam Secret e **um** garantia o
+> namespace. Os cinco restantes viraram o `B-108`, em vez de serem consertados por analogia — a
+> pressuposição é a mesma, mas se a posição de cada um na cadeia já a garante ninguém mediu, e
+> adivinhar é o que produziu este item.
+>
+> **Bala da verificação da rota — fechada com artefato.** O `router_wiring_test.go` injeta
+> `&stubGitHubWebhookHandler{}`, sempre não-nil: **um teste que sempre fornece a dependência nunca vê o
+> que acontece sem ela.** `webhook_route_registration_test.go` fixa a cadeia pelos dois lados —
+> handler `nil` ⇒ rota ausente, handler presente ⇒ rota alcançada — e reprova com o registro removido
+> **e** com o caminho renomeado, os dois verificados por mutante.
+>
+> **Bala do push real — continua aberta, e é honesto dizer.** Ela pede um push no repositório de
+> fixture disparando um build ponta a ponta. Isso exige o droplet e um push de verdade; não há
+> artefato de repositório que a substitua, e fingir que os dois testes acima a cobrem seria repetir o
+> defeito que esta correção conserta.
+
 dod:
   - a cadeia de seeds pós-cleanroom completa sem falhas de pré-requisito, ou a ordem dela garante que o namespace exista antes do seed que depende dele
   - `POST /api/v1/webhooks/github` deixa de devolver 404 — com assinatura inválida deve devolver 401, não 404
@@ -3562,4 +3592,21 @@ dod:
 > de `deterministic/major` para `heuristic/minor`, com a taxa medida no comentário e um teste que fixa
 > a classificação — declarar palpite com confiança de medição é exatamente o defeito que este checador
 > existe para pegar, e ele o estava cometendo em si mesmo.
+
+## B-108 — Cinco seeds gravam Secret num namespace que podem não encontrar   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-14 ao consertar o `B-021`. Sete arquivos de `cmd/loopzero-ops/internal/seed/` gravam Secret via `CreateOrUpdateSecret`, e antes desta medição **um** garantia o namespace antes (`broker.go`). O `github_app_dev.go` foi consertado porque a falha dele está medida — numa sala limpa ele rodou antes de `loopzero-system` existir, falhou no pré-requisito, e o efeito só apareceu como `404` no log de entrega do GitHub. Restam **cinco** com a mesma forma: `argocd_gitea_creds.go`, `argocd_token.go`, `gitea_token.go`, `stripe_api_keys.go`, `stripe_webhook_secret.go`.
+why_now: a falha do `B-021` não foi de código, foi de **ordem** — o seed pressupôs um namespace que a cadeia ainda não tinha criado. A pressuposição é a mesma nos cinco; o que não se sabe é se a posição de cada um na cadeia já a garante. Consertar os cinco sem medir seria adivinhar, e adivinhar é o que produziu o item que os revelou.
+status: raw
+severity: média — nenhum está medido falhando hoje, mas o modo de falha é silencioso por construção: o seed falha, a cadeia segue, e o efeito aparece num sistema de terceiros
+dod:
+  - para cada um dos cinco, está medido se o namespace é garantido pela posição na cadeia ou não
+  - os que não são garantidos passam a garanti-lo, e entram no contrato de `namespace_precondition_test.go`
+  - os que são garantidos ficam com a razão escrita, para que a próxima pessoa não re-pergunte
+
+> Registrado 2026-08-14, ao consertar o `B-021` — a auditoria adversarial de fechamento achou a instância, a medição achou a classe.
 
