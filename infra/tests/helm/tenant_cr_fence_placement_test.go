@@ -23,6 +23,7 @@
 package helm
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -140,4 +141,77 @@ func policySection(t *testing.T, rendered, name string) string {
 	}
 	t.Fatalf("policy %q not found in the render; a check that inspected nothing verified nothing", name)
 	return ""
+}
+
+// mgmtValuesStack reads the values files the helmfile actually layers onto the
+// mgmt release, newest last.
+//
+// The tests above name the stack literally — `values.yaml`, `values-mgmt.yaml`.
+// Today that matches the helmfile, and a review of the B-077 closure pointed out
+// that nothing keeps it matching: add a third overlay in the helmfile and the
+// tests keep rendering a two-file stack, green, measuring a composition that is
+// not the deployed one.
+//
+// It is the same shape as the finding that produced this whole item — "the test
+// measures the render but not WHERE the value is overridden" — one level up.
+//
+// This function does not replace the literals; it asserts they still ARE the
+// stack. Rendering from a derived list would hide a divergence by absorbing it.
+func mgmtValuesStack(t *testing.T) []string {
+	t.Helper()
+	const helmfilePath = "../../helmfile/core.helmfile.yaml.gotmpl"
+	b, err := os.ReadFile(filepath.Clean(helmfilePath))
+	if err != nil {
+		t.Fatalf("reading %s: %v — the stack cannot be derived, and a literal nobody checks is the "+
+			"drift this function exists to catch", helmfilePath, err)
+	}
+
+	lines := strings.Split(string(b), "\n")
+	start := -1
+	for i, l := range lines {
+		if strings.Contains(l, "name: admission-policies-mgmt") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatalf("no release named admission-policies-mgmt in %s — either it was renamed, in which "+
+			"case these tests point at nothing, or the file moved", helmfilePath)
+	}
+
+	var stack []string
+	inValues := false
+	for _, l := range lines[start:] {
+		trimmed := strings.TrimSpace(l)
+		switch {
+		case trimmed == "values:":
+			inValues = true
+		case inValues && strings.HasPrefix(trimmed, "- "):
+			stack = append(stack, filepath.Base(strings.TrimPrefix(trimmed, "- ")))
+		case inValues && trimmed != "" && !strings.HasPrefix(trimmed, "- "):
+			return stack // the values block ended
+		case strings.HasPrefix(trimmed, "- name: ") && inValues:
+			return stack
+		}
+	}
+	return stack
+}
+
+// TestTenantCrFence_TheValuesStackUnderTestIsTheDeployedOne keeps the literal
+// stack in the tests above honest against the helmfile that deploys it.
+func TestTenantCrFence_TheValuesStackUnderTestIsTheDeployedOne(t *testing.T) {
+	want := []string{"values.yaml", "values-mgmt.yaml"}
+	got := mgmtValuesStack(t)
+
+	if len(got) != len(want) {
+		t.Fatalf("the helmfile layers %d values file(s) onto admission-policies-mgmt (%v) and these "+
+			"tests render %d (%v). Every assertion above is measuring a composition that is not "+
+			"deployed — green, and about the wrong thing (B-077).", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("values file %d: helmfile layers %q, the tests render %q — order matters, the "+
+				"later file overrides the earlier", i, got[i], want[i])
+		}
+	}
 }

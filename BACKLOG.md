@@ -518,6 +518,32 @@ evidence: medido em 2026-08-10 ao reconstruir o app-dev sem acesso ao GHCR. `loo
 why_now: o escape hatch existe justamente para o dia em que o token falta. Nesse dia ele não funcionou, e os dois defeitos são de tipos que nenhum build verde pegaria: o (1) só aparece sem credencial (com ela, o fetch remoto funciona e mascara o replace morto), e o (2) só aparece quando `main.go` passa a depender de um irmão — o que aconteceu depois que o arquivo foi escrito.
 status: shipped
 severity: alta — é o caminho de recuperação, e estava quebrado exatamente no cenário para o qual foi criado.
+
+> **CORREÇÃO 2026-08-14 — a auditoria adversarial marcou este fechamento com ressalva, e tinha razão.**
+>
+> Os dois defeitos originais estão mortos e as três guardas são reais — ela verificou por mutante. Mas
+> a terceira bala pede verificação que **constrói**, *"senão o próximo apodrecimento é invisível
+> igual"*, e o entregue é regex sobre o texto do Dockerfile, com o próprio doc-comment admitindo
+> *"este guarda é estático"*. As três fixam três erros **passados**: alvo de build, caminho do módulo,
+> staging do contracts. Nenhuma vê a classe.
+>
+> **A classe, nomeada pela auditoria:** um diretório de código novo no topo do módulo que o `./cmd`
+> passe a importar e o Dockerfile nunca copie. A imagem falha a construir por pacote ausente — a mesma
+> forma dos defeitos que as guardas fixam, e invisível do mesmo jeito.
+>
+> **Fechada com uma guarda que DERIVA em vez de repetir** (`loopzero-cloud`, commit `4ec23e61`):
+> `go list -deps ./cmd` diz exatamente quais pacotes o binário alcança, então o conjunto exigido vem do
+> compilador e não de alguém lembrar de atualizar uma lista. Medido: o binário alcança `cmd` e
+> `internal`; `tests/` tem código Go e está corretamente fora da imagem, então não é exigido.
+>
+> **Ela não é um build, e isso está escrito nela.** Um build de verdade precisa de Docker, e fingir
+> que uma checagem estática é um build seria a substituição de que este item inteiro trata. A bala fica
+> **parcialmente** cumprida — a classe está fechada, a verificação por construção não —, e isso fica
+> dito em vez de arredondado.
+>
+> A primeira versão **SKIPava**: o `go list` rodava com `cwd` em `internal/ci`, onde `./cmd` não
+> existe, e o teste saía `ok`. Um skip que lê como aprovação é o modo de falha do próprio item. Agora
+> roda na raiz do módulo e falha alto se não puder rodar.
 dod:
   - o `replace` injetado cita o caminho de módulo atual
   - o build compila o pacote (`./cmd`), não um arquivo
@@ -2221,6 +2247,21 @@ evidence: medido em 2026-08-12 na revisão da fatia slice-3. `infra/helm/admissi
 why_now: a cerca `failurePolicy: Fail` sobre a forma dos CRs Tenant roda nos clusters que não guardam CR Tenant nenhum, e está desligada no único que guarda. O plano da fatia slice-3 afirmou o contrário (`R3`: *"ela já roda em dev e em core pelo caminho L2"*) e usou isso para justificar o risco como aceitável — a premissa não se sustenta, e a revisão a derrubou.
 status: shipped
 severity: alta — é uma fronteira de segurança que parece ativa e não está onde importa.
+
+> **Ressalva da auditoria fechada em 2026-08-14.** O teste **renderiza mesmo** — ela verificou
+> (`exec.Command("helm","template",…)`, não `os.Stat`) e matou dois mutantes. Mas a pilha de values
+> estava **escrita à mão** no teste enquanto a fonte é `infra/helmfile/core.helmfile.yaml.gotmpl`.
+> Hoje coincidem; nada as mantinha coincidindo. Um terceiro overlay no helmfile e o teste seguiria
+> verde renderizando uma composição que não é a implantada.
+>
+> É a mesma forma do achado H3 que originou este item — *"o teste mede render, mas não mede **onde** o
+> valor é sobreposto"* — um nível acima.
+>
+> `TestTenantCrFence_TheValuesStackUnderTestIsTheDeployedOne` lê a pilha do helmfile e afirma que os
+> literais **ainda são** ela. Deliberadamente **não** renderiza a partir da lista derivada: renderizar
+> do derivado absorveria a divergência em vez de a denunciar. Verificado por mutante — terceiro overlay
+> injetado, a asserção acusa nomeando os três arquivos.
+
 dod:
   - está decidido e escrito por que a VAP está desligada no mgmt, ou ela é habilitada lá
   - a decisão é verificável por render, não por presença de arquivo

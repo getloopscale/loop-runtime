@@ -338,7 +338,10 @@ tasks:
       engine OpenAPI spec conformance + cli<->engine. (cloud<->loopzero-data moved to
       the standalone loopzero-cloud repo — M4.)
     cmds:
-      - cd api && go test ./internal/contract/...
+      # -count=1: these read fixtures from ANOTHER module, and Go's test cache
+      # keys on THIS module's inputs. Without it a change in the file being read
+      # leaves the cached PASS in place — green over code that moved.
+      - cd api && go test ./internal/contract/... -count=1
 
   contract:cross-repo:
     desc: >
@@ -349,11 +352,11 @@ tasks:
     cmds:
       - |
         echo "=== seam engine OpenAPI + cli consumer (loopzero/api) ==="
-        cd api && go test ./internal/contract/...
+        cd api && go test ./internal/contract/... -count=1
       - |
         echo "=== seam cloud-themory + cloud-serviceauth ==="
         if [ -d ../loopzero-cloud ]; then
-          (cd ../loopzero-cloud && go test ./internal/themory/... ./internal/auth/...)
+          (cd ../loopzero-cloud && go test ./internal/themory/... ./internal/auth/... -count=1)
         else
           echo "SKIP: loopzero-cloud sibling absent (umbrella layout required)"
         fi
