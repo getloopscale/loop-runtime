@@ -1,4 +1,13 @@
-package routes
+// Package rollback serves the rollback endpoint: returning an environment to a
+// previous release.
+//
+// Twentieth family to leave the flat `routes` package (B-080, slice-38).
+//
+// Its `isLockTimeout` predicate had exactly one reader outside this code — a
+// block in the parent's shared coverage file — which is what the compiler said
+// the moment the family left. A helper reached only by one test of the parent
+// belongs with the code it guards.
+package rollback
 
 import (
 	"context"

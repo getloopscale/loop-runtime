@@ -20,6 +20,7 @@ import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"mime/multipart"
@@ -87,7 +88,7 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
-		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
@@ -138,7 +139,7 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
-		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
@@ -192,7 +193,7 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
-		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),

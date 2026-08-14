@@ -11,6 +11,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
@@ -77,7 +79,7 @@ type Config struct {
 	// build handler — single source of truth for env creation / PG
 	// environments row writes. nil-safe: when nil, ProjectHandler.Create
 	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).
-	ProjectEnvEnsurer routes.EnvironmentEnsurer
+	ProjectEnvEnsurer promote.EnvironmentEnsurer
 	IdempotencyStore  middleware.IdempotencyStore
 	SourceStore       source.SourceStore
 	ObjectUploader    routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
@@ -123,8 +125,8 @@ type Config struct {
 	SSEMaxConcurrentStreams int64
 	LogsHandler             *routes.LogsHandler
 	LogStreamHandler        *routes.LogStreamHandler
-	RollbackHandler         *routes.RollbackHandler
-	PromoteHandler          *routes.PromoteHandler
+	RollbackHandler         *rollback.RollbackHandler
+	PromoteHandler          *promote.PromoteHandler
 	StatusHandler           *routes.StatusHandler
 	MetricsProxyHandler     *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
 	StatusSSEHandler        *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"io"
 	"log/slog"
@@ -47,7 +48,7 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
-		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),

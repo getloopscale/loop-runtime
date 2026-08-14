@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package promote serves the promotion endpoint: moving a release from one
+// environment to the next.
+//
+// Nineteenth family to leave the flat `routes` package (B-080, slice-38),
+// extracted alongside `rollback` — the two are the release lifecycle's forward
+// and backward moves, and they share nothing but that symmetry.
+//
+// It declares its own `EnvironmentEnsurer`, the third package to do so: a Go
+// interface is structural, so each consumer naming the one method it calls is
+// cheaper and more honest than a shared package nobody owns.
+package promote
 
 import (
 	"context"
@@ -70,7 +80,6 @@ type promoteResponse struct {
 	URL           string `json:"url,omitempty"`
 }
 
-// PromoteHandler provides HTTP handlers for promote operations.
 // EnvironmentEnsurer creates the environment a promotion targets.
 //
 // Declared here rather than imported from the builds family that also declares
@@ -82,6 +91,7 @@ type EnvironmentEnsurer interface {
 	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
 
+// PromoteHandler provides HTTP handlers for promote operations.
 type PromoteHandler struct {
 	projects   PromoteProjectStore
 	service    PromoteService

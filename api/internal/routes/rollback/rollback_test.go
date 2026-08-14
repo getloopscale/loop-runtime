@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package rollback
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,8 +58,8 @@ func TestRollback_HappyPath(t *testing.T) {
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -83,8 +84,8 @@ func TestRollback_ProjectNotFound(t *testing.T) {
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/nonexistent/rollback", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -103,8 +104,8 @@ func TestRollback_MissingEnvironment(t *testing.T) {
 
 	body := `{}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -125,8 +126,8 @@ func TestRollback_NoActiveRelease(t *testing.T) {
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -141,7 +142,7 @@ func TestRollback_Unauthenticated(t *testing.T) {
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -162,8 +163,8 @@ func TestRollback_LockTimeout(t *testing.T) {
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)

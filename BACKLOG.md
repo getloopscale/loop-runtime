@@ -2652,6 +2652,23 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > LoopZeroKit↔LoopZeroCloud. Declarar isomorfismo pela contagem seria fechar contra o resultado mais fácil de
 > medir, que é o padrão pelo qual três itens desta sessão foram reabertos.
 
+> **Fatia 38 — `promote` e `rollback` (2026-08-14).** Pai de 12 para **10** arquivos de produção; **23
+> subpacotes**, cerca verde, lint zero. As duas são o movimento para frente e para trás do ciclo de
+> release — não compartilham nada além dessa simetria, e foi por ela que saíram juntas.
+>
+> `isLockTimeout` tinha exatamente **um** leitor fora do `rollback`: um bloco no arquivo de cobertura
+> compartilhado do pai. Um helper alcançado só por um teste do pai mora com o código que ele guarda.
+>
+> **E o `EnvironmentEnsurer` foi declarado pelo consumidor uma terceira vez.** Três pacotes
+> independentes nomeando a mesma interface de um método, cada um para si — que é mais barato e mais
+> honesto que um pacote compartilhado que ninguém possui, e é a forma DIP que `rules/architecture.md`
+> pede.
+>
+> **Um erro meu no caminho, e vale registrar:** cortei os blocos por número de linha e parti uma
+> função ao meio, produzindo dois arquivos que não compilavam. Revertido com `git restore` e refeito
+> por bloco de topo — a mesma correção que a fatia 28 já tinha exigido, cometida de novo por eu ter
+> voltado ao atalho.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

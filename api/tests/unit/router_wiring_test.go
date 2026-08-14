@@ -10,6 +10,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"io"
@@ -187,7 +188,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 
 	buildHandler := builds.NewBuildHandler(nil, logger)
 	logsHandler := routes.NewLogsHandler(nil, nil)
-	rollbackHandler := routes.NewRollbackHandler(nil, nil, "test.local")
+	rollbackHandler := rollback.NewRollbackHandler(nil, nil, "test.local")
 	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := builds.NewBuildListHandler(nil)
 	environmentHandler := environments.NewEnvironmentHandler(nil)

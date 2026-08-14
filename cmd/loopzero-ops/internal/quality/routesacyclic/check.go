@@ -299,6 +299,12 @@ var allowed = map[string]map[string]bool{
 	// read surfaces than any other resource here — the build itself, its list, its
 	// attestation, its SBOM and its statistics.
 	"builds": {"httpio": true, "routestest": true, "pagination": true},
+
+	// The nineteenth and twentieth families (slice-38, B-080): the release
+	// lifecycle's forward and backward moves. They share nothing but that symmetry,
+	// and were extracted together for it.
+	"promote":  {"httpio": true, "routestest": true},
+	"rollback": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

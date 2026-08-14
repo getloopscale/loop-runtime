@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package promote
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,8 +62,8 @@ func TestPromote_HappyPath(t *testing.T) {
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	// Act
@@ -98,8 +99,8 @@ func TestPromote_ProjectNotFound(t *testing.T) {
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/nonexistent/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -118,8 +119,8 @@ func TestPromote_MissingFromEnv(t *testing.T) {
 
 	body := `{"to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -138,8 +139,8 @@ func TestPromote_MissingToEnv(t *testing.T) {
 
 	body := `{"from":"staging"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -160,8 +161,8 @@ func TestPromote_SameEnvironment(t *testing.T) {
 
 	body := `{"from":"staging","to":"staging"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -182,8 +183,8 @@ func TestPromote_NoActiveRelease(t *testing.T) {
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -198,7 +199,7 @@ func TestPromote_Unauthenticated(t *testing.T) {
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -219,8 +220,8 @@ func TestPromote_LockTimeout(t *testing.T) {
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -262,8 +263,8 @@ func TestPromote_SameEnvironment_SurfacesCode(t *testing.T) {
 
 	body := `{"from":"staging","to":"staging"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -326,8 +327,8 @@ func TestPromote_RegressionV10BodyShape(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(tc.body))
-			req = withAuth(req, defaultUserContext())
-			req = withChiParam(req, "name", "my-api")
+			req = routestest.WithAuth(req, routestest.DefaultUserContext())
+			req = routestest.WithChiParam(req, "name", "my-api")
 			w := httptest.NewRecorder()
 
 			h.Create(w, req)
@@ -385,8 +386,8 @@ func TestPromote_EnsuresTargetEnvironment_BeforeService_RedTeam158(t *testing.T)
 
 	body := `{"from":"preview","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/loopzerokit-example/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "loopzerokit-example")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "loopzerokit-example")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -423,8 +424,8 @@ func TestPromote_EnsureEnvironment_Failure_ShortCircuits_RedTeam158(t *testing.T
 
 	body := `{"from":"preview","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/loopzerokit-example/promote", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "loopzerokit-example")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "loopzerokit-example")
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)

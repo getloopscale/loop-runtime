@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -28,7 +29,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/server"
@@ -244,7 +244,7 @@ func main() {
 	// ~325. POST /api/v1/projects then auto-creates a `production` env
 	// without a second wire-up. nil when k8sDeps is unavailable (test or
 	// degraded boot) → server.Router falls back to pre-T4.1 behavior.
-	var projectEnvEnsurer routes.EnvironmentEnsurer
+	var projectEnvEnsurer promote.EnvironmentEnsurer
 
 	// Plan T2.2 D5 — wire EnvironmentEnsurer so loopzero deploy --env <novo>
 	// auto-creates the Environment CR + namespace + ArgoCD App on first

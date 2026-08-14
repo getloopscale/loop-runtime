@@ -7,6 +7,8 @@ import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"log/slog"
 	"net/http"
 	"time"
@@ -76,8 +78,8 @@ type OrchestratorDeps struct {
 	BuildOrchestrator   builds.BuildOrchestratorService
 	LogsHandler         *routes.LogsHandler
 	LogStreamHandler    *routes.LogStreamHandler
-	RollbackHandler     *routes.RollbackHandler
-	PromoteHandler      *routes.PromoteHandler
+	RollbackHandler     *rollback.RollbackHandler
+	PromoteHandler      *promote.PromoteHandler
 	StatusHandler       *routes.StatusHandler
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
@@ -199,7 +201,7 @@ func setupOrchestrator(
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
-	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
+	rollbackHandler := rollback.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
 		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
@@ -222,7 +224,7 @@ func setupOrchestrator(
 		Logger:       logger,
 	})
 	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
-	promoteHandler := routes.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
+	promoteHandler := promote.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}

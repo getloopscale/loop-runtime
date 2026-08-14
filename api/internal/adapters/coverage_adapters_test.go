@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"testing"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // =============================================================================
@@ -231,7 +231,7 @@ func TestTenantK8sEvictorAdapter_VerifyFieldMapping(t *testing.T) {
 
 func TestRollbackServiceAdapter_TypeTranslation(t *testing.T) {
 	// Verify the routes.RollbackInput to release.RollbackRequest mapping.
-	input := routes.RollbackInput{
+	input := rollback.RollbackInput{
 		TenantID:      "tn-acme",
 		ProjectID:     "proj-123",
 		ProjectName:   "my-app",
