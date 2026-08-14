@@ -27,7 +27,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
@@ -57,7 +57,7 @@ type tenantCellQuerier interface {
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
 
-// rawSecretReader implements routes.InternalSecretReader using a raw SQL
+// rawSecretReader implements secrets.InternalSecretReader using a raw SQL
 // query against the secrets table. We bypass the PostgresSecretStore for
 // this read path because the existing store only exposes Set/Delete/List
 // methods (no single-secret Get); adding a fourth Get method to the store
@@ -71,7 +71,7 @@ type rawSecretReader struct {
 	transit vault.Transit
 }
 
-// ReadSecret satisfies routes.InternalSecretReader. T2.1 + ADR D2 of
+// ReadSecret satisfies secrets.InternalSecretReader. T2.1 + ADR D2 of
 // plan 2026-06-10-j22-layer2-code-review-fixes (closes HIGH #15 scope-drop):
 // SQL query scopes by the canonical composite unique key
 // (tenant_id, project, environment, name). The previous query scoped only
@@ -108,7 +108,7 @@ func (r *rawSecretReader) ReadSecret(ctx context.Context, tenantID, project, env
 		// was fragile — any future wrapper that rephrased the message
 		// would silently turn a 404 NOT_FOUND into a 500 INTERNAL).
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, routes.ErrSecretNotFound
+			return nil, secrets.ErrSecretNotFound
 		}
 		return nil, fmt.Errorf("secret_fetch: load: %w", err)
 	}
@@ -125,15 +125,15 @@ func (r *rawSecretReader) ReadSecret(ctx context.Context, tenantID, project, env
 }
 
 // Compile-time interface assertion.
-var _ routes.InternalSecretReader = (*rawSecretReader)(nil)
+var _ secrets.InternalSecretReader = (*rawSecretReader)(nil)
 
-// inlineTenantBinding satisfies routes.TenantCellBindingLookup using the
+// inlineTenantBinding satisfies secrets.TenantCellBindingLookup using the
 // existing PostgresCellStore.GetTenantCellID.
 type inlineTenantBinding struct {
 	cellStore tenantCellQuerier
 }
 
-// GetTenantCellID satisfies routes.TenantCellBindingLookup.
+// GetTenantCellID satisfies secrets.TenantCellBindingLookup.
 //
 // EC-8 follow-up absorption (plan 2026-06-10-j22-layer2-code-review-fixes):
 // canonical pgx no-rows detection via `errors.Is(pgx.ErrNoRows)` so the
@@ -151,7 +151,7 @@ func (b *inlineTenantBinding) GetTenantCellID(ctx context.Context, tenantID stri
 	cell, err := b.cellStore.GetTenantCellID(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", routes.ErrTenantNotFound
+			return "", secrets.ErrTenantNotFound
 		}
 		return "", fmt.Errorf("secret_fetch: tenant binding: %w", err)
 	}
@@ -159,19 +159,19 @@ func (b *inlineTenantBinding) GetTenantCellID(ctx context.Context, tenantID stri
 }
 
 // Compile-time interface assertion.
-var _ routes.TenantCellBindingLookup = (*inlineTenantBinding)(nil)
+var _ secrets.TenantCellBindingLookup = (*inlineTenantBinding)(nil)
 
 // setupSecretFetchDeps composes the three runtime dependencies for the
 // broker handler. Returns nil when any prerequisite is missing so the
 // caller can skip route registration cleanly (LIVE 404 → ESO retries).
-func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *store.PostgresCellStore, auditLogger *store.AuditLogger) *routes.SecretFetchHandlerDeps {
+func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *store.PostgresCellStore, auditLogger *store.AuditLogger) *secrets.SecretFetchHandlerDeps {
 	if pool == nil || transit == nil || cellStore == nil || auditLogger == nil {
 		return nil
 	}
-	return &routes.SecretFetchHandlerDeps{
+	return &secrets.SecretFetchHandlerDeps{
 		TenantBinding: &inlineTenantBinding{cellStore: cellStore},
 		SecretReader:  &rawSecretReader{pool: pool, transit: transit},
-		AuditWriter:   routes.NewSecretReadAuditAdapter(auditLogger),
+		AuditWriter:   secrets.NewSecretReadAuditAdapter(auditLogger),
 	}
 }
 

@@ -26,12 +26,13 @@
 //
 // Whatever makes Transit unavailable in a given environment, the API's job is
 // to say WHICH subsystem refused. Rule 8: fail fast, fail clear, typed.
-package routes
+package secrets
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,7 +67,7 @@ func TestSecretSet_BackendUnavailableIsTyped(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=loopzerokit-example",
 		strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Set(w, req)
@@ -105,7 +106,7 @@ func TestSecretSet_BackendErrorMessageIsActionableAndClean(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=loopzerokit-example",
 		strings.NewReader(`{"name":"K","value":"v","environment":"production","app":"api"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Set(w, req)
 
@@ -139,7 +140,7 @@ func TestSecretSet_UnrelatedErrorsStayInternal(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=p",
 		strings.NewReader(`{"name":"K","value":"v","environment":"production","app":"api"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Set(w, req)
 

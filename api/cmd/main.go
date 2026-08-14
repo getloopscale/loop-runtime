@@ -28,6 +28,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/tracing"
@@ -404,7 +405,7 @@ func main() {
 		fetchDeps := setupSecretFetchDeps(dbAdapter.Pool, transit, cellStore, auditLogger)
 		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
 		if fetchDeps != nil && brokerToken != "" {
-			rawHandler := routes.NewSecretFetchHandler(*fetchDeps)
+			rawHandler := secrets.NewSecretFetchHandler(*fetchDeps)
 			srvCfg.SecretFetchHandler = brokerBearerMiddleware(brokerToken, rawHandler)
 		} else if fetchDeps != nil {
 			logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")

@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -34,7 +35,7 @@ type StoreDeps struct {
 	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
 	PgEventStore     *sse.PostgresEventStore
-	SecretStore      routes.SecretStore
+	SecretStore      secrets.SecretStore
 	BootstrapStore   routes.BootstrapStore
 	DomainStore      *store.PostgresDomainStore
 	CellStore        *store.PostgresCellStore
@@ -138,7 +139,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 // cfg.CryptoMode(); fail-loud refusal already fired upstream in
 // config.Validate() so reaching this function with the wrong combination
 // is a programming error, not a runtime error.
-func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.Transit, logger *slog.Logger) (routes.SecretStore, error) {
+func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.Transit, logger *slog.Logger) (secrets.SecretStore, error) {
 	var encKey []byte
 	if encKeyHex != "" {
 		var err error

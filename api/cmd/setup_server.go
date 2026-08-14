@@ -100,7 +100,7 @@ func buildServerConfig(
 		// checker (EC-03 absorption — 404 byte-identical between cross-
 		// tenant attempts + nonexistent projects; CWE-204 defense). The
 		// PostgresProjectStore.GetByName signature already matches
-		// routes.SecretProjectChecker — no adapter needed.
+		// secrets.SecretProjectChecker — no adapter needed.
 		SecretProjectChecker: dbDeps.ProjectStore,
 		DomainHandler:        domainHandler,
 		BuildHandler:         buildHandler,

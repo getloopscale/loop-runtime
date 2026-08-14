@@ -10,33 +10,33 @@
 //
 // Coverage map (ADR D3 + EC-5 absorption + concurrency invariants):
 //
-//   rawSecretReader:
-//     - HappyPath / composite key scope (T2.1 + ADR D2)
-//     - NoRows → ErrSecretNotFound
-//     - NoRows through WRAPPED error (EC-8 absorption)
-//     - TransitDecryptError propagates wrapped
-//     - PoolNil / TransitNil → typed error
-//     - Concurrent_NoRace (32 goroutines, -race clean)
+//	rawSecretReader:
+//	  - HappyPath / composite key scope (T2.1 + ADR D2)
+//	  - NoRows → ErrSecretNotFound
+//	  - NoRows through WRAPPED error (EC-8 absorption)
+//	  - TransitDecryptError propagates wrapped
+//	  - PoolNil / TransitNil → typed error
+//	  - Concurrent_NoRace (32 goroutines, -race clean)
 //
-//   inlineTenantBinding:
-//     - HappyPath
-//     - TenantNotFound translation
-//     - CellStoreNil → typed error
+//	inlineTenantBinding:
+//	  - HappyPath
+//	  - TenantNotFound translation
+//	  - CellStoreNil → typed error
 //
-//   brokerBearerMiddleware:
-//     - RejectsClientSuppliedXCellID (T1.1 RED — Phase 1)
-//     - NoBearer → 401
-//     - WrongBearer → 401 constant-time
-//     - EmptyExpectedToken → 500 (mis-config)
-//     - NoBearerNoCellID → 401_Not_500 (EC-5 absorption)
-//     - Concurrent_NoRace
+//	brokerBearerMiddleware:
+//	  - RejectsClientSuppliedXCellID (T1.1 RED — Phase 1)
+//	  - NoBearer → 401
+//	  - WrongBearer → 401 constant-time
+//	  - EmptyExpectedToken → 500 (mis-config)
+//	  - NoBearerNoCellID → 401_Not_500 (EC-5 absorption)
+//	  - Concurrent_NoRace
 //
-//   setupSecretFetchDeps:
-//     - AllDepsPresent → non-nil
-//     - PoolNil → nil
-//     - TransitNil → nil
-//     - CellStoreNil → nil
-//     - AuditNil → nil
+//	setupSecretFetchDeps:
+//	  - AllDepsPresent → non-nil
+//	  - PoolNil → nil
+//	  - TransitNil → nil
+//	  - CellStoreNil → nil
+//	  - AuditNil → nil
 package main
 
 import (
@@ -53,7 +53,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 )
 
 // --- fakes ---
@@ -258,7 +258,7 @@ func Test_rawSecretReader_ReadSecret_NoRows_ReturnsErrSecretNotFound(t *testing.
 	}
 	r := &rawSecretReader{pool: q, transit: &fakeTransitForRead{}}
 	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.ErrorIs(t, err, routes.ErrSecretNotFound)
+	require.ErrorIs(t, err, secrets.ErrSecretNotFound)
 }
 
 // EC-8 absorption: ErrNoRows survives intermediate fmt.Errorf wrap.
@@ -270,7 +270,7 @@ func Test_rawSecretReader_ReadSecret_NoRows_DetectedThroughWrappedError(t *testi
 	}
 	r := &rawSecretReader{pool: q, transit: &fakeTransitForRead{}}
 	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.ErrorIs(t, err, routes.ErrSecretNotFound,
+	require.ErrorIs(t, err, secrets.ErrSecretNotFound,
 		"EC-8: errors.Is must resolve ErrNoRows through one level of fmt.Errorf wrapping")
 }
 
@@ -339,12 +339,12 @@ func Test_inlineTenantBinding_GetTenantCellID_TenantNotFound_TranslatesToErrTena
 	// EC-8 follow-up absorption: parallel to setup_secret_fetch.go's pgx
 	// detection — when the underlying cell store returns pgx.ErrNoRows
 	// (even through one level of fmt.Errorf wrap, as PostgresCellStore
-	// does), inlineTenantBinding translates to routes.ErrTenantNotFound.
+	// does), inlineTenantBinding translates to secrets.ErrTenantNotFound.
 	b := &inlineTenantBinding{cellStore: &fakeCellQuerier{
 		err: fmt.Errorf("cell store: get tenant cell_id: %w", pgx.ErrNoRows),
 	}}
 	_, err := b.GetTenantCellID(context.Background(), "tn-x")
-	require.ErrorIs(t, err, routes.ErrTenantNotFound)
+	require.ErrorIs(t, err, secrets.ErrTenantNotFound)
 }
 
 func Test_inlineTenantBinding_GetTenantCellID_OtherErrorPropagatesWrapped(t *testing.T) {
@@ -356,7 +356,7 @@ func Test_inlineTenantBinding_GetTenantCellID_OtherErrorPropagatesWrapped(t *tes
 	}}
 	_, err := b.GetTenantCellID(context.Background(), "tn-1")
 	require.Error(t, err)
-	require.NotErrorIs(t, err, routes.ErrTenantNotFound)
+	require.NotErrorIs(t, err, secrets.ErrTenantNotFound)
 	require.Contains(t, err.Error(), "tenant binding")
 	require.Contains(t, err.Error(), "pg connection refused")
 }

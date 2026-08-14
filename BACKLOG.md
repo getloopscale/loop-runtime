@@ -2334,6 +2334,25 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 >
 > `secrets` é o melhor candidato por massa removida sobre risco: 3 arquivos, 879+ linhas, 6
 > referências num só arquivo. `billing`, `teams` e `preview` custam uma referência cada.
+
+> **`secrets` extraída em 2026-08-14 (fatia 28). O pai vai de 35 para 32 arquivos de produção, e o
+> subpacote leva 879+ linhas em 3 arquivos mais 4 de teste.**
+>
+> **E a sonda tinha subestimado — a correção importa mais que o número.** Ela disse 6 referências, num
+> consumidor. Real: `internal/server`, `cmd/` e `tests/unit`, achados iterando o build até fechar. Duas
+> razões, ambas de truncamento: o Go **não compila** pacote que depende de um que falhou, então os de
+> baixo ficam invisíveis enquanto o de cima está vermelho; e ele **para em 10 erros por pacote**, então
+> mesmo o pacote visível mostra só os dez primeiros. Uma execução única mede um piso, não o total.
+>
+> A cerca decidiu duas coisas que eu teria decidido errado. Primeiro, ela recusa **pai → família**
+> mesmo vindo de `_test.go`: eu havia qualificado o `cross_tenant_test.go` do pai para o subpacote,
+> achando que teste podia. Não pode, e a razão é o próprio item — um pai que depende de uma família
+> nunca esvazia. Os testes de isolamento de secrets foram para o subpacote. Segundo, os auxiliares de
+> teste vieram do leaf `routestest`, que existe para isso.
+>
+> As fixtures (`xtTenantA`, `tenantBContext`, …) foram **duplicadas**, não exportadas do pai. DRY rege
+> conhecimento, não linhas: são constantes de teste, e compartilhá-las recriaria a aresta proibida na
+> direção que parece inofensiva.
 >
 > A sonda roda no lugar e restaura por `mv`, com `git status --porcelain api/` verificando o retorno —
 > a cópia em scratch não serve, porque `go.work` aponta para módulos irmãos que a cópia não tem, e a

@@ -20,6 +20,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -73,7 +74,7 @@ type Config struct {
 	ArgoCallbackSecret string
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
-	SecretStore        routes.SecretStore
+	SecretStore        secrets.SecretStore
 	BootstrapStore     routes.BootstrapStore
 	BootstrapSecret    string                      // SEC-003: shared secret for /internal/bootstrap auth
 	CellPlacement      routes.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
@@ -126,7 +127,7 @@ type Config struct {
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
 	BuildStatsHandler *routes.BuildStatsHandler
-	SecretK8sSync     routes.SecretK8sSync
+	SecretK8sSync     secrets.SecretK8sSync
 	// SecretEnvLocker injects the environment lock into SecretHandler so
 	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.
 	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
@@ -134,7 +135,7 @@ type Config struct {
 	// using the same *adapters.PoolEnvironmentLocker injected into build
 	// orchestrators. nil-safe: when nil, SecretHandler falls back to
 	// the legacy non-locked path (test-friendly).
-	SecretEnvLocker routes.SecretEnvLocker
+	SecretEnvLocker secrets.SecretEnvLocker
 	// SecretProjectChecker injects the cross-tenant binding check (T1.2 of
 	// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk
 	// resolves the requested project's owning tenant via the tenant-scoped
@@ -143,7 +144,7 @@ type Config struct {
 	// existence-leak prevention / CWE-204 defense). nil-safe: when nil,
 	// Bulk skips the check (legacy/test path). Production wires the
 	// existing *store.PostgresProjectStore directly (signature matches).
-	SecretProjectChecker routes.SecretProjectChecker
+	SecretProjectChecker secrets.SecretProjectChecker
 	// SecretTransit injects the OpenBao transit encrypt path into the Bulk
 	// handler (T2.3+T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync
 	// v1.2). When wired, Bulk encrypts every entry.Value via Encrypt
@@ -153,7 +154,7 @@ type Config struct {
 	// prefix and passes through (no double-encrypt). Production wires
 	// the same *vault.TransitClient that the secret store dispatches
 	// through; nil disables the handler-layer encrypt (legacy AES path).
-	SecretTransit routes.SecretTransit
+	SecretTransit secrets.SecretTransit
 	// SecretFetchHandler exposes /internal/v1/secret-fetch/{tenant_id}/{name}
 	// for ESO ClusterSecretStore webhook backend to resolve secrets via
 	// loopzero-api (T4.1 of openbao-adoption v1.3). Wired by setup_secret_fetch.go

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package secrets
 
 // internal_secret_fetch.go — T4.1 of plan 2026-06-02-openbao-adoption v1.3.
 //

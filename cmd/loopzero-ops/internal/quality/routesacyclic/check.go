@@ -220,6 +220,19 @@ var allowed = map[string]map[string]bool{
 	// type. The compiler ranked it first. Mutation-verified: dropping httpio from
 	// this entry reports 5 sibling edges.
 	"domains": {"httpio": true, "routestest": true},
+	// The fifth family (slice-28, B-080), and the first chosen by measurement
+	// rather than by name-counting. The compiler probe put it at 6 broken
+	// references against billing/teams/preview at 1 each — but it removes 879+
+	// lines in 3 files, the largest mass per unit of risk on the board, and every
+	// one of those 6 lives in a single consumer.
+	//
+	// The probe under-reported, and the correction is worth keeping: Go stops
+	// compiling packages that depend on a failed one, and caps errors at 10 per
+	// package. The real consumer set was cmd/, internal/server/ and tests/unit/,
+	// found by iterating the build until it closed rather than by trusting one run.
+	//
+	// Serves /api/v1/secrets and the internal secret-fetch endpoint.
+	"secrets": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

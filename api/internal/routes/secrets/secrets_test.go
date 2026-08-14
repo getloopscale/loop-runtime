@@ -8,7 +8,7 @@
 // tests lock the invariant so a future refactor cannot silently re-introduce
 // the unlocked path.
 
-package routes
+package secrets
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 	"net/http"
 	"net/http/httptest"
@@ -84,7 +85,7 @@ func TestSecretSet_AcquiresEnvLock(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=proj-x", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Set(w, req)
@@ -121,7 +122,7 @@ func TestSecretSet_LegacyPathStillWorks_WhenLockerNil(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=proj-x", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	defer func() {
@@ -150,8 +151,8 @@ func TestSecretDelete_AcquiresEnvLock(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete,
 		"/api/v1/secrets/DB_PASS?project=proj-x&environment=production&app=api", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "DB_PASS")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "DB_PASS")
 	w := httptest.NewRecorder()
 
 	h.DeleteSecret(w, req)
@@ -186,8 +187,8 @@ func TestSecretDelete_RejectsEmptyEnvParam(t *testing.T) {
 	// NO environment query param — only project + app + name.
 	req := httptest.NewRequest(http.MethodDelete,
 		"/api/v1/secrets/DB_PASS?project=proj-x&app=api", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "DB_PASS")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "DB_PASS")
 	w := httptest.NewRecorder()
 
 	h.DeleteSecret(w, req)
@@ -241,7 +242,7 @@ func TestSecretBulk_ShapeInvariant(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -317,7 +318,7 @@ func TestSecretBulk_AuditLogPerKey(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -370,7 +371,7 @@ func TestSecretBulk_PlanLimit_402(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -414,7 +415,7 @@ func TestSecretBulk_DuplicateKeyInBatch_400(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -453,7 +454,7 @@ func TestSecretBulk_SizeCap(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{"project": "proj-x", "secrets": secrets})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -551,7 +552,7 @@ func TestSecretBulk_K8sSyncPerEnv(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -602,7 +603,7 @@ func TestSecretBulk_K8sSyncSkipsInvalidKey(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -649,7 +650,7 @@ func TestSecretBulk_PartialEnvFailureReturnsPerEnvStatus(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -723,7 +724,7 @@ func TestSecretBulk_StoreFailureContinuesRemainingKeys(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -832,7 +833,7 @@ func TestSecretBulk_CrossTenantBindingReturns404(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -893,7 +894,7 @@ func TestSecretBulk_NonexistentProjectReturns404(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -987,7 +988,7 @@ func TestSecretBulk_UsesTransitEncryptWhenWired(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -1029,7 +1030,7 @@ func TestSecretBulk_LegacyPathStillWorksWhenTransitNil(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -1073,7 +1074,7 @@ func TestSecretBulk_TransitFailureDoesNotPersistPlaintext(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Bulk(w, req)
@@ -1122,7 +1123,7 @@ func TestSecretBulk_CrossTenantAndNonexistentResponsesByteIdentical(t *testing.T
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		req = withAuth(req, defaultUserContext())
+		req = routestest.WithAuth(req, routestest.DefaultUserContext())
 		w := httptest.NewRecorder()
 		h.Bulk(w, req)
 		return w.Body.Bytes()
@@ -1152,7 +1153,7 @@ func TestSecretHandler_List_NonExistentProject_Returns404_RedTeam92(t *testing.T
 	store := &fakeSecretStoreT01{}
 	checker := &fakeProjectCheckerT12{
 		owned: map[string]string{
-			// tn-test-123 (= defaultUserContext()) owns only "owned-project".
+			// tn-test-123 (= routestest.DefaultUserContext()) owns only "owned-project".
 			// "nonexistent-zzz" is NOT in the map → checker returns nil.
 			"owned-project": "tn-test-123",
 		},
@@ -1162,7 +1163,7 @@ func TestSecretHandler_List_NonExistentProject_Returns404_RedTeam92(t *testing.T
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/secrets?env=production&project=nonexistent-zzz", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -1185,7 +1186,7 @@ func TestSecretHandler_List_ExistingProject_AllowsThrough_RedTeam92(t *testing.T
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/secrets?env=production&project=owned-project", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)

@@ -21,6 +21,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -375,7 +376,7 @@ func registerProtectedRoutes(
 
 	// Secret routes
 	if cfg.SecretStore != nil {
-		secrets := routes.NewSecretHandler(cfg.SecretStore)
+		secrets := secrets.NewSecretHandler(cfg.SecretStore)
 		if cfg.SecretK8sSync != nil {
 			secrets.SetK8sSync(cfg.SecretK8sSync)
 		}

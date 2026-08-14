@@ -30,7 +30,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
@@ -71,7 +71,7 @@ func TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T)
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := routes.NewSecretHandler(store)
+	handler := secrets.NewSecretHandler(store)
 	handler.SetLocker(locker)
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"postgres://x","environment":"production","app":"api"}`)
@@ -102,7 +102,7 @@ func TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T)
 
 func TestSprintA_SecretHandler_Set_SkipsEnvLock_WhenLockerNil(t *testing.T) {
 	store := &fakeSecretStore{}
-	handler := routes.NewSecretHandler(store)
+	handler := secrets.NewSecretHandler(store)
 	// NO handler.SetLocker call — locker stays nil.
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"postgres://x","environment":"production","app":"api"}`)
@@ -128,7 +128,7 @@ func TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := routes.NewSecretHandler(store)
+	handler := secrets.NewSecretHandler(store)
 	handler.SetLocker(locker)
 
 	// chi.URLParam needs router context.
@@ -163,7 +163,7 @@ func TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing
 func TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
 	// Compile-time: this MUST compile after T1.1.
 	cfg := server.Config{}
-	var _ routes.SecretEnvLocker = cfg.SecretEnvLocker // type assertion via assignment
+	var _ secrets.SecretEnvLocker = cfg.SecretEnvLocker // type assertion via assignment
 
 	// Runtime: zero-value is nil (nil-safe legacy default).
 	if cfg.SecretEnvLocker != nil {
@@ -179,7 +179,7 @@ func TestSprintA_SecretHandler_DeleteSecret_RejectsEmptyEnvParam(t *testing.T) {
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := routes.NewSecretHandler(store)
+	handler := secrets.NewSecretHandler(store)
 	handler.SetLocker(locker)
 
 	// NO environment query param — should be rejected BEFORE locker is called.
@@ -229,7 +229,7 @@ func TestSprintA_SecretSet_LockKeyMatchesEnvironmentLock(t *testing.T) {
 	sharedLocker := &recordingLocker{}
 
 	// Secret handler.
-	secretsHandler := routes.NewSecretHandler(&fakeSecretStore{})
+	secretsHandler := secrets.NewSecretHandler(&fakeSecretStore{})
 	secretsHandler.SetLocker(sharedLocker)
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"x","environment":"production","app":"api"}`)
