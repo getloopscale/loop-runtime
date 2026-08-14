@@ -13,6 +13,7 @@ import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
+	"github.com/getloopscale/loopzero/api/internal/routes/projects"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"net/http"
@@ -315,7 +316,7 @@ func registerProtectedRoutes(
 
 	// Project routes
 	if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
-		projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
+		projects := projects.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
 		if cfg.ProjectDeleter != nil {
 			projects.SetDeleter(cfg.ProjectDeleter)
 		}

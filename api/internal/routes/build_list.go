@@ -5,9 +5,10 @@ package routes
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -56,7 +57,7 @@ type BuildListHandler struct {
 	// disables the gate (legacy List path stays unchanged for callers
 	// constructed via NewBuildListHandler — the gate is a T2.2 addition
 	// only relevant for the new /build-envs endpoint).
-	projects ProjectStore
+	projects domain.ProjectStore
 }
 
 // NewBuildListHandler creates a new BuildListHandler (legacy constructor —
@@ -73,7 +74,7 @@ func NewBuildListHandler(builds BuildListStore) *BuildListHandler {
 // BEFORE the query is even attempted. Without the gate, a tenant could
 // probe `/api/v1/projects/<other-tenant-project>/build-envs` and
 // observe metadata (env names) that doesn't belong to them.
-func NewBuildListHandlerWithGate(builds BuildListStore, projects ProjectStore) *BuildListHandler {
+func NewBuildListHandlerWithGate(builds BuildListStore, projects domain.ProjectStore) *BuildListHandler {
 	return &BuildListHandler{builds: builds, projects: projects}
 }
 
@@ -122,8 +123,8 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	env := r.URL.Query().Get("env")
-	limit := parseIntParam(r.URL.Query().Get("limit"), 20)
-	offset := parseIntParam(r.URL.Query().Get("offset"), 0)
+	limit := pagination.ParseIntParam(r.URL.Query().Get("limit"), 20)
+	offset := pagination.ParseIntParam(r.URL.Query().Get("offset"), 0)
 
 	builds, total, err := h.builds.ListByProjectAndEnv(ctx, uc.TenantID, name, env, limit, offset)
 	if err != nil {
@@ -225,16 +226,4 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 		Envs:  envs,
 		Total: len(envs),
 	})
-}
-
-// parseIntParam parses a string to int, returning defaultVal on failure or empty string.
-func parseIntParam(s string, defaultVal int) int {
-	if s == "" {
-		return defaultVal
-	}
-	v, err := strconv.Atoi(s)
-	if err != nil {
-		return defaultVal
-	}
-	return v
 }

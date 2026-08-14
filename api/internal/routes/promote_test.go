@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,10 +30,10 @@ func (f *fakePromoteService) Promote(_ context.Context, _ PromoteInput) (*Promot
 // --- Fake PromoteProjectStore ---
 
 type fakePromoteProjectStore struct {
-	project *ProjectResult
+	project *domain.ProjectResult
 }
 
-func (f *fakePromoteProjectStore) GetByName(_ context.Context, _, name string) (*ProjectResult, error) {
+func (f *fakePromoteProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
@@ -44,7 +45,7 @@ func (f *fakePromoteProjectStore) GetByName(_ context.Context, _, name string) (
 func TestPromote_HappyPath(t *testing.T) {
 	// Arrange
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{
@@ -110,7 +111,7 @@ func TestPromote_ProjectNotFound(t *testing.T) {
 
 func TestPromote_MissingFromEnv(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{}
 	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
@@ -130,7 +131,7 @@ func TestPromote_MissingFromEnv(t *testing.T) {
 
 func TestPromote_MissingToEnv(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{}
 	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
@@ -150,7 +151,7 @@ func TestPromote_MissingToEnv(t *testing.T) {
 
 func TestPromote_SameEnvironment(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
 		err: loopzeroerrors.ErrSameEnvironment,
@@ -172,7 +173,7 @@ func TestPromote_SameEnvironment(t *testing.T) {
 
 func TestPromote_NoActiveRelease(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
 		err: loopzeroerrors.ErrNoActiveRelease,
@@ -209,7 +210,7 @@ func TestPromote_Unauthenticated(t *testing.T) {
 
 func TestPromote_LockTimeout(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
 		err: loopzeroerrors.ErrLockTimeout,
@@ -254,7 +255,7 @@ func TestPromote_LockTimeout(t *testing.T) {
 // and the user would have no actionable feedback.
 func TestPromote_SameEnvironment_SurfacesCode(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{err: loopzeroerrors.ErrSameEnvironment}
 	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
@@ -287,7 +288,7 @@ func TestPromote_SameEnvironment_SurfacesCode(t *testing.T) {
 // "wrong layer". This test pins the contract so the bug cannot return.
 func TestPromote_RegressionV10BodyShape(t *testing.T) {
 	projects := &fakePromoteProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{
@@ -369,7 +370,7 @@ func (f *fakePromoteEnsurer) EnsureEnvironment(_ context.Context, tenantID, proj
 // missing the tuple → AppProject destinations never extended → sync failed →
 // release SYNC_FAILED → CLI reports success + URL that 404s.
 func TestPromote_EnsuresTargetEnvironment_BeforeService_RedTeam158(t *testing.T) {
-	projects := &fakePromoteProjectStore{project: &ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
+	projects := &fakePromoteProjectStore{project: &domain.ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{
 			PromotionID:     "promo-158",
@@ -413,7 +414,7 @@ func TestPromote_EnsuresTargetEnvironment_BeforeService_RedTeam158(t *testing.T)
 // (would create a release row without a viable target env → the exact
 // SYNC_FAILED trap #158 fixes).
 func TestPromote_EnsureEnvironment_Failure_ShortCircuits_RedTeam158(t *testing.T) {
-	projects := &fakePromoteProjectStore{project: &ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
+	projects := &fakePromoteProjectStore{project: &domain.ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{PromotionID: "should-not-reach"},
 	}

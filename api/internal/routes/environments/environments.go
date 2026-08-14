@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package environments serves the environment endpoints under
+// /api/v1/environments: the per-project deploy targets and their readiness.
+//
+// Seventeenth family to leave the flat `routes` package (B-080, slice-36),
+// extracted alongside `projects` because the two shared four helpers and a pile
+// of type aliases — separating one without the other would have moved the
+// coupling rather than removed it.
+package environments
 
 import (
 	"context"
@@ -9,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -350,8 +358,8 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 		// "Showing N of M" affordance.
 		// T2.3 pagination.
 		envsTotal := len(envs)
-		envsLimit, envsOffset := parsePaginationParams(r)
-		envsFrom, envsTo := sliceWindow(envsTotal, envsLimit, envsOffset)
+		envsLimit, envsOffset := pagination.ParsePaginationParams(r)
+		envsFrom, envsTo := pagination.SliceWindow(envsTotal, envsLimit, envsOffset)
 		httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"environments": envs[envsFrom:envsTo], // legacy (back-compat) — paginated post-T2.3
 			"permanent":    permanent,
@@ -362,27 +370,12 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	envsTotal := len(envs)
-	envsLimit, envsOffset := parsePaginationParams(r)
-	envsFrom, envsTo := sliceWindow(envsTotal, envsLimit, envsOffset)
+	envsLimit, envsOffset := pagination.ParsePaginationParams(r)
+	envsFrom, envsTo := pagination.SliceWindow(envsTotal, envsLimit, envsOffset)
 	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"environments": envs[envsFrom:envsTo],
 		"total":        envsTotal,
 	})
-}
-
-// sliceWindow clamps offset/limit against total and returns the [from, to)
-// window. Both indices are safe for slice indexing on a slice of length
-// total. Plan 2026-06-08-dashboard-screens-review-fixes T2.3 helper.
-func sliceWindow(total, paginationLimit, paginationOffset int) (int, int) {
-	from := paginationOffset
-	if from > total {
-		from = total
-	}
-	to := from + paginationLimit
-	if to > total {
-		to = total
-	}
-	return from, to
 }
 
 // Create handles POST /api/v1/environments.
@@ -404,7 +397,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate name format (RFC 1123: lowercase alphanumeric + hyphens, no leading hyphen)
-	if !rfc1123.MatchString(req.Name) {
+	if !pagination.IsRFC1123Name(req.Name) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}

@@ -9,6 +9,7 @@ package unit
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"io"
 	"log/slog"
@@ -48,7 +49,7 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
-		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
+		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),

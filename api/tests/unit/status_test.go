@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,11 +19,11 @@ import (
 
 // fakeStatusProjectStore implements routes.StatusProjectStore for testing.
 type fakeStatusProjectStore struct {
-	project *routes.ProjectResult
+	project *domain.ProjectResult
 	err     error
 }
 
-func (f *fakeStatusProjectStore) GetByName(ctx context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+func (f *fakeStatusProjectStore) GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -87,7 +88,7 @@ func TestStatusRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name}/status → 200 with valid project and env", func(t *testing.T) {
 		// Arrange
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{
 			builds: []routes.StatusBuild{
@@ -212,7 +213,7 @@ func TestStatusRoute(t *testing.T) {
 		// Behavioral contract is now "fallback to production, never
 		// 400 on omitted env".
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{
 			builds: []routes.StatusBuild{
@@ -249,7 +250,7 @@ func TestStatusRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name}/status → 200 with null builds and releases when none exist", func(t *testing.T) {
 		// Arrange
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{builds: []routes.StatusBuild{}}
 		releases := &fakeStatusReleaseStore{release: nil}
@@ -307,7 +308,7 @@ func TestStatusRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name}/status → filters builds by environment", func(t *testing.T) {
 		// Arrange — builds for different environments
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{
 			builds: []routes.StatusBuild{
@@ -365,7 +366,7 @@ func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	t.Parallel()
 
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{
+		project: &domain.ProjectResult{
 			ID:     "proj-123",
 			Name:   "teste",
 			TeamID: "tn-acme",

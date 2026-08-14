@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
@@ -56,16 +57,16 @@ func (s *stubMemberStore) GetMemberships(_ context.Context, _ string) ([]middlew
 // stubProjectStore implements routes.ProjectStore.
 type stubProjectStore struct{}
 
-func (s *stubProjectStore) CreateProject(_ context.Context, _ routes.CreateProjectInput) (routes.ProjectResult, error) {
-	return routes.ProjectResult{}, nil
+func (s *stubProjectStore) CreateProject(_ context.Context, _ domain.CreateProjectInput) (domain.ProjectResult, error) {
+	return domain.ProjectResult{}, nil
 }
-func (s *stubProjectStore) GetByName(_ context.Context, _, _ string) (*routes.ProjectResult, error) {
-	return &routes.ProjectResult{Name: "test"}, nil
+func (s *stubProjectStore) GetByName(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+	return &domain.ProjectResult{Name: "test"}, nil
 }
-func (s *stubProjectStore) ListByTenant(_ context.Context, _ string) ([]routes.ProjectResult, error) {
+func (s *stubProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.ProjectResult, error) {
 	return nil, nil
 }
-func (s *stubProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]routes.ProjectSummary, error) {
+func (s *stubProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]domain.ProjectSummary, error) {
 	return nil, nil
 }
 func (s *stubProjectStore) DeleteProject(_ context.Context, _, _ string) error { return nil }
@@ -73,7 +74,7 @@ func (s *stubProjectStore) DeleteProject(_ context.Context, _, _ string) error {
 // stubTenantCRManager implements routes.TenantCRManager.
 type stubTenantCRManager struct{}
 
-func (s *stubTenantCRManager) EnsureTenant(_ context.Context, _ string, _ routes.TenantCRSpec) error {
+func (s *stubTenantCRManager) EnsureTenant(_ context.Context, _ string, _ domain.TenantCRSpec) error {
 	return nil
 }
 
@@ -188,7 +189,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	rollbackHandler := routes.NewRollbackHandler(nil, nil, "test.local")
 	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := routes.NewBuildListHandler(nil)
-	environmentHandler := routes.NewEnvironmentHandler(nil)
+	environmentHandler := environments.NewEnvironmentHandler(nil)
 	teamHandler := teams.NewTeamHandler(nil)
 	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
 	repositoryHandler := repositories.NewRepositoryHandler(nil)

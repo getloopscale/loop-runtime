@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package environments
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,7 +59,7 @@ func TestEnvs_List_HappyPath(t *testing.T) {
 	h := NewEnvironmentHandler(mgr)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -67,7 +68,10 @@ func TestEnvs_List_HappyPath(t *testing.T) {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp struct { Environments []EnvironmentEntry `json:"environments"`; Total int `json:"total"` }
+	var resp struct {
+		Environments []EnvironmentEntry `json:"environments"`
+		Total        int                `json:"total"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -96,7 +100,7 @@ func TestEnvs_Create_HappyPath(t *testing.T) {
 	// projectStore-bypass path so the handler doesn't try DB lookup.
 	body := `{"name":"staging","project":"web"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -111,7 +115,7 @@ func TestEnvs_Create_InvalidName(t *testing.T) {
 
 	body := `{"name":"BAD NAME"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -126,7 +130,7 @@ func TestEnvs_Create_ReservedName(t *testing.T) {
 
 	body := `{"name":"kube-system"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -146,8 +150,8 @@ func TestEnvs_Get_Found(t *testing.T) {
 	h := NewEnvironmentHandler(mgr)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments/production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "production")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "production")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -162,8 +166,8 @@ func TestEnvs_Get_NotFound(t *testing.T) {
 	h := NewEnvironmentHandler(mgr)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments/nonexistent", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -177,8 +181,8 @@ func TestEnvs_Delete_HappyPath(t *testing.T) {
 	h := NewEnvironmentHandler(&fakeEnvMgr{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/staging", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "staging")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -192,8 +196,8 @@ func TestEnvs_Delete_CannotDeleteProduction(t *testing.T) {
 	h := NewEnvironmentHandler(&fakeEnvMgr{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "production")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "production")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -231,7 +235,7 @@ func TestEnvs_List_KPIEnrichment_PopulatesFields(t *testing.T) {
 	h := NewEnvironmentHandler(mgr).WithKPILookup(lookup)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -240,7 +244,10 @@ func TestEnvs_List_KPIEnrichment_PopulatesFields(t *testing.T) {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp struct { Environments []EnvironmentEntry `json:"environments"`; Total int `json:"total"` }
+	var resp struct {
+		Environments []EnvironmentEntry `json:"environments"`
+		Total        int                `json:"total"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -279,7 +286,7 @@ func TestEnvs_List_KPIEnrichment_LookupErrorIsTolerant(t *testing.T) {
 	h := NewEnvironmentHandler(mgr).WithKPILookup(lookup)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -287,7 +294,10 @@ func TestEnvs_List_KPIEnrichment_LookupErrorIsTolerant(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200 (tolerant), got %d body=%s", w.Code, w.Body.String())
 	}
-	var resp struct { Environments []EnvironmentEntry `json:"environments"`; Total int `json:"total"` }
+	var resp struct {
+		Environments []EnvironmentEntry `json:"environments"`
+		Total        int                `json:"total"`
+	}
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if len(resp.Environments) != 1 {
 		t.Fatalf("want 1 env, got %d", len(resp.Environments))
@@ -307,7 +317,7 @@ func TestEnvs_List_NoKPILookup_BackwardCompatible(t *testing.T) {
 	h := NewEnvironmentHandler(mgr) // no WithKPILookup
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -365,7 +375,7 @@ func TestEnvs_Create_Returns400WhenProjectMissing_M2(t *testing.T) {
 	body := `{"name":"staging"}` // no project
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -385,7 +395,7 @@ func TestEnvs_Create_Returns404WhenProjectNotInTenant_M2(t *testing.T) {
 	body := `{"name":"staging","project":"nonexistent"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -413,8 +423,8 @@ func TestEnvs_Create_RejectsProjectFromOtherTenant_M2(t *testing.T) {
 	body := `{"name":"staging","project":"web"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
 		bytes.NewBufferString(body))
-	// defaultUserContext() → tenant_id = "tn-test-123"
-	req = withAuth(req, defaultUserContext())
+	// routestest.DefaultUserContext() → tenant_id = "tn-test-123"
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -438,7 +448,7 @@ func TestEnvs_Create_ResponseIncludesProject_M2(t *testing.T) {
 	body := `{"name":"staging","project":"web"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -459,7 +469,7 @@ func TestEnvs_Create_DuplicateReturns409_M2(t *testing.T) {
 	body := `{"name":"staging","project":"web"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -476,7 +486,7 @@ func TestEnvs_Create_ProductionRejectedCrossProject_M2(t *testing.T) {
 	body := `{"name":"production","project":"web"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -493,8 +503,8 @@ func TestEnvs_Delete_PropagatesProjectQuery_M2(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete,
 		"/api/v1/environments/staging?project=web", nil)
-	req = withChiParam(req, "name", "staging")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -514,8 +524,8 @@ func TestEnvs_Delete_WarnsOnActiveRelease_M2(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete,
 		"/api/v1/environments/staging?project=web", nil)
-	req = withChiParam(req, "name", "staging")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -544,8 +554,8 @@ func TestEnvs_Delete_WarningRule3Compliant(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete,
 		"/api/v1/environments/staging?project=web", nil)
-	req = withChiParam(req, "name", "staging")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -584,8 +594,8 @@ func TestEnvs_Get_PropagatesProjectQuery_M2(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/environments/staging?project=web", nil)
-	req = withChiParam(req, "name", "staging")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -595,7 +605,6 @@ func TestEnvs_Get_PropagatesProjectQuery_M2(t *testing.T) {
 	}
 }
 
-
 // TestEnvs_List_ReturnsProjectInEachEntry_M2 — T4.4. Asserts the
 // `project` field is propagated from the EnvironmentEntry struct
 // (populated by T2.1 TenantCRManager.ListEnvironments) into the JSON
@@ -604,15 +613,15 @@ func TestEnvs_Get_PropagatesProjectQuery_M2(t *testing.T) {
 func TestEnvs_List_ReturnsProjectInEachEntry_M2(t *testing.T) {
 	mgr := &fakeEnvMgr{
 		envs: []EnvironmentEntry{
-			{Name: "production", Status: "active"},                   // legacy (no project)
-			{Name: "staging", Status: "active", Project: "web"},      // M2 canonical
-			{Name: "staging", Status: "active", Project: "api"},      // same name, different project
+			{Name: "production", Status: "active"},              // legacy (no project)
+			{Name: "staging", Status: "active", Project: "web"}, // M2 canonical
+			{Name: "staging", Status: "active", Project: "api"}, // same name, different project
 		},
 	}
 	h := NewEnvironmentHandler(mgr)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -663,7 +672,7 @@ func TestEnvs_List_FilterByProjectHonored_RedTeam48(t *testing.T) {
 	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments?project=web", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -695,7 +704,7 @@ func TestEnvs_List_FilterByCrossTenantProjectRejected_RedTeam48(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/environments?project=someone-elses-project", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -722,7 +731,7 @@ func TestEnvs_List_NoFilter_LegacyShapeUnchanged_RedTeam48(t *testing.T) {
 	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 

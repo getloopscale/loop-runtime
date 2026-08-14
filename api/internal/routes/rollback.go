@@ -1,11 +1,12 @@
 package routes
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -45,7 +46,7 @@ type RollbackOutput struct {
 
 // RollbackProjectStore abstracts project lookup for rollback (DIP).
 type RollbackProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
 }
 
 // RollbackReleaseLookup resolves the canonical release for a build.
@@ -80,11 +81,11 @@ type rollbackRequest struct {
 
 // rollbackResponse is the JSON response for a successful rollback.
 type rollbackResponse struct {
-	Status              string `json:"status"`
-	RolledBackRelease   string `json:"rolled_back_release"`
-	ReactivatedRelease  string `json:"reactivated_release"`
-	Environment         string `json:"environment"`
-	URL                 string `json:"url"`
+	Status             string `json:"status"`
+	RolledBackRelease  string `json:"rolled_back_release"`
+	ReactivatedRelease string `json:"reactivated_release"`
+	Environment        string `json:"environment"`
+	URL                string `json:"url"`
 }
 
 // RollbackHandler provides HTTP handlers for rollback operations.

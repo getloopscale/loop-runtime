@@ -4,12 +4,11 @@
 package unit
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // project_store_test.go — RESHAPED in T2.1 #4 of plan
@@ -43,7 +42,7 @@ import (
 
 // TestPostgresProjectStoreImplementsInterface — compile-time guard.
 func TestPostgresProjectStoreImplementsInterface(t *testing.T) {
-	var _ routes.ProjectStore = (*store.PostgresProjectStore)(nil)
+	var _ domain.ProjectStore = (*store.PostgresProjectStore)(nil)
 }
 
 func TestGenerateProjectID(t *testing.T) {

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 	"os"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
@@ -28,7 +28,7 @@ import (
 type DatabaseDeps struct {
 	DBAdapter    *db.PgxAdapter
 	MemberStore  middleware.MembershipStore
-	ProjectStore routes.ProjectStore
+	ProjectStore domain.ProjectStore
 	DBHealth     health.DBHealthChecker
 	PlanLimiter  *enforcement.PlanLimiter
 

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 	"net/http"
 	"time"
@@ -82,7 +83,7 @@ type OrchestratorDeps struct {
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *routes.BuildListHandler
 	BuildStatsHandler   *routes.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
-	ProjectDeleter      routes.ProjectDeleter
+	ProjectDeleter      domain.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 }
 

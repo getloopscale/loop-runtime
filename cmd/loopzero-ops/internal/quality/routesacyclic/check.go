@@ -130,6 +130,7 @@ const routesImportPrefix = routesPkgPath + "/"
 var leaves = map[string]bool{
 	"httpio":     true, // response writers (slice-5)
 	"routestest": true, // test request helpers (slice-8)
+	"pagination": true, // request-parsing helpers (slice-36)
 }
 
 // testOnlyLeaves are leaves that only a _test.go may reach.
@@ -273,6 +274,24 @@ var allowed = map[string]map[string]bool{
 	// No routestest edge: its tests build their own requests, because an admin
 	// route is X-Service-Auth only and the shared helpers mint a USER identity.
 	"admin": {"httpio": true},
+
+	// A THIRD leaf (slice-36, B-080). Request-parsing helpers: pagination
+	// parameters, an int query param with a default, the offset+limit window, and
+	// the RFC 1123 name predicate.
+	//
+	// It was already this leaf in everything but location — `pagination.go` served
+	// no route and declared only helpers. What made it move was the split of
+	// `projects` and `environments`: three helpers declared in ONE of them and
+	// reached by the OTHER, plus one declared in the parent and reached by a
+	// family. The fence refuses both, so a leaf became the only legal home.
+	"pagination": {},
+
+	// The sixteenth and seventeenth families (slice-36, B-080). Serve
+	// /api/v1/projects and /api/v1/environments. They moved together because they
+	// shared four helpers and a pile of type aliases: splitting one without the
+	// other would have relocated the coupling instead of removing it.
+	"projects":     {"httpio": true, "routestest": true, "pagination": true},
+	"environments": {"httpio": true, "routestest": true, "pagination": true},
 }
 
 // Config drives the gate.

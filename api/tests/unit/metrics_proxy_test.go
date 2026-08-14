@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -94,7 +95,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		// with `tenant_id="acme"` and `project="my-app"` labels — derived from
 		// session ctx (makeAuthCtx tenant=acme), NOT from URL.
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
 		promClient := &fakePrometheusQueryClient{
 			data: []routes.PrometheusDataPoint{{Timestamp: 1000, Value: 0.99}},
@@ -122,7 +123,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		// Arrange: Prometheus client returns context.DeadlineExceeded
 		// simulating 5s timeout. Handler must return HTTP 504 NOT silent 0.
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
 		promClient := &fakePrometheusQueryClient{err: context.DeadlineExceeded}
 		handler := routes.NewMetricsProxyHandler(projects, promClient)
@@ -153,7 +154,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		// result. Handler must return 200 OK with status=collecting + hint —
 		// UI consumer renders "Coletando dados..." NOT empty chart.
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
 		promClient := &fakePrometheusQueryClient{data: []routes.PrometheusDataPoint{}}
 		handler := routes.NewMetricsProxyHandler(projects, promClient)
@@ -186,7 +187,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 	t.Run("Happy path: data returned with status=ok", func(t *testing.T) {
 		// Arrange: Prometheus returns 3 datapoints.
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
 		promClient := &fakePrometheusQueryClient{
 			data: []routes.PrometheusDataPoint{
@@ -233,7 +234,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		// did not configure LOOPZERO_PROMETHEUS_ADDRESS). Handler must surface
 		// 503 honestly — NOT silently return empty data.
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
 		handler := routes.NewMetricsProxyHandler(projects, nil)
 		req := newMetricsRequest("my-app", "signal=uptime_24h&range=7d", true)
@@ -271,7 +272,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 
 	t.Run("Defaults: missing signal/range fall back to uptime_24h/7d", func(t *testing.T) {
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
 		promClient := &fakePrometheusQueryClient{
 			data: []routes.PrometheusDataPoint{{Timestamp: 1000, Value: 0.99}},

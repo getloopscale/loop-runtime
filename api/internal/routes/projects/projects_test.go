@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package projects
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,7 +29,7 @@ func TestProjects_Create_CapExceeded_Returns422(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(`{"name":"api"}`))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Create(w, req)
 
@@ -45,30 +47,30 @@ func TestProjects_Create_CapExceeded_Returns422(t *testing.T) {
 // --- Fake ProjectStore ---
 
 type fakeProjectStore struct {
-	projects       []ProjectResult
+	projects       []domain.ProjectResult
 	projectSummary []ProjectSummary // T2.1: per-project summary fixture
-	project        *ProjectResult
-	createResult   ProjectResult
+	project        *domain.ProjectResult
+	createResult   domain.ProjectResult
 	createErr      error
 	deleteErr      error
 	summaryErr     error
 }
 
-func (f *fakeProjectStore) CreateProject(_ context.Context, input CreateProjectInput) (ProjectResult, error) {
+func (f *fakeProjectStore) CreateProject(_ context.Context, input CreateProjectInput) (domain.ProjectResult, error) {
 	if f.createErr != nil {
-		return ProjectResult{}, f.createErr
+		return domain.ProjectResult{}, f.createErr
 	}
 	return f.createResult, nil
 }
 
-func (f *fakeProjectStore) GetByName(_ context.Context, _, name string) (*ProjectResult, error) {
+func (f *fakeProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
 	return nil, nil
 }
 
-func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]ProjectResult, error) {
+func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.ProjectResult, error) {
 	return f.projects, nil
 }
 
@@ -143,7 +145,7 @@ func (f *fakeProjectDeleter) Delete(_ context.Context, _ ProjectDeleteInput) (*P
 
 func TestProjects_List_HappyPath(t *testing.T) {
 	store := &fakeProjectStore{
-		projects: []ProjectResult{
+		projects: []domain.ProjectResult{
 			{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 			{ID: "p2", Name: "my-web", TeamID: "tn-test-123"},
 		},
@@ -151,7 +153,7 @@ func TestProjects_List_HappyPath(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -163,8 +165,8 @@ func TestProjects_List_HappyPath(t *testing.T) {
 	// T2.3 pagination scaffold: response now carries `total` alongside
 	// `projects` — typed struct keeps the assertion focused.
 	var resp struct {
-		Projects []ProjectResult `json:"projects"`
-		Total    int             `json:"total"`
+		Projects []domain.ProjectResult `json:"projects"`
+		Total    int                    `json:"total"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -200,7 +202,7 @@ func TestProjects_List_SummaryShape(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -255,7 +257,7 @@ func TestProjects_List_PaginationLimitHonored(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects?limit=2", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -280,7 +282,7 @@ func TestProjects_List_PaginationOffsetHonored(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects?offset=2&limit=2", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -302,7 +304,7 @@ func TestProjects_List_PaginationLimitCappedAt100(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects?limit=1000", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -327,7 +329,7 @@ func TestProjects_List_PaginationDefaultsBackwardsCompat(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -354,7 +356,7 @@ func TestProjects_List_SummaryErrorReturns500(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -396,8 +398,8 @@ func TestProjects_Get_Found(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -406,7 +408,7 @@ func TestProjects_Get_Found(t *testing.T) {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp ProjectResult
+	var resp domain.ProjectResult
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -420,8 +422,8 @@ func TestProjects_Get_NotFound(t *testing.T) {
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -437,7 +439,7 @@ func TestProjects_Get_NotFound(t *testing.T) {
 // MUST be the value passed to the Tenant CR.
 func TestProjects_Create_ResolvedPlanTierFlowsToTenantCR(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "api", TeamID: "tn-paying"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-paying"},
 	}
 	crMgr := &fakeTenantCRMgr{}
 	h := NewProjectHandler(store, crMgr)
@@ -447,7 +449,7 @@ func TestProjects_Create_ResolvedPlanTierFlowsToTenantCR(t *testing.T) {
 	body := `{"name":"api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -466,7 +468,7 @@ func TestProjects_Create_ResolvedPlanTierFlowsToTenantCR(t *testing.T) {
 // must surface as canonical Pro at the CR boundary.
 func TestProjects_Create_LegacyGrowthMapsToProInCR(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "api", TeamID: "tn-legacy"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-legacy"},
 	}
 	crMgr := &fakeTenantCRMgr{}
 	h := NewProjectHandler(store, crMgr)
@@ -475,7 +477,7 @@ func TestProjects_Create_LegacyGrowthMapsToProInCR(t *testing.T) {
 	body := `{"name":"api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -494,7 +496,7 @@ func TestProjects_Create_LegacyGrowthMapsToProInCR(t *testing.T) {
 // surface 503 instead of silently downgrading to Starter.
 func TestProjects_Create_UnknownPlanReturns503(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
 	}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 	h.SetPlanTierStore(fakePlanTierStore{plan: "platinum-vip"})
@@ -502,7 +504,7 @@ func TestProjects_Create_UnknownPlanReturns503(t *testing.T) {
 	body := `{"name":"api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -520,7 +522,7 @@ func TestProjects_Create_UnknownPlanReturns503(t *testing.T) {
 // production wire-up in main.go IS the closure of the bug.
 func TestProjects_Create_NoStoreFallsBackToStarter(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
 	}
 	crMgr := &fakeTenantCRMgr{}
 	h := NewProjectHandler(store, crMgr) // no SetPlanTierStore call
@@ -528,7 +530,7 @@ func TestProjects_Create_NoStoreFallsBackToStarter(t *testing.T) {
 	body := `{"name":"api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects",
 		bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -544,7 +546,7 @@ func TestProjects_Create_NoStoreFallsBackToStarter(t *testing.T) {
 
 func TestProjects_Create_HappyPath(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{
+		createResult: domain.ProjectResult{
 			ID:     "p1",
 			Name:   "my-api",
 			TeamID: "tn-test-123",
@@ -554,7 +556,7 @@ func TestProjects_Create_HappyPath(t *testing.T) {
 
 	body := `{"name":"my-api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -563,7 +565,7 @@ func TestProjects_Create_HappyPath(t *testing.T) {
 		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp ProjectResult
+	var resp domain.ProjectResult
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -580,7 +582,7 @@ func TestProjects_Create_AlreadyExists(t *testing.T) {
 
 	body := `{"name":"my-api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -595,7 +597,7 @@ func TestProjects_Create_InvalidName(t *testing.T) {
 
 	body := `{"name":"UPPERCASE-BAD"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -609,7 +611,7 @@ func TestProjects_Create_InvalidJSON(t *testing.T) {
 	h := NewProjectHandler(&fakeProjectStore{}, &fakeTenantCRMgr{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString("not-json"))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -621,7 +623,7 @@ func TestProjects_Create_InvalidJSON(t *testing.T) {
 
 func TestProjects_Delete_Success(t *testing.T) {
 	store := &fakeProjectStore{
-		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	deleter := &fakeProjectDeleter{
 		result: &ProjectDeleteOutput{
@@ -634,8 +636,8 @@ func TestProjects_Delete_Success(t *testing.T) {
 	h.SetDeleter(deleter)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -651,8 +653,8 @@ func TestProjects_Delete_NotFound(t *testing.T) {
 	h.SetDeleter(&fakeProjectDeleter{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/nonexistent", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)
@@ -668,8 +670,8 @@ func TestProjects_Delete_NoDeleter(t *testing.T) {
 	// deleter not set
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Delete(w, req)

@@ -9,6 +9,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
@@ -56,9 +57,9 @@ type Config struct {
 	HealthServices []health.ServiceHealthChecker
 	TokenValidator middleware.TokenValidator
 	MemberStore    middleware.MembershipStore
-	ProjectStore   routes.ProjectStore
-	TenantCRMgr    routes.TenantCRManager
-	ProjectDeleter routes.ProjectDeleter
+	ProjectStore   domain.ProjectStore
+	TenantCRMgr    domain.TenantCRManager
+	ProjectDeleter domain.ProjectDeleter
 	// PlanTierStore wires the canonical tier resolver (subscriptions.plan
 	// active row → PlanTier enum per ADR D4 of plan
 	// 2026-06-15-code-review-49-findings-remediation). nil-safe — when
@@ -171,7 +172,7 @@ type Config struct {
 	// in api/cmd/. nil-safe: when nil, route is not registered (LIVE 404 ⇒
 	// ESO retries with backoff — safer than registering a broken handler).
 	SecretFetchHandler http.HandlerFunc
-	EnvironmentHandler *routes.EnvironmentHandler
+	EnvironmentHandler *environments.EnvironmentHandler
 	TeamHandler        *teams.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by store.PostgresTeamStore.

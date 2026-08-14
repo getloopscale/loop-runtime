@@ -4,9 +4,9 @@
 package audit
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"

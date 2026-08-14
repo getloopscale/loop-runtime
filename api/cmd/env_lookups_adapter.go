@@ -5,8 +5,7 @@ package main
 
 import (
 	"context"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
 // envProjectLookupAdapter wires the canonical routes.ProjectStore
@@ -28,7 +27,7 @@ import (
 // (handler shipped with the EnvProjectLookup interface, no production
 // implementation injected). This adapter closes that gap.
 type envProjectLookupAdapter struct {
-	store routes.ProjectStore
+	store domain.ProjectStore
 }
 
 // ProjectExistsForTenant returns true when (tenant_id, projectName) tuple

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,7 +87,7 @@ func TestRollback_BuildIDSugar_ResolvesToReleaseID(t *testing.T) {
 	}
 	lookup := &fakeReleaseLookup{tenantID: "tn-1", buildID: "build-xyz", releaseID: "rel-canon-42"}
 	projects := &fakeRollbackProjectStore{
-		project: &ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
+		project: &domain.ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
 	}
 	srv := newRollbackTestServer(svc, lookup, projects)
 	defer srv.Close()
@@ -113,7 +114,7 @@ func TestRollback_BuildIDSugar_UnknownBuild_Returns400(t *testing.T) {
 	svc := &fakeRollbackService{}
 	lookup := &fakeReleaseLookup{tenantID: "tn-1", buildID: "build-known"}
 	projects := &fakeRollbackProjectStore{
-		project: &ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
+		project: &domain.ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
 	}
 	srv := newRollbackTestServer(svc, lookup, projects)
 	defer srv.Close()
@@ -134,7 +135,7 @@ func TestRollback_BuildIDSugar_UnknownBuild_Returns400(t *testing.T) {
 func TestRollback_BuildIDSugar_NoLookupConfigured_Returns500(t *testing.T) {
 	svc := &fakeRollbackService{}
 	projects := &fakeRollbackProjectStore{
-		project: &ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
+		project: &domain.ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
 	}
 	srv := newRollbackTestServer(svc, nil, projects)
 	defer srv.Close()
@@ -165,7 +166,7 @@ func TestRollback_CanonicalToReleaseID_StillWorks(t *testing.T) {
 		captured: &captured,
 	}
 	projects := &fakeRollbackProjectStore{
-		project: &ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
+		project: &domain.ProjectResult{ID: "proj-1", Name: "proj-1", TeamID: "tn-1"},
 	}
 	// No lookup needed when to_release_id is supplied directly.
 	srv := newRollbackTestServer(svc, nil, projects)

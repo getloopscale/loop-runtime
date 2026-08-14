@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
@@ -49,7 +50,7 @@ type PromoteOutput struct {
 
 // PromoteProjectStore abstracts project lookup for promote (DIP).
 type PromoteProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
 }
 
 // promoteRequest is the JSON body for POST /api/v1/projects/{name}/promote.

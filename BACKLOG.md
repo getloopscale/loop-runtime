@@ -2591,6 +2591,35 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > **Escopo do diff limpo pela primeira vez em cinco fatias**, depois de eu parar de rodar `gofmt -w`
 > sobre diretório e passar a formatar só os arquivos tocados.
 
+> **Fatia 36 — `projects`, `environments` e um TERCEIRO leaf (2026-08-14).** Pai de 20 para **17**;
+> **20 subpacotes**, cerca verde, lint zero. **17 de 18 famílias.**
+>
+> As duas famílias tiveram de sair juntas: compartilhavam quatro helpers e uma pilha de aliases, e
+> separar uma sem a outra teria **relocado** o acoplamento em vez de o remover.
+>
+> **E foi a extração que forçou o leaf `pagination`** — o que eu tinha adiado por não ser família.
+> `pagination.go` já era leaf em tudo menos na localização: servia rota nenhuma e declarava só
+> helpers. O que o moveu foi o compilador: três helpers declarados numa das duas famílias e alcançados
+> pela outra, mais um declarado no pai e alcançado por uma família. A cerca recusa os dois sentidos,
+> então leaf virou a única casa legal.
+>
+> Duas decisões de desenho que a medição forçou:
+>
+> **`EnvironmentEnsurer` passou a ser declarada pelo consumidor.** É um tipo do pai (`builds.go`) que
+> `projects` precisava — acoplamento família↔família de verdade. Interface em Go é estrutural, então o
+> consumidor nomear exatamente o método que chama é idiomático **e** é a forma DIP que
+> `rules/architecture.md` pede. A dependência real é de **um método**, não de um pacote.
+>
+> **`rfc1123` foi para o leaf sem virar `pkg/naming.ValidateKubernetesName`.** O compartilhado existe
+> e é parecido — e não é o mesmo: devolve `error`, checa vazio e comprimento separadamente, e mudaria
+> o que estes handlers rejeitam e o que dizem ao rejeitar. Consolidar é mudança de validação; esta
+> fatia é mudança de lugar.
+>
+> **Três defeitos no meu ferramental, todos da mesma família:** o regex de qualificação reescreveu o
+> **lado esquerdo** de declaração de alias, o **nome de campo** de struct, e a **chave** em literal de
+> struct — em cada caso transformando `X` em `domain.X` onde `X` era o nome e não o tipo. Consertados
+> com padrões ancorados que exigem a forma `nome tipo` ou `nome = tipo`.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

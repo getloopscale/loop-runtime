@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -146,7 +147,7 @@ func TestStatusSSE_MissingEnvReturns400(t *testing.T) {
 	// Per memory feedback_j19_runtime_logs_stream_missing_env_param: env
 	// query parameter is mandatory; missing → 400 invalid_field.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{}
 	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
@@ -168,7 +169,7 @@ func TestStatusSSE_500WhenFlusherUnavailable(t *testing.T) {
 
 	// EC-5 absorption: ResponseWriter without Flusher → 500 graceful, NOT panic.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{}
 	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
@@ -199,7 +200,7 @@ func TestStatusSSE_EmitsSignalChangedEvents(t *testing.T) {
 	// Happy path: 3 signal.changed events flow through handler with proper
 	// SSE wire format per memory feedback_eventsource_named_events_vs_onmessage.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{
 		events: []sse.SSEEvent{
@@ -245,7 +246,7 @@ func TestStatusSSE_FiltersNonSignalEvents(t *testing.T) {
 	// filter event_type=signal.changed before emit so consumers don't see
 	// foreign events.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{
 		events: []sse.SSEEvent{
@@ -285,7 +286,7 @@ func TestStatusSSE_LastEventIDDedup(t *testing.T) {
 	// [10, 11, 12]; handler must skip id=10 (already delivered) + emit
 	// id=11, id=12 only.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{
 		events: []sse.SSEEvent{

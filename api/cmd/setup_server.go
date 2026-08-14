@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"os"
@@ -127,7 +128,7 @@ func buildServerConfig(
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler: routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr).
+		EnvironmentHandler: environments.NewEnvironmentHandler(k8sDeps.TenantCRMgr).
 			WithKPILookup(&envKPILookupPgx{pool: dbAdapter.Pool}).
 			WithPreviewSlotLookup(&previewSlotLookupAdapter{store: stores.PreviewSlotStore}).
 			// M2 v1.2 T4.1 (LIVE-caught wiring gap 2026-06-08): the
@@ -632,7 +633,7 @@ type envKPILookupPgx struct {
 	}
 }
 
-func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]routes.EnvKPI, error) {
+func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]environments.EnvKPI, error) {
 	const q = `
 		SELECT DISTINCT ON (environment)
 			environment, git_commit, created_at
@@ -645,14 +646,14 @@ func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID strin
 		return nil, fmt.Errorf("envKPILookupPgx: %w", err)
 	}
 	defer rows.Close()
-	result := make(map[string]routes.EnvKPI)
+	result := make(map[string]environments.EnvKPI)
 	for rows.Next() {
 		var env, sha string
 		var createdAt time.Time
 		if scanErr := rows.Scan(&env, &sha, &createdAt); scanErr != nil {
 			return nil, fmt.Errorf("envKPILookupPgx scan: %w", scanErr)
 		}
-		result[env] = routes.EnvKPI{
+		result[env] = environments.EnvKPI{
 			LastDeploy:    createdAt.UTC().Format(time.RFC3339),
 			LastDeploySha: sha,
 		}
@@ -673,14 +674,14 @@ type previewSlotLookupAdapter struct {
 	store *store.PostgresPreviewSlotStore
 }
 
-func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]routes.PreviewSlotInfo, error) {
+func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]environments.PreviewSlotInfo, error) {
 	slots, err := a.store.ListByTenant(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]routes.PreviewSlotInfo, 0, len(slots))
+	out := make([]environments.PreviewSlotInfo, 0, len(slots))
 	for _, slot := range slots {
-		out = append(out, routes.PreviewSlotInfo{
+		out = append(out, environments.PreviewSlotInfo{
 			ProjectID:       slot.ProjectID,
 			ActivePRNumber:  slot.ActivePRNumber,
 			ActiveBranch:    slot.ActiveBranch,

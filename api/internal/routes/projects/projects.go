@@ -1,18 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package projects serves the project endpoints under /api/v1/projects: create,
+// list, read and delete, plus the tenant-CR side effects a project carries.
+//
+// Sixteenth family to leave the flat `routes` package (B-080, slice-36).
+//
+// Its extraction is the one that forced the `pagination` leaf. Three helpers it
+// shared with `environments` — and one it took from the parent — had been
+// invisible while everything lived in one package; splitting the two families
+// apart is what made the compiler refuse them.
+package projects
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,35 +35,44 @@ import (
 var (
 	// ErrProjectExists is an alias for domain.ErrProjectExists (backward compatibility).
 	ErrProjectExists = domain.ErrProjectExists
-
-	// rfc1123 validates Kubernetes-compatible names: lowercase, alphanumeric, hyphens, max 63 chars.
-	rfc1123 = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	CreateProjectInput = domain.CreateProjectInput
-	ProjectResult      = domain.ProjectResult
-	ProjectSummary     = domain.ProjectSummary
-	ProjectStore       = domain.ProjectStore
-	TenantCRSpec       = domain.TenantCRSpec
-	TenantCRManager    = domain.TenantCRManager
+	CreateProjectInput  = domain.CreateProjectInput
+	ProjectResult       = domain.ProjectResult
+	ProjectSummary      = domain.ProjectSummary
+	ProjectStore        = domain.ProjectStore
+	TenantCRSpec        = domain.TenantCRSpec
+	TenantCRManager     = domain.TenantCRManager
 	ProjectDeleteInput  = domain.ProjectDeleteInput
 	ProjectDeleteOutput = domain.ProjectDeleteOutput
 	ProjectDeleter      = domain.ProjectDeleter
 )
 
+// EnvironmentEnsurer creates the environment a new project needs.
+//
+// Declared HERE rather than imported from the family that also declares it: a Go
+// interface is structural, so the consumer naming exactly the method it calls is
+// both idiomatic and the DIP shape the architecture rules ask for. Importing the
+// sibling's copy would be the family→family edge the routes fence forbids, and
+// the fence is right — the dependency the handler actually has is on ONE method,
+// not on a package (B-080, slice-36).
+type EnvironmentEnsurer interface {
+	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
+}
+
 // ProjectHandler provides HTTP handlers for project operations.
 type ProjectHandler struct {
-	store         ProjectStore
+	store         domain.ProjectStore
 	crMgr         TenantCRManager
 	deleter       ProjectDeleter
-	envEnsurer    EnvironmentEnsurer        // T4.1: auto-create production env on POST /api/v1/projects
-	planTierStore pkgdomain.PlanTierStore   // T2.3.b: resolves tenant's canonical plan instead of hardcoded "starter"
+	envEnsurer    EnvironmentEnsurer      // T4.1: auto-create production env on POST /api/v1/projects
+	planTierStore pkgdomain.PlanTierStore // T2.3.b: resolves tenant's canonical plan instead of hardcoded "starter"
 }
 
 // NewProjectHandler creates a new ProjectHandler.
-func NewProjectHandler(store ProjectStore, crMgr TenantCRManager) *ProjectHandler {
+func NewProjectHandler(store domain.ProjectStore, crMgr TenantCRManager) *ProjectHandler {
 	return &ProjectHandler{store: store, crMgr: crMgr}
 }
 
@@ -126,31 +144,12 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	// `total` field carries the UNPAGINATED count so the dashboard can
 	// render "Showing N of M" + "Load more" affordances (J-17 lesson).
 	total := len(projects)
-	limit, offset := parsePaginationParams(r)
-	from, to := sliceWindow(total, limit, offset)
+	limit, offset := pagination.ParsePaginationParams(r)
+	from, to := pagination.SliceWindow(total, limit, offset)
 	httpio.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"projects": projects[from:to],
 		"total":    total,
 	})
-}
-
-// parsePaginationParams reads ?limit= and ?offset= query params with
-// defaults (limit=50, offset=0) and cap (limit ≤ 100). Negative or
-// non-numeric values fall back to defaults. Per plan
-// 2026-06-08-dashboard-screens-review-fixes T2.3 + ADR D8.
-func parsePaginationParams(r *http.Request) (limit, offset int) {
-	limit = parseIntParam(r.URL.Query().Get("limit"), 50)
-	offset = parseIntParam(r.URL.Query().Get("offset"), 0)
-	if limit < 0 {
-		limit = 50
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	return limit, offset
 }
 
 // Get handles GET /api/v1/projects/{name}.
@@ -199,7 +198,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // createProjectRequest is the JSON request body for POST /api/v1/projects.
 type createProjectRequest struct {
-	Name string                 `json:"name"`
+	Name string                   `json:"name"`
 	Apps []map[string]interface{} `json:"apps,omitempty"`
 }
 
@@ -221,7 +220,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate name (RFC 1123)
-	if !rfc1123.MatchString(req.Name) {
+	if !pagination.IsRFC1123Name(req.Name) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("project name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}
@@ -469,4 +468,3 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 
 	httpio.WriteJSON(w, http.StatusOK, result)
 }
-

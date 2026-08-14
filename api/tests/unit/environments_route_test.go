@@ -8,26 +8,26 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // fakeEnvironmentManager implements routes.EnvironmentManager for testing.
 type fakeEnvironmentManager struct {
-	environments []routes.EnvironmentEntry
-	detail       *routes.EnvironmentDetail
+	environments []domain.EnvironmentEntry
+	detail       *domain.EnvironmentDetail
 	listErr      error
 	addErr       error
 	removeErr    error
 	getErr       error
 }
 
-func (f *fakeEnvironmentManager) ListEnvironments(_ context.Context, _ string) ([]routes.EnvironmentEntry, error) {
+func (f *fakeEnvironmentManager) ListEnvironments(_ context.Context, _ string) ([]domain.EnvironmentEntry, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -43,7 +43,7 @@ func (f *fakeEnvironmentManager) RemoveEnvironment(_ context.Context, _, _, _ st
 	return f.removeErr
 }
 
-func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _ string) (*routes.EnvironmentDetail, error) {
+func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _ string) (*domain.EnvironmentDetail, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -53,12 +53,12 @@ func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _
 func TestEnvironmentListRoute(t *testing.T) {
 	t.Run("GET /api/v1/environments → 200 with environments list", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
-			environments: []routes.EnvironmentEntry{
+			environments: []domain.EnvironmentEntry{
 				{Name: "production", Status: "active"},
 				{Name: "staging", Status: "active"},
 			},
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -83,9 +83,9 @@ func TestEnvironmentListRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/environments → 200 with empty list", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
-			environments: []routes.EnvironmentEntry{},
+			environments: []domain.EnvironmentEntry{},
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -110,7 +110,7 @@ func TestEnvironmentListRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/environments → 401 without auth", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
 		rec := httptest.NewRecorder()
@@ -126,7 +126,7 @@ func TestEnvironmentListRoute(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
 			listErr: errors.New("connection failed"),
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -143,7 +143,7 @@ func TestEnvironmentListRoute(t *testing.T) {
 func TestEnvironmentCreateRoute(t *testing.T) {
 	t.Run("POST /api/v1/environments → 201 with valid name", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"staging","project":"web"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -166,7 +166,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with invalid name (uppercase)", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"My-Env"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -183,7 +183,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with leading hyphen", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"-staging"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -200,7 +200,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with empty name", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":""}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -217,7 +217,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with reserved name default", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"default"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -240,7 +240,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with reserved name kube-system", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"kube-system"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -257,7 +257,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with reserved name loopzero-system", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"loopzero-system"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -274,7 +274,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with reserved name argocd", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"argocd"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -291,7 +291,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with reserved name monitoring", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"monitoring"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -308,7 +308,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 401 without auth", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"staging"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body))
@@ -324,7 +324,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 
 	t.Run("POST /api/v1/environments → 400 with invalid JSON", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{invalid`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -343,7 +343,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
 			addErr: errors.New("k8s unavailable"),
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		body := `{"name":"staging","project":"web"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
@@ -362,15 +362,15 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 func TestEnvironmentGetRoute(t *testing.T) {
 	t.Run("GET /api/v1/environments/{name} → 200 with detail", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
-			detail: &routes.EnvironmentDetail{
+			detail: &domain.EnvironmentDetail{
 				Name:   "production",
 				Status: "active",
-				Projects: []routes.EnvProjectInfo{
+				Projects: []domain.EnvProjectInfo{
 					{Name: "my-api", ActiveRelease: "rel-001", URL: "https://my-api.example.com"},
 				},
 			},
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments/production", nil)
 		rctx := chi.NewRouteContext()
@@ -400,7 +400,7 @@ func TestEnvironmentGetRoute(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
 			detail: nil,
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments/nonexistent", nil)
 		rctx := chi.NewRouteContext()
@@ -425,7 +425,7 @@ func TestEnvironmentGetRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/environments/{name} → 401 without auth", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments/production", nil)
 		rctx := chi.NewRouteContext()
@@ -444,7 +444,7 @@ func TestEnvironmentGetRoute(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
 			getErr: errors.New("k8s unavailable"),
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/environments/production", nil)
 		rctx := chi.NewRouteContext()
@@ -465,7 +465,7 @@ func TestEnvironmentGetRoute(t *testing.T) {
 func TestEnvironmentDeleteRoute(t *testing.T) {
 	t.Run("DELETE /api/v1/environments/{name} → 200 on success", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/staging", nil)
 		rctx := chi.NewRouteContext()
@@ -490,7 +490,7 @@ func TestEnvironmentDeleteRoute(t *testing.T) {
 
 	t.Run("DELETE /api/v1/environments/{name} → 403 when deleting production", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/production", nil)
 		rctx := chi.NewRouteContext()
@@ -515,7 +515,7 @@ func TestEnvironmentDeleteRoute(t *testing.T) {
 
 	t.Run("DELETE /api/v1/environments/{name} → 401 without auth", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/staging", nil)
 		rctx := chi.NewRouteContext()
@@ -534,7 +534,7 @@ func TestEnvironmentDeleteRoute(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
 			removeErr: errors.New("k8s unavailable"),
 		}
-		handler := routes.NewEnvironmentHandler(mgr)
+		handler := environments.NewEnvironmentHandler(mgr)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/staging", nil)
 		rctx := chi.NewRouteContext()

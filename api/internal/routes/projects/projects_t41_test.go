@@ -5,12 +5,14 @@
 // Pins the Vercel-style "every project has production from day 1" contract
 // (ADR D4) and the production-env-auto-create error path semantics.
 
-package routes
+package projects
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -47,7 +49,7 @@ func (f *fakeEnvEnsurer) EnsureEnvironment(_ context.Context, tenantID, project,
 // `loopzero-<tenant>-<project>-production` automatically.
 func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	envEnsurer := &fakeEnvEnsurer{}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
@@ -55,7 +57,7 @@ func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 
 	body := `{"name":"my-api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -96,7 +98,7 @@ func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 // status code contract; the rollback contract is tracked separately.
 func TestProjectCreate_PropagatesEnvEnsurerFailure(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	envEnsurer := &fakeEnvEnsurer{returnErr: errors.New("k8s API server unavailable")}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
@@ -104,7 +106,7 @@ func TestProjectCreate_PropagatesEnvEnsurerFailure(t *testing.T) {
 
 	body := `{"name":"my-api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -127,14 +129,14 @@ func TestProjectCreate_PropagatesEnvEnsurerFailure(t *testing.T) {
 // mandatory.
 func TestProjectCreate_BackwardCompatNoEnsurer(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		createResult: domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 	// envEnsurer intentionally unset.
 
 	body := `{"name":"my-api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)

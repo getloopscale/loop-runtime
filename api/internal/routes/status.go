@@ -4,8 +4,9 @@
 package routes
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -72,18 +73,18 @@ type StatusRelease struct {
 
 // StatusProjectStore abstracts project lookup for the status handler (DIP).
 type StatusProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
 }
 
 // StatusHandler provides HTTP handlers for project status operations.
 type StatusHandler struct {
-	projects        StatusProjectStore
-	builds          StatusBuildStore
-	releases        StatusReleaseStore
-	baseDomain      string
-	publicDomain    string // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
-	grafanaBaseURL  string // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
-	planTierStore   pkgdomain.PlanTierStore // #142 / #123 canonical — resolves tenant tier for dashboard pre-Apply slider ceiling (qa-dogfood-cleanup-2026-06-21). When nil, plan_tier echoes "starter" (matches pre-#142 fallback in ProjectHandler.Create + ScaleHandler.resolveTier).
+	projects       StatusProjectStore
+	builds         StatusBuildStore
+	releases       StatusReleaseStore
+	baseDomain     string
+	publicDomain   string                  // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
+	grafanaBaseURL string                  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
+	planTierStore  pkgdomain.PlanTierStore // #142 / #123 canonical — resolves tenant tier for dashboard pre-Apply slider ceiling (qa-dogfood-cleanup-2026-06-21). When nil, plan_tier echoes "starter" (matches pre-#142 fallback in ProjectHandler.Create + ScaleHandler.resolveTier).
 }
 
 // NewStatusHandler creates a new StatusHandler.
@@ -186,8 +187,8 @@ type statusResponse struct {
 	// SUCCEEDED build so the CLI/dashboard can surface a hint instead of
 	// rendering the misleading empty-state view. Omitempty preserves the
 	// legacy shape when no other envs have releases.
-	OtherEnvsWithReleases []envHintResponse `json:"other_envs_with_releases,omitempty"`
-	Scaling       *scalingStatusResponse `json:"scaling,omitempty"`
+	OtherEnvsWithReleases []envHintResponse      `json:"other_envs_with_releases,omitempty"`
+	Scaling               *scalingStatusResponse `json:"scaling,omitempty"`
 	// Rollout is the progressive-delivery state for the active release.
 	// Optional/null when:
 	//   - release used legacy Deployment manifests (D8 fallback path), OR

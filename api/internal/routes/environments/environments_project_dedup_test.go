@@ -20,10 +20,11 @@
 // not run still carries ONLY the empty-Project row and would get an empty
 // list — a working environment made invisible, strictly worse than a
 // duplicate. Both properties must hold at once, so both are asserted here.
-package routes
+package environments
 
 import (
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,7 +43,7 @@ func listEnvNamesFiltered(t *testing.T, envs []EnvironmentEntry, projectFilter s
 		url += "?project=" + projectFilter
 	}
 	req := httptest.NewRequest(http.MethodGet, url, nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -159,7 +160,7 @@ func TestEnvListProjectFilter_PrefersProjectScopedRow(t *testing.T) {
 
 	h := NewEnvironmentHandler(&fakeEnvMgr{envs: envs})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments?project=web", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
