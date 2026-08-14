@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-08-14
+
 ### Added
 - Um teste que **deriva do código** os caminhos que o serviço pede ao cofre e exige que a permissão versionada os cubra — inclusive a capacidade que só uma execução real revelou ser necessária. Comparar a permissão com o runbook pegaria este caso e manteria o mesmo modo de falha: os dois são texto escrito à mão. (B-072)
 - Um teste que verifica a colocação dessa validação **renderizando** os dois conjuntos de configuração, em vez de conferir a presença do arquivo. A verificação por nome de arquivo já falhou uma vez: o chart publicado recebeu o template sem a chave que o habilita, e o detector de divergência ficou verde porque compara nomes. O teste também exige que os dois charts concordem no padrão. (B-077)
@@ -19,11 +21,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Gate `helmfile-context-parity`: uma task que invoca um helmfile com `--kube-context` divergente do `kubeContext` que o helmfile declara agora reprova — e também quando o helmfile exige uma variável de ambiente que a invocação não exporta (uma variável do Task **não** é variável de ambiente; a distinção quebrou uma instalação antes de virar asserção). Medido contra helmfile 1.1.6: a flag sobrescreve o declarado **em silêncio**, sem erro nem aviso — a propriedade não é obtenível do helmfile, e por isso vem de um gate. (B-044)
 - Os quatro helmfiles de plano (core, build, cell, secrets) declaram o cluster onde instalam. Um `helmfile sync` sem `--kube-context` deixa de aterrissar no contexto ativo do kubectl. O de célula usa `requiredEnv` porque serve N células — amarrar valor fixo reproduziria o defeito do B-026. (B-044)
 - `charts/loopzero-admission-policies` passa a incluir — e a **renderizar** — `vap-tenant-cr-shape.yaml` e `cosign-version-config.yaml`. Copiar o arquivo não bastava: o guarda lê `vaps.tenantCrShape`, uma chave que o chart publicado não definia, então o template ficava inerte enquanto o gate de divergência (que compara nomes de arquivo) ficava verde. A cerca `failurePolicy: Fail` sobre CRs Tenant existia no chart de desenvolvimento e não no publicado — uma fronteira de segurança que só vale em dev é pior que nenhuma, porque faz o teste de dev passar. (B-046)
-
-### Removed
-- `infra/quality/environment-lock-baseline.txt`. Era a baseline de um gate `environment-lock` que **não existe** no inventário, com **zero** leitores em qualquer linguagem — e já desatualizada: 2 dos seus 21 caminhos deixaram de existir quando `routes/tenants` virou subpacote. Um baseline que ninguém lê e que já está errado não é um contrato; parece um. (B-045)
-- `task k3d:secrets:bootstrap-in-core` e seu irmão `k3d:secrets:status-in-core`. Eles instalavam o OpenBao dentro do cluster de gerenciamento — o que a regra da plataforma proíbe **em todo tier**, por ser violação de topologia e não atalho. O `desc` da própria task declarava o custo: *"CON: loses isolation between control plane and secret storage"*. O caminho canônico (`task k3d:secrets:create` + `task k3d:secrets:bootstrap`) não muda. (B-047)
-- `conditions.UpdateStatusWithRetry` e o contador `loopzero_status_update_conflicts_total`. O helper mandava, pelo próprio doc-comment, que **toda** escrita de status dos operators migrasse para ele — citando um `ADR-0024` que **não existe** — e o que ele implementa é exatamente o `Get → mutate → Status().Update` que o contrato de escritor único **proíbe**. Eram 165 linhas com **zero** chamadores de produção e uma métrica que só incrementava em teste: dívida que parecia cobertura, porque quem encontrasse o helper concluiria que o problema de conflito estava tratado. Escolhida a regra que tem reunião ratificada. (B-055)
+- **loopzero:** backlog B-035 — o segredo que verifica pagamentos não existia no ambiente
+- **loopzero:** backlog B-036 — os seeds de cobrança pulam sem credencial e a corrente reporta verde
+- **loopzero:** backlog B-037 — o painel monta os dois segredos de cobrança como opcionais
+- **loopzero:** backlog B-038 — nenhuma camada de cobrança pode degradar em silêncio
+- **`GET /api/v1/health/ready`** — the ecosystem-canonical readiness name, sharing the handler behind `/api/v1/health/deep`. `deep` describes how the check is implemented; `ready` describes what it answers, which is the question an orchestrator asks before routing traffic. `deep` is unchanged: deployment probes point at it, and removal is a separate item after a deprecation deadline. (B-123)
+- Uma verificação automática lista todas as portas que o servidor abre e reprova qualquer uma que
+  apareça sem estar declarada. Antes a regra era o contrário — uma porta nova ficava aberta até
+  alguém lembrar de fechá-la —, e o resultado foi que dezessete portas se tornaram alcançáveis da
+  internet sem que ninguém tivesse decidido isso, entre elas o painel que entrega as aplicações e o
+  serviço de login sem criptografia. Cada porta agora tem uma classe e um responsável escritos, e só
+  a classe que declara um consumidor externo permanece aberta (BACKLOG.md B-028)
+- Um comando que verifica, contra o ambiente no ar, que nada da plataforma responde a quem não se
+  identificou. Ele testa cada endereço público sem credencial nenhuma e exige recusa — e cobra
+  resposta justamente das duas páginas que o padrão de login obriga a serem abertas. A lista do que
+  testar sai do inventário de endereços já existente, então um endereço novo entra na verificação
+  sozinho; se alguém declarar um e não disser como testá-lo, isso é reprovado em vez de passar
+  despercebido. Uma resposta "não encontrado" não conta como recusa: esconder não é negar, e aceitá-la
+  faria endereço quebrado passar por endereço protegido (BACKLOG.md B-020)
+- Uma verificação automática que prova que a renomeação dos clusters mudou apenas nomes de cluster, e
+  nunca uma linha em que a mesma palavra significava outra coisa — como as 70 linhas em que "vault"
+  nomeia o software de segredos, não o cluster (BACKLOG.md B-001)
+- Registro de manutenção deste repositório (`BACKLOG.md`), com cinco itens abertos, e o plano aprovado
+  para renomear os dois clusters cujo nome descreve algo diferente do que eles são: o que hospeda o
+  produto inteiro e o que guarda os segredos (BACKLOG.md B-001, B-002, B-005)
+- Índice de topologia Helm gerado (`docs/architecture/helm-topology.md`): responde "em qual
+  cluster este chart roda?" sem abrir os helmfiles. 44 charts, com a natureza (nosso ou
+  configuração de terceiro), a versão fixada e — quando existe — a condição que faz a instalação
+  valer só em alguns ambientes. É derivado dos helmfiles, que são a fonte executável: uma segunda
+  cópia escrita à mão divergiria, que é o problema que os dois charts duplicados já causam. O gate
+  `helm-topology-index` reprova quando o índice sai de sincronia
+- Guardrail de deleção no cluster de gestão: `Application`, `AppProject`, `Tenant`,
+  `Environment`, `ClusterCredential` — **e as definições que os descrevem** — passam a ser
+  protegidos contra remoção por identidade não autorizada. Remover qualquer um deles aciona
+  a cascata que apaga também a infraestrutura que ele gerencia; remover a *definição* apaga
+  todas as instâncias de uma vez, sem que nenhuma regra por instância seja consultada — foi
+  essa a sequência do incidente que motivou a proteção. Até agora o cluster de gestão não
+  tinha **nenhuma** política de admissão: o chart que as carrega só era instalado no cluster
+  de execução, enquanto esses recursos vivem na gestão. Entra em modo de **aviso**, com
+  alerta e runbook; o bloqueio efetivo é uma etapa separada, condicionada a uma janela de
+  observação provar que nenhuma identidade legítima é afetada — ligar o bloqueio com o mapa
+  de identidades incompleto é como cinco namespaces ficaram presos em `Terminating` no
+  passado. Desligável por configuração, sem reconstruir imagem
+  (`.claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md`,
+  `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` D4)
+- Gate `vap-delete-guardrail`: reprova se a política sumir, se o interruptor for desligado
+  na gestão, se a lista de identidades isentas encolher a ponto de inverter a regra (uma
+  lista vazia faria a política negar **toda** remoção, inclusive a dos operadores), se as
+  isenções do coletor de lixo do Kubernetes forem removidas, ou se os dois charts que
+  carregam a política divergirem entre si
+- Gate `proxy-exposure` + hook de entrega. Todo `reverse_proxy` do edge
+  (`infra/local/Caddyfile`) precisa de uma linha em `infra/quality/proxy-exposure.txt` dizendo o que
+  deixa passar, classificada como `filtered` / `internal` / `reviewed` **com justificativa**. Um proxy
+  herda o contrato de resposta do upstream, então o que chega ao browser é invisível neste repositório
+  até alguém escrever — foi assim que `app-dev.loopzero.example/sessions/*` passou a devolver a sessão Ory
+  inteira, incluindo `devices[].ip_address` e `recovery_addresses`, que nenhum cliente lê (medido
+  contra `loopzero-cloud/dashboard/src`). 26 proxies declarados, 21ms. Um proxy novo sem linha reprova;
+  uma linha sem proxy correspondente também. O gate não prova que uma resposta é segura — só um probe
+  LIVE prova — mas garante que a superfície inteira foi classificada por alguém (#267)
+- Hook `PreToolUse` `delivery-gate.sh`: intercepta `git push` e bloqueia (exit 2) se
+  `task quality:gates` reprovar. Existe porque o `pre-push` do git não é versionado — só existe onde
+  alguém rodou `install-git-hooks.sh`, então não valia para o agente nem para um clone novo. Escopo
+  estreito (só `git push`, pula `--dry-run`) e sem flag de bypass (#267)
+- Gate `workflow-hygiene`: reprova antes do merge qualquer action de terceiro sem SHA fixo e qualquer
+  `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
+- Guard de wiring de gates: todo gate registrado passa a exigir wiring em `taskfiles/quality.yml` ou
+  entrada num ledger com motivo. Um gate novo não nasce mais órfão em silêncio (#255)
+- 10 gates que existiam sem nunca rodar passam a ser executados por `task quality:gates` —
+  `agpl-isolation`, `contract-consumers`, `decisions-deletion`, `no-migrate-force`, `no-shell-wrap`,
+  `orphan-alerts`, `test-deletion`, `test-pyramid`, `test-targets`, `taskfile-interface`. Os 13 restantes do backlog do
+  #255 ficaram de fora com motivo medido e registrado por gate: 9 reprovam com achado real, 2
+  estouram 25s, 3 passam vacuamente (`cli-bundle-size` guarda `cli/dist`, que saiu no M2) (#255)
+- `docs/README.md`: índice de `docs/`, separando explicitamente referência viva de trilha de
+  auditoria datada — os 250 arquivos não tinham ponto de entrada (docs-audit 2026-07-30)
 
 ### Changed
 - A terceira família de rotas — a de repositórios conectados — saiu do pacote plano de 41 arquivos. Ela não referencia o pacote pai, nem é referenciada por ele: a única menção era um comentário. O critério publicado para as próximas famílias mudou junto — a contagem por nome de símbolo, que eu usara para escolher, confundia método homônimo de outro tipo com dependência, e a medição que vale passou a ser mover a família de verdade numa cópia e ler o que cada lado deixa de compilar. (B-080)
@@ -56,48 +126,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - As duas primeiras famílias de rotas viraram subpacotes: `/api/v1/version` e `/v1/version` moram em `api/internal/routes/version` e `/api/v1/tenants` em `api/internal/routes/tenants`, com seus testes junto. Um quarto escritor de resposta que se escondia num arquivo de domínio foi para o `httpio`, e os quatro helpers de teste que trinta arquivos compartilham ganharam um pacote próprio — sem ele, nenhuma família com autenticação consegue sair. Nenhum caminho, método ou nome de rota mudou — só o import. A cerca escrita antes do movimento passou a vigiar algo de verdade: antes do registro ela recusou a família com *"uma família de handlers que ninguém decidiu"*. (B-041)
 - Três pacotes saíram do kernel compartilhado para dentro de quem os usa: as 329 linhas de eventos SSE foram para `api/internal/events`, e as 2.234 de `shellrun` + `pulumi` para `cmd/loopzero-ops/internal/`. Eram API pública de um repositório que ninguém importa de fora, com **um único módulo consumidor cada**. Sob `internal/`, o compilador passa a recusar o import de qualquer outro módulo — não é convenção nem gate, é erro de compilação, e há um teste que o prova compilando a violação. O kernel encolheu 2.563 linhas. (B-043)
 - O allowlist do gate `helm-drift` passa a ser chaveado por **arquivo**, não por par de charts. Um par aprovado aprovava toda divergência que aquele par viesse a ter, inclusive arquivos que ninguém tinha visto — foi assim que a ValidatingAdmissionPolicy e dois ExternalSecret sumiram do chart publicado sob um gate que leva a fronteira no nome. O gate voltou ao verde e foi **ligado** em `taskfiles/quality.yml`. (B-046)
-
-### Fixed
-- A gravação de estado do controller de times passou a acontecer sem uma trava de versão obsoleta. Um instantâneo tirado cedo demais fazia a gravação carregar a versão lida **antes** de oito passos de rede, o que a rejeitaria na primeira reconciliação de todo time. (B-085)
-- O controller de times persistia o estado de um jeito que **perdia escrita em silêncio**: relia o registro só para obter uma versão que não fosse conflitar, devolvia o estado antigo por cima e gravava. Uma alteração feita por outro ator no intervalo desaparecia — sem conflito e sem registro. Passou a gravar por aplicação de diferença, que não carrega versão e só menciona o que mudou; agora uma alteração concorrente sobrevive. (B-085)
-- O resumo de prontidão desse controller era uma cópia à mão do auxiliar compartilhado, e **descartava o erro de gravação**. Passou a usar o auxiliar, que registra a falha. Quatro dos seis controllers já o usavam; a cópia local divergia dele em silêncio. (B-085)
-- A permissão versionada que autoriza criar a chave de cifragem de um time passou a descrever o que o serviço realmente pede. Ela existia no runbook de operação e no script de desenvolvimento, e **não** no pacote. **Isto ainda não conserta a falha para o usuário:** a permissão é carregada por uma identidade que o serviço não usa, e o script de instalação a sobrescreve minutos depois de aplicá-la. O que falta está registrado. (B-072)
-- Uma negação de permissão deixou de ser relatada como se fosse instabilidade de rede. São fatos opostos para quem está de plantão: a negação é permanente e exige ação, a instabilidade passa sozinha — e quem visse "falhou" ficava esperando por algo que nunca ia melhorar. (B-072)
-- A mesma validação passou a isentar o operator de times, que **escreve** esses registros — inclusive a escrita que remove o finalizador e conclui uma exclusão. Sem a isenção, um registro cuja forma armazenada não satisfizesse a regra ficaria **impossível de excluir**: o finalizador nunca sairia. A política irmã, no mesmo pacote, já isentava o operator; as duas listas divergiam, e agora um teste as compara. (B-077)
-- A validação que protege a forma dos registros de time estava instalada nos clusters de execução — que não guardam nenhum desses registros — e **ausente** no cluster de gerenciamento, onde todos eles vivem. Ela é a única defesa da plataforma sobre os próprios registros, porque não há webhook de admissão atrás dela; até agora, não podia disparar em lugar nenhum. Passou para onde os registros existem, e saiu de onde não existem. (B-077)
-- Três lugares afirmavam, no presente, que a regra de prefixos reservados **impede** um serviço de sobrescrever configuração da plataforma nos argumentos de build. Ela não impede: o campo que ela percorre não é preenchido por nenhum caminho de produção, e o tipo que recebe a requisição sequer o declara. As três afirmações foram corrigidas; o campo inalcançável ficou registrado. Nenhuma vulnerabilidade estava aberta — o caminho que a regra guardaria também não existe. (B-094)
-- `task quality:all` voltou a completar. Ele abortava **no primeiro passo** desde o M9: `quality:hermetic` executava `cd pkg && go test ./quality/...`, e esse diretório foi relocado naquele marco. Como o alvo agregado depende dele, o comando inteiro morria — e só `quality:gates` sozinho ficava verde, que é justamente o que o hook de push chama, e por isso ninguém percebeu. (B-087)
-- Cinco dos nove módulos Go do repositório não tinham seus testes executados por **nenhuma** task, entre eles `cmd/loopzero-ops`, onde vivem os 123 quality gates. Os testes que provam que um gate reprova o que deve reprovar nunca rodavam por caminho automatizado — `quality:hermetic` fazia `go build`, não `go test`. Agora os nove são cobertos, ou têm isenção com razão escrita. (B-088)
-- `infra/helm/admission-policies/values.yaml` apontava para dois artefatos que **não existem**: um `ADR-0050` e um `infra/scripts/check_clusterimagepolicy_mode.sh`, com o comentário afirmando que o segundo *já reconhecia* o primeiro. Terceira referência normativa fantasma medida nesta série, depois do `ADR-0024`. (B-045)
-- As duas implementações da regra que reserva prefixos de variável de ambiente passam a comparar do mesmo jeito. Elas discordavam: a API compara exatamente, o linter passava a chave por `ToUpper` antes. Como variável de ambiente no Linux é sensível a caixa e **todo** nome que o LoopZero injeta é maiúsculo (medido), `aws_region` não pode sombrear `AWS_REGION` — a rejeição protegia contra uma colisão que o sistema operacional não permite. O linter passa a comparar como a API; `ENV AWS_REGION` segue recusado, que é a razão da regra existir. **Não corrige quebra ativa:** a revisão desta fatia mediu que o linter não é invocado — o caminho BYO-Dockerfile foi removido como superfície de RCE, e o Dockerfile do usuário é ignorado *fail-closed*. É consistência antes que o caminho volte. (B-070)
-- A mensagem de recusa passa a dizer que a comparação é sensível a caixa, e a listar os prefixos a partir da própria lista em vez de um texto reescrito à mão — quem via `aws_region` casar com `AWS_` não tinha como entender por quê. (B-070)
-- O sumário de readiness — a **última** escrita de status de cinco reconcile loops, rodando depois da escrita do próprio controller — persistia com `Status().Update` a partir de uma releitura, e **descartava o erro**. Passa a persistir por merge-patch e a registrar a falha. A releitura estreitava a janela sem fechá-la: um `Update` reenvia o objeto inteiro carregando o `resourceVersion` recém-lido, então uma escrita que chegue no intervalo é rejeitada ou sobrescrita; um merge-patch não carrega `resourceVersion` e não menciona o que não mudou, logo não apaga o que nunca viu. É o invariante de escritor único aplicado ao único ponto que, por construção, é um segundo escritor. (B-055)
-- **loopzero:** o teste de regressão que protege o endpoint de versão voltou ao verde. Ele afirmava o caminho antigo do handler, e nenhum gate ligado o cobria — a verificação de rotas roda sobre os charts, e as duas invocações que alcançam esse pacote filtram por um nome que não casa com ele (B-041)
-- **loopzero:** a instrução de build que injeta a versão no binário voltou a apontar para o pacote certo. O caminho faz parte do endereço do símbolo e mudou quando o endpoint virou subpacote; um caminho errado é **descartado em silêncio** pelo linker, e o binário sai reportando `dev` sem aviso nenhum (#284)
-- **loopzero:** `task test:unit` volta ao verde. Os 4 testes de migração vermelhos afirmavam a identidade ATUAL das células (`cell-0`) contra arquivos de migração que são história imutável e falam de `cell-default`/`cell-1`/`cell-2` — a migração `000061` renomeou depois, mas renomear no presente não muda o que um arquivo executou no passado. Foram os testes que voltaram a ler história (B-071)
-- **loopzero:** `golangci-lint` em `operators/` volta ao verde. As duas variáveis de ambiente que configuram o servidor de perfil e o coletor de tracing passaram a ser **validadas na fronteira** — um valor malformado falha alto em vez de ser registrado e usado —, e três pacotes ganharam o comentário que os descreve, incluindo um que ainda dizia o nome anterior à separação dos binários (B-009)
-- **loopzero:** medido que o apagamento criptográfico de um tenant — o primitivo que sustenta o direito ao esquecimento — **não tem implementação em lugar nenhum**. O único vestígio no repositório é um comentário sobre um método de interface que nada implementa, nada atribui e ninguém chama; não há runbook operacional equivalente. Registrado em `B-075`, cuja pergunta deixa de ser "de quem é o DELETE" e passa a ser "o DELETE precisa existir" (B-075)
-- **loopzero:** a verificação de referências normativas deixa de aprovar quando não encontra referência nenhuma, e deixa de aceitar os próprios documentos de trabalho como prova de que uma decisão existe. Ela aprovava uma árvore vazia, e dava por documentado o registro de decisão que o código cita — porque o plano que criou a verificação o mencionava ao explicar que ele não existe (B-052)
-- **loopzero:** o clone do repositório encolhe 71 MB — dois binários compilados estavam versionados por engano (`operators/app-operator`, 68 MB, e `tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint`, 3,2 MB) (B-051)
-- **loopzero:** a verificação que garante autenticação em toda rota pública deixa de aprovar quando não examina rota nenhuma. Ela respondia "aprovado" com zero rotas enumeradas — e como essa verificação autoriza o `git push`, um commit que desligasse a autenticação de toda a API passaria verde (B-040)
-- **loopzero:** a cobrança falha fechado — um ambiente que declara cobrar não semeia, não sobe e não reporta fingindo que ela funciona (B-034, B-035, B-036, B-037)
-- **loopzero-cloud:** o painel deixa de afirmar que a cobrança está pronta quando só metade dela está configurada (B-035)
-- O portal de cobrança passa a ter um dono só: o clique em "Gerenciar plano" atravessa o painel, que
-  emite uma sessão real do Stripe. O motor deixou de emitir endereços de cobrança montados à mão, que
-  embutiam o identificador do cliente no próprio link (B-029, B-032)
-
-
-### Changed
-
 - **loopzero:** a decisão sobre a chave de criptografia por cliente ficou **parcial, de propósito**: quem cria a chave está decidido; quem a **destrói** não. O apagamento criptográfico é o mecanismo que torna os dados de um cliente irrecuperáveis quando ele pede exclusão, e a primeira versão da decisão o teria removido junto com código morto que estava na mesma interface (B-042, B-075)
-
 - **loopzero:** quatro contradições que travavam trabalho passam a ter decisão registrada, com a alternativa rejeitada e o número que a rejeita: de quem é o provisionamento de chave por tenant, se vale a regra que proíbe instalar o cofre no cluster de gestão ou a tarefa que o instala lá, se o pacote guarda-chuva preserva a separação de ambientes, e quem é o dono do recurso de sincronização (B-042, B-047, B-048, B-050)
-
 - **loopzero:** a verificação automática deixa de rodar no pull request e passa a rodar **depois do merge**, em `develop` e em `main`. O portão que impede um merge ruim neste repositório é local — roda antes de todo `git push` e bloqueia em vermelho — então o PR reexecutava o que já havia rodado na máquina de quem empurrou. A consequência: o primeiro sinal automático chega depois do merge, e uma falha se conserta com correção ou reversão
-
 - **loopzero:** uma verificação só pode ser dispensada de rodar se disser **de que estado externo ela depende**. A dispensa era uma etiqueta aceita sem conferência, e quatro estavam erradas: duas leem apenas arquivos do repositório (uma delas escondia, desde então, uma política de segurança ausente do pacote publicado), uma está quebrada há tempo (procura um documento no caminho antigo) e uma é hermética e verde — foi ligada (B-045)
 - **loopzero:** referências normativas passam a ser verificadas. Um documento de contrato citado pelo guia do repositório, ou um registro de decisão citado por código de produção, tem de existir — ou constar numa lista de exceções **com prazo**. Estavam quebradas 13, incluindo o registro que o código cita como a autoridade que obriga uma migração e que não existia em lugar nenhum (B-052)
-
 - O portal de cobrança passou a ser aberto por um único componente. Dois pontos do sistema pediam a
   sessão ao provedor de pagamento por caminhos diferentes, e por isso a chave de cobrança podia
   existir em dois processos — inclusive no que atende os comandos de implantação. Agora ela vive num
@@ -105,7 +138,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   o pagamento configurado passa a ver uma mensagem com o endereço do painel, em vez de um link
   (BACKLOG.md B-029)
 - Hook de validação de comandos ficou mais rápido: ~6 processos por chamada de ferramenta em vez de ~50, sem mudança de comportamento
-
 - **BREAKING —** quem instala o chart `loopzero-api` e informa o kubeconfig do cluster central passa a usar
   a chave `secrets.coreKubeconfig`; ela se chamava `secrets.mgmtKubeconfig`. O cluster mudou de nome e a
   chave acompanhou, senão ela e a variável de ambiente que ela alimenta diriam coisas diferentes
@@ -147,74 +179,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `task infra:install:core`, `task infra:install:cell`, `task k3d:bootstrap-cell-0` e
   `task k3d:bootstrap-cell-1`. As formas antigas — terminadas em `-mgmt`, `-workload` e `-runtime-2` —
   respondem "task not found" (BACKLOG.md B-001, B-005)
-
-### Added
-- **loopzero:** backlog B-035 — o segredo que verifica pagamentos não existia no ambiente
-- **loopzero:** backlog B-036 — os seeds de cobrança pulam sem credencial e a corrente reporta verde
-- **loopzero:** backlog B-037 — o painel monta os dois segredos de cobrança como opcionais
-- **loopzero:** backlog B-038 — nenhuma camada de cobrança pode degradar em silêncio
-
-- **`GET /api/v1/health/ready`** — the ecosystem-canonical readiness name, sharing the handler behind `/api/v1/health/deep`. `deep` describes how the check is implemented; `ready` describes what it answers, which is the question an orchestrator asks before routing traffic. `deep` is unchanged: deployment probes point at it, and removal is a separate item after a deprecation deadline. (B-123)
-
-- Uma verificação automática lista todas as portas que o servidor abre e reprova qualquer uma que
-  apareça sem estar declarada. Antes a regra era o contrário — uma porta nova ficava aberta até
-  alguém lembrar de fechá-la —, e o resultado foi que dezessete portas se tornaram alcançáveis da
-  internet sem que ninguém tivesse decidido isso, entre elas o painel que entrega as aplicações e o
-  serviço de login sem criptografia. Cada porta agora tem uma classe e um responsável escritos, e só
-  a classe que declara um consumidor externo permanece aberta (BACKLOG.md B-028)
-
-- Um comando que verifica, contra o ambiente no ar, que nada da plataforma responde a quem não se
-  identificou. Ele testa cada endereço público sem credencial nenhuma e exige recusa — e cobra
-  resposta justamente das duas páginas que o padrão de login obriga a serem abertas. A lista do que
-  testar sai do inventário de endereços já existente, então um endereço novo entra na verificação
-  sozinho; se alguém declarar um e não disser como testá-lo, isso é reprovado em vez de passar
-  despercebido. Uma resposta "não encontrado" não conta como recusa: esconder não é negar, e aceitá-la
-  faria endereço quebrado passar por endereço protegido (BACKLOG.md B-020)
-- Uma verificação automática que prova que a renomeação dos clusters mudou apenas nomes de cluster, e
-  nunca uma linha em que a mesma palavra significava outra coisa — como as 70 linhas em que "vault"
-  nomeia o software de segredos, não o cluster (BACKLOG.md B-001)
-- Registro de manutenção deste repositório (`BACKLOG.md`), com cinco itens abertos, e o plano aprovado
-  para renomear os dois clusters cujo nome descreve algo diferente do que eles são: o que hospeda o
-  produto inteiro e o que guarda os segredos (BACKLOG.md B-001, B-002, B-005)
+- Documentação alinhada ao estado real do repositório: `CLAUDE.md` reescrito (650 → ~310 linhas,
+  preservando as tabelas de armadilhas), mais `README.md`, `SECURITY.md`, `PITCH.md` e `ROADMAP.md`
+  — `cli/` e `cloud/` foram extraídos para os repos irmãos, o workspace é multi-módulo
+  (`go.work` + `../loopzero-contracts`), Go 1.26, e os gates vivem em `cmd/loopzero-ops/internal/quality/`
+  (docs-audit 2026-07-30)
+- `GOVERNANCE.md` reescrito: descrevia governança CNCF vendor-neutral, com os 5 documentos que
+  referenciava inexistentes, contradizendo o LICENSE proprietário. Passa a descrever a governança
+  real — tiers T0-T3, ADRs, política de emenda de plano, fluxo `workspace → develop → main`
+  (docs-audit 2026-07-30)
 
 ### Removed
-
+- `infra/quality/environment-lock-baseline.txt`. Era a baseline de um gate `environment-lock` que **não existe** no inventário, com **zero** leitores em qualquer linguagem — e já desatualizada: 2 dos seus 21 caminhos deixaram de existir quando `routes/tenants` virou subpacote. Um baseline que ninguém lê e que já está errado não é um contrato; parece um. (B-045)
+- `task k3d:secrets:bootstrap-in-core` e seu irmão `k3d:secrets:status-in-core`. Eles instalavam o OpenBao dentro do cluster de gerenciamento — o que a regra da plataforma proíbe **em todo tier**, por ser violação de topologia e não atalho. O `desc` da própria task declarava o custo: *"CON: loses isolation between control plane and secret storage"*. O caminho canônico (`task k3d:secrets:create` + `task k3d:secrets:bootstrap`) não muda. (B-047)
+- `conditions.UpdateStatusWithRetry` e o contador `loopzero_status_update_conflicts_total`. O helper mandava, pelo próprio doc-comment, que **toda** escrita de status dos operators migrasse para ele — citando um `ADR-0024` que **não existe** — e o que ele implementa é exatamente o `Get → mutate → Status().Update` que o contrato de escritor único **proíbe**. Eram 165 linhas com **zero** chamadores de produção e uma métrica que só incrementava em teste: dívida que parecia cobertura, porque quem encontrasse o helper concluiria que o problema de conflito estava tratado. Escolhida a regra que tem reunião ratificada. (B-055)
 - O endereço `cloud-dev` deixou de existir. Ele era um segundo nome para o mesmo painel: tudo que
   chegava nele era redirecionado para `app-dev`, e a única coisa que ele de fato entregava — o aviso
   que o GitHub manda quando alguém publica código — já era entregue no endereço novo. Enquanto
   existia, ele constava como origem autorizada para login, o que é permissão concedida a um endereço
   que ninguém usava (BACKLOG.md B-020)
+- Removidos 4,2 MB de arquivos de comparação gerados em maio que nenhum teste, tarefa ou script lia. O
+  plano que os criou previa cinco arquivos e um teste que os comparasse; o que ficou foram dois
+  arquivos e nenhum teste (BACKLOG.md B-007)
+- Removidas as duas formas antigas de montar o endereço de um ambiente, que ignoravam o
+  projeto, e o campo de mensagem livre do status de bootstrap, substituído há tempos pelas
+  condições. Nenhuma tinha consumidor legítimo restante (#274)
+- Tasks `cli:link` e `cli:build` do `Taskfile.yml`: rodavam `cd cli && npm …` contra um diretório que
+  saiu do repo no M2 (extração para `loopzero-cli`), sem nenhum chamador. Não foram repontadas para
+  `../loopzero-cli` — task atravessando fronteira de repo reintroduz o acoplamento que o M2 removeu e faz
+  no-op silencioso quando o irmão não está clonado. Guard de classe (qualquer `cd` para diretório
+  ausente) em `cmd/loopzero-ops/quality_taskfile_dead_dir_test.go` (#254, CHG-2026-07-30-001)
+- `infra/tests/livetest`: 9 funções exportadas sem nenhum chamador — a camada paralela de caos que
+  duplicava a suíte que de fato roda (`infra/tests/chaos/`), três Camadas nunca invocadas da
+  contra-prova e dois helpers de dogfood citados só em comentário (#228, #230)
 
 ### Fixed
-
+- A gravação de estado do controller de times passou a acontecer sem uma trava de versão obsoleta. Um instantâneo tirado cedo demais fazia a gravação carregar a versão lida **antes** de oito passos de rede, o que a rejeitaria na primeira reconciliação de todo time. (B-085)
+- O controller de times persistia o estado de um jeito que **perdia escrita em silêncio**: relia o registro só para obter uma versão que não fosse conflitar, devolvia o estado antigo por cima e gravava. Uma alteração feita por outro ator no intervalo desaparecia — sem conflito e sem registro. Passou a gravar por aplicação de diferença, que não carrega versão e só menciona o que mudou; agora uma alteração concorrente sobrevive. (B-085)
+- O resumo de prontidão desse controller era uma cópia à mão do auxiliar compartilhado, e **descartava o erro de gravação**. Passou a usar o auxiliar, que registra a falha. Quatro dos seis controllers já o usavam; a cópia local divergia dele em silêncio. (B-085)
+- A permissão versionada que autoriza criar a chave de cifragem de um time passou a descrever o que o serviço realmente pede. Ela existia no runbook de operação e no script de desenvolvimento, e **não** no pacote. **Isto ainda não conserta a falha para o usuário:** a permissão é carregada por uma identidade que o serviço não usa, e o script de instalação a sobrescreve minutos depois de aplicá-la. O que falta está registrado. (B-072)
+- Uma negação de permissão deixou de ser relatada como se fosse instabilidade de rede. São fatos opostos para quem está de plantão: a negação é permanente e exige ação, a instabilidade passa sozinha — e quem visse "falhou" ficava esperando por algo que nunca ia melhorar. (B-072)
+- A mesma validação passou a isentar o operator de times, que **escreve** esses registros — inclusive a escrita que remove o finalizador e conclui uma exclusão. Sem a isenção, um registro cuja forma armazenada não satisfizesse a regra ficaria **impossível de excluir**: o finalizador nunca sairia. A política irmã, no mesmo pacote, já isentava o operator; as duas listas divergiam, e agora um teste as compara. (B-077)
+- A validação que protege a forma dos registros de time estava instalada nos clusters de execução — que não guardam nenhum desses registros — e **ausente** no cluster de gerenciamento, onde todos eles vivem. Ela é a única defesa da plataforma sobre os próprios registros, porque não há webhook de admissão atrás dela; até agora, não podia disparar em lugar nenhum. Passou para onde os registros existem, e saiu de onde não existem. (B-077)
+- Três lugares afirmavam, no presente, que a regra de prefixos reservados **impede** um serviço de sobrescrever configuração da plataforma nos argumentos de build. Ela não impede: o campo que ela percorre não é preenchido por nenhum caminho de produção, e o tipo que recebe a requisição sequer o declara. As três afirmações foram corrigidas; o campo inalcançável ficou registrado. Nenhuma vulnerabilidade estava aberta — o caminho que a regra guardaria também não existe. (B-094)
+- `task quality:all` voltou a completar. Ele abortava **no primeiro passo** desde o M9: `quality:hermetic` executava `cd pkg && go test ./quality/...`, e esse diretório foi relocado naquele marco. Como o alvo agregado depende dele, o comando inteiro morria — e só `quality:gates` sozinho ficava verde, que é justamente o que o hook de push chama, e por isso ninguém percebeu. (B-087)
+- Cinco dos nove módulos Go do repositório não tinham seus testes executados por **nenhuma** task, entre eles `cmd/loopzero-ops`, onde vivem os 123 quality gates. Os testes que provam que um gate reprova o que deve reprovar nunca rodavam por caminho automatizado — `quality:hermetic` fazia `go build`, não `go test`. Agora os nove são cobertos, ou têm isenção com razão escrita. (B-088)
+- `infra/helm/admission-policies/values.yaml` apontava para dois artefatos que **não existem**: um `ADR-0050` e um `infra/scripts/check_clusterimagepolicy_mode.sh`, com o comentário afirmando que o segundo *já reconhecia* o primeiro. Terceira referência normativa fantasma medida nesta série, depois do `ADR-0024`. (B-045)
+- As duas implementações da regra que reserva prefixos de variável de ambiente passam a comparar do mesmo jeito. Elas discordavam: a API compara exatamente, o linter passava a chave por `ToUpper` antes. Como variável de ambiente no Linux é sensível a caixa e **todo** nome que o LoopZero injeta é maiúsculo (medido), `aws_region` não pode sombrear `AWS_REGION` — a rejeição protegia contra uma colisão que o sistema operacional não permite. O linter passa a comparar como a API; `ENV AWS_REGION` segue recusado, que é a razão da regra existir. **Não corrige quebra ativa:** a revisão desta fatia mediu que o linter não é invocado — o caminho BYO-Dockerfile foi removido como superfície de RCE, e o Dockerfile do usuário é ignorado *fail-closed*. É consistência antes que o caminho volte. (B-070)
+- A mensagem de recusa passa a dizer que a comparação é sensível a caixa, e a listar os prefixos a partir da própria lista em vez de um texto reescrito à mão — quem via `aws_region` casar com `AWS_` não tinha como entender por quê. (B-070)
+- O sumário de readiness — a **última** escrita de status de cinco reconcile loops, rodando depois da escrita do próprio controller — persistia com `Status().Update` a partir de uma releitura, e **descartava o erro**. Passa a persistir por merge-patch e a registrar a falha. A releitura estreitava a janela sem fechá-la: um `Update` reenvia o objeto inteiro carregando o `resourceVersion` recém-lido, então uma escrita que chegue no intervalo é rejeitada ou sobrescrita; um merge-patch não carrega `resourceVersion` e não menciona o que não mudou, logo não apaga o que nunca viu. É o invariante de escritor único aplicado ao único ponto que, por construção, é um segundo escritor. (B-055)
+- **loopzero:** o teste de regressão que protege o endpoint de versão voltou ao verde. Ele afirmava o caminho antigo do handler, e nenhum gate ligado o cobria — a verificação de rotas roda sobre os charts, e as duas invocações que alcançam esse pacote filtram por um nome que não casa com ele (B-041)
+- **loopzero:** a instrução de build que injeta a versão no binário voltou a apontar para o pacote certo. O caminho faz parte do endereço do símbolo e mudou quando o endpoint virou subpacote; um caminho errado é **descartado em silêncio** pelo linker, e o binário sai reportando `dev` sem aviso nenhum (#284)
+- **loopzero:** `task test:unit` volta ao verde. Os 4 testes de migração vermelhos afirmavam a identidade ATUAL das células (`cell-0`) contra arquivos de migração que são história imutável e falam de `cell-default`/`cell-1`/`cell-2` — a migração `000061` renomeou depois, mas renomear no presente não muda o que um arquivo executou no passado. Foram os testes que voltaram a ler história (B-071)
+- **loopzero:** `golangci-lint` em `operators/` volta ao verde. As duas variáveis de ambiente que configuram o servidor de perfil e o coletor de tracing passaram a ser **validadas na fronteira** — um valor malformado falha alto em vez de ser registrado e usado —, e três pacotes ganharam o comentário que os descreve, incluindo um que ainda dizia o nome anterior à separação dos binários (B-009)
+- **loopzero:** medido que o apagamento criptográfico de um tenant — o primitivo que sustenta o direito ao esquecimento — **não tem implementação em lugar nenhum**. O único vestígio no repositório é um comentário sobre um método de interface que nada implementa, nada atribui e ninguém chama; não há runbook operacional equivalente. Registrado em `B-075`, cuja pergunta deixa de ser "de quem é o DELETE" e passa a ser "o DELETE precisa existir" (B-075)
+- **loopzero:** a verificação de referências normativas deixa de aprovar quando não encontra referência nenhuma, e deixa de aceitar os próprios documentos de trabalho como prova de que uma decisão existe. Ela aprovava uma árvore vazia, e dava por documentado o registro de decisão que o código cita — porque o plano que criou a verificação o mencionava ao explicar que ele não existe (B-052)
+- **loopzero:** o clone do repositório encolhe 71 MB — dois binários compilados estavam versionados por engano (`operators/app-operator`, 68 MB, e `tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint`, 3,2 MB) (B-051)
+- **loopzero:** a verificação que garante autenticação em toda rota pública deixa de aprovar quando não examina rota nenhuma. Ela respondia "aprovado" com zero rotas enumeradas — e como essa verificação autoriza o `git push`, um commit que desligasse a autenticação de toda a API passaria verde (B-040)
+- **loopzero:** a cobrança falha fechado — um ambiente que declara cobrar não semeia, não sobe e não reporta fingindo que ela funciona (B-034, B-035, B-036, B-037)
+- **loopzero-cloud:** o painel deixa de afirmar que a cobrança está pronta quando só metade dela está configurada (B-035)
+- O portal de cobrança passa a ter um dono só: o clique em "Gerenciar plano" atravessa o painel, que
+  emite uma sessão real do Stripe. O motor deixou de emitir endereços de cobrança montados à mão, que
+  embutiam o identificador do cliente no próprio link (B-029, B-032)
 - O comando que abre o portal de cobrança parou de entregar um endereço montado à mão. Quando o
   serviço de pagamento não está configurado, ele devolvia um endereço construído com o identificador
   de cobrança do cliente dentro — que parecia funcionar e não era uma sessão de verdade. Agora ele
   diz que a cobrança é gerida pelo painel e informa onde abrir (BACKLOG.md B-032)
-
 - Abrir o portal de cobrança pela linha de comando passou a exigir ser dono da conta, como já era
   exigido pelo painel. A mesma ação pedia permissões diferentes conforme o caminho usado, e pelo
   caminho da linha de comando qualquer integrante do time conseguia ver fatura, meio de pagamento e
   histórico de cobrança (BACKLOG.md B-031)
-
 - Entrar com a conta do Google voltou a funcionar. Uma reinstalação do serviço de login gravou um
   texto de exemplo no lugar das credenciais reais e terminou como se tivesse dado certo — o Google
   então recusava a entrada dizendo que o aplicativo não existe. As credenciais nunca se perderam;
   só haviam sido cobertas. A verificação automática passou a reprovar quando encontra um texto de
   exemplo onde deveria haver credencial (BACKLOG.md B-023)
-
 - Digitar o endereço do serviço de login no navegador levava a uma página de erro em texto puro, sem
   caminho nenhum dali. Agora leva à tela de entrada. O endereço é usado sobretudo por programas, e
   nenhuma parte do produto mandava alguém para lá — mas um endereço público que não leva a lugar
   nenhum é um beco sem saída para quem chega (BACKLOG.md B-020)
-
 - O serviço de login voltou a anunciar seu endereço público. Ele publica uma página que diz aos
   programas onde ficam suas próprias funções, e essa página apontava para um endereço que só existe
   dentro do servidor — inalcançável de fora, e sem criptografia. Nove endereços estavam assim,
   incluindo o que é gravado dentro do crachá de acesso e conferido por quem o recebe. A causa era um
   comando de instalação que ignorava o ambiente pedido e instalava outro: ele não falhava, apenas
   instalava a coisa errada com sucesso (BACKLOG.md B-020)
-
 - Instalar a plataforma a partir de uma cópia recém-clonada do repositório voltou a funcionar. O passo
   que baixa as dependências dos pacotes de instalação nunca rodava antes da instalação, e essas
   dependências não são versionadas — então quem clonasse o repositório e mandasse instalar recebia um
@@ -245,144 +294,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A verificação que protege a renomeação parou de acusar arquivos que apenas mudaram de lugar. Ela
   cobrava que cada linha continuasse no mesmo caminho, quando o que ela precisa garantir é que a linha
   continue existindo — mover um arquivo é prática normal e virava acusação falsa (BACKLOG.md B-001)
-
-### Removed
-
-- Removidos 4,2 MB de arquivos de comparação gerados em maio que nenhum teste, tarefa ou script lia. O
-  plano que os criou previa cinco arquivos e um teste que os comparasse; o que ficou foram dois
-  arquivos e nenhum teste (BACKLOG.md B-007)
-- Removidas as duas formas antigas de montar o endereço de um ambiente, que ignoravam o
-  projeto, e o campo de mensagem livre do status de bootstrap, substituído há tempos pelas
-  condições. Nenhuma tinha consumidor legítimo restante (#274)
-
-### Fixed
-
 - O certificado TLS de um serviço voltou a ser reconhecido. O sistema procurava o
   certificado no cluster errado e com um nome que ninguém usava, então o endereço público
   ficava marcado como "aguardando certificado" para sempre — em um caso, 27 dias, com o
   certificado emitido e válido ao lado da aplicação (#277)
-
 - O status de cada serviço voltou a ser lido de verdade. O componente que acompanha os
   contêineres não recebia acesso ao ambiente onde eles rodam, então desistia em silêncio e
   o deploy ficava marcado como "em andamento" indefinidamente — em um caso, por 26 dias,
   com o serviço no ar. O acesso estava implementado e apenas desligado (#274)
-
 - Promover um deploy entre ambientes deixou de poder mandá-lo para um endereço inexistente.
   Quando o projeto não era informado, o sistema reescrevia os arquivos de configuração para
   o formato antigo de endereço, sem erro — e o deploy ia para o vazio. Agora falha na hora,
   dizendo o que faltou
-
 - O status de cada serviço no dashboard voltou a refletir a realidade. O sistema procurava
   os contêineres num endereço que não existia mais desde que os ambientes passaram a ser
   separados por projeto, então nunca contava nenhum pronto e o deploy aparecia como "em
   andamento" para sempre — em um caso, por 26 dias, com o serviço no ar (#274)
-
 - Um projeto podia ficar sem infraestrutura nenhuma, em silêncio. Quando dois projetos do
   mesmo time usavam o mesmo nome de ambiente, apenas um recebia namespace, permissões e
   isolamento de rede — o outro não recebia nada e nada reportava erro. Medido: 5 de 9
   combinações projeto/ambiente estavam sem provisionamento (#273)
-
 - Dois projetos de um mesmo time no mesmo ambiente deixaram de disputar o mesmo registro de
   deploy. A identidade do deploy omitia o projeto, então o segundo projeto sobrescrevia o
   primeiro a cada ciclo, e cada um enxergava os arquivos de configuração do outro. Deploy,
   promote, rollback e a limpeza automática de ambientes agora derivam essa identidade de um
   único lugar (#271)
-
 - Sync e health dos deploys pararam de piscar como desconhecidos. O componente que mantém
   os deploys em dia reescrevia o registro de cada ambiente por inteiro e, ao fazer isso,
   apagava o estado que o motor de entrega acabara de calcular — que voltava segundos depois.
   Quem consultasse nesse intervalo, inclusive `loopzero platform status`, via divergência onde
   não havia (#271)
-
-
 - Build da imagem `loopzero-api` voltou a passar. O `api/Dockerfile` autenticava para a organização
   antiga do GitHub enquanto o `api/go.mod` passou a exigir a nova — a reescrita de URL não casava
   com o módulo pedido, então o git buscava sem credencial. O GitHub responde a repositório privado
   sem autenticação com "não encontrado", a mesma mensagem de repositório inexistente, então o erro
   mandava procurar algo que existe. Quebrou no primeiro merge para `develop` depois da migração
-
-### Added
-
-- Índice de topologia Helm gerado (`docs/architecture/helm-topology.md`): responde "em qual
-  cluster este chart roda?" sem abrir os helmfiles. 44 charts, com a natureza (nosso ou
-  configuração de terceiro), a versão fixada e — quando existe — a condição que faz a instalação
-  valer só em alguns ambientes. É derivado dos helmfiles, que são a fonte executável: uma segunda
-  cópia escrita à mão divergiria, que é o problema que os dois charts duplicados já causam. O gate
-  `helm-topology-index` reprova quando o índice sai de sincronia
-
-- Guardrail de deleção no cluster de gestão: `Application`, `AppProject`, `Tenant`,
-  `Environment`, `ClusterCredential` — **e as definições que os descrevem** — passam a ser
-  protegidos contra remoção por identidade não autorizada. Remover qualquer um deles aciona
-  a cascata que apaga também a infraestrutura que ele gerencia; remover a *definição* apaga
-  todas as instâncias de uma vez, sem que nenhuma regra por instância seja consultada — foi
-  essa a sequência do incidente que motivou a proteção. Até agora o cluster de gestão não
-  tinha **nenhuma** política de admissão: o chart que as carrega só era instalado no cluster
-  de execução, enquanto esses recursos vivem na gestão. Entra em modo de **aviso**, com
-  alerta e runbook; o bloqueio efetivo é uma etapa separada, condicionada a uma janela de
-  observação provar que nenhuma identidade legítima é afetada — ligar o bloqueio com o mapa
-  de identidades incompleto é como cinco namespaces ficaram presos em `Terminating` no
-  passado. Desligável por configuração, sem reconstruir imagem
-  (`.claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md`,
-  `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` D4)
-- Gate `vap-delete-guardrail`: reprova se a política sumir, se o interruptor for desligado
-  na gestão, se a lista de identidades isentas encolher a ponto de inverter a regra (uma
-  lista vazia faria a política negar **toda** remoção, inclusive a dos operadores), se as
-  isenções do coletor de lixo do Kubernetes forem removidas, ou se os dois charts que
-  carregam a política divergirem entre si
-
-- Gate `proxy-exposure` + hook de entrega. Todo `reverse_proxy` do edge
-  (`infra/local/Caddyfile`) precisa de uma linha em `infra/quality/proxy-exposure.txt` dizendo o que
-  deixa passar, classificada como `filtered` / `internal` / `reviewed` **com justificativa**. Um proxy
-  herda o contrato de resposta do upstream, então o que chega ao browser é invisível neste repositório
-  até alguém escrever — foi assim que `app-dev.loopzero.example/sessions/*` passou a devolver a sessão Ory
-  inteira, incluindo `devices[].ip_address` e `recovery_addresses`, que nenhum cliente lê (medido
-  contra `loopzero-cloud/dashboard/src`). 26 proxies declarados, 21ms. Um proxy novo sem linha reprova;
-  uma linha sem proxy correspondente também. O gate não prova que uma resposta é segura — só um probe
-  LIVE prova — mas garante que a superfície inteira foi classificada por alguém (#267)
-- Hook `PreToolUse` `delivery-gate.sh`: intercepta `git push` e bloqueia (exit 2) se
-  `task quality:gates` reprovar. Existe porque o `pre-push` do git não é versionado — só existe onde
-  alguém rodou `install-git-hooks.sh`, então não valia para o agente nem para um clone novo. Escopo
-  estreito (só `git push`, pula `--dry-run`) e sem flag de bypass (#267)
-
-- Gate `workflow-hygiene`: reprova antes do merge qualquer action de terceiro sem SHA fixo e qualquer
-  `${{ }}` interpolado dentro de `run:` — as duas correções abaixo passam a ter guarda (#233, #250)
-- Guard de wiring de gates: todo gate registrado passa a exigir wiring em `taskfiles/quality.yml` ou
-  entrada num ledger com motivo. Um gate novo não nasce mais órfão em silêncio (#255)
-- 10 gates que existiam sem nunca rodar passam a ser executados por `task quality:gates` —
-  `agpl-isolation`, `contract-consumers`, `decisions-deletion`, `no-migrate-force`, `no-shell-wrap`,
-  `orphan-alerts`, `test-deletion`, `test-pyramid`, `test-targets`, `taskfile-interface`. Os 13 restantes do backlog do
-  #255 ficaram de fora com motivo medido e registrado por gate: 9 reprovam com achado real, 2
-  estouram 25s, 3 passam vacuamente (`cli-bundle-size` guarda `cli/dist`, que saiu no M2) (#255)
-- `docs/README.md`: índice de `docs/`, separando explicitamente referência viva de trilha de
-  auditoria datada — os 250 arquivos não tinham ponto de entrada (docs-audit 2026-07-30)
-
-### Changed
-
-- Documentação alinhada ao estado real do repositório: `CLAUDE.md` reescrito (650 → ~310 linhas,
-  preservando as tabelas de armadilhas), mais `README.md`, `SECURITY.md`, `PITCH.md` e `ROADMAP.md`
-  — `cli/` e `cloud/` foram extraídos para os repos irmãos, o workspace é multi-módulo
-  (`go.work` + `../loopzero-contracts`), Go 1.26, e os gates vivem em `cmd/loopzero-ops/internal/quality/`
-  (docs-audit 2026-07-30)
-- `GOVERNANCE.md` reescrito: descrevia governança CNCF vendor-neutral, com os 5 documentos que
-  referenciava inexistentes, contradizendo o LICENSE proprietário. Passa a descrever a governança
-  real — tiers T0-T3, ADRs, política de emenda de plano, fluxo `workspace → develop → main`
-  (docs-audit 2026-07-30)
-
-### Deprecated
-
-### Removed
-
-- Tasks `cli:link` e `cli:build` do `Taskfile.yml`: rodavam `cd cli && npm …` contra um diretório que
-  saiu do repo no M2 (extração para `loopzero-cli`), sem nenhum chamador. Não foram repontadas para
-  `../loopzero-cli` — task atravessando fronteira de repo reintroduz o acoplamento que o M2 removeu e faz
-  no-op silencioso quando o irmão não está clonado. Guard de classe (qualquer `cd` para diretório
-  ausente) em `cmd/loopzero-ops/quality_taskfile_dead_dir_test.go` (#254, CHG-2026-07-30-001)
-- `infra/tests/livetest`: 9 funções exportadas sem nenhum chamador — a camada paralela de caos que
-  duplicava a suíte que de fato roda (`infra/tests/chaos/`), três Camadas nunca invocadas da
-  contra-prova e dois helpers de dogfood citados só em comentário (#228, #230)
-
-### Fixed
-
 - O novo canal do `test-deletion` vazava hermeticidade: um teste que fornecia `DiffOverride`
   (modo hermético) ainda caía no `git log` real, então assim que um commit deste repo passou a
   carregar o marcador, todo teste "deleção sem justificativa deve falhar" começou a passar. Pego
@@ -394,7 +340,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 14 hooks e scripts do harness (`.claude/hooks/*`, `.claude/scripts/*`,
   `.github/scripts/check-workflow-hygiene.sh`) nunca foram allowlistados — mesma lacuna já
   documentada para `validate-command.sh`. `no-new-bash` reprovava em qualquer diff que os tocasse (#267)
-
 - As quatro entradas que permanecem no ledger passam a carregar a medição, para que o tamanho de
   cada dívida esteja no registro em vez de implícito: `alert-runbooks` 33 alertas — e as URLs que os
   alertas conformes já carregam retornam **404**, então o gate confere a presença da string, não a
@@ -444,7 +389,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   nenhum arquivo é lido, e a lista deixou de citar três Dockerfiles que saíram do repo (#267)
 - Descrição do gate `skip-link` no registry dizia "accessibility skip-link presence in the dashboard";
   ele valida `t.Skip`/`it.skip` sem issue URL. O ledger repetia o erro ("115 a11y violations") (#267)
-
 - Suíte `operators` deixa de ser flaky. Os specs de envtest liam um CR e o atualizavam sem retry,
   correndo contra o reconcile do controller e perdendo no `resourceVersion` — 3 de 4 execuções
   consecutivas de `internal/tenant` falhavam, cada uma num spec DIFERENTE, com
@@ -503,14 +447,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Links quebrados em documentos vivos: plano `live-ca-fetch-clustercredential` e plano de integração
   Vault (movidos para `completed/`), `IDENTITY.md` e o espelho do seam doc do LoopZeroKit (ambos
   inexistentes no workspace) (docs-audit 2026-07-30)
-
 - `TestMetricCheckConstraint_MatchesContractsConstants` deixa de reprovar por falso-positivo: o guard
   lia o CHECK de `metric` de **outra tabela** (`lens_alert_rules`/`lens_fired_alerts`, cujas migrations
   vêm depois) em vez do de `cost_counters`. A suíte de `api/internal/db` volta ao verde (#241)
 
 ### Security
 - `golang.org/x/net` v0.55.0 → v0.56.0 em `api`, `pkg`, `cmd/loopzero-ops` e `operators/api`. CVE-2026-46600 (HIGH): negação de serviço ao processar registro DNS inválido. Os módulos `operators` e `infra/tests` já rodavam a versão corrigida — a divergência entre os seis módulos do workspace é que deixou quatro expostos. (B-055)
-
 - O consumidor do `/sessions/whoami` no edge deixou de existir: o dashboard passou a obter a
   identidade pelo `POST /v1/auth/session/token`, que já validava o cookie contra o Ory no servidor
   (`loopzero-cloud` eb81cb6). O proxy segue no Caddyfile por ordem de deploy — removê-lo antes do bundle
@@ -528,7 +470,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `devices[].ip_address` e `recovery_addresses` que nenhum cliente lê. Filtrar o corpo exige um
   módulo de reescrita de resposta no Caddy ou um endpoint no BFF — permanece aberto e está declarado
   como tal em `infra/quality/proxy-exposure.txt` (#267)
-
 - As 22 CVEs CRITICAL/HIGH restantes que reprovavam `trivy-scan` foram zeradas — `trivy fs` sai limpo
   nos 15 manifests do repo. Nos módulos Go: `kin-openapi` 0.140.0 → 0.144.0 (bypass de autenticação
   fail-open, CRITICAL), `grpc-go` 1.80.0 → 1.82.1, `prometheus` 0.303.0 → 0.311.3 (vazamento de
@@ -542,7 +483,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   permite negação de serviço via UTF-8 inválido (CVE-2026-56852, HIGH). Não desbloqueia
   `task quality:gates` sozinha — restam 22 CVEs pré-existentes em dependências, inventariadas em
   (#267)
-
 - `build-publish.yml`: os dois passos do cosign deixam de interpolar `${{ inputs.* }}` dentro de
   `run:` — os valores passam pelo `env:` do step, então nenhum conteúdo vindo do caller vira sintaxe
   de shell com acesso aos segredos do job. Como este reusable é chamado por cinco repos, a correção
