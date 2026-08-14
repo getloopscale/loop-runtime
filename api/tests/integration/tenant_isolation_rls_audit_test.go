@@ -59,6 +59,9 @@ func auditPool(t *testing.T, envVar, role string) (context.Context, *pgxpool.Poo
 		} else if auditRequired() {
 			t.Fatalf("LOOPZERO_RLS_AUDIT_REQUIRE=1 but %s is unset — the %s path would go unmeasured", envVar, role)
 		} else {
+			// Skipped when the role's DSN is absent, which is the honest answer —
+			// but it means this compliance evidence is NOT collected by default.
+			// Tracked: https://github.com/getloopscale/loopzero/issues/289
 			t.Skipf("%s not set — %s path skipped (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)", envVar, role)
 		}
 	}
@@ -77,6 +80,8 @@ func auditPool(t *testing.T, envVar, role string) (context.Context, *pgxpool.Poo
 				"This test is compliance evidence — a skip here would report a tenant-isolation "+
 				"control as green without measuring it.", role, err)
 		}
+		// Same shape: unreachable role degrades to skip unless REQUIRE is set.
+		// Tracked: https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("cannot connect as %s (%v)", role, err)
 	}
 	t.Cleanup(pool.Close)
