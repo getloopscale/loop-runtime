@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package billing
 
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -69,7 +70,7 @@ func (p *fakeBillingPool) QueryRow(_ context.Context, sql string, _ ...any) Bill
 func TestBilling_Get_HappyPath(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{plan: "pro"})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -89,7 +90,7 @@ func TestBilling_Get_HappyPath(t *testing.T) {
 func TestBilling_Get_NoSubscription_DefaultsToStarter(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{}) // no plan set → ErrNoRows
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -121,7 +122,7 @@ func TestBilling_Get_Unauthenticated(t *testing.T) {
 func TestBilling_Portal_NoStripeCustomer_Returns400(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{}) // customerID nil → ErrNoRows
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Portal(w, req)
@@ -149,7 +150,7 @@ func TestBilling_Portal_ComEmissor_DevolveSessaoEmitida(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
 		WithPortalSessionCreator(emissorFalso{url: sessaoEmitida}, "https://app.example/billing")
 
-	req := withAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), defaultUserContext())
+	req := routestest.WithAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Portal(w, req)
 
@@ -175,14 +176,6 @@ type emissorFalso struct{ url string }
 
 func (e emissorFalso) CreateSession(_ context.Context, _, _ string) (string, error) {
 	return e.url, nil
-}
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 // fakePortalCreator is a test double for PortalSessionCreator. Records
@@ -216,7 +209,7 @@ func TestBilling_Portal_WithSDK_HappyPath(t *testing.T) {
 		WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Portal(w, req)
@@ -247,7 +240,7 @@ func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
 		WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Portal(w, req)
@@ -262,7 +255,7 @@ func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
 	}
 	// Rule 3 guard: message must not leak "Stripe" or "stripe" to user.
 	msg := body["message"]
-	if contains(msg, "Stripe") || contains(msg, "stripe") {
+	if strings.Contains(msg, "Stripe") || strings.Contains(msg, "stripe") {
 		t.Errorf("Rule 3 violation: message leaks internal vendor name: %q", msg)
 	}
 }
@@ -276,7 +269,7 @@ func TestBilling_Portal_NoCustomer_DoesNotCallSDK(t *testing.T) {
 							WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Portal(w, req)
@@ -316,7 +309,7 @@ func TestBilling_Portal_SemEmissorNaoConstroiURL(t *testing.T) {
 	custID := "cus_TestCustomerID"
 	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}) // sem WithPortalSessionCreator
 
-	req := withAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), defaultUserContext())
+	req := routestest.WithAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Portal(w, req)
 

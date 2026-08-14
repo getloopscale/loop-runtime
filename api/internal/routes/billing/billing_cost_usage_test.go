@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package billing
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,7 +45,7 @@ func TestBilling_Get_WithCostSource_PopulatesUsage(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{plan: "starter"}).WithCostSource(cost)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
@@ -91,7 +92,7 @@ func TestBilling_Get_EnterprisePlan_ShowsUnlimitedSentinel(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{plan: "enterprise"}).WithCostSource(cost)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
@@ -114,7 +115,7 @@ func TestBilling_Get_NoCostSource_EmptyUsage(t *testing.T) {
 	// No WithCostSource call
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
@@ -133,7 +134,7 @@ func TestBilling_Get_CostStoreError_SkipsMetric_Continues(t *testing.T) {
 	h := NewBillingHandler(&fakeBillingPool{plan: "pro"}).WithCostSource(cost)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 

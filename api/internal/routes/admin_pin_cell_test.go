@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
@@ -427,7 +428,7 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status: want %d got %d body=%s", tc.wantStatus, rec.Code, rec.Body.String())
 			}
-			if !contains(rec.Body.String(), `"code":"`+tc.wantCode+`"`) {
+			if !strings.Contains(rec.Body.String(), `"code":"`+tc.wantCode+`"`) {
 				t.Errorf("body missing code=%q: %s", tc.wantCode, rec.Body.String())
 			}
 		})

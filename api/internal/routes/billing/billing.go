@@ -18,7 +18,20 @@
 //       * 200 with legacy placeholder URL when SDK is unwired (local dev)
 //       * 502 BILLING_PROVIDER_UNAVAILABLE if Stripe API returns error
 
-package routes
+// Package billing serves the billing endpoints under /api/v1/billing: the
+// checkout session, the customer portal, and the cost/usage read side.
+//
+// Seventh family to leave the flat `routes` package (B-080, slice-30).
+//
+// Extracting it removed a hand-rolled `strings.Contains` that had been declared
+// in this family's test file and reached by two tests of the parent — a helper
+// nobody would have written on purpose, kept alive by living in a package big
+// enough that its declarations were invisible. Splitting the package is what
+// made it visible; the stdlib replaced it in all three call sites.
+//
+// Depends on two leaves and no sibling family: `httpio` for the response
+// writers, `routestest` for request helpers, and that one only from _test.go.
+package billing
 
 import (
 	"context"

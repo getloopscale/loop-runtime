@@ -33,6 +33,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
@@ -256,7 +257,7 @@ func buildServerConfig(
 		// docr_pulls, build_minutes) with their current values + caps.
 		// pre-migration-000017 the costSource returns no rows and
 		// usage map stays empty (graceful degradation).
-		billingHandler := routes.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
+		billingHandler := billing.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
 		if dbDeps != nil && dbDeps.StdDB != nil {
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
 			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
@@ -455,7 +456,7 @@ func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
 // billingPoolAdapter bridges *pgxpool.Pool to routes.BillingPool. The
 // routes package defines its own narrow Row/Pool interfaces to avoid
 // the routes ↔ db import cycle (find_arch_001). pgx.Row satisfies the
-// routes.BillingRow contract (single Scan method) — this adapter just
+// billing.BillingRow contract (single Scan method) — this adapter just
 // re-types the QueryRow signature.
 type billingPoolAdapter struct {
 	pool interface {
@@ -463,7 +464,7 @@ type billingPoolAdapter struct {
 	}
 }
 
-func (a billingPoolAdapter) QueryRow(ctx context.Context, sql string, args ...any) routes.BillingRow {
+func (a billingPoolAdapter) QueryRow(ctx context.Context, sql string, args ...any) billing.BillingRow {
 	return a.pool.QueryRow(ctx, sql, args...)
 }
 

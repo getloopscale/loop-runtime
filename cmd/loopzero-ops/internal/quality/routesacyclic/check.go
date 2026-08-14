@@ -240,6 +240,8 @@ var allowed = map[string]map[string]bool{
 	// one: the fence measures imports, and the collision is resolved at the
 	// importer with the alias convention already in the tree.
 	"preview": {"httpio": true, "routestest": true},
+	// The seventh family (slice-30, B-080). Serves /api/v1/billing.
+	"billing": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

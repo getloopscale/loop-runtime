@@ -18,8 +18,9 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/routes/preview"
+	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/source"
@@ -184,7 +185,7 @@ type Config struct {
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
 	// skipped and CLI returns its own error rather than 404.
-	BillingHandler *routes.BillingHandler
+	BillingHandler *billing.BillingHandler
 	AdminEvictor   routes.TenantEvictor
 	AdminPinner    routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure: diagnostic

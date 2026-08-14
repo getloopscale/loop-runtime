@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -339,7 +340,7 @@ func TestPromote_RegressionV10BodyShape(t *testing.T) {
 					t.Fatalf("[%s] decode: %v", tc.name, err)
 				}
 				gotMsg, _ := errBody["message"].(string)
-				if gotMsg == "" || !contains(gotMsg, tc.wantMsg) {
+				if gotMsg == "" || !strings.Contains(gotMsg, tc.wantMsg) {
 					t.Errorf("[%s] want message containing %q, got %q", tc.name, tc.wantMsg, gotMsg)
 				}
 			}

@@ -2399,6 +2399,21 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > já na árvore sufixa o **serviço** (`domainsvc`, `placementsvc`, `releasesvc`), então o serviço virou
 > `previewsvc` e o de rotas ficou `previewroutes` no único arquivo onde os dois se encontram.
 
+> **Fatia 30 — `billing` extraída (2026-08-14).** Pai de 31 para **30** arquivos de produção; cerca com
+> **9 subpacotes**, 0 não registrados, 0 arestas irmãs; lint do pacote novo em 0.
+>
+> **A extração desenterrou uma reimplementação de `strings.Contains`.** Ela vivia no arquivo de teste
+> desta família e era alcançada por dois testes do pai (`admin_pin_cell_test.go`, `promote_test.go`) —
+> nove linhas fazendo o que a stdlib faz numa chamada. Ninguém a escreveria de propósito; ela
+> sobreviveu porque morava num pacote grande o bastante para que suas declarações fossem invisíveis.
+> **Separar o pacote foi o que a tornou visível**, e é um argumento pela decomposição que o item não
+> tinha: um pacote plano esconde não só acoplamento, mas duplicação de conhecimento com a biblioteca
+> padrão. Substituída nos três sítios pelo degrau 2 da escada de parcimônia.
+>
+> E a armadilha da fatia 29 — referência qualificada atravessando linha — entrou na receita: o laço de
+> compilador passou a casar `routes.` seguido de quebra e do símbolo, então ela não custa mais
+> iteração nenhuma.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta
