@@ -671,6 +671,22 @@ severity: alta — é uma jornada inteira do produto (conectar repositório → 
 > artefato de repositório que a substitua, e fingir que os dois testes acima a cobrem seria repetir o
 > defeito que esta correção conserta.
 
+> **Medido no droplet em 2026-08-14: a bala não é só "não feita", ela ainda não é MEDÍVEL.**
+>
+> Um push no repositório de fixture só dispara build se houver **projeto conectado** a quem disparar.
+> Estado do banco no droplet agora: `tenants=2`, **`projects=0`**, **`builds=0`**. Nunca houve build
+> nesta instância — não é que o webhook falhou, é que não existe destino.
+>
+> Então a bala tem uma **pré-condição não escrita**: a cadeia de seeds pós-cleanroom precisa ter
+> rodado até criar projeto e conectar o repositório de fixture. Sem isso, disparar um push mede a
+> ausência do seed, não a saúde do webhook — e reportar `FAIL` seria culpar o elo errado, que é o
+> mesmo defeito de atribuição que esta sessão corrigiu em três itens.
+>
+> A bala fica aberta com o bloqueio nomeado: **rodar `seed-post-cleanroom-all.sh` até
+> `seed-tenant-fixture-canonical` antes de medir**. Isso é mutação de ambiente compartilhado, e a
+> disciplina do droplet diz para mutar só com razão registrada — esta é a razão, e a decisão de
+> executá-la é do patrocinador.
+
 dod:
   - a cadeia de seeds pós-cleanroom completa sem falhas de pré-requisito, ou a ordem dela garante que o namespace exista antes do seed que depende dele
   - `POST /api/v1/webhooks/github` deixa de devolver 404 — com assinatura inválida deve devolver 401, não 404
