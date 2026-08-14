@@ -455,7 +455,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet app-dev em 2026-08-10, após a reconstrução total. Quatro componentes do cluster `loopzero-core` ficam em `ImagePullBackOff`: `loopzero-api`, `loopzero-cloud`, `loopzero-app-operator` e `loopzero-platform-operator` (13 pods problemáticos de 69; os clusters `loopzero-build`, `loopzero-cell-0` e `loopzero-cell-1` estão 100% limpos). O `dev-public` os puxa de `ghcr.io/getloopscale/loopzero-api:develop` com o `imagePullSecret` `ghcr-pull`, cuja fonte canônica é `~/.loopzero/ghcr-pull-token.txt` (`taskfiles/infra.yml:985,993`). O arquivo existe, tem 40 bytes e data de **2026-06-19**; testado direto contra o registro devolve **`HTTP 401`** para `develop`, `latest` e `main`. O Secret no cluster carrega o mesmo token (usuário `getloopscale`) e falha igual. `docker pull` sem credencial devolve `403`.
 why_now: a condição é anterior à reconstrução — o achado de 2026-08-09 já registrava GHCR inacessível a partir do droplet. O que mudou é que o cache local de imagens mascarava o problema: os pods rodavam com camadas puxadas meses atrás. `k3d cluster delete` levou o cache junto, e a dependência ficou exposta. **Não é regressão do rename**; é uma dependência que só aparece quando o ambiente sobe do zero, que é exatamente o que o mandato de cleanroom existe para forçar.
-status: raw
+status: triaged
 severity: alta — sem isto, `app-dev.loopzero.example` não volta a servir. É o único item que separa a plataforma reconstruída de estar funcional.
 **RESOLVIDO em 2026-08-10 — e a afirmação original estava errada.** Eu havia escrito que não existia caminho técnico sem a credencial. Existe: `loopzero-api` e os quatro operators têm Dockerfile **neste** repositório, e o `loopzero-cloud` tem no repo irmão. As seis imagens foram construídas localmente e publicadas no registro do k3d, e `LOOPZERO_PLATFORM_IMAGE_PREFIX` (commit `6b4669dd`, padrão inalterado no GHCR) passou a permitir apontar o ambiente para elas. O token do GHCR continua inválido — o que mudou é que ele deixou de ser condição para o ambiente subir.
 dod:
@@ -466,6 +466,24 @@ dod:
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
 
+> **Re-medido no droplet 2026-08-14, com acesso SSH concedido pelo patrocinador.** A causa está
+> **viva**; o sintoma é que não.
+>
+> Os cinco clusters estão limpos — **158 pods, zero fora de `Running`**. Medir só isso teria matado o
+> item. A causa, medida direto: `~/.loopzero/ghcr-pull-token.txt` continua com **40 bytes** e data de
+> **2026-06-19**, e devolve `HTTP 401` em `develop`, `latest` e `main`. O Secret `ghcr-pull` do
+> `loopzero-core` carrega **o mesmo token** — confirmado por hash, sem revelar o valor. O pacote é privado
+> (401 também sem credencial).
+>
+> Por que o sintoma sumiu: os pods rodam de camadas já baixadas. O defeito reaparece **no próximo
+> cleanroom**, que é exatamente o que o item previu.
+>
+> **Bloqueado em credencial que só o patrocinador emite** — um PAT do GitHub com `read:packages`. Nada
+> mais no item depende de mim.
+>
+> Nota de método: minha primeira sonda do Secret leu os campos `username`/`password` e concluiu "Secret
+> em branco". Aquele `dockerconfigjson` só tem o campo `auth` (base64 de `user:pass`) — eu quase
+> reportei um achado falso a partir de um campo que não existe naquele formato.
 
 ## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
 
@@ -475,7 +493,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-10 ao reconstruir o app-dev sem acesso ao GHCR. `loopzero-cloud/Dockerfile.local` é o caminho documentado para quando o `gomod_token` falta (criado em 2026-06-27 por Red Team #95 P0, pela mesma razão), e **não funciona**. Dois defeitos independentes: (1) injeta um `replace` citando `getloopscale/loopzero-contracts`, mas o `go.mod` declara `getloopscale/loopzero-contracts` — o `replace` não casa e o Go cai no fetch remoto, falhando em `git ls-remote` sem credencial; (2) compila `go build -o /cloud-api ./cmd/main.go` — **um arquivo**, não o pacote —, então os arquivos irmãos de `package main` ficam de fora e o build morre com `undefined: newTrustDashboardKeyResolver` e outros. Corrigidos os dois numa cópia de build, a imagem constrói e sobe.
 why_now: o escape hatch existe justamente para o dia em que o token falta. Nesse dia ele não funcionou, e os dois defeitos são de tipos que nenhum build verde pegaria: o (1) só aparece sem credencial (com ela, o fetch remoto funciona e mascara o replace morto), e o (2) só aparece quando `main.go` passa a depender de um irmão — o que aconteceu depois que o arquivo foi escrito.
-status: raw
+status: shipped
 severity: alta — é o caminho de recuperação, e estava quebrado exatamente no cenário para o qual foi criado.
 dod:
   - o `replace` injetado cita o caminho de módulo atual
@@ -487,6 +505,18 @@ dod:
 **Provado por execução, no cenário para o qual o arquivo existe**: clone limpo do commit publicado, `loopzero-contracts` na `v0.4.0`, e `docker build -f loopzero-cloud/Dockerfile.local` **sem segredo algum** → OK. Antes do conserto o mesmo comando falhava em `git ls-remote` (defeito 1) e, passado esse, em `undefined: newTrustDashboardKeyResolver` (defeito 2).
 
 Guarda: `internal/ci/dockerfile_local_test.go` compara o `replace` injetado com o que o `go.mod` **declara** — em vez de fixar a string, que é como o defeito entrou — e reprova qualquer alvo de build terminado em `.go`. RED antes de GREEN nos dois.
+
+> **Verificado fechado 2026-08-14**, no `loopzero-cloud` (`../loopzero-cloud`, clonado). Os dois defeitos que o
+> item nomeia não existem mais no `Dockerfile.local`: o build é `go build … ./cmd` — o **pacote**, não
+> o arquivo — e não há mais `go mod edit -replace` citando a organização errada; os contratos são
+> encenados no contexto de build. Consertado pelo commit `1dfb3513` daquele repositório
+> (*"o caminho de recuperacao sem token volta a construir"*).
+>
+> As menções a `getloopscale` que sobram são comentário e `LABEL` de imagem, não `replace`.
+>
+> O campo `status` seguia `raw` com o checkbox já em `[x]` — a mesma deriva que esta sessão mediu em
+> outros seis itens, aqui numa variação que o verificador ainda não cobre: **checkbox contra campo**,
+> em vez de nota-de-fechamento contra campo.
 
 ## B-018 — A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild   [x]
 
@@ -560,7 +590,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido em 2026-08-10 ao investigar o `cloud-dev`. `POST /api/v1/webhooks/github` devolve **404** por `app-dev` e direto no `loopzero-api` (`localhost:13001`), enquanto `POST /api/v1/health` devolve **405** — ou seja, a rota do webhook nem chega a ser registrada, não é erro de roteamento. O log do `loopzero-api` confirma: *"github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)"*. A causa está em `api/cmd/setup_github.go:152-158`: sem o segredo, `WebhookHandler` fica nil e o roteador não registra a rota. O seed que provisiona o segredo (`5-seed-github-app-dev`) reprovou com `namespaces "loopzero-system" not found` — ele rodou antes do namespace existir, durante a reconstrução.
 why_now: enquanto o segredo existiu no cluster, isto era invisível. A reconstrução total o apagou junto com tudo, e o seed que o recria falhou por ordem. **A consequência é que auto-deploy a partir do GitHub não funciona** — um `git push` no repositório de um cliente não dispara build nenhum. Não apareceu antes porque as sondagens de verificação cobriam `/engine/*` e os fluxos de login, e o webhook é a única superfície que não se testa com um GET.
-status: raw
+status: triaged
 severity: alta — é uma jornada inteira do produto (conectar repositório → push → deploy) que está morta, e ela falha em silêncio: o GitHub recebe 404 e o usuário não vê erro nenhum no painel.
 dod:
   - a cadeia de seeds pós-cleanroom completa sem falhas de pré-requisito, ou a ordem dela garante que o namespace exista antes do seed que depende dele
@@ -570,6 +600,19 @@ dod:
 
 > Registrado 2026-08-10 ao investigar por que o `cloud-dev` existia.
 
+> **Re-medido no droplet 2026-08-14.** Vivo e inalterado: `POST /api/v1/webhooks/github` → **404**,
+> `POST /api/v1/health` → **405**. A rota não é registrada.
+>
+> E a medição foi além do que o item registrava, encontrando **o mecanismo do silêncio**. Os dois
+> secrets de que o webhook depende estão **ausentes** — `loopzero-github-webhook` e `loopzero-api-github` —, e
+> as duas referências são `optional: true`: a variável (`secretKeyRef … optional: true`) e o `envFrom`.
+> É por isso que o pod sobe normal, a rota não existe, e nada reclama em lugar nenhum.
+>
+> Isso divide o item em duas metades com donos diferentes. **A credencial** (segredo HMAC e chave
+> privada do GitHub App, que precisam casar com o lado do GitHub) só o patrocinador provê. **A
+> invisibilidade** é defeito próprio e independente da credencial: uma superfície de segurança que se
+> desliga sozinha e deixa o `git push` do cliente sem disparar build nenhum deveria ser alta e não
+> muda; hoje ela é `optional: true` em silêncio. Vale item próprio.
 
 ## B-022 — O caminho do motor depende do painel estar de pé   [ ]
 
@@ -2985,4 +3028,22 @@ dod:
 > corrigido em lote:** virar 43 status sem abrir cada item é exatamente o atalho que produziu a deriva.
 > Os seis que corrigi nesta fatia foram verificados um a um por execução — inclusive um (`B-070`) em
 > que minha primeira sonda deu o resultado errado e a nota estava certa.
+
+## B-104 — O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-live-test
+evidence: medido no droplet em 2026-08-14, ao investigar o `B-021`. O `loopzero-api` sobe normalmente com os **dois** secrets do webhook ausentes — `loopzero-github-webhook` e `loopzero-api-github` —, porque as duas referências são `optional: true`: a variável (`GITHUB_WEBHOOK_SECRET` via `secretKeyRef … optional: true`) e o `envFrom` do `loopzero-api-github`. Sem o segredo, `api/cmd/setup_github.go:152-158` deixa o `WebhookHandler` nil e o roteador não registra a rota: `POST /api/v1/webhooks/github` devolve **404** enquanto `POST /api/v1/health` devolve **405**. Nenhum log de erro, nenhuma condição, nenhuma métrica — o único vestígio é uma linha `Info` no arranque.
+why_now: é uma superfície de segurança que se desliga sozinha, e a consequência é que o `git push` de um cliente não dispara build nenhum. O `B-021` trata da credencial ausente, que só o patrocinador provê; **este trata da invisibilidade**, que é defeito nosso e independente dela. Enquanto o segredo existiu, isto era invisível; a reconstrução total o apagou e o modo de falha ficou exposto — mas quem o expôs foi uma sondagem manual, não o sistema.
+status: triaged
+severity: alta — não pelo estado atual (o ambiente é de desenvolvimento), mas porque o mesmo desenho em produção significa auto-deploy morto sem ninguém saber
+dod:
+  - a ausência do segredo do webhook deixa de ser silenciosa: ou o arranque falha alto, ou existe sinal observável (condição, métrica ou readiness) que diga que a superfície está desligada
+  - está decidido e escrito por que cada `optional: true` do `loopzero-api` é opcional — hoje são dez `envFrom` e nenhuma decisão registrada distingue os que podem faltar dos que não podem
+  - existe verificação de que a rota do webhook está registrada quando o segredo existe, e que a ausência dele é detectável sem ler log
+
+> Registrado 2026-08-14 pela medição do `B-021` no droplet. A credencial é do patrocinador; a
+> invisibilidade é nossa.
 
