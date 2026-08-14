@@ -6,6 +6,8 @@ package helmdrift
 import (
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -162,5 +164,63 @@ func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
 	}
 	if out.Pass {
 		t.Errorf("a drifted file with no per-file approval must FAIL the gate; blessing it because the PAIR was blessed is how the VAP went missing (drifts=%+v)", out.Drifts)
+	}
+}
+
+// TestNoApprovalCarriesAnInheritedReason is the B-076 close.
+//
+// The allowlist was re-keyed from PAIR to PAIR:FILE by slice-3, but the 21
+// entries that already existed were carried over with one generic sentence and
+// `Inherited: true` — deliberately, so the debt would be countable instead of
+// invisible. The field exists to be driven to zero.
+//
+// A reason is "measured" here in a specific sense: it says what was OBSERVED
+// about the two charts, not what someone believes about them. Twenty-one
+// plausible rationales would have closed the item and would have hidden the
+// finding that produced this test — that four of the twenty-one are not resource
+// drift at all, because both charts render the resource and only the filename
+// differs.
+func TestNoApprovalCarriesAnInheritedReason(t *testing.T) {
+	var inherited []string
+	for key, a := range approvedDriftFiles {
+		if a.Inherited {
+			inherited = append(inherited, key)
+		}
+	}
+	if len(inherited) != 0 {
+		sort.Strings(inherited)
+		t.Errorf("%d approval(s) still carry an inherited reason, so the gate approves a divergence "+
+			"nobody measured:\n  %s\nEach needs a reason stating what was observed about the two "+
+			"charts, or removal because the divergence should not exist (B-076).",
+			len(inherited), strings.Join(inherited, "\n  "))
+	}
+}
+
+// TestEveryApprovalNamesItsMeasurement keeps the reasons from decaying back into
+// assertions once the inherited flag is gone.
+//
+// The three classes came from rendering both charts of each pair and comparing
+// the kinds actually produced — the same method B-077 established when it proved
+// its fence renders rather than checking for a file. A reason that does not name
+// its class is a reason nobody can re-derive.
+func TestEveryApprovalNamesItsMeasurement(t *testing.T) {
+	if len(approvedDriftFiles) == 0 {
+		t.Fatal("no approvals to check — the test would pass vacuously")
+	}
+	for key, a := range approvedDriftFiles {
+		if a.ADR == "" {
+			t.Errorf("%s carries no ADR — an approval nobody signed", key)
+		}
+		switch {
+		case strings.Contains(a.Reason, "ambos renderizam"),
+			strings.Contains(a.Reason, "não renderiza"),
+			strings.Contains(a.Reason, "só o publicado renderiza"),
+			strings.Contains(a.Reason, "só o bootstrap renderiza"):
+			// One of the three measured classes.
+		default:
+			t.Errorf("%s: reason %q does not name what was measured about the render. The classes are: "+
+				"both render it (filename-only drift), neither renders it under default values "+
+				"(conditional), or exactly one renders it (real asymmetry).", key, a.Reason)
+		}
 	}
 }

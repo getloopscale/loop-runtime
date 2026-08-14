@@ -51,42 +51,69 @@ type approval struct {
 // approves-future-members defect at a smaller scale, which is the whole bug.
 var approvedDriftFiles = map[string]approval{}
 
+// The 21 approvals inherited from ADR-0043's blanket pair approval, each now
+// carrying what was MEASURED about it rather than the one sentence they shared.
+//
+// Method: render both charts of the pair with `helm template` under default
+// values and compare the kinds actually produced. A filename is not a resource —
+// two charts can differ in every filename and install the same thing — and that
+// is what the classes below record. Same method B-077 established when it proved
+// its fence renders rather than checking for a file.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-helm-drift-per-file-reasons
 func init() {
-	// Inherited from ADR-0043's blanket pair approval. The pair-level decision
-	// is real; the per-file reasons below were NOT individually measured, and
-	// saying so is cheaper than inventing 21 rationales that read as verified.
+	// CLASS A — both charts render the resource; only the file declaring it has a
+	// different name. This is NOT resource drift, and the gate reports it because
+	// it compares filenames. Approved as a workaround for how the gate measures,
+	// not because a divergence was accepted. The fix is B-110.
+	both := "ambos renderizam este recurso; a divergência é de nome de arquivo, não de recurso instalado"
 	for _, k := range []string{
-		// loopzero-api — only in the published chart
+		"loopzero-api:loopzero-api:service.yaml",
 		"loopzero-api:loopzero-api:clusterrole.yaml",
 		"loopzero-api:loopzero-api:clusterrolebinding.yaml",
-		"loopzero-api:loopzero-api:configmap.yaml",
-		"loopzero-api:loopzero-api:secret.yaml",
-		"loopzero-api:loopzero-api:service.yaml",
-		// loopzero-api — only in the bootstrap chart
-		"loopzero-api:loopzero-api:configmap-runtime.yaml",
+		"loopzero-cloud:loopzero-cloud:service.yaml",
+	} {
+		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: both}
+	}
+
+	// CLASS B — the file exists on one side and NEITHER chart produces the
+	// resource under default values: it is behind a toggle, a CRD that may be
+	// absent, or an environment that opts in.
+	conditional := "não renderiza sob os values padrão em nenhum dos dois charts; é condicional"
+	for _, k := range []string{
 		"loopzero-api:loopzero-api:cronjob-day30-verify.yaml",
 		"loopzero-api:loopzero-api:cronjob-day60-aes-delete.yaml",
-		"loopzero-api:loopzero-api:ingressroute.yaml",
+		"loopzero-api:loopzero-api:configmap-runtime.yaml",
 		"loopzero-api:loopzero-api:secret-runtime.yaml",
-		// loopzero-cloud — only in the published chart
-		"loopzero-cloud:loopzero-cloud:configmap.yaml",
-		"loopzero-cloud:loopzero-cloud:networkpolicy.yaml",
-		"loopzero-cloud:loopzero-cloud:secret.yaml",
-		"loopzero-cloud:loopzero-cloud:service.yaml",
-		"loopzero-cloud:loopzero-cloud:serviceaccount.yaml",
 		"loopzero-cloud:loopzero-cloud:servicemonitor.yaml",
-		// loopzero-cloud — only in the bootstrap chart
-		"loopzero-cloud:loopzero-cloud:configmap-runtime.yaml",
 		"loopzero-cloud:loopzero-cloud:externalsecret-lens-admin-key.yaml",
 		"loopzero-cloud:loopzero-cloud:externalsecret-rag-admin-key.yaml",
-		"loopzero-cloud:loopzero-cloud:ingressroute.yaml",
+		"loopzero-cloud:loopzero-cloud:configmap-runtime.yaml",
 		"loopzero-cloud:loopzero-cloud:secret-runtime.yaml",
 	} {
-		approvedDriftFiles[k] = approval{
-			ADR:       "ADR-0043",
-			Reason:    "herdado da aprovação em bloco por par; a razão por arquivo não foi medida",
-			Inherited: true,
-		}
+		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: conditional}
+	}
+
+	// CLASS C — exactly one side produces the resource. This is the asymmetry the
+	// gate exists to watch, and it is the class where a future removal would be a
+	// real regression rather than a naming artefact.
+	onlyPublished := "só o publicado renderiza este recurso; o de bootstrap não produz nenhum do mesmo kind"
+	for _, k := range []string{
+		"loopzero-api:loopzero-api:configmap.yaml",
+		"loopzero-api:loopzero-api:secret.yaml",
+		"loopzero-cloud:loopzero-cloud:configmap.yaml",
+		"loopzero-cloud:loopzero-cloud:secret.yaml",
+		"loopzero-cloud:loopzero-cloud:networkpolicy.yaml",
+		"loopzero-cloud:loopzero-cloud:serviceaccount.yaml",
+	} {
+		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: onlyPublished}
+	}
+	onlyBootstrap := "só o bootstrap renderiza este recurso; o publicado não produz nenhum do mesmo kind"
+	for _, k := range []string{
+		"loopzero-api:loopzero-api:ingressroute.yaml",
+		"loopzero-cloud:loopzero-cloud:ingressroute.yaml",
+	} {
+		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: onlyBootstrap}
 	}
 }
 

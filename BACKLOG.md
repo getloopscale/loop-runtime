@@ -1486,7 +1486,7 @@ dod:
 > comentário do Taskfile registra por que a auditoria original concluiu o contrário — ela rodou **sem**
 > a flag, em modo relatório. Hoje sai `✅ 0 NON-CONFORMANT charts without ADR exception`.
 
-## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
+## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1494,7 +1494,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `charts/loopzero-admission-policies/templates/` é **subconjunto estrito** de `infra/helm/admission-policies/templates/`: 18 contra 20, nada exclusivo do lado publicado. Os dois ausentes são `cosign-version-config.yaml` e **`vap-tenant-cr-shape.yaml`** — uma `ValidatingAdmissionPolicy` com `failurePolicy: Fail` cujo próprio cabeçalho declara por que existe: *"loopzero has zero admission webhooks on its own CRDs today … so a hand-authored `kubectl apply` of a malformed Tenant bypasses the REST-layer validation — the exact class of the M2 legacy-namespace incident"*. O chart de bootstrap é instalado por `cell.helmfile:169` e `core.helmfile:753`; o publicado é dependência declarada de `charts/loopzero-platform` (`Chart.yaml:58-61`), o caminho de self-host / ArgoCD L3. Issue #282.
 why_now: **uma fronteira de segurança que existe em dev e não em produção é pior que uma que não existe em lugar nenhum — porque faz o teste de dev passar.** E o allowlist do `helm-drift` (`helmdrift/check.go:29-32`) aprova **pares de chart inteiros**, então um ADR aprova em bloco toda divergência presente e futura daquele par: foi assim que os dois `ExternalSecret` que carregam as chaves de admin de RAG e Lens também sumiram do radar.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-3-infra-boundaries-plan.md — vap-tenant-cr-shape.yaml e cosign-version-config.yaml copiados para charts/loopzero-admission-policies, e o allowlist do helm-drift re-chaveado de PAR para PAR:ARQUIVO. O gate passou a verde e foi LIGADO em taskfiles/quality.yml (estava isento como failingGate).
 severity: alta — assimetria de fronteira de segurança entre superfícies de instalação. **Incerteza declarada:** não verifiquei qual caminho a produção usa hoje; se instala por Helmfile L2, o impacto é potencial (self-host e qualquer migração para L3), não ativo.
 dod:
@@ -2221,7 +2221,7 @@ dod:
 > proibi-lo seria um teste anulando uma decisão em vez de guardá-la. O que ficou guardado é o que
 > importa: `delete` no prefixo que o `api` cria reprova, porque o `api` não tem caminho de shredding.
 
-## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [ ]
+## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2229,12 +2229,38 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 durante a fatia slice-3. O `helm-drift` aprovava divergência **por par de charts** (`helmdrift/check.go`, mapa `approvedDrifts`): `loopzero-api:loopzero-api` e `loopzero-cloud:loopzero-cloud` apontavam para `ADR-0043`, e isso bastava para aprovar todo arquivo que aquele par viesse a divergir — inclusive arquivos que ninguém tinha visto. A fatia re-chaveou para `PAR:ARQUIVO`, o que exigiu enumerar as 21 divergências reais. Elas foram registradas com a justificativa honesta `herdado da aprovação em bloco por par; a razão por arquivo não foi medida` e o marcador `Inherited: true`.
 why_now: o re-chaveamento tornou visível uma dívida que antes não tinha onde aparecer. Enquanto as 21 entradas disserem `Inherited`, o gate protege contra a **22ª** divergência mas não afirma entender as 21 primeiras — e essa distinção só existe porque foi escrita.
-status: raw
+
 severity: média — nenhuma das 21 é um defeito conhecido; o risco é que uma delas seja um segundo `vap-tenant-cr-shape.yaml` e ninguém saiba.
 dod:
   - cada uma das 21 entradas tem uma razão medida, ou é removida do allowlist porque a divergência não deveria existir
   - nenhuma entrada resta com `Inherited: true`
 
+
+> **Fechado 2026-08-14, e a medição achou mais do que o item pedia.**
+>
+> As 21 ganharam razão medida e o `Inherited` foi a zero. Mas a razão não veio de ler os arquivos —
+> veio de **renderizar os dois charts de cada par** com `helm template` e comparar os kinds
+> efetivamente produzidos. Escrever 21 justificativas plausíveis a partir da leitura teria fechado o
+> item e escondido o achado, que é exatamente o que o comentário do código recusou fazer ao dizer
+> *"dizer isso é mais barato que inventar 21 racionalizações que leem como verificadas"*.
+>
+> As 21 caem em **três classes**, e as três exigem coisas diferentes:
+>
+> | classe | quantas | o que a medição mostrou |
+> |---|---|---|
+> | **A** — mesmo recurso, arquivo diferente | **4** | os dois charts renderizam; só o nome do arquivo difere. **Não é divergência** |
+> | **B** — condicional | **9** | o arquivo existe de um lado e **nenhum dos dois** produz o recurso sob values padrão |
+> | **C** — assimetria real | **8** | exatamente um lado produz o recurso. É o que o gate existe para vigiar |
+>
+> Duas asserções fixam o fechamento: nenhuma aprovação carrega `Inherited`, e toda razão nomeia a
+> classe medida. Verificadas por mutante — trocar uma razão por "aprovado" reprova nomeando as
+> entradas.
+>
+> **E o achado virou o `B-110`:** o gate compara nome de arquivo, e 13 das 21 que ele reporta não são
+> assimetria de instalação. As 4 da classe A ficam aprovadas com a razão dizendo que a aprovação é
+> contorno da forma de medir — removê-las as tornaria reprovações, quebrando o gate por um defeito
+> que é dele.
+status: shipped
 > Registrado 2026-08-12 pela fatia slice-3 (T1.4). O campo `Inherited` existe exatamente para que esta dívida seja contável em vez de invisível.
 
 ## B-077 — A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem   [x]
@@ -3712,4 +3738,23 @@ dod:
   - o resultado da varredura fica registrado junto da guarda, mesmo quando é zero — zero medido e zero suposto são fatos diferentes
 
 > Registrado 2026-08-14. A lição é da auditoria, que a aplicou a si mesma antes de eu aplicá-la a mim.
+
+## B-110 — O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: |
+  medido em 2026-08-14 ao fechar o `B-076`. O `helm-drift` compara as **listas de arquivos** de `templates/` dos dois charts de um par. Renderizando os dois com `helm template` sob values padrão e comparando os **kinds efetivamente produzidos**, **4 das 21** divergências que ele reporta não existem no que é instalado: `service.yaml` nos dois pares e `clusterrole.yaml`/`clusterrolebinding.yaml` no `loopzero-api` — os dois charts renderizam esses recursos, e só o arquivo que os declara tem nome diferente.
+  Outras **9** são condicionais: o arquivo existe de um lado só e **nenhum dos dois** produz o recurso sob os values padrão. Só **8** são assimetria real de recurso renderizado.
+why_now: o gate existe para vigiar assimetria de instalação, e 13 de 21 do que ele reporta não é isso. Cada falso reporte precisa de uma entrada de allowlist, e cada entrada de allowlist é uma linha que alguém lê como "divergência aceita" — o ruído desloca a atenção do que importa. É a mesma lição do `B-077`: medir o render, não a presença de arquivo.
+status: raw
+severity: média — não esconde defeito hoje (as 8 reais estão nomeadas), mas infla o allowlist com 13 aprovações de coisa que não é divergência, e um allowlist inflado é um allowlist que ninguém revisa
+dod:
+  - está decidido se a base de comparação passa a ser o recurso renderizado, e o que fazer com a classe condicional — um recurso que só aparece sob certos values não é comparável sob os values padrão
+  - se passar, as entradas da classe A saem do allowlist porque deixam de ser reportadas
+  - o custo de renderizar no gate está medido (hoje ele só lê diretório; `helm template` exige o binário e resolve dependências)
+
+> Registrado 2026-08-14 ao medir as 21 herdadas do `B-076`. Decisão que o separou deste item: `MEET-ASYNC-AMENDMENT-2026-08-14-helm-drift-per-file-reasons`.
 
