@@ -2386,6 +2386,41 @@ dod:
 > Próxima fatia por tamanho e por isolamento: `preview_controller.go` — 6 pontos num arquivo só, e o
 > `preview` não compartilha escritor de status com nenhum outro controller.
 
+> **Fatia `slice-21` — o `preview` saiu, 2026-08-13.** Restam **22** escritas cruas em **9** arquivos:
+>
+> | arquivo | cruas |
+> |---|---:|
+> | `platform/clustercredential_controller.go` | 5 |
+> | `platform/platformbootstrap_controller.go` | 5 |
+> | `app/exposure_controller.go` | 3 |
+> | `platform/gitrepositorybinding_controller.go` | 3 |
+> | `tenant/tenant_deletion.go` | 2 |
+> | `app/application_controller.go` · `app/application_reaper.go` · `environment/environment_controller.go` · `tenant/tenant_controller.go` | 1 cada |
+> | **total** | **22** |
+>
+> O `preview` foi de **6** para **0**. Duas coisas que a conversão dele ensinou e que valem para os
+> próximos:
+>
+> **A base não podia ser tirada na cabeça de cada `reconcileX`.** O `Reconcile` **muta** `.Status` na
+> inicialização de fase antes de despachar, então um snapshot tirado depois disso diferia a fase
+> contra ela mesma e o patch omitiria silenciosamente a transição que ele existe para gravar. Ela vai
+> **depois** do finalizer (senão carrega `resourceVersion` velho — o 409 da fatia 18) e **antes** da
+> inicialização de fase. É uma janela de duas linhas.
+>
+> **São dois snapshots, não um.** O caminho de deleção desvia **antes** do bloco do finalizer, então
+> não existe base para ele naquele ponto; e uma base única no topo estaria velha para o caminho
+> normal. Escopos disjuntos tornam impossível pegar a do outro caminho.
+>
+> **E a lição do teste, que vale mais que a conversão.** Minha primeira asserção "decisiva" construía
+> os objetos à mão e nunca chamava `Reconcile` — media `controller-runtime`, não a colocação da base.
+> Com o defeito da fatia 18 instalado, a suíte inteira passava. A que vale **executa** o `Reconcile` e
+> lê o corpo do patch por interceptor, e ela guarda **dois** contratos opostos de propósito: o corpo do
+> controller usa `MergeFrom` e não pode carregar `resourceVersion`; o `DeferReadinessSummary` usa
+> `MergeFromWithOptimisticLock` e **tem** de carregar, porque refaz o fetch e `conditions` é array —
+> escalar no RFC 7386. Minha primeira versão reprovava a segunda como se fosse defeito.
+>
+> Próxima por tamanho: `clustercredential_controller.go` ou `platformbootstrap_controller.go`, 5 cada.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go

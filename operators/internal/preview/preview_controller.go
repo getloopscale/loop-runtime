@@ -195,6 +195,23 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		}
 	}
 
+	// The base snapshot for every status write on this path.
+	//
+	// Placement is the whole trick, and slice-18 paid for getting it wrong on the
+	// Tenant controller: it goes AFTER the finalizer Update above, because that
+	// Update bumps resourceVersion, and a merge patch derived from a snapshot
+	// taken before it carries the stale version — turning the patch into an
+	// optimistic lock frozen at snapshot time, which is a WIDER conflict window
+	// than the refetch this contract removes.
+	//
+	// And BEFORE the phase initialisation below, because that mutates .Status: a
+	// snapshot taken after it would diff the phase against itself and the patch
+	// would silently omit the very transition it exists to persist.
+	//
+	// The deletion path does not pass through here — it returns above, before the
+	// finalizer block — so it takes its own snapshot (see reconcileDelete).
+	base := preview.DeepCopy()
+
 	// Initialize phase via state machine (T2.1 / COMP-002).
 	if preview.Status.Phase == "" {
 		preview.Status.Phase = loopzerov1.PreviewPhaseCreating
@@ -210,9 +227,9 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	// already established in evaluateWorkloadGate.
 	switch preview.Status.Phase {
 	case loopzerov1.PreviewPhaseCreating:
-		return r.reconcileCreating(ctx, &preview)
+		return r.reconcileCreating(ctx, &preview, base)
 	case loopzerov1.PreviewPhaseActive:
-		return r.reconcileActive(ctx, &preview, start)
+		return r.reconcileActive(ctx, &preview, base, start)
 	case loopzerov1.PreviewPhaseExpiring:
 		return r.reconcileExpiring(ctx, &preview)
 	default:
@@ -238,16 +255,17 @@ func (r *PreviewReconciler) previewNamespaceName(preview *loopzerov1.PreviewEnvi
 }
 
 // failPreviewCondition is the canonical "set status condition False +
-// update + log status-update failure" pattern used throughout
-// reconcileCreating. Phase 3 helper: collapses 4 inline 7-line copies
+// patch + log status-write failure" pattern used throughout
+// reconcileCreating. Phase 3 helper: shared by 5 call sites, collapsing what
+// were 4 inline 7-line copies
 // across NamespaceReady/NetworkPolicyReady/ResourceQuotaReady error paths.
 // Returns the err untouched so the caller decides the controller-runtime
 // result envelope (some paths want Requeue, others want no-requeue).
-func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview *loopzerov1.PreviewEnvironment, condType, reason, msg, statusLogContext string) {
+func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment, condType, reason, msg, statusLogContext string) {
 	logger := log.FromContext(ctx)
 	conditions.SetCondition(&preview.Status.Conditions, condType,
 		metav1.ConditionFalse, reason, msg, preview.Generation)
-	if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+	if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
 		if statusLogContext == "" {
 			logger.Error(statusErr, "failed to update preview status")
 		} else {
@@ -257,11 +275,11 @@ func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview *l
 }
 
 // reconcileCreating provisions the preview namespace and route.
-func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	nsName, err := r.previewNamespaceName(preview)
 	if err != nil {
-		r.failPreviewCondition(ctx, preview, conditions.TypePreviewNamespaceReady, "InvalidNaming", err.Error(), "")
+		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewNamespaceReady, "InvalidNaming", err.Error(), "")
 		// Naming is input validation — requeue is pointless without a Spec
 		// change, but we surface the condition and let the user fix the CR.
 		return ctrl.Result{}, nil
@@ -284,7 +302,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
 		return nil
 	}); err != nil {
-		r.failPreviewCondition(ctx, preview, conditions.TypePreviewNamespaceReady, "CreateFailed", err.Error(), "")
+		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewNamespaceReady, "CreateFailed", err.Error(), "")
 		return ctrl.Result{}, err
 	}
 
@@ -294,14 +312,14 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	// Sprint 5 / T1.2 — namespace hardening (NetworkPolicy + ResourceQuota +
 	// LimitRange). Each is its own condition for finer-grained observability.
 	if npErr := r.reconcilePreviewNetworkPolicies(ctx, nsName); npErr != nil {
-		r.failPreviewCondition(ctx, preview, conditions.TypePreviewNetworkPolicyReady, "ApplyFailed", npErr.Error(), "NP failure")
+		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewNetworkPolicyReady, "ApplyFailed", npErr.Error(), "NP failure")
 		return ctrl.Result{}, npErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNetworkPolicyReady,
 		metav1.ConditionTrue, "Ready", "Preview network policies applied (deny-all + allow-ingress + allow-egress)", preview.Generation)
 
 	if quotaErr := r.reconcilePreviewQuota(ctx, nsName); quotaErr != nil {
-		r.failPreviewCondition(ctx, preview, conditions.TypePreviewResourceQuotaReady, "ApplyFailed", quotaErr.Error(), "quota failure")
+		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewResourceQuotaReady, "ApplyFailed", quotaErr.Error(), "quota failure")
 		return ctrl.Result{}, quotaErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewResourceQuotaReady,
@@ -315,7 +333,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	// before the first deploy, otherwise pods CrashLoop with "serviceaccount
 	// loopzero-app not found" and the workload-readiness gate keeps requeuing.
 	if saErr := r.reconcilePreviewServiceAccount(ctx, nsName); saErr != nil {
-		r.failPreviewCondition(ctx, preview, conditions.TypePreviewServiceAccountReady, "ApplyFailed", saErr.Error(), "SA failure")
+		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewServiceAccountReady, "ApplyFailed", saErr.Error(), "SA failure")
 		return ctrl.Result{}, saErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewServiceAccountReady,
@@ -344,7 +362,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	if gated {
 		// Persist conditions/phase changes the gate may have set, then
 		// honor its requeue/error.
-		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+		if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
 			logger.Error(statusErr, "failed to update preview status while gating on workload conditions")
 			return ctrl.Result{}, statusErr
 		}
@@ -355,7 +373,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationCompleted),
 	)
 
-	if err := r.Status().Update(ctx, preview); err != nil {
+	if err := r.Status().Patch(ctx, preview, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -387,7 +405,8 @@ const (
 //
 // Side effects: may set preview.Status.Phase to Failed via the state
 // machine if BuildCompleted=False. Caller is responsible for persisting
-// the Status with r.Status().Update.
+// the Status with r.Status().Patch off the base snapshot — never Update
+// (ADR 2026-08-12-status-writer-contract).
 func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvironment) (ctrl.Result, bool) {
 	now := time.Now()
 
@@ -461,7 +480,7 @@ func findCondition(conds []metav1.Condition, name string) *metav1.Condition {
 // canonical "current time" for this reconcile pass — captured once at
 // Reconcile entry — so TTL comparison is deterministic under mock clocks
 // and consistent with other time-dependent decisions in the same pass.
-func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopzerov1.PreviewEnvironment, now time.Time) (ctrl.Result, error) {
+func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment, now time.Time) (ctrl.Result, error) {
 	// Check TTL — transition Active -> Expiring via state machine.
 	if preview.Spec.ExpiresAt != nil && now.After(preview.Spec.ExpiresAt.Time) {
 		log.FromContext(ctx).Info("preview TTL expired, transitioning to Expiring",
@@ -470,7 +489,7 @@ func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopze
 		preview.Status.Phase = loopzerov1.PreviewPhase(
 			previewSM.Transition(statemachine.PPhActive, statemachine.PPEventExpirationTriggered),
 		)
-		if err := r.Status().Update(ctx, preview); err != nil {
+		if err := r.Status().Patch(ctx, preview, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -523,6 +542,12 @@ const (
 // LoopZero-side namespace is gone. (Per ADR D7 — controller owns operational
 // state in the runtime cluster; API owns gitops + Application CRs.)
 func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+	// This path's own base. Reconcile branches here BEFORE the finalizer block,
+	// so the snapshot the normal path takes does not exist yet — and one taken at
+	// the top of Reconcile to serve both would be stale for the normal path.
+	// Two snapshots in disjoint scopes make picking the wrong one impossible.
+	base := preview.DeepCopy()
+
 	logger := log.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(preview, previewFinalizer) {
@@ -579,7 +604,7 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 					} else {
 						preview.Status.Phase = loopzerov1.PreviewPhase(nextState)
 					}
-					if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+					if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
 						logger.Error(statusErr, "preview cleanup: failed to update CleanupFailed status")
 					}
 					// Persist the bumped annotation BEFORE returning so the
@@ -615,7 +640,7 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 
 	// Status update is best-effort here — even if it fails, dropping the
 	// finalizer must succeed or the CR is stuck forever.
-	if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+	if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
 		logger.Error(statusErr, "preview cleanup: status update failed (continuing)")
 	}
 
