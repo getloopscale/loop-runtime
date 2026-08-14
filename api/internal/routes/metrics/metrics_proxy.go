@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package metrics serves /api/v1/projects/{name}/metrics: the proxy that answers
+// a project's metrics query, and the Prometheus client behind it.
+//
+// Twenty-third family to leave the flat `routes` package (B-080, slice-40). The
+// proxy and the client ship together because they are one read path, even though
+// the proxy does not name the client's type — the wiring happens in cmd.
+package metrics
 
 import (
 	"context"
@@ -46,7 +52,6 @@ type PrometheusQueryClient interface {
 	QueryRange(ctx context.Context, promQL string, startUnix, endUnix int64, stepSeconds int) ([]PrometheusDataPoint, error)
 }
 
-// MetricsProxyHandler handles GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime
 // StatusProjectStore resolves a project by name for the caller's tenant.
 //
 // Declared here rather than imported from the status family that also declares
@@ -58,6 +63,7 @@ type StatusProjectStore interface {
 	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
 }
 
+// MetricsProxyHandler handles GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime
 type MetricsProxyHandler struct {
 	projects   StatusProjectStore
 	promClient PrometheusQueryClient

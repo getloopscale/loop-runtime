@@ -312,6 +312,17 @@ var allowed = map[string]map[string]bool{
 	// files.
 	"status": {"httpio": true, "routestest": true},
 	"logs":   {"httpio": true, "routestest": true},
+
+	// The last three families (slice-40, B-080). Serve the project metrics proxy,
+	// the deploy timeline, and the GitOps sync callback.
+	//
+	// `timeline` and `argocd` declare NO leaf at all: they write their own
+	// responses. An empty set here is a family that imports no sibling, which the
+	// `leaves` map above distinguishes from an actual leaf — the distinction that
+	// let the parent reach `version` before slice-19 measured it.
+	"metrics":  {"httpio": true},
+	"timeline": {},
+	"argocd":   {},
 }
 
 // Config drives the gate.

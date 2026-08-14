@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package routes — deploy timeline SSE handler (T4.2 of Phase D plan).
+// Package timeline — deploy timeline SSE handler (T4.2 of Phase D plan).
 //
 // Mirrors api/internal/sse/stream_handler.go shape with simplifications:
 //   - One event scope: deploy_id (vs build_id + project for J-17 stream)
@@ -10,7 +10,18 @@
 //   - 2s default poll + Flusher per chunk (SSE buffer trap from
 //     feedback_loopzero_cloud_sse_proxy_buffers_until_eof.md)
 //   - 30min cap per ADR D6 (orphan stream guard)
-package routes
+//
+// Package timeline serves GET /api/v1/deploys/{deployID}/timeline: the ordered
+// events of one deploy.
+//
+// Twenty-fourth family to leave the flat `routes` package (B-080, slice-40).
+//
+// It registers its route through a helper (RegisterDeployTimelineRoute) rather
+// than by a literal in router.go, and moving that helper broke the spec⟺router
+// conformance test — which scanned the routes directory SHALLOWLY and stopped
+// seeing the file that spells the path. The route was registered the whole time;
+// the scan had stopped reaching it. Fixed by walking the tree.
+package timeline
 
 import (
 	"context"

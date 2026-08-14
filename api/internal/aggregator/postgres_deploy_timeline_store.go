@@ -6,8 +6,7 @@ package aggregator
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 )
 
 // SSEReader is the minimal read surface from sse.EventStore the deploy
@@ -52,7 +51,7 @@ func NewPostgresDeployTimelineStore(b BuildLookup, r SSEReader) *PostgresDeployT
 func (s *PostgresDeployTimelineStore) DeployTenantID(ctx context.Context, deployID string) (string, error) {
 	tenant, err := s.BuildLookup.GetTenantForBuild(ctx, deployID)
 	if err != nil || tenant == "" {
-		return "", routes.ErrDeployNotFound
+		return "", timeline.ErrDeployNotFound
 	}
 	return tenant, nil
 }
@@ -62,19 +61,19 @@ func (s *PostgresDeployTimelineStore) DeployTenantID(ctx context.Context, deploy
 // BEFORE invoking this method, so the tenant arg is the resolved-owner
 // — this method honors ADR D8 by re-validating ownership at the read
 // boundary (defense-in-depth).
-func (s *PostgresDeployTimelineStore) GetAfterForDeploy(ctx context.Context, tenantID, deployID string, afterID int64) ([]routes.DeployTimelineEvent, error) {
+func (s *PostgresDeployTimelineStore) GetAfterForDeploy(ctx context.Context, tenantID, deployID string, afterID int64) ([]timeline.DeployTimelineEvent, error) {
 	// Defense-in-depth re-check (ADR D8).
 	owner, err := s.BuildLookup.GetTenantForBuild(ctx, deployID)
 	if err != nil || owner == "" || owner != tenantID {
-		return nil, routes.ErrDeployNotFound
+		return nil, timeline.ErrDeployNotFound
 	}
 	rows, err := s.Reader.GetAfter(ctx, deployID, afterID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]routes.DeployTimelineEvent, 0, len(rows))
+	out := make([]timeline.DeployTimelineEvent, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, routes.DeployTimelineEvent{
+		out = append(out, timeline.DeployTimelineEvent{
 			ID:        row.ID,
 			EventType: row.EventType,
 			Data:      row.Data,

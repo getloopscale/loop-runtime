@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
@@ -202,7 +202,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// invokes the handler body (handler unit tests own that contract).
 	integrationsGitHubHandler := integrations.NewIntegrationsGitHubHandler(nil, nil)
 	auditHandler := audit.NewAuditHandler(nil)
-	argoCallbackHandler := routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
+	argoCallbackHandler := argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 
 	cfg := server.Config{
 		Port:                      "0",

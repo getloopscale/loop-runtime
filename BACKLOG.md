@@ -2687,6 +2687,31 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > caminho mudou. O pai carrega dois da mesma classe hoje, e o lint do repositório tem linha de base
 > de 200. Fica dito em vez de consertado em silêncio numa fatia que é de mudança de lugar.
 
+> **Fatia 40 — `metrics`, `timeline` e `argocd` (2026-08-14). O pai fica com UM arquivo.** De 43
+> arquivos de produção para **1**: o `source.go`, que permanece por decisão, sob a regra travada do
+> seam LoopZeroKit↔LoopZeroCloud. **28 subpacotes**, cerca verde, lint zero.
+>
+> **A extração quebrou o teste de conformidade spec⟺router, e o defeito era do teste.** O
+> `timeline` registra sua rota por um **helper** (`RegisterDeployTimelineRoute`), não por literal no
+> `router.go` — e o teste já previa isso: varria `../routes` justamente para achar rotas registradas
+> por helper. Só que varria com `os.ReadDir`, que é **raso**. Enquanto `routes` era um pacote plano,
+> raso bastava; no instante em que a família virou subpacote, o arquivo que soletra o caminho ficou
+> fora do alcance e a rota foi reportada como *phantom spec*. **Ela estava registrada o tempo todo.**
+> Corrigido para descer a árvore, com mutante confirmando que a asserção ainda pega rota de verdade
+> ausente.
+>
+> É a terceira ferramenta desta decomposição cujo modelo era "tudo está num pacote plano": a cerca
+> (que precisou de registro de subpacotes), o `.gitignore` (que engoliu um diretório novo), e agora
+> este scanner. **Decompor não quebra só o código — quebra as ferramentas que pressupunham a forma
+> antiga**, e cada uma só se revela quando a forma muda.
+>
+> `metrics_proxy.go` **não** usa o `prometheus_client.go` — verificado antes de agrupar. Ficam no mesmo
+> pacote porque são um caminho de leitura só, com a ligação feita no `cmd`.
+>
+> **Quatro arquivos não rastreados de outra sessão** estão na árvore, e um deles carrega um `t.Skip`
+> sem URL que **reprova o portão de entrega**. Não são meus; consertá-los não é minha decisão. Duas
+> fatias seguem commitadas localmente à espera.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

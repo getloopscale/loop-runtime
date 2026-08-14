@@ -15,6 +15,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/projects"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"net/http"
 
@@ -472,7 +473,7 @@ func registerProtectedRoutes(
 	// tenant from middleware.GetUserContext (same auth contract as
 	// every other authenticated route in this group).
 	if cfg.DeployTimelineStore != nil {
-		routes.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore,
+		timeline.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore,
 			func(ctx context.Context) (string, bool) {
 				uc := middleware.GetUserContext(ctx)
 				if uc == nil || uc.TenantID == "" {

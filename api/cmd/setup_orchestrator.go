@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
@@ -29,7 +31,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/loki"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -83,13 +84,13 @@ type OrchestratorDeps struct {
 	RollbackHandler     *rollback.RollbackHandler
 	PromoteHandler      *promote.PromoteHandler
 	StatusHandler       *status.StatusHandler
-	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
-	StatusSSEHandler    *status.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	MetricsProxyHandler *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
+	StatusSSEHandler    *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      domain.ProjectDeleter
-	ArgoCallbackHandler *routes.ArgoCallbackHandler
+	ArgoCallbackHandler *argocd.ArgoCallbackHandler
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
@@ -239,11 +240,11 @@ func setupOrchestrator(
 	// ship nil so the handler returns 503 prometheus_not_configured honestly
 	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
 	// Go tests inject httptest-backed fakes.
-	var promClient routes.PrometheusQueryClient
+	var promClient metrics.PrometheusQueryClient
 	if cfg.PrometheusAddress != "" {
-		promClient = routes.NewPrometheusClient(cfg.PrometheusAddress, nil)
+		promClient = metrics.NewPrometheusClient(cfg.PrometheusAddress, nil)
 	}
-	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, promClient)
+	metricsProxyHandler := metrics.NewMetricsProxyHandler(projectStore, promClient)
 
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
 	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
@@ -366,7 +367,7 @@ func setupOrchestrator(
 	} else {
 		logger.Warn("sync callback activator: dynamic client unavailable; falling back to LastIndex parser (code-005 hyphen ambiguity remains)")
 	}
-	argoCallbackHandler := routes.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
+	argoCallbackHandler := argocd.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
 		Orchestrator:        orch,

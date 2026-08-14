@@ -8,15 +8,18 @@ import (
 	"errors"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"log/slog"
 	"net/http"
 	"os"
@@ -105,7 +108,7 @@ type Config struct {
 	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
 	// per-app SBOM metadata + presigned download URLs from S3.
 	BuildSBOMHandler    *builds.BuildSBOMHandler
-	ArgoCallbackHandler *routes.ArgoCallbackHandler
+	ArgoCallbackHandler *argocd.ArgoCallbackHandler
 	RateLimiter         *middleware.RateLimiter
 	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
 	// When non-nil, mounted as the FIRST middleware so brute-force attempts
@@ -130,14 +133,14 @@ type Config struct {
 	RollbackHandler         *rollback.RollbackHandler
 	PromoteHandler          *promote.PromoteHandler
 	StatusHandler           *status.StatusHandler
-	MetricsProxyHandler     *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
-	StatusSSEHandler        *status.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	MetricsProxyHandler     *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
+	StatusSSEHandler        *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
 	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
 	// nil, the route is omitted (legacy / test paths). Production wires
 	// aggregator.SSEEventSink-backed PostgresEventStore that satisfies
 	// the DeployTimelineEventStore contract.
-	DeployTimelineStore routes.DeployTimelineEventStore
+	DeployTimelineStore timeline.DeployTimelineEventStore
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
