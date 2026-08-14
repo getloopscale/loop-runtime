@@ -13,12 +13,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/conditions"
 )
 
 // notYetConverted are the files in this package still holding bare
@@ -442,5 +447,160 @@ func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.
 		t.Errorf("a status field written by another writer between the read and the patch was REVERTED. "+
 			"That is the damage the single-writer contract names, and an anchor taken after a re-fetch "+
 			"produces it while still looking like a merge patch (B-105).\npatch: %s", bodies[0])
+	}
+}
+
+// TestApplicationController_ErrorPathPersistsAFreshReadinessSummary is the
+// behavioural guard for B-105 bala 2 (decision
+// MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation).
+//
+// The reconcile has TWO points that persist .status: the happy path at the end,
+// and the ExposedRoute failure path, which marks IngressReady=False and patches
+// before returning the error. Only the first folded in the readiness summary, so
+// a failed pass persisted a FRESH IngressReady=False next to a Ready condition
+// left over from the previous pass — stale, and possibly True.
+//
+// The assertion is on persisted state, never on the source text: seed a stale
+// Ready=True at an older generation, force the ExposedRoute write to fail, and
+// read back what the server holds. ADR-0025 D3 requires the summary to be the
+// last status mutation even on early return.
+func TestApplicationController_ErrorPathPersistsAFreshReadinessSummary(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := loopzerov1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	const staleGen, currentGen = 6, 7
+	seed := &loopzerov1.LoopZeroApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-err", Namespace: "loopzero-system", Generation: currentGen},
+		Spec: loopzerov1.LoopZeroApplicationSpec{
+			TenantRef: "tn-x", Project: "p", Environment: "e",
+			ServiceName: "svc", Hostname: "app-err.example.invalid",
+		},
+		Status: loopzerov1.LoopZeroApplicationStatus{
+			Conditions: []metav1.Condition{{
+				Type:               conditions.TypeReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             conditions.ReasonReady,
+				Message:            "left over from the previous pass",
+				ObservedGeneration: staleGen,
+				LastTransitionTime: metav1.Now(),
+			}},
+		},
+	}
+
+	inner := fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
+		WithStatusSubresource(&loopzerov1.LoopZeroApplication{}).Build()
+
+	// Deny the ExposedRoute write so reconcileExposedRoute takes its failure
+	// branch — the branch that persists status and returns.
+	c := interceptor.NewClient(inner, interceptor.Funcs{
+		Create: func(ctx context.Context, cl client.WithWatch, obj client.Object,
+			opts ...client.CreateOption) error {
+			if _, isRoute := obj.(*loopzerov1.ExposedRoute); isRoute {
+				return fmt.Errorf("denied by the guard")
+			}
+			return cl.Create(ctx, obj, opts...)
+		},
+	})
+
+	r := &ApplicationReconciler{Client: c, Scheme: scheme, BaseDomain: "example.invalid"}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: seed.Name, Namespace: seed.Namespace},
+	}); err == nil {
+		t.Fatal("Reconcile returned no error — the failure branch under test never ran, so a green " +
+			"result here would prove nothing")
+	}
+
+	var got loopzerov1.LoopZeroApplication
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(seed), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	ingress := meta.FindStatusCondition(got.Status.Conditions, conditions.TypeIngressReady)
+	if ingress == nil || ingress.Status != metav1.ConditionFalse {
+		t.Fatalf("the failure branch did not persist IngressReady=False — the guard is not observing "+
+			"the write it was built for. conditions: %+v", got.Status.Conditions)
+	}
+
+	ready := meta.FindStatusCondition(got.Status.Conditions, conditions.TypeReady)
+	if ready == nil {
+		t.Fatalf("no Ready condition persisted. conditions: %+v", got.Status.Conditions)
+	}
+	if ready.ObservedGeneration != currentGen {
+		t.Errorf("Ready was persisted at generation %d while the object is at %d — the summary was NOT "+
+			"recomputed on this pass. A reader sees a readiness verdict from before the failure, which "+
+			"is exactly when it is read (ADR-0025 D3, B-105).", ready.ObservedGeneration, currentGen)
+	}
+	if ready.Status != metav1.ConditionFalse {
+		t.Errorf("IngressReady=False was persisted but Ready stayed %s — a failed pass left the summary "+
+			"claiming the application is ready.", ready.Status)
+	}
+}
+
+// TestApplicationController_StatusIsPersistedFromExactlyOnePlace is the
+// structural half of the B-105 guard, and it exists because the B-085 table
+// scored this file as conformant while the defect was live: that table counts
+// the CALL (`Patch` vs `Update`), and the defect was in the ORDERING around it.
+//
+// Counting calls cannot see an ordering invariant. What it can see is how many
+// places are in a position to violate one. With every persist routed through
+// patchStatus, that number is one — and a new early-return path cannot skip the
+// readiness summary without first adding a second persist point here, which is
+// what this test refuses.
+//
+// It walks the AST rather than the file text: a guard for this defect that
+// matched strings would be the same mistake one layer up.
+func TestApplicationController_StatusIsPersistedFromExactlyOnePlace(t *testing.T) {
+	const file = "application_controller.go"
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, file, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", file, err)
+	}
+
+	// enclosing maps a position to the function declaration containing it.
+	enclosing := func(pos token.Pos) string {
+		for _, decl := range parsed.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if ok && fn.Pos() <= pos && pos <= fn.End() {
+				return fn.Name.Name
+			}
+		}
+		return "(top level)"
+	}
+
+	var sites []string
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		// Match `<x>.Status().Patch(...)` and `<x>.Status().Update(...)`.
+		outer, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || (outer.Sel.Name != "Patch" && outer.Sel.Name != "Update") {
+			return true
+		}
+		innerCall, ok := outer.X.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		inner, ok := innerCall.Fun.(*ast.SelectorExpr)
+		if !ok || inner.Sel.Name != "Status" {
+			return true
+		}
+		sites = append(sites, fmt.Sprintf("%s (line %d, in %s)",
+			outer.Sel.Name, fset.Position(call.Pos()).Line, enclosing(call.Pos())))
+		return true
+	})
+
+	if len(sites) != 1 {
+		t.Fatalf("%s persists .status from %d places, expected exactly 1 (patchStatus). Every extra "+
+			"place is a place where the readiness summary can be forgotten — which is how B-105 "+
+			"happened.\nsites: %v", file, len(sites), sites)
+	}
+	if !strings.Contains(sites[0], "in patchStatus") {
+		t.Errorf("the single persist site is not inside patchStatus, so the readiness summary is no "+
+			"longer guaranteed to be the last status mutation (ADR-0025 D3).\nsite: %s", sites[0])
 	}
 }

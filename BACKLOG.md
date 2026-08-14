@@ -301,7 +301,7 @@ suggested_mode: bug
 source: discover-review
 evidence: `task test:unit` sai **201**. Um único teste falha: `api/internal/contract/dashboard_consumer_test.go:159` — *"dashboard/src calls 1 engine path(s) not in testdata/dashboard-consumed-paths.txt (add to the list + engine.yaml): [/api/v1/auth/whoami]"*. O teste caminha por `dashboardSrcDir = "../../../../loopzero-cloud/dashboard/src"` (`:32`), ou seja, lê o **repo irmão**. E o dashboard de fato passou a chamar o caminho: `../loopzero-cloud/dashboard/src/hooks/settings/use-whoami.ts:22` faz `engineFetch<Whoami>('/api/v1/auth/whoami')`. A lista deste repo tem 13 entradas e não inclui essa. Medido em 2026-08-09.
 why_now: encontrado ao rodar o checklist de pré-conclusão do próprio repo (`CLAUDE.md § Pre-completion checklist`) depois do rename de clusters. **Não é do rename**: `git diff 26ba1340..HEAD --name-only` não toca `api/internal/contract/` nem o `testdata/`, e o dashboard vive em `loopzero-cloud`, repositório que esta sessão não abriu. É drift pré-existente que estava mascarado porque `task test:unit` não vinha sendo rodado inteiro.
-status: raw
+status: shipped
 dod:
   - está decidido se `/api/v1/auth/whoami` **deve** ser consumido pelo dashboard — a lista é contrato, não formalidade, e adicionar a linha sem responder isso transforma o gate em carimbo
   - se deve: a entrada existe em `testdata/dashboard-consumed-paths.txt` **e** em `engine.yaml`, como a própria mensagem do teste exige
@@ -392,7 +392,7 @@ dod:
 
 > B-011 e B-012 registrados 2026-08-10 durante o diagnóstico do app-dev.
 
-## B-013 — O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado   [ ]
+## B-013 — O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -400,7 +400,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet em 2026-08-10. `kubectl --context k3d-loopzero-runtime-2 get nodes` mostra `k3d-loopzero-runtime-2-agent-0` **`NotReady`**, com `Kubelet stopped posting node status` e `lastHeartbeatTime = 2026-07-23T14:36:39Z` — 18 dias parado. O container Docker está **`Up 2 semanas`**: o processo vive, o k3s dentro dele não. O log daquele dia registra a morte: `Shutdown request received: failed to start networking: unable to initialize network policy controller: error getting node subnet: failed to find interface with specified node ip` — deriva de IP na rede Docker. Reiniciei o container (2026-08-10 03:15): o k3s **inicia** (`Starting k3s agent v1.32.13+k3s1`) e então trava em `Waiting to retrieve agent configuration; server is not ready: failed to retrieve configuration from server: **not authorized**` — o token do agente já não bate com o do servidor. Consequência colateral: os 6 pods em `Terminating` há 18-28 dias estão todos nesse nó, e um nó NotReady nunca confirma deleção; todos têm substituto `Running` no nó servidor, então não há degradação de serviço por causa deles.
 why_now: encontrado ao perseguir os 6 pods `Terminating` até a origem, em vez de forçar a remoção deles. Forçar teria escondido o nó morto.
-status: raw
+status: shipped
 severity: baixa — `select cell_id, count(*) from tenants` retorna 94 em `cell-default` e zero em `cell-2`.
 status_live: **RESOLVIDO em 2026-08-10.** Token e CA batiam, o servidor estava `readyz=ok` e não registrava recusa; a senha de nó é guardada como `hash`, então não dava para alinhar por patch. Em vez de seguir escavando internals num nó com zero tenants, apliquei o caminho canônico para agente que não re-registra: `k3d node delete` do agente morto + `k3d node create` do substituto. O novo (`k3d-agent-0-0`) subiu **`Ready`**. Removido também o objeto Node órfão — lápide sem container — e, aí sim, os 6 pods `Terminating` foram removidos com `--force`: **com a causa raiz corrigida, forçar já não escondia nada**, que era a objeção original. Resultado: `loopzero-runtime-2` com 2 nós `Ready` e **0 pods problemáticos** de 14.
 dod:
@@ -549,7 +549,7 @@ suggested_mode: evolve
 source: discover-live-test
 evidence: medido em 2026-08-10. `auth-dev.loopzero.example` devolvia `502` com Kratos e Hydra **saudáveis** no cluster: a borda encaminha para `localhost:14433` e `localhost:14444`, e os serviços `ory-kratos-public` / `ory-hydra-public` são `ClusterIP` — alcançáveis apenas por `kubectl port-forward`. Nenhuma unidade systemd os gerencia (diferente de `loopzero-cloud-dataplane-authz.service`), então eram processos manuais que morreram junto com os clusters. Restaurados em laço de reinício, `auth-dev` voltou a `200` e o fluxo de login a `303`.
 why_now: é o mesmo defeito do `B-010` — encaminhamento de porta como transporte em vez de ferramenta de depuração — noutro serviço, e sobreviveu porque ninguém havia destruído os clusters desde então. O `loopzero-cloud` ganhou NodePort; Kratos e Hydra não.
-status: raw
+status: shipped
 severity: média — o login funciona hoje, mas por um processo que ninguém supervisiona e que qualquer reinício derruba.
 dod:
   - Kratos e Hydra são alcançados pela borda sem `kubectl port-forward`, ou o encaminhamento é uma unidade supervisionada e declarada como as irmãs
@@ -605,7 +605,7 @@ dod:
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor.
 
-## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [ ]
+## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [x]
 
 domain: engine-go
 repo: loopzero
@@ -801,7 +801,7 @@ dod:
 
 > Registrado 2026-08-10, a partir da diretriz de superfície única do sponsor.
 
-## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [x]
+## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
 
 domain: engine-go
 repo: loopzero
@@ -840,7 +840,7 @@ suggested_mode: review
 source: human
 evidence: medido em 2026-08-11. `api/go.mod:19` declara `github.com/getloopscale/loopzero-forge v0.6.0`, e **18 arquivos** do engine a importam — incluindo `api/internal/argo/workflow_builder.go`, que constrói os workflows de build (o coração do caminho de deploy). O `loopzero-forge` **não aparece na tabela de domínios** do `cycle-backlog.md` (zero menções), **não tem especialista** em `agents/`, e **não tem checkout no disco** (`loopzero-platform/loopzero-forge` não existe).
 why_now: a pergunta sobre separação de domínios expôs a lacuna. Todo repositório que o ecossistema mantém tem domínio e especialista — este tem 18 arquivos dependendo dele e nenhum dos dois. Um achado nele não teria para onde ser roteado: `route_domain.py` recusaria, e a regra de intake (`G1`) bloquearia o item.
-status: raw
+status: shipped
 severity: média — a dependência funciona (versão fixada, build verde). O custo aparece quando ela precisar mudar: ninguém é dono, ninguém tem o código à mão, e o caminho de manutenção do ecossistema não a alcança.
 dod:
   - `loopzero-forge` tem domínio e especialista, ou está declarado explicitamente como dependência de terceiros fora do ecossistema — as duas respostas são aceitáveis, o silêncio não
@@ -879,7 +879,7 @@ source: discover-review
 severity: **alta** — não é vazamento (a rota está autenticada), mas é escalonamento horizontal: qualquer membro autenticado de um time abre o portal de cobrança dele, onde se vê fatura, meio de pagamento e histórico. O `loopzero-cloud` já decidiu que isso é privilégio de `owner`; o engine oferece o mesmo pela porta ao lado, sem a exigência.
 evidence: medido em 2026-08-11 ao planejar o `B-029`. As duas implementações da sessão de portal do Stripe exigem autorização **diferente** para a mesma capacidade. `loopzero-cloud/cmd/main.go:1572` monta `r.With(auth.RequireRole(tenantProvisioner, "owner")).Get("/portal", billingHandler.Portal)`. O engine, em `api/internal/server/router.go:520`, monta `r.With(rateLimitMiddlewares...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)` — **rate-limit e nada mais**. O engine **tem** o middleware: `api/internal/middleware/roles.go:26` define `RequireRole(minRole)` com a hierarquia `owner > admin > member`, e as rotas vizinhas o usam (`router.go:512` aplica `middleware.RequireAdmin` em `tenants/bulk-delete`). A de portal simplesmente não o aplica.
 why_now: apareceu ao medir a viabilidade de unificar as duas implementações — a comparação lado a lado expôs a divergência que nenhuma leitura de um lado só mostraria. É o custo típico de capacidade duplicada: as duas cópias divergem, e a que diverge para menos rigor é a que ninguém percebe.
-status: raw
+status: shipped
 dod:
   - `POST /api/v1/billing/portal` no engine exige o mesmo papel que o `loopzero-cloud` exige, ou está registrado por que a assimetria é deliberada
   - existe verificação que compara autorização entre implementações duplicadas da mesma capacidade — enquanto houver duas, elas não podem divergir em silêncio
@@ -900,7 +900,7 @@ source: discover-review
 severity: **alta** — a URL entregue ao usuário não é uma sessão emitida pelo Stripe, e o identificador do cliente vai no endereço. Não é vazamento de credencial, mas é identificador de cobrança em texto claro numa URL, que trafega em histórico de navegador, log de proxy e barra de endereços.
 evidence: medido em 2026-08-11. `api/internal/routes/billing.go:245` define o caminho sem credencial: `url := "https://billing.stripe.com/p/login/" + customerID // legacy fallback`. Ele só é substituído por uma sessão real quando `h.portalCreator != nil`, o que exige `STRIPE_SECRET_KEY`. **No app-dev o fallback está ativo**: o deployment monta o Secret `loopzero-api-stripe` com `optional: true`, e `kubectl get secret loopzero-api-stripe` devolve **NotFound**. Ou seja, hoje `loopzero billing portal` entrega ao usuário uma URL montada com o `cus_...` dele.
 why_now: apareceu ao medir se o engine realmente precisa da credencial do Stripe (fase de planejamento do `B-029`). A resposta é que ele **não precisa** — e é exatamente por isso que o problema existe: o fallback foi escrito para que dev e testes funcionassem sem chave, e virou o comportamento de produção do ambiente porque o Secret nunca foi semeado. O comentário no código diz *"otherwise preserve legacy placeholder behavior so local dev + tests without a Stripe key keep working"* — a intenção era local, o efeito é público.
-status: raw
+status: shipped
 dod:
   - `loopzero billing portal` devolve uma sessão emitida pelo Stripe, ou falha dizendo que o faturamento não está configurado — nunca uma URL construída
   - o fallback, se mantido, é explicitamente restrito a ambiente de desenvolvimento e não pode ser alcançado quando o ambiente é público
@@ -1034,7 +1034,7 @@ dod:
   - a degradação silenciosa deixa de ser silenciosa: quando o agregador não sobe, isso
     aparece como estado do sistema, não como uma linha de log no boot
 
-## B-034 — A cobrança por uso não tem para onde reportar   [x]
+## B-034 — A cobrança por uso não tem para onde reportar   [ ]
 
 domain: control-plane
 repo: loopzero-cloud
@@ -1055,7 +1055,7 @@ dod:
   - o reporter enviando ao menos um registro, provado pelo lado do Stripe
   - o caso "assinatura sem item" falha alto em vez de percorrer zero linhas em silêncio
 
-## B-035 — O segredo que verifica pagamentos não existia no ambiente   [x]
+## B-035 — O segredo que verifica pagamentos não existia no ambiente   [ ]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1080,7 +1080,7 @@ dod:
   - um evento real do Stripe processado no app-dev, provado pelo lado do Stripe e pelo log
   - a ausência do Secret deixa de ser um estado que o sistema aceita ao subir
 
-## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [x]
+## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [ ]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1102,7 +1102,7 @@ dod:
   - o teste que prove isso falha antes da correção
   - a distinção fica explícita: opcional por design ≠ ausente por acidente
 
-## B-037 — O painel monta os dois segredos de cobrança como opcionais   [x]
+## B-037 — O painel monta os dois segredos de cobrança como opcionais   [ ]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1294,7 +1294,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (`pkg/` + credenciais).
 
-## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [ ]
+## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1325,7 +1325,7 @@ dod:
 > antes de qualquer conexão, em vez de depender de o helmfile detectá-la depois. Fecho por prevenção
 > verificada, não por detecção presumida.
 
-## B-045 — Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado   [ ]
+## B-045 — Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1460,7 +1460,7 @@ dod:
 > a própria saída do gate diz: *"21 aprovações herdadas do allowlist antigo por PAR, cuja razão por
 > arquivo nunca foi medida"*, e aponta o **`B-076`**. Essa bala é do `B-076`, não deste item.
 
-## B-047 — A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador   [ ]
+## B-047 — A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1649,7 +1649,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-055 — O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador   [ ]
+## B-055 — O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1933,7 +1933,7 @@ dod:
 > do conjunto: tornar o descarte silencioso da API explícito muda o resultado de deploys que hoje
 > sucedem. Continua sendo a única das três divergências em que nenhum lado é obviamente o certo.
 
-## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [ ]
+## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1997,7 +1997,7 @@ dod:
 
 > Registrado 2026-08-11 durante a validação de integração da fatia `slice-1-tripwires`. Bissectado até o commit; **não** causado por esta fatia, que não toca `api/`.
 
-## B-072 — A policy versionada nega ao `api` a criação de chave que o `api` faz   [ ]
+## B-072 — A policy versionada nega ao `api` a criação de chave que o `api` faz   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2181,7 +2181,7 @@ dod:
 
 > Registrado 2026-08-12 pela fatia slice-3 (T1.4). O campo `Inherited` existe exatamente para que esta dívida seja contável em vez de invisível.
 
-## B-077 — A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem   [ ]
+## B-077 — A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2495,7 +2495,7 @@ dod:
 > Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em
 > `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3.
 
-## B-085 — Dez arquivos escrevem `.status` fora do contrato, em 28 pontos   [ ]
+## B-085 — Dez arquivos escrevem `.status` fora do contrato, em 28 pontos   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2503,7 +2503,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12, durante a fatia `slice-10`. Com o contrato decidido pelo ADR `2026-08-12-status-writer-contract` (merge-patch a partir de snapshot), a contagem por controller é: `app/exposure_controller.go` **3**, `platform/clustercredential_controller.go` **5**, `platform/gitrepositorybinding_controller.go` **3**, `platform/platformbootstrap_controller.go` **5**, `preview/preview_controller.go` **6**, `tenant/tenant_controller.go` **3**, mais **1** em `app/application_controller.go` e **1** em `environment/environment_controller.go` (estes dois já usam merge-patch no caminho principal). Total **25** chamadas cruas a `Status().Update` nesses seis; 27 no repositório todo, contando 1 em `application` e 1 em `environment`, que já usam merge-patch no caminho principal. Os dois que seguem o contrato — `environment` (5 merge-patch) e `application` (1) — são o modelo, e `environment_controller_conflict_test.go` é o molde de teste determinístico por interceptor.
 why_now: até 2026-08-12 havia **duas** regras mandando o oposto sobre como escrever status, então não existia alvo único de migração. O ADR desta data escolheu uma; estes 27 pontos são o que falta para o invariante ser um invariante em vez de uma descrição de dois controllers.
-status: raw
+status: shipped
 severity: alta — é o mesmo modo de falha do B-055 (perda de escrita sob concorrência), agora sem ambiguidade sobre qual é o padrão certo.
 dod:
   - os 25 pontos persistem por merge-patch a partir de um snapshot tirado logo após o `Get`
@@ -2844,7 +2844,7 @@ dod:
 > fixtures em `check_test.go:266` e `:282` já são arquivos `.go`. A afirmação errada era minha, feita
 > sem medir, numa fatia cujo objeto é apagar afirmações normativas que não se sustentam.
 
-## B-087 — `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9   [ ]
+## B-087 — `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2878,7 +2878,7 @@ dod:
 > diretório inexistente, que era a família do defeito. O conserto veio em fatia anterior; o item ficou
 > `raw` até esta medição, que é o inverso do defeito que ele mesmo descreve.
 
-## B-088 — Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task   [ ]
+## B-088 — Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2954,7 +2954,7 @@ dod:
 >
 > Decisão T2 em `MEET-ASYNC-AMENDMENT-2026-08-13-delivery-gate-hermetic`.
 
-## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [ ]
+## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3162,7 +3162,7 @@ dod:
 > nunca ligado* — as outras: `B-055` (helper sem chamador), `B-045` (gates que não rodam), `B-094`
 > (regra que percorre campo não populado).
 
-## B-099 — A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve   [ ]
+## B-099 — A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3294,7 +3294,7 @@ dod:
 > Registrado 2026-08-14 pela medição do `B-021` no droplet. A credencial é do patrocinador; a
 > invisibilidade é nossa.
 
-## B-105 — O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado   [ ]
+## B-105 — O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3302,7 +3302,6 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-14 pelo review da fatia `slice-25`. Dois defeitos independentes no mesmo trecho de `operators/internal/app/application_controller.go`. **(1)** `:151-163` compõe o status, faz `r.Get` de re-fetch em `:154`, e só então tira `client.MergeFrom(app.DeepCopy())` em `:158` — a base é o estado **fresco** do servidor enquanto a carga é o composto **anterior** ao re-fetch, então o diff **reverte** qualquer campo de status que outro escritor tenha mudado entre `:89` e `:154`. Não é a dança que o contrato proíbe pela letra (aquela nomeia `Status().Update`, esta é `Patch`), mas é o mesmo dano com outro nome. A forma prescrita pelo ADR — base logo após o `Get` inicial — não tem essa propriedade. **(2)** o sumário de prontidão é computado inline em `:162`, e **quatro** caminhos de erro retornam antes disso (`:121`, `:125`, `:136`, `:155`, mais `reconcileDelete` em `:117`). O `ADR-0025 D3`, citado em `reconcilehelpers/readiness.go:8-11`, exige que o sumário seja a última mutação de status **mesmo em retorno antecipado** — que é por que o helper é um `defer`.
 why_now: eu declarei essa forma como "desenho melhor" ao isentá-la da asserção da fatia 25, e estava errado nos dois pontos — o review mediu. A tabela mecânica do `B-085` a pontuou como conforme porque conta a **chamada** (`Patch` e não `Update`), não a **âncora**. Enquanto isso, em todo caminho de erro a condição `Ready` fica velha, que é exatamente quando alguém a lê.
-status: triaged
 severity: média — o raio prático é pequeno porque `LoopZeroApplication.status` deveria ter um escritor só; o custo é que o invariante vale por contagem de chamada e não por forma, e uma condição de prontidão velha é lida como verdadeira
 dod:
   - a base é tirada logo após o `Get` inicial, sem re-fetch entre a composição e o patch — ou está escrito por que o re-fetch é necessário aqui e o que ele protege
@@ -3310,6 +3309,41 @@ dod:
   - a asserção do `B-085` deixa de pontuar por chamada e passa a pontuar por âncora, ou fica escrito que ela não distingue as duas coisas
 
 > Registrado 2026-08-14 pelo review da fatia 25, corrigindo uma isenção que eu tinha justificado errado.
+
+> **Fechado em 2026-08-14. Três balas, e uma delas respondida ao contrário do que pedia.**
+>
+> **Bala 1 — fechada em `673c820c`.** A base passou a ser tirada logo após `reconcileHostname`, sem
+> re-fetch entre a composição e o patch; a dança `computedStatus` saiu. Decisão em
+> `MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor`, que também registra a arqueologia:
+> o comentário justificava o re-fetch por UID, e o `git log -S` mostrou que a razão original era
+> `resourceVersion` sob `Update` — vestigial desde `a07f0531`.
+>
+> **Bala 2 — fechada, e o item exagerava.** Ela fala em **cinco** caminhos; medido no código, são
+> **quatro não-defeitos e um defeito**. `:91` e `:93` não têm objeto; `:121` e `:125` retornam antes
+> de `base` existir, sem nenhuma mutação de status na passagem — escrever um sumário ali exigiria
+> inventar uma base, que é a armadilha registrada na decisão da âncora. O defeito é `:152`, e ele é
+> real: `reconcileExposedRoute` marca `IngressReady=False` e **persiste** antes de devolver o erro,
+> então o servidor fica com um `IngressReady=False` fresco ao lado de um `Ready` da geração anterior.
+>
+> O conserto encapsula os **dois** pontos de persistência num `patchStatus`, que dobra o sumário
+> dentro. O invariante deixa de valer por lembrança e passa a valer por forma: não existe caminho que
+> persista status sem resumir. Decisão em
+> `MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation`, que registra por que
+> `DeferReadinessSummary` foi rejeitado — ele é um **segundo escritor por desenho**, e este controller
+> teve um removido no T5.1 por flapping e 409.
+>
+> **Bala 3 — respondida pelos dois lados.** A asserção do `B-085` continua contando **chamada**
+> (`Patch` vs `Update`) e **não distingue âncora** — isso fica dito, porque é verdade e nenhuma
+> asserção barata a torna anchor-aware para o pacote inteiro. Mas para este arquivo o encapsulamento
+> permitiu uma asserção **estrutural**, por AST:
+> `TestApplicationController_StatusIsPersistedFromExactlyOnePlace` conta os sítios de persistência e
+> exige que haja **um**, dentro de `patchStatus`. Não vê a âncora; vê quantos lugares estão em posição
+> de violá-la, e mantém esse número em um.
+>
+> Os dois guards são comportamentais/estruturais, nunca textuais, e os dois foram verificados por
+> mutante: reintroduzir o patch direto no caminho de erro reprova ambos, um pela geração velha do
+> `Ready` persistido, outro nomeando os dois sítios e suas funções.
+status: shipped
 
 ## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [ ]
 
@@ -3328,4 +3362,48 @@ dod:
 
 > Registrado 2026-08-14 pelo review da fatia 27. Os 2 caminhos de `routes/` foram corrigidos naquela
 > fatia; os outros 215 são anteriores a ela e não são dela.
+
+## B-107 — O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-14 ao fechar o `B-105`. Cada item carrega o estado em **dois** lugares — o `[ ]`/`[x]` do título e o campo `status:` — e nada os mantinha de acordo. Cruzando os dois sobre 106 itens: `[x]` com `status: raw` em **10**, `[ ]` com `status: shipped` em **13**. Vinte e três discordâncias, e a direção perigosa é a primeira: o box afirma entregue para trabalho que o registro diz que ninguém mediu. O box é o que se lê ao passar os olhos; o campo é o que `cycle-maintenance § SELECT` lê para escolher o próximo item.
+why_now: apareceu ao marcar o `B-105` como `shipped` e notar que treze irmãos já `shipped` continuavam com `[ ]`. Não é cosmético: as duas representações são lidas por públicos diferentes — humano e laço — e quem olha a errada é enganado sem sinal nenhum.
+status: shipped
+severity: média — nenhuma trava, mas um registro cujas duas metades discordam em 22% dos itens deixa de ser fonte de verdade, que é a única coisa que ele é
+dod:
+  - o checador falha quando as duas representações discordam, nas duas direções, com severidade proporcional
+  - as 23 divergências existentes são resolvidas pela evidência de cada item, não por regra única
+  - `killed` fica de fora enquanto não houver convenção decidida, e isso está escrito
+
+> Registrado e fechado 2026-08-14, na mesma fatia que o `B-105`.
+
+> **Fechado 2026-08-14.**
+>
+> **Bala 1.** `check_backlog_structure.py` ganhou `checkbox_status_mismatch`, determinístico, com
+> severidade que segue a direção do erro: `[x]` sobre status aberto é **major** (afirma entregue o que
+> não foi), `[ ]` sobre `shipped` é **minor** (subestima). Quatro testes o fixam, incluindo o caso que
+> deve **calar** — as duas direções concordando.
+>
+> **Bala 2.** As 23 foram resolvidas **por evidência de cada item**, não por regra única, porque a
+> regra única estaria errada nos dois sentidos. Dos 10 com `[x]` sobre `raw`, **cinco** carregavam nota
+> de fechamento — nesses o campo é que estava velho, e virou `shipped`; os outros **cinco** não
+> carregavam, e ali o box é que mentia. Os 13 `shipped` com `[ ]` ganharam o `[x]`.
+>
+> **Bala 3.** `killed` não é julgado. É fechado sem ser entregue, e o registro não tem convenção
+> decidida para qual box isso é; inventar uma aqui fabricaria achado a partir de pergunta não
+> respondida. Um teste garante que a regra permanece calada nos dois boxes para `killed`.
+>
+> **E o achado colateral vale mais que o item.** Ao cruzar as duas representações apareceu que a regra
+> `closure_note_without_shipped` — que eu mesmo escrevi nesta sessão — só conhecia `Fechado`/`Closed` e
+> **não conhecia `RESOLVIDO`**, que é o marcador que este registro de fato usa. Ela perdia **cinco de
+> seis** casos reais e relatava limpo porque olhava para o lado. Ampliada, achou os seis — e dois deles
+> são **falsos positivos**: no `B-016` o `RESOLVIDO` fecha um argumento que o autor estava corrigindo,
+> e no `B-012` fecha um contorno aplicado ao host enquanto o conserto durável seguia aberto. Uma
+> expressão regular não sabe qual substantivo uma frase de fechamento fecha. A regra foi reclassificada
+> de `deterministic/major` para `heuristic/minor`, com a taxa medida no comentário e um teste que fixa
+> a classificação — declarar palpite com confiança de medição é exatamente o defeito que este checador
+> existe para pegar, e ele o estava cometendo em si mesmo.
 

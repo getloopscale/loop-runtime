@@ -164,15 +164,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	app.Status.ObservedGeneration = app.Generation
 
-	// T5.1: fold kstatus readiness summary BEFORE the Patch so the deferred
-	// Status().Update is no longer needed (single write per pass).
-	//
-	// It stays inline rather than moving to DeferReadinessSummary: one write per
-	// pass with no second status writer is the better shape. What it does NOT
-	// solve — being skipped on early return, which the shared helper handles by
-	// being a defer — remains open in B-105.
-	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
-	if err := r.Status().Patch(ctx, &app, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, &app, base); err != nil {
 		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}
 
@@ -183,6 +175,32 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		"url", app.Status.URL)
 
 	return ctrl.Result{}, nil
+}
+
+// patchStatus is the ONLY path in this reconcile that persists .status. It folds
+// the kstatus readiness summary in as the last mutation before the write, per
+// ADR-0025 D3.
+//
+// The ordering used to live at each call site, and that is how it was lost: the
+// happy path folded the summary in, the ExposedRoute failure branch patched
+// without it, and a failed pass persisted a fresh IngressReady=False next to a
+// Ready condition left over from the previous generation — stale, and read as
+// true precisely when something had just gone wrong.
+//
+// Routing every persist through here makes the invariant structural instead of
+// remembered: a new early-return path cannot reintroduce the defect, because
+// there is no way to persist status without summarizing it first.
+//
+// Deliberately NOT reconcilehelpers.DeferReadinessSummary, which the other
+// controllers use: that helper re-fetches and takes an optimistic lock because
+// it is a SECOND writer by design. This controller had a second writer removed
+// (T5.1, see the note in Reconcile) for flapping conditions and 409s; trading an
+// ordering defect for a concurrency one is not a fix.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation
+func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
+	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
+	return r.Status().Patch(ctx, app, client.MergeFrom(base))
 }
 
 // reconcileHostname computes and persists the hostname if not yet assigned.
@@ -244,7 +262,7 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, 
 			metav1.ConditionFalse, conditions.ReasonFailed,
 			fmt.Sprintf("failed to ensure ExposedRoute: %v", err),
 			app.Generation)
-		if statusErr := r.Status().Patch(ctx, app, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, app, base); statusErr != nil {
 			logger.Error(statusErr, "failed to patch application status")
 		}
 		return fmt.Errorf("ensuring ExposedRoute %s: %w", routeName, err)
