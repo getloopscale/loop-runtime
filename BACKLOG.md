@@ -466,6 +466,29 @@ dod:
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
 
+> **Balas 3 e 4 fechadas em 2026-08-14, medindo o lado da publicação — e as duas responderam ao
+> contrário do que o item supunha.**
+>
+> **Bala 4 — as imagens ESTÃO publicadas.** O `401` é token, não ausência. `release-artifacts.yml`
+> (gatilho `push` em `develop` e tag `v*`) chama `build-publish.yml` via `workflow_call`, e a última
+> execução com sucesso é de **2026-08-09**, com cinco jobs verdes: `loopzero-api` e os quatro operators.
+> Isto mantém o conserto em "renovar token" e **valida o pedido do PAT** em vez de o redirecionar.
+>
+> Duas leituras minhas antes disso estavam erradas, pela mesma razão: **saída truncada lida como
+> completa.** `gh run list --workflow=build-publish.yml` veio vazio e eu li como "nunca roda" —
+> execução chamada por `workflow_call` aparece sob o **chamador**, não sob o chamado. E o grep que
+> procurava o chamador foi cortado em `head -3`, escondendo `release-artifacts.yml:103`.
+>
+> **Bala 3 — o caminho local existe, e o texto desta bala sobre ele estava errado.** `task
+> images:build` não produz os operators: é composto de três imagens de **ferramenta**
+> (`clone-runner`, `syft-scanner`, `cosign-signer`). Quem constrói aplicação localmente é o
+> **Tiltfile** — cinco `docker_build`: `loopzero-api` e os quatro operators. `loopzero-cloud` não tem caminho
+> local aqui, porque nasce no repositório irmão. O caminho local cobre **5 de 6** imagens, e a lacuna
+> passa a ser nomeada em vez de suposta.
+>
+> A decisão que a bala pede — depender de imagem publicada ou adotar build local — fica com o
+> patrocinador, agora com as duas opções medidas.
+
 > **Re-medido no droplet 2026-08-14, com acesso SSH concedido pelo patrocinador.** A causa está
 > **viva**; o sintoma é que não.
 >
