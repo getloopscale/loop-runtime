@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package preview
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,8 +96,8 @@ func TestPreviewHandler_List_HappyPath(t *testing.T) {
 	h := NewPreviewHandler(store, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -119,7 +120,7 @@ func TestPreviewHandler_List_HappyPath(t *testing.T) {
 func TestPreviewHandler_List_Unauthenticated(t *testing.T) {
 	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 	h.List(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -130,7 +131,7 @@ func TestPreviewHandler_List_Unauthenticated(t *testing.T) {
 func TestPreviewHandler_List_MissingProject(t *testing.T) {
 	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects//previews", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.List(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -149,8 +150,8 @@ func TestPreviewHandler_List_NoInternalTermsInResponse(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
@@ -177,7 +178,7 @@ func TestPreviewHandler_Get_HappyPath(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews/prev-x", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	req = withChiParams(req, map[string]string{"project": "api", "id": "prev-x"})
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -195,7 +196,7 @@ func TestPreviewHandler_Get_NotFound(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews/x", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	req = withChiParams(req, map[string]string{"project": "api", "id": "missing"})
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -214,7 +215,7 @@ func TestPreviewHandler_Get_CrossProjectIsolation(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/web/previews/prev-x", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	// different project in URL!
 	req = withChiParams(req, map[string]string{"project": "web", "id": "prev-x"})
 	w := httptest.NewRecorder()
@@ -244,7 +245,7 @@ func TestPreviewHandler_Delete_HappyPath(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/api/previews/prev-x", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	req = withChiParams(req, map[string]string{"project": "api", "id": "prev-x"})
 	w := httptest.NewRecorder()
 	h.Delete(w, req)
@@ -265,7 +266,7 @@ func TestPreviewHandler_Delete_NotFound(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/api/previews/missing", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	req = withChiParams(req, map[string]string{"project": "api", "id": "missing"})
 	w := httptest.NewRecorder()
 	h.Delete(w, req)
@@ -298,8 +299,8 @@ func TestPreviewHandler_Create_HappyPath(t *testing.T) {
 	}
 	body := []byte(`{"pr_number":42,"branch":"feature/x","commit_sha":"abc1234","repo_full_name":"acme/api"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/api/previews", bytes.NewReader(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 
 	h := NewPreviewHandler(&fakePreviewStore{}, svc, nil)
@@ -315,8 +316,8 @@ func TestPreviewHandler_Create_RejectsBadJSON(t *testing.T) {
 	h := NewPreviewHandler(&fakePreviewStore{}, svc, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/api/previews", strings.NewReader("not json"))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 	h.Create(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -340,8 +341,8 @@ func TestPreviewHandler_Create_RejectsMissingFields(t *testing.T) {
 			svc := &fakePreviewService{}
 			h := NewPreviewHandler(&fakePreviewStore{}, svc, nil)
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/api/previews", strings.NewReader(tc.body))
-			req = withAuth(req, defaultUserContext())
-			req = withChiParam(req, "project", "api")
+			req = routestest.WithAuth(req, routestest.DefaultUserContext())
+			req = routestest.WithChiParam(req, "project", "api")
 			w := httptest.NewRecorder()
 			h.Create(w, req)
 			if w.Code != http.StatusBadRequest {
@@ -357,8 +358,8 @@ func TestPreviewHandler_Create_NoServiceWired(t *testing.T) {
 	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil)
 	body := []byte(`{"pr_number":1,"branch":"x","commit_sha":"y"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/api/previews", bytes.NewReader(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 	h.Create(w, req)
 	if w.Code < 500 || w.Code > 599 {
@@ -405,8 +406,8 @@ func TestPreviewHandler_List_NonExistentProject_Returns404(t *testing.T) {
 	}
 	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil).WithProjectChecker(checker)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent-zzz/previews", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "nonexistent-zzz")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "nonexistent-zzz")
 	w := httptest.NewRecorder()
 	h.List(w, req)
 	if w.Code != http.StatusNotFound {
@@ -431,8 +432,8 @@ func TestPreviewHandler_List_ExistingProject_AllowsThrough(t *testing.T) {
 	}
 	h := NewPreviewHandler(store, nil, nil).WithProjectChecker(checker)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 	h.List(w, req)
 	if w.Code != http.StatusOK {
@@ -444,8 +445,8 @@ func TestPreviewHandler_List_NilChecker_BackwardsCompat(t *testing.T) {
 	// Without a wired checker (legacy/test path), the gate is skipped.
 	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/api/previews", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "project", "api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "project", "api")
 	w := httptest.NewRecorder()
 	h.List(w, req)
 	if w.Code != http.StatusOK {
@@ -461,7 +462,7 @@ func TestPreviewHandler_Get_NonExistentProject_Returns404(t *testing.T) {
 	}
 	h := NewPreviewHandler(&fakePreviewStore{}, nil, nil).WithProjectChecker(checker)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent/previews/prev-1", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	req = withChiParams(req, map[string]string{"project": "nonexistent", "id": "prev-1"})
 	w := httptest.NewRecorder()
 	h.Get(w, req)

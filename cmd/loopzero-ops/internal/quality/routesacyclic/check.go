@@ -233,6 +233,13 @@ var allowed = map[string]map[string]bool{
 	//
 	// Serves /api/v1/secrets and the internal secret-fetch endpoint.
 	"secrets": {"httpio": true, "routestest": true},
+	// The sixth family (slice-29, B-080). Serves /api/v1/previews.
+	//
+	// First one whose name collides with a package outside routes
+	// (internal/services/preview), which is a naming fact rather than a coupling
+	// one: the fence measures imports, and the collision is resolved at the
+	// importer with the alias convention already in the tree.
+	"preview": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

@@ -18,6 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
@@ -174,7 +175,7 @@ type Config struct {
 	RepositoryHandler    *repositories.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
 	IntegrationsGitHubHandler *routes.IntegrationsGitHubHandler
-	PreviewHandler            *routes.PreviewHandler // Sprint 5 / T2.3 — preview environments
+	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               middleware.AuditWriter
 	AuditHandler              *routes.AuditHandler

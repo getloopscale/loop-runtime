@@ -15,7 +15,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/preview"
+	previewsvc "github.com/getloopscale/loopzero/api/internal/services/preview"
 
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
@@ -34,6 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -330,9 +331,9 @@ func buildServerConfig(
 		// BuildOrchestrator is available (always, post-Sprint-2), the
 		// service can submit builds for previews (best-effort).
 		previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-		var previewService *preview.PreviewService
+		var previewService *previewsvc.PreviewService
 		if orchDeps != nil && orchDeps.Orchestrator != nil {
-			ps, perr := preview.NewPreviewService(preview.PreviewServiceDeps{
+			ps, perr := previewsvc.NewPreviewService(previewsvc.PreviewServiceDeps{
 				Store:               previewStore,
 				Builds:              orchDeps.Orchestrator,
 				BuildApps:           &previewAppsLookupAdapter{builds: stores.BuildStore},
@@ -359,7 +360,7 @@ func buildServerConfig(
 		// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty
 		// list. Existing *store.PostgresProjectStore matches the narrow
 		// interface signature — no adapter needed.
-		sc.PreviewHandler = routes.
+		sc.PreviewHandler = previewroutes.
 			NewPreviewHandler(previewStore, previewService, logger).
 			WithPhaseLookup(k8sDeps.PreviewCRMgr).
 			WithProjectChecker(&store.PostgresProjectStore{DB: dbAdapter})

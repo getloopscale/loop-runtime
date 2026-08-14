@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package preview serves the preview-environment endpoints under /api/v1/previews:
+// the per-PR environments a deploy creates and tears down.
+//
+// Sixth family to leave the flat `routes` package (B-080, slice-29). It carries
+// the one wrinkle none of the previous five had: the repository already has an
+// `internal/services/preview`, so a file importing both needs an alias. The
+// convention already in the tree suffixes the SERVICE (`domainsvc`,
+// `placementsvc`, `releasesvc`), which is what `cmd/setup_server.go` now does —
+// the routes half keeps the plain name everywhere it does not collide.
+//
+// Depends on two leaves and no sibling family: `httpio` for the response
+// writers, `routestest` for request helpers, and that one only from _test.go.
+package preview
 
 import (
 	"context"

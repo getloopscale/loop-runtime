@@ -2382,6 +2382,23 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > a cópia em scratch não serve, porque `go.work` aponta para módulos irmãos que a cópia não tem, e a
 > ausência deles faz a sonda medir zero por outra razão (a mesma armadilha, dois níveis acima).
 
+> **Fatia 29 — `preview` extraída (2026-08-14).** O pai vai de 32 para 31 arquivos de produção; o
+> subpacote leva `preview.go` + seu teste. Cerca: **8 subpacotes**, 0 não registrados, 0 arestas irmãs.
+> Lint do pacote novo: 0 achados — o comentário de pacote entrou desde o início, que foi a correção
+> #2 da revisão anterior aplicada como prevenção em vez de conserto.
+>
+> Duas armadilhas novas, as duas sobre **como se lê o código**, não sobre acoplamento:
+>
+> A referência qualificada pode atravessar linha. `cmd/setup_server.go` tinha `sc.PreviewHandler =
+> routes.` numa linha e `NewPreviewHandler(...)` na seguinte, encadeado. Um regex por linha não a vê,
+> e o laço de compilador ficou repetindo o mesmo símbolo sem casar arquivo nenhum — cinco iterações
+> gastas antes de eu ler o erro em vez da minha própria saída.
+>
+> E `preview` **colide com um pacote fora de routes**: já existe `internal/services/preview`. É fato
+> de nome, não de acoplamento — a cerca mede import, e a colisão se resolve no importador. A convenção
+> já na árvore sufixa o **serviço** (`domainsvc`, `placementsvc`, `releasesvc`), então o serviço virou
+> `previewsvc` e o de rotas ficou `previewroutes` no único arquivo onde os dois se encontram.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta
