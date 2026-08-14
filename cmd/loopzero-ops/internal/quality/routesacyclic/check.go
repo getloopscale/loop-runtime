@@ -260,6 +260,14 @@ var allowed = map[string]map[string]bool{
 	// never from the recipe the previous family happened to use.
 	"integrations": {"httpio": true, "routestest": true},
 	"bootstrap":    {"httpio": true},
+	// The thirteenth and fourteenth families (slice-34, B-080). Serve
+	// /api/v1/auth and /api/v1/teams.
+	//
+	// They moved in one slice because they shared a test file, and a shared test
+	// is a question about ownership that extracting one of them would have forced
+	// anyway. All ten of its tests exercise handlers declared in `auth`.
+	"auth":  {"httpio": true, "routestest": true},
+	"teams": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package auth
 
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,7 +31,7 @@ func TestAuth_Whoami_HappyPath(t *testing.T) {
 	h := NewAuthHandler(&fakeUsernameLookup{byID: map[string]string{"github-testuser": "testuser"}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Whoami(w, req)
@@ -84,7 +85,7 @@ func TestAuth_Whoami_PrivateEmail_DeriveNoreply(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
-	req = withAuth(req, uc)
+	req = routestest.WithAuth(req, uc)
 	w := httptest.NewRecorder()
 
 	h.Whoami(w, req)
@@ -115,7 +116,7 @@ func TestAuth_Whoami_ServiceAccount_UsesUsername(t *testing.T) {
 		Role:     "owner",
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
-	req = withAuth(req, uc)
+	req = routestest.WithAuth(req, uc)
 	w := httptest.NewRecorder()
 
 	h.Whoami(w, req)

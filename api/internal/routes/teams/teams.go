@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package teams serves the membership endpoints under /api/v1/teams: who belongs
+// to a team, and the invite and removal paths.
+//
+// Fourteenth family to leave the flat `routes` package (B-080, slice-34).
+//
+// `TeamMemberInfo` and `TeamUserInfo` turned out to be aliases re-exported from
+// `internal/domain`, like three types in the previous slice; consumers now name
+// the originals. Fourth slice running where the compiler surfaced an alias the
+// fence could not see.
+package teams
 
 import (
 	"context"

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"os"
 	"strings"
@@ -279,7 +280,7 @@ func buildServerConfig(
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.
 		teamStore := &store.PostgresTeamStore{DB: dbAdapter}
-		sc.TeamHandler = routes.NewTeamHandler(teamStore)
+		sc.TeamHandler = teams.NewTeamHandler(teamStore)
 		sc.AuthUserLookup = teamStore
 		// Plan T2.5 D8 full — persistent active-team selection backed by
 		// users.active_tenant_id column (migration 000018).

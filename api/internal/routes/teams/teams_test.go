@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package teams
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,7 +75,7 @@ func TestTeams_List_HappyPath(t *testing.T) {
 	h := NewTeamHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/teams/members", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -114,7 +115,7 @@ func TestTeams_Add_HappyPath(t *testing.T) {
 
 	body := `{"username":"newuser","role":"member"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Add(w, req)
@@ -133,7 +134,7 @@ func TestTeams_Add_MemberCantAdd(t *testing.T) {
 
 	body := `{"username":"newuser","role":"member"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body))
-	req = withAuth(req, memberUserContext())
+	req = routestest.WithAuth(req, routestest.MemberUserContext())
 	w := httptest.NewRecorder()
 
 	h.Add(w, req)
@@ -152,7 +153,7 @@ func TestTeams_Add_CannotAssignOwnerRole(t *testing.T) {
 
 	body := `{"username":"newuser","role":"owner"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Add(w, req)
@@ -171,7 +172,7 @@ func TestTeams_Add_UserNotFound(t *testing.T) {
 
 	body := `{"username":"nonexistent","role":"member"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Add(w, req)
@@ -201,8 +202,8 @@ func TestTeams_Remove_HappyPath(t *testing.T) {
 	h := NewTeamHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/bob", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "username", "bob")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "username", "bob")
 	w := httptest.NewRecorder()
 
 	h.Remove(w, req)
@@ -230,8 +231,8 @@ func TestTeams_Remove_NotMember_Returns404(t *testing.T) {
 	h := NewTeamHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/fake-user", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "username", "fake-user")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "username", "fake-user")
 	w := httptest.NewRecorder()
 
 	h.Remove(w, req)
@@ -264,8 +265,8 @@ func TestTeams_Remove_CannotRemoveOwner(t *testing.T) {
 	h := NewTeamHandler(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/targetowner", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "username", "targetowner")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "username", "targetowner")
 	w := httptest.NewRecorder()
 
 	h.Remove(w, req)
@@ -294,8 +295,8 @@ func TestTeams_UpdateRole_HappyPath(t *testing.T) {
 
 	body := `{"role":"admin"}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "username", "bob")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "username", "bob")
 	w := httptest.NewRecorder()
 
 	h.UpdateRole(w, req)
@@ -313,8 +314,8 @@ func TestTeams_UpdateRole_OnlyOwnerCanChange(t *testing.T) {
 
 	body := `{"role":"admin"}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
-	req = withAuth(req, memberUserContext())
-	req = withChiParam(req, "username", "bob")
+	req = routestest.WithAuth(req, routestest.MemberUserContext())
+	req = routestest.WithChiParam(req, "username", "bob")
 	w := httptest.NewRecorder()
 
 	h.UpdateRole(w, req)
@@ -337,8 +338,8 @@ func TestTeams_UpdateRole_CannotAssignOwner(t *testing.T) {
 
 	body := `{"role":"owner"}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "username", "bob")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "username", "bob")
 	w := httptest.NewRecorder()
 
 	h.UpdateRole(w, req)

@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package auth serves the identity endpoints under /api/v1/auth: whoami, which
+// answers "who am I and which teams do I belong to", and switch-team, which moves
+// the caller's active team.
+//
+// Thirteenth family to leave the flat `routes` package (B-080, slice-34),
+// extracted alongside `teams`, and the two had to move together: they shared
+// `auth_whoami_teams_test.go`, ten tests that read like they belong to both.
+// Measured, all ten exercise handlers declared HERE — the filename said so and
+// the compiler confirmed it. A shared test file is a question about ownership,
+// and the answer came from where the handlers live rather than from the name.
+package auth
 
 import (
 	"context"

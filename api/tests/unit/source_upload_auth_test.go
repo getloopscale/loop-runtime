@@ -18,6 +18,7 @@ package unit
 import (
 	"bytes"
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -88,7 +89,7 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
-		TeamHandler:          routes.NewTeamHandler(nil),
+		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),
@@ -139,7 +140,7 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
-		TeamHandler:          routes.NewTeamHandler(nil),
+		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),
@@ -193,7 +194,7 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
-		TeamHandler:          routes.NewTeamHandler(nil),
+		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),

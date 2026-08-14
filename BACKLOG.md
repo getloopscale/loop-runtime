@@ -2559,6 +2559,21 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > Quarta vez que um `gofmt -w` sobre diretório alcançou arquivos alheios (dois de
 > `tests/integration/`). Revertidos.
 
+> **Fatia 34 — `auth` e `teams` (2026-08-14).** Pai de 25 para **23**; **16 subpacotes**, cerca verde,
+> lint zero. **14 de 18 famílias extraídas.**
+>
+> As duas tiveram de sair juntas: compartilhavam `auth_whoami_teams_test.go`, e **um arquivo de teste
+> compartilhado é uma pergunta sobre propriedade** que extrair uma delas forçaria de todo jeito.
+> Medido, os dez testes exercitam handlers declarados em `auth` — o nome do arquivo já dizia, e o
+> compilador confirmou. A resposta veio de onde os handlers moram, não do nome.
+>
+> Quarta fatia seguida em que o compilador acusou alias: `TeamMemberInfo` e `TeamUserInfo` são
+> reexportações de `internal/domain`. O padrão já é regularidade, não coincidência — o pacote plano
+> acumulou reexportações que **parecem** propriedade dele.
+>
+> **Quinta vez** que o `gofmt -w` sobre diretório alcançou os mesmos dois arquivos de
+> `tests/integration/`. Revertidos. Passo a formatar apenas os arquivos tocados.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

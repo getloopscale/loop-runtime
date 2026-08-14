@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -109,7 +110,7 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
-		TeamHandler:          routes.NewTeamHandler(nil),
+		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),

@@ -11,6 +11,7 @@ package server
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"net/http"
@@ -203,7 +204,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Plan T2.5 D8 full: pass ActiveTeamStore so /whoami reads the
 			// persistent users.active_tenant_id (migration 000018) and
 			// /team/switch can update it. EC-4 self-heal lives in Whoami.
-			auth := routes.NewAuthHandler(cfg.AuthUserLookup).
+			auth := auth.NewAuthHandler(cfg.AuthUserLookup).
 				WithMembershipLookup(cfg.MemberStore)
 			if cfg.ActiveTeamStore != nil {
 				auth = auth.WithActiveTeamStore(cfg.ActiveTeamStore)

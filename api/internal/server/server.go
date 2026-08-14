@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/auth"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
 	"net/http"
@@ -169,13 +171,13 @@ type Config struct {
 	// ESO retries with backoff — safer than registering a broken handler).
 	SecretFetchHandler http.HandlerFunc
 	EnvironmentHandler *routes.EnvironmentHandler
-	TeamHandler        *routes.TeamHandler
+	TeamHandler        *teams.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by store.PostgresTeamStore.
-	AuthUserLookup routes.UsernameLookup
+	AuthUserLookup auth.UsernameLookup
 	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
 	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
-	ActiveTeamStore      routes.ActiveTeamStore
+	ActiveTeamStore      auth.ActiveTeamStore
 	DomainHandler        *domains.DomainHandler
 	GitHubWebhookHandler http.Handler
 	RepositoryHandler    *repositories.RepositoryHandler

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"io"
 	"log/slog"
@@ -188,7 +189,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := routes.NewBuildListHandler(nil)
 	environmentHandler := routes.NewEnvironmentHandler(nil)
-	teamHandler := routes.NewTeamHandler(nil)
+	teamHandler := teams.NewTeamHandler(nil)
 	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
 	repositoryHandler := repositories.NewRepositoryHandler(nil)
 	// Plan J-09 T2.1: dashboard repo picker -- wired with nil lister/store

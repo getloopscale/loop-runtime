@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package auth
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,7 +55,7 @@ func (s *stubActiveTeamStore) ClearActiveTenant(_ context.Context, _ string) err
 func makeWhoamiRequest(uc *middleware.UserContext) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
 	if uc != nil {
-		return withAuth(req, uc)
+		return routestest.WithAuth(req, uc)
 	}
 	return req
 }
@@ -281,7 +282,7 @@ func TestSwitchTeam_HappyPath(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name": "tn-b"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = withAuth(req, &middleware.UserContext{
+	req = routestest.WithAuth(req, &middleware.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-a",
 		Role:     "developer",
@@ -314,7 +315,7 @@ func TestSwitchTeam_NotMemberReturns403(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name": "tn-not-mine"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = withAuth(req, &middleware.UserContext{
+	req = routestest.WithAuth(req, &middleware.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-a",
 		Role:     "developer",
@@ -338,7 +339,7 @@ func TestSwitchTeam_InvalidBody(t *testing.T) {
 
 	body := bytes.NewBufferString(`not json`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = withAuth(req, &middleware.UserContext{UserID: "u", TenantID: "t", Role: "r"})
+	req = routestest.WithAuth(req, &middleware.UserContext{UserID: "u", TenantID: "t", Role: "r"})
 	rec := httptest.NewRecorder()
 	handler.SwitchTeam(rec, req)
 
@@ -353,7 +354,7 @@ func TestSwitchTeam_MissingActiveStore(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name": "tn-x"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = withAuth(req, &middleware.UserContext{UserID: "u", TenantID: "t", Role: "r"})
+	req = routestest.WithAuth(req, &middleware.UserContext{UserID: "u", TenantID: "t", Role: "r"})
 	rec := httptest.NewRecorder()
 	handler.SwitchTeam(rec, req)
 

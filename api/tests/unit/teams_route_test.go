@@ -7,21 +7,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // --- Fake TeamStore ---
 
 type fakeTeamStore struct {
-	members      map[string][]routes.TeamMemberInfo // tenantID -> members
-	users        map[string]*routes.TeamUserInfo    // username -> user
+	members      map[string][]domain.TeamMemberInfo // tenantID -> members
+	users        map[string]*domain.TeamUserInfo    // username -> user
 	addErr       error
 	removeErr    error
 	updateErr    error
@@ -31,18 +31,18 @@ type fakeTeamStore struct {
 
 func newFakeTeamStore() *fakeTeamStore {
 	return &fakeTeamStore{
-		members: make(map[string][]routes.TeamMemberInfo),
-		users:   make(map[string]*routes.TeamUserInfo),
+		members: make(map[string][]domain.TeamMemberInfo),
+		users:   make(map[string]*domain.TeamUserInfo),
 	}
 }
 
-func (f *fakeTeamStore) ListMembers(_ context.Context, tenantID string) ([]routes.TeamMemberInfo, error) {
+func (f *fakeTeamStore) ListMembers(_ context.Context, tenantID string) ([]domain.TeamMemberInfo, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	members := f.members[tenantID]
 	if members == nil {
-		return []routes.TeamMemberInfo{}, nil
+		return []domain.TeamMemberInfo{}, nil
 	}
 	return members, nil
 }
@@ -57,7 +57,7 @@ func (f *fakeTeamStore) AddMember(_ context.Context, tenantID, userID, role stri
 			return nil
 		}
 	}
-	f.members[tenantID] = append(f.members[tenantID], routes.TeamMemberInfo{
+	f.members[tenantID] = append(f.members[tenantID], domain.TeamMemberInfo{
 		Username: stripGitHubPrefix(userID),
 		Email:    userID + "@test.com",
 		Role:     role,
@@ -91,10 +91,10 @@ func (f *fakeTeamStore) UpdateMemberRole(_ context.Context, tenantID, userID, ne
 			return nil
 		}
 	}
-	return routes.ErrMemberNotFound
+	return teams.ErrMemberNotFound
 }
 
-func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*routes.TeamMemberInfo, error) {
+func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*domain.TeamMemberInfo, error) {
 	if f.getMemberErr != nil {
 		return nil, f.getMemberErr
 	}
@@ -106,7 +106,7 @@ func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*
 	return nil, nil
 }
 
-func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*routes.TeamUserInfo, error) {
+func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*domain.TeamUserInfo, error) {
 	u, ok := f.users[username]
 	if !ok {
 		return nil, nil
@@ -141,13 +141,13 @@ func stripGitHubPrefix(id string) string {
 
 func addMember(s *fakeTeamStore, tenantID, userID, role string) {
 	username := stripGitHubPrefix(userID)
-	s.members[tenantID] = append(s.members[tenantID], routes.TeamMemberInfo{
+	s.members[tenantID] = append(s.members[tenantID], domain.TeamMemberInfo{
 		Username: username,
 		Email:    userID + "@test.com",
 		Role:     role,
 		JoinedAt: time.Now().UTC().Format(time.RFC3339),
 	})
-	s.users[username] = &routes.TeamUserInfo{
+	s.users[username] = &domain.TeamUserInfo{
 		ID:          userID,
 		Email:       userID + "@test.com",
 		DisplayName: username,
@@ -157,7 +157,7 @@ func addMember(s *fakeTeamStore, tenantID, userID, role string) {
 func storeWithOwner(tenantID, ownerUserID string) *fakeTeamStore {
 	s := newFakeTeamStore()
 	addMember(s, tenantID, ownerUserID, "owner")
-	s.users["newuser"] = &routes.TeamUserInfo{
+	s.users["newuser"] = &domain.TeamUserInfo{
 		ID:          "github-newuser",
 		Email:       "newuser@test.com",
 		DisplayName: "New User",
@@ -182,7 +182,7 @@ func storeWithOwnerAndMember(tenantID, ownerUserID, memberUserID string) *fakeTe
 func TestTeamList(t *testing.T) {
 	t.Run("GET /api/v1/teams/members → 200 with members list", func(t *testing.T) {
 		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/teams/members", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -216,7 +216,7 @@ func TestTeamList(t *testing.T) {
 
 	t.Run("GET /api/v1/teams/members → 401 without auth", func(t *testing.T) {
 		store := newFakeTeamStore()
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/teams/members", nil)
 		rec := httptest.NewRecorder()
@@ -230,7 +230,7 @@ func TestTeamList(t *testing.T) {
 
 	t.Run("GET /api/v1/teams/members → 200 with empty list when no members", func(t *testing.T) {
 		store := newFakeTeamStore()
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/teams/members", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -254,7 +254,7 @@ func TestTeamList(t *testing.T) {
 func TestTeamAdd(t *testing.T) {
 	t.Run("POST /api/v1/teams/members → 201 when owner adds member", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"newuser","role":"member"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -271,7 +271,7 @@ func TestTeamAdd(t *testing.T) {
 
 	t.Run("POST /api/v1/teams/members → 201 when admin adds member", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"newuser","role":"member"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -288,7 +288,7 @@ func TestTeamAdd(t *testing.T) {
 
 	t.Run("POST /api/v1/teams/members → 403 when member tries to add", func(t *testing.T) {
 		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"newuser","role":"member"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -305,7 +305,7 @@ func TestTeamAdd(t *testing.T) {
 
 	t.Run("POST /api/v1/teams/members → 401 without auth", func(t *testing.T) {
 		store := newFakeTeamStore()
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"newuser","role":"member"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body))
@@ -321,7 +321,7 @@ func TestTeamAdd(t *testing.T) {
 
 	t.Run("POST /api/v1/teams/members → 400 with invalid role", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"newuser","role":"superadmin"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -339,8 +339,8 @@ func TestTeamAdd(t *testing.T) {
 	// SECURITY R-01: privilege escalation — "owner" role must be rejected via API
 	t.Run("POST /api/v1/teams/members → 400 rejects owner role (privilege escalation)", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		store.users["github-hacker"] = &routes.TeamUserInfo{ID: "github-hacker", Email: "h@x.com"}
-		handler := routes.NewTeamHandler(store)
+		store.users["github-hacker"] = &domain.TeamUserInfo{ID: "github-hacker", Email: "h@x.com"}
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"hacker","role":"owner"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -358,7 +358,7 @@ func TestTeamAdd(t *testing.T) {
 	t.Run("POST /api/v1/teams/members → 404 when user not found", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
 		// Do NOT add "unknownuser" to store.users
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"unknownuser","role":"member"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -375,7 +375,7 @@ func TestTeamAdd(t *testing.T) {
 
 	t.Run("POST /api/v1/teams/members → 400 with missing username", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"member"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
@@ -395,7 +395,7 @@ func TestTeamRemove(t *testing.T) {
 	t.Run("DELETE /api/v1/teams/members/{username} → 200 when admin removes member", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
 		addMember(store, "acme", "github-bob", "member")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/bob", nil)
 		rctx := chi.NewRouteContext()
@@ -414,7 +414,7 @@ func TestTeamRemove(t *testing.T) {
 
 	t.Run("DELETE /api/v1/teams/members/{username} → 403 when member tries to remove", func(t *testing.T) {
 		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/lucas", nil)
 		rctx := chi.NewRouteContext()
@@ -433,7 +433,7 @@ func TestTeamRemove(t *testing.T) {
 
 	t.Run("DELETE /api/v1/teams/members/{username} → 403 when trying to remove owner", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/lucas", nil)
 		rctx := chi.NewRouteContext()
@@ -453,7 +453,7 @@ func TestTeamRemove(t *testing.T) {
 	t.Run("DELETE /api/v1/teams/members/{username} → 403 when admin removes another admin", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin1")
 		addMember(store, "acme", "github-admin2", "admin")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/admin2", nil)
 		rctx := chi.NewRouteContext()
@@ -472,7 +472,7 @@ func TestTeamRemove(t *testing.T) {
 
 	t.Run("DELETE /api/v1/teams/members/{username} → 401 without auth", func(t *testing.T) {
 		store := newFakeTeamStore()
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/teams/members/bob", nil)
 		rctx := chi.NewRouteContext()
@@ -491,7 +491,7 @@ func TestTeamRemove(t *testing.T) {
 func TestTeamUpdateRole(t *testing.T) {
 	t.Run("PATCH /api/v1/teams/members/{username} → 200 when owner changes role", func(t *testing.T) {
 		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"admin"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
@@ -512,13 +512,13 @@ func TestTeamUpdateRole(t *testing.T) {
 
 	t.Run("PATCH /api/v1/teams/members/{username} → 403 when admin tries to change role", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
-		store.members["acme"] = append(store.members["acme"], routes.TeamMemberInfo{
+		store.members["acme"] = append(store.members["acme"], domain.TeamMemberInfo{
 			Username: "bob",
 			Email:    "bob@test.com",
 			Role:     "member",
 			JoinedAt: time.Now().UTC().Format(time.RFC3339),
 		})
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"admin"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
@@ -539,7 +539,7 @@ func TestTeamUpdateRole(t *testing.T) {
 
 	t.Run("PATCH /api/v1/teams/members/{username} → 403 when trying to change owner role", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"admin"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/lucas", bytes.NewBufferString(body))
@@ -560,7 +560,7 @@ func TestTeamUpdateRole(t *testing.T) {
 
 	t.Run("PATCH /api/v1/teams/members/{username} → 404 when member not found", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"admin"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/nonexistent", bytes.NewBufferString(body))
@@ -581,7 +581,7 @@ func TestTeamUpdateRole(t *testing.T) {
 
 	t.Run("PATCH /api/v1/teams/members/{username} → 400 with invalid role", func(t *testing.T) {
 		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"superadmin"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
@@ -603,7 +603,7 @@ func TestTeamUpdateRole(t *testing.T) {
 	// SECURITY R-01: privilege escalation — "owner" role must be rejected in UpdateRole
 	t.Run("PATCH /api/v1/teams/members/{username} → 400 rejects owner role (privilege escalation)", func(t *testing.T) {
 		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"owner"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
@@ -624,7 +624,7 @@ func TestTeamUpdateRole(t *testing.T) {
 
 	t.Run("PATCH /api/v1/teams/members/{username} → 401 without auth", func(t *testing.T) {
 		store := newFakeTeamStore()
-		handler := routes.NewTeamHandler(store)
+		handler := teams.NewTeamHandler(store)
 
 		body := `{"role":"admin"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
