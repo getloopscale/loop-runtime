@@ -2897,7 +2897,35 @@ dod:
 > **O item fica aberto**, esperando o `B-105`. Uma escrita de 28 é um resultado; chamá-lo de zero seria
 > a deriva que esta sessão passou o tempo todo consertando.
 
-> **Fechado 2026-08-14 — de 28 para ZERO.** A última escrita saiu junto com o defeito que a
+> **Fechado 2026-08-14 — de 28 para ZERO.**
+>
+> **CORREÇÃO — este fechamento estava errado, e a auditoria adversarial de fechamento o pegou.** A
+> contagem é verdadeira: nenhuma chamada de produção de `Status().Update` sobrevive. Mas a **bala 4 do
+> DoD** pede outra coisa — *"um gate estático recusa `Status().Update` novo nos operators — sem ele a
+> migração é reversível por descuido"* — e esse gate **não existia**. A auditoria provou por mutação:
+> injetou uma escrita crua nova em `operators/internal/environment/environment_controller.go` e a suíte
+> inteira de `operators/internal/...` saiu **exit 0**, 14 pacotes `ok`.
+>
+> A causa é de cobertura. As catracas são **por pacote** e existem em alguns; `environment` não tinha
+> nenhuma. E dos 123 gates do `loopzero-ops`, **zero** casavam com o assunto.
+>
+> **O padrão vale mais que o defeito**, e a auditoria o encontrou em três itens: o fechamento foi
+> contra *o resultado mais fácil de medir* — a contagem zerada — enquanto a bala que pedia a **guarda
+> contra o retorno** ficou sem dono. É a forma que este próprio item nomeia noutra fatia: *"um gate
+> cuja única falha é uma isenção conhecida não é ligado, e então não vigia nada"*. Houve deriva de
+> alvo: uma nota anterior dizia que o gate *"entra quando os seis estiverem migrados"* — os seis
+> migraram, o gate não entrou, e a nota de fechamento não mencionou.
+>
+> **Bala 4 fechada em 2026-08-14** com o gate `status-writer-contract`
+> (`cmd/loopzero-ops/internal/quality/statuswritercontract/`), ligado em `quality:gates`. Ele varre **toda**
+> a árvore `operators/` — 83 arquivos de produção — em vez de depender de uma catraca por pacote, e a
+> inversão é o ponto: uma catraca protege o pacote que alguém lembrou de proteger, um gate que varre
+> falha pela **ausência** de proteção.
+>
+> Reconhece as três formas que a revisão da fatia 27 provou serem burla de duas linhas: apelido local
+> (`sw := r.Status()`), `SubResource("status")`, e as duas combinadas. **O mutante exato da auditoria
+> agora reprova**, nomeando arquivo, linha, função e a forma pela qual o escritor foi alcançado.
+> Decisão em `MEET-ASYNC-AMENDMENT-2026-08-14-status-writer-gate`. A última escrita saiu junto com o defeito que a
 > bloqueava.
 >
 > Ela estava presa porque o `application_controller.go` tirava a base **depois de um re-fetch**, então

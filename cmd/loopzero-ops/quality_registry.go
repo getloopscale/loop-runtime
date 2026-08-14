@@ -89,6 +89,7 @@ var gateRegistry = []gateSpec{
 	{"helmfile-context-parity", "A task que invoca um helmfile aponta para o cluster que o helmfile declara (B-044).", runHelmfileContextParity},
 	{"domain-sink-purity", "Ratchet: the services DAG sink must not grow its persistence surface (B-049).", runDomainSinkPurity},
 	{"routes-acyclic", "Deny-by-default fence over api/internal/routes subpackages: registered families only, no sibling edges (B-041).", runRoutesAcyclic},
+	{"status-writer-contract", "Refuses a bare Status().Update anywhere in operators production code, including the local-alias and SubResource spellings (ADR 2026-08-12-status-writer-contract, B-085).", runStatusWriterContract},
 	{"helm-drift", "Detects drift between rendered Helm charts and the deployed state.", runHelmDrift},
 	{"helm-overlap-parity", "Keeps the dual Helm chart systems (infra/helm vs charts) in parity.", runHelmOverlapParity},
 	{"migration-test-coverage", "Every DB migration has corresponding test coverage.", runMigrationTestCoverage},

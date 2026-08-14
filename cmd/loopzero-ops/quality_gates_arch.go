@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routesacyclic"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/statuswritercontract"
 	"os"
 	"path/filepath"
 	"strings"
@@ -365,6 +366,39 @@ func runDomainSinkPurity(args []string) int {
 		return 1
 	}
 	fmt.Printf("PASS — nenhum símbolo novo (persistência ou camada de aplicação) atravessa o sink (%d congelados, rastreados em B-079)\n", o.FrozenCount)
+	return 0
+}
+
+// runStatusWriterContract — B-085 bala 4.
+//
+// The gate the migration asked for in the same breath as the conversion, and
+// that for a while did not exist: an adversarial audit injected a fresh bare
+// Update into a package with no per-package ratchet and the whole operators
+// suite stayed green. A ratchet protects the package somebody remembered; a
+// walk fails on the ABSENCE of protection.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-status-writer-gate
+func runStatusWriterContract(args []string) int {
+	fs := flag.NewFlagSet("status-writer-contract", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	o, err := statuswritercontract.Check(statuswritercontract.Config{Root: *root})
+	fmt.Println(o.Summary())
+	for _, v := range o.Violations {
+		fmt.Printf("  %s:%d — %s() persists status with Update (reached by %s)\n",
+			v.File, v.Line, v.Func, v.Form)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "status-writer-contract: %v\n", err)
+		return 1
+	}
+	if !o.Pass {
+		fmt.Fprintln(os.Stderr, statuswritercontract.ActionableFix)
+		return 1
+	}
 	return 0
 }
 
