@@ -2515,6 +2515,23 @@ dod:
 > `+kubebuilder:default=false`, que faz o servidor materializar o campo, e está preso por asserção que
 > lê o objeto não-estruturado — a leitura tipada devolve `false` nos dois casos e é cega para isto.
 
+> **Fatia `slice-24` — o `gitrepositorybinding` saiu, e com ele o pacote `platform` inteiro.** Restam
+> **9** escritas em **6** arquivos, todas fora dele: `app/exposure_controller.go` 3,
+> `tenant/tenant_deletion.go` 2, e 1 cada em `app/application_controller.go`,
+> `app/application_reaper.go`, `environment/environment_controller.go`, `tenant/tenant_controller.go`.
+>
+> A mais simples das quatro, e por uma razão que vale nomear: as três escritas estão **todas** no
+> `Reconcile`, e os helpers apenas *setam* condições sem persistir. Nenhuma assinatura mudou. Onde as
+> anteriores exigiram a base atravessando três e cinco funções, aqui ela nasce e morre no mesmo escopo.
+>
+> **A lista de isenções ficou VAZIA**, que é a primeira vez que ela prova o que afirma. Ela e sua irmã
+> congelada continuam no código em vez de serem apagadas: são elas que fazem a próxima escrita crua
+> neste pacote reprovar alto, em vez de chegar com uma isenção anexada. Mutante confirmou.
+>
+> **E a lição da fatia 23 foi aplicada antes de converter, não depois:** conferi que este CRD não tem
+> `status.required` e que nenhum campo de status é valor-zero sem `omitempty` — as duas condições que
+> tornam o merge-patch não-mecânico. Nenhuma se aplica aqui.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go

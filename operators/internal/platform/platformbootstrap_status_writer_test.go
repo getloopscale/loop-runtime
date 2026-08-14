@@ -42,9 +42,12 @@ import (
 // The count is part of the exemption on purpose. Adding a write to an exempt
 // controller trips the check just as surely as adding one to a converted file,
 // so the list can only shrink.
-var notYetConverted = map[string]exemption{
-	"gitrepositorybinding_controller.go": {writes: 3, since: "2026-08-13"},
-}
+//
+// EMPTY since 2026-08-13: every controller in this package writes status by
+// merge patch. The map and its frozen twin stay rather than being deleted —
+// they are what makes the next bare Update in this package fail loudly instead
+// of arriving with an exemption attached.
+var notYetConverted = map[string]exemption{}
 
 type exemption struct {
 	writes int
@@ -57,9 +60,7 @@ type exemption struct {
 // nothing stopped a new key being added — so "the list only shrinks" was a
 // convention I asserted in a comment and nowhere else. Freezing the set makes
 // adding an exemption a deliberate edit to two places, which is the point.
-var exemptedFiles = []string{
-	"gitrepositorybinding_controller.go",
-}
+var exemptedFiles = []string{}
 
 func TestPlatform_TheExemptionListOnlyShrinks(t *testing.T) {
 	if len(notYetConverted) != len(exemptedFiles) {
@@ -170,7 +171,11 @@ func TestPlatform_BareStatusUpdatesAreConvertedOrDeclared(t *testing.T) {
 // defect than the one being fixed.
 func TestPlatform_ConvertedControllersPersistStatusByMergePatch(t *testing.T) {
 	pkg := packageSource(t)
-	for _, name := range []string{"platformbootstrap_controller.go", "clustercredential_controller.go"} {
+	for _, name := range []string{
+		"platformbootstrap_controller.go",
+		"clustercredential_controller.go",
+		"gitrepositorybinding_controller.go",
+	} {
 		src := pkg[name]
 		if src == "" {
 			t.Fatalf("%s not read", name)
@@ -400,6 +405,93 @@ func TestClusterCredential_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 	// The last patch is the deferred readiness summary, which carries the lock by
 	// design; everything before it is the controller body and must not.
 	for i, body := range bodies[:max(0, len(bodies)-1)] {
+		if strings.Contains(body, "resourceVersion") {
+			t.Errorf("body patch #%d carries resourceVersion — capture `base` AFTER EnsureFinalizer "+
+				"(B-085).\npatch: %s", i+1, body)
+		}
+	}
+}
+
+// The same execution guard for the GitRepositoryBinding controller.
+//
+// Scope note, learned the hard way in slice-23: this catches the two classes the
+// fake client CAN see — a stale resourceVersion riding the patch, and a write
+// the controller intended that did not persist. It cannot see absent-versus-false,
+// because the fake client stores typed objects and re-materialises zero values.
+// For that class the guard is the envtest suite reading the unstructured object.
+// Measured here first: this CRD has no required status field and no zero-valued
+// status field without omitempty, so the class does not arise.
+func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) {
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{loopzerov1.AddToScheme, corev1.AddToScheme} {
+		if err := add(scheme); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed := &loopzerov1.GitRepositoryBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "gh", Namespace: "loopzero-system", Generation: 7},
+		Spec: loopzerov1.GitRepositoryBindingSpec{
+			RepoURL: "https://example.invalid/x.git",
+			CredentialSecretRef: loopzerov1.CredentialSecretRef{
+				Name: "creds", Key: "token", Namespace: "loopzero-system",
+			},
+		},
+	}
+	// The Secret EXISTS on purpose.
+	//
+	// The first version of this guard left it absent, so resolveCredential failed
+	// and only the FIRST of the three patch sites ever ran. The third one is the
+	// one that writes the non-condition fields — CredentialHash and
+	// ObservedGeneration — which are exactly the shape the clustercredential
+	// slice showed can vanish from a merge patch. A guard that never reaches the
+	// site it most needs to watch is a guard by name. Review of slice-24.
+	creds := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "loopzero-system"},
+		Data:       map[string][]byte{"token": []byte("ghp_probe")},
+	}
+
+	var bodies []string
+	var lost []string
+	c := interceptor.NewClient(
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed, creds).
+			WithStatusSubresource(&loopzerov1.GitRepositoryBinding{}).Build(),
+		interceptor.Funcs{
+			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
+				patch client.Patch, opts ...client.SubResourcePatchOption) error {
+				data, err := patch.Data(obj)
+				if err != nil {
+					return err
+				}
+				bodies = append(bodies, string(data))
+				want, _ := json.Marshal(obj.(*loopzerov1.GitRepositoryBinding).Status)
+				if err := cl.Status().Patch(ctx, obj, patch, opts...); err != nil {
+					return err
+				}
+				var got loopzerov1.GitRepositoryBinding
+				if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &got); err != nil {
+					return err
+				}
+				if persisted, _ := json.Marshal(got.Status); string(want) != string(persisted) {
+					lost = append(lost, fmt.Sprintf("held %s\n    persisted %s", want, persisted))
+				}
+				return nil
+			},
+		})
+
+	r := &GitRepositoryBindingReconciler{Client: c}
+	_, _ = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: seed.Name, Namespace: seed.Namespace},
+	})
+
+	if len(bodies) < 2 {
+		t.Fatalf("expected at least one body patch and the deferred readiness summary; got %d — "+
+			"an incomplete observation is not a clean one", len(bodies))
+	}
+	if len(lost) > 0 {
+		t.Errorf("%d status write(s) did not persist what the controller held:\n  %s",
+			len(lost), strings.Join(lost, "\n  "))
+	}
+	for i, body := range bodies[:len(bodies)-1] {
 		if strings.Contains(body, "resourceVersion") {
 			t.Errorf("body patch #%d carries resourceVersion — capture `base` AFTER EnsureFinalizer "+
 				"(B-085).\npatch: %s", i+1, body)

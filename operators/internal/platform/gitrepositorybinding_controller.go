@@ -97,12 +97,30 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
+	// The base snapshot for every status write below.
+	//
+	// AFTER EnsureFinalizer above, which writes metadata and bumps
+	// resourceVersion: a patch derived from an earlier snapshot carries the stale
+	// version and becomes an optimistic lock frozen at snapshot time — a WIDER
+	// conflict window than the refetch this contract removes. Measured as a real
+	// 409 in slice-18.
+	//
+	// And before the first .Status mutation: the helpers below SET conditions on
+	// `binding` without persisting them, so a snapshot taken after any of them
+	// would diff those conditions against themselves and the patch would silently
+	// omit the very findings it exists to record.
+	//
+	// The deletion path returns above and writes no status, so unlike the preview
+	// controller it needs no base of its own. And no helper signature changes:
+	// all three writes live in Reconcile, which is where `base` is in scope.
+	base := binding.DeepCopy()
+
 	gen := binding.Generation
 
 	// Step 1: Resolve credential from the referenced Secret.
 	token, err := r.resolveCredential(ctx, &binding, gen)
 	if err != nil {
-		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
+		if statusErr := r.Status().Patch(ctx, &binding, client.MergeFrom(base)); statusErr != nil {
 			logger.Error(statusErr, "failed to update binding status after credential resolve error")
 		}
 		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
@@ -113,7 +131,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Step 3: Ensure ArgoCD Secret exists with correct data.
 	if err := r.ensureArgoCDSecret(ctx, &binding, token, hash, gen); err != nil {
-		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
+		if statusErr := r.Status().Patch(ctx, &binding, client.MergeFrom(base)); statusErr != nil {
 			logger.Error(statusErr, "failed to update binding status after ArgoCD secret error")
 		}
 		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
@@ -136,7 +154,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	// Step 7: Update observed generation.
 	binding.Status.ObservedGeneration = gen
 
-	if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
+	if statusErr := r.Status().Patch(ctx, &binding, client.MergeFrom(base)); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
