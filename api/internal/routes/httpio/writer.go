@@ -90,3 +90,22 @@ func WriteErrorJSON(w http.ResponseWriter, status int, code, message string) {
 		"message": message,
 	})
 }
+
+// WriteCodeErrorJSON emits `{"code": …, "message": …}`.
+//
+// It is NOT WriteErrorJSON with a different name. The two differ in one byte
+// sequence that matters: this one keys the machine-readable field `code`, the
+// other keys it `error`. Merging them would silently change the response body of
+// every endpoint that uses this one — and `--json` output is a stability contract
+// (CLAUDE.md Rule 5), so a key rename is a breaking change wearing the costume of
+// a deduplication.
+//
+// It moved here from the audit family when that family was extracted (B-080).
+// Two files of the parent package reached it, which is what the compiler said the
+// moment the family left: a helper that serves the whole package does not belong
+// to one of its members.
+func WriteCodeErrorJSON(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+}

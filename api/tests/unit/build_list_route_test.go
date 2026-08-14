@@ -99,7 +99,7 @@ func TestBuildListRoute(t *testing.T) {
 
 		var resp struct {
 			Builds []routes.BuildStatusResponse `json:"builds"`
-			Total  int                           `json:"total"`
+			Total  int                          `json:"total"`
 		}
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
@@ -286,7 +286,7 @@ func TestBuildListRoute(t *testing.T) {
 
 		var resp struct {
 			Builds []routes.BuildStatusResponse `json:"builds"`
-			Total  int                           `json:"total"`
+			Total  int                          `json:"total"`
 		}
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)

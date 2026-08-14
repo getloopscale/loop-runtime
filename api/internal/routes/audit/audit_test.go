@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package audit
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -49,7 +50,7 @@ func TestAudit_List_HappyPath(t *testing.T) {
 	h := NewAuditHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit", nil)
-	req = withAuth(req, defaultUserContext()) // owner role
+	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // owner role
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -82,7 +83,7 @@ func TestAudit_List_Empty(t *testing.T) {
 	h := NewAuditHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -117,7 +118,7 @@ func TestAudit_List_MemberForbidden(t *testing.T) {
 	h := NewAuditHandler(&fakeAuditStore{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit", nil)
-	req = withAuth(req, memberUserContext()) // member role, not owner/admin
+	req = routestest.WithAuth(req, routestest.MemberUserContext()) // member role, not owner/admin
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -137,7 +138,7 @@ func TestAudit_List_WithFilters(t *testing.T) {
 	h := NewAuditHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit?action=project.created&resource_type=project&limit=10&offset=5", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.List(w, req)

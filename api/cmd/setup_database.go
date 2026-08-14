@@ -21,6 +21,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
 // DatabaseDeps holds everything produced by setupDatabase.
@@ -28,7 +29,7 @@ type DatabaseDeps struct {
 	DBAdapter    *db.PgxAdapter
 	MemberStore  middleware.MembershipStore
 	ProjectStore routes.ProjectStore
-	DBHealth     routes.DBHealthChecker
+	DBHealth     health.DBHealthChecker
 	PlanLimiter  *enforcement.PlanLimiter
 
 	// StdDB is the stdlib sql.DB used for plan enforcement (caller must defer Close).

@@ -23,6 +23,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"os"
 
@@ -37,7 +38,7 @@ import (
 func AdminReleaseInspectHandler(inspector release.ReleaseInspector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
-			jsonError(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
+			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
 			return
 		}
 
@@ -45,13 +46,13 @@ func AdminReleaseInspectHandler(inspector release.ReleaseInspector) http.Handler
 		expected := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
 		if expected == "" || serviceAuth == "" ||
 			subtle.ConstantTimeCompare([]byte(serviceAuth), []byte(expected)) != 1 {
-			jsonError(w, http.StatusForbidden, "FORBIDDEN", "Admin endpoint requires X-Service-Auth.")
+			httpio.WriteCodeErrorJSON(w, http.StatusForbidden, "FORBIDDEN", "Admin endpoint requires X-Service-Auth.")
 			return
 		}
 
 		releaseID := chi.URLParam(r, "id")
 		if releaseID == "" {
-			jsonError(w, http.StatusBadRequest, "MISSING_ID", "Release id path parameter is required.")
+			httpio.WriteCodeErrorJSON(w, http.StatusBadRequest, "MISSING_ID", "Release id path parameter is required.")
 			return
 		}
 
@@ -59,10 +60,10 @@ func AdminReleaseInspectHandler(inspector release.ReleaseInspector) http.Handler
 		if err != nil {
 			var nfe release.ErrReleaseInspectionNotFound
 			if errors.As(err, &nfe) {
-				jsonError(w, http.StatusNotFound, "RELEASE_NOT_FOUND", "Release does not exist.")
+				httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "RELEASE_NOT_FOUND", "Release does not exist.")
 				return
 			}
-			jsonError(w, http.StatusInternalServerError, "INSPECT_FAILED", "Release inspection failed.")
+			httpio.WriteCodeErrorJSON(w, http.StatusInternalServerError, "INSPECT_FAILED", "Release inspection failed.")
 			return
 		}
 

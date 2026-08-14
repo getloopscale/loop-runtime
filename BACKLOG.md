@@ -2524,6 +2524,24 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > pendente). Revertidos as três vezes. Formatar por diretório num repositório com dívida de formatação
 > pré-existente **sempre** mistura o alheio com o próprio.
 
+> **Fatia 32 — `audit` e `health` (2026-08-14).** Pai de 29 para **27**; **12 subpacotes**, 101
+> arquivos, cerca verde, lint zero. Duas famílias numa fatia porque ambas são de arquivo único e sem
+> acoplamento — a disciplina de uma-por-fatia existe pela revisabilidade, não por si mesma.
+>
+> **E a extração desenterrou um segundo escritor de resposta com contrato divergente.** `jsonError`
+> vivia no `audit.go` e era alcançado por dois arquivos do pai. O leaf `httpio` já tinha
+> `WriteErrorJSON` — **quase** idêntico, e a diferença é o que importa: um emite `{"code":…}`, o outro
+> `{"error":…}`. Fundi-los teria mudado o corpo de resposta dos endpoints de admin, e `--json` é
+> contrato de estabilidade (Regra 5). Foi para o leaf como `WriteCodeErrorJSON`, com a razão de não
+> ser fusão escrita ao lado.
+>
+> É o mesmo padrão da fatia 30, que desenterrou uma cópia caseira de `strings.Contains`: **um pacote
+> plano esconde duplicação, e separar é o que a torna visível** — só que desta vez a "duplicação" era
+> uma armadilha, porque as duas funções não são a mesma.
+>
+> **Medido o denominador do item:** o `router.go` declara **18** famílias; 8 têm subpacote. O critério
+> de fechamento é o isomorfismo entre as duas listas.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

@@ -1,10 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package audit serves the audit-log endpoints under /api/v1/audit: the
+// tenant-scoped read side of what the platform recorded about itself.
+//
+// Ninth family to leave the flat `routes` package (B-080, slice-32), extracted
+// together with `health` because both are single-file families with no coupling —
+// two trivial moves in one diff stay reviewable, and the one-family-per-slice
+// discipline exists for reviewability rather than for its own sake.
+//
+// Its extraction surfaced `jsonError`, a response writer that lived here and was
+// reached by two files of the parent. It moved to the `httpio` leaf as
+// WriteCodeErrorJSON — deliberately NOT merged into the existing WriteErrorJSON,
+// which keys its machine-readable field `error` where this one keys it `code`.
+// Merging them would have been a breaking change to the `--json` contract wearing
+// the costume of a deduplication.
+package audit
 
 import (
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"strconv"
 	"time"
@@ -36,13 +51,13 @@ func NewAuditHandler(store AuditStore) *AuditHandler {
 func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		jsonError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Not authenticated.")
+		httpio.WriteCodeErrorJSON(w, http.StatusUnauthorized, "UNAUTHORIZED", "Not authenticated.")
 		return
 	}
 
 	// Require admin or owner role
 	if uc.Role != "owner" && uc.Role != "admin" {
-		jsonError(w, http.StatusForbidden, "INSUFFICIENT_ROLE", "Audit log requires admin or owner role.")
+		httpio.WriteCodeErrorJSON(w, http.StatusForbidden, "INSUFFICIENT_ROLE", "Audit log requires admin or owner role.")
 		return
 	}
 
@@ -73,7 +88,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	entries, total, err := h.store.ListAuditEntries(r.Context(), uc.TenantID, filter)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve audit log.")
+		httpio.WriteCodeErrorJSON(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve audit log.")
 		return
 	}
 
@@ -84,10 +99,4 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		"limit":   filter.Limit,
 		"offset":  filter.Offset,
 	})
-}
-
-func jsonError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
 }

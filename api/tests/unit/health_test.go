@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
 type fakeHealthChecker struct {
@@ -25,7 +25,7 @@ func (f *fakeHealthChecker) Ping() error {
 
 func TestHealthHandler(t *testing.T) {
 	t.Run("GET /api/v1/health returns 200 with status ok", func(t *testing.T) {
-		handler := routes.NewHealthHandler(nil)
+		handler := health.NewHealthHandler(nil)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 		rec := httptest.NewRecorder()
 
@@ -45,7 +45,7 @@ func TestHealthHandler(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/health returns content-type application/json", func(t *testing.T) {
-		handler := routes.NewHealthHandler(nil)
+		handler := health.NewHealthHandler(nil)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 		rec := httptest.NewRecorder()
 
@@ -61,7 +61,7 @@ func TestHealthHandler(t *testing.T) {
 func TestDeepHealthHandler(t *testing.T) {
 	t.Run("returns 200 when DB is healthy", func(t *testing.T) {
 		checker := &fakeHealthChecker{err: nil}
-		handler := routes.NewHealthHandler(checker)
+		handler := health.NewHealthHandler(checker)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
 		rec := httptest.NewRecorder()
 
@@ -85,7 +85,7 @@ func TestDeepHealthHandler(t *testing.T) {
 
 	t.Run("returns 503 when DB is down", func(t *testing.T) {
 		checker := &fakeHealthChecker{err: errors.New("connection refused")}
-		handler := routes.NewHealthHandler(checker)
+		handler := health.NewHealthHandler(checker)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
 		rec := httptest.NewRecorder()
 
@@ -109,7 +109,7 @@ func TestDeepHealthHandler(t *testing.T) {
 
 	t.Run("returns 200 when DB and all services healthy", func(t *testing.T) {
 		checker := &fakeHealthChecker{err: nil}
-		handler := routes.NewHealthHandler(checker,
+		handler := health.NewHealthHandler(checker,
 			&fakeServiceChecker{name: "argocd", err: nil},
 			&fakeServiceChecker{name: "gitea", err: nil},
 		)
@@ -135,7 +135,7 @@ func TestDeepHealthHandler(t *testing.T) {
 
 	t.Run("returns 503 when any service is unreachable", func(t *testing.T) {
 		checker := &fakeHealthChecker{err: nil} // DB ok
-		handler := routes.NewHealthHandler(checker,
+		handler := health.NewHealthHandler(checker,
 			&fakeServiceChecker{name: "argocd", err: errors.New("connection refused")},
 			&fakeServiceChecker{name: "gitea", err: nil},
 		)
@@ -164,7 +164,7 @@ func TestDeepHealthHandler(t *testing.T) {
 
 	t.Run("returns auth_failed for 401 errors", func(t *testing.T) {
 		checker := &fakeHealthChecker{err: nil}
-		handler := routes.NewHealthHandler(checker,
+		handler := health.NewHealthHandler(checker,
 			&fakeServiceChecker{name: "argocd", err: fmt.Errorf("argocd: auth_failed")},
 		)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
@@ -185,11 +185,11 @@ func TestDeepHealthHandler(t *testing.T) {
 	})
 }
 
-// fakeServiceChecker implements routes.ServiceHealthChecker for testing.
+// fakeServiceChecker implements health.ServiceHealthChecker for testing.
 type fakeServiceChecker struct {
 	name string
 	err  error
 }
 
-func (f *fakeServiceChecker) Name() string                        { return f.name }
-func (f *fakeServiceChecker) Check(_ context.Context) error       { return f.err }
+func (f *fakeServiceChecker) Name() string                  { return f.name }
+func (f *fakeServiceChecker) Check(_ context.Context) error { return f.err }

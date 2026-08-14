@@ -18,11 +18,13 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
-	"github.com/getloopscale/loopzero/api/internal/routes/scale"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
+	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -45,8 +47,8 @@ type Config struct {
 	// fall back to slog.Default. Production wiring in api/cmd/main.go
 	// SHOULD set this (Beta Logs Gate requirement).
 	ContextLogger  *pkglogging.ContextLogger
-	DB             routes.DBHealthChecker
-	HealthServices []routes.ServiceHealthChecker
+	DB             health.DBHealthChecker
+	HealthServices []health.ServiceHealthChecker
 	TokenValidator middleware.TokenValidator
 	MemberStore    middleware.MembershipStore
 	ProjectStore   routes.ProjectStore
@@ -81,7 +83,7 @@ type Config struct {
 	BootstrapStore     routes.BootstrapStore
 	BootstrapSecret    string                      // SEC-003: shared secret for /internal/bootstrap auth
 	CellPlacement      routes.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
-	CellDiscovery      routes.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
+	CellDiscovery      health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc
 	BuildHandler       *routes.BuildHandler
@@ -180,7 +182,7 @@ type Config struct {
 	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               middleware.AuditWriter
-	AuditHandler              *routes.AuditHandler
+	AuditHandler              *audit.AuditHandler
 	TenantDeletionStore       tenants.TenantDeletionStore
 	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and

@@ -43,8 +43,8 @@ type fakeBuildOrchestrator struct {
 	buildTerminal bool
 
 	// CancelBuild
-	cancelErr          error
-	lastCancelBuildID  string
+	cancelErr         error
+	lastCancelBuildID string
 
 	// SEC-4: tenant ownership check
 	buildTenantID string

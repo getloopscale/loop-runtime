@@ -179,7 +179,6 @@ func setupFunctionsInFiles(t *testing.T, pattern string) []string {
 	return found
 }
 
-
 func contains(ss []string, s string) bool {
 	for _, v := range ss {
 		if v == s {

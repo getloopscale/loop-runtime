@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package health serves /api/v1/health and the readiness probes behind it: the
+// database check, the per-service HTTP checks, and cell discovery.
+//
+// Ninth family to leave the flat `routes` package (B-080, slice-32), extracted
+// alongside `audit`.
+//
+// Depends on no sibling family and, unusually, not even on `httpio`: it writes
+// its own responses because a health endpoint that fails to render is worse than
+// one that renders plainly.
+package health
 
 import (
 	"context"

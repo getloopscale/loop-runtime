@@ -18,6 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
@@ -142,7 +143,7 @@ func (s *stubTenantEvictor) EnqueueEviction(_ context.Context, _ []string) (stri
 	return "job-1", nil
 }
 
-// stubDBHealthChecker implements routes.DBHealthChecker.
+// stubDBHealthChecker implements health.DBHealthChecker.
 type stubDBHealthChecker struct{}
 
 func (s *stubDBHealthChecker) Ping() error { return nil }
@@ -192,7 +193,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// because router-level test only verifies route registration, never
 	// invokes the handler body (handler unit tests own that contract).
 	integrationsGitHubHandler := routes.NewIntegrationsGitHubHandler(nil, nil)
-	auditHandler := routes.NewAuditHandler(nil)
+	auditHandler := audit.NewAuditHandler(nil)
 	argoCallbackHandler := routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 
 	cfg := server.Config{

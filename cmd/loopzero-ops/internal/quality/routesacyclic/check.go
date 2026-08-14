@@ -244,6 +244,14 @@ var allowed = map[string]map[string]bool{
 	"billing": {"httpio": true, "routestest": true},
 	// The eighth family (slice-31, B-080). Serves /api/v1/scale.
 	"scale": {"httpio": true, "routestest": true},
+	// The ninth and tenth families (slice-32, B-080), extracted in one diff because
+	// both are single-file with no coupling. Serve /api/v1/audit and /api/v1/health.
+	//
+	// `health` declares NO leaf at all — it writes its own responses, because a
+	// health endpoint that fails to render is worse than one that renders plainly.
+	// An empty set here is a family that imports no sibling, not a leaf.
+	"audit":  {"httpio": true, "routestest": true},
+	"health": {"routestest": true},
 }
 
 // Config drives the gate.

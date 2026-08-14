@@ -33,10 +33,10 @@ import (
 
 // fakeStatusSSEEventStore captures invocations + emits scripted events.
 type fakeStatusSSEEventStore struct {
-	events     []sse.SSEEvent
-	calls      atomic.Int32
-	err        error
-	emitOnce   atomic.Bool // emit events on first call only (avoid infinite loop in tests)
+	events   []sse.SSEEvent
+	calls    atomic.Int32
+	err      error
+	emitOnce atomic.Bool // emit events on first call only (avoid infinite loop in tests)
 }
 
 func (f *fakeStatusSSEEventStore) GetAfterForProject(_ context.Context, _ string, _ string, afterID int64) ([]sse.SSEEvent, error) {

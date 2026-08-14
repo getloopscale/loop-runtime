@@ -76,24 +76,24 @@ type TenantEvictor interface {
 func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
-			jsonError(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
+			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
 			return
 		}
 
 		var input AdminEvictInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			jsonError(w, http.StatusBadRequest, "INVALID_BODY", "Request body must be JSON matching AdminEvictInput.")
+			httpio.WriteCodeErrorJSON(w, http.StatusBadRequest, "INVALID_BODY", "Request body must be JSON matching AdminEvictInput.")
 			return
 		}
 
 		if strings.TrimSpace(input.Pattern) == "" && len(input.IDs) == 0 {
-			jsonError(w, http.StatusBadRequest, "MISSING_FILTER", "Either 'pattern' or 'ids' must be set.")
+			httpio.WriteCodeErrorJSON(w, http.StatusBadRequest, "MISSING_FILTER", "Either 'pattern' or 'ids' must be set.")
 			return
 		}
 
 		// Require explicit acknowledgement for full-match patterns.
 		if input.Pattern == "%" || input.Pattern == "tn-%" {
-			jsonError(w, http.StatusBadRequest, "PATTERN_TOO_BROAD",
+			httpio.WriteCodeErrorJSON(w, http.StatusBadRequest, "PATTERN_TOO_BROAD",
 				"Pattern '%' or 'tn-%' requires explicit enumeration — too dangerous as free-text.")
 			return
 		}
@@ -103,7 +103,7 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 
 		matched, err := evictor.MatchTenants(ctx, input.Pattern, input.IDs)
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, "MATCH_FAILED",
+			httpio.WriteCodeErrorJSON(w, http.StatusInternalServerError, "MATCH_FAILED",
 				fmt.Sprintf("Failed to resolve tenants: %v", err))
 			return
 		}
@@ -133,7 +133,7 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 				"job_id", jobID,
 				"tenants_matched_count", len(matched),
 			)
-			jsonError(w, http.StatusInternalServerError, "ENQUEUE_FAILED",
+			httpio.WriteCodeErrorJSON(w, http.StatusInternalServerError, "ENQUEUE_FAILED",
 				"Eviction queue temporarily unavailable. Please retry.")
 			return
 		}

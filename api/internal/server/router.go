@@ -21,6 +21,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -92,7 +93,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	})
 
 	// Public routes (no auth required)
-	health := routes.NewHealthHandler(cfg.DB, cfg.HealthServices...)
+	health := health.NewHealthHandler(cfg.DB, cfg.HealthServices...)
 	if cfg.CellDiscovery != nil {
 		health.WithCellDiscovery(cfg.CellDiscovery)
 	}

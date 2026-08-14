@@ -20,12 +20,12 @@ import (
 // --- Fake TeamStore ---
 
 type fakeTeamStore struct {
-	members    map[string][]routes.TeamMemberInfo // tenantID -> members
-	users      map[string]*routes.TeamUserInfo    // username -> user
-	addErr     error
-	removeErr  error
-	updateErr  error
-	listErr    error
+	members      map[string][]routes.TeamMemberInfo // tenantID -> members
+	users        map[string]*routes.TeamUserInfo    // username -> user
+	addErr       error
+	removeErr    error
+	updateErr    error
+	listErr      error
 	getMemberErr error
 }
 

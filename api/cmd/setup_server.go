@@ -33,8 +33,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -43,14 +45,14 @@ import (
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
-func setupHealthServices(cfg config.Config) []routes.ServiceHealthChecker {
-	var healthServices []routes.ServiceHealthChecker
+func setupHealthServices(cfg config.Config) []health.ServiceHealthChecker {
+	var healthServices []health.ServiceHealthChecker
 	if cfg.ArgocdURL != "" {
-		healthServices = append(healthServices, routes.NewHTTPServiceChecker(
+		healthServices = append(healthServices, health.NewHTTPServiceChecker(
 			"argocd", cfg.ArgocdURL+"/api/v1/applications", cfg.ArgocdToken, nil))
 	}
 	if cfg.GiteaURL != "" {
-		healthServices = append(healthServices, routes.NewHTTPServiceChecker(
+		healthServices = append(healthServices, health.NewHTTPServiceChecker(
 			"gitea", cfg.GiteaURL+"/api/v1/repos/search?limit=1", cfg.GiteaToken, nil))
 	}
 	return healthServices
@@ -69,7 +71,7 @@ func buildServerConfig(
 	cellStore *store.PostgresCellStore,
 	domainHandler *domains.DomainHandler,
 	buildHandler *routes.BuildHandler,
-	healthServices []routes.ServiceHealthChecker,
+	healthServices []health.ServiceHealthChecker,
 	tokenValidator middleware.TokenValidator,
 	rateLimiter *middleware.RateLimiter,
 	shutdownCtx context.Context,
@@ -281,7 +283,7 @@ func buildServerConfig(
 		// Plan T2.5 D8 full — persistent active-team selection backed by
 		// users.active_tenant_id column (migration 000018).
 		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
-		sc.AuditHandler = routes.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
+		sc.AuditHandler = audit.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
 		// /api/v1/admin/tenants/pin endpoint registered in router.go can
@@ -369,7 +371,7 @@ func buildServerConfig(
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
 		}()
-		if checker, ok := cellRouter.(routes.CellDiscoveryChecker); ok {
+		if checker, ok := cellRouter.(health.CellDiscoveryChecker); ok {
 			sc.CellDiscovery = checker
 		}
 	}

@@ -305,7 +305,7 @@ func TestProjectListRoute(t *testing.T) {
 		store := &fakeProjectStore{
 			projects: map[string]bool{
 				"acme/api-service": true,
-				"acme/web-app":    true,
+				"acme/web-app":     true,
 			},
 		}
 		crMgr := &fakeTenantCRManager{}
@@ -376,7 +376,7 @@ func TestProjectListRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects → only returns tenant's own projects", func(t *testing.T) {
 		store := &fakeProjectStore{
 			projects: map[string]bool{
-				"acme/my-app":       true,
+				"acme/my-app":      true,
 				"other-tenant/app": true,
 			},
 		}
