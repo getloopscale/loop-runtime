@@ -29,7 +29,7 @@ import (
 // reconcileArgoCDPhase handles the ConfiguringArgoCD phase.
 // Steps: check reachability, validate/create JWT, register repo credentials.
 // ARCH-OP-001: Uses ArgoCDBootstrapClient interface for HTTP operations.
-func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
 	ctx, span := reconcilehelpers.StartChildSpan(ctx, "bootstrap.argocd.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
@@ -44,13 +44,13 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 	// Step 1: Check ArgoCD reachable.
 	if err := argoClient.CheckReachable(ctx); err != nil {
 		logger.Info("argocd unreachable", "url", argoURL, "error", err)
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("ArgoCD unreachable: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("ArgoCD unreachable: %v", err))
 	}
 
 	// Step 2: Check if token already exists in platform-tokens Secret.
 	platformSecret, err := r.getSecret(ctx, constants.SecretPlatformTokens, pb.Namespace)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("platform tokens secret not found: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("platform tokens secret not found: %v", err))
 	}
 
 	existingToken, _ := secretString(platformSecret, constants.KeyArgoCDToken)
@@ -66,14 +66,14 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 		var adminSecret corev1.Secret
 		if err := r.Get(ctx, client.ObjectKey{Name: adminSecretName, Namespace: argoNS}, &adminSecret); err != nil {
 			if errors.IsNotFound(err) {
-				return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("ArgoCD admin secret %s/%s not found", argoNS, adminSecretName))
+				return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("ArgoCD admin secret %s/%s not found", argoNS, adminSecretName))
 			}
-			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to read ArgoCD admin secret: %v", err))
+			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to read ArgoCD admin secret: %v", err))
 		}
 
 		adminPassword, passErr := secretString(&adminSecret, constants.KeyPassword)
 		if passErr != nil {
-			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("ArgoCD admin secret: %v", passErr))
+			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("ArgoCD admin secret: %v", passErr))
 		}
 
 		// Step 4: Generate apiKey token for loopzero-api account (non-expiring).
@@ -81,28 +81,28 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 		// generateArgoCDApiKey (non-expiring apiKey scoped to sync+get via RBAC).
 		apiKeyToken, err := argoClient.GenerateAPIKey(ctx, adminPassword)
 		if err != nil {
-			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to generate ArgoCD apiKey: %v", err))
+			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to generate ArgoCD apiKey: %v", err))
 		}
 
 		// Step 5: Store apiKey JWT in platform-tokens Secret.
 		if err := r.updateSecretData(ctx, platformSecret, constants.KeyArgoCDToken, apiKeyToken); err != nil {
-			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to store ArgoCD token: %v", err))
+			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to store ArgoCD token: %v", err))
 		}
 	}
 
 	// Step 6: Create repo credential Secrets in ArgoCD namespace.
 	giteaToken, giteaErr := secretString(platformSecret, constants.KeyGiteaToken)
 	if giteaErr != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("platform-tokens missing Gitea token: %v", giteaErr))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("platform-tokens missing Gitea token: %v", giteaErr))
 	}
 	for _, repoCred := range pb.Spec.ArgoCD.RepoCredentials {
 		if err := r.ensureRepoCredentialSecret(ctx, argoNS, repoCred, giteaToken); err != nil {
-			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to create repo credential %s: %v", repoCred.Name, err))
+			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to create repo credential %s: %v", repoCred.Name, err))
 		}
 	}
 
 	r.setCondition(pb, conditions.TypeArgoCDReady, metav1.ConditionTrue, conditions.ReasonReady, "ArgoCD configured")
-	return r.transitionToNextPhase(ctx, pb, statemachine.PBPEventArgoCDReady, "ArgoCD configuration complete")
+	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventArgoCDReady, "ArgoCD configuration complete")
 }
 
 // argoCDHTTPClient is the default ArgoCDBootstrapClient implementation using HTTP.

@@ -21,7 +21,7 @@ import (
 
 // reconcileAPIPhase handles the WaitingForAPI phase.
 // Steps: check API health, resolve bootstrap secret, call bootstrap endpoint for DB seeding.
-func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
 	ctx, span := reconcilehelpers.StartChildSpan(ctx, "bootstrap.api.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
@@ -32,23 +32,23 @@ func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb 
 	// Step 1: Check API health.
 	if err := r.checkAPIHealth(ctx, healthURL); err != nil {
 		logger.Info("API not healthy", "url", healthURL, "error", err)
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("API not healthy: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("API not healthy: %v", err))
 	}
 
 	// Step 2: Resolve bootstrap secret for SEC-003 auth (B1 fix).
 	bootstrapSecret, err := r.resolveBootstrapSecret(ctx, pb)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("resolve bootstrap secret: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("resolve bootstrap secret: %v", err))
 	}
 
 	// Step 3: Call bootstrap endpoint for DB seeding.
 	if err := r.callBootstrapEndpoint(ctx, bootstrapURL, bootstrapSecret); err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("bootstrap endpoint failed: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("bootstrap endpoint failed: %v", err))
 	}
 
 	r.setCondition(pb, conditions.TypeDatabaseSeeded, metav1.ConditionTrue, conditions.ReasonReady, "Database seeded via API bootstrap")
 	r.setCondition(pb, conditions.TypeBootstrapComplete, metav1.ConditionTrue, conditions.ReasonReady, "Platform bootstrap complete")
-	return r.transitionToNextPhase(ctx, pb, statemachine.PBPEventAPISeeded, "Bootstrap complete")
+	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventAPISeeded, "Bootstrap complete")
 }
 
 // checkAPIHealth checks if the API is healthy by calling GET on the health endpoint.

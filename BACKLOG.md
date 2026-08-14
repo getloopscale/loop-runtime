@@ -2445,6 +2445,42 @@ dod:
 >
 > Próxima por tamanho: `clustercredential_controller.go` ou `platformbootstrap_controller.go`, 5 cada.
 
+> **Fatia `slice-22` — o `platformbootstrap` saiu, 2026-08-13.** Restam **17** escritas cruas em **8**
+> arquivos: `platform/clustercredential_controller.go` 5, `app/exposure_controller.go` 3,
+> `platform/gitrepositorybinding_controller.go` 3, `tenant/tenant_deletion.go` 2, e 1 cada em
+> `app/application_controller.go`, `app/application_reaper.go`, `environment/environment_controller.go`
+> e `tenant/tenant_controller.go`.
+>
+> **Duas diferenças em relação ao `preview`, e as duas mudaram o desenho.**
+>
+> A base é **uma só**: o caminho de deleção deste controller retorna sem escrever status, então não
+> precisa da sua — o `preview` precisava porque escreve status ao limpar. E os helpers de transição
+> são chamados de **outros arquivos** do pacote (`_gitea.go`, `_argocd.go`, `_api.go`), então a base
+> atravessa cinco assinaturas, não três.
+>
+> **A asserção passou a ter lista de isenções, e ela é o registro do que falta.** O pacote `platform`
+> tem três controllers e o `B-085` converte um por fatia: varrer o arquivo é burlável por helper irmão
+> (medido na fatia 21), e varrer o pacote reprovaria arquivos que a fatia não toca. A lista declara
+> cada não-convertido com a contagem **e a data**, e o conjunto de chaves é congelado à parte — porque
+> a contagem trava crescimento *dentro* de um isento, mas nada travava **acrescentar uma chave nova**;
+> "a lista só encolhe" era convenção que eu afirmava em comentário e em lugar nenhum. Achado do review.
+>
+> **E a verificação de colocação deixou de comparar offsets de texto.** Eu conferia que `base :=`
+> aparecia depois de `AddFinalizer(` no arquivo — e o review quebrou isso nas duas direções: extrair o
+> finalizer para um helper definido **acima** do `Reconcile` faz a base textualmente posterior e
+> semanticamente anterior (passa, com o defeito instalado); e se este controller ganhar uma base no
+> caminho de deleção, como o `preview` tem, a primeira ocorrência cai antes e código correto reprova.
+>
+> Agora o teste **executa** o `Reconcile` com interceptor e afirma três coisas: o patch do corpo não
+> carrega `resourceVersion`; ele carrega a transição de fase; e — a geral — **o que ficou persistido é
+> o que o controller tinha em mãos**. Essa última é a única que enxerga um campo qualquer mutado antes
+> do snapshot: o patch não pode revelá-lo, porque ele fica simplesmente **ausente**, e ausência é
+> indistinguível de "não devia mudar".
+>
+> Uma armadilha do próprio teste, registrada porque quase o deixou vácuo: com `Generation` no valor
+> zero da semente, a mutação de sonda escrevia 0, o `omitempty` o descartava, e a comparação não via
+> nada. O fixture passou a nomear `Generation: 7`.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go
