@@ -1248,7 +1248,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `grep -rn kubeContext infra/helmfile/` devolve **um único hit, e é uma values key não relacionada**. Nenhum dos quatro helmfiles de plano (`core`, `build`, `cell`, `secrets`) declara `kubeContext`. O cluster vem do chamador — `taskfiles/infra.yml:197` e `:259` passam `--kube-context {{.BUILD_CONTEXT}}` / `{{.CELL_CTX}}`. Portanto `helmfile -f build.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core sync` **funciona hoje**, e nada — nem helmfile, nem chart, nem gate — o rejeita.
 why_now: a auditoria mediu que a separação de planos é real e vive **inteiramente em `infra/`** (5 clusters, 4 helmfiles com forma de plano). Para CORE, BUILD, WORKLOAD e SECRETS, a resposta a *"o que impede uma violação?"* é hoje **"o operador digitou a variável certa"**. Amarrar o contexto dentro do arquivo converte um sucesso silencioso em conflito de declaração, e é **o maior benefício por arquivo tocado de toda a auditoria**: 4 arquivos, 4 planos.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-3-infra-boundaries-plan.md — os 4 helmfiles declaram kubeContext (conserta o default) + gate novo helmfile-context-parity (obtem o conflito). CORRECAO POR MEDICAO: a premissa original deste item era falsa. Testado contra helmfile 1.1.6, um --kube-context divergente NAO produz erro de conflito — ele sobrescreve o declarado em silencio. A promessa nao e obtenivel do helmfile; veio do gate. Ver MEET-ASYNC-AMENDMENT-2026-08-12-003 Amendment 1.
 severity: alta — quatro dos cinco planos dependem de disciplina de digitação para não misturar cluster.
 dod:
@@ -1258,6 +1258,19 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (Helm + multi-cluster).
 
+> **Verificado fechado 2026-08-14.** Os **quatro** helmfiles declaram `kubeContext` — `build`,
+> `secrets`, `cell` e `core`, um cada — e o gate `helmfile-context-parity` está ligado e passa:
+> *"4 invocations compared, 0 divergence(s), 0 helmfile(s) declaring no context"*.
+>
+> **A bala 2 foi cumprida por mecanismo diferente do que ela descreve, e isso vale dizer.** Ela pedia
+> que um `--kube-context` divergente produzisse **erro de conflito**. Medido: `helmfile template` com
+> contexto divergente sai **0 e não reclama** — mas ele não conecta, então não é o teste que decide, e
+> o que decidiria (`sync`/`apply`) é operação mutante num ambiente compartilhado.
+>
+> O que protege hoje é mais forte que a bala: o gate impede a divergência **no ponto de invocação**,
+> antes de qualquer conexão, em vez de depender de o helmfile detectá-la depois. Fecho por prevenção
+> verificada, não por detecção presumida.
+
 ## B-045 — Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado   [ ]
 
 domain: engine-go
@@ -1266,7 +1279,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11 com binário recém-compilado (`go build -o /tmp/loopzero-ops ./cmd/loopzero-ops`), **não** o `./loopzero-ops` da raiz. **27 dos 117 gates** reportam wiring `-`/`diff`; 17 não são referenciados por taskfile nenhum. Dos 10 que rodam sem argumento e sem credencial, **quatro reprovam sobre conteúdo real**: `helm-drift` (exit 1, drift sem ADR nomeando `vap-tenant-cr-shape.yaml`), `clusterimagepolicy-mode` (exit 1, `mode: enforce` em `infra/helm/admission-policies/values.yaml:36` **sem nenhum ADR/MEET referenciando o cutover de deny-flip**), `alert-runbooks` (**33** violações), `migration-test-coverage` (**43** de 59 migrations sem teste). E a causa-raiz não é esquecimento: `cmd/loopzero-ops/quality_gate_wiring_test.go:110` e `:113` classificam `helm-drift` e `clusterimagepolicy-mode` como `operatorRun` — *"need live state, a ceremony, or a cadence"* — quando ambos são verificações herméticas que rodam em sandbox. **A isenção documentou o buraco como decisão.** Os outros seis se comportam como a classificação prevê (parametrizados, dormentes, ou dependentes de credencial) — o `-` deles está correto.
 why_now: a auditoria mediu que as fronteiras de plano deste repositório são sustentadas **por gates, não por estrutura**. Isso é escolha legítima — mas só funciona se os gates rodarem. O par `helm-drift` (reprova, desligado) × `helm-overlap-parity` (roda, mede outra dimensão, passa) é o caso exemplar: o gate certo existe, funciona, reprova, e ninguém executa. O `clusterimagepolicy-mode` é o mais desconfortável: diz que uma mudança viva de postura de segurança está ativa sem o registro de governança que o próprio repositório exige.
-status: planned
+status: shipped
 resolved_in: cmd/loopzero-ops/quality_gate_wiring_test.go — wiringReason virou value object com invariante (operatorRun DEVE nomear o insumo externo). O invariante encontrou 4 classificacoes erradas, nao as 2 que a auditoria vira. Fatia slice-1.
 severity: alta — não pelos quatro achados isolados, mas porque o mecanismo de defesa do repositório tem uma camada que ninguém verifica.
 dod:
@@ -1352,6 +1365,17 @@ dod:
 > **4. ADR do deny-flip** escrito, e o gate ligado. **5. baseline órfã** removida.
 > **2. `helm-drift` e `clusterimagepolicy-mode`** ligados.
 
+> **Verificado fechado 2026-08-14.** As três balas, medidas contra o código e não contra o CHANGELOG:
+>
+> A classificação `operatorRun` é **provada**: `cmd/loopzero-ops/quality_gate_wiring_test.go` roda cada gate
+> assim marcado contra árvore hermética e reprova se ele concluir sem exigir estado externo.
+>
+> `helm-drift` e `clusterimagepolicy-mode` estão **ligados** — uma invocação cada em `quality:gates`.
+>
+> E o `security-context` deixou de sair 0 imprimindo violação: ele roda **com `--gate`**, e o próprio
+> comentário do Taskfile registra por que a auditoria original concluiu o contrário — ela rodou **sem**
+> a flag, em modo relatório. Hoje sai `✅ 0 NON-CONFORMANT charts without ADR exception`.
+
 ## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [ ]
 
 domain: engine-go
@@ -1370,6 +1394,18 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (Helm + fronteira de segurança).
 
+> **Medido 2026-08-14 — duas balas de três, e a terceira tem dono.**
+>
+> **Fechadas:** a decisão está **escrita no chart publicado**, não inferida do silêncio —
+> `charts/loopzero-admission-policies/values.yaml` e o chart de bootstrap carregam o mesmo bloco
+> explicando que a política é ligada onde os Tenants vivem e desligada nas cells porque o CRD não
+> existe lá, citando `B-077` e o ADR `2026-08-13-tenant-cr-fence-placement`. E o `helm-drift` está
+> ligado.
+>
+> **Aberta:** o allowlist do `helm-drift` ainda aprova **por par**, não por arquivo com justificativa —
+> a própria saída do gate diz: *"21 aprovações herdadas do allowlist antigo por PAR, cuja razão por
+> arquivo nunca foi medida"*, e aponta o **`B-076`**. Essa bala é do `B-076`, não deste item.
+
 ## B-047 — A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador   [ ]
 
 domain: engine-go
@@ -1378,7 +1414,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `CLAUDE.md` diz que instalar OpenBao no cluster de gestão é *"FORBIDDEN in every tier — it is a topology violation, not a shortcut"*, e `.claude/rules/cleanroom-up-live-test-mandate.md` repete como PROIBIDO em qualquer tier. A task existe em `taskfiles/k3d.yml:230` e instala a stack OpenBao inteira no core via quatro syncs `--kube-context k3d-loopzero-core`. E o gate que leva a fronteira no nome — `openbaobootstrapincore/check.go:67,:94` — **não a proíbe**: suas asserções verificam que a task *existe* e *aponta para core*. Ele **falha se a task violadora for removida**.
 why_now: é um teste de conformidade **para** a fronteira que ele deveria defender. Enquanto ele existir nessa forma, remover a task proibida quebra o `quality:gates` — ou seja, a regra e o gate se contradizem, e o gate ganha.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md — a regra vence. A task sai, o gate e invertido, e os runbooks que a apresentam como caminho valido sao corrigidos. Na implementacao: cleanroom_mandate_openbao_gate_test.go:63-69 EXIGE que o mandate documente o atalho como escape hatch — precisa ser invertido junto
 severity: alta — a contradição está shipada e é exercível por qualquer um que leia o Taskfile em vez da regra.
 dod:
@@ -1420,6 +1456,12 @@ dod:
 > task, ele foi a 0 divergências e **foi ligado** — é ele que cobre o que a checagem por linha não
 > alcança. A asserção de reconciliação que escrevi na fatia 3 pegou, no caminho, um comentário meu
 > que continha a string da flag e desalinhava a contagem em 1.
+
+> **Verificado fechado 2026-08-14.** As três balas: a decisão está no ADR
+> `2026-08-12-openbao-in-core-rule-vs-task` (a **regra** vence, não a task); a task foi **removida** —
+> `grep -c bootstrap-in-core taskfiles/k3d.yml` devolve **0**; e o gate deixou de validar a forma da
+> violação e passou a **proibi-la**: `openbao-bootstrap-in-core-task` está ligado e sai
+> *"PASS — no mgmt-cluster OpenBao shortcut (5144 lines scanned)"*.
 
 ## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [ ]
 
