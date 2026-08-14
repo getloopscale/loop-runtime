@@ -47,11 +47,63 @@ var taskfilesToScan = []string{
 // interpolation, no variable expansion, no absolute path).
 var reCdLiteral = regexp.MustCompile(`(?:^|[;&|]\s*|\s)cd\s+([A-Za-z0-9_./-]+)`)
 
+// reGoPkgPattern matches the package pattern of a `go test|build|vet|run`
+// invocation: the first argument that is not a flag.
+//
+// It exists because stat'ing the `cd` argument alone was measured insufficient.
+// The #254 defect was `cd pkg && go test ./quality/...`: the directory existed
+// and the PATTERN did not, so the guard reported clean while the task failed.
+var reGoPkgPattern = regexp.MustCompile(`\bgo\s+(?:test|build|vet)\s+((?:\./)?[A-Za-z0-9_./-]+)`)
+
+// deadGoPattern reports the directory a `go` package pattern resolves to when
+// that directory does not exist, or "" when the pattern is fine or out of scope.
+//
+// Scope, deliberately narrow — a guard that flags a working task is a guard
+// somebody turns off:
+//
+//   - `./...` is the whole module and is valid whenever the cd target exists;
+//   - a templated pattern is not ours to resolve;
+//   - only the directory part is checked, because `...` is a wildcard over
+//     packages BELOW a real directory, and that directory is what can go missing.
+func deadGoPattern(repoRoot, cdTarget, line string) string {
+	m := reGoPkgPattern.FindStringSubmatch(line)
+	if m == nil {
+		return ""
+	}
+	pat := m[1]
+	if strings.Contains(pat, "{{") || strings.HasPrefix(pat, "-") {
+		return ""
+	}
+	pat = strings.TrimPrefix(pat, "./")
+	pat = strings.TrimSuffix(pat, "...")
+	pat = strings.Trim(pat, "/")
+	if pat == "" { // `./...` — the module itself
+		return ""
+	}
+	rel := filepath.Join(cdTarget, pat)
+	if _, err := os.Stat(filepath.Join(repoRoot, rel)); err != nil {
+		return rel
+	}
+	return ""
+}
+
 // deadCdFinding is one `cd` into a path absent from the repo.
+// findingKind distinguishes the two ways a task can point at nothing, because
+// the remedy differs and a shared message sends the reader to the wrong line:
+// a dead `cd` is visible verbatim in the file, a dead package pattern is a path
+// the reader has to compose from two arguments.
+type findingKind int
+
+const (
+	deadCdTarget findingKind = iota
+	deadPkgPattern
+)
+
 type deadCdFinding struct {
 	file string
 	line int
 	path string
+	kind findingKind
 }
 
 // auditTaskfileDeadCd finds `cd <literal>` targets that do not resolve,
@@ -76,7 +128,12 @@ func auditTaskfileDeadCd(repoRoot, relFile, body string) []deadCdFinding {
 				continue
 			}
 			if _, err := os.Stat(filepath.Join(repoRoot, target)); err != nil {
-				out = append(out, deadCdFinding{file: relFile, line: i + 1, path: target})
+				out = append(out, deadCdFinding{file: relFile, line: i + 1, path: target, kind: deadCdTarget})
+				continue // the cd itself is dead; the pattern under it is moot
+			}
+			// The cd target exists. The package pattern under it may still not.
+			if dead := deadGoPattern(repoRoot, target, line); dead != "" {
+				out = append(out, deadCdFinding{file: relFile, line: i + 1, path: dead, kind: deadPkgPattern})
 			}
 		}
 	}
@@ -111,11 +168,20 @@ func TestTaskfilesDoNotCdIntoMissingDirs(t *testing.T) {
 		}
 		scanned++
 		for _, f := range auditTaskfileDeadCd(root, rel, string(b)) {
-			t.Errorf("%s:%d — `cd %s` targets a path that does not exist in this repo.\n"+
-				"    Invoking the task fails with a raw `cd: %s: No such file or directory` (issue #254).\n"+
-				"    If the directory moved to a sibling repo (the M2/M4 extractions), delete the task or\n"+
-				"    point it at the sibling behind an existence guard — do not leave it as a trap.",
-				f.file, f.line, f.path, f.path)
+			switch f.kind {
+			case deadCdTarget:
+				t.Errorf("%s:%d — `cd %s` targets a path that does not exist in this repo.\n"+
+					"    Invoking the task fails with a raw `cd: %s: No such file or directory` (issue #254).\n"+
+					"    If the directory moved to a sibling repo (the M2/M4 extractions), delete the task or\n"+
+					"    point it at the sibling behind an existence guard — do not leave it as a trap.",
+					f.file, f.line, f.path, f.path)
+			case deadPkgPattern:
+				t.Errorf("%s:%d — the `go` package pattern resolves to %s, which does not exist.\n"+
+					"    The `cd` target is fine; the pattern under it is not, so the task fails with\n"+
+					"    `no such file or directory` while every path written on the line looks plausible.\n"+
+					"    This is the shape that broke quality:all after M9 moved pkg/quality (B-087).",
+					f.file, f.line, f.path)
+			}
 		}
 	}
 	if scanned == 0 {
@@ -197,5 +263,52 @@ func TestTaskfilesDoNotMutateGlobalKubecontext(t *testing.T) {
 	}
 	if scanned == 0 {
 		t.Fatalf("scanned 0 taskfiles — guard would pass vacuously")
+	}
+}
+
+// TestTaskfilesDeadCd_SeesTheDeadPackagePattern is the half the guard was
+// missing, and it is the half that would have caught the defect the guard was
+// written for.
+//
+// The #254 shape that broke `task quality:all` was:
+//
+//	cd pkg && go test ./quality/... -count=1
+//
+// `pkg` EXISTS — it is a real module. What did not exist was `./quality/`, moved
+// out of the shared base at M9. The matcher stat'ed only the `cd` argument, so it
+// reported clean while the target failed with
+// `lstat ./quality/: no such file or directory`.
+//
+// An adversarial audit of the B-087 closure reintroduced that exact line and the
+// guard passed, exit 0. The item had been closed against a guard that does not
+// assert what the item describes — which is the same defect the audit found in
+// two sibling items: closing against the easiest thing to measure while the
+// bullet asking for the regression guard went unowned.
+func TestTaskfilesDeadCd_SeesTheDeadPackagePattern(t *testing.T) {
+	root := repoRootFromCmd(t)
+
+	// The #254 line, verbatim.
+	got := auditTaskfileDeadCd(root, "synthetic.yml", "    - cd pkg && go test ./quality/... -count=1\n")
+	if len(got) == 0 {
+		t.Fatal("the guard did not see `cd pkg && go test ./quality/...`. `pkg` exists, so stat'ing the " +
+			"cd argument alone reports clean — and this is the exact line that broke quality:all (#254).")
+	}
+	if got[0].path != "pkg/quality" {
+		t.Errorf("the finding names %q; it should name the path that does not exist, resolved against "+
+			"the cd target, so the reader can act on it", got[0].path)
+	}
+
+	// And it must NOT fire on the healthy forms, or it gets disabled.
+	for _, healthy := range []string{
+		"    - cd api && go test ./...\n",
+		"    - cd api && go test ./internal/routes/... -count=1\n",
+		"    - cd cmd/loopzero-ops && go build ./...\n",
+		"    - cd api && go test ./internal/... -run TestFoo -v\n",
+		"    - cd pkg && go test {{.PATTERN}}\n",
+	} {
+		if f := auditTaskfileDeadCd(root, "synthetic.yml", healthy); len(f) != 0 {
+			t.Errorf("false positive on a healthy target %q: %+v — a guard that flags working tasks is a "+
+				"guard somebody turns off", strings.TrimSpace(healthy), f)
+		}
 	}
 }

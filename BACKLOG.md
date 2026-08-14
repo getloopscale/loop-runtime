@@ -3015,6 +3015,37 @@ evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. `taskfiles/qua
 why_now: o `CLAUDE.md` documenta `task quality:all` como "hermetic tests + full scan + contract gates". Quem seguir a documentação recebe uma falha imediata e pode concluir que o repositório está quebrado. E os testes hermeticos que o alvo prometia rodar **não rodam desde o M9**.
 status: shipped
 severity: alta — um alvo de qualidade documentado que aborta é pior que um ausente: ele parece cobertura.
+
+> **CORREÇÃO 2026-08-14 — a auditoria adversarial reprovou a terceira bala, e tinha razão.**
+>
+> A bala pede *"asserção contra alvo que entra em diretório inexistente"*, e a nota afirmava que
+> `TestTaskfilesDoNotCdIntoMissingDirs` era essa asserção. A auditoria reintroduziu o defeito
+> **verbatim** — `cd pkg && go test ./quality/... -count=1` — e a guarda saiu **exit 0, PASS**.
+>
+> A razão é precisa e vale registrar: o matcher fazia `stat` **só no argumento do `cd`**, e no defeito
+> original `pkg` **existe** — é um módulo de verdade. Quem não existia era o padrão de pacote
+> `./quality/...`, movido no M9. A guarda olhava para o lado certo da linha e para a metade errada.
+>
+> **Fechada** estendendo o matcher para validar também o padrão de `go test|build|vet`, resolvido
+> relativo ao alvo do `cd`. Escopo estreito de propósito — `./...` é o módulo e é sempre válido,
+> padrão com template não é nosso para resolver, e só a parte de diretório é verificada porque `...`
+> é curinga **sob** um diretório real. Uma guarda que reprova task saudável é uma guarda que alguém
+> desliga.
+>
+> **E ela achou um defeito vivo no primeiro run.** `taskfiles/security.yml:40` rodava
+> `cd pkg && go test ./quality/deadlineratchet/...` — mesmo padrão, mesmo M9, e a task
+> `service-auth-ed25519:test-rotation-ratchet` estava **falhando hoje**, medida antes e depois:
+> `FAIL ./quality/deadlineratchet/... [setup failed]` → `ok ... 0.008s`. Ninguém tinha percebido
+> porque nada afirmava sobre padrão de pacote. Repontada para `cmd/loopzero-ops/internal/quality/`.
+>
+> A mensagem ganhou tipo. A primeira versão dizia *"`cd pkg/quality` aponta para caminho inexistente"*
+> quando o `cd` era `pkg` — mandava o leitor procurar uma linha que não existe no arquivo. Agora um
+> `cd` morto e um padrão morto têm mensagens diferentes, porque o remédio é diferente.
+>
+> **Nota de reprodução:** a nota original afirma **121** passos em `quality:all`; hoje são **123**
+> (exit 0). O número envelheceu com gates novos — e um número que não reproduz é indistinguível de um
+> número inventado, que é por que este fica dito em vez de corrigido em silêncio.
+
 dod:
   - `task quality:all` completa, com exit code real
   - `quality:hermetic` aponta para onde os testes vivem hoje, ou deixa de prometer o que não roda
