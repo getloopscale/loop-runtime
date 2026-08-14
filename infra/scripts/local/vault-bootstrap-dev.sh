@@ -416,8 +416,8 @@ else
   log "  Skip R3: OPENBAO_CONTEXT == TARGET_CONTEXT (single-cluster topology) OR DRY_RUN"
 fi
 
-# === Step 6+7: approle + policy ===
-log "Step 6+7: approle + loopzero-api policy"
+# === Step 6+7: approle (a policy e do chart) ===
+log "Step 6+7: approle loopzero-api (policy vem do chart openbao-init)"
 export BAO_TOKEN="$ROOT_TOKEN"
 # `bao_auth` is now defined right after ROOT_TOKEN is set (Step 4) so
 # Step 5.5's auth/k8s-core wait-loop can actually call it. The legacy
@@ -426,20 +426,27 @@ export BAO_TOKEN="$ROOT_TOKEN"
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
-# loopzero-api policy with transit/keys/* wildcard (catch #8 from session)
-POLICY='path "transit/keys/*" { capabilities = ["create","read","update","delete","list"] }
-path "transit/encrypt/*" { capabilities = ["update"] }
-path "transit/decrypt/*" { capabilities = ["update"] }
-path "kv/data/loopzero/*" { capabilities = ["read"] }
-path "kv/metadata/loopzero/*" { capabilities = ["list"] }'
-
+# A policy NAO e escrita aqui. Ela e declarada no chart infra/helm/openbao-init
+# e aplicada pelo helmfile no passo 5, logo acima.
+#
+# Ate 2026-08-13 este bloco fazia `bao policy write loopzero-api` com
+# transit/keys/* incluindo delete e list — minutos DEPOIS de o chart aplicar uma
+# policy do mesmo nome. Ultimo escritor vence, entao a versao versionada, que e a
+# que passa por revisao, nunca alcancava runtime nenhum: a correcao do B-072
+# ficou invisivel. E o conjunto daqui concedia `delete` em chave transit, que e o
+# verbo de crypto-shredding, a uma identidade que (B-075) nao tem caminho de
+# shredding nenhum.
+#
+# Medido antes de remover: o TransitClient monta exatamente tres caminhos, todos
+# sob loopzero-tenants-<id> (encrypt, keys, decrypt), mais o login por AppRole.
+# Nenhum LIST, nenhum DELETE, nenhum KV. O conjunto do chart cobre os tres.
+#
+# O que fica aqui e o ciclo de vida da CREDENCIAL — criar o AppRole, gerar o
+# secret_id, materializar o Secret — porque isso so roda contra um cofre vivo e
+# nao se declara em template.
+#
+# Decisao: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  # LIVE bug fix 2026-06-15 Phase 4 Cleanroom: `policy write` invocation
-  # via stdin pipe was missing BAO_SKIP_VERIFY=true; cert chain x509
-  # verification failed inside the pod (no CA bundle for openbao-tls).
-  # Mirrors the bao() / bao_auth() helper fixes.
-  echo "$POLICY" | kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec -i "$POD" -- \
-    env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao policy write loopzero-api - || true
   bao_auth write auth/approle/role/loopzero-api \
     token_policies=loopzero-api \
     token_ttl=24h \

@@ -114,24 +114,24 @@ bao auth enable approle 2>&1 | grep -v "already enabled" || true
 # the key name. The hyphen convention is implemented in
 # pkg/vault/transit_client.go via the tenantKeyName() helper; this
 # policy MUST match.
-bao policy write loopzero-api-approle - <<'EOF'
-path "transit/encrypt/loopzero-tenants-*" {
-  capabilities = ["update"]
-}
-path "transit/decrypt/loopzero-tenants-*" {
-  capabilities = ["update"]
-}
-path "transit/keys/loopzero-tenants-*" {
-  # NOTE: "update" is required IN ADDITION to "create" because the
-  # `bao write` CLI (and the Go client's POST to /v1/transit/keys/<name>)
-  # uses HTTP PUT, which OpenBao policy-enforces as "update" semantics
-  # even when the key does not yet exist. LIVE-caught 2026-06-10 J-22
-  # walkthrough: with only ["create", "read"], the AppRole token's
-  # `bao token capabilities` reported "create, read" but the actual PUT
-  # returned 403 "permission denied" because PUT requires "update".
-  capabilities = ["create", "read", "update"]
-}
-EOF
+# A policy NÃO é escrita aqui, desde 2026-08-13.
+#
+# Ela é declarada em `infra/helm/openbao-init/values.yaml` (policy `loopzero-api`) e
+# aplicada pelo helmfile. Escrevê-la também daqui reintroduz a disputa de nome que
+# o B-099 mediu: dois escritores da mesma policy, e o último vence — o que fez a
+# versão versionada nunca alcançar runtime nenhum.
+#
+# Este runbook usava um TERCEIRO nome (`loopzero-api-approle`), que o chart não
+# declara. O nome canônico é `loopzero-api`.
+#
+# Decisão: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
+# O que continua aqui é o ciclo de vida da credencial, abaixo.
+#
+# As regras que ficavam neste bloco — encrypt/decrypt/keys sob loopzero-tenants-*,
+# com a nota LIVE-caught de 2026-06-10 sobre `update` ser exigido junto de
+# `create` porque o PUT do cliente Go é aplicado com semântica de update — estão
+# em infra/helm/openbao-init/values.yaml, policy `loopzero-api`, e são conferidas por
+# TestOpenBaoInitAuth_ChartGrantsTheKeyPrefixTheCodeNames.
 ```
 
 ### 1.3 — Create the AppRole + capture role_id
@@ -141,7 +141,7 @@ EOF
 # for dev-public; prod uses 1h + response-wrapping auto-rotation (separate
 # runbook for prod cutover ships when J-22 promotes).
 bao write auth/approle/role/loopzero-api \
-  token_policies="loopzero-api-approle" \
+  token_policies="loopzero-api" \
   token_ttl=1h \
   token_max_ttl=4h \
   secret_id_ttl=24h \

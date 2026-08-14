@@ -1866,7 +1866,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-12 ao decidir o `B-042`. `infra/helm/openbao-init/values.yaml:187-201` define a policy `loopzero-api` com **apenas** `transit/encrypt/*` e `transit/decrypt/*` — **nenhuma capacidade em `transit/keys/*`**. Mas o caminho lazy do `api` cria a chave: `pkg/vault/transit_client.go:274` reage ao 404 do encrypt com um POST para `/v1/transit/keys/...` (`:380-392`). **Correção 2026-08-12 (review da fatia 2):** a redação original dizia que *"o único lugar que concede a capacidade é um script de desenvolvimento"*. **Falso.** Há pelo menos dois, e o segundo é operacional: `docs/operations/openbao-transit-cutover-runbook.md:117-133` escreve a policy `loopzero-api-approle` com `path "transit/keys/loopzero-tenants-*" { capabilities = ["create","read","update"] }`. O outro é `infra/scripts/local/vault-bootstrap-dev.sh:429-434`. Isso muda a moldura: **não é ausência de autorização, é drift entre o chart e o runbook** — alguém autorizou em dois lugares e o chart não acompanhou. A correção é a mesma; a descrição errada mandaria a próxima pessoa procurar uma decisão que já existe.
 why_now: a auditoria de 2026-08-11 registrou que "as chaves são criadas lazily pelo `api`" e usou isso para baixar a severidade do `B-042`. Isso vale para o ambiente de desenvolvimento; **em qualquer ambiente que carregue as policies do chart, não vale** — a criação é negada por desenho. E o erro tipado não tem tratamento a jusante: `grep ErrTransitKeyCreateFailed api/` devolve zero hits, e em `api/internal/routes/secrets.go:503-510` a negação de policy é indistinguível de timeout de rede para quem chama. O ADR `2026-08-12-tenant-transit-key-ownership` torna isto pré-requisito: a policy vem **antes** da deleção da seam do operator.
-status: triaged
+status: shipped
 severity: alta — é o caminho de escrita de segredo de tenant, e a falha é silenciosa do ponto de vista de quem chama.
 dod:
   - a policy `loopzero-api` do chart concede `transit/keys/loopzero-tenants-*` com `create`, `read` **e `update`** — `update` não é opcional: o POST do cliente Go usa HTTP PUT, que o OpenBao aplica com semântica de `update` mesmo quando a chave ainda não existe (nota LIVE-caught em `docs/operations/openbao-transit-cutover-runbook.md:125-131`). A redação original pedia só o path, e teria reproduzido o defeito que aquele runbook registrou
@@ -1923,6 +1923,17 @@ dod:
 > para quem está de plantão, e colapsá-los é o que a Regra 8 chama de tratar todo erro igual.
 >
 > Achado no caminho: **`B-098`** — duas policies declaradas e nunca ligadas a role nenhum.
+
+> **Fechado 2026-08-13, agora de verdade.** O item tinha sido reaberto porque a correção do chart não
+> alcançava runtime — o `B-099` era essa lacuna, e fechou.
+>
+> As quatro balas: (1) o chart concede `transit/keys/loopzero-tenants-*` com `create`, `read` e `update`
+> (`values.yaml:241-243`); (2) chart e runbook pararam de divergir — o runbook não escreve mais policy e
+> nomeia `loopzero-api`; (3) `ErrTransitKeyCreateFailed` tem leitor desde a fatia 11
+> (`api/internal/routes/secrets.go:120`, `transitFailureStatus`, com testes); (4) **a que faltava** —
+> `TestOpenBaoInitAuth_ChartGrantsTheKeyPrefixTheCodeNames` lê `tenantKeyPrefix` do
+> `pkg/vault/transit_client.go` e exige que o chart conceda esse prefixo nos três verbos. Mutante:
+> mudar o prefixo no Go e não no chart reprova, nomeando os paths.
 
 ## B-073 — O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa   [ ]
 
@@ -2001,6 +2012,19 @@ dod:
   - se o shredding ficar operator-side e o provisionamento api-side, a divergência de nome de chave (`tenant-<id>` × `loopzero-tenants-<id>`) é resolvida — hoje o operator deletaria uma chave que o `api` nunca criou
 
 > Registrado 2026-08-12 pelo review adversarial da fatia 2. O ADR foi corrigido de decisão total para parcial por causa deste achado.
+
+> **Confirmado por um terceiro ângulo, 2026-08-13 (fatia do `B-099`).** A divergência de nome de chave
+> não está só no código — está na **policy**. `infra/helm/openbao-init/values.yaml:165` e `:260`
+> concedem `delete` em `transit/keys/tenant-+` a `tenant-controller-transit` e `loopzero-tenant-operator`,
+> com doc-comment nomeando explicitamente o padrão de crypto-shredding.
+>
+> Ou seja: o lado operator **está autorizado** a apagar chaves com o nome `tenant-<id>` — que ninguém
+> cria. O `api` cria `loopzero-tenants-<id>`. Ligar esse caminho hoje apagaria nada e reportaria sucesso.
+>
+> Achado por uma asserção que eu tinha escrito larga demais (proibindo `delete` em qualquer chave
+> transit) e que a medição estreitou: o `delete` do operator é decisão deliberada e documentada, e
+> proibi-lo seria um teste anulando uma decisão em vez de guardá-la. O que ficou guardado é o que
+> importa: `delete` no prefixo que o `api` cria reprova, porque o `api` não tem caminho de shredding.
 
 ## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [ ]
 
@@ -2769,7 +2793,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-17`. **(a)** `TransitClient` autentica exclusivamente por AppRole — `pkg/vault/transit_client.go:584` é o único login do arquivo (`POST /v1/auth/approle/login`), e `api/cmd/setup_transit.go:47-52` é o único ponto de construção, passando `RoleID`/`SecretID`. O chart `infra/helm/openbao-init` **não declara AppRole**: a policy `loopzero-api` está ligada só ao role de mount `k8s-core` (`values.yaml:329-336`), cujo cliente `pkg/vault.NewClient` tem **zero** chamadores de produção. **(b)** `infra/scripts/local/vault-bootstrap-dev.sh` aplica o chart no passo 5 (`helmfile sync --selector name=openbao-init`) e, nos passos 6-7 (`:429-445`), faz `bao policy write loopzero-api` com `transit/keys/*` incluindo `delete` e `list`, e liga o AppRole a `token_policies=loopzero-api`. Mesmo nome, escrita incondicional, último escritor vence — e o script é o passo 1 de `seed-post-cleanroom-all.sh:151`. **(c)** O runbook (`openbao-transit-cutover-runbook.md:144`) liga o AppRole a `loopzero-api-approle`, um **terceiro nome** que o chart não declara.
 why_now: a fatia `slice-17` corrigiu a policy do chart e mediu que isso **não tem efeito em runtime** por (a) e (b). Sem este item, o `B-072` pareceria fechado — a policy versionada está certa, e nada a carrega.
-status: raw
+status: shipped
 severity: alta — é o mesmo defeito do `B-072` (criação de chave de tenant negada), com a diferença de que agora a correção existe e não alcança. Uma correção que não alcança é pior que a ausência dela, porque parece cobertura.
 dod:
   - está decidido onde o AppRole do `loopzero-api` é declarado — no chart, ou fora dele com o chart ciente
@@ -2781,6 +2805,25 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-17`. Quinta instância nesta série do padrão
 > *declarado e nunca ligado*, e a primeira em que **eu** a produzi: a policy corrigida existe, está
 > versionada, e nenhuma identidade a carrega.
+
+> **Fechado 2026-08-13.** Decisão em `MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership`: **a
+> policy é do chart; o AppRole é do script.** O que a identidade PODE fazer é declarativo e versionado;
+> o ciclo de vida da credencial só roda contra cofre vivo.
+>
+> `vault-bootstrap-dev.sh` parou de escrever a policy e manteve o binding do AppRole. O runbook parou
+> de escrevê-la e o terceiro nome (`loopzero-api-approle`) virou `loopzero-api`. A baseline de 2026-06-10 que
+> também o cita **fica intocada** — é trilha de auditoria, e reescrevê-la para parecer atual destruiria
+> a evidência do que era verdade então.
+>
+> **É estreitamento, não risco, e isso foi medido antes de remover.** O `TransitClient` monta
+> exatamente três caminhos — `encrypt`, `keys`, `decrypt`, todos sob `loopzero-tenants-<id>` — mais o login.
+> Nenhum LIST, nenhum DELETE, nenhum KV. Sai da policy efetiva: `delete` em `transit/keys/*` (o verbo de
+> crypto-shredding, concedido a quem pelo `B-075` não tem caminho de shredding nenhum), `list`, o `*`
+> que alcançava chave que não é de tenant, e duas concessões KV mortas dos dois lados.
+>
+> Preso por `TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns`, que reprova se qualquer shell sob
+> `infra/` voltar a escrever policy. Mutante verificado.
+
 ## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [ ]
 
 domain: engine-go

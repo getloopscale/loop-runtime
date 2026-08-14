@@ -202,13 +202,22 @@ policies:
       path "transit/decrypt/loopzero-tenants-*" {
         capabilities = ["update"]
       }
-      # ATTENTION, measured 2026-08-13: this grant does NOT reach the client
-      # today. TransitClient authenticates by APPROLE (transit_client.go, POST
-      # /v1/auth/approle/login), and this chart declares no AppRole — this policy
-      # is bound only to the k8s-core role below, whose client (pkg/vault.NewClient)
-      # has zero production callers. The AppRole is created outside the chart, and
-      # the dev bootstrap OVERWRITES this same policy name minutes after applying
-      # it. Fixing the chart was necessary and is not sufficient; see B-099.
+      # This IS the policy the client runs under, since 2026-08-13.
+      #
+      # TransitClient authenticates by APPROLE (transit_client.go, POST
+      # /v1/auth/approle/login). The chart does not declare that AppRole — the
+      # credential lifecycle (create the role, generate the secret_id, materialise
+      # the Secret) only runs against a live vault, so it lives in
+      # infra/scripts/local/vault-bootstrap-dev.sh. What the script no longer does
+      # is WRITE this policy: until B-099 it overwrote this same name minutes
+      # after helmfile applied it, so the versioned rules — the reviewed ones —
+      # reached no runtime at all, and slice-17's B-072 fix was invisible.
+      #
+      # The split is the decision: what the identity MAY do is declared here; the
+      # identity's credential is minted there. Guarded by
+      # TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns, which fails if any
+      # shell under infra/ writes a policy again.
+      # Decision: MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.
       #
       # Scope note: `*` in a Vault policy matches any number of characters
       # INCLUDING `/`, so this also grants update on .../config and .../rotate.
