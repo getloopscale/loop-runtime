@@ -26,10 +26,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
-// crossTenantSecretStore is a fake SecretStore that records which tenant_id
-// the handler passes to it. The adversarial test then asserts that the
-// recorded tenant is the CALLER's tenant (B), NEVER tenant A — even when
-// the URL/body references tenant A's project.
 // Fixtures for this package's isolation tests.
 //
 // Duplicated from the parent's suite rather than exported from it, and that is
@@ -57,6 +53,10 @@ func tenantBContext() *middleware.UserContext {
 	}
 }
 
+// crossTenantSecretStore is a fake SecretStore that records which tenant_id
+// the handler passes to it. The adversarial test then asserts that the
+// recorded tenant is the CALLER's tenant (B), NEVER tenant A — even when
+// the URL/body references tenant A's project.
 type crossTenantSecretStore struct {
 	// recorded values from the last call
 	gotTenant  string

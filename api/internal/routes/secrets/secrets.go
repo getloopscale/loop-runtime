@@ -1,6 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package secrets serves the tenant secret endpoints: /api/v1/secrets and its
+// bulk sibling, plus the internal secret-fetch endpoint the build plane calls.
+//
+// Fifth family to leave the flat `routes` package (B-080, slice-28), and the
+// first chosen by measurement rather than by counting names. A compiler probe —
+// move the files, build the module, read what breaks — put it at more broken
+// references than billing, teams or preview, and it was still the right pick:
+// 879+ lines in three files is the largest mass removed per unit of risk on the
+// board.
+//
+// That probe under-reported, which is worth carrying: Go does not compile a
+// package that depends on a failed one, and it stops at ten errors per package.
+// A single build measures a floor. The real consumer set came out of iterating
+// the build until it closed.
+//
+// Depends on two leaves and no sibling family: `httpio` for the response
+// writers, `routestest` for request helpers — and that one only from _test.go,
+// because its helpers mint an owner-role identity.
 package secrets
 
 import (

@@ -2353,6 +2353,30 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > As fixtures (`xtTenantA`, `tenantBContext`, …) foram **duplicadas**, não exportadas do pai. DRY rege
 > conhecimento, não linhas: são constantes de teste, e compartilhá-las recriaria a aresta proibida na
 > direção que parece inofensiva.
+
+> **Revisão adversarial: `READY_TO_MERGE_WITH_FOLLOWUPS`, cinco achados, todos consertados na mesma
+> fatia.** O risco central — perda silenciosa de teste, já que dois arquivos foram montados recortando
+> blocos do pai por linha — foi descartado com evidência que vale registrar: não a contagem, mas o
+> **conjunto**. Os nomes dos testes executados por `go test -v` antes e depois são byte-idênticos
+> (`diff` vazio sobre as listas ordenadas), e as somas fecham nos dois arquivos (41 = 35 + 6, 16 = 11 + 5).
+> O registro do gate foi verificado por mutação nas duas direções: tirar `httpio` acusa 1 aresta, tirar
+> `routestest` acusa 3. Nenhum símbolo precisou virar exportado, nenhuma rota mudou.
+>
+> Dois dos cinco eram **regressão desta fatia**, não dívida herdada, e a revisão provou isso extraindo
+> os 7 arquivos tocados no commit-pai e mostrando `gofmt -l` vazio: (1) o import novo entrou fora de
+> ordem em `api/cmd/main.go`, e nada é vermelho porque o `.golangci.yml` não habilita `gofmt`; (2) o
+> pacote novo nasceu sem comentário de pacote, +3 `ST1000` — e o agravante é que `tenants` e `version`
+> têm, `domains` e `repositories` não, e eu repeti a metade errada. Os outros três: doc de tipo colada
+> no bloco de constantes pelo recorte por linha, duas constantes que morreram no pai quando os testes
+> saíram, e um local `secrets :=` sombreando o próprio pacote contra a convenção `xHandler` das quatro
+> famílias anteriores.
+>
+> Depois dos consertos: `golangci-lint` volta aos **11** achados da linha de base, cerca PASS, módulo
+> verde.
+>
+> **E a revisão tropeçou três vezes no mesmo defeito que a fatia trata** — `| head` e `| tail` fazendo
+> o `$?` reportar o exit do pipe e não do comando, uma vez dizendo `exit 0` para um lint que saía 1.
+> Ela refez e disse. A armadilha não é de quem escreve o código; é de quem lê a saída.
 >
 > A sonda roda no lugar e restaura por `mv`, com `git status --porcelain api/` verificando o retorno —
 > a cópia em scratch não serve, porque `go.work` aponta para módulos irmãos que a cópia não tem, e a

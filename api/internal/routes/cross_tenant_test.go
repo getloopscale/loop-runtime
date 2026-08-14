@@ -52,13 +52,10 @@ import (
 // package's constants live in the same logical adversarial fixture; reproducing
 // them inline keeps the tests deterministic without an integration dependency.
 const (
-	xtTenantA  = "tn-xt-tenant-a"
-	xtTenantB  = "tn-xt-tenant-b"
-	xtUserA    = "github-xt-user-a"
-	xtUserB    = "github-xt-user-b"
-	xtBuildA   = "bld-xt-a"
-	xtProjectA = "xt-project-a"
-	xtEnvProd  = "production"
+	xtTenantA = "tn-xt-tenant-a"
+	xtTenantB = "tn-xt-tenant-b"
+	xtUserB   = "github-xt-user-b"
+	xtBuildA  = "bld-xt-a"
 )
 
 // tenantBContext returns a UserContext for the attacker (tenant B).

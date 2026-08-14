@@ -376,21 +376,21 @@ func registerProtectedRoutes(
 
 	// Secret routes
 	if cfg.SecretStore != nil {
-		secrets := secrets.NewSecretHandler(cfg.SecretStore)
+		secretHandler := secrets.NewSecretHandler(cfg.SecretStore)
 		if cfg.SecretK8sSync != nil {
-			secrets.SetK8sSync(cfg.SecretK8sSync)
+			secretHandler.SetK8sSync(cfg.SecretK8sSync)
 		}
 		// Sprint A T1.1 (closes comp-001 CRITICAL): wire the environment
 		// lock so Set/DeleteSecret serialize with concurrent `loopzero deploy`
 		// flows holding the same pg_advisory_xact_lock key.
 		if cfg.SecretEnvLocker != nil {
-			secrets.SetLocker(cfg.SecretEnvLocker)
+			secretHandler.SetLocker(cfg.SecretEnvLocker)
 		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
 		// the cross-tenant binding check (EC-03 absorption / CWE-204
 		// defense). Production injects *store.PostgresProjectStore directly.
 		if cfg.SecretProjectChecker != nil {
-			secrets.SetProjectChecker(cfg.SecretProjectChecker)
+			secretHandler.SetProjectChecker(cfg.SecretProjectChecker)
 		}
 		// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
 		// wire the OpenBao transit encrypt path into Bulk so plaintext
@@ -400,18 +400,18 @@ func registerProtectedRoutes(
 		// reads decrypt correctly. encryptForStore detects the
 		// vault:v1: prefix and passes through (no double-encrypt).
 		if cfg.SecretTransit != nil {
-			secrets.SetTransitClient(cfg.SecretTransit)
+			secretHandler.SetTransitClient(cfg.SecretTransit)
 		}
-		r.Get("/api/v1/secrets", secrets.List)
-		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
+		r.Get("/api/v1/secrets", secretHandler.List)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secretHandler.Set)
 		// J-22 T1.1: bulk endpoint POST /api/v1/secrets/bulk.
 		// Registered BEFORE /secrets/{name} so chi v5.2.5 radix tree resolves the
 		// literal `/bulk` prefix before the `{name}` wildcard. The reverse order
 		// causes chi to route POST /secrets/bulk through the {name} branch where
 		// only DELETE is registered → 405 METHOD_NOT_ALLOWED (caught LIVE 2026-06-13
 		// sponsor walkthrough post v0.14.0; loopzero-api log confirmed status=405).
-		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets/bulk", secrets.Bulk)
-		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets/bulk", secretHandler.Bulk)
+		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secretHandler.DeleteSecret)
 	}
 
 	// Build routes — use the single BuildHandler from Config (C-08).
