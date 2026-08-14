@@ -6,6 +6,7 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	buildroutes "github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -142,14 +143,14 @@ type BuildListStoreAdapter struct {
 	Store db.BuildStore
 }
 
-func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]routes.BuildListItem, int, error) {
+func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]buildroutes.BuildListItem, int, error) {
 	builds, total, err := a.Store.ListByProjectAndEnv(ctx, tenantID, projectID, env, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
-	result := make([]routes.BuildListItem, len(builds))
+	result := make([]buildroutes.BuildListItem, len(builds))
 	for i, b := range builds {
-		result[i] = routes.BuildListItem{
+		result[i] = buildroutes.BuildListItem{
 			ID:              b.ID,
 			ProjectID:       b.ProjectID,
 			Environment:     b.Environment,
@@ -180,7 +181,7 @@ func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantI
 // loopzero.yaml apps schema: [{ "name": "...", "type": "...", "port": N,
 // "rendering": "..." }] — we surface only name + type per the dashboard
 // Apps card contract (BuildAppInfo in api/internal/routes/builds.go).
-func decodeAppsSpecForListing(raw json.RawMessage) []routes.BuildAppInfo {
+func decodeAppsSpecForListing(raw json.RawMessage) []buildroutes.BuildAppInfo {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -194,9 +195,9 @@ func decodeAppsSpecForListing(raw json.RawMessage) []routes.BuildAppInfo {
 	if len(parsed) == 0 {
 		return nil
 	}
-	out := make([]routes.BuildAppInfo, len(parsed))
+	out := make([]buildroutes.BuildAppInfo, len(parsed))
 	for i, p := range parsed {
-		out[i] = routes.BuildAppInfo{Name: p.Name, Type: p.Type}
+		out[i] = buildroutes.BuildAppInfo{Name: p.Name, Type: p.Type}
 	}
 	return out
 }
@@ -223,14 +224,14 @@ type BuildStatsStoreAdapter struct {
 	Store buildStatsSource
 }
 
-func (a *BuildStatsStoreAdapter) BuildStatsByDay(ctx context.Context, tenantID string, since time.Time) ([]routes.BuildDayCount, error) {
+func (a *BuildStatsStoreAdapter) BuildStatsByDay(ctx context.Context, tenantID string, since time.Time) ([]buildroutes.BuildDayCount, error) {
 	rows, err := a.Store.BuildStatsByDay(ctx, tenantID, since)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]routes.BuildDayCount, len(rows))
+	out := make([]buildroutes.BuildDayCount, len(rows))
 	for i, r := range rows {
-		out[i] = routes.BuildDayCount{Day: r.Day.Time, Count: int(r.Count)}
+		out[i] = buildroutes.BuildDayCount{Day: r.Day.Time, Count: int(r.Count)}
 	}
 	return out, nil
 }

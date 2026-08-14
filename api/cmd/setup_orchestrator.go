@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"log/slog"
 	"net/http"
 	"time"
@@ -72,7 +73,7 @@ func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapC
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
 	Orchestrator        *build.BuildOrchestrator
-	BuildOrchestrator   routes.BuildOrchestratorService
+	BuildOrchestrator   builds.BuildOrchestratorService
 	LogsHandler         *routes.LogsHandler
 	LogStreamHandler    *routes.LogStreamHandler
 	RollbackHandler     *routes.RollbackHandler
@@ -81,8 +82,8 @@ type OrchestratorDeps struct {
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *scale.ScaleHandler
-	BuildListHandler    *routes.BuildListHandler
-	BuildStatsHandler   *routes.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
+	BuildListHandler    *builds.BuildListHandler
+	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      domain.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 }
@@ -308,7 +309,7 @@ func setupOrchestrator(
 	// so the /build-envs endpoint can reject cross-tenant probes with
 	// 404 PROJECT_NOT_FOUND (existence-leak prevention) BEFORE the
 	// underlying ListEnvsForProject query runs.
-	buildListHandler := routes.NewBuildListHandlerWithGate(
+	buildListHandler := builds.NewBuildListHandlerWithGate(
 		&adapters.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
@@ -316,7 +317,7 @@ func setupOrchestrator(
 	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
 	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
-	buildStatsHandler := routes.NewBuildStatsHandler(
+	buildStatsHandler := builds.NewBuildStatsHandler(
 		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
 	)
 

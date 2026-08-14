@@ -2620,6 +2620,38 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > struct — em cada caso transformando `X` em `domain.X` onde `X` era o nome e não o tipo. Consertados
 > com padrões ancorados que exigem a forma `nome tipo` ou `nome = tipo`.
 
+> **Fatia 37 — `builds`, a décima oitava e última família (2026-08-14).** Pai de 17 para **12**
+> arquivos de produção; **21 subpacotes**, cerca verde, lint zero. A maior das dezoito: cinco arquivos
+> para um prefixo, porque um build tem mais superfícies de leitura que qualquer outro recurso.
+>
+> **O portão de entrega pegou o defeito mais grave da fatia, e eu não o teria visto.** O `.gitignore`
+> tinha `builds/` **sem barra inicial**, e padrão assim casa em **qualquer profundidade**: no instante
+> em que a família virou `api/internal/routes/builds/`, dois arquivos que eu havia criado ficaram
+> invisíveis para o git. Empurrar teria deixado o pacote sem compilar para todo mundo menos para mim —
+> o modo de falha que só aparece no clone de outra pessoa. A regra existe para um diretório de
+> artefatos na raiz, então passou a dizer `/builds/`.
+>
+> O portão também acusou um `t.Skip` sem URL de issue. Ele não é novo — veio no arquivo movido, e a
+> referência interna `code-005` existia sem rastro no tracker. Virou a issue **#290**.
+>
+> Um consumidor precisou de apelido: `internal/adapters/build_store_adapter.go` tem variável local
+> chamada `builds`, que sombreia o pacote. A convenção da árvore sufixa a **outra** parte, então o lado
+> de rotas virou `buildroutes` naquele arquivo apenas. E o `EnvironmentEnsurer` foi declarado pelo
+> consumidor uma **segunda** vez (no `promote.go`): duas ocorrências independentes da mesma forma são
+> o sinal de que a decisão estava certa — a dependência é de um método, não de um pacote.
+>
+> **Sobre o critério de fechamento, medido e não arredondado.** O `router.go` declara **18** famílias e
+> existem **18** subpacotes de família (mais 3 leaves) — mas os **conjuntos não são idênticos**, e a
+> divergência é do meu heurístico, não do trabalho: ele deriva a família do segmento após `v1`, então
+> lê `/api/v1/projects/{name}/status` como família `projects`. As quatro divergências de cada lado são
+> isso.
+>
+> **O item continua aberto**, e o resíduo do pai é nomeado: `promote`, `rollback`, `status` +
+> `status_sse`, `logs` + `logs_stream`, `deploy_timeline` ×2, `metrics_proxy`, `prometheus_client`,
+> `argocd_callback` — e `source.go`, que fica por decisão, sob a regra travada do seam
+> LoopZeroKit↔LoopZeroCloud. Declarar isomorfismo pela contagem seria fechar contra o resultado mais fácil de
+> medir, que é o padrão pelo qual três itens desta sessão foram reabertos.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

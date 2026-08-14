@@ -292,6 +292,13 @@ var allowed = map[string]map[string]bool{
 	// other would have relocated the coupling instead of removing it.
 	"projects":     {"httpio": true, "routestest": true, "pagination": true},
 	"environments": {"httpio": true, "routestest": true, "pagination": true},
+
+	// The EIGHTEENTH and last family (slice-37, B-080). Serves /api/v1/builds.
+	//
+	// The largest: five production files for one prefix, because a build has more
+	// read surfaces than any other resource here — the build itself, its list, its
+	// attestation, its SBOM and its statistics.
+	"builds": {"httpio": true, "routestest": true, "pagination": true},
 }
 
 // Config drives the gate.

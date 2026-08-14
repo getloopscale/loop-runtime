@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -442,11 +443,11 @@ func silenceKlog() {
 func setupBuildHandler(
 	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
 	cfg config.Config, shutdownCtx context.Context, logger *slog.Logger,
-) *routes.BuildHandler {
+) *builds.BuildHandler {
 	if orchDeps == nil {
 		return nil
 	}
-	buildHandler := routes.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
+	buildHandler := builds.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
 	if dbAdapter == nil {
 		return buildHandler
 	}

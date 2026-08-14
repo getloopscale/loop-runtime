@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +41,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
@@ -56,7 +56,7 @@ type buildOrchestratorAdapter struct {
 	buildStore db.BuildStore
 }
 
-func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
+func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
 	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
@@ -86,18 +86,18 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		return nil, err
 	}
 
-	return &routes.SubmitBuildResult{
+	return &builds.SubmitBuildResult{
 		BuildID:   resp.BuildID,
 		StreamURL: resp.StreamURL,
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*routes.BuildStatusResponse, error) {
+func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*builds.BuildStatusResponse, error) {
 	build, err := a.buildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return nil, err
 	}
-	return &routes.BuildStatusResponse{
+	return &builds.BuildStatusResponse{
 		BuildID:     build.ID,
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
@@ -107,7 +107,7 @@ func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
+func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
 	var apps []deploycontracts.AppRelease
 	for _, app := range result.Apps {
 		apps = append(apps, deploycontracts.AppRelease{
@@ -150,7 +150,7 @@ func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 // GetRedeploySource — Plan J-17 T6.4. Stub for integration tests; not
 // exercised by concurrent-builds scenarios. The production adapter
 // (api/internal/adapters/build_adapter.go) carries the real impl.
-func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*routes.RedeploySource, error) {
+func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*builds.RedeploySource, error) {
 	return nil, nil
 }
 
@@ -286,7 +286,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	// Create real server with real middleware
 	logger := logging.NewLogger("test")
 
-	buildHandler := routes.NewBuildHandler(orchAdapter, logger)
+	buildHandler := builds.NewBuildHandler(orchAdapter, logger)
 	router := server.NewRouter(server.Config{
 		Port:               "0",
 		Logger:             logger,

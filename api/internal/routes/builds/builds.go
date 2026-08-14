@@ -1,7 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package builds serves the build endpoints under /api/v1/builds: submitting a
+// build, listing and reading them, and the attestation, SBOM and statistics
+// read sides.
+//
+// EIGHTEENTH and last family to leave the flat `routes` package (B-080,
+// slice-37), and the largest — five production files for one route prefix,
+// because a build has more read surfaces than any other resource here.
+//
+// One consumer had to alias the import: `internal/adapters/build_store_adapter.go`
+// holds a local variable named `builds`, which shadows the package inside the
+// function that uses it. The repository's convention suffixes the OTHER party
+// (`domainsvc`, `placementsvc`, `previewsvc`), so the routes half became
+// `buildroutes` in that file alone.
+package builds
 
 import (
 	"context"
@@ -189,7 +202,6 @@ type BuildHandler struct {
 	secretResync SecretResyncer     // V9 L20: resync PG secrets to workload K8s post-envEnsurer
 }
 
-// NewBuildHandler creates a new BuildHandler.
 // EnvironmentEnsurer ensures the requested environment exists (auto-create
 // on first deploy --env <novo>). Plan T2.2 D5. Implementations should be
 // idempotent: existing envs return nil immediately; new envs create the
@@ -203,6 +215,7 @@ type EnvironmentEnsurer interface {
 	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
 
+// NewBuildHandler creates a new BuildHandler.
 func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildHandler {
 	return &BuildHandler{
 		orch:   orch,

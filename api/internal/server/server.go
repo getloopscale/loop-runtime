@@ -9,6 +9,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
@@ -92,14 +93,14 @@ type Config struct {
 	CellDiscovery      health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc
-	BuildHandler       *routes.BuildHandler
+	BuildHandler       *builds.BuildHandler
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.
-	BuildAttestationHandler *routes.BuildAttestationHandler
+	BuildAttestationHandler *builds.BuildAttestationHandler
 	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
 	// per-app SBOM metadata + presigned download URLs from S3.
-	BuildSBOMHandler    *routes.BuildSBOMHandler
+	BuildSBOMHandler    *builds.BuildSBOMHandler
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	RateLimiter         *middleware.RateLimiter
 	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
@@ -134,10 +135,10 @@ type Config struct {
 	// the DeployTimelineEventStore contract.
 	DeployTimelineStore routes.DeployTimelineEventStore
 	ScaleHandler        *scale.ScaleHandler
-	BuildListHandler    *routes.BuildListHandler
+	BuildListHandler    *builds.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
-	BuildStatsHandler *routes.BuildStatsHandler
+	BuildStatsHandler *builds.BuildStatsHandler
 	SecretK8sSync     secrets.SecretK8sSync
 	// SecretEnvLocker injects the environment lock into SecretHandler so
 	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.

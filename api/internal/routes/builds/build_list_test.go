@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package builds
 
 import (
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -63,8 +64,8 @@ func TestBuildList_HappyPath(t *testing.T) {
 	h := NewBuildListHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -93,8 +94,8 @@ func TestBuildList_Empty(t *testing.T) {
 	h := NewBuildListHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -116,7 +117,7 @@ func TestBuildList_Unauthenticated(t *testing.T) {
 	h := NewBuildListHandler(&fakeBuildListStore{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds", nil)
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -134,8 +135,8 @@ func TestBuildList_WithPagination(t *testing.T) {
 	h := NewBuildListHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds?limit=10&offset=20", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -169,8 +170,8 @@ func TestBuildList_WithTimestamps(t *testing.T) {
 	h := NewBuildListHandler(store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -224,8 +225,8 @@ func TestBuildEnvs_ReturnsDistinct(t *testing.T) {
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/build-envs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.BuildEnvs(w, req)
@@ -259,8 +260,8 @@ func TestBuildEnvs_OrdersByRecency(t *testing.T) {
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/build-envs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.BuildEnvs(w, req)
@@ -288,8 +289,8 @@ func TestBuildEnvs_EmptyForColdProject(t *testing.T) {
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/build-envs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.BuildEnvs(w, req)
@@ -326,8 +327,8 @@ func TestBuildEnvs_CrossTenantBlockedWith404(t *testing.T) {
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/other-tenant-project/build-envs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "other-tenant-project")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "other-tenant-project")
 	w := httptest.NewRecorder()
 
 	h.BuildEnvs(w, req)
@@ -359,8 +360,8 @@ func TestBuildList_NonExistentProject_Returns404(t *testing.T) {
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent-zzz/builds", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent-zzz")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent-zzz")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -387,8 +388,8 @@ func TestBuildList_ExistingProject_AllowsThrough(t *testing.T) {
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/builds", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)
@@ -405,8 +406,8 @@ func TestBuildList_NilProjectStore_NoGate(t *testing.T) {
 	h := NewBuildListHandler(store) // no gate
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/whatever/builds", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "whatever")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "whatever")
 	w := httptest.NewRecorder()
 
 	h.List(w, req)

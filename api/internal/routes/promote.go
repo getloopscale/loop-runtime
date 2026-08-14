@@ -71,6 +71,17 @@ type promoteResponse struct {
 }
 
 // PromoteHandler provides HTTP handlers for promote operations.
+// EnvironmentEnsurer creates the environment a promotion targets.
+//
+// Declared here rather than imported from the builds family that also declares
+// it: a Go interface is structural, so the consumer naming exactly the method it
+// calls is both idiomatic and the DIP shape rules/architecture.md asks for. Same
+// decision the projects family took one slice earlier, for the same reason — the
+// dependency is on ONE method, not on a package (B-080, slice-37).
+type EnvironmentEnsurer interface {
+	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
+}
+
 type PromoteHandler struct {
 	projects   PromoteProjectStore
 	service    PromoteService

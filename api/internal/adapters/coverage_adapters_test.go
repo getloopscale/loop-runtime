@@ -6,6 +6,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"testing"
 	"time"
 
@@ -72,12 +73,12 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 
 	// We cannot call SubmitBuild on the real orchestrator without DB,
 	// but we CAN test the type translation inline.
-	req := routes.SubmitBuildInput{
+	req := builds.SubmitBuildInput{
 		TenantID:    "tn-test",
 		ProjectID:   "my-app",
 		Environment: "production",
 		CommitSHA:   "abc123",
-		Apps: []routes.AppInput{
+		Apps: []builds.AppInput{
 			{Name: "api", Path: ".", Port: 3000, Type: "server", Runtime: "node"},
 			{Name: "web", Path: "./web", Type: "", Runtime: "node"}, // empty type
 			{Name: "worker", Path: "./bg", Type: "worker", Port: 0},
@@ -114,9 +115,9 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 
 func TestBuildOrchestratorAdapter_OnBuildCompleted_TranslatesApps(t *testing.T) {
 	// Verify the app translation from routes.BuildCallbackInput to deploycontracts.BuildCallbackRequest.
-	input := routes.BuildCallbackInput{
+	input := builds.BuildCallbackInput{
 		Status: "SUCCEEDED",
-		Apps: []routes.BuildCallbackApp{
+		Apps: []builds.BuildCallbackApp{
 			{Name: "api", ImageDigest: "sha256:abc", URL: "https://api.example.com", Type: "server", DurationMs: 45000},
 			{Name: "web", ImageDigest: "sha256:def", URL: "https://web.example.com", Type: "static", DurationMs: 12000},
 		},

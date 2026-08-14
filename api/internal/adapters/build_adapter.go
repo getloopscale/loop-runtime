@@ -5,6 +5,7 @@ package adapters
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
@@ -12,7 +13,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -25,7 +25,7 @@ type BuildOrchestratorAdapter struct {
 	BuildStore db.BuildStore
 }
 
-func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
+func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
 	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
@@ -75,18 +75,18 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		return nil, err
 	}
 
-	return &routes.SubmitBuildResult{
+	return &builds.SubmitBuildResult{
 		BuildID:   resp.BuildID,
 		StreamURL: resp.StreamURL,
 	}, nil
 }
 
-func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*routes.BuildStatusResponse, error) {
+func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*builds.BuildStatusResponse, error) {
 	build, err := a.BuildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return nil, err
 	}
-	resp := &routes.BuildStatusResponse{
+	resp := &builds.BuildStatusResponse{
 		BuildID:         build.ID,
 		ProjectID:       build.ProjectID,
 		Environment:     build.Environment,
@@ -106,7 +106,7 @@ func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	// Populate apps from stored spec
 	apps, _ := a.BuildStore.GetBuildApps(ctx, buildID)
 	for _, app := range apps {
-		resp.Apps = append(resp.Apps, routes.BuildAppInfo{
+		resp.Apps = append(resp.Apps, builds.BuildAppInfo{
 			Name: app.Name,
 			Type: app.Type,
 		})
@@ -114,7 +114,7 @@ func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	return resp, nil
 }
 
-func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
+func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
 	var apps []deploycontracts.AppRelease
 	for _, app := range result.Apps {
 		apps = append(apps, deploycontracts.AppRelease{
@@ -165,7 +165,7 @@ func (a *BuildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 // the schema persists them). The legacy `framework` field was removed
 // (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): the build strategy is
 // keyed on the persisted `runtime` (python|node).
-func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenantID, buildID string) (*routes.RedeploySource, error) {
+func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenantID, buildID string) (*builds.RedeploySource, error) {
 	build, err := a.BuildStore.GetByIDForTenant(ctx, tenantID, buildID)
 	if err != nil {
 		return nil, err
@@ -181,16 +181,16 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 	if specErr != nil {
 		return nil, specErr
 	}
-	apps := make([]routes.AppInput, 0, len(specs))
+	apps := make([]builds.AppInput, 0, len(specs))
 	for _, s := range specs {
-		ai := routes.AppInput{
-			Name:      s.Name,
-			Type:      s.Type,
-			Port:      s.Port,
-			Path:      s.Path,    // T0.2: now persisted → redeploy preserves monorepo path
-			Build:     s.Build,   // T0.2: now persisted → redeploy preserves build mode
-			Start:     s.Start,   // T0.2: now persisted → redeploy preserves start command
-			Runtime:   s.Runtime, // loopzero#185: redeploy MUST preserve services.json runtime (F-dom-2) —
+		ai := builds.AppInput{
+			Name:    s.Name,
+			Type:    s.Type,
+			Port:    s.Port,
+			Path:    s.Path,    // T0.2: now persisted → redeploy preserves monorepo path
+			Build:   s.Build,   // T0.2: now persisted → redeploy preserves build mode
+			Start:   s.Start,   // T0.2: now persisted → redeploy preserves start command
+			Runtime: s.Runtime, // loopzero#185: redeploy MUST preserve services.json runtime (F-dom-2) —
 			//                       adapter was silently dropping it → empty runtime → unsupportedStrategy
 			//                       → "Failed to build manifests with custom domains" → SYNC_FAILED.
 			Rendering: s.Rendering,
@@ -198,7 +198,7 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 			Replicas:  s.Replicas,
 		}
 		if s.Autoscaling != nil {
-			ai.Autoscaling = &routes.AppAutoscalingInput{
+			ai.Autoscaling = &builds.AppAutoscalingInput{
 				Min:       s.Autoscaling.MinReplicas,
 				Max:       s.Autoscaling.MaxReplicas,
 				TargetCPU: s.Autoscaling.TargetCPU,
@@ -206,7 +206,7 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 		}
 		apps = append(apps, ai)
 	}
-	return &routes.RedeploySource{
+	return &builds.RedeploySource{
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
 		CommitSHA:   build.CommitSHA,

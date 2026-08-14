@@ -7,20 +7,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // --- Fake BuildListStore ---
 
 type fakeBuildListStore struct {
-	builds []routes.BuildListItem
+	builds []builds.BuildListItem
 	total  int
 	err    error
 
@@ -32,7 +31,7 @@ type fakeBuildListStore struct {
 	lastOffset    int
 }
 
-func (f *fakeBuildListStore) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]routes.BuildListItem, int, error) {
+func (f *fakeBuildListStore) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]builds.BuildListItem, int, error) {
 	f.lastTenantID = tenantID
 	f.lastProjectID = projectID
 	f.lastEnv = env
@@ -49,9 +48,9 @@ func (f *fakeBuildListStore) ListEnvsForProject(_ context.Context, _, _ string) 
 }
 
 // Compile-time check
-var _ routes.BuildListStore = (*fakeBuildListStore)(nil)
+var _ builds.BuildListStore = (*fakeBuildListStore)(nil)
 
-func buildListRouter(handler *routes.BuildListHandler) *chi.Mux {
+func buildListRouter(handler *builds.BuildListHandler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Get("/api/v1/projects/{name}/builds", handler.List)
 	return r
@@ -66,7 +65,7 @@ func TestBuildListRoute(t *testing.T) {
 	t.Run("GET /projects/{name}/builds returns 200 with builds and total", func(t *testing.T) {
 		// Arrange
 		store := &fakeBuildListStore{
-			builds: []routes.BuildListItem{
+			builds: []builds.BuildListItem{
 				{
 					ID:              "build-001",
 					ProjectID:       "my-app",
@@ -82,7 +81,7 @@ func TestBuildListRoute(t *testing.T) {
 			},
 			total: 1,
 		}
-		handler := routes.NewBuildListHandler(store)
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds", nil).
@@ -98,7 +97,7 @@ func TestBuildListRoute(t *testing.T) {
 		}
 
 		var resp struct {
-			Builds []routes.BuildStatusResponse `json:"builds"`
+			Builds []builds.BuildStatusResponse `json:"builds"`
 			Total  int                          `json:"total"`
 		}
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
@@ -141,8 +140,8 @@ func TestBuildListRoute(t *testing.T) {
 
 	t.Run("GET /projects/{name}/builds with env filter passes env to store", func(t *testing.T) {
 		// Arrange
-		store := &fakeBuildListStore{builds: []routes.BuildListItem{}, total: 0}
-		handler := routes.NewBuildListHandler(store)
+		store := &fakeBuildListStore{builds: []builds.BuildListItem{}, total: 0}
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds?env=staging", nil).
@@ -163,8 +162,8 @@ func TestBuildListRoute(t *testing.T) {
 
 	t.Run("GET /projects/{name}/builds with limit and offset passes them to store", func(t *testing.T) {
 		// Arrange
-		store := &fakeBuildListStore{builds: []routes.BuildListItem{}, total: 0}
-		handler := routes.NewBuildListHandler(store)
+		store := &fakeBuildListStore{builds: []builds.BuildListItem{}, total: 0}
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds?limit=10&offset=20", nil).
@@ -189,8 +188,8 @@ func TestBuildListRoute(t *testing.T) {
 	t.Run("GET /projects/{name}/builds clamps limit to 1-50 range", func(t *testing.T) {
 		// Arrange — limit clamping is done in the store, but handler passes the raw value.
 		// The store (ListByProjectAndEnv) clamps. Handler passes through.
-		store := &fakeBuildListStore{builds: []routes.BuildListItem{}, total: 0}
-		handler := routes.NewBuildListHandler(store)
+		store := &fakeBuildListStore{builds: []builds.BuildListItem{}, total: 0}
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		// Test limit > 50 — passed through to store which clamps
@@ -207,8 +206,8 @@ func TestBuildListRoute(t *testing.T) {
 
 	t.Run("GET /projects/{name}/builds defaults limit to 20", func(t *testing.T) {
 		// Arrange
-		store := &fakeBuildListStore{builds: []routes.BuildListItem{}, total: 0}
-		handler := routes.NewBuildListHandler(store)
+		store := &fakeBuildListStore{builds: []builds.BuildListItem{}, total: 0}
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds", nil).
@@ -230,7 +229,7 @@ func TestBuildListRoute(t *testing.T) {
 	t.Run("GET /projects/{name}/builds auth missing returns 401", func(t *testing.T) {
 		// Arrange
 		store := &fakeBuildListStore{}
-		handler := routes.NewBuildListHandler(store)
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds", nil)
@@ -250,7 +249,7 @@ func TestBuildListRoute(t *testing.T) {
 		store := &fakeBuildListStore{
 			err: fmt.Errorf("database connection lost"),
 		}
-		handler := routes.NewBuildListHandler(store)
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds", nil).
@@ -268,8 +267,8 @@ func TestBuildListRoute(t *testing.T) {
 
 	t.Run("GET /projects/{name}/builds empty result returns empty array not null", func(t *testing.T) {
 		// Arrange
-		store := &fakeBuildListStore{builds: []routes.BuildListItem{}, total: 0}
-		handler := routes.NewBuildListHandler(store)
+		store := &fakeBuildListStore{builds: []builds.BuildListItem{}, total: 0}
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds", nil).
@@ -285,7 +284,7 @@ func TestBuildListRoute(t *testing.T) {
 		}
 
 		var resp struct {
-			Builds []routes.BuildStatusResponse `json:"builds"`
+			Builds []builds.BuildStatusResponse `json:"builds"`
 			Total  int                          `json:"total"`
 		}
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
@@ -302,7 +301,7 @@ func TestBuildListRoute(t *testing.T) {
 	t.Run("GET /projects/{name}/builds populates error_message field", func(t *testing.T) {
 		// Arrange
 		store := &fakeBuildListStore{
-			builds: []routes.BuildListItem{
+			builds: []builds.BuildListItem{
 				{
 					ID:           "build-fail",
 					ProjectID:    "my-app",
@@ -314,7 +313,7 @@ func TestBuildListRoute(t *testing.T) {
 			},
 			total: 1,
 		}
-		handler := routes.NewBuildListHandler(store)
+		handler := builds.NewBuildListHandler(store)
 		router := buildListRouter(handler)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app/builds", nil).
@@ -330,7 +329,7 @@ func TestBuildListRoute(t *testing.T) {
 		}
 
 		var resp struct {
-			Builds []routes.BuildStatusResponse `json:"builds"`
+			Builds []builds.BuildStatusResponse `json:"builds"`
 		}
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)

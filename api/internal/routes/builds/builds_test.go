@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package builds
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -80,7 +81,7 @@ func TestBuilds_Create_HappyPath(t *testing.T) {
 
 	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -103,7 +104,7 @@ func TestBuilds_Create_MissingProject(t *testing.T) {
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -118,7 +119,7 @@ func TestBuilds_Create_MissingEnvironment(t *testing.T) {
 
 	body := `{"project_id":"my-project"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -138,7 +139,7 @@ func TestBuilds_Create_MissingApps(t *testing.T) {
 
 	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -175,7 +176,7 @@ func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 
 	body := `{"project_id":"my-project","environment":"UPPERCASE"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -235,9 +236,11 @@ func TestEnvironmentRegex_AcceptsCanonicalNames(t *testing.T) {
 // TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation —
 // EC-9 of the plan: documents the bounded limitation explicitly via
 // t.Skip so CI stays green while preserving the known-issue audit
-// trail. Tracked separately as code-005 OPEN.
+// trail. Tracked as https://github.com/getloopscale/loopzero/issues/290 (was the
+// tracker-less internal reference code-005 until the family split made the
+// skip-link gate ask for a URL).
 func TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation(t *testing.T) {
-	t.Skip("known parser limitation; tracked as code-005 OPEN. sync_callback_activator.go LastIndex(\"-\") parser is ambiguous for env names containing hyphens. T3.2 regex tightening reverted 2026-06-02 to keep trio GREEN. Re-attempt requires e2e fixture migration first (see MEET-ASYNC-AMENDMENT-2026-06-02-002).")
+	t.Skip("known parser limitation; https://github.com/getloopscale/loopzero/issues/290. sync_callback_activator.go LastIndex(\"-\") parser is ambiguous for env names containing hyphens. T3.2 regex tightening reverted 2026-06-02 to keep trio GREEN. Re-attempt requires e2e fixture migration first (see MEET-ASYNC-AMENDMENT-2026-06-02-002).")
 }
 
 func TestBuilds_Create_Unauthenticated(t *testing.T) {
@@ -259,7 +262,7 @@ func TestBuilds_Create_InvalidJSON(t *testing.T) {
 	h := NewBuildHandler(&fakeBuildOrch{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString("not-json"))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -277,7 +280,7 @@ func TestBuilds_Create_DeployInProgress(t *testing.T) {
 
 	body := `{"project_id":"my-project","environment":"production","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -305,8 +308,8 @@ func TestBuilds_Get_Found(t *testing.T) {
 	h := NewBuildHandler(orch, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -331,8 +334,8 @@ func TestBuilds_Get_NotFound(t *testing.T) {
 	h := NewBuildHandler(orch, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-nonexistent", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -349,8 +352,8 @@ func TestBuilds_Get_CrossTenantDenied(t *testing.T) {
 	h := NewBuildHandler(orch, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123", nil)
-	req = withAuth(req, defaultUserContext()) // tn-test-123
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // tn-test-123
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -368,8 +371,8 @@ func TestBuilds_Cancel_Success(t *testing.T) {
 	h := NewBuildHandler(orch, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/bld-abc123/cancel", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Cancel(w, req)
@@ -386,8 +389,8 @@ func TestBuilds_Cancel_NotFound(t *testing.T) {
 	h := NewBuildHandler(orch, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/bld-nonexistent/cancel", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Cancel(w, req)
@@ -405,8 +408,8 @@ func TestBuilds_Cancel_AlreadyCompleted(t *testing.T) {
 	h := NewBuildHandler(orch, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds/bld-abc123/cancel", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Cancel(w, req)
@@ -437,7 +440,7 @@ func TestBuilds_Redeploy_HappyPath(t *testing.T) {
 
 	body := `{"redeploy_of":"bld-source"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -445,9 +448,9 @@ func TestBuilds_Redeploy_HappyPath(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
 	}
-	if orch.redeployTenantSeen != defaultUserContext().TenantID {
+	if orch.redeployTenantSeen != routestest.DefaultUserContext().TenantID {
 		t.Errorf("redeploy tenant mismatch: got %q want %q",
-			orch.redeployTenantSeen, defaultUserContext().TenantID)
+			orch.redeployTenantSeen, routestest.DefaultUserContext().TenantID)
 	}
 	if orch.redeployBuildSeen != "bld-source" {
 		t.Errorf("redeploy build id mismatch: got %q want %q",
@@ -467,7 +470,7 @@ func TestBuilds_Redeploy_NotTerminalReturns409(t *testing.T) {
 
 	body := `{"redeploy_of":"bld-source-running"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -488,7 +491,7 @@ func TestBuilds_Redeploy_NotFoundReturns404(t *testing.T) {
 
 	body := `{"redeploy_of":"bld-missing"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -525,7 +528,7 @@ func TestBuilds_Redeploy_BodyParamsIgnored(t *testing.T) {
 		"apps":[{"name":"attacker-app","type":"server"}]
 	}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -564,7 +567,7 @@ func TestBuilds_Redeploy_SourceWithoutAppsReturnsCanonicalRedeployError(t *testi
 
 	body := `{"redeploy_of":"bld-source-empty"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
@@ -35,7 +36,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
@@ -73,7 +73,7 @@ func buildServerConfig(
 	cellRouter placement.Router,
 	cellStore *store.PostgresCellStore,
 	domainHandler *domains.DomainHandler,
-	buildHandler *routes.BuildHandler,
+	buildHandler *builds.BuildHandler,
 	healthServices []health.ServiceHealthChecker,
 	tokenValidator middleware.TokenValidator,
 	rateLimiter *middleware.RateLimiter,
@@ -114,7 +114,7 @@ func buildServerConfig(
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
 		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
 		// returns real data (was always 404 because the store was nil).
-		BuildAttestationHandler: routes.NewBuildAttestationHandler(
+		BuildAttestationHandler: builds.NewBuildAttestationHandler(
 			store.NewPostgresAttestationStore(dbAdapter), logger,
 		),
 		// Sprint 6 / T1.2: per-app SBOM endpoint. The store is the
@@ -122,7 +122,7 @@ func buildServerConfig(
 		// the existing S3 uploader (loopzero-static-assets bucket / sbom/
 		// prefix). When stores.ObjUploader is nil (no S3 in dev), the
 		// handler still serves metadata but omits download_url.
-		BuildSBOMHandler: routes.NewBuildSBOMHandler(
+		BuildSBOMHandler: builds.NewBuildSBOMHandler(
 			newAppSBOMStoreAdapter(dbAdapter),
 			toSBOMURLGenerator(stores),
 			cfg.SourceBucket,
@@ -402,14 +402,14 @@ func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
 
 func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
 	ctx context.Context, tenantID, buildID string,
-) ([]routes.AppSBOMInfo, error) {
+) ([]builds.AppSBOMInfo, error) {
 	infos, err := a.inner.GetBuildAppAttestations(ctx, tenantID, buildID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]routes.AppSBOMInfo, 0, len(infos))
+	out := make([]builds.AppSBOMInfo, 0, len(infos))
 	for _, in := range infos {
-		out = append(out, routes.AppSBOMInfo{
+		out = append(out, builds.AppSBOMInfo{
 			AppName:            in.AppName,
 			SBOMS3Key:          in.SBOMS3Key,
 			SBOMFormat:         in.SBOMFormat,
@@ -424,11 +424,11 @@ func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
 // toSBOMURLGenerator returns a SBOMURLGenerator if the configured
 // uploader supports presigning, else nil. When nil, the SBOM endpoint
 // returns metadata-only (no download_url).
-func toSBOMURLGenerator(stores *StoreDeps) routes.SBOMURLGenerator {
+func toSBOMURLGenerator(stores *StoreDeps) builds.SBOMURLGenerator {
 	if stores == nil {
 		return nil
 	}
-	if g, ok := stores.ObjUploader.(routes.SBOMURLGenerator); ok {
+	if g, ok := stores.ObjUploader.(builds.SBOMURLGenerator); ok {
 		return g
 	}
 	return nil

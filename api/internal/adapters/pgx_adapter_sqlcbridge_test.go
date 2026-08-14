@@ -12,9 +12,9 @@ import (
 // TestPgxTxDBTX_ImplementsSqlcBridge — regression test for the LIVE
 // dogfood panic surfaced 2026-05-29 cleanroom retry:
 //
-//   "build_wrapper: DBTX *adapters.PgxTxDBTX does not implement
-//    SqlcBridge — sqlc-backed stores require PgxAdapter /
-//    PgxTxAdapter or pgxmock per T0.6 reshape matrix"
+//	"build_wrapper: DBTX *adapters.PgxTxDBTX does not implement
+//	 SqlcBridge — sqlc-backed stores require PgxAdapter /
+//	 PgxTxAdapter or pgxmock per T0.6 reshape matrix"
 //
 // Pre-fix-949aae1c, the lock-side adapter satisfied db.DBTX but
 // NOT db.SqlcBridge. The sqlc-backed wrappers' bridge() helper
@@ -23,11 +23,11 @@ import (
 // error.
 //
 // This test ensures:
-//   1. PgxTxDBTX implements db.DBTX (the surface the wrapper field
-//      expects)
-//   2. PgxTxDBTX implements db.SqlcBridge (the bridge contract for
-//      dispatching into sqlc-backed wrappers inside the
-//      withEnvironmentLock-held tx)
+//  1. PgxTxDBTX implements db.DBTX (the surface the wrapper field
+//     expects)
+//  2. PgxTxDBTX implements db.SqlcBridge (the bridge contract for
+//     dispatching into sqlc-backed wrappers inside the
+//     withEnvironmentLock-held tx)
 //
 // If a future contributor adds a new pgx.Tx wrapper, they should
 // add the equivalent assertions here OR in the new wrapper's _test.go.

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
@@ -184,11 +185,11 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// The auth middleware returns 401 for requests without tokens, which is fine.
 	// For routes behind auth, we provide a valid Bearer token so auth passes.
 
-	buildHandler := routes.NewBuildHandler(nil, logger)
+	buildHandler := builds.NewBuildHandler(nil, logger)
 	logsHandler := routes.NewLogsHandler(nil, nil)
 	rollbackHandler := routes.NewRollbackHandler(nil, nil, "test.local")
 	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
-	buildListHandler := routes.NewBuildListHandler(nil)
+	buildListHandler := builds.NewBuildListHandler(nil)
 	environmentHandler := environments.NewEnvironmentHandler(nil)
 	teamHandler := teams.NewTeamHandler(nil)
 	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")

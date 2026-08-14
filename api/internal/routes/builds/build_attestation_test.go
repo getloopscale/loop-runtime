@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package builds
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestBuildAttestation_Get_Found(t *testing.T) {
 	h := NewBuildAttestationHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/attestation", nil)
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -66,7 +67,7 @@ func TestBuildAttestation_Get_NotFound(t *testing.T) {
 	h := NewBuildAttestationHandler(store, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-nonexistent/attestation", nil)
-	req = withChiParam(req, "id", "bld-nonexistent")
+	req = routestest.WithChiParam(req, "id", "bld-nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -80,7 +81,7 @@ func TestBuildAttestation_Get_MissingID(t *testing.T) {
 	h := NewBuildAttestationHandler(&fakeAttestationStore{}, slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds//attestation", nil)
-	req = withChiParam(req, "id", "")
+	req = routestest.WithChiParam(req, "id", "")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)

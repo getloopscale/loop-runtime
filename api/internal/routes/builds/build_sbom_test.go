@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package builds
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -92,7 +93,7 @@ func TestBuildSBOMHandler_ReturnsAllAppsWithDownloadURL(t *testing.T) {
 	h := NewBuildSBOMHandler(store, signer, "loopzero-static-assets", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 
@@ -132,7 +133,7 @@ func TestBuildSBOMHandler_NoBuildReturns404(t *testing.T) {
 	h := NewBuildSBOMHandler(store, &fakeSBOMSigner{}, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/missing/sbom", nil)
-	req = withChiParam(req, "id", "missing")
+	req = routestest.WithChiParam(req, "id", "missing")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -149,7 +150,7 @@ func TestBuildSBOMHandler_CrossTenantReturns404(t *testing.T) {
 	h := NewBuildSBOMHandler(store, &fakeSBOMSigner{}, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	req = withTenantContext(req, "tn-other")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -163,7 +164,7 @@ func TestBuildSBOMHandler_NoBuildID_Returns400(t *testing.T) {
 	h := NewBuildSBOMHandler(&fakeSBOMStore{}, &fakeSBOMSigner{}, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds//sbom", nil)
-	req = withChiParam(req, "id", "")
+	req = routestest.WithChiParam(req, "id", "")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -177,7 +178,7 @@ func TestBuildSBOMHandler_Unauthenticated_Returns401(t *testing.T) {
 	h := NewBuildSBOMHandler(&fakeSBOMStore{}, &fakeSBOMSigner{}, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	// no withTenantContext — request is anonymous
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -192,7 +193,7 @@ func TestBuildSBOMHandler_StoreError_Returns500(t *testing.T) {
 	h := NewBuildSBOMHandler(store, &fakeSBOMSigner{}, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -215,7 +216,7 @@ func TestBuildSBOMHandler_FiltersAppsWithoutSBOM(t *testing.T) {
 	h := NewBuildSBOMHandler(store, signer, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -244,7 +245,7 @@ func TestBuildSBOMHandler_NilSigner_OmitsDownloadURL(t *testing.T) {
 	h := NewBuildSBOMHandler(store, nil, "", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
@@ -276,7 +277,7 @@ func TestBuildSBOMHandler_PresignFails_ReturnsMetadataWithoutURL(t *testing.T) {
 	h := NewBuildSBOMHandler(store, signer, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
-	req = withChiParam(req, "id", "build-1")
+	req = routestest.WithChiParam(req, "id", "build-1")
 	req = withTenantContext(req, "tn-1")
 	w := httptest.NewRecorder()
 	h.Get(w, req)

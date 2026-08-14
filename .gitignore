@@ -181,7 +181,11 @@ tmp/
 
 # Reference projects for golden-harvest testing (not part of the codebase)
 referencias/
-builds/
+# Anchored: `builds/` without a leading slash matches at EVERY depth, and it was
+# swallowing the api/internal/routes/builds package the moment that family was
+# extracted (B-080, slice-37). The rule is about a root-level artefact directory,
+# so it says so.
+/builds/
 .actrc
 .act-secrets
 

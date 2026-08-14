@@ -18,6 +18,7 @@ package unit
 import (
 	"bytes"
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
@@ -84,11 +85,11 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
-		BuildHandler:         routes.NewBuildHandler(nil, logger),
+		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
 		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
-		BuildListHandler:     routes.NewBuildListHandler(nil),
+		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
@@ -135,11 +136,11 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
-		BuildHandler:         routes.NewBuildHandler(nil, logger),
+		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
 		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
-		BuildListHandler:     routes.NewBuildListHandler(nil),
+		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
@@ -189,11 +190,11 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
-		BuildHandler:         routes.NewBuildHandler(nil, logger),
+		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
 		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
-		BuildListHandler:     routes.NewBuildListHandler(nil),
+		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
