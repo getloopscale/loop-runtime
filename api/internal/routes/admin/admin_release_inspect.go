@@ -17,7 +17,7 @@
 //         (maps to CLI exit 1)
 //   - 500 unexpected internal error
 
-package routes
+package admin
 
 import (
 	"crypto/subtle"

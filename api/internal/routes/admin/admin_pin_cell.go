@@ -18,7 +18,7 @@
 // Gated behind LOOPZERO_ADMIN_API=true (same flag as admin_evict). Requires
 // X-Service-Auth header. Fails 403 without either.
 
-package routes
+package admin
 
 import (
 	"context"

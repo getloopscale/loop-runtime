@@ -4,7 +4,7 @@
 // Phase 5 T5.5 — admin_pin_cell handler tests.
 // Mirror admin_evict_test.go structure for consistency.
 
-package routes
+package admin
 
 import (
 	"bytes"

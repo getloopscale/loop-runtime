@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
@@ -193,8 +194,8 @@ type Config struct {
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
 	// skipped and CLI returns its own error rather than 404.
 	BillingHandler *billing.BillingHandler
-	AdminEvictor   routes.TenantEvictor
-	AdminPinner    routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
+	AdminEvictor   admin.TenantEvictor
+	AdminPinner    admin.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure: diagnostic
 	// read-only endpoint for on-call. Nil-safe — when unset, the route
 	// is not mounted and the handler answers 404 like the other admin

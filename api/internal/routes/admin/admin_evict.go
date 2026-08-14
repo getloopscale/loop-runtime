@@ -12,7 +12,19 @@
 // returns a job ID. Actual eviction is done by placement.TenantEvictor
 // (separate file) which handles FK ordering + finalizer removal.
 
-package routes
+// Package admin serves the operator endpoints under /api/v1/admin: evicting a
+// tenant from a cell, pinning one to a specific cell, and inspecting a release.
+//
+// Fifteenth family to leave the flat `routes` package (B-080, slice-35), and the
+// first with three production files — the three admin_* files are one family by
+// audience rather than by subject: every route here is X-Service-Auth only, with
+// no user context, which is why the router registers them as a sibling of the
+// webhook rather than behind the user-auth middleware.
+//
+// It is also the family that pulled `WriteCodeErrorJSON` into the `httpio` leaf
+// two slices ago: two of these three files reached a response writer that lived
+// in the audit family, and the extraction of THAT family is what surfaced it.
+package admin
 
 import (
 	"context"

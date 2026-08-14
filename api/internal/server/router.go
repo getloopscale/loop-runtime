@@ -11,6 +11,7 @@ package server
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/version"
@@ -174,19 +175,19 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.AdminEvictor != nil {
 		r.With(middleware.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
-			routes.AdminEvictHandler(cfg.AdminEvictor),
+			admin.AdminEvictHandler(cfg.AdminEvictor),
 		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if cfg.AdminPinner != nil {
-		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
+		r.Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. The handler
 	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
 	if cfg.ReleaseInspector != nil {
-		r.Get("/api/v1/admin/releases/{id}/inspect", routes.AdminReleaseInspectHandler(cfg.ReleaseInspector))
+		r.Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
 	}
 
 	// Protected routes (auth required)

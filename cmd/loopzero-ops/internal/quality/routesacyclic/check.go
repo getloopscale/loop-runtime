@@ -268,6 +268,11 @@ var allowed = map[string]map[string]bool{
 	// anyway. All ten of its tests exercise handlers declared in `auth`.
 	"auth":  {"httpio": true, "routestest": true},
 	"teams": {"httpio": true, "routestest": true},
+	// The fifteenth family (slice-35, B-080). Serves /api/v1/admin.
+	//
+	// No routestest edge: its tests build their own requests, because an admin
+	// route is X-Service-Auth only and the shared helpers mint a USER identity.
+	"admin": {"httpio": true},
 }
 
 // Config drives the gate.

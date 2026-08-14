@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
@@ -18,7 +19,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
@@ -80,7 +80,7 @@ func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input buil
 // available, but partial-cluster breakage (e.g. runtime kubeconfig mis-set)
 // shouldn't prevent the API from starting. A startup log line makes the
 // degraded mode explicit.
-func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.TenantEvictor {
+func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) admin.TenantEvictor {
 	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed admin
 	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
 	// eviction cascade preserved verbatim; all queries are

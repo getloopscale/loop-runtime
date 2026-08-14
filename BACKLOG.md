@@ -2574,6 +2574,23 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > **Quinta vez** que o `gofmt -w` sobre diretório alcançou os mesmos dois arquivos de
 > `tests/integration/`. Revertidos. Passo a formatar apenas os arquivos tocados.
 
+> **Fatia 35 — `admin` (2026-08-14).** Pai de 23 para **20**; **17 subpacotes**, cerca verde, lint
+> zero. **15 de 18 famílias.**
+>
+> Primeira com **três** arquivos de produção, e a coesão é por **público**, não por assunto: toda rota
+> aqui é `X-Service-Auth` apenas, sem contexto de usuário — que é por que o router as registra como
+> irmãs do webhook, fora do middleware de auth de usuário. A família não declara aresta para
+> `routestest` porque seus testes constroem as próprias requisições: os auxiliares compartilhados
+> cunham identidade de **usuário**, e uma rota de operador não tem uma. Medido, não suposto.
+>
+> **E é a família que puxou o `WriteCodeErrorJSON` para o leaf duas fatias atrás** — dois destes três
+> arquivos alcançavam um escritor de resposta que morava na família `audit`, e foi a extração *daquela*
+> que o revelou. A decomposição vai desenterrando o acoplamento na ordem em que o compilador consegue
+> vê-lo.
+>
+> **Escopo do diff limpo pela primeira vez em cinco fatias**, depois de eu parar de rodar `gofmt -w`
+> sobre diretório e passar a formatar só os arquivos tocados.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta
