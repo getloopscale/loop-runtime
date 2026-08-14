@@ -163,6 +163,16 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 		reason,
 		app.Generation,
 	)
+	// The readiness summary is the LAST status mutation before any persist
+	// (ADR-0025 D3). Without it this write lands a terminal Phase=Cleaned next to
+	// a Ready condition computed on an earlier pass — the same shape as the defect
+	// B-105 fixed one file over, and the reason the guard now sweeps the package
+	// instead of a single file.
+	//
+	// The function has no production caller (see the note above), so this is not a
+	// live bug being fixed; it is the invariant being made true everywhere it is
+	// claimed, so the guard does not need an exemption nobody would revisit.
+	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
 	if err := c.Status().Patch(ctx, app, client.MergeFrom(base)); err != nil {
 		return fmt.Errorf("MarkAsCleaned: status patch: %w", err)
 	}

@@ -162,8 +162,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	r.reconcileRouteStatus(ctx, &app)
 	r.reconcileHealthCondition(&app)
 
-	app.Status.ObservedGeneration = app.Generation
-
 	if err := r.patchStatus(ctx, &app, base); err != nil {
 		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}
@@ -199,6 +197,17 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 //
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation
 func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
+	// observedGeneration belongs to the write, not to the happy path. It used to be
+	// set only just before the final patch, so the failure branch persisted a Ready
+	// condition stamped with the CURRENT generation next to a
+	// .status.observedGeneration from the previous one — a status contradicting
+	// itself inside a single write, and kstatus reading the whole subresource as
+	// stale. The sibling Environment controller already sets it inside its error
+	// branches (environment_controller.go); this makes the two agree.
+	//
+	// It is honest on a failed pass: "I have seen generation N and it is not ready"
+	// is exactly what a false Ready at that generation says.
+	app.Status.ObservedGeneration = app.Generation
 	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
 	return r.Status().Patch(ctx, app, client.MergeFrom(base))
 }

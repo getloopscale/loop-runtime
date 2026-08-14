@@ -16,6 +16,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	gotypes "go/types"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -536,71 +537,187 @@ func TestApplicationController_ErrorPathPersistsAFreshReadinessSummary(t *testin
 		t.Errorf("IngressReady=False was persisted but Ready stayed %s — a failed pass left the summary "+
 			"claiming the application is ready.", ready.Status)
 	}
+
+	// The write must not contradict itself. A Ready stamped with the current
+	// generation next to a .status.observedGeneration from the previous one tells
+	// a reader two different things about which generation was seen, and kstatus
+	// resolves that by treating the whole subresource as stale — discarding the
+	// very verdict this test proved was recomputed.
+	if got.Status.ObservedGeneration != currentGen {
+		t.Errorf("Ready is stamped at generation %d but .status.observedGeneration is %d — one status "+
+			"write disagreeing with itself about which generation the controller has seen.",
+			ready.ObservedGeneration, got.Status.ObservedGeneration)
+	}
 }
 
-// TestApplicationController_StatusIsPersistedFromExactlyOnePlace is the
-// structural half of the B-105 guard, and it exists because the B-085 table
-// scored this file as conformant while the defect was live: that table counts
-// the CALL (`Patch` vs `Update`), and the defect was in the ORDERING around it.
+// statusPersistSite is one place in the package that writes a .status subresource.
+type statusPersistSite struct {
+	file, fn string
+	line     int
+	form     string // how the writer was reached, for the failure message
+}
+
+// findStatusPersistSites walks the package AST for every call that persists a
+// status subresource, and reports the enclosing function of each.
 //
-// Counting calls cannot see an ordering invariant. What it can see is how many
-// places are in a position to violate one. With every persist routed through
-// patchStatus, that number is one — and a new early-return path cannot skip the
-// readiness summary without first adding a second persist point here, which is
-// what this test refuses.
+// It replaced a guard that parsed ONE file and required the receiver to be
+// literally `x.Status()`. The review of this slice killed that guard with three
+// two-line mutants, all of which compiled and persisted status while the package
+// stayed green:
 //
-// It walks the AST rather than the file text: a guard for this defect that
-// matched strings would be the same mistake one layer up.
-func TestApplicationController_StatusIsPersistedFromExactlyOnePlace(t *testing.T) {
-	const file = "application_controller.go"
-	fset := token.NewFileSet()
-	parsed, err := parser.ParseFile(fset, file, nil, 0)
+//   - `sw := r.Status()` then `sw.Patch(...)` — receiver is an Ident, not a call
+//   - `r.SubResource("status").Patch(...)` — different selector, same subresource
+//   - the same write moved to a sibling file of the package
+//
+// So: every production file, local aliases resolved, and SubResource treated as
+// the synonym it is. A guard that only recognises the shape its author happened
+// to write reports clean because it is looking away — measured twice in one day,
+// here and in the backlog checker's closure-note rule.
+func findStatusPersistSites(t *testing.T) []statusPersistSite {
+	t.Helper()
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("parsing %s: %v", file, err)
+		t.Fatalf("reading the package directory: %v", err)
 	}
 
-	// enclosing maps a position to the function declaration containing it.
-	enclosing := func(pos token.Pos) string {
+	reachesStatus := func(e ast.Expr) string {
+		src := gotypes.ExprString(e)
+		switch {
+		case strings.Contains(src, ".Status()"):
+			return "Status()"
+		case strings.Contains(src, ".SubResource(\"status\")"):
+			return `SubResource("status")`
+		}
+		return ""
+	}
+
+	var sites []statusPersistSite
+	var files int
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		files++
+		fset := token.NewFileSet()
+		parsed, err := parser.ParseFile(fset, filepath.Clean(name), nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", name, err)
+		}
+
 		for _, decl := range parsed.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if ok && fn.Pos() <= pos && pos <= fn.End() {
-				return fn.Name.Name
+			if !ok || fn.Body == nil {
+				continue
 			}
+
+			// Locals bound to a status writer: `sw := r.Status()`.
+			aliases := map[string]string{}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				assign, ok := n.(*ast.AssignStmt)
+				if !ok {
+					return true
+				}
+				for i, rhs := range assign.Rhs {
+					if via := reachesStatus(rhs); via != "" && i < len(assign.Lhs) {
+						if id, ok := assign.Lhs[i].(*ast.Ident); ok {
+							aliases[id.Name] = via + " via local `" + id.Name + "`"
+						}
+					}
+				}
+				return true
+			})
+
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || (sel.Sel.Name != "Patch" && sel.Sel.Name != "Update") {
+					return true
+				}
+				form := reachesStatus(sel.X)
+				if form == "" {
+					if id, ok := sel.X.(*ast.Ident); ok {
+						form = aliases[id.Name]
+					}
+				}
+				if form == "" {
+					return true
+				}
+				sites = append(sites, statusPersistSite{
+					file: name, fn: fn.Name.Name,
+					line: fset.Position(call.Pos()).Line, form: form,
+				})
+				return true
+			})
 		}
-		return "(top level)"
+	}
+	if files == 0 {
+		t.Fatal("no production file parsed; a check that read nothing verified nothing")
+	}
+	return sites
+}
+
+// TestApp_EveryStatusPersistFoldsTheReadinessSummary is the structural guard for
+// ADR-0025 D3 across the package.
+//
+// The invariant is one of ORDER — the readiness summary is the last status
+// mutation before any persist — and order is what a call-counting table cannot
+// see. That is how B-105 stayed hidden: the B-085 table scored this package
+// conformant because it counted `Patch` vs `Update`, while a failure branch
+// persisted without ever summarising.
+//
+// So the assertion is on the ENCLOSING FUNCTION of each persist, not on how many
+// persists there are. A function may satisfy it two ways, and both are used here:
+// fold the summary in-line before the write (patchStatus), or cover every exit
+// with `defer DeferReadinessSummary` (the ExposedRoute reconcile). Counting sites
+// would have banned the second, which is the shape the other seven controllers use.
+func TestApp_EveryStatusPersistFoldsTheReadinessSummary(t *testing.T) {
+	sites := findStatusPersistSites(t)
+	if len(sites) == 0 {
+		t.Fatal("no status persist found in the package — the guard observed nothing, which is not " +
+			"the same as observing a clean package")
 	}
 
-	var sites []string
-	ast.Inspect(parsed, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
+	sources := map[string]string{}
+	read := func(t *testing.T, file string) string {
+		t.Helper()
+		if s, ok := sources[file]; ok {
+			return s
 		}
-		// Match `<x>.Status().Patch(...)` and `<x>.Status().Update(...)`.
-		outer, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || (outer.Sel.Name != "Patch" && outer.Sel.Name != "Update") {
-			return true
+		b, err := os.ReadFile(filepath.Clean(file))
+		if err != nil {
+			t.Fatalf("reading %s: %v", file, err)
 		}
-		innerCall, ok := outer.X.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		inner, ok := innerCall.Fun.(*ast.SelectorExpr)
-		if !ok || inner.Sel.Name != "Status" {
-			return true
-		}
-		sites = append(sites, fmt.Sprintf("%s (line %d, in %s)",
-			outer.Sel.Name, fset.Position(call.Pos()).Line, enclosing(call.Pos())))
-		return true
-	})
-
-	if len(sites) != 1 {
-		t.Fatalf("%s persists .status from %d places, expected exactly 1 (patchStatus). Every extra "+
-			"place is a place where the readiness summary can be forgotten — which is how B-105 "+
-			"happened.\nsites: %v", file, len(sites), sites)
+		sources[file] = stripGoComments(string(b))
+		return sources[file]
 	}
-	if !strings.Contains(sites[0], "in patchStatus") {
-		t.Errorf("the single persist site is not inside patchStatus, so the readiness summary is no "+
-			"longer guaranteed to be the last status mutation (ADR-0025 D3).\nsite: %s", sites[0])
+
+	for _, s := range sites {
+		src := read(t, s.file)
+		fnStart := strings.Index(src, "func "+s.fn+"(")
+		if fnStart < 0 {
+			// Method: `func (r *X) Name(`.
+			fnStart = strings.Index(src, ") "+s.fn+"(")
+		}
+		if fnStart < 0 {
+			t.Errorf("could not locate %s in %s to inspect its body", s.fn, s.file)
+			continue
+		}
+		body := src[fnStart:]
+		if end := strings.Index(body, "\nfunc "); end > 0 {
+			body = body[:end]
+		}
+
+		inline := strings.Contains(body, "SetReadinessSummaryViaPkg(")
+		deferred := strings.Contains(body, "DeferReadinessSummary(")
+		if !inline && !deferred {
+			t.Errorf("%s:%d — %s() persists .status (reached by %s) without folding in the readiness "+
+				"summary and without a deferred one. A pass through this function leaves the Ready "+
+				"condition at whatever the PREVIOUS pass computed, which is read as current "+
+				"(ADR-0025 D3, B-105).", s.file, s.line, s.fn, s.form)
+		}
 	}
 }

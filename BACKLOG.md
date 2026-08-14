@@ -3346,16 +3346,24 @@ dod:
 > o comentário justificava o re-fetch por UID, e o `git log -S` mostrou que a razão original era
 > `resourceVersion` sob `Update` — vestigial desde `a07f0531`.
 >
-> **Bala 2 — fechada, e o item exagerava.** Ela fala em **cinco** caminhos; medido no código, são
-> **quatro não-defeitos e um defeito**. `:91` e `:93` não têm objeto; `:121` e `:125` retornam antes
-> de `base` existir, sem nenhuma mutação de status na passagem — escrever um sumário ali exigiria
-> inventar uma base, que é a armadilha registrada na decisão da âncora. O defeito é `:152`, e ele é
-> real: `reconcileExposedRoute` marca `IngressReady=False` e **persiste** antes de devolver o erro,
-> então o servidor fica com um `IngressReady=False` fresco ao lado de um `Ready` da geração anterior.
+> **Bala 2 — fechada, e o item exagerava.** Ela fala em **cinco** caminhos; medido, são **quatro
+> não-defeitos e um defeito**. `:117` (`reconcileDelete`) não muta `.Status`, e o helper canônico pula
+> objeto em deleção; `:121` e `:125` retornam antes de `base` existir, sem mutação de status na
+> passagem — escrever um sumário ali exigiria inventar uma base, que é a armadilha registrada na
+> decisão da âncora; `:155` **deixou de existir** quando a bala 1 removeu o re-fetch. O defeito é
+> `:136` (hoje `:152`): `reconcileExposedRoute` marca `IngressReady=False` e **persiste** antes de
+> devolver o erro, então o servidor fica com um `IngressReady=False` fresco ao lado de um `Ready` da
+> geração anterior.
+>
+> **A primeira redação desta nota trocou dois desses caminhos em silêncio** — largou o `:117` que o
+> item nomeia e pôs no lugar `:91`/`:93`, que ele não nomeia — mantendo a contagem "cinco" intacta.
+> Manter o número enquanto se troca o conjunto é a forma mais discreta de não medir o que se afirmou
+> medir. A revisão adversarial da fatia pegou, e é por isso que ela existe.
 >
 > O conserto encapsula os **dois** pontos de persistência num `patchStatus`, que dobra o sumário
-> dentro. O invariante deixa de valer por lembrança e passa a valer por forma: não existe caminho que
-> persista status sem resumir. Decisão em
+> dentro — e o `observedGeneration` foi para dentro dele junto, porque no ramo de falha ele ficava na
+> geração anterior enquanto o `Ready` era carimbado na atual: uma escrita de status discordando de si
+> mesma. Decisão em
 > `MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation`, que registra por que
 > `DeferReadinessSummary` foi rejeitado — ele é um **segundo escritor por desenho**, e este controller
 > teve um removido no T5.1 por flapping e 409.
@@ -3368,9 +3376,26 @@ dod:
 > exige que haja **um**, dentro de `patchStatus`. Não vê a âncora; vê quantos lugares estão em posição
 > de violá-la, e mantém esse número em um.
 >
-> Os dois guards são comportamentais/estruturais, nunca textuais, e os dois foram verificados por
-> mutante: reintroduzir o patch direto no caminho de erro reprova ambos, um pela geração velha do
-> `Ready` persistido, outro nomeando os dois sítios e suas funções.
+> **E o guard estrutural precisou ser reescrito, porque a primeira versão era burlável.** Ela parseava
+> **um** arquivo e exigia que o receptor fosse literalmente `x.Status()`. A revisão matou-a com três
+> mutantes de duas linhas, todos compilando e deixando o pacote verde: `sw := r.Status()` seguido de
+> `sw.Patch(...)`, `r.SubResource("status").Patch(...)`, e a mesma escrita num arquivo irmão. Eu havia
+> afirmado, no ADR e na mensagem de commit, que "não existe caminho que persista status sem resumir" —
+> falso, e falso de um jeito que ninguém notaria até o defeito voltar.
+>
+> A forma nova varre todos os arquivos de produção do pacote, resolve apelido local, trata
+> `SubResource("status")` como sinônimo, e afirma sobre a **função que envolve** cada persistência:
+> ela precisa dobrar o sumário em linha ou estar coberta por um `defer DeferReadinessSummary`. Os três
+> mutantes reprovam, e a segunda forma segue permitida — é a que os outros sete controllers usam, e
+> contar sítios a teria proibido.
+>
+> Isso expôs um sítio que ninguém guardava: `application_reaper.go:166` persiste `Phase=Cleaned` sem
+> resumir. Não é bug vivo — `MarkAsCleaned` não tem chamador de produção — mas era a prova de que a
+> classe seguia aberta. Fechado junto, para o invariante não precisar de uma isenção que ninguém
+> revisitaria.
+>
+> Todos os guards são comportamentais ou estruturais, nunca textuais, e cada asserção foi verificada
+> por mutante — incluindo os três que a revisão usou para matar a versão anterior.
 status: shipped
 
 ## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [ ]
