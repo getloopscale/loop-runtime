@@ -3873,6 +3873,36 @@ evidence: medido em 2026-08-14 pelo review da fatia `slice-27`. `infra/quality/t
 why_now: o review achou isto porque a fatia 19 moveu `repositories_test.go` e não atualizou o inventário; a 27 repetiu com `domains_test.go`. Os dois foram corrigidos nessa fatia, e a medição do resto revelou que eles eram 2 de 217. Um inventário em que 37% dos caminhos são fantasmas não descreve mais a suíte — ele descreve o que a suíte era em algum momento, e nenhum gate percebe a diferença.
 status: triaged
 severity: média — nada quebra hoje; o custo é um gate de governança de testes que mede uma lista que não corresponde à realidade, e que por isso não pode acusar cobertura perdida
+
+> **Medido em 2026-08-14, e a premissa do item estava errada — o defeito é maior.**
+>
+> O item diz que *"o gate que o lê nunca verifica existência de caminho"*. Verdade, mas enganoso: **o
+> gate não verifica caminho porque não LÊ caminho.** O único consumidor de
+> `infra/quality/test-inventory.json` é o `testpyramid`, e sua struct declara exatamente três campos —
+> `ratio_unit_pct`, `ratio_integration_pct`, `ratio_e2e_pct`, todos sob `summary`. Os 710 caminhos são
+> **dados mortos**: nada os lê, e por isso 332 fantasmas (46%, não 37% — o número do item envelheceu)
+> não quebram nada. Não é o gate que está cego para os caminhos; são os caminhos que não têm leitor.
+>
+> **E o que o gate lê é uma auto-declaração.** Os três percentuais são números escritos no arquivo,
+> não derivados da árvore. Medido contra o disco hoje:
+>
+> | | inventário afirma | árvore tem |
+> |---|---|---|
+> | arquivos de teste | 710 | **967** |
+> | `ratio_unit_pct` | 99,4 | **93,7** |
+> | `ratio_integration_pct` | 0,4 | **2,2** |
+> | `ratio_e2e_pct` | 0,1 | **4,1** |
+>
+> O gate compara um limiar contra um número que o próprio arquivo afirma. **Um arquivo pode declarar a
+> pirâmide que quiser** — e a que ele declara hoje já não é a do repositório, em todas as quatro
+> linhas. É a mesma forma que a auditoria adversarial encontrou em três itens desta sessão: **medir a
+> declaração em vez da coisa.**
+>
+> Isso reescreve a bala 1. Não adianta o gate reprovar caminho inexistente: os caminhos não têm
+> função. O conserto é **derivar os três percentuais da árvore** — aí o inventário deixa de ser
+> config viva mantida à mão e vira o que descreve. Enquanto for declarado, atualizar os 332 fantasmas
+> conserta a aparência e não o mecanismo.
+
 dod:
   - o gate que lê o inventário passa a reprovar caminho inexistente, ou o inventário deixa de listar caminho e passa a ser derivado da árvore
   - os 215 são triados por causa — extraído para repo irmão, movido, apagado — e cada grupo tem destino decidido
