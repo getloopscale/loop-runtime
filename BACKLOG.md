@@ -2311,6 +2311,34 @@ recipe_proven: 2026-08-12 pela fatia slice-8, que moveu a PRIMEIRA familia de po
   (c) helpers de TESTE em `_test.go` nao sao importaveis entre pacotes. `withAuth` e usada por TRINTA arquivos de teste, e a familia perdeu acesso a ela ao sair. Nasceu `routes/routestest` — o irmao do `httpio` do lado dos testes, com os 4 helpers exportados; o pacote pai delega em vez de duplicar. A familia 1 (`version`) nao revelou isso porque nao tem auth.
   ORDEM SUGERIDA, por superficie externa medida (arquivos de fora que referenciam a familia): version 2 (FEITA), tenants 4 (FEITA), billing 2, auth 2. RECONTADO pela revisao: `tenants` tinha 4 consumidores externos e `auth` tem 2 — duas das quatro contagens estavam erradas, e como o criterio de ordenacao E a superficie medida, a ordem publicada nao era confiavel. `pagination` tem 0 mas nao e familia do router — e utilitario, e move como folha ao lado do `httpio`.
 severity: alta — é o achado central da auditoria de arquitetura, e agora está desbloqueado.
+
+> **Sonda de compilador re-executada em 2026-08-14, agora com o alvo certo — e o alvo era o defeito.**
+>
+> A primeira tentativa desta sessão compilou `./internal/routes/...` e devolveu **zero** acoplamento
+> para as cinco famílias, inclusive uma de 879 linhas. Quatro zeros seguidos são a assinatura de uma
+> sonda que não mediu nada: quem consome os handlers vive **fora** do pacote, então compilar só o
+> pacote não podia quebrar. Com `go build ./...` do módulo, a medição aparece.
+>
+> | família | arquivos | referências quebradas | onde |
+> |---|---|---|---|
+> | `billing` | 1 | **1** — `BillingHandler` | `internal/server/server.go` |
+> | `teams` | 1 | **1** — `TeamHandler` | idem |
+> | `preview` | 1 | **1** — `PreviewHandler` | idem |
+> | `auth` | 1 | **3** — `ActiveTeamStore`, `NewAuthHandler`, `UsernameLookup` | idem |
+> | `secrets` | 3 | **6** — `NewSecretHandler`, `SecretStore`, `SecretEnvLocker`, `SecretK8sSync`, `SecretProjectChecker`, `SecretTransit` | idem |
+>
+> E o resultado que decide o próximo passo: **nenhuma das cinco referencia símbolo do pai.** O
+> compilador não emitiu um único erro dentro dos pacotes movidos — verificado contra o teto de erros
+> do Go (`too many errors` ausente, saída completa em 7 linhas). Extrair qualquer uma delas toca
+> **um** consumidor.
+>
+> `secrets` é o melhor candidato por massa removida sobre risco: 3 arquivos, 879+ linhas, 6
+> referências num só arquivo. `billing`, `teams` e `preview` custam uma referência cada.
+>
+> A sonda roda no lugar e restaura por `mv`, com `git status --porcelain api/` verificando o retorno —
+> a cópia em scratch não serve, porque `go.work` aponta para módulos irmãos que a cópia não tem, e a
+> ausência deles faz a sonda medir zero por outra razão (a mesma armadilha, dois níveis acima).
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta
