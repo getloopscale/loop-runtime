@@ -123,6 +123,19 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 	// through ApplicationOrphaned event registered in pkg/statemachine/
 	// application.go. Empty/unknown phase from older CRs is normalized
 	// via Empty→Progressing first, so reaper still fires on legacy data.
+	// The base snapshot, taken before any .Status mutation below.
+	//
+	// The caller owns the Get, so no finalizer write precedes this point and the
+	// ordering constraint that shapes the controllers does not apply. (Worth
+	// noting that this function has no production caller at all — grep finds only
+	// tests — so the contract it reasons about is not exercised today.) What DOES
+	// apply is the other half: a snapshot taken after a mutation would diff that
+	// field against itself, and the patch would silently omit it.
+	//
+	// The re-fetch below is left in place but NOT because the object goes stale —
+	// see its own comment (B-085).
+	base := app.DeepCopy()
+
 	machine := statemachine.NewApplicationTypedMachine()
 	current := statemachine.ApplicationPhase(app.Status.Phase)
 	if current == statemachine.APhEmpty {
@@ -150,14 +163,26 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 		reason,
 		app.Generation,
 	)
-	if err := c.Status().Update(ctx, app); err != nil {
-		return fmt.Errorf("MarkAsCleaned: status update: %w", err)
+	if err := c.Status().Patch(ctx, app, client.MergeFrom(base)); err != nil {
+		return fmt.Errorf("MarkAsCleaned: status patch: %w", err)
 	}
 
 	// T1.5 of deep-review-2026-05-10-remediation-plan (find_reap_409 HIGH):
-	// re-fetch the object before the finalizer Update. The Status().Update
-	// above bumped ResourceVersion, so the in-memory `app` is now stale.
-	// Without re-fetch the next Update would 409-conflict in K8s.
+	// re-fetch before the finalizer Update.
+	//
+	// CORRECTION, measured 2026-08-14 (B-085): the stated reason is wrong, and it
+	// was wrong before this slice too. client.Status().Patch and Status().Update
+	// BOTH decode the response back into the caller's object
+	// (controller-runtime typed_client.go:274 and :305, `.Into(body)`), so `app`
+	// carries the fresh ResourceVersion the moment the write returns. Probed
+	// against a client: 999 before, 1000 in memory AND on the server after.
+	//
+	// So this Get is conservative, not necessary — one redundant API call per
+	// reap. Left in place because removing it is a behaviour change that belongs
+	// in a slice that can exercise this function, and it has no production caller
+	// to exercise. The sibling environment controller already patches status and
+	// removes its finalizer with no re-fetch between them
+	// (environment_controller.go), which is the shape this could take.
 	if err := c.Get(ctx, client.ObjectKeyFromObject(app), app); err != nil {
 		return fmt.Errorf("MarkAsCleaned: re-fetch after status update: %w", err)
 	}

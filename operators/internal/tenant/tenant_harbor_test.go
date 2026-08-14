@@ -132,4 +132,3 @@ func TestHarborOperations_NilClient_AreNoOps(t *testing.T) {
 		})
 	}
 }
-

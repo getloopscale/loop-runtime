@@ -36,9 +36,19 @@ import (
 // The set is frozen separately below: the count locks growth INSIDE a file, but
 // nothing stops a new key being added, so "the list only shrinks" would be a
 // convention asserted in a comment and nowhere else (review of slice-22).
+// The one file left, and it is left on purpose.
+//
+// Its single bare write (application_controller.go:235) sits inside
+// reconcileExposedRoute, called at :135 — while the file's only base is taken at
+// :158, AFTER that call. There is no base for this write to use, and inventing
+// one here would decide the file's anchoring, which is exactly what B-105
+// reserves: that file re-fetches at :154 and takes MergeFrom off the FRESH
+// object, so its diff reverts what another writer changed in between.
+//
+// Converting this line before that decision would either paper over the anchor
+// defect or silently change it. Left with its reason, not with a shrug.
 var notYetConverted = map[string]exemption{
 	"application_controller.go": {writes: 1, since: "2026-08-14"},
-	"application_reaper.go":     {writes: 1, since: "2026-08-14"},
 }
 
 type exemption struct {
@@ -48,7 +58,6 @@ type exemption struct {
 
 var exemptedFiles = []string{
 	"application_controller.go",
-	"application_reaper.go",
 }
 
 func TestApp_TheExemptionListOnlyShrinks(t *testing.T) {

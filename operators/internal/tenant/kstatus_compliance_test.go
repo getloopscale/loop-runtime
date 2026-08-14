@@ -172,9 +172,10 @@ var _ = Describe("kstatus compliance — universal Ready/Reconciling/Stalled", f
 //
 // Per kstatus library semantics
 // (sigs.k8s.io/cli-utils/pkg/kstatus/status):
-//   Stalled=True       → FailedStatus
-//   Reconciling=True   → InProgressStatus
-//   Ready=True         → CurrentStatus
+//
+//	Stalled=True       → FailedStatus
+//	Reconciling=True   → InProgressStatus
+//	Ready=True         → CurrentStatus
 func classifyConditions(conds []metav1.Condition) status.Status {
 	for _, c := range conds {
 		if c.Type == "Stalled" && c.Status == metav1.ConditionTrue {

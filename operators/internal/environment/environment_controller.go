@@ -316,6 +316,15 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 
 	logger.Info("environment is being deleted", "environment", env.Name)
 
+	// This path's own base snapshot.
+	//
+	// Reconcile branches here BEFORE the finalizer block, so the base the main
+	// path takes does not exist yet — and one taken at the top of Reconcile to
+	// serve both would be stale for the main path. Two snapshots in disjoint
+	// scopes make picking the wrong one impossible; the shape validated in
+	// slice-21 (B-085).
+	base := env.DeepCopy()
+
 	// Transition to Deleting via state machine (Rule 8).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
 		next, err := environmentSM.TryTransition(statemachine.EnvironmentPhase(env.Status.Phase), statemachine.EPEventDeleteRequested)
@@ -324,7 +333,7 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 			return ctrl.Result{}, err
 		}
 		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
-		if err := r.Status().Update(ctx, env); err != nil {
+		if err := r.Status().Patch(ctx, env, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

@@ -2683,6 +2683,50 @@ dod:
 > intervalo. Não é a dança proibida pela letra (aquela nomeia `Update`, esta é `Patch`), mas o dano que
 > o contrato nomeia sobrevive à troca de nome. Vira `B-105`.
 
+> **Fatia `slice-26` — as três últimas saíram. De 28 para 1.**
+>
+> `tenant/tenant_deletion.go` (2), `environment/environment_controller.go` reconcileDelete (1) e
+> `app/application_reaper.go` (1). As quatro tinham a **mesma forma**, e é por isso que sobraram: todas
+> em caminho de deleção ou reaper, não no corpo do reconcile. O desvio de deleção acontece **antes** do
+> bloco do finalizer, então cada um tira a própria base — o desenho que a fatia 21 validou no `preview`.
+>
+> **E aqui eu afirmei uma necessidade em vez de medi-la — em três lugares.** Escrevi que o `Get` depois
+> da escrita do reaper continua necessário *"porque o merge-patch bumpa o `resourceVersion` e o objeto
+> em memória fica velho"*. **Falso, e falso desde antes desta fatia.** `Status().Patch` e
+> `Status().Update` **ambos** decodificam a resposta de volta no objeto do chamador
+> (`typed_client.go:274` e `:305`, `.Into(body)`). Medido contra um cliente: `999` antes, **`1000` em
+> memória e no servidor** depois. O objeto nunca fica velho.
+>
+> O `Get` é **conservador, não necessário** — uma chamada de API redundante por reap. Fica, porque
+> removê-lo é mudança de comportamento numa função que **não tem chamador de produção nenhum** (grep
+> devolve só testes), e o comentário passou a dizer isso em vez de inventar uma razão. O irmão
+> `environment_controller` já faz patch de status e remove finalizer sem re-fetch entre os dois.
+>
+> É a forma da fatia 23 de novo: **afirmação de necessidade tratada como medição**, e desta vez ela já
+> tinha entrado no backlog como achado.
+>
+> **A que resta está isenta por razão medida.** `application_controller.go:235` fica dentro do
+> `reconcileExposedRoute`, chamado em `:135`, enquanto a única base do arquivo nasce em `:158` — depois
+> da chamada. **Não existe base para essa escrita usar**, e inventar uma decidiria a ancoragem do
+> arquivo, que é justamente o que o `B-105` reserva.
+>
+> **Duas lacunas fechadas, apontadas pelo review.** Das quatro escritas convertidas, a do ramo
+> `len(deleteErrs) > 0` do `tenant_deletion.go` era executada por **teste nenhum** — cobertura 0 — e é
+> justamente a que grava a condição de falha de limpeza, ou seja, a que um operador lê quando algo deu
+> errado. E o ratchet conta a **ausência** de `Status().Update`, mas nada dizia sobre **onde a base
+> está** nos caminhos de deleção. Agora há guarda que executa o `reconcileDelete` e lê o corpo do
+> patch; ele aborta na primeira escrita, porque é ali que a ancoragem se decide e satisfazer as
+> dependências seguintes o transformaria num teste de teardown. Mutante confirmado: base depois da
+> mutação de fase reprova nomeando a transição perdida.
+>
+> **E o ratchet da fatia 18 pegou a própria fatia que o zerou.** Ele reprovou com *"down from 2 — this
+> ratchet must be lowered in the same commit, or it stops measuring anything"*, que é a frase que
+> escrevi nele. Baixado para 0 e mantido como piso: arquivo em zero é onde a próxima escrita crua
+> passaria despercebida.
+>
+> **O item fica aberto**, esperando o `B-105`. Uma escrita de 28 é um resultado; chamá-lo de zero seria
+> a deriva que esta sessão passou o tempo todo consertando.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go

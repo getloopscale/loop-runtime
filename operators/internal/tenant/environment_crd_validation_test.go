@@ -33,10 +33,10 @@ import (
 // TestProjectFieldHasRFC1123PatternAndRequired (RED 2 / EC-2) — schema
 // contract test. Asserts the generated CRD YAML at
 // `../../config/crd/bases/loopzero.io_tenants.yaml` declares:
-//   1. The TenantEnvironmentEntry.project field has the canonical RFC 1123
-//      DNS-label Pattern (^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
-//   2. The field has minLength: 1.
-//   3. The TenantEnvironmentEntry required-list includes "project".
+//  1. The TenantEnvironmentEntry.project field has the canonical RFC 1123
+//     DNS-label Pattern (^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
+//  2. The field has minLength: 1.
+//  3. The TenantEnvironmentEntry required-list includes "project".
 //
 // This is a deterministic file-based test that bypasses envtest's API
 // server (Pattern enforcement varies by envtest binary version). The CRD
@@ -156,5 +156,3 @@ var _ = Describe("T1.1 — TenantEnvironmentEntry.Project CRD validation", func(
 		})
 	})
 })
-
-

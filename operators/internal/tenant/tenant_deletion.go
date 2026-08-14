@@ -41,6 +41,15 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	if currentPhase == "" {
 		currentPhase = statemachine.TPhEmpty
 	}
+	// This path's own base snapshot.
+	//
+	// Reconcile branches here BEFORE the finalizer block, so the base the main
+	// path takes does not exist yet — and one taken at the top of Reconcile to
+	// serve both would be stale for the main path. Two snapshots in disjoint
+	// scopes make picking the wrong one impossible; the shape validated in
+	// slice-21 (B-085).
+	base := tenant.DeepCopy()
+
 	// Only transition if not already Deleting (idempotent)
 	if tenant.Status.Phase != loopzerov1.TenantPhaseDeleting {
 		next, err := tenantSM.TryTransition(currentPhase, statemachine.TPEventDelete)
@@ -50,7 +59,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		}
 		tenant.Status.Phase = loopzerov1.TenantPhase(next)
 	}
-	if err := r.Status().Update(ctx, tenant); err != nil {
+	if err := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -101,7 +110,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	if len(deleteErrs) > 0 {
 		// Persist condition before returning so observers can see the
 		// failure even while the reconciler retries with backoff.
-		if statusErr := r.Status().Update(ctx, tenant); statusErr != nil {
+		if statusErr := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); statusErr != nil {
 			logger.Error(statusErr, "failed to persist EnvironmentCleanup condition")
 		}
 		return ctrl.Result{}, fmt.Errorf("phase 1: delete %d/%d child environments failed (first: %s): %w",
