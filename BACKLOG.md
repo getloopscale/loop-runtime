@@ -4006,6 +4006,20 @@ evidence: |
 why_now: o gate existe para vigiar assimetria de instalação, e 13 de 21 do que ele reporta não é isso. Cada falso reporte precisa de uma entrada de allowlist, e cada entrada de allowlist é uma linha que alguém lê como "divergência aceita" — o ruído desloca a atenção do que importa. É a mesma lição do `B-077`: medir o render, não a presença de arquivo.
 status: raw
 severity: média — não esconde defeito hoje (as 8 reais estão nomeadas), mas infla o allowlist com 13 aprovações de coisa que não é divergência, e um allowlist inflado é um allowlist que ninguém revisa
+
+> **Bala 3 medida em 2026-08-14: o custo não é obstáculo.**
+>
+> Renderizar os **quatro** charts dos dois pares com `helm template` leva **0,18s** no total. E o
+> `helm` já é pré-requisito do `quality:gates` — o alvo falha explicitamente quando `helmfile` não
+> está no PATH (`taskfiles/quality.yml`), e `helmfile` depende de `helm`. Não há dependência nova a
+> introduzir nem tempo relevante a pagar.
+>
+> Com isso, a única questão aberta da bala 1 é o que fazer com a **classe condicional**: nove das 21
+> entradas são arquivos que, sob os values padrão, **nenhum dos dois** charts renderiza. Comparar
+> recurso renderizado sob values padrão simplesmente não as vê — o que é melhor que reportá-las como
+> divergência (a situação de hoje), mas significa que a cobertura passa a depender de quais values o
+> gate escolhe. Essa é a decisão que resta, e ela é de desenho, não de custo.
+
 dod:
   - está decidido se a base de comparação passa a ser o recurso renderizado, e o que fazer com a classe condicional — um recurso que só aparece sob certos values não é comparável sob os values padrão
   - se passar, as entradas da classe A saem do allowlist porque deixam de ser reportadas
