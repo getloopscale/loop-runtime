@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -127,6 +128,29 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				cond := findCondition(fetched.Status.Conditions, conditions.TypeSecretNotFound)
 				g.Expect(cond).NotTo(BeNil(), "expected SecretNotFound condition to exist")
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+
+				// The typed read above cannot tell an ABSENT `connected` from a
+				// stored false — Go gives the zero value either way. The stored
+				// document can, and the difference is what `kubectl get` prints.
+				//
+				// It matters because the controller writes by merge patch, which
+				// sends the DIFF: `connected` is omitted whenever it did not
+				// change, so on this path — secret missing, connected already
+				// false — nothing carries the key. Without a schema default the
+				// apiserver stores no key and the Connected column renders blank
+				// for every credential that has not yet connected. Measured, and
+				// it is why the field carries +kubebuilder:default=false.
+				var raw unstructured.Unstructured
+				raw.SetGroupVersionKind(loopzerov1.GroupVersion.WithKind("ClusterCredential"))
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "cc-no-secret", Namespace: "default",
+				}, &raw)).To(Succeed())
+				_, found, err := unstructured.NestedBool(raw.Object, "status", "connected")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(found).To(BeTrue(),
+					"status.connected is absent from the stored object — kubectl get renders the "+
+						"Connected column blank. The schema default is what materialises it under a "+
+						"merge patch that does not carry the field (B-085).")
 			}, timeout, interval).Should(Succeed())
 		})
 	})
@@ -594,5 +618,3 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 		})
 	})
 })
-
-

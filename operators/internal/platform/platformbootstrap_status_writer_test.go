@@ -43,7 +43,6 @@ import (
 // controller trips the check just as surely as adding one to a converted file,
 // so the list can only shrink.
 var notYetConverted = map[string]exemption{
-	"clustercredential_controller.go":    {writes: 5, since: "2026-08-13"},
 	"gitrepositorybinding_controller.go": {writes: 3, since: "2026-08-13"},
 }
 
@@ -59,7 +58,6 @@ type exemption struct {
 // convention I asserted in a comment and nowhere else. Freezing the set makes
 // adding an exemption a deliberate edit to two places, which is the point.
 var exemptedFiles = []string{
-	"clustercredential_controller.go",
 	"gitrepositorybinding_controller.go",
 }
 
@@ -170,18 +168,26 @@ func TestPlatform_BareStatusUpdatesAreConvertedOrDeclared(t *testing.T) {
 // Asserted apart from the absence above: a file with zero Updates and zero
 // Patches satisfies the first check while writing no status at all — a worse
 // defect than the one being fixed.
-func TestPlatformBootstrap_PersistsStatusByMergePatch(t *testing.T) {
-	src := packageSource(t)["platformbootstrap_controller.go"]
-	if src == "" {
-		t.Fatal("platformbootstrap_controller.go not read")
+func TestPlatform_ConvertedControllersPersistStatusByMergePatch(t *testing.T) {
+	pkg := packageSource(t)
+	for _, name := range []string{"platformbootstrap_controller.go", "clustercredential_controller.go"} {
+		src := pkg[name]
+		if src == "" {
+			t.Fatalf("%s not read", name)
+		}
+		assertMergePatchShape(t, name, src)
 	}
+}
+
+func assertMergePatchShape(t *testing.T, name, src string) {
+	t.Helper()
 	if !strings.Contains(src, "Status().Patch(") {
-		t.Fatal("no Status().Patch — a controller that stopped writing status satisfies the no-Update " +
-			"check for the wrong reason")
+		t.Fatalf("%s has no Status().Patch — a controller that stopped writing status satisfies the "+
+			"no-Update check for the wrong reason", name)
 	}
 	if !strings.Contains(src, "client.MergeFrom(") {
-		t.Error("Status().Patch is present but not derived from client.MergeFrom — the patch must be a " +
-			"diff against a base snapshot, or it is an Update wearing a different name")
+		t.Errorf("%s: Status().Patch is present but not derived from client.MergeFrom — the patch must "+
+			"be a diff against a base snapshot, or it is an Update wearing a different name", name)
 	}
 }
 
@@ -323,4 +329,80 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PlatformBootstrap) []s
 			"(\"right after r.Get, BEFORE mutating .Status\"):\n  %s", len(lost), strings.Join(lost, "\n  "))
 	}
 	return bodies
+}
+
+// The same execution guard for the ClusterCredential controller.
+//
+// A second helper rather than generics: the interceptor closure needs the
+// concrete type to read .Status back, and two twelve-line helpers are cheaper to
+// read than one generic one with a type-parameter dance.
+func TestClusterCredential_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) {
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{loopzerov1.AddToScheme, corev1.AddToScheme} {
+		if err := add(scheme); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed := &loopzerov1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cell-0",
+			Namespace: "loopzero-system",
+			// Non-zero for the same reason as the sibling test: with Generation at
+			// zero a lost write of ObservedGeneration is erased by omitempty and
+			// the comparison below sees nothing.
+			Generation: 7,
+		},
+		Spec: loopzerov1.ClusterCredentialSpec{CellID: "cell-0"},
+	}
+
+	var bodies []string
+	var lost []string
+	c := interceptor.NewClient(
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
+			WithStatusSubresource(&loopzerov1.ClusterCredential{}).Build(),
+		interceptor.Funcs{
+			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
+				patch client.Patch, opts ...client.SubResourcePatchOption) error {
+				data, err := patch.Data(obj)
+				if err != nil {
+					return err
+				}
+				bodies = append(bodies, string(data))
+				want, _ := json.Marshal(obj.(*loopzerov1.ClusterCredential).Status)
+				if err := cl.Status().Patch(ctx, obj, patch, opts...); err != nil {
+					return err
+				}
+				var got loopzerov1.ClusterCredential
+				if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &got); err != nil {
+					return err
+				}
+				if persisted, _ := json.Marshal(got.Status); string(want) != string(persisted) {
+					lost = append(lost, fmt.Sprintf("held %s\n    persisted %s", want, persisted))
+				}
+				return nil
+			},
+		})
+
+	r := &ClusterCredentialReconciler{Client: c}
+	_, _ = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: seed.Name, Namespace: seed.Namespace},
+	})
+
+	if len(bodies) == 0 {
+		t.Fatal("Reconcile emitted no status patch — the guard observed nothing, which is not the " +
+			"same as observing a clean run")
+	}
+	if len(lost) > 0 {
+		t.Errorf("%d status write(s) did not persist what the controller held — a field mutated BEFORE "+
+			"the snapshot sits in both base and object, so the diff omits it and the write is silently "+
+			"empty for that field:\n  %s", len(lost), strings.Join(lost, "\n  "))
+	}
+	// The last patch is the deferred readiness summary, which carries the lock by
+	// design; everything before it is the controller body and must not.
+	for i, body := range bodies[:max(0, len(bodies)-1)] {
+		if strings.Contains(body, "resourceVersion") {
+			t.Errorf("body patch #%d carries resourceVersion — capture `base` AFTER EnsureFinalizer "+
+				"(B-085).\npatch: %s", i+1, body)
+		}
+	}
 }

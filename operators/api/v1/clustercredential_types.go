@@ -76,6 +76,28 @@ type ClusterTLSConfig struct {
 // ClusterCredentialStatus defines the observed state of a ClusterCredential.
 type ClusterCredentialStatus struct {
 	// Connected indicates whether the target cluster is reachable.
+	//
+	// +optional deliberately, and the JSON tag deliberately keeps no omitempty.
+	//
+	// For a plain bool, absent and false are the SAME value — requiring it bought
+	// no distinction (that would need *bool), while it made every partial write
+	// invalid: a merge patch omits a field equal in base and object, and applying
+	// such a patch to an object whose status was never written produces a status
+	// without `connected`, which the apiserver rejects. Measured against envtest
+	// while converting this controller to the merge-patch contract (B-085).
+	//
+	// The default is what keeps the `Connected` printcolumn from going blank, and
+	// the first version of this change got that wrong. Dropping `required` alone
+	// is not enough: a merge patch sends the DIFF, not the marshalled status, so
+	// `connected` is omitted whenever it did not change — and an object whose
+	// status was never written then stores no key at all. Measured against a real
+	// apiserver, `kubectl get` printed an empty cell for every ClusterCredential
+	// that had not yet connected. The default makes the server materialise the
+	// field on write, so the column reads false again.
+	//
+	// Decision: MEET-ASYNC-AMENDMENT-2026-08-13-clustercredential-connected-optional
+	// +optional
+	// +kubebuilder:default=false
 	Connected bool `json:"connected"`
 
 	// LastCheckedAt is the last time connectivity was verified.

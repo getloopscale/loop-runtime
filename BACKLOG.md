@@ -2481,6 +2481,40 @@ dod:
 > zero da semente, a mutação de sonda escrevia 0, o `omitempty` o descartava, e a comparação não via
 > nada. O fixture passou a nomear `Generation: 7`.
 
+> **Fatia `slice-23` — o `clustercredential` saiu, 2026-08-13. Restam 12 escritas em 7 arquivos.** E
+> ela achou a primeira coisa nesta série que **não** é mecânica.
+>
+> A conversão quebrou contra o apiserver do envtest, com uma mensagem que diz tudo:
+> `status.connected: Required value`. O CRD declarava o campo como obrigatório, o merge-patch o **omite**
+> (ele é igual na base e no objeto), e aplicar esse patch a um objeto cujo `status` nunca foi escrito
+> produz um status sem o campo. O `Update` funcionava porque mandava o status inteiro.
+>
+> **Medido: dos oito CRDs, só este tem `status.required`.** Por isso as seis conversões anteriores
+> passaram, e por isso vale saber que as sete restantes também são mecânicas nesse aspecto.
+>
+> A decisão (`MEET-ASYNC-AMENDMENT-2026-08-13-clustercredential-connected-optional`, T2) é que o campo
+> vira `+optional`: para um `bool` puro, **ausente e `false` são o mesmo valor** — exigi-lo não comprava
+> distinção nenhuma (isso pediria `*bool`). A tag JSON fica sem `omitempty` de propósito, para o campo
+> continuar sempre serializado e a `printcolumn` seguir mostrando `false` em vez de vazio.
+>
+> **E o achado sobre os próprios testes desta série, que o review completou.** O cliente falso diverge
+> do apiserver de **duas** formas, e a segunda é a que escondeu o defeito. (1) Ele não valida contra o
+> esquema do CRD — aceita o que o servidor recusa, inclusive a semente do teste novo. (2) Ele guarda
+> objetos **tipados**, não documentos: um campo de valor zero sem `omitempty` é sempre re-materializado
+> no round-trip, então ele mostra `connected: false` onde o servidor não guarda chave nenhuma.
+>
+> A consequência vale para as sete fatias restantes: o detector de perda de escrita — o que compara o
+> que o controller tinha em mãos com o que ficou persistido — é **estruturalmente cego** à classe
+> ausente-versus-falso. Ele prova intenção de escrita, não forma do que ficou gravado. Quem enxerga essa
+> classe é o envtest, lendo o objeto **não-estruturado**.
+>
+> **E eu tinha afirmado, em cinco lugares, algo falso:** que manter a tag sem `omitempty` preservava a
+> coluna do `kubectl get`. A premissa era certa (o marshal do status inclui o campo) e a conclusão não
+> decorria dela — **o merge-patch envia o diff, não o status serializado**. Medido pelo review contra
+> apiserver real: a coluna ficava vazia em toda credencial ainda não conectada. O conserto é
+> `+kubebuilder:default=false`, que faz o servidor materializar o campo, e está preso por asserção que
+> lê o objeto não-estruturado — a leitura tipada devolve `false` nos dois casos e é cega para isto.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go
