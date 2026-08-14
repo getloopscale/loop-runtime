@@ -2315,7 +2315,7 @@ dod:
 > Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em
 > `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3.
 
-## B-085 — Seis controllers escrevem `.status` fora do contrato, em 25 pontos   [ ]
+## B-085 — Dez arquivos escrevem `.status` fora do contrato, em 28 pontos   [ ]
 
 domain: engine-go
 repo: loopzero
@@ -2389,6 +2389,29 @@ dod:
 > isenções — e esta série mediu quatro vezes o que acontece com um gate cuja única falha é uma
 > isenção conhecida: ele não é ligado, e então não vigia nada (`B-045`, `B-051`, `B-072`, `B-077`).
 > Ele entra quando os seis estiverem migrados, sem isenção nenhuma.
+
+> **Re-medido 2026-08-13.** A contagem do item envelheceu em duas direções ao mesmo tempo, e as duas
+> valem registrar porque só uma é progresso.
+>
+> Hoje são **28** chamadas cruas a `Status().Update` em **10** arquivos de produção sob
+> `operators/internal/`, não 25 em seis. O item tinha subcontado o alcance: `app/application_reaper.go`
+> (1) e `tenant/tenant_deletion.go` (2) nunca apareceram na medição original, e os dois escrevem status.
+>
+> A fatia `slice-18` converteu `tenant_controller.go` de 3 para **1**, que é o progresso real. O resto
+> está intacto:
+>
+> | arquivo | cruas |
+> |---|---:|
+> | `preview/preview_controller.go` | 6 |
+> | `platform/platformbootstrap_controller.go` | 5 |
+> | `platform/clustercredential_controller.go` | 5 |
+> | `platform/gitrepositorybinding_controller.go` | 3 |
+> | `app/exposure_controller.go` | 3 |
+> | `tenant/tenant_deletion.go` | 2 |
+> | `app/application_controller.go` · `app/application_reaper.go` · `environment/environment_controller.go` · `tenant/tenant_controller.go` | 1 cada |
+>
+> Próxima fatia por tamanho e por isolamento: `preview_controller.go` — 6 pontos num arquivo só, e o
+> `preview` não compartilha escritor de status com nenhum outro controller.
 
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
