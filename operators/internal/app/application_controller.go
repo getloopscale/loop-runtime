@@ -125,6 +125,22 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// The base snapshot for the status patch below.
+	//
+	// HERE, and not after a re-fetch. The previous shape composed the whole
+	// status, re-fetched, and took MergeFrom off the FRESH object while carrying
+	// the composite from before — so the diff reverted whatever another writer
+	// had changed in between. That is the damage the contract names, wearing a
+	// Patch instead of an Update (B-105).
+	//
+	// Safe here because every metadata/spec write ahead of this point re-reads
+	// the object itself: EnsureFinalizer (reconcilehelpers/finalizer.go) and
+	// reconcileHostname (its `return r.Get(...)`). Measured, not assumed — that
+	// is what made the third re-fetch removable.
+	//
+	// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor
+	base := app.DeepCopy()
+
 	app.Status.URL = "https://" + app.Spec.Hostname
 
 	conditions.SetCondition(&app.Status.Conditions, conditions.TypeServiceResolved,
@@ -132,7 +148,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		fmt.Sprintf("service %s resolved", app.Spec.ServiceName),
 		app.Generation)
 
-	if err := r.reconcileExposedRoute(ctx, &app); err != nil {
+	if err := r.reconcileExposedRoute(ctx, &app, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -146,21 +162,17 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	r.reconcileRouteStatus(ctx, &app)
 	r.reconcileHealthCondition(&app)
 
-	// Save computed status, then re-fetch to get latest ResourceVersion,
-	// then apply status via Patch (avoids UID precondition failures from Update).
-	computedStatus := app.Status.DeepCopy()
-	computedStatus.ObservedGeneration = app.Generation
+	app.Status.ObservedGeneration = app.Generation
 
-	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
-		return ctrl.Result{}, fmt.Errorf("re-fetching application: %w", err)
-	}
-	// MergeFrom captures the clean base; then we mutate status and patch.
-	patch := client.MergeFrom(app.DeepCopy())
-	app.Status = *computedStatus
-	// T5.1: fold kstatus readiness summary BEFORE the explicit Patch so
-	// the deferred Status().Update is no longer needed (single write per pass).
+	// T5.1: fold kstatus readiness summary BEFORE the Patch so the deferred
+	// Status().Update is no longer needed (single write per pass).
+	//
+	// It stays inline rather than moving to DeferReadinessSummary: one write per
+	// pass with no second status writer is the better shape. What it does NOT
+	// solve — being skipped on early return, which the shared helper handles by
+	// being a defer — remains open in B-105.
 	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
-	if err := r.Status().Patch(ctx, &app, patch); err != nil {
+	if err := r.Status().Patch(ctx, &app, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}
 
@@ -190,7 +202,7 @@ func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.
 }
 
 // reconcileExposedRoute ensures the ExposedRoute CR exists with correct spec.
-func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *loopzerov1.LoopZeroApplication) error {
+func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
 	ctx, span := reconcilehelpers.StartChildSpan(ctx, "application.exposed_route.ensure")
 	defer span.End()
 
@@ -232,8 +244,8 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *
 			metav1.ConditionFalse, conditions.ReasonFailed,
 			fmt.Sprintf("failed to ensure ExposedRoute: %v", err),
 			app.Generation)
-		if statusErr := r.Status().Update(ctx, app); statusErr != nil {
-			logger.Error(statusErr, "failed to update application status")
+		if statusErr := r.Status().Patch(ctx, app, client.MergeFrom(base)); statusErr != nil {
+			logger.Error(statusErr, "failed to patch application status")
 		}
 		return fmt.Errorf("ensuring ExposedRoute %s: %w", routeName, err)
 	}

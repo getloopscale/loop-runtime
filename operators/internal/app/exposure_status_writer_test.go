@@ -36,29 +36,24 @@ import (
 // The set is frozen separately below: the count locks growth INSIDE a file, but
 // nothing stops a new key being added, so "the list only shrinks" would be a
 // convention asserted in a comment and nowhere else (review of slice-22).
-// The one file left, and it is left on purpose.
+// EMPTY since 2026-08-14 (B-085 closed at zero).
 //
-// Its single bare write (application_controller.go:235) sits inside
-// reconcileExposedRoute, called at :135 — while the file's only base is taken at
-// :158, AFTER that call. There is no base for this write to use, and inventing
-// one here would decide the file's anchoring, which is exactly what B-105
-// reserves: that file re-fetches at :154 and takes MergeFrom off the FRESH
-// object, so its diff reverts what another writer changed in between.
+// It held `application_controller.go` while that file's only base was taken
+// after a re-fetch, leaving its write inside reconcileExposedRoute with no base
+// to use. Re-anchoring removed both the re-fetch and the exemption in the same
+// slice.
 //
-// Converting this line before that decision would either paper over the anchor
-// defect or silently change it. Left with its reason, not with a shrug.
-var notYetConverted = map[string]exemption{
-	"application_controller.go": {writes: 1, since: "2026-08-14"},
-}
+// The map and its frozen twin stay rather than being deleted: they are what
+// makes the next bare Update fail loudly instead of arriving with an exemption
+// attached.
+var notYetConverted = map[string]exemption{}
 
 type exemption struct {
 	writes int
 	since  string
 }
 
-var exemptedFiles = []string{
-	"application_controller.go",
-}
+var exemptedFiles = []string{}
 
 func TestApp_TheExemptionListOnlyShrinks(t *testing.T) {
 	if len(notYetConverted) != len(exemptedFiles) {
@@ -191,8 +186,9 @@ func TestApp_BareStatusUpdatesAreConvertedOrDeclared(t *testing.T) {
 // So this is an exemption, not an endorsement, and it is B-105. Declared with
 // its reason rather than weakening the assertion until it catches nothing.
 var foldsSummaryIntoItsOwnPatch = map[string]string{
-	"application_controller.go": "folds the summary into its own Status().Patch — weaker than the " +
-		"helper, not better: skipped on early return, and its base is taken after a re-fetch (B-105)",
+	"application_controller.go": "folds the summary into its own Status().Patch — skipped on early " +
+		"return, which the shared helper handles by being a defer (B-105). The other half of this " +
+		"reason — a base taken after a re-fetch — was FIXED on 2026-08-14 and no longer applies",
 }
 
 func TestApp_ReadinessSummaryIsNotHandRolled(t *testing.T) {
@@ -361,3 +357,90 @@ func assertAnchoredPatches(t *testing.T, tlsEnabled bool) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// The application controller's base is anchored BEFORE the status is composed —
+// observed by running Reconcile against a concurrent writer.
+//
+// The first version of this guard read the source for the strings "re-fetching
+// application" and "computedStatus". The review broke it by moving
+// `base := app.DeepCopy()` below the first .Status mutation — the auto-diff
+// defect — and it PASSED, while printing "the re-fetch at offset %d". An offset,
+// in the file whose own comment 140 lines above says structural checks were
+// measured bypassable in slice-22. Renaming the error string would bypass it too.
+//
+// So this asserts the property behaviourally: a field written by SOMEONE ELSE
+// between the controller's read and its patch must SURVIVE. Under the old shape
+// the base was the freshly re-read object while the payload was the composite
+// from before, so the diff actively reverted that field. Under the correct
+// anchor the patch simply does not mention it.
+//
+// Scope, honest: RFC 7386 treats arrays as scalars, so `status.conditions` is
+// still replaced wholesale by any pass that touches a condition. This guards the
+// scalar fields — url, phase, observedGeneration, endpointsReady — which is what
+// the re-anchoring actually fixes.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor
+func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := loopzerov1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	seed := &loopzerov1.LoopZeroApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "app1", Namespace: "loopzero-system", Generation: 7},
+		Spec: loopzerov1.LoopZeroApplicationSpec{
+			TenantRef: "tn-x", Project: "p", Environment: "e",
+			ServiceName: "svc", Hostname: "app1.example.invalid",
+		},
+	}
+
+	inner := fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
+		WithStatusSubresource(&loopzerov1.LoopZeroApplication{}).Build()
+
+	var bodies []string
+	c := interceptor.NewClient(inner, interceptor.Funcs{
+		SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
+			patch client.Patch, opts ...client.SubResourcePatchOption) error {
+			// A DIFFERENT writer lands a scalar status field between the
+			// controller's read and its patch — the race the anchor decides.
+			var live loopzerov1.LoopZeroApplication
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &live); err == nil {
+				live.Status.EndpointsReady = true
+				_ = cl.Status().Update(ctx, &live)
+			}
+			data, err := patch.Data(obj)
+			if err != nil {
+				return err
+			}
+			bodies = append(bodies, string(data))
+			return cl.Status().Patch(ctx, obj, patch, opts...)
+		},
+	})
+
+	r := &ApplicationReconciler{Client: c, Scheme: scheme, BaseDomain: "example.invalid"}
+	_, _ = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: seed.Name, Namespace: seed.Namespace},
+	})
+
+	if len(bodies) == 0 {
+		t.Fatal("Reconcile emitted no status patch — the guard observed nothing, which is not the " +
+			"same as observing a clean run")
+	}
+	// (1) The patch carries what the controller computed. An empty or url-less
+	// body means the base was taken AFTER the mutation and the diff cancelled it.
+	if !strings.Contains(bodies[0], `"url"`) {
+		t.Errorf("the patch does not carry status.url, set before the base is taken — the snapshot is "+
+			"anchored after the mutation and the write persists nothing for it.\npatch: %s", bodies[0])
+	}
+	// (2) The concurrent write survived. Under the old anchor the diff carried
+	// endpointsReady:false — the value from the pre-refetch composite — and
+	// reverted it.
+	var got loopzerov1.LoopZeroApplication
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(seed), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Status.EndpointsReady {
+		t.Errorf("a status field written by another writer between the read and the patch was REVERTED. "+
+			"That is the damage the single-writer contract names, and an anchor taken after a re-fetch "+
+			"produces it while still looking like a merge patch (B-105).\npatch: %s", bodies[0])
+	}
+}

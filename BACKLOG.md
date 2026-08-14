@@ -2771,6 +2771,34 @@ dod:
 > **O item fica aberto**, esperando o `B-105`. Uma escrita de 28 é um resultado; chamá-lo de zero seria
 > a deriva que esta sessão passou o tempo todo consertando.
 
+> **Fechado 2026-08-14 — de 28 para ZERO.** A última escrita saiu junto com o defeito que a
+> bloqueava.
+>
+> Ela estava presa porque o `application_controller.go` tirava a base **depois de um re-fetch**, então
+> não havia base para a escrita de `reconcileExposedRoute` usar. Medi o que aquele re-fetch protegia:
+> as duas únicas escritas de metadata/spec anteriores — `EnsureFinalizer` e `reconcileHostname` — **já
+> re-buscam o objeto por conta própria**. Quando o fluxo chega na composição do status, o objeto em
+> memória já É o do servidor; o terceiro re-fetch não protegia nada e custava jogar fora o status
+> computado para reconstruí-lo por atribuição.
+>
+> Com ele fora, a base é tirada no lugar certo, atravessa o `reconcileExposedRoute`, e a escrita que
+> restava virou patch. `grep` de `Status().Update(` em `operators/internal/` sem comentários: **0**.
+>
+> **O que isso conserta é maior que a contagem.** O desenho anterior ancorava o diff no estado
+> **fresco** enquanto carregava o composto **anterior** — ele *revertia* campo escalar que outro
+> escritor tivesse mudado no intervalo (`url`, `phase`, `observedGeneration`, `endpointsReady`). Era o
+> dano que o contrato nomeia, vestindo um `Patch`, e por isso a tabela mecânica o pontuava como
+> conforme: ela conta a **chamada**, não a **âncora**.
+>
+> **Escalar, não tudo — a revisão corrigiu meu exagero.** `status.conditions` é array, e o RFC 7386
+> trata array como escalar: qualquer passagem que mude uma condição continua substituindo o array
+> inteiro. Isso não é regressão nem foi introduzido aqui, mas dizer "qualquer alteração" afirmava mais
+> do que a mudança entrega.
+>
+> Decisão em `MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor`. O `B-105` **continua aberto**
+> pela outra bala: o sumário de prontidão inline é pulado em retorno antecipado, e o `ADR-0025 D3`
+> exige que ele seja a última mutação de status mesmo aí. Uma coisa por fatia.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go
