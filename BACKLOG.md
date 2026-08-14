@@ -1518,7 +1518,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11 e conferido pelo gate de qualidade da fase 3. O merge-patch a partir de snapshot base — o padrão que o `CLAUDE.md:145-160` descreve como o contrato — está aplicado em **2 dos 8 controllers de CRD**. E `environment_controller.go:142` registra `DeferReadinessSummary`, que é um **segundo** escritor de status (`readiness.go:59`, `_ = c.Status().Update(ctx, latest)`), no mesmo passo em que o comentário do próprio arquivo (`:166`) diz tê-lo removido; há outros `Status().Update` crus em `:320` e em `app/application_controller.go:235`. Separadamente, `conditions.UpdateStatusWithRetry` (`operators/internal/conditions/retry.go:85`, 165 LOC) tem **zero chamadores de produção** — 24 referências, todas em `_test.go` — e seu contador Prometheus só incrementa em `metrics_test.go:38`. O ADR que o manda migrar **não existe** (ver B-052).
 why_now: o `MEET-2026-07-02-002` estabelece a decisão do merge-patch e a pré-condição de escritor único, e sua própria linha de risco diz *"a future 2nd status-writer must revisit"* — que é exatamente o defeito medido. A cobertura de 2 em 8 é extrapolação heurística: a reunião tratava do Environment e não mandatou os oito.
-status: planned
+status: shipped
 severity: alta — perda de escrita de status sob concorrência é o modo de falha que o merge-patch existe para evitar, e ele está garantido em um quarto dos controllers.
 dod:
   - está decidido se o invariante vale para os oito controllers ou só para os que a reunião cobriu — e isso está escrito
@@ -1802,7 +1802,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido **ao vivo** em 2026-08-11 executando o binário real (`GOWORK=off go run .` em `tools/loopzero-dockerfile-lint`) contra um Dockerfile com `ENV aws_region=us-east-1`: `{"rule":"RESERVED_ENV_KEY","severity":"REJECT",...}` e `exit status 1`. A causa é sensibilidade a maiúsculas divergente: o linter compara `strings.HasPrefix(strings.ToUpper(key), p)` (`main.go:491`), a API compara `k[:len(p)] == p` (`build_plan.go:36`), e o comentário em `:32-33` **documenta** a escolha da API como *"exact-prefix and case-sensitive"*. O lado do linter usa `ToUpper` **sem comentário**, e `git log -S` sobre o símbolo devolve um único commit que não separa a decisão.
 why_now: esta divergência é **ativa**, não latente — diferente do `GOOGLE_` do `B-051`, que é potencial. Um tenant que escreva `ENV aws_region` em minúsculas tem o build rejeitado hoje, com uma mensagem que nomeia prefixos em maiúsculas (`LOOPZERO_/KUBERNETES_/AWS_/DO_`) e não explica que o casamento ignora caixa. Se houver tenants nesse estado, existe quebra que ninguém atribuiu a esta regra.
-status: planned
+status: shipped
 severity: média (rebaixada de alta em 2026-08-12) — a premissa de 'já rejeita build de terceiro hoje' NAO se sustentou: a revisão da fatia `slice-11` mediu que o linter nao e invocado, porque o caminho BYO-Dockerfile foi removido como superficie de RCE (`api/internal/argo/languages.go:138-143`, `UserDockerfileStrategy` com zero definicoes). A medicao original era do binario ISOLADO. Resta divergencia real entre duas implementacoes da mesma regra, uma delas sem chamador.
 dod:
   - está decidido se o casamento ignora caixa ou não — e os dois lados passam a concordar
@@ -2026,7 +2026,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 na revisão da fatia slice-3. `infra/helm/admission-policies/values-mgmt.yaml:37` define `tenantCrShape: false`, e `infra/helmfile/core.helmfile.yaml.gotmpl:764-769` sobrepõe `values.yaml` com `values-mgmt.yaml` no release `admission-policies-mgmt` — o último vence. A VAP fica **habilitada apenas** via `cell.helmfile.yaml.gotmpl:180-186`, ou seja nas células de workload. Mas per `CLAUDE.md` e ADR-0018 v2, os CRs `Tenant` e `Environment` vivem em `loopzero-system` no cluster **mgmt**.
 why_now: a cerca `failurePolicy: Fail` sobre a forma dos CRs Tenant roda nos clusters que não guardam CR Tenant nenhum, e está desligada no único que guarda. O plano da fatia slice-3 afirmou o contrário (`R3`: *"ela já roda em dev e em core pelo caminho L2"*) e usou isso para justificar o risco como aceitável — a premissa não se sustenta, e a revisão a derrubou.
-status: planned
+status: shipped
 severity: alta — é uma fronteira de segurança que parece ativa e não está onde importa.
 dod:
   - está decidido e escrito por que a VAP está desligada no mgmt, ou ela é habilitada lá
@@ -2079,6 +2079,15 @@ dod:
 > Corrigido nos dois charts, e com um teste que **compara as isenções das duas políticas** em vez de
 > reenumerar escritores — uma lista à mão erra de novo; a comparação pega a divergência. O mutante
 > que remove a isenção reprova.
+
+> **Verificado fechado 2026-08-13.** As duas balas: a VAP **está** habilitada onde os CRs vivem
+> (`infra/helm/admission-policies/values-mgmt.yaml:35` → `tenantCrShape: true`) e desligada nas cells
+> (base `values.yaml:103` → `false`, e o chart publicado concorda). E a decisão é verificável por
+> **render**, não por presença de arquivo: `infra/tests/helm/tenant_cr_fence_placement_test.go` roda
+> 5 asserções — renderiza no mgmt, não renderiza nas cells, os dois charts concordam no default, os
+> renders não são vazios, e as identidades isentas batem com as da irmã. 5/5 PASS.
+>
+> Fechado pela fatia `slice-16`; o campo `status` não acompanhou até esta medição.
 
 ## B-078 — O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado   [ ]
 
@@ -2200,62 +2209,6 @@ dod:
 > código de **produção** da família a importá-lo, e `routestest.DefaultUserContext` devolve uma
 > identidade `owner`. Provado por mutação: a import em `repositories.go` de produção deixava a árvore
 > real GREEN em `0 sibling edge(s)`. `tenants` carregava a mesma declaração desde a fatia 8.
-
-## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: review
-source: discover-review
-evidence: medido em 2026-08-13, quando o gate bloqueou o push da fatia 19. Dois limites, ambos por trabalhar com **nome** em vez de referência. (1) `cmd/loopzero-ops/internal/quality/contractconsumers/check.go:212` — `tagExistsAt` pergunta se a tag existe em **qualquer** struct do conjunto rastreado. `api/internal/routes/repositories/repositories.go:105,117` declara `json:"repo"` duas vezes, então remover de uma é invisível. Coberto pelo teste `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop`, que documenta o limite e diz para atualizá-lo — não apagá-lo — quando fechar. (2) `check.go:242` — `grepConsumersForTag` casa `\.<tag>\b`, o que pega **campo de struct homônimo** e **literal de string**: na ocorrência real, dos 9 "consumidores" de `repo`, 8 eram `p.repo.RepoURL(...)` (`p.repo` é `*gitclient.GiteaRepoManager` — `api/internal/gitops/gitea_pusher.go:45`) e 1 era `attribute.String("loopzero.github.repo", ...)`. Zero liam a tag.
-why_now: é o **mesmo defeito** que o review da fatia 19 achou na minha tabela de acoplamento — contar ocorrência de nome como referência — e nesta sessão ele apareceu de forma independente em dois lugares. Aqui ele custa: o gate bloqueou um push que não mudava contrato nenhum, e um gate que erra assim é um gate que as pessoas aprendem a contornar.
-status: triaged
-severity: média — não deixa contrato quebrado passar (o caminho de detecção continua fechado para a última declaração sair); gera ruído, que é como um gate perde autoridade
-dod:
-  - a existência da tag é verificada na struct de onde ela saiu, não em qualquer uma do conjunto — e `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop` é reescrito para exigir o contrário do que exige hoje
-  - um campo Go homônimo (`p.repo`) e um literal de string (`"loopzero.github.repo"`) deixam de ser reportados como consumidores, provado com estes dois casos exatos
-  - a detecção de consumidor em TypeScript continua funcionando — ali `.repo` é de fato o acesso à propriedade, e estreitar demais mataria o lado que motivou o gate
-
-> Registrado 2026-08-13, pela fatia 19: o gate reprovou o push porque `gofmt -w` reduziu o espaçamento antes de um comentário de fim de linha, e uma linha *modificada* contendo a tag era lida como tag *removida*. Essa parte foi corrigida na mesma fatia; o que fica aqui é a granularidade de nome, dos dois lados.
-
-
-## B-101 — Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: review
-source: discover-review
-evidence: medido em 2026-08-13. `cd cmd/loopzero-ops && go test ./... -short -count=1` leva **408 s**, dos quais **392 s** são de `internal/seed` — e o `-short` não muda nada, porque nenhum teste do pacote o consulta (`grep -c 'testing.Short()' cmd/loopzero-ops/internal/seed/*.go` → 0). Quatro testes respondem por 390 s: `TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer` (120 s), `TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL` (120 s), `TestPatchKratosSeed_Run_PatchesAndRolloutsBoth` (90 s) e `TestNetworkingCorednsSeed_HappyPath` (60 s). Nenhum toca cluster — usam `fake.NewClientBuilder()`. Eles pagam o prazo inteiro de `waitForRolloutSettled` (`cmd/loopzero-ops/internal/seed/vault_cross_cluster_addr.go:223`), cujo valor está **cravado na chamada**: `120*time.Second` em `broker.go:109`, `loki_cross_cluster.go:125` e `vault_role_id_sync.go:81`, `60*time.Second` em `networking_cross_cluster_coredns.go:84`. Com cliente falso o Deployment nunca assenta, então o laço espera até o fim.
-why_now: é o obstáculo concreto da bala 2 do DoD do `B-088` — o `delivery-gate.sh` roda `task quality:gates`, que **não** chama `quality:hermetic`, que é onde `cd cmd/loopzero-ops && go test ./...` vive. Medido: `gates` tem `deps: [build]` e nada mais. Ou seja, os testes que provam que um gate reprova o que deve reprovar não estão no caminho de push — e ninguém os colocou lá porque custariam ~7 min por push. Some o custo e a bala fica trivial.
-status: triaged
-severity: média — não há defeito de produção; o custo é que a rede de proteção dos gates fica fora do único ponto que é obrigatório
-dod:
-  - o prazo de espera de rollout é injetável pela raiz de composição, como `Policy` já é em `Deps` (`seed.go:101`), com o zero preservando o valor de hoje
-  - os quatro testes passam a injetar um prazo curto, e `cd cmd/loopzero-ops && go test ./... -short` cai para a ordem de segundos
-  - o valor cravado deixa de aparecer no ponto de chamada de cada seed
-
-> Registrado 2026-08-13, ao medir o `B-088` para fechá-lo. `.claude/rules/testing.md § 6` nomeia isto: *"Time/randomness in unit tests — inject a clock/RNG so the test is deterministic"*.
-
-
-## B-102 — `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: review
-source: discover-review
-evidence: medido em 2026-08-13 pela revisão do `B-088`. `task --dry` expande deps transitivas com fidelidade — `grep -nE 'preconditions:|internal: true|run: once|status:|sources:|generates:|platforms:' taskfiles/quality.yml Taskfile.yml` devolve **nada**, então nenhum passo é pulado por condição e o `--dry` nunca sub-reporta. Mas ele **super-reporta**: um `cmds:` em bloco (`- |`) é impresso verbatim, sem avaliar o `if`/`exit` dentro dele. Prova viva já na árvore — `taskfiles/quality.yml:298-301` aborta com `exit 1` quando falta o `helmfile` ou quando `LOOPZERO_TEST_SKIP_HELMFILE` está setado, e mesmo assim o `task --dry quality:all` imprime `cd infra/tests && go test ./charts/ -count=1` incondicionalmente.
-why_now: a asserção que fecha a bala 2 do `B-088` (`TestDeliveryGate_RunsOneRealTargetThatCoversThisModule`) confere a **cobertura** lendo a saída do `--dry`. Um alvo futuro com a forma `- |` / `[ -n "$SKIP" ] && exit 0` / `cd cmd/loopzero-ops && go test ./...` satisfaz a asserção e não roda nada — a mesma classe do bypass `--dry` que a revisão construiu, só que alcançada **sem ninguém querer burlar**. A metade comportamental do teste (o substituto de `task` que grava o argv) já cobre o que o hook executa; o que falta é a metade que confere o que o alvo executa.
-status: triaged
-severity: média — hoje nenhum alvo do caminho de push tem essa forma, e a metade comportamental fecha o caso deliberado; o buraco é para o acidente futuro
-dod:
-  - a cobertura é conferida por execução observada, não por leitura do `--dry` — por exemplo rodando o alvo com um substituto de `go` que grava os argv, como o teste já faz com o `task`
-  - existe caso que prova o buraco: um alvo de teste com `- |` e saída antecipada satisfaz a asserção de hoje e reprova na nova
-  - a regra vale para qualquer asserção futura que leia `--dry` como prova de execução
-
-> Registrado 2026-08-13 pela revisão do `B-088`. É a mesma lição da fatia 19 e da 20, numa terceira
-> roupa: ler o texto de um comando não é observar o comando. As duas anteriores foram `grep -lw` como
-> medida de acoplamento e regex como guarda de literal; esta é `--dry` como prova de execução.
-
 
 ## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
 
@@ -2573,7 +2526,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. Além de `api/internal/services/deploycontracts/build_plan.go:23` (5 prefixos) e `tools/loopzero-dockerfile-lint/main.go:84` (4), existe `api/internal/source/validator_env.go:46` com um **terceiro** conjunto — `DYLD_`, `KUBERNETES_`, `LOOPZERO_` — e seu próprio `isReservedEnvKey` (`:68`), sobre o env do `services.json` do usuário, ligado em `validator_services.go:156`. O resultado é que `DYLD_*` é bloqueado por uma cópia e permitido pelas outras duas, e `AWS_*` o inverso. E das três, a que **não** tem chamador é justamente a que o gate `env-prefix-parity` compara contra a API.
 why_now: o gate passou a rodar em 2026-08-12 (`B-070`) e imprime `PASS — 2 declarations`. Duas de três. Um verde que cobre dois terços de uma regra de segurança é lido como cobertura da regra.
-status: planned
+status: shipped
 severity: alta — três respostas diferentes para "o tenant pode declarar esta variável?", e a decisão de qual vale nunca foi tomada.
 dod:
   - está decidido qual conjunto é a regra, e por quê (os três diferem em `DYLD_`, `AWS_`, `DO_`, `GOOGLE_`)
@@ -2793,3 +2746,78 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-17`. Quinta instância nesta série do padrão
 > *declarado e nunca ligado*, e a primeira em que **eu** a produzi: a policy corrigida existe, está
 > versionada, e nenhuma identidade a carrega.
+## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13, quando o gate bloqueou o push da fatia 19. Dois limites, ambos por trabalhar com **nome** em vez de referência. (1) `cmd/loopzero-ops/internal/quality/contractconsumers/check.go:212` — `tagExistsAt` pergunta se a tag existe em **qualquer** struct do conjunto rastreado. `api/internal/routes/repositories/repositories.go:105,117` declara `json:"repo"` duas vezes, então remover de uma é invisível. Coberto pelo teste `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop`, que documenta o limite e diz para atualizá-lo — não apagá-lo — quando fechar. (2) `check.go:242` — `grepConsumersForTag` casa `\.<tag>\b`, o que pega **campo de struct homônimo** e **literal de string**: na ocorrência real, dos 9 "consumidores" de `repo`, 8 eram `p.repo.RepoURL(...)` (`p.repo` é `*gitclient.GiteaRepoManager` — `api/internal/gitops/gitea_pusher.go:45`) e 1 era `attribute.String("loopzero.github.repo", ...)`. Zero liam a tag.
+why_now: é o **mesmo defeito** que o review da fatia 19 achou na minha tabela de acoplamento — contar ocorrência de nome como referência — e nesta sessão ele apareceu de forma independente em dois lugares. Aqui ele custa: o gate bloqueou um push que não mudava contrato nenhum, e um gate que erra assim é um gate que as pessoas aprendem a contornar.
+status: triaged
+severity: média — não deixa contrato quebrado passar (o caminho de detecção continua fechado para a última declaração sair); gera ruído, que é como um gate perde autoridade
+dod:
+  - a existência da tag é verificada na struct de onde ela saiu, não em qualquer uma do conjunto — e `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop` é reescrito para exigir o contrário do que exige hoje
+  - um campo Go homônimo (`p.repo`) e um literal de string (`"loopzero.github.repo"`) deixam de ser reportados como consumidores, provado com estes dois casos exatos
+  - a detecção de consumidor em TypeScript continua funcionando — ali `.repo` é de fato o acesso à propriedade, e estreitar demais mataria o lado que motivou o gate
+
+> Registrado 2026-08-13, pela fatia 19: o gate reprovou o push porque `gofmt -w` reduziu o espaçamento antes de um comentário de fim de linha, e uma linha *modificada* contendo a tag era lida como tag *removida*. Essa parte foi corrigida na mesma fatia; o que fica aqui é a granularidade de nome, dos dois lados.
+
+
+## B-101 — Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13. `cd cmd/loopzero-ops && go test ./... -short -count=1` leva **408 s**, dos quais **392 s** são de `internal/seed` — e o `-short` não muda nada, porque nenhum teste do pacote o consulta (`grep -c 'testing.Short()' cmd/loopzero-ops/internal/seed/*.go` → 0). Quatro testes respondem por 390 s: `TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer` (120 s), `TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL` (120 s), `TestPatchKratosSeed_Run_PatchesAndRolloutsBoth` (90 s) e `TestNetworkingCorednsSeed_HappyPath` (60 s). Nenhum toca cluster — usam `fake.NewClientBuilder()`. Eles pagam o prazo inteiro de `waitForRolloutSettled` (`cmd/loopzero-ops/internal/seed/vault_cross_cluster_addr.go:223`), cujo valor está **cravado na chamada**: `120*time.Second` em `broker.go:109`, `loki_cross_cluster.go:125` e `vault_role_id_sync.go:81`, `60*time.Second` em `networking_cross_cluster_coredns.go:84`. Com cliente falso o Deployment nunca assenta, então o laço espera até o fim.
+why_now: é o obstáculo concreto da bala 2 do DoD do `B-088` — o `delivery-gate.sh` roda `task quality:gates`, que **não** chama `quality:hermetic`, que é onde `cd cmd/loopzero-ops && go test ./...` vive. Medido: `gates` tem `deps: [build]` e nada mais. Ou seja, os testes que provam que um gate reprova o que deve reprovar não estão no caminho de push — e ninguém os colocou lá porque custariam ~7 min por push. Some o custo e a bala fica trivial.
+status: triaged
+severity: média — não há defeito de produção; o custo é que a rede de proteção dos gates fica fora do único ponto que é obrigatório
+dod:
+  - o prazo de espera de rollout é injetável pela raiz de composição, como `Policy` já é em `Deps` (`seed.go:101`), com o zero preservando o valor de hoje
+  - os quatro testes passam a injetar um prazo curto, e `cd cmd/loopzero-ops && go test ./... -short` cai para a ordem de segundos
+  - o valor cravado deixa de aparecer no ponto de chamada de cada seed
+
+> Registrado 2026-08-13, ao medir o `B-088` para fechá-lo. `.claude/rules/testing.md § 6` nomeia isto: *"Time/randomness in unit tests — inject a clock/RNG so the test is deterministic"*.
+
+
+## B-102 — `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão do `B-088`. `task --dry` expande deps transitivas com fidelidade — `grep -nE 'preconditions:|internal: true|run: once|status:|sources:|generates:|platforms:' taskfiles/quality.yml Taskfile.yml` devolve **nada**, então nenhum passo é pulado por condição e o `--dry` nunca sub-reporta. Mas ele **super-reporta**: um `cmds:` em bloco (`- |`) é impresso verbatim, sem avaliar o `if`/`exit` dentro dele. Prova viva já na árvore — `taskfiles/quality.yml:298-301` aborta com `exit 1` quando falta o `helmfile` ou quando `LOOPZERO_TEST_SKIP_HELMFILE` está setado, e mesmo assim o `task --dry quality:all` imprime `cd infra/tests && go test ./charts/ -count=1` incondicionalmente.
+why_now: a asserção que fecha a bala 2 do `B-088` (`TestDeliveryGate_RunsOneRealTargetThatCoversThisModule`) confere a **cobertura** lendo a saída do `--dry`. Um alvo futuro com a forma `- |` / `[ -n "$SKIP" ] && exit 0` / `cd cmd/loopzero-ops && go test ./...` satisfaz a asserção e não roda nada — a mesma classe do bypass `--dry` que a revisão construiu, só que alcançada **sem ninguém querer burlar**. A metade comportamental do teste (o substituto de `task` que grava o argv) já cobre o que o hook executa; o que falta é a metade que confere o que o alvo executa.
+status: triaged
+severity: média — hoje nenhum alvo do caminho de push tem essa forma, e a metade comportamental fecha o caso deliberado; o buraco é para o acidente futuro
+dod:
+  - a cobertura é conferida por execução observada, não por leitura do `--dry` — por exemplo rodando o alvo com um substituto de `go` que grava os argv, como o teste já faz com o `task`
+  - existe caso que prova o buraco: um alvo de teste com `- |` e saída antecipada satisfaz a asserção de hoje e reprova na nova
+  - a regra vale para qualquer asserção futura que leia `--dry` como prova de execução
+
+> Registrado 2026-08-13 pela revisão do `B-088`. É a mesma lição da fatia 19 e da 20, numa terceira
+> roupa: ler o texto de um comando não é observar o comando. As duas anteriores foram `grep -lw` como
+> medida de acoplamento e regex como guarda de literal; esta é `--dry` como prova de execução.
+
+## B-103 — 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 por `check_backlog_structure.py`, que já tinha o achado `raw_with_evidence` e nunca fora rodado contra o registro inteiro: **43** de 102 itens declaram `status: raw` com o campo `evidence` preenchido. São eles: B-008, B-013, B-014, B-015, B-016, B-017, B-018, B-019, B-021, B-022, B-024, B-025, B-027, B-028, B-029, B-030, B-031, B-032, B-033, B-034, B-035, B-036, B-037, B-038, B-039, B-076, B-078, B-079, B-081, B-082, B-083, B-085, B-086, B-090, B-091, B-092, B-093, B-094, B-095, B-096, B-097, B-098, B-099. O verificador descreve o defeito na própria mensagem — *"measurement happened and the status was never advanced"*.
+why_now: `cycle-maintenance § SELECT` ordena `triaged` antes de `raw`, porque medido vence não-medido. Com 43 itens medidos declarando-se não-medidos, essa ordenação escolhe errado de forma sistemática — e a regra de desempate seguinte é idade, então os mais antigos entre eles ficam eternamente atrás. É a mesma família do `closure_note_without_shipped` fechado nesta mesma fatia, um passo antes no ciclo de vida: lá a prosa dizia fechado e o campo dizia aberto; aqui o campo `evidence` diz medido e o campo `status` diz que não.
+status: triaged
+severity: média — nada quebra; o custo é o loop de manutenção priorizar mal, de forma invisível
+dod:
+  - cada um dos 43 é verificado individualmente e recebe o status que sua evidência sustenta — `triaged` se a medição vale, `raw` com `evidence: none-yet` se o campo foi preenchido por engano
+  - fica escrito por que a intake por `--sweep` nasce com evidência e mesmo assim é registrada `raw`, ou o `/backlog-item` passa a registrá-la `triaged`
+  - `check_backlog_structure.py` sai sem nenhum `raw_with_evidence` contra o registro real
+
+> Registrado 2026-08-13 pela fatia que fechou o `closure_note_without_shipped`. **Deliberadamente não
+> corrigido em lote:** virar 43 status sem abrir cada item é exatamente o atalho que produziu a deriva.
+> Os seis que corrigi nesta fatia foram verificados um a um por execução — inclusive um (`B-070`) em
+> que minha primeira sonda deu o resultado errado e a nota estava certa.
+
