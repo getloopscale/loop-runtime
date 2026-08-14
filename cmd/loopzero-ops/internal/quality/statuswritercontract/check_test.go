@@ -27,7 +27,8 @@ const preamble = "package x\n\nimport (\n\t\"context\"\n)\n\nfunc f(ctx context.
 func TestCleanTreePasses(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/app/a.go",
-		preamble+"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
+		preamble+"\tconditions.SetReadinessSummaryViaPkg(&o.Status.Conditions, o.Generation, d)\n"+
+			"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
 
 	out, err := Check(Config{Root: root})
 	if err != nil {
@@ -44,7 +45,8 @@ func TestCleanTreePasses(t *testing.T) {
 func TestBareStatusUpdateIsRefused(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/environment/env.go",
-		preamble+"\treturn r.Status().Update(ctx, o)\n}\n")
+		preamble+"\tconditions.SetReadinessSummaryViaPkg(&o.Status.Conditions, o.Generation, d)\n"+
+			"\treturn r.Status().Update(ctx, o)\n}\n")
 
 	out, _ := Check(Config{Root: root})
 	if out.Pass {
@@ -85,7 +87,8 @@ func TestTestFilesAreNotJudged(t *testing.T) {
 	// empty as far as this gate is concerned — and that case is asserted
 	// separately, by TestEmptyTreeIsAFailureNotAPass.
 	write(t, root, "operators/internal/app/a.go",
-		preamble+"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
+		preamble+"\tconditions.SetReadinessSummaryViaPkg(&o.Status.Conditions, o.Generation, d)\n"+
+			"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
 	write(t, root, "operators/internal/app/a_test.go",
 		preamble+"\treturn r.Status().Update(ctx, o)\n}\n")
 
@@ -116,5 +119,65 @@ func TestEmptyTreeIsAFailureNotAPass(t *testing.T) {
 		t.Fatal("an operators tree with no file scanned reported PASS. A gate that finds nothing must " +
 			"say so — 'nothing to check' and 'everything is clean' are different facts, and reporting " +
 			"the second for the first is how a gate goes quiet without anyone noticing.")
+	}
+}
+
+// --- readiness-summary coverage -------------------------------------------
+//
+// The population sweep that produced these tests: of 21 functions in the
+// operators tree that persist .status, TWO fold the readiness summary inline and
+// NINETEEN rely on a `defer DeferReadinessSummary` at the top of their package's
+// Reconcile. Nothing asserted that the defer stays. Deleting one line silently
+// uncovers four persists in a single package.
+//
+// That is the same shape as the bare-Update case this gate already refuses: an
+// invariant held by convention across a population nobody measured.
+
+func TestPersistWithoutAnySummaryIsRefused(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/lonely/c.go",
+		preamble+"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
+
+	out, _ := Check(Config{Root: root})
+	if out.Pass {
+		t.Fatal("a package persists .status and neither folds the readiness summary nor defers one. " +
+			"Every pass through it leaves the Ready condition at whatever the PREVIOUS pass computed, " +
+			"which is read as current (ADR-0025 D3).")
+	}
+}
+
+func TestInlineSummaryCovers(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/inline/c.go",
+		preamble+"\tconditions.SetReadinessSummaryViaPkg(&o.Status.Conditions, o.Generation, d)\n"+
+			"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
+
+	out, err := Check(Config{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Pass {
+		t.Fatalf("folding the summary in-line before the patch is one of the two prescribed shapes: %v",
+			out.Violations)
+	}
+}
+
+func TestDeferredSummaryCoversThePackage(t *testing.T) {
+	root := t.TempDir()
+	// The shape seven controllers use: the defer lives in Reconcile, and the
+	// helpers it calls persist status on their own.
+	write(t, root, "operators/internal/deferred/reconcile.go",
+		preamble+"\tdefer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, key, a, b, c)()\n\treturn nil\n}\n")
+	write(t, root, "operators/internal/deferred/helper.go",
+		preamble+"\tconditions.SetReadinessSummaryViaPkg(&o.Status.Conditions, o.Generation, d)\n"+
+			"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")
+
+	out, err := Check(Config{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Pass {
+		t.Fatalf("a deferred summary covers every persist in its package, including helpers in sibling "+
+			"files — banning that would ban the shape seven controllers use: %v", out.Violations)
 	}
 }

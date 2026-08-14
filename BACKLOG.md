@@ -3018,6 +3018,15 @@ severity: alta — um alvo de qualidade documentado que aborta é pior que um au
 
 > **CORREÇÃO 2026-08-14 — a auditoria adversarial reprovou a terceira bala, e tinha razão.**
 >
+> **A auditoria subiu o veredito de "fechado com ressalva" para FALSAMENTE FECHADO**, por uma razão
+> mais forte que a minha: não é só que a guarda não pegaria um retorno futuro — ela **não estava
+> pegando o que já estava lá**. O `taskfiles/security.yml:40` carregava a instância viva no HEAD, no
+> momento em que o item foi marcado `shipped`.
+>
+> As duas medições convergiram de forma independente e na mesma janela: ela varreu os taskfiles
+> versionados e achou 3 candidatos (2 artefato de regex, **1 real**); a guarda estendida achou
+> exatamente esse 1 no primeiro run. O conserto já estava commitado quando o adendo chegou.
+>
 > A bala pede *"asserção contra alvo que entra em diretório inexistente"*, e a nota afirmava que
 > `TestTaskfilesDoNotCdIntoMissingDirs` era essa asserção. A auditoria reintroduziu o defeito
 > **verbatim** — `cd pkg && go test ./quality/... -count=1` — e a guarda saiu **exit 0, PASS**.
@@ -3640,4 +3649,26 @@ dod:
   - os que são garantidos ficam com a razão escrita, para que a próxima pessoa não re-pergunte
 
 > Registrado 2026-08-14, ao consertar o `B-021` — a auditoria adversarial de fechamento achou a instância, a medição achou a classe.
+
+## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: |
+  medido em 2026-08-14. A auditoria adversarial de fechamento nomeou esta falha **sobre si mesma**: ela provou que `TestTaskfilesDoNotCdIntoMissingDirs` era cega a uma forma injetando a forma, e nunca perguntou *quantas instâncias dessa forma já existem*. Havia **uma, viva, no HEAD** (`taskfiles/security.yml:40`), e a task estava falhando desde o M9.
+
+  A mesma lacuna apareceu do meu lado, no mesmo dia: `TestApp_EveryStatusPersistFoldsTheReadinessSummary` afirma o invariante do sumário de prontidão e roda **num pacote**. A população são cinco. Varrida, deu **21 persistências: 19 cobertas por `defer` no pacote, 2 em linha, 0 descobertas** — o invariante valia, mas ninguém sabia, e nada impedia que uma linha removida descobrisse quatro de uma vez.
+
+  Das seis guardas criadas nesta sessão, **cinco** tiveram varredura de população (checkbox 23 achados, marcador de fechamento 6, seeds 7→1, padrão de pacote 1 real, `Status().Update` 83 arquivos) e **uma** não. A que não teve é a que só existia como teste de pacote.
+why_now: mutante sintético prova que a guarda **enxerga** a forma; varredura prova quantas vezes a forma **já aconteceu**. As duas perguntas são diferentes, e a segunda é a que encontra defeito hoje em vez de prevenir defeito amanhã. Esta sessão gastou três correções em cima de itens que mediram o mecanismo e não a população.
+status: raw
+severity: média — nenhuma guarda está errada; o que falta é o passo que transforma cada uma de prevenção em achado
+dod:
+  - a regra "toda guarda nova roda contra a população real antes de ser declarada pronta" está escrita onde as guardas são escritas
+  - para cada guarda de âmbito de pacote existente nos operators, está medido se o invariante vale nos outros pacotes ou se ela só cobre o seu
+  - o resultado da varredura fica registrado junto da guarda, mesmo quando é zero — zero medido e zero suposto são fatos diferentes
+
+> Registrado 2026-08-14. A lição é da auditoria, que a aplicou a si mesma antes de eu aplicá-la a mim.
 

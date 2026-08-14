@@ -388,6 +388,11 @@ func runStatusWriterContract(args []string) int {
 	o, err := statuswritercontract.Check(statuswritercontract.Config{Root: *root})
 	fmt.Println(o.Summary())
 	for _, v := range o.Violations {
+		if v.Kind == statuswritercontract.UncoveredSummary {
+			fmt.Printf("  %s:%d — the package of %s() persists status and folds no readiness summary, "+
+				"in-line or deferred (ADR-0025 D3)\n", v.File, v.Line, v.Func)
+			continue
+		}
 		fmt.Printf("  %s:%d — %s() persists status with Update (reached by %s)\n",
 			v.File, v.Line, v.Func, v.Form)
 	}

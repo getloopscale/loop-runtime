@@ -75,8 +75,22 @@ type Config struct {
 	Root string
 }
 
-// Violation is one production site that persists status with Update.
+// Kind distinguishes the two ways the contract is broken. The remedy differs —
+// one converts a write, the other adds a summary — so a single label would send
+// the reader to the wrong fix.
+type Kind int
+
+const (
+	// BareUpdate: status persisted with Update instead of a merge patch.
+	BareUpdate Kind = iota
+	// UncoveredSummary: status persisted in a package where nothing folds the
+	// kstatus readiness summary, in-line or deferred.
+	UncoveredSummary
+)
+
+// Violation is one production site that breaks the contract.
 type Violation struct {
+	Kind Kind
 	File string
 	Line int
 	Func string
@@ -95,11 +109,19 @@ type Outcome struct {
 // Summary renders the one-line result the gate runner prints.
 func (o Outcome) Summary() string {
 	if o.Pass {
-		return fmt.Sprintf("PASS — no bare Status().Update in operators (%d production file(s) scanned)",
-			o.FilesScanned)
+		return fmt.Sprintf("PASS — no bare Status().Update, and every package that persists status "+
+			"folds a readiness summary (%d production file(s) scanned)", o.FilesScanned)
 	}
-	return fmt.Sprintf("FAIL — %d bare status Update(s) across %d production file(s) scanned",
-		len(o.Violations), o.FilesScanned)
+	var updates, uncovered int
+	for _, v := range o.Violations {
+		if v.Kind == BareUpdate {
+			updates++
+		} else {
+			uncovered++
+		}
+	}
+	return fmt.Sprintf("FAIL — %d bare status Update(s), %d package(s) persisting without a readiness "+
+		"summary, across %d production file(s) scanned", updates, uncovered, o.FilesScanned)
 }
 
 // ActionableFix is printed under a failure.
@@ -128,8 +150,21 @@ func reachesStatus(e ast.Expr) string {
 	return ""
 }
 
-// scanFile collects the violations of one parsed production file.
-func scanFile(fset *token.FileSet, parsed *ast.File, rel string) []Violation {
+// fileScan is what one production file contributes to the package verdict.
+type fileScan struct {
+	violations []Violation
+	// persists are every status write in the file, Update or Patch alike. The
+	// summary question is about persistence, not about which verb reached it.
+	persists []Violation
+	// coversSummary is true when the file folds the summary in-line or defers one.
+	// It is a PACKAGE-level property: the defer lives in Reconcile and covers the
+	// helpers in sibling files, which is the shape seven controllers use.
+	coversSummary bool
+}
+
+// scanFile collects what one parsed production file contributes.
+func scanFile(fset *token.FileSet, parsed *ast.File, rel string) fileScan {
+	var scan fileScan
 	var out []Violation
 	for _, decl := range parsed.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
@@ -160,7 +195,18 @@ func scanFile(fset *token.FileSet, parsed *ast.File, rel string) []Violation {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Update" {
+			if !ok {
+				return true
+			}
+
+			// Either shape of summary fold marks the whole PACKAGE covered: the
+			// deferred one lives in Reconcile and covers helpers in sibling files,
+			// which is the shape seven controllers use.
+			if sel.Sel.Name == "SetReadinessSummaryViaPkg" || sel.Sel.Name == "DeferReadinessSummary" {
+				scan.coversSummary = true
+				return true
+			}
+			if sel.Sel.Name != "Update" && sel.Sel.Name != "Patch" {
 				return true
 			}
 			form := reachesStatus(sel.X)
@@ -172,20 +218,31 @@ func scanFile(fset *token.FileSet, parsed *ast.File, rel string) []Violation {
 			if form == "" {
 				return true
 			}
-			out = append(out, Violation{
+			v := Violation{
 				File: rel, Line: fset.Position(call.Pos()).Line,
 				Func: fn.Name.Name, Form: form,
-			})
+			}
+			// Every status write counts toward the summary question, Update or
+			// Patch alike — the invariant is about persistence, not about which
+			// verb reached it.
+			scan.persists = append(scan.persists, v)
+			if sel.Sel.Name == "Update" {
+				v.Kind = BareUpdate
+				out = append(out, v)
+			}
 			return true
 		})
 	}
-	return out
+	scan.violations = out
+	return scan
 }
 
 // Check walks Root/operators and refuses every bare status Update in production.
 func Check(cfg Config) (Outcome, error) {
 	base := filepath.Join(cfg.Root, "operators")
 	var out Outcome
+	pkgPersists := map[string][]Violation{}
+	pkgCovered := map[string]bool{}
 
 	err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -216,7 +273,17 @@ func Check(cfg Config) (Outcome, error) {
 		if rerr != nil {
 			rel = path
 		}
-		out.Violations = append(out.Violations, scanFile(fset, parsed, rel)...)
+		scan := scanFile(fset, parsed, rel)
+		out.Violations = append(out.Violations, scan.violations...)
+
+		// Summary coverage is a PACKAGE verdict, so accumulate and decide after
+		// the walk: judging per file would fail every helper whose Reconcile
+		// defers the summary from a sibling file.
+		dir := filepath.Dir(path)
+		pkgPersists[dir] = append(pkgPersists[dir], scan.persists...)
+		if scan.coversSummary {
+			pkgCovered[dir] = true
+		}
 		return nil
 	})
 	if err != nil {
@@ -229,6 +296,21 @@ func Check(cfg Config) (Outcome, error) {
 	if out.FilesScanned == 0 {
 		return out, fmt.Errorf("no production file found under %s — a gate that reads nothing "+
 			"verifies nothing", base)
+	}
+
+	// A package that persists status and folds no summary anywhere leaves the Ready
+	// condition at whatever the PREVIOUS pass computed — read as current, and read
+	// precisely when something has just gone wrong.
+	//
+	// Only the FIRST persist of each uncovered package is reported: the fix is one
+	// summary for the package, and N findings for one fix trains the reader to skim.
+	for dir, persists := range pkgPersists {
+		if pkgCovered[dir] || len(persists) == 0 {
+			continue
+		}
+		v := persists[0]
+		v.Kind = UncoveredSummary
+		out.Violations = append(out.Violations, v)
 	}
 
 	sort.Slice(out.Violations, func(i, j int) bool {
