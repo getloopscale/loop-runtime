@@ -68,6 +68,12 @@ tasks:
       # TestTaskfilesDoNotCdIntoMissingDirs. Os dois ultimos sao guardas contra
       # exatamente a familia de defeito do B-087 — e nao rodavam. Custo: ~12s.
       - cd cmd/loopzero-ops && go test ./... -count=1
+      # `tools/` esta FORA do go.work por desenho (os binarios constroem
+      # sozinhos), entao exige GOWORK=off — e era exatamente por estar fora que
+      # ninguem os alcancava: viviam so em `test:unit`, que o gate de entrega
+      # nao chama. O B-088 nomeia os dois no titulo. Custo somado: ~3 s.
+      - cd tools/loopzero-dockerfile-lint && GOWORK=off go test ./... -count=1
+      - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -count=1
       - cd cmd/loopzero-ops && go build ./...
 
   gates:

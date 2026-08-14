@@ -2237,6 +2237,26 @@ dod:
 > Registrado 2026-08-13, ao medir o `B-088` para fechá-lo. `.claude/rules/testing.md § 6` nomeia isto: *"Time/randomness in unit tests — inject a clock/RNG so the test is deterministic"*.
 
 
+## B-102 — `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-13 pela revisão do `B-088`. `task --dry` expande deps transitivas com fidelidade — `grep -nE 'preconditions:|internal: true|run: once|status:|sources:|generates:|platforms:' taskfiles/quality.yml Taskfile.yml` devolve **nada**, então nenhum passo é pulado por condição e o `--dry` nunca sub-reporta. Mas ele **super-reporta**: um `cmds:` em bloco (`- |`) é impresso verbatim, sem avaliar o `if`/`exit` dentro dele. Prova viva já na árvore — `taskfiles/quality.yml:298-301` aborta com `exit 1` quando falta o `helmfile` ou quando `LOOPZERO_TEST_SKIP_HELMFILE` está setado, e mesmo assim o `task --dry quality:all` imprime `cd infra/tests && go test ./charts/ -count=1` incondicionalmente.
+why_now: a asserção que fecha a bala 2 do `B-088` (`TestDeliveryGate_RunsOneRealTargetThatCoversThisModule`) confere a **cobertura** lendo a saída do `--dry`. Um alvo futuro com a forma `- |` / `[ -n "$SKIP" ] && exit 0` / `cd cmd/loopzero-ops && go test ./...` satisfaz a asserção e não roda nada — a mesma classe do bypass `--dry` que a revisão construiu, só que alcançada **sem ninguém querer burlar**. A metade comportamental do teste (o substituto de `task` que grava o argv) já cobre o que o hook executa; o que falta é a metade que confere o que o alvo executa.
+status: triaged
+severity: média — hoje nenhum alvo do caminho de push tem essa forma, e a metade comportamental fecha o caso deliberado; o buraco é para o acidente futuro
+dod:
+  - a cobertura é conferida por execução observada, não por leitura do `--dry` — por exemplo rodando o alvo com um substituto de `go` que grava os argv, como o teste já faz com o `task`
+  - existe caso que prova o buraco: um alvo de teste com `- |` e saída antecipada satisfaz a asserção de hoje e reprova na nova
+  - a regra vale para qualquer asserção futura que leia `--dry` como prova de execução
+
+> Registrado 2026-08-13 pela revisão do `B-088`. É a mesma lição da fatia 19 e da 20, numa terceira
+> roupa: ler o texto de um comando não é observar o comando. As duas anteriores foram `grep -lw` como
+> medida de acoplamento e regex como guarda de literal; esta é `--dry` como prova de execução.
+
+
 ## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
 
 domain: engine-go
@@ -2477,7 +2497,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`. `taskfiles/test.yml:107-111` (`test:unit`) roda `pkg`, `operators`, `api` e `infra/tests` — **não** `cmd/loopzero-ops`, **não** `tools/`. `quality:hermetic` faz `cd cmd/loopzero-ops && go build ./...` — **build, não test**. E `grep -rn "loopzero-dockerfile-lint" taskfiles/ Taskfile.yml .github/` devolve **zero**. Consequência medida na própria fatia: os 12 testes que ela escreveu (6 no linter, 6 no gate) **nunca executam** por nenhum caminho automatizado.
 why_now: `cmd/loopzero-ops` é onde vivem os 123 quality gates — a substituição declarada do CI. Os testes que provam que um gate reprova o que deve reprovar não rodam em lugar nenhum, o que torna cada gate uma afirmação não verificada. É a mesma forma do `B-045` (gate que existe e não roda), um nível acima: o **teste** do gate que existe e não roda.
-status: raw
+status: shipped
 severity: alta — um teste que nunca executa não é teste, e aqui são os testes do mecanismo que substitui o CI.
 dod:
   - `cmd/loopzero-ops` e `tools/loopzero-dockerfile-lint` entram num alvo que roda de fato
@@ -2519,6 +2539,31 @@ dod:
 > testes que provam que um gate reprova o que deve reprovar seguem fora do único ponto obrigatório.
 > Ninguém os pôs lá porque custam **408 s**, dos quais 392 s são quatro testes herméticos que esperam
 > relógio real — ver `B-101`, que é o que destrava esta bala.
+
+> **Fechado 2026-08-13 — a bala 2 caiu.** O `delivery-gate.sh` passou a invocar `task quality:all` em
+> vez de `quality:gates`. O alvo não é novo: ele já se declarava *"hermetic tests + full-scan gates +
+> contract"* e tem `deps: [hermetic, gates, contract]` — era o alvo certo não sendo chamado.
+>
+> Custo medido com a máquina ociosa: `gates` 80 s, `hermetic` 93 s, `all` ~175 s. Antes do `B-101`
+> seriam ~440 s, e era esse número que mantinha a omissão de pé.
+>
+> O `tools/` também entrou — ele está no título do item e vivia só em `test:unit`, que o gate não
+> chama. Custo somado: ~3 s.
+>
+> **Preso por asserção comportamental, não textual.** A primeira versão lia o hook como texto e a
+> revisão a burlou de três formas, todas reproduzidas contra o arquivo real: `task quality:all --dry`
+> (a regex pegava o alvo e ignorava a flag — o portão rodava **nada**), um `if [ -n "$LOOPZERO_FAST_PUSH" ]`
+> (semântica de "qualquer um serve" era satisfeita pelo braço lento enquanto o rápido pulava tudo), e
+> `command task` com uma isca em heredoc (o padrão ancorado em linha nunca via a invocação real).
+> Agora o teste **executa** o hook com um substituto de `task` que grava o argv, e exige: exatamente
+> uma invocação (duas são um branch, e é no branch que mora a válvula de escape), sem `--dry`, e com a
+> expansão alcançando as três linhas de teste. As três formas reprovam.
+>
+> **O que ela NÃO pega, dito explicitamente:** o push que a remove. Hooks são lidos do disco, então um
+> commit que reverte o hook é vigiado pelo hook **já revertido**, que roda `quality:gates` — e esse
+> alvo não roda este teste. A asserção pega a divergência **depois**, não no ato. Achado da revisão.
+>
+> Decisão T2 em `MEET-ASYNC-AMENDMENT-2026-08-13-delivery-gate-hermetic`.
 
 ## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [ ]
 
