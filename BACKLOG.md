@@ -2712,6 +2712,30 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > sem URL que **reprova o portão de entrega**. Não são meus; consertá-los não é minha decisão. Duas
 > fatias seguem commitadas localmente à espera.
 
+> ---
+>
+> **O último arquivo: `source.go`. Lido o documento travado, medido, e a conclusão não é "não mexer".**
+>
+> A regra do `CLAUDE.md` manda ler `docs/architecture/loopzerokit-loopzerocloud-integration.md` antes de tocar
+> qualquer coisa do seam LoopZeroKit↔LoopZeroCloud, e nomeia o `routes/source.go` explicitamente. Lido:
+>
+> **O contrato do seam é comportamental, não de pacote.** O que o documento fixa é a ordem dos campos
+> do `multipart` (o `services_json` tem de vir primeiro, senão `400 MULTIPART_FIELD_ORDER`), os
+> limites (`256KB` → `413`), e o desenho do fluxo. **Nada nisso muda ao mover o arquivo** — extrair
+> para `routes/source/` não altera um único código de resposta.
+>
+> **O que a extração exige é o documento.** Ele cita `routes/source` em **4** lugares, um deles dentro
+> do diagrama ASCII do fluxo. E o próprio `CLAUDE.md` avisa que este documento é **a única cópia** do
+> contrato no workspace — o espelho do lado LoopZeroKit deixou de existir. Um diagrama que aponta para um
+> caminho que não existe mais é pior que nenhum diagrama, porque parece atualizado.
+>
+> **Então a decisão medida é:** a extração é segura e deve levar o documento junto, no mesmo commit —
+> exatamente a disciplina que a regra do espelho estabelecia antes de o espelho sumir. É T2 (toca
+> arquivo de seam), então precisa de MEET antes do código, e não de mais medição.
+>
+> Isto substitui a formulação anterior — *"fica por decisão"* —, que descrevia ausência de decisão
+> como se fosse uma. A decisão existe agora, com o que ela custa nomeado.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta
