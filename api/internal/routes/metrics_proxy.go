@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"strings"
@@ -46,6 +47,17 @@ type PrometheusQueryClient interface {
 }
 
 // MetricsProxyHandler handles GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime
+// StatusProjectStore resolves a project by name for the caller's tenant.
+//
+// Declared here rather than imported from the status family that also declares
+// it: a Go interface is structural, so the consumer naming exactly the method it
+// calls is both idiomatic and the DIP shape rules/architecture.md asks for. The
+// fourth package to make this call in the routes decomposition — the dependency
+// is on ONE method, not on a package (B-080, slice-39).
+type StatusProjectStore interface {
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+}
+
 type MetricsProxyHandler struct {
 	projects   StatusProjectStore
 	promClient PrometheusQueryClient

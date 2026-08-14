@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package logs
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -71,8 +72,8 @@ func TestLogs_Get_HappyPath(t *testing.T) {
 	h := NewLogsHandler(builds, querier)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -99,8 +100,8 @@ func TestLogs_Get_BuildNotFound(t *testing.T) {
 	h := NewLogsHandler(builds, querier)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-nonexistent/logs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -118,8 +119,8 @@ func TestLogs_Get_CrossTenantDenied(t *testing.T) {
 	h := NewLogsHandler(builds, querier)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs", nil)
-	req = withAuth(req, defaultUserContext()) // tn-test-123
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // tn-test-123
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -134,7 +135,7 @@ func TestLogs_Get_Unauthenticated(t *testing.T) {
 	h := NewLogsHandler(&fakeLogBuildStore{}, &fakeLogQuerier{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs", nil)
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -154,8 +155,8 @@ func TestLogs_Get_LokiUnavailable_ReturnsEmptyEntries(t *testing.T) {
 	h := NewLogsHandler(builds, querier)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -182,8 +183,8 @@ func TestLogs_Get_WithQueryParams(t *testing.T) {
 	h := NewLogsHandler(builds, querier)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs?tail=100&step=build", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -231,8 +232,8 @@ func TestLogs_Get_SinceParamPropagatesToQuerier(t *testing.T) {
 				path += "?since=" + tc.queryParam
 			}
 			req := httptest.NewRequest(http.MethodGet, path, nil)
-			req = withAuth(req, defaultUserContext())
-			req = withChiParam(req, "id", "bld-x")
+			req = routestest.WithAuth(req, routestest.DefaultUserContext())
+			req = routestest.WithChiParam(req, "id", "bld-x")
 			w := httptest.NewRecorder()
 
 			h.Get(w, req)

@@ -7,13 +7,14 @@ import (
 	"context"
 	"errors"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -503,9 +504,9 @@ func (f *fakeBuildListStore) ListByProjectAndEnv(_ context.Context, _, _, _ stri
 // --- Verify adapter types satisfy interfaces ---
 
 var _ builds.BuildOrchestratorService = (*BuildOrchestratorAdapter)(nil)
-var _ routes.LogBuildStore = (*LogBuildStoreAdapter)(nil)
-var _ routes.StatusBuildStore = (*StatusBuildStoreAdapter)(nil)
-var _ routes.StatusReleaseStore = (*StatusReleaseStoreAdapter)(nil)
+var _ logs.LogBuildStore = (*LogBuildStoreAdapter)(nil)
+var _ status.StatusBuildStore = (*StatusBuildStoreAdapter)(nil)
+var _ status.StatusReleaseStore = (*StatusReleaseStoreAdapter)(nil)
 
 // --- IsBuildTerminal ---
 

@@ -305,6 +305,13 @@ var allowed = map[string]map[string]bool{
 	// and were extracted together for it.
 	"promote":  {"httpio": true, "routestest": true},
 	"rollback": {"httpio": true, "routestest": true},
+
+	// The twenty-first and twenty-second families (slice-39, B-080). Serve the
+	// project status and the build logs — both read surfaces that come in a
+	// one-shot and a streaming variant, which is why each carries two production
+	// files.
+	"status": {"httpio": true, "routestest": true},
+	"logs":   {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

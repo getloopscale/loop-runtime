@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package logs serves the build log endpoints: the paged read and the streaming
+// tail.
+//
+// Twenty-second family to leave the flat `routes` package (B-080, slice-39),
+// extracted alongside `status` — both are read surfaces over a build, and both
+// come in a one-shot and a streaming variant.
+package logs
 
 import (
 	"context"

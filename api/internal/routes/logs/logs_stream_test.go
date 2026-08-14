@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package logs
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -103,8 +104,8 @@ func TestStreamBuildLogs_EmitsSSEEvents(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)
@@ -166,8 +167,8 @@ func TestStreamBuildLogs_StopsOnTerminalBuild(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	start := time.Now()
@@ -199,7 +200,7 @@ func TestStreamBuildLogs_Unauthorized(t *testing.T) {
 	h := NewLogStreamHandler(builds, querier, LogStreamHandlerOpts{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	// No auth context
 	w := httptest.NewRecorder()
 
@@ -219,8 +220,8 @@ func TestStreamBuildLogs_CrossTenantDenied(t *testing.T) {
 	h := NewLogStreamHandler(builds, querier, LogStreamHandlerOpts{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext()) // tn-test-123
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // tn-test-123
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)
@@ -238,8 +239,8 @@ func TestStreamBuildLogs_BuildNotFound(t *testing.T) {
 	h := NewLogStreamHandler(builds, querier, LogStreamHandlerOpts{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-nonexistent/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-nonexistent")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)
@@ -268,8 +269,8 @@ func TestStreamBuildLogs_SupportsLastEventID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
 	req.Header.Set("Last-Event-ID", "1735689600000000000") // 2026-01-01T00:00:00Z in nanos
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)
@@ -328,8 +329,8 @@ func TestStreamRuntimeLogs_RequiresEnvParam(t *testing.T) {
 	h := NewLogStreamHandler(builds, querier, LogStreamHandlerOpts{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/myapp/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "myapp")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "myapp")
 	w := httptest.NewRecorder()
 
 	h.StreamRuntimeLogs(w, req)
@@ -356,8 +357,8 @@ func TestStreamRuntimeLogs_EmitsSSEEvents(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/myapp/logs/stream?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "myapp")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "myapp")
 	w := httptest.NewRecorder()
 
 	h.StreamRuntimeLogs(w, req)
@@ -393,8 +394,8 @@ func TestStreamBuildLogs_MaxDurationTimeout(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	start := time.Now()
@@ -421,7 +422,7 @@ func TestStreamBuildLogs_MissingBuildID(t *testing.T) {
 	h := NewLogStreamHandler(&fakeStreamBuildStore{}, &fakeStreamLogQuerier{}, LogStreamHandlerOpts{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds//logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	// No chi param for "id"
 	w := httptest.NewRecorder()
 
@@ -451,8 +452,8 @@ func TestStreamBuildLogs_NoInternalTerms(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)
@@ -485,8 +486,8 @@ func TestStreamBuildLogs_SSEEventFormat(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)
@@ -542,8 +543,8 @@ func TestStreamBuildLogs_LokiError_Continues(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "bld-abc123")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
 	h.StreamBuildLogs(w, req)

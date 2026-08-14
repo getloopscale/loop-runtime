@@ -7,8 +7,10 @@ import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"log/slog"
 	"net/http"
 	"time"
@@ -76,13 +78,13 @@ func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapC
 type OrchestratorDeps struct {
 	Orchestrator        *build.BuildOrchestrator
 	BuildOrchestrator   builds.BuildOrchestratorService
-	LogsHandler         *routes.LogsHandler
-	LogStreamHandler    *routes.LogStreamHandler
+	LogsHandler         *logs.LogsHandler
+	LogStreamHandler    *logs.LogStreamHandler
 	RollbackHandler     *rollback.RollbackHandler
 	PromoteHandler      *promote.PromoteHandler
-	StatusHandler       *routes.StatusHandler
+	StatusHandler       *status.StatusHandler
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
-	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	StatusSSEHandler    *status.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
@@ -179,8 +181,8 @@ func setupOrchestrator(
 	}
 	lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
 	logBuildStore := &adapters.LogBuildStoreAdapter{Store: stores.BuildStore}
-	logsHandler := routes.NewLogsHandler(logBuildStore, lokiClient)
-	logStreamHandler := routes.NewLogStreamHandler(logBuildStore, lokiClient, routes.LogStreamHandlerOpts{
+	logsHandler := logs.NewLogsHandler(logBuildStore, lokiClient)
+	logStreamHandler := logs.NewLogStreamHandler(logBuildStore, lokiClient, logs.LogStreamHandlerOpts{
 		Logger: logger,
 	})
 
@@ -229,7 +231,7 @@ func setupOrchestrator(
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
-	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	statusHandler := status.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
 	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
 	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
@@ -248,7 +250,7 @@ func setupOrchestrator(
 	// to project-scoped SSE endpoint. Handler enforces tenant ownership +
 	// env validation + Flusher safety + Last-Event-ID dedup per plan
 	// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
-	statusSSEHandler := routes.NewStatusSSEHandler(projectStore, stores.EventStore, routes.StatusSSEHandlerOpts{})
+	statusSSEHandler := status.NewStatusSSEHandler(projectStore, stores.EventStore, status.StatusSSEHandlerOpts{})
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).

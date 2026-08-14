@@ -10,7 +10,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"io"
@@ -187,9 +189,9 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// For routes behind auth, we provide a valid Bearer token so auth passes.
 
 	buildHandler := builds.NewBuildHandler(nil, logger)
-	logsHandler := routes.NewLogsHandler(nil, nil)
+	logsHandler := logs.NewLogsHandler(nil, nil)
 	rollbackHandler := rollback.NewRollbackHandler(nil, nil, "test.local")
-	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
+	statusHandler := status.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := builds.NewBuildListHandler(nil)
 	environmentHandler := environments.NewEnvironmentHandler(nil)
 	teamHandler := teams.NewTeamHandler(nil)
@@ -228,7 +230,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		IntegrationsGitHubHandler: integrationsGitHubHandler,
 		AuditHandler:              auditHandler,
 		ArgoCallbackHandler:       argoCallbackHandler,
-		LogStreamHandler:          routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		LogStreamHandler:          logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler:      &stubGitHubWebhookHandler{},
 		TenantDeletionStore:       &stubTenantDeletionStore{},
 		AdminEvictor:              &stubTenantEvictor{},

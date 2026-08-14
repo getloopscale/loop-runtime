@@ -2669,6 +2669,24 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > por bloco de topo — a mesma correção que a fatia 28 já tinha exigido, cometida de novo por eu ter
 > voltado ao atalho.
 
+> **Fatia 39 — `status` e `logs` (2026-08-14).** Pai de 10 para **6** arquivos de produção; **25
+> subpacotes**, cerca verde. Cada uma tem dois arquivos porque cada uma tem duas formas — uma resposta
+> e uma assinatura —, e as duas compartilham os contratos de store.
+>
+> **Quarta declaração de interface pelo consumidor:** `metrics_proxy.go`, ainda no pai, passou a
+> nomear seu próprio `StatusProjectStore`. Quatro pacotes independentes chegando à mesma forma é
+> confirmação, não coincidência.
+>
+> **E eu quase perdi a fatia inteira.** Rodei um `git stash` desnecessário no meio de uma verificação
+> de lint, e ele engoliu as duas famílias — os diretórios sumiram do disco. Recuperado com `git stash
+> pop`, e a integridade re-verificada por build, suíte e cerca antes de qualquer commit. A lição é a
+> mesma que a do `--amend` na fatia 37: **comando que mexe no estado do git não entra no meio de uma
+> medição.**
+>
+> O `errcheck` no `status_sse.go` é **pré-existente e idêntico ao do HEAD** — só apareceu porque o
+> caminho mudou. O pai carrega dois da mesma classe hoje, e o lint do repositório tem linha de base
+> de 200. Fica dito em vez de consertado em silêncio numa fatia que é de mudança de lugar.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

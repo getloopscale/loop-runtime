@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package status serves the project status endpoints: the point-in-time read and
+// the SSE stream that pushes changes as they happen.
+//
+// Twenty-first family to leave the flat `routes` package (B-080, slice-39), with
+// two production files because a status has two shapes — one answer and one
+// subscription — and they share the store contracts.
+//
+// The parent's metrics_proxy.go now declares its own StatusProjectStore: the
+// FOURTH package in this decomposition to name a one-method interface for itself
+// rather than import a sibling's copy.
+package status
 
 import (
 	"context"

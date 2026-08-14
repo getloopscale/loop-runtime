@@ -11,8 +11,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
@@ -123,13 +125,13 @@ type Config struct {
 	SSEPollInterval         time.Duration
 	SSESafetyTimeout        time.Duration
 	SSEMaxConcurrentStreams int64
-	LogsHandler             *routes.LogsHandler
-	LogStreamHandler        *routes.LogStreamHandler
+	LogsHandler             *logs.LogsHandler
+	LogStreamHandler        *logs.LogStreamHandler
 	RollbackHandler         *rollback.RollbackHandler
 	PromoteHandler          *promote.PromoteHandler
-	StatusHandler           *routes.StatusHandler
+	StatusHandler           *status.StatusHandler
 	MetricsProxyHandler     *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
-	StatusSSEHandler        *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	StatusSSEHandler        *status.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
 	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
 	// nil, the route is omitted (legacy / test paths). Production wires

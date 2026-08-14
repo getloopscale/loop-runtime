@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -102,7 +102,7 @@ func TestStatusSSE_Unauthorized(t *testing.T) {
 
 	projects := &fakeStatusProjectStore{}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -123,7 +123,7 @@ func TestStatusSSE_CrossTenantReturns404(t *testing.T) {
 	// (existence-leak-prevention per T1.2 EC-2). Exact status code assertion.
 	projects := &fakeStatusProjectStore{project: nil}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -150,7 +150,7 @@ func TestStatusSSE_MissingEnvReturns400(t *testing.T) {
 		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -172,7 +172,7 @@ func TestStatusSSE_500WhenFlusherUnavailable(t *testing.T) {
 		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -209,7 +209,7 @@ func TestStatusSSE_EmitsSignalChangedEvents(t *testing.T) {
 			{ID: 3, BuildID: "rel-1", EventType: "signal.changed", Data: json.RawMessage(`{"rps":42}`)},
 		},
 	}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 100 * time.Hour, // effectively no further polls
 		MaxDuration:  50 * time.Millisecond,
 	})
@@ -255,7 +255,7 @@ func TestStatusSSE_FiltersNonSignalEvents(t *testing.T) {
 			{ID: 3, EventType: "build.failed", Data: json.RawMessage(`{"build":"failed"}`)},
 		},
 	}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 100 * time.Hour,
 		MaxDuration:  50 * time.Millisecond,
 	})
@@ -295,7 +295,7 @@ func TestStatusSSE_LastEventIDDedup(t *testing.T) {
 			{ID: 12, EventType: "signal.changed", Data: json.RawMessage(`{"new":2}`)},
 		},
 	}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 100 * time.Hour,
 		MaxDuration:  50 * time.Millisecond,
 	})

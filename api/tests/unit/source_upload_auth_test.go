@@ -20,7 +20,9 @@ import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"mime/multipart"
@@ -87,9 +89,9 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
-		LogsHandler:          routes.NewLogsHandler(nil, nil),
+		LogsHandler:          logs.NewLogsHandler(nil, nil),
 		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
+		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
@@ -97,7 +99,7 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),
 		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
-		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		AdminEvictor:         &stubTenantEvictor{},
@@ -138,9 +140,9 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
-		LogsHandler:          routes.NewLogsHandler(nil, nil),
+		LogsHandler:          logs.NewLogsHandler(nil, nil),
 		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
+		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
@@ -148,7 +150,7 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),
 		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
-		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		AdminEvictor:         &stubTenantEvictor{},
@@ -192,9 +194,9 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
-		LogsHandler:          routes.NewLogsHandler(nil, nil),
+		LogsHandler:          logs.NewLogsHandler(nil, nil),
 		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
+		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
 		TeamHandler:          teams.NewTeamHandler(nil),
@@ -202,7 +204,7 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
 		AuditHandler:         audit.NewAuditHandler(nil),
 		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
-		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		AdminEvictor:         &stubTenantEvictor{},

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package status
 
 import (
 	"context"
 	"encoding/json"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -88,8 +89,8 @@ func TestStatus_Get_HappyPath(t *testing.T) {
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -135,8 +136,8 @@ func TestStatus_Get_ProjectNotFound(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "nonexistent")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "nonexistent")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -161,8 +162,8 @@ func TestStatus_Get_MissingEnv_DefaultsToProduction(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status", nil) // no ?env=
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -186,7 +187,7 @@ func TestStatus_Get_Unauthenticated(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -220,8 +221,8 @@ func TestStatus_Get_ScalingScaleToZero(t *testing.T) {
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -275,8 +276,8 @@ func TestStatus_Get_ScalingHPA(t *testing.T) {
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -316,8 +317,8 @@ func TestStatus_Get_NoScaling(t *testing.T) {
 	h := NewStatusHandler(projects, builds, &fakeStatusReleaseStore{}, "dev.loopzero.example", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -340,8 +341,8 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -408,8 +409,8 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
@@ -470,8 +471,8 @@ func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint_RedTeam70(t *test
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
@@ -512,8 +513,8 @@ func TestStatus_EmptyProductionWithNoSiblings_OmitsHint_RedTeam70(t *testing.T) 
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
@@ -558,8 +559,8 @@ func TestStatus_EmptyProductionWithFailedSibling_OmitsHint_RedTeam70(t *testing.
 	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "name", "my-api")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
 	w := httptest.NewRecorder()
 	h.Get(w, req)
 
