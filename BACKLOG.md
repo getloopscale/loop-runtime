@@ -2542,6 +2542,23 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > **Medido o denominador do item:** o `router.go` declara **18** famílias; 8 têm subpacote. O critério
 > de fechamento é o isomorfismo entre as duas listas.
 
+> **Fatia 33 — `integrations` e `bootstrap` (2026-08-14).** Pai de 27 para **25**; **14 subpacotes**,
+> cerca verde, lint zero.
+>
+> **Terceira família seguida em que o compilador acusou um alias.** `BootstrapStore`,
+> `CellPlacementEngine`, `BootstrapRequest` — todos reexportações de `internal/domain`, como o
+> `ProjectResult` da fatia 31. Os consumidores passaram a apontar para o tipo real e o acoplamento
+> aparente nunca existiu. A cerca não vê isso: ela mede **import**, e um alias se esconde atrás do
+> pacote que o declara.
+>
+> **E o ferramental tinha um defeito que só apareceu aqui: o shell é zsh, e zsh não faz
+> word-splitting em expansão não citada.** O laço `for s in $syms` tratava a lista inteira de símbolos
+> como **um** item, e por isso repetia sem casar nada — comportamento que eu havia atribuído a outra
+> coisa em duas fatias anteriores. Corrigido com `printf | while read`.
+>
+> Quarta vez que um `gofmt -w` sobre diretório alcançou arquivos alheios (dois de
+> `tests/integration/`). Revertidos.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

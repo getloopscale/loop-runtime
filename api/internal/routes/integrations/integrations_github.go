@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+// Package integrations serves /api/v1/integrations/github: the dashboard's view
+// of which GitHub App installations a tenant has, and the revocation state of
+// each.
+//
+// Eleventh family to leave the flat `routes` package (B-080, slice-33), extracted
+// alongside `bootstrap`.
+package integrations
 
 import (
 	"context"

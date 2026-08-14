@@ -252,6 +252,14 @@ var allowed = map[string]map[string]bool{
 	// An empty set here is a family that imports no sibling, not a leaf.
 	"audit":  {"httpio": true, "routestest": true},
 	"health": {"routestest": true},
+	// The eleventh and twelfth families (slice-33, B-080). Serve
+	// /api/v1/integrations/github and /api/v1/bootstrap.
+	//
+	// `bootstrap` declares no routestest edge because its test does not need a
+	// request helper — the declaration is derived from what the package imports,
+	// never from the recipe the previous family happened to use.
+	"integrations": {"httpio": true, "routestest": true},
+	"bootstrap":    {"httpio": true},
 }
 
 // Config drives the gate.

@@ -7,11 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	gh "github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 )
 
@@ -77,12 +77,12 @@ type installationLookupAdapter struct {
 	store *store.PostgresRepositoryStore
 }
 
-func (a *installationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*routes.InstallationRecord, error) {
+func (a *installationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*integrations.InstallationRecord, error) {
 	inst, err := a.store.GetInstallation(ctx, installationID)
 	if err != nil || inst == nil {
 		return nil, err
 	}
-	return &routes.InstallationRecord{
+	return &integrations.InstallationRecord{
 		ID:       inst.ID,
 		TenantID: inst.TenantID,
 	}, nil
@@ -98,18 +98,18 @@ type installationRepoListerAdapter struct {
 	client *gh.AppClient
 }
 
-func (a *installationRepoListerAdapter) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]routes.InstallationRepository, error) {
+func (a *installationRepoListerAdapter) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]integrations.InstallationRepository, error) {
 	repos, err := a.client.ListInstallationRepositories(ctx, installationID, page)
 	if err != nil {
 		var revoked *gh.InstallationRevokedError
 		if errors.As(err, &revoked) {
-			return nil, fmt.Errorf("github installation %d revoked: %w", installationID, routes.ErrInstallationRevoked)
+			return nil, fmt.Errorf("github installation %d revoked: %w", installationID, integrations.ErrInstallationRevoked)
 		}
 		return nil, err
 	}
-	out := make([]routes.InstallationRepository, 0, len(repos))
+	out := make([]integrations.InstallationRepository, 0, len(repos))
 	for _, r := range repos {
-		out = append(out, routes.InstallationRepository{
+		out = append(out, integrations.InstallationRepository{
 			FullName:      r.FullName,
 			DefaultBranch: r.DefaultBranch,
 			Private:       r.Private,

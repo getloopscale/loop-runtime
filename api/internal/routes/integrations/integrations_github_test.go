@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package integrations
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,8 +59,8 @@ func defaultRepoReply() []InstallationRepository {
 func newListRequest(t *testing.T, installationID string) *http.Request {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations/github/installations/"+installationID+"/repositories", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", installationID)
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "id", installationID)
 	return req
 }
 
@@ -96,7 +97,7 @@ func TestListRepositories_Unauthenticated_401(t *testing.T) {
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/integrations/github/installations/1/repositories", nil)
-	req = withChiParam(req, "id", "1")
+	req = routestest.WithChiParam(req, "id", "1")
 	w := httptest.NewRecorder()
 	h.ListRepositories(w, req)
 	if w.Code != http.StatusUnauthorized {

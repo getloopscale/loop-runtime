@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
 )
 
 // stubCellEngine implements routes.CellPlacementEngine for tests.
@@ -31,8 +31,8 @@ func (stubCellEngine) AssignAndExecute(ctx context.Context, fn func(context.Cont
 
 func TestBootstrapRoute(t *testing.T) {
 	t.Run("POST /internal/bootstrap → 200 creates records", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -52,7 +52,7 @@ func TestBootstrapRoute(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var result routes.BootstrapResponse
+		var result bootstrap.BootstrapResponse
 		if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -72,8 +72,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → 200 idempotent on second call", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -102,7 +102,7 @@ func TestBootstrapRoute(t *testing.T) {
 			t.Fatalf("second call: expected 200, got %d: %s", rec2.Code, rec2.Body.String())
 		}
 
-		var result routes.BootstrapResponse
+		var result bootstrap.BootstrapResponse
 		if err := json.NewDecoder(rec2.Body).Decode(&result); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -115,8 +115,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → 400 missing admin_github_id", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_login":         "paulo",
@@ -147,8 +147,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → 400 missing admin_login", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -169,8 +169,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → 400 missing tenant_slug", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -191,8 +191,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → 400 invalid JSON body", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewReader([]byte("not json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -206,8 +206,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → tenant_id uses tn- prefix", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "999",
@@ -227,7 +227,7 @@ func TestBootstrapRoute(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var result routes.BootstrapResponse
+		var result bootstrap.BootstrapResponse
 		if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -240,8 +240,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → defaults plan to starter when empty", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -264,8 +264,8 @@ func TestBootstrapRoute(t *testing.T) {
 	// ADR-0008: Cell placement tests
 
 	t.Run("POST /internal/bootstrap → assigns cell_id from PlacementEngine", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -293,8 +293,8 @@ func TestBootstrapRoute(t *testing.T) {
 	})
 
 	t.Run("POST /internal/bootstrap → 500 when PlacementEngine fails", func(t *testing.T) {
-		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", &failingPlacementEngine{})
+		store := bootstrap.NewInMemoryBootstrapStore()
+		handler := bootstrap.NewBootstrapHandler(store, "", &failingPlacementEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",

@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
+	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
@@ -80,9 +82,9 @@ type Config struct {
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        secrets.SecretStore
-	BootstrapStore     routes.BootstrapStore
+	BootstrapStore     domain.BootstrapStore
 	BootstrapSecret    string                      // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement      routes.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
+	CellPlacement      domain.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
 	CellDiscovery      health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc
@@ -178,7 +180,7 @@ type Config struct {
 	GitHubWebhookHandler http.Handler
 	RepositoryHandler    *repositories.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
-	IntegrationsGitHubHandler *routes.IntegrationsGitHubHandler
+	IntegrationsGitHubHandler *integrations.IntegrationsGitHubHandler
 	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               middleware.AuditWriter

@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/hex"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -36,7 +37,7 @@ type StoreDeps struct {
 	EventStore       sse.EventStore
 	PgEventStore     *sse.PostgresEventStore
 	SecretStore      secrets.SecretStore
-	BootstrapStore   routes.BootstrapStore
+	BootstrapStore   domain.BootstrapStore
 	DomainStore      *store.PostgresDomainStore
 	CellStore        *store.PostgresCellStore
 	SourceStore      source.SourceStore

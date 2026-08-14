@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 	"os"
 	"strings"
@@ -367,7 +368,7 @@ func buildServerConfig(
 			NewPreviewHandler(previewStore, previewService, logger).
 			WithPhaseLookup(k8sDeps.PreviewCRMgr).
 			WithProjectChecker(&store.PostgresProjectStore{DB: dbAdapter})
-		sc.CellPlacement = func() routes.CellPlacementEngine {
+		sc.CellPlacement = func() domain.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
 		}()

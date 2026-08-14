@@ -6,6 +6,8 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"io"
 	"log/slog"
@@ -108,7 +110,7 @@ func (s *stubBuildReader) GetByID(_ context.Context, id string) (*sse.BuildInfo,
 // stubBootstrapStore implements routes.BootstrapStore.
 type stubBootstrapStore struct{}
 
-func (s *stubBootstrapStore) Bootstrap(_ context.Context, _ routes.BootstrapRequest) (string, string, bool, error) {
+func (s *stubBootstrapStore) Bootstrap(_ context.Context, _ domain.BootstrapRequest) (string, string, bool, error) {
 	return "user-1", "tenant-1", false, nil
 }
 
@@ -192,7 +194,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// Plan J-09 T2.1: dashboard repo picker -- wired with nil lister/store
 	// because router-level test only verifies route registration, never
 	// invokes the handler body (handler unit tests own that contract).
-	integrationsGitHubHandler := routes.NewIntegrationsGitHubHandler(nil, nil)
+	integrationsGitHubHandler := integrations.NewIntegrationsGitHubHandler(nil, nil)
 	auditHandler := audit.NewAuditHandler(nil)
 	argoCallbackHandler := routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 

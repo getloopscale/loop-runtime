@@ -1,14 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package routes — bootstrap.go
+// Package bootstrap serves the platform bootstrap endpoint.
 //
 // POST /internal/bootstrap
 // Internal-only endpoint for platform bootstrap. NOT part of the public API contract.
 // Creates initial system records (admin user, system tenant, tenant membership).
 // Idempotent: safe to call multiple times (uses ON CONFLICT DO NOTHING in PostgreSQL,
 // duplicate detection in memory for tests).
-package routes
+// Twelfth family to leave the flat `routes` package (B-080, slice-33): the first
+// call a new tenant makes,
+// which assigns it to a cell and creates the records the rest of the platform
+// reads.
+//
+// Twelfth family to leave the flat `routes` package (B-080, slice-33).
+//
+// Placement is sticky and one-time (ADR-0008), so this handler is the only path
+// that decides a tenant's cell — everything downstream is lookup. The types it
+// names for that decision, `BootstrapStore` and `CellPlacementEngine`, are ALIASES
+// re-exported from `internal/domain`; consumers now reference the real types, so
+// the apparent coupling to this family never existed. Third family in a row where
+// the compiler surfaced an alias the fence could not see, because the fence
+// measures imports and an alias hides behind the package that declares it.
+package bootstrap
 
 import (
 	"context"
