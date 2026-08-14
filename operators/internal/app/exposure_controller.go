@@ -110,17 +110,21 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	ctx = correlation.WithID(ctx, route.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.ExposedRoute{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, exposureDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	//
+	// The shared helper, not the hand-rolled copy this file used to carry. That
+	// copy predated slice-10 and reproduced the two defects that slice fixed:
+	// it persisted with Status().Update, so a conditions write — an ARRAY, which
+	// RFC 7386 treats as a scalar — could erase a concurrent write of the whole
+	// array with no error anywhere; and it DISCARDED the error (`_ =`), making a
+	// dropped status write silent in the one place that has nowhere to return to.
+	//
+	// DeferReadinessSummary carries MergeFromWithOptimisticLock and logs the
+	// failure. Duplicated knowledge is why this file still had the pre-fix shape
+	// months after the fix (B-085).
+	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.ExposedRoute { return &loopzerov1.ExposedRoute{} },
+		func(x *loopzerov1.ExposedRoute) *[]metav1.Condition { return &x.Status.Conditions },
+		exposureDetailTypes)()
 
 	// Handle deletion — remove finalizer immediately (v1: no external resources to clean up,
 	// namespace deletion handles IngressRoute/Certificate cleanup).
@@ -138,6 +142,22 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// The base snapshot for every status write below.
+	//
+	// AFTER EnsureFinalizer above, which writes metadata and bumps
+	// resourceVersion: a patch derived from an earlier snapshot carries the stale
+	// version and becomes an optimistic lock frozen at snapshot time — a WIDER
+	// conflict window than the refetch this contract removes. Measured as a real
+	// 409 in slice-18.
+	//
+	// And before the phase initialisation below, which mutates .Status: a
+	// snapshot taken after it would diff the phase against itself and the patch
+	// would silently omit the very transition it exists to persist.
+	//
+	// The deletion path returns above and writes no status, so it needs no base
+	// of its own.
+	base := route.DeepCopy()
 
 	// Initialize phase via state machine (T3.6 / ARCH-002).
 	if route.Status.Phase == "" {
@@ -172,7 +192,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		}
 		route.Status.ObservedGeneration = route.Generation
 
-		if err := r.Status().Update(ctx, &route); err != nil {
+		if err := r.Status().Patch(ctx, &route, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating route status: %w", err)
 		}
 		logger.Info("certificate not ready, requeuing", "route", route.Name)
@@ -275,7 +295,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	route.Status.ObservedGeneration = route.Generation
 
-	if err := r.Status().Update(ctx, &route); err != nil {
+	if err := r.Status().Patch(ctx, &route, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating route status: %w", err)
 	}
 

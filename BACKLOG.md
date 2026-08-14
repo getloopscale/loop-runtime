@@ -2648,6 +2648,41 @@ dod:
 > `status.required` e que nenhum campo de status é valor-zero sem `omitempty` — as duas condições que
 > tornam o merge-patch não-mecânico. Nenhuma se aplica aqui.
 
+> **Fatia `slice-25` — o `exposure_controller` saiu.** Restam **5** escritas em **4** arquivos.
+>
+> E ela achou mais do que as três escritas: o arquivo carregava uma **cópia manual do sumário de
+> prontidão**, e a cópia era a forma **anterior** ao conserto da fatia 10 — persistia com
+> `Status().Update` (sem a trava otimista, então uma escrita de `conditions`, que é array e portanto
+> escalar no RFC 7386, podia apagar escrita concorrente do array inteiro) e **descartava o erro**
+> (`_ =`), no único lugar que não tem para onde retornar. Trocada pelo helper compartilhado. É por isso
+> que conhecimento duplicado é caro: o conserto da fatia 10 nunca chegou aqui.
+>
+> A asserção nova — *ninguém rola o sumário à mão* — achou uma **segunda** ocorrência,
+> `application_controller.go`. Mas ali não é cópia obsoleta: ele **funde** o sumário no próprio patch,
+> e o comentário diz por quê — *"so the deferred Status().Update is no longer needed (single write per
+> pass)"*. É desenho melhor, não pior: uma escrita por passagem, sem segundo escritor. Minha asserção
+> perguntava *"chama o helper?"* em vez de *"reimplementa os DEFEITOS do helper?"*. Declarei a exceção
+> com a razão em vez de enfraquecer a asserção até ela não pegar nada.
+>
+> Pré-checagem da fatia 23 feita antes de converter: nenhum dos dois CRDs do pacote tem
+> `status.required`, e todo campo de status tem `omitempty`.
+>
+> **Correção de contagem, achada pelo review.** Eu vinha publicando "6 em 5" e o número real é **5 em
+> 4**: a sexta era um **comentário** em `tenant/tenant_controller.go:179` citando
+> `_ = r.Status().Update(...)` para chamá-lo de padrão proibido. O erro vem da fatia 24 e esta o
+> propagou por aritmética. A ironia é exata: o `stripGoComments` que escrevi **neste mesmo teste**
+> remove comentários antes de contar e teria acertado — eu não o apliquei à prosa. É a armadilha da
+> fatia 22 numa terceira roupa.
+>
+> **E a exceção que declarei estava justificada errado.** Eu disse que o `application_controller.go`
+> funde o sumário no próprio patch por desenho "melhor". O review mostrou que é forma **diferente e mais
+> fraca**: ela é **pulada em retorno antecipado** — quatro caminhos de erro retornam antes de o sumário
+> ser computado, e o helper é `defer` justamente porque o `ADR-0025 D3` exige que o sumário seja a
+> última mutação de status *mesmo em retorno antecipado*; e a base dela é tirada **depois de um
+> re-fetch**, então o diff **reverte ativamente** qualquer campo que outro escritor tenha mudado no
+> intervalo. Não é a dança proibida pela letra (aquela nomeia `Update`, esta é `Patch`), mas o dano que
+> o contrato nomeia sobrevive à troca de nome. Vira `B-105`.
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
 
 domain: engine-go
@@ -3119,4 +3154,21 @@ dod:
 
 > Registrado 2026-08-14 pela medição do `B-021` no droplet. A credencial é do patrocinador; a
 > invisibilidade é nossa.
+
+## B-105 — O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-14 pelo review da fatia `slice-25`. Dois defeitos independentes no mesmo trecho de `operators/internal/app/application_controller.go`. **(1)** `:151-163` compõe o status, faz `r.Get` de re-fetch em `:154`, e só então tira `client.MergeFrom(app.DeepCopy())` em `:158` — a base é o estado **fresco** do servidor enquanto a carga é o composto **anterior** ao re-fetch, então o diff **reverte** qualquer campo de status que outro escritor tenha mudado entre `:89` e `:154`. Não é a dança que o contrato proíbe pela letra (aquela nomeia `Status().Update`, esta é `Patch`), mas é o mesmo dano com outro nome. A forma prescrita pelo ADR — base logo após o `Get` inicial — não tem essa propriedade. **(2)** o sumário de prontidão é computado inline em `:162`, e **quatro** caminhos de erro retornam antes disso (`:121`, `:125`, `:136`, `:155`, mais `reconcileDelete` em `:117`). O `ADR-0025 D3`, citado em `reconcilehelpers/readiness.go:8-11`, exige que o sumário seja a última mutação de status **mesmo em retorno antecipado** — que é por que o helper é um `defer`.
+why_now: eu declarei essa forma como "desenho melhor" ao isentá-la da asserção da fatia 25, e estava errado nos dois pontos — o review mediu. A tabela mecânica do `B-085` a pontuou como conforme porque conta a **chamada** (`Patch` e não `Update`), não a **âncora**. Enquanto isso, em todo caminho de erro a condição `Ready` fica velha, que é exatamente quando alguém a lê.
+status: triaged
+severity: média — o raio prático é pequeno porque `LoopZeroApplication.status` deveria ter um escritor só; o custo é que o invariante vale por contagem de chamada e não por forma, e uma condição de prontidão velha é lida como verdadeira
+dod:
+  - a base é tirada logo após o `Get` inicial, sem re-fetch entre a composição e o patch — ou está escrito por que o re-fetch é necessário aqui e o que ele protege
+  - o sumário de prontidão passa a ser a última mutação de status também nos cinco caminhos de retorno antecipado
+  - a asserção do `B-085` deixa de pontuar por chamada e passa a pontuar por âncora, ou fica escrito que ela não distingue as duas coisas
+
+> Registrado 2026-08-14 pelo review da fatia 25, corrigindo uma isenção que eu tinha justificado errado.
 
