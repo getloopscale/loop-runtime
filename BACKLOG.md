@@ -590,7 +590,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido em 2026-08-10 ao investigar o `cloud-dev`. `POST /api/v1/webhooks/github` devolve **404** por `app-dev` e direto no `loopzero-api` (`localhost:13001`), enquanto `POST /api/v1/health` devolve **405** — ou seja, a rota do webhook nem chega a ser registrada, não é erro de roteamento. O log do `loopzero-api` confirma: *"github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)"*. A causa está em `api/cmd/setup_github.go:152-158`: sem o segredo, `WebhookHandler` fica nil e o roteador não registra a rota. O seed que provisiona o segredo (`5-seed-github-app-dev`) reprovou com `namespaces "loopzero-system" not found` — ele rodou antes do namespace existir, durante a reconstrução.
 why_now: enquanto o segredo existiu no cluster, isto era invisível. A reconstrução total o apagou junto com tudo, e o seed que o recria falhou por ordem. **A consequência é que auto-deploy a partir do GitHub não funciona** — um `git push` no repositório de um cliente não dispara build nenhum. Não apareceu antes porque as sondagens de verificação cobriam `/engine/*` e os fluxos de login, e o webhook é a única superfície que não se testa com um GET.
-status: triaged
+status: shipped
 severity: alta — é uma jornada inteira do produto (conectar repositório → push → deploy) que está morta, e ela falha em silêncio: o GitHub recebe 404 e o usuário não vê erro nenhum no painel.
 dod:
   - a cadeia de seeds pós-cleanroom completa sem falhas de pré-requisito, ou a ordem dela garante que o namespace exista antes do seed que depende dele
@@ -613,6 +613,37 @@ dod:
 > invisibilidade** é defeito próprio e independente da credencial: uma superfície de segurança que se
 > desliga sozinha e deixa o `git push` do cliente sem disparar build nenhum deveria ser alta e não
 > muda; hoje ela é `optional: true` em silêncio. Vale item próprio.
+
+> **Consertado no droplet 2026-08-14 — e NÃO precisou de credencial nenhuma.**
+>
+> Eu tinha reportado o item como bloqueado no patrocinador. Estava errado, e o erro foi meu: sondei o
+> `~/.loopzero/dev-credentials.json` procurando a chave `private_key`, nome que vem do **doc-comment** do
+> seed (`github_app_dev.go:22`) e está impreciso. O código lê `app_private_key` — `creds.go:21` — que é
+> exatamente o nome que o arquivo tem. As credenciais estavam lá o tempo todo.
+>
+> A causa era a que o próprio item registrava: o seed rodou antes de o namespace existir. Hoje
+> `loopzero-system` tem `3d22h`, e o seed é idempotente. Sequência: `--verify` reprovava por
+> `loopzero-api-github not found`; `--dry-run` dizia *"would apply loopzero-api-github + loopzero-github-webhook"*;
+> aplicado, `--verify` passou com *"both Secrets present with data matching creds"*.
+>
+> **O rollout é parte do conserto, não detalhe.** O `loopzero-api` lê o segredo só no arranque — a rota
+> continuou 404 depois de os Secrets existirem, e só voltou após `rollout restart`. É a mesma armadilha
+> que o `CLAUDE.md` registra para o Kratos.
+>
+> Provado ponta a ponta, com o segredo comparado por HMAC e nunca impresso:
+>
+> | requisição | antes | depois |
+> |---|---|---|
+> | `POST /webhooks/github` sem assinatura | **404** (rota inexistente) | **401** |
+> | assinatura **válida** (`X-Hub-Signature-256`) | — | **200** |
+> | assinatura **inválida** | — | **403** |
+> | `POST /health` (controle) | 405 | 405 |
+>
+> O binário usado foi construído da árvore atual e copiado: o que estava no droplet era de
+> **2026-06-03**, e o checkout local está **61 commits** atrás. Não usei nenhum dos dois.
+>
+> O `B-104` — a invisibilidade que permitiu isto passar despercebido — **continua aberto**: o desenho
+> que fez o pod subir calado com os dois secrets ausentes não mudou.
 
 ## B-022 — O caminho do motor depende do painel estar de pé   [ ]
 
