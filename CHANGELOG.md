@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Os fechamentos desta rodada passaram a ter um registro único com o comando que prova cada um, re-executado depois do fato. Sete deles existiam só como afirmação no meio da conversa: podiam estar certos — e estavam —, mas quem lesse depois não teria como saber sem medir de novo.
 - Dois caminhos do inventário de testes que apontavam para arquivos já movidos foram corrigidos. Medindo o resto, 215 dos 582 caminhos declarados não existem — a verificação que lê esse arquivo nunca confere se o caminho existe, então a defasagem vinha crescendo sem ninguém ver. O resto está registrado para tratamento próprio. (B-080, B-106)
 - A quarta família de rotas — a de domínios personalizados — saiu do pacote plano. Ela era a maior das candidatas e vinha classificada como a mais acoplada; medida movendo-a de verdade, não tem acoplamento nenhum com o resto. O critério de escolha das próximas passou a ser esse. (B-080)
 
