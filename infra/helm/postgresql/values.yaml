@@ -45,6 +45,17 @@ auth:
 # Discovered live during T5.1 virgin install on 2026-04-30.
 
 primary:
+  # Declared, not inherited. PostgreSQL defaults max_prepared_transactions to 0, and
+  # nothing in the ecosystem uses two-phase commit (measured 2026-08-14: zero
+  # PREPARE TRANSACTION across all eight repositories) — so this changes no behaviour.
+  #
+  # It is written down because a prepared transaction holds its locks and its snapshot
+  # until someone commits or rolls it back, across disconnects and restarts. That makes
+  # the maximum transaction duration unbounded, which is what would stop a tenant
+  # migration or shard cutover from ever proving its quiesce window closed. Dev matches
+  # production here so the property cannot hold in one and not the other.
+  extendedConfiguration: |
+    max_prepared_transactions = 0
   initdb:
     scripts:
       create-platform-dbs.sql: |

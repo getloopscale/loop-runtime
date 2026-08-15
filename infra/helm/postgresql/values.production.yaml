@@ -32,6 +32,19 @@ primary:
   # WAL archiving for point-in-time recovery (PITR)
   # Bitnami chart supports extended configuration via postgresql.conf overrides.
   extendedConfiguration: |
+    # Two-phase commit stays off, and stays off ON PURPOSE.
+    #
+    # Nothing here uses it (measured 2026-08-14: zero PREPARE TRANSACTION across all
+    # eight repositories). PostgreSQL already defaults this to 0, so the value below
+    # changes no behaviour — it removes the reliance on a default.
+    #
+    # A prepared transaction holds its locks and its snapshot until someone commits or
+    # rolls it back, surviving both the client disconnecting and a server restart. That
+    # makes the maximum transaction duration unbounded, and an unbounded transaction is
+    # what stops any tenant-migration or shard-cutover quiesce window from ever being
+    # provably closed. Raising this is a decision to argue for, not a knob to turn for
+    # one integration.
+    max_prepared_transactions = 0
     archive_mode = on
     archive_command = 'test ! -f /bitnami/postgresql/archive/%f && cp %p /bitnami/postgresql/archive/%f'
     wal_level = replica
