@@ -378,7 +378,14 @@ jobs:
           # rest of the migration chain is not replayable against a schema dump
           # (the dump already carries its result), and a glob would silently
           # start including the next migration somebody adds.
-          for m in 000062_rls_fail_closed 000063_cloud_named_role 000064_drop_owner_maintenance; do
+          #
+          # The flip side is that adding a migration and forgetting this line is
+          # invisible — the job stays green measuring the schema WITHOUT it. The
+          # step below counts what the migrations must have produced, which is
+          # what catches the omission for 62/63/64; 065 and 066 are pinned by
+          # their own integration tests (FK ON DELETE, idempotency per tenant).
+          for m in 000062_rls_fail_closed 000063_cloud_named_role 000064_drop_owner_maintenance \
+                   000065_explicit_fk_on_delete 000066_idempotency_key_per_tenant; do
             echo "-- $m"
             PGPASSWORD=loopzero psql -U loopzero -d loopzero_test -v ON_ERROR_STOP=1 \
               -f "loopzero/api/internal/db/migrations/$m.up.sql"
