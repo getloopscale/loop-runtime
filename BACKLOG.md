@@ -2752,6 +2752,39 @@ severity: alta — é o achado central da auditoria de arquitetura, e agora est�
 > Isto substitui a formulação anterior — *"fica por decisão"* —, que descrevia ausência de decisão
 > como se fosse uma. A decisão existe agora, com o que ela custa nomeado.
 
+> ---
+>
+> **Fatia 41 — `source` extraída (2026-08-15). O pacote `routes` deixou de existir.**
+>
+> Executada sob a decisão registrada em `MEET-ASYNC-AMENDMENT-2026-08-14-source-family-extraction`,
+> que segue **pendente de ratificação** — o `pre-release-governance.md § Async exception` permite o
+> progresso do laço com o registro visível, e bloqueia apenas **declarar o item completo**. Este item,
+> portanto, **não está fechado**: está com o trabalho feito e esperando o "pode".
+>
+> **De 43 arquivos de produção para ZERO.** `api/internal/routes` não é mais um pacote Go — o
+> diretório passou a conter apenas as **26 famílias** e os **3 leaves**. O que sobrava no pai:
+>
+> - os 7 testes do `SourceHandler` foram com a família;
+> - `fixtures_test.go` e `test_helpers_test.go` ficaram **órfãos** quando as famílias saíram — o
+>   compilador provou, removendo-os sem quebrar nada;
+> - as 5 asserções transversais do `cross_tenant_test.go` (auth de serviço, idempotência,
+>   pass-through de admin) foram para `api/tests/unit/`, onde as outras transversais moram. Elas não
+>   referenciam família nenhuma, o que é justamente por que podiam ficar — e por que não precisavam.
+>
+> **Um pacote só de testes não compila.** `go build ./...` recusa com *"no non-test Go files"*, e foi
+> isso que decidiu dissolver o pai em vez de o manter como casa de asserções transversais.
+>
+> **As quatro citações do documento foram no mesmo commit**, como a decisão exigia — inclusive a de
+> dentro do diagrama ASCII, cuja borda precisou ser realinhada porque o caminho ficou 7 caracteres mais
+> longo. Um diagrama desalinhado é um sinal barato de que ninguém verificou.
+>
+> **Colisão de nome resolvida pela convenção da árvore:** a família `source` e o validador
+> `internal/source` compartilham nome. Nos arquivos que importam os dois, o lado de **rotas** ganhou o
+> apelido `sourceroutes` — o mesmo padrão de `domainsvc`, `placementsvc`, `previewsvc`, `buildroutes`.
+>
+> Os dois achados de lint no arquivo movido (`field mu is unused`, cópia de variável de `for`) são
+> **pré-existentes** e vieram com ele.
+
 dod:
   - `ls -d api/internal/routes/*/` fica isomórfico às famílias de `server/router.go`
   - cada família nova entra no allow-list de `routes-acyclic` como declaração, não como descoberta

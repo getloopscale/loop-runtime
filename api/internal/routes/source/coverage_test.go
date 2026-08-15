@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package source
 
 import (
 	"bytes"
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -72,7 +73,7 @@ func TestSourceHandler_Upload_ContentTooLarge(t *testing.T) {
 	h := NewSourceHandler(nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", nil)
 	req.ContentLength = maxBundleSize + 1
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Upload(w, req)
@@ -87,7 +88,7 @@ func TestSourceHandler_Upload_InvalidMultipart(t *testing.T) {
 	body := bytes.NewBufferString("not-valid-multipart")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=invalid")
-	req = withAuth(req, defaultUserContext())
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 
 	h.Upload(w, req)

@@ -323,6 +323,16 @@ var allowed = map[string]map[string]bool{
 	"metrics":  {"httpio": true},
 	"timeline": {},
 	"argocd":   {},
+
+	// The LAST family (B-080). Serves the bundle upload — the LoopZeroKit ↔ LoopZeroCloud
+	// seam, locked by CLAUDE.md and moved only after its contract was read and
+	// measured to be behavioural rather than positional.
+	//
+	// With it, `api/internal/routes` stops existing as a Go package: the directory
+	// now holds only families and leaves. The gate's parent-edge rule therefore has
+	// nothing left to guard against on the vertical — kept because a future file
+	// dropped at the top level would recreate the parent it exists to police.
+	"source": {"httpio": true, "routestest": true},
 }
 
 // Config drives the gate.

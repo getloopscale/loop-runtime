@@ -24,10 +24,10 @@ import (
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/routes/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -301,17 +301,17 @@ func registerProtectedRoutes(
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
 	if cfg.SourceStore != nil {
-		var sourceOpts []func(*routes.SourceHandler)
+		var sourceOpts []func(*source.SourceHandler)
 		if cfg.ObjectUploader != nil {
-			sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
+			sourceOpts = append(sourceOpts, source.WithObjectUploader(cfg.ObjectUploader))
 		}
 		// CHG-2026-04-29-DOGFOOD iter 9 — WithProductionMode removed:
 		// upload errors are now always fatal when an object store is
 		// configured. Local must equal production (Rule 10).
 		if cfg.SourceBucket != "" {
-			sourceOpts = append(sourceOpts, routes.WithSourceBucket(cfg.SourceBucket))
+			sourceOpts = append(sourceOpts, source.WithSourceBucket(cfg.SourceBucket))
 		}
-		sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
+		sourceHandler := source.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 	}
 

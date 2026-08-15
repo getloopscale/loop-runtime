@@ -15,7 +15,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
 	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
@@ -159,7 +159,7 @@ func TestSourceUpload(t *testing.T) {
 	t.Run("upload valid bundle returns 200 with commit_sha and apps list", func(t *testing.T) {
 		// Arrange
 		store := newFakeSourceStore("abc123def456")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		req := newMultipartRequest(t, []byte("fake-bundle-data"), validLoopZeroYAML)
 		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -173,7 +173,7 @@ func TestSourceUpload(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var resp routes.SourceUploadResponse
+		var resp sourceroutes.SourceUploadResponse
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -206,7 +206,7 @@ func TestSourceUpload(t *testing.T) {
 	t.Run("no loopzero_yaml returns 422", func(t *testing.T) {
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		req := newMultipartRequest(t, []byte("fake-bundle"), "")
 		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -233,7 +233,7 @@ func TestSourceUpload(t *testing.T) {
 		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		loopzeroYAML := `
 apps:
@@ -268,7 +268,7 @@ apps:
 		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		loopzeroYAML := `
 name: my-saas
@@ -299,7 +299,7 @@ apps: {}
 		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		loopzeroYAML := `
 name: my-saas
@@ -333,7 +333,7 @@ apps:
 	t.Run("bundle too large returns 413", func(t *testing.T) {
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		// Create a request with Content-Length exceeding 500MB
 		// We don't actually create a 500MB body — we set Content-Length header
@@ -363,7 +363,7 @@ apps:
 	t.Run("no auth returns 401", func(t *testing.T) {
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		req := newMultipartRequest(t, []byte("fake-bundle"), validLoopZeroYAML)
 		// No auth context set
@@ -385,7 +385,7 @@ apps:
 		t.Skip("legacy loopzero.yaml worker-type flow removed post Plan B v3.1")
 		// Arrange
 		store := newFakeSourceStore("sha-worker-ok")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		loopzeroYAML := `
 name: my-saas
@@ -406,7 +406,7 @@ apps:
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var resp routes.SourceUploadResponse
+		var resp sourceroutes.SourceUploadResponse
 		_ = json.NewDecoder(rec.Body).Decode(&resp)
 		if resp.CommitSHA != "sha-worker-ok" {
 			t.Errorf("expected commit_sha 'sha-worker-ok', got '%s'", resp.CommitSHA)
@@ -423,7 +423,7 @@ apps:
 		t.Skip("legacy loopzero.yaml port-validation flow removed post Plan B v3.1")
 		// Arrange
 		store := newFakeSourceStore("abc123")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		loopzeroYAML := `
 name: my-saas
@@ -455,7 +455,7 @@ apps:
 		// Arrange
 		store := newFakeSourceStore("abc123")
 		store.Error = fmt.Errorf("gitea connection refused")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		req := newMultipartRequest(t, []byte("fake-bundle"), validLoopZeroYAML)
 		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -480,7 +480,7 @@ apps:
 		// Arrange — the CLI sends loopzero_yaml as a file (Blob with filename),
 		// not as a text field. The API must accept both forms.
 		store := newFakeSourceStore("sha-file-yaml")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		req := newMultipartRequestWithFileYAML(t, []byte("fake-bundle-data"), validLoopZeroYAML)
 		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -494,7 +494,7 @@ apps:
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var resp routes.SourceUploadResponse
+		var resp sourceroutes.SourceUploadResponse
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -522,7 +522,7 @@ apps:
 		t.Skip("legacy loopzero.yaml frontend-type flow removed post Plan B v3.1")
 		// Arrange
 		store := newFakeSourceStore("sha-frontend-ok")
-		handler := routes.NewSourceHandler(store)
+		handler := sourceroutes.NewSourceHandler(store)
 
 		loopzeroYAML := `
 name: my-saas
@@ -543,7 +543,7 @@ apps:
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var resp routes.SourceUploadResponse
+		var resp sourceroutes.SourceUploadResponse
 		_ = json.NewDecoder(rec.Body).Decode(&resp)
 		if len(resp.Apps) != 1 || resp.Apps[0] != "web" {
 			t.Errorf("expected apps ['web'], got %v", resp.Apps)

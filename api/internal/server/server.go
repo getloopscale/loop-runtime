@@ -30,7 +30,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
@@ -40,6 +39,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -87,8 +87,8 @@ type Config struct {
 	ProjectEnvEnsurer promote.EnvironmentEnsurer
 	IdempotencyStore  middleware.IdempotencyStore
 	SourceStore       source.SourceStore
-	ObjectUploader    routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
-	SourceBucket      string                // S3 bucket name for source bundles (env: SOURCE_BUCKET)
+	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
+	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
 	ArgoCallbackSecret string
 	EventStore         sse.EventStore

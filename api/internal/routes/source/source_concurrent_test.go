@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package source
 
 import (
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -109,7 +110,7 @@ func TestSourceHandler_Upload_ConcurrentRaceResolvesAsDeployInProgress(t *testin
 			body, contentType := buildMultipart()
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
 			req.Header.Set("Content-Type", contentType)
-			req = withAuth(req, defaultUserContext())
+			req = routestest.WithAuth(req, routestest.DefaultUserContext())
 			rec := httptest.NewRecorder()
 			handler.Upload(rec, req)
 			results[i] = result{status: rec.Code, body: rec.Body.String()}

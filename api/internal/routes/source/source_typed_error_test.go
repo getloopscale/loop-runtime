@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package routes
+package source
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -57,7 +58,7 @@ func buildValidUploadRequest(t *testing.T) *http.Request {
 	_ = w.Close()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", &body)
 	req.Header.Set("Content-Type", w.FormDataContentType())
-	return withAuth(req, defaultUserContext())
+	return routestest.WithAuth(req, routestest.DefaultUserContext())
 }
 
 // EC-3 regression-assurance #1 — ErrInvalidTenantOrProject sentinel path

@@ -13,8 +13,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
 	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -41,7 +41,7 @@ type StoreDeps struct {
 	DomainStore      *store.PostgresDomainStore
 	CellStore        *store.PostgresCellStore
 	SourceStore      source.SourceStore
-	ObjUploader      routes.ObjectUploader
+	ObjUploader      sourceroutes.ObjectUploader
 	Locker           *adapters.PoolEnvironmentLocker
 
 	// SSE adapter
@@ -100,7 +100,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	}
 
 	// S3 uploader for source bundles — build cluster reads from Spaces.
-	var objUploader routes.ObjectUploader
+	var objUploader sourceroutes.ObjectUploader
 	if cfg.MinIOEndpoint != "" && cfg.MinIOAccessKey != "" && cfg.MinIOSecretKey != "" {
 		objUploader = s3uploader.New(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
 		logger.Info("s3 uploader enabled", "endpoint", cfg.MinIOEndpoint)

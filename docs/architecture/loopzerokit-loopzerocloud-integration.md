@@ -103,7 +103,7 @@ The architectural seam between them is **a single JSON file on disk**: `.loopzer
 │   └─────────────────────────────────────────────────────────────────────────┘    │
 │                                  ▼                                               │
 │   ┌─────────────────────────────────────────────────────────────────────────┐    │
-│   │  routes/source.go — SourceHandler.Upload                                │    │
+│   │  routes/source/source.go — SourceHandler.Upload                         │    │
 │   │                                                                          │    │
 │   │  ① peekFirstMultipartFieldName(r)  ─── Plan v1.2 T6.1 (EC-5)            │    │
 │   │     │  clones r.GetBody (cap 16KB) e checa nome do 1º part              │    │
@@ -247,7 +247,7 @@ LoopZeroCloud Go side                        loopzero-cloud CLI (TS)           o
 sourceRepoName → ErrInvalidTenantOrProject
         │
         ▼
-routes/source.go errors.Is(err, source.ErrInvalidTenantOrProject)
+routes/source/source.go errors.Is(err, source.ErrInvalidTenantOrProject)
         │
         ▼
 HTTP 400 { "code": "INVALID_TENANT_OR_PROJECT", "message": "..." }
@@ -305,7 +305,7 @@ Plan v1.2 closed 22 findings on the integration seam. The invariants that MUST h
 - **services.json schema is `oneOf` discriminated by `version`**. Add a v3 only via a new branch — never break v1+v2.
 
 ### Wire
-- **Multipart field order is part of the contract.** `services_json` first, `bundle` second. Enforced via `peekFirstMultipartFieldName` (`api/internal/routes/source.go`). Documented at [`docs/api/source-upload-wire-protocol.md`](../api/source-upload-wire-protocol.md).
+- **Multipart field order is part of the contract.** `services_json` first, `bundle` second. Enforced via `peekFirstMultipartFieldName` (`api/internal/routes/source/source.go`). Documented at [`docs/api/source-upload-wire-protocol.md`](../api/source-upload-wire-protocol.md).
 - **`services_json` field is capped at 256 KB**; `bundle` at 500 MB. Constants: `maxServicesJSONSize`, `maxBundleSize`.
 
 ### Error discipline
@@ -323,7 +323,7 @@ Plan v1.2 closed 22 findings on the integration seam. The invariants that MUST h
 |---------------------|------------|-----------|
 | `services.schema.json` | This doc + Plan v1.2 §Phase 2 | `loopzerokit/src/services/adapters-bridge/manifest.ts` (mirror types) |
 | `loopzerokit build --target loopzero-cloud` emit | This doc + Plan v1.2 T2.3 | `services-manifest-v2.test.ts` (cross-product gate) |
-| `routes/source.go` upload handler | This doc + wire protocol spec | Plan v1.2 T1.1 / T1.2 / T6.1 tests |
+| `routes/source/source.go` upload handler | This doc + wire protocol spec | Plan v1.2 T1.1 / T1.2 / T6.1 tests |
 | `manifests/renderer.go` | This doc | Plan v1.2 T3.1 grep audit + T4.1 K8sDoc tests |
 | `cli/src/adapters/source-upload.ts` | This doc + wire protocol spec | Plan v1.2 T5.1 / T5.2 tests |
 | `cli/src/commands/deploy.ts` | This doc + Vercel-like UX plan | Plan v1.2 T5.1 cause-chain pattern |

@@ -34,7 +34,7 @@
 //   - Fixture: infra/tests/seed/cross_tenant_fixture.go
 //   - RLS policies: api/internal/db/migrations/000001_initial_schema.up.sql:476-522
 
-package routes
+package unit
 
 import (
 	"testing"
@@ -125,7 +125,7 @@ func TestCrossTenant_EC_NEW_7_MetaReference(t *testing.T) {
 // Specifying the spec here forces the future implementer to satisfy this
 // adversarial requirement and surfaces the gap in the test suite output.
 func TestCrossTenant_EC_NEW_8_AdminAuditMetaEmission(t *testing.T) {
-	t.Skip("EC-NEW-8 pending — requires admin audit-read endpoint + meta-audit middleware (T2 trigger, see MEET-ASYNC-AMENDMENT-2026-05-12-001)")
+	t.Skip("EC-NEW-8 pending — https://github.com/getloopscale/loopzero/issues/291 — requires admin audit-read endpoint + meta-audit middleware (T2 trigger, see MEET-ASYNC-AMENDMENT-2026-05-12-001)")
 }
 
 // =============================================================================
