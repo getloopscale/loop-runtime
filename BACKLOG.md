@@ -859,19 +859,74 @@ sponsor: diretriz de 2026-08-10 — *"SEGURANÇA SEMPRE É CRÍTICO E PRIORIDADE
 severity: **P0** — por diretriz do sponsor, e sustentada por medição.
 evidence: medido em 2026-08-10, **da internet** (não do droplet). 39 portas escutam em `0.0.0.0`; o firewall `loopzero-host-firewall` bloqueia 20; sobram **19**, das quais 2 estão na `ALLOW_EXTERNAL` com justificativa medida. As outras **17 não estão em lista nenhuma**. Testado de fora com conexão TCP: `14433`, `14444`, `30082`, `18084`, `30090` e `30094` responderam **ABERTA**. Identificado o que serve cada uma via `docker ps`: `30082` é o **ArgoCD** (entregador GitOps), `30095` é o **cluster de segredos**, `18083`–`18090` são cinco produtos do plano de dados servindo direto, contornando a borda, e `14433`/`14444` são Kratos e Hydra **sem TLS** — o mesmo serviço que a borda já publica em HTTPS.
 why_now: a lista `PROTECT` do firewall foi escrita quando os clusters se chamavam `mgmt`, `workload`, `runtime-2` e `vault` — os comentários dela ainda citam esses nomes. Ela cobre as portas que existiam então; tudo que subiu depois (as pontes NodePort de Kratos e Hydra que criei hoje, os produtos do plano de dados, o cluster de segredos) nasceu fora da lista. **Uma lista escrita à mão degrada sozinha**, e esta degradou em silêncio: nada reprova quando uma porta nova aparece sem entrada.
-status: raw
+status: triaged
 blocked_by: nada técnico. O que exige decisão é a política — quais portas ficam abertas e com que justificativa —, e a diretriz do sponsor já a define: **uma superfície exposta**.
 dod:
   - o firewall passa a fechar **por padrão** e abrir por exceção nomeada, em vez do inverso: hoje uma porta ausente da lista fica ABERTA, que é a polaridade errada para uma regra de segurança
-  - as 17 portas sem lista são classificadas — fecha, ou entra na `ALLOW_EXTERNAL` com o consumidor nomeado e medido, como as duas que já estão lá
-  - o `loopzero-host-firewall.sh` passa a viver num repositório versionado: hoje ele existe **só em `/home/paulo/loopzero-ops/dev/`**, fora de qualquer git, e é o mesmo padrão do `B-010` — um controle que vive só no servidor some no próximo servidor
-  - existe verificação que reprova porta escutando em `0.0.0.0` sem entrada em `PROTECT` nem em `ALLOW_EXTERNAL` — sem ela, a lista degrada de novo pelo mesmo caminho
+  - as portas sem lista são classificadas — fecha, ou entra na `ALLOW_EXTERNAL` com o consumidor nomeado e medido, como as duas que já estão lá. **Medidas em 2026-08-15: são 10, não 17, e a tabela está na seção de re-medição abaixo**
+  - ~~o `loopzero-host-firewall.sh` passa a viver num repositório versionado~~ — **satisfeita, e a premissa estava errada**: medido em 2026-08-15, o arquivo chama-se `host-firewall.sh` e já é rastreado por git em três repositórios. O que sobrou dessa medição é o `B-111`
+  - existe verificação que reprova porta escutando em `0.0.0.0` sem entrada em `PROTECT` nem em `ALLOW_EXTERNAL` — sem ela, a lista degrada de novo pelo mesmo caminho. **A medição de 15/08 acrescenta um requisito**: a verificação reconcilia nos **dois** sentidos, porque a divergência medida é bidirecional — 9 portas abertas sem declaração e 1 declarada sem quem escute
 
 **O que NÃO deve ser feito, e o autor do firewall já documentou.** As portas `8787` e `18084` foram fechadas uma vez e quebraram dois gates de CI (`dev-version-drift.yml` do loopzero-rag e do loopzero-lens, que sondam o droplet **de um runner do GitHub**). O autor reabriu com a medição registrada no próprio script: *"o gate é CONTROLE — ele é o que detecta deploy"*. Fechar sem substituir o caminho de verificação troca uma exposição por uma cegueira.
 
 **O crédito onde é devido.** O `loopzero-host-firewall` existe, está habilitado, e a `ALLOW_EXTERNAL` documenta cada exceção com evidência de quando e como foi medida. O defeito não é ausência de controle — é que o controle é uma lista de negação escrita à mão, e listas de negação envelhecem para o lado inseguro.
 
 > Registrado 2026-08-10, a partir da diretriz de superfície única do sponsor.
+
+---
+
+### Re-medido em 2026-08-15, da internet — e a superfície mudou em cinco dias
+
+Sondadas 52 portas de fora do droplet por conexão TCP. **13 abertas**, das quais **3 são a borda
+pretendida** (`22`, `80`, `443`) e **10 não estão em lista nenhuma**.
+
+**Três correções ao registro de 10/08**, todas medidas:
+
+1. **O script existe e é versionado.** O nome é `host-firewall.sh`, não `loopzero-host-firewall.sh`, e
+   ele é rastreado por git em **três** repositórios — `loopzero-cloud`, `loopzero-ops` e o clone aninhado
+   `loopzero-cloud/loopzero-workspace` —, com `md5` idêntico (`359c0d6b`). **A terceira bala do DoD está
+   satisfeita** e por isso sai da lista; o que ficou no lugar dela é pior e virou o `B-111`: um
+   controle de segurança em triplicata sem dono declarado.
+2. **O controle está no lugar certo.** As regras vivem em `DOCKER-USER`, a única chain que precede
+   o Docker — `ufw` inativo é irrelevante, e não um defeito. Quem escreveu isso acertou.
+3. **Parte do item já foi executada.** `14433`, `14444`, `30082` e `30095` — as quatro que o registro
+   de 10/08 nomeava — hoje têm `DROP` com o comentário `loopzero-fw-p0` e respondem fechadas.
+
+**As 10 que continuam expostas, classificadas por medição** (`docker ps` + `kubectl get svc` por
+contexto):
+
+| porta | serve | classe |
+|---|---|---|
+| `18084` | `loopzerolens_api` (OTLP) | **declarada** na `ALLOW_EXTERNAL`, consumidor nomeado |
+| `18083` `18085` `18087` `18090` | `loopzeropromptly_app`, `loopzerotrust_app`, `loopzeroskill_app`, `loopzero-mcp-gateway` | produto do plano de dados servindo direto, contornando a borda |
+| `30090` | `argo/argo-workflows-metrics` (cluster build) | **telemetria interna exposta** |
+| `30091` | `traefik/traefik-metrics` (cell-0) | **telemetria interna exposta** |
+| `30094` | `monitoring/loki-cross-cluster` (core) | **agregação de log exposta** |
+| `30081` `30093` | `serverlb` dos clusters build e core — **nenhum Service NodePort corresponde** | publicação órfã, provável resíduo de recurso deletado |
+
+As três linhas de telemetria são **achado novo**: não estavam classificadas em 10/08. Métrica de
+Argo Workflows e de Traefik descreve topologia interna e volume de trabalho por tenant, e Loki guarda
+o log. Nenhuma delas é a borda, e nenhuma tem consumidor externo declarado.
+
+**A lacuna é bidirecional, e é o argumento mais forte para a quarta bala.** A `ALLOW_EXTERNAL`
+declara **duas** portas — `8787` (therag_api) e `18084` (loopzero-lens). A `18084` está aberta como
+declarado. A **`8787` responde `ConnectionRefusedError`**: não há regra de `DROP` para ela, o firewall
+faz o certo — **ninguém escuta**. O `therag_api` roda sem publicar a porta, e o `8787/tcp` que
+aparece no `docker ps` é interno do `therag_worker`. Ou seja, a lista diverge da realidade **nas duas
+direções ao mesmo tempo**: 9 portas abertas que ninguém declarou, e 1 porta declarada que não existe.
+Uma verificação que só olhasse um dos lados teria reportado verde numa delas.
+
+O lado "declarado mas ausente" tem consequência própria e virou o `B-112`: o
+`dev-version-drift.yml` do loopzero-rag sonda essa porta de um runner do GitHub para **detectar deploy**.
+O autor do firewall manteve a porta aberta exatamente para preservar esse gate — e o gate quebrou
+assim mesmo, porque o que sumiu foi a publicação, não a regra. É a cegueira que ele quis evitar,
+chegando pelo caminho que ninguém vigiava.
+
+**O que isto muda no DoD:** a bala 3 sai (satisfeita). A bala 2 passa a ter as 10 classificadas
+acima em vez de 17 não medidas. As balas 1 e 4 seguem abertas e são o trabalho real — e a bala 4
+ganhou o requisito de **reconciliar nos dois sentidos**, que a evidência de 10/08 não pedia.
+
+status anterior: `raw` · **agora `triaged`** — a medição acima é a saída do `/discover --mode live-test`.
 
 ## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
 
@@ -4075,4 +4130,36 @@ dod:
   - o custo de renderizar no gate está medido (hoje ele só lê diretório; `helm template` exige o binário e resolve dependências)
 
 > Registrado 2026-08-14 ao medir as 21 herdadas do `B-076`. Decisão que o separou deste item: `MEET-ASYNC-AMENDMENT-2026-08-14-helm-drift-per-file-reasons`.
+
+## B-111 — O mesmo controle de firewall vive em três repositórios sem dono declarado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-live-test
+evidence: medido em 2026-08-15 no droplet. `host-firewall.sh` é rastreado por git em `loopzero-cloud/dev/`, `loopzero-ops/dev/` e no clone aninhado `loopzero-cloud/loopzero-workspace/dev/`, com `md5` idêntico `359c0d6b`. Nenhum dos três declara qual é a cópia canônica, e a `ALLOW_EXTERNAL` — a política de exposição — está duplicada nas três.
+why_now: o `B-028` registrava que o controle vivia **fora** de git e pedia que entrasse. Medindo, ele já está dentro — três vezes. Isto não é a bala cumprida com folga: uma política de segurança em triplicata diverge na primeira vez que alguém edita uma cópia, e a divergência é silenciosa porque as três continuam existindo e nenhuma reprova.
+status: triaged
+severity: média — não é exposição em si, é o mecanismo que garante que a exposição volte a divergir.
+dod:
+  - uma cópia é declarada canônica, e as outras ou somem ou passam a apontar para ela
+  - existe verificação que reprova quando duas cópias divergem, medida por conteúdo e não por data
+
+> Registrado 2026-08-15, ao re-medir o `B-028` e descobrir que a premissa da terceira bala dele estava errada.
+
+## B-112 — O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: live-test
+source: discover-live-test
+evidence: medido em 2026-08-15. `8787` está na `ALLOW_EXTERNAL` do `host-firewall.sh` com o comentário *"lido por loopzero-rag/dev-version-drift.yml"*, e **não há regra de DROP para ela** — o firewall faz o certo. Da internet ela responde `ConnectionRefusedError`, e não filtragem: **ninguém escuta no host**. `docker ps` mostra `therag_api` rodando **sem publicar porta** e `therag_worker` com `8787/tcp` apenas interno ao container.
+why_now: o próprio `B-028` registra que este gate é **controle** — *"o gate é CONTROLE — ele é o que detecta deploy"* — e que a porta foi mantida aberta para preservá-lo. A porta continua aberta e o gate ficou cego assim mesmo, porque o que sumiu foi a **publicação** do container, não a regra do firewall. Um gate de detecção de deploy que não alcança o alvo reporta ausência de deploy exatamente como reportaria um deploy parado.
+status: triaged
+severity: alta — é um controle de detecção silenciosamente inoperante, e a classe é pior que a instância: nada reprova quando um alvo de sondagem deixa de existir.
+dod:
+  - o gate falha alto quando o alvo não responde, em vez de tratar ausência de resposta como ausência de deploy
+  - `8787` volta a ser publicada pelo `therag_api`, ou a `ALLOW_EXTERNAL` deixa de declará-la e o gate passa a sondar o caminho que existe
+
+> Registrado 2026-08-15, ao re-medir o `B-028`. É o inverso exato do que o autor do firewall quis evitar: ele manteve a porta aberta para preservar o gate, e o gate cegou pelo lado que ninguém vigiava.
 
