@@ -212,6 +212,32 @@ type LensAlertRule struct {
 	LastTriggeredAt         pgtype.Timestamptz `json:"last_triggered_at"`
 	RenotifyIntervalSeconds *int32             `json:"renotify_interval_seconds"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	MonitorID               *string            `json:"monitor_id"`
+	PromptName              *string            `json:"prompt_name"`
+}
+
+type LensDashboard struct {
+	ID        string             `json:"id"`
+	TenantID  string             `json:"tenant_id"`
+	CreatedBy string             `json:"created_by"`
+	Name      string             `json:"name"`
+	Config    []byte             `json:"config"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LensFiredAlert struct {
+	ID           string             `json:"id"`
+	RuleID       string             `json:"rule_id"`
+	TenantID     string             `json:"tenant_id"`
+	Metric       string             `json:"metric"`
+	Comparator   string             `json:"comparator"`
+	Threshold    float64            `json:"threshold"`
+	Value        float64            `json:"value"`
+	FiredAt      pgtype.Timestamptz `json:"fired_at"`
+	TransitionID string             `json:"transition_id"`
+	DeliveryID   string             `json:"delivery_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type LensSavedView struct {
@@ -397,6 +423,17 @@ type SseEvent struct {
 	EventType string             `json:"event_type"`
 	Data      []byte             `json:"data"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type StorageObject struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  string             `json:"tenant_id"`
+	Name      string             `json:"name"`
+	SizeBytes int64              `json:"size_bytes"`
+	MimeType  string             `json:"mime_type"`
+	Status    string             `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Subscription struct {
