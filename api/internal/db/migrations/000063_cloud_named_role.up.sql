@@ -73,7 +73,11 @@ BEGIN
         RETURN;
     END IF;
 
-    EXECUTE 'GRANT CONNECT ON DATABASE loopzero TO loopzero_cloud';
+    -- current_database(), not a literal: the database is named `loopzero` in
+    -- production and something else in every CI job and audit replay. A
+    -- hardcoded name makes the migration fail with `database "loopzero" does not
+    -- exist` exactly where the isolation is being measured.
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO loopzero_cloud', current_database());
     EXECUTE 'GRANT USAGE ON SCHEMA public TO loopzero_cloud';
     EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO loopzero_cloud';
     EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO loopzero_cloud';
