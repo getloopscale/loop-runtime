@@ -217,8 +217,15 @@ type bgLoop struct {
 }
 
 // createCoreLoops builds the list of always-on background loops.
+//
+// `bgAdapter` and `stores` MUST come from the BACKGROUND pool (loopzero_worker),
+// never from the request pool. Every loop here sweeps across tenants by
+// definition, and the request role holds no cross-tenant policy: over that pool
+// each sweep reads and deletes NOTHING — no error, no log, no metric. The boot
+// guard in setup_background_database.go refuses to hand over a pool without the
+// named reach, so this contract fails loudly instead of quietly.
 func createCoreLoops(
-	dbAdapter *db.PgxAdapter,
+	bgAdapter *db.PgxAdapter,
 	stores *StoreDeps,
 	workflows *WorkflowDeps,
 	orchDeps *OrchestratorDeps,
@@ -261,7 +268,7 @@ func createCoreLoops(
 
 	reaper := build.NewBuildReaper(
 		buildStore,
-		&build.PostgresStaleBuildChecker{DB: dbAdapter},
+		&build.PostgresStaleBuildChecker{DB: bgAdapter},
 		stores.Locker,
 		workflows.WorkflowSubmitter,
 		stores.EventStore,
@@ -281,7 +288,7 @@ func createCoreLoops(
 
 	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&release.PostgresStaleReleaseChecker{DB: dbAdapter},
+		&release.PostgresStaleReleaseChecker{DB: bgAdapter},
 		stores.Locker,
 		pgEventStore,
 		logger,
@@ -309,17 +316,17 @@ func createCoreLoops(
 	releaseConvergenceLoop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
 
 	idempotencyCleaner := platform.NewIdempotencyCleaner(
-		&store.PostgresIdempotencyStore{DB: dbAdapter}, logger, 1*time.Hour,
+		&store.PostgresIdempotencyStore{DB: bgAdapter}, logger, 1*time.Hour,
 	)
 	eventPruner := sse.NewEventPruner(pgEventStore, logger, 24*time.Hour, 1*time.Hour)
 	cellMetrics := placement.NewCellMetricsCollector(stores.CellStore, logger, 60*time.Second)
 	buildGC := build.NewBuildGC(
-		&store.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
+		&store.PostgresBuildGCStore{DB: bgAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
 	)
 	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
 	// (1 year default). Was implemented but never wired, leaving audit_log to
 	// grow unbounded. PruneOnce runs nightly at 02:00 local via Start().
-	auditLogPruner := platform.NewAuditLogPruner(dbAdapter.Pool, platform.AuditLogPrunerOpts{
+	auditLogPruner := platform.NewAuditLogPruner(bgAdapter.Pool, platform.AuditLogPrunerOpts{
 		Logger: logger,
 	})
 
@@ -412,12 +419,13 @@ func runLeaderHeartbeat(
 	}
 }
 
-// startLeaderLoops starts all background loops that run on the leader replica only.
+// startLeaderLoops starts every leader-only loop over the BACKGROUND pool.
+// See createCoreLoops for why it must not be the request pool.
 func startLeaderLoops(
 	shutdownCtx context.Context,
 	bgWg *sync.WaitGroup,
 	leaderConn *pgxpool.Conn,
-	dbAdapter *db.PgxAdapter,
+	bgAdapter *db.PgxAdapter,
 	stores *StoreDeps,
 	workflows *WorkflowDeps,
 	orchDeps *OrchestratorDeps,
@@ -435,7 +443,7 @@ func startLeaderLoops(
 		return
 	}
 
-	coreLoops := createCoreLoops(dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter, domainProvisioner, domainHealthChecker, cfg, logger)
+	coreLoops := createCoreLoops(bgAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter, domainProvisioner, domainHealthChecker, cfg, logger)
 	optionalLoops := createOptionalLoops(stores, workflows, cfZoneClient, cfg, logger)
 	allLoops := append(coreLoops, optionalLoops...)
 

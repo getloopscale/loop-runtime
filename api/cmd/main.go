@@ -144,6 +144,10 @@ func main() {
 	WireAuthFailureAuditor(dbAdapter, logger)
 
 	var stores *StoreDeps
+
+	var bgStores *StoreDeps
+
+	var bgAdapter *db.PgxAdapter
 	var workflows *WorkflowDeps
 	var orchDeps *OrchestratorDeps
 	var ghDeps *GitHubDeps
@@ -165,6 +169,32 @@ func main() {
 		if err != nil {
 			logger.Error("failed to setup stores", "error", err)
 			os.Exit(1)
+		}
+		// Os loops de background NÃO usam o pool das requisições. Ele é
+		// deliberadamente incapaz de ver outro tenant (AssertRequestPoolIsolated
+		// recusa subir se conseguir), e varredura entre tenants é exatamente o
+		// trabalho deles — sobre aquele pool, cada varredura leria e apagaria
+		// NADA, sem erro e sem log. Ver setup_background_database.go.
+		bgAdapter, err = setupBackgroundDatabase(cfg, logger)
+		if err != nil {
+			logger.Error("failed to connect the background database pool", "error", err)
+			os.Exit(1)
+		}
+		defer bgAdapter.Close()
+		bgStores, err = setupStores(bgAdapter, cfg, transit, logger)
+		if err != nil {
+			logger.Error("failed to setup background stores", "error", err)
+			os.Exit(1)
+		}
+		// O cap de projetos é POR CONTA e conta através dos tenants dela. O pool
+		// das requisições enxerga um tenant só desde a migration 000062, então
+		// sem isto o cap por conta vira cap por tenant — silenciosamente. Medido:
+		// conta com 2 tenants e 1 projeto cada devolvia 1 pelo pool de request e
+		// 2 pelo loopzero_worker. Ver internal/db/store/project_wrapper.go.
+		if dbDeps.ProjectStore != nil {
+			if ps, ok := dbDeps.ProjectStore.(*store.PostgresProjectStore); ok {
+				ps.SetCrossTenantCounter(bgAdapter)
+			}
 		}
 		workflows, err = setupWorkflows(cfg, httpTransport, logger)
 		if err != nil {
@@ -225,7 +255,7 @@ func main() {
 
 			if leaderResult.IsLeader {
 				startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
-					dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter,
+					bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
 					domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
 			}
 			// Non-leader: setupLeaderElection already started the

@@ -121,21 +121,47 @@ func resolveAccountAndLock(ctx context.Context, tx db.DBTX, tenantID string) (st
 // resolveAccountAndLock on the same tx first. Shared by createProjectCapped (API)
 // and ensureProjectCapped (deploy) so the cap rule + the count SQL live once.
 //
-// RLS INVARIANT (load-bearing): the count is a CROSS-TENANT aggregate over all
-// the Account's tenants. On the deploy path it runs inside the build-submit tx,
-// which sets `app.tenant_id = <deploying tenant>` (internal/lock — the projects
-// RLS policy `projects_tenant_isolation`). The count therefore REQUIRES a
-// connection that is NOT subject to that policy — i.e. a role with BYPASSRLS or
-// the table owner — otherwise it would be silently filtered to the single
-// deploying tenant and the per-Account cap would degrade to per-tenant. The
-// engine's synchronous request path (API + build-submit) runs on exactly such a
-// pool today (LOOPZERO's main role has rolbypassrls=true); the restricted
-// `loopzero_worker` role is reserved for background loops, never the submit path. If
-// the submit path is ever moved to a non-BYPASSRLS role this count MUST be made
-// RLS-independent (e.g. a SECURITY DEFINER counting function). Tracked separately.
-func enforceProjectCapTx(ctx context.Context, tx db.DBTX, accountID, plan string, cap int) error {
+// RLS INVARIANT (load-bearing), and how it is satisfied NOW.
+//
+// The count is a CROSS-TENANT aggregate over all the Account's tenants, while
+// the transaction that calls it carries ONE tenant's context (internal/lock
+// sets `app.tenant_id = <deploying tenant>` on the submit path). Until
+// 2026-08-14 the request pool held BYPASSRLS, so the policy never applied and
+// the count saw every tenant. Migration 000062 plus the boot guard
+// `AssertRequestPoolIsolated` moved that pool to `loopzero_api` — non-owner, no
+// BYPASSRLS — and the count silently became per-TENANT.
+//
+// Measured on a real database: one account, two tenants, one project each.
+//
+//	loopzero_api  (context = tenant 1)  -> 1   <= cap, creation allowed
+//	loopzero_worker                     -> 2
+//
+// A plan capped at N projects became N per tenant, unbounded across tenants.
+// Nothing errored and nothing logged; the cap simply stopped being the cap.
+//
+// `crossTenant` is the fix: a handle on the connection that legitimately spans
+// tenants (loopzero_worker, whose reach is the named *_worker_cross_tenant policies
+// of migration 000062). It is used for the COUNT only — the lock, the checks and
+// the write all stay on the caller's transaction.
+//
+// WHY COUNTING OFF-TRANSACTION IS SAFE HERE. Every creator takes
+// `pg_advisory_xact_lock(hashtext(accountID))` before reaching this point, so at
+// most one creator per account is in flight; a separate connection therefore
+// sees the complete committed state for that account. Without the lock this
+// would be a race; with it, it is the same number the in-transaction count used
+// to produce.
+//
+// When `crossTenant` is nil the count falls back to the caller's transaction —
+// the pre-2026-08-14 behaviour — and is filtered by RLS. That path is for tests
+// and for a database whose worker role was never provisioned; production wires
+// it, and `TestProjectCap_CrossTenantCount` pins the difference.
+func enforceProjectCapTx(ctx context.Context, tx db.DBTX, crossTenant db.DBTX, accountID, plan string, cap int) error {
+	counter := tx
+	if crossTenant != nil {
+		counter = crossTenant
+	}
 	var count int
-	if err := tx.QueryRow(ctx,
+	if err := counter.QueryRow(ctx,
 		"SELECT count(*) FROM projects WHERE tenant_id IN (SELECT id FROM tenants WHERE account_id = $1)",
 		accountID,
 	).Scan(&count); err != nil {
@@ -175,7 +201,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 	if err != nil {
 		return domain.ProjectResult{}, err
 	}
-	if err := enforceProjectCapTx(ctx, tx, accountID, plan, cap); err != nil {
+	if err := enforceProjectCapTx(ctx, tx, s.crossTenant, accountID, plan, cap); err != nil {
 		return domain.ProjectResult{}, err
 	}
 
@@ -302,7 +328,7 @@ func (s *PostgresProjectStore) ensureProjectCapped(ctx context.Context, tx db.DB
 		return fmt.Errorf("project store: existence check: %w", existErr)
 	}
 
-	if err := enforceProjectCapTx(ctx, capTx, accountID, plan, cap); err != nil {
+	if err := enforceProjectCapTx(ctx, capTx, s.crossTenant, accountID, plan, cap); err != nil {
 		return err
 	}
 

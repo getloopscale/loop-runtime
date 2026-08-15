@@ -48,7 +48,7 @@ func (c realProjectCapChecker) CheckProjectsValue(tenantID string, current int) 
 func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	t.Helper()
 	pool := testPool(t) // skips if pg unreachable
-	stdDB, err := sql.Open("pgx", dbURL())
+	stdDB, err := sql.Open("pgx", seedDBURL())
 	if err != nil {
 		t.Fatalf("open stdlib DB: %v", err)
 	}

@@ -100,6 +100,7 @@ func seedActiveRelease(t *testing.T, pool *pgxpool.Pool, tenantID, projectID, en
 	releaseID = "rel-uniq-" + suffix
 	corrID := "corr-uniq-" + suffix
 
+	seedTenantRow(t, pool, tenantID)
 	_, err := pool.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 		 VALUES ($1, $2, $3, $4, 'SUCCEEDED', $5, 'system:test')`,
@@ -108,6 +109,11 @@ func seedActiveRelease(t *testing.T, pool *pgxpool.Pool, tenantID, projectID, en
 		t.Fatalf("seed build: %v", err)
 	}
 
+	seedTenantRow(t, pool, tenantID)
+	seedTenantRow(t, pool, tenantID)
+	seedTenantRow(t, pool, tenantID)
+	seedTenantRow(t, pool, tenantID)
+	seedTenantRow(t, pool, tenantID)
 	_, err = pool.Exec(ctx,
 		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'system:test')`,
@@ -291,6 +297,7 @@ func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
 		buildID := fmt.Sprintf("bld-pf-%s-%d", suffix, i)
 		relID := fmt.Sprintf("rel-pf-%s-%d", suffix, i)
 		corrID := fmt.Sprintf("corr-pf-%s-%d", suffix, i)
+		seedTenantRow(t, pool, tenantID)
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 			 VALUES ($1, $2, $3, $4, 'SUCCEEDED', $5, 'system:test')`,
@@ -347,4 +354,36 @@ func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
 		t.Errorf("expected count=2, got %d", violations[0].N)
 	}
 	// tx rollback in defer restores the index and discards seed rows.
+}
+
+// seedTenantRow creates the user/account/tenant a `builds` row needs.
+//
+// Migration 000061 added a trigger that resolves `builds.cell_id` from
+// `tenants.cell_id` and raises when the tenant is absent. Fixtures written
+// before it inserted a build for a tenant that never existed; they now fail
+// with "o tenant nao existe ou nao tem cell". Seeding the parents is what the
+// trigger asks for — the honest fix rather than disabling it.
+func seedTenantRow(t *testing.T, pool *pgxpool.Pool, tenantID string) {
+	t.Helper()
+
+	ctx := context.Background()
+	owner := "u-" + tenantID
+	account := "acct-" + tenantID
+
+	for _, step := range []struct {
+		what string
+		sql  string
+		args []any
+	}{
+		{"user", `INSERT INTO users (id,email,display_name,username)
+		          VALUES ($1,$1||'@fixture.test','F',$1) ON CONFLICT (id) DO NOTHING`, []any{owner}},
+		{"account", `INSERT INTO accounts (id,display_name,plan,owner_id)
+		             VALUES ($1,'F','starter',$2) ON CONFLICT (id) DO NOTHING`, []any{account, owner}},
+		{"tenant", `INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id)
+		            VALUES ($1,$1,$1,$2,$3,'cell-0') ON CONFLICT (id) DO NOTHING`, []any{tenantID, owner, account}},
+	} {
+		if _, err := pool.Exec(ctx, step.sql, step.args...); err != nil {
+			t.Fatalf("seed %s for %s: %v", step.what, tenantID, err)
+		}
+	}
 }

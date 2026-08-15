@@ -264,12 +264,19 @@ jobs:
   # suite with LOOPZERO_RLS_AUDIT_REQUIRE=1 — which turns "cannot connect" from a
   # skip into a failure.
   #
-  # SCOPE IS DELIBERATE. It runs the isolation and hardening tests, not the whole
-  # integration suite: 16 of those tests were already failing against a real
-  # database before this work (fixtures that predate the cell_id trigger added by
-  # migration 000061, plus a pre-existing find_data_004 FK regression). Widening
-  # this job would mix a security gate with unrelated debt and give a reason to
-  # disable it. That debt is tracked separately.
+  # SCOPE IS THE WHOLE SUITE, as of 2026-08-14. It used to run only the isolation
+  # and hardening tests because 16 others were already failing against a real
+  # database — fixtures that predated the cell_id trigger (000061), fixtures that
+  # predated the `apps: [AppInput]` body and the mandatory Idempotency-Key, and
+  # the find_data_004 FK regression. Every one of those is now fixed, so the
+  # narrowing has no reason left: 62 tests, 62 green.
+  #
+  # The narrowing had a cost worth remembering. `-run '<list>'` silently excludes
+  # any test whose name is not in it, so two isolation tests added later ran in
+  # NO job with a database and were green by never executing — the same
+  # "green without running" this job exists to prevent, reintroduced by the
+  # mechanism protecting against it. Running everything removes the list, and
+  # with it the possibility of forgetting to add a name to it.
   # ---------------------------------------------------------------------------
   tenant-isolation:
     runs-on: blacksmith-8vcpu-ubuntu-2404
@@ -371,7 +378,7 @@ jobs:
           # rest of the migration chain is not replayable against a schema dump
           # (the dump already carries its result), and a glob would silently
           # start including the next migration somebody adds.
-          for m in 000062_rls_fail_closed 000063_cloud_named_role; do
+          for m in 000062_rls_fail_closed 000063_cloud_named_role 000064_drop_owner_maintenance; do
             echo "-- $m"
             PGPASSWORD=loopzero psql -U loopzero -d loopzero_test -v ON_ERROR_STOP=1 \
               -f "loopzero/api/internal/db/migrations/$m.up.sql"
@@ -403,7 +410,7 @@ jobs:
             exit 1
           fi
 
-      - name: Isolamento de tenant (falha se o banco sumir, nunca pula)
+      - name: Integração contra banco real (falha se o banco sumir, nunca pula)
         env:
           DATABASE_URL: postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable
           LOOPZERO_API_DATABASE_URL: postgres://loopzero_api:loopzero-api@localhost:5432/loopzero_test?sslmode=disable
@@ -413,5 +420,4 @@ jobs:
         run: |
           set -euo pipefail
           cd loopzero/api
-          go test ./tests/integration/ -count=1 -v \
-            -run 'TenantIsolation|RLSGuard|RLSOnAllTenantTables|RolesExist|LoopZeroApiCannotDDL|AuditLogAppendOnly|ReconciliationQueriesWithRLS|OwnerMaintenancePoliciesAreGone|NoUnconditionalTruePolicyOutsideNamedWorkers'
+          go test ./tests/integration/ -count=1 -v

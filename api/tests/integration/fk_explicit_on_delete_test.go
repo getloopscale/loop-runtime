@@ -8,11 +8,12 @@
 // default (pg_constraint.confdeltype = 'a').
 //
 // PostgreSQL confdeltype values:
-//   'a' — NO ACTION (default — what we want to eliminate)
-//   'r' — RESTRICT
-//   'c' — CASCADE
-//   'n' — SET NULL
-//   'd' — SET DEFAULT
+//
+//	'a' — NO ACTION (default — what we want to eliminate)
+//	'r' — RESTRICT
+//	'c' — CASCADE
+//	'n' — SET NULL
+//	'd' — SET DEFAULT
 package integration
 
 import (
