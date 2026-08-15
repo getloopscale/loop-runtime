@@ -414,4 +414,4 @@ jobs:
           set -euo pipefail
           cd loopzero/api
           go test ./tests/integration/ -count=1 -v \
-            -run 'TenantIsolation|RLSGuard|RLSOnAllTenantTables|RolesExist|LoopZeroApiCannotDDL|AuditLogAppendOnly|ReconciliationQueriesWithRLS'
+            -run 'TenantIsolation|RLSGuard|RLSOnAllTenantTables|RolesExist|LoopZeroApiCannotDDL|AuditLogAppendOnly|ReconciliationQueriesWithRLS|OwnerMaintenancePoliciesAreGone|NoUnconditionalTruePolicyOutsideNamedWorkers'
