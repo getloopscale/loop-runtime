@@ -26,6 +26,9 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.New(ctx, seedDBURL())
 	if err != nil {
 		cancel()
+		// Máquina sem banco. No CI o job de integração provisiona um, então este
+		// caminho não roda lá; a tensão "pular por padrão" está em:
+		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("skipping: cannot connect to PostgreSQL: %v", err)
 	}
 
@@ -34,6 +37,8 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 		"SELECT relrowsecurity FROM pg_class WHERE relname = 'builds'").Scan(&rlsEnabled); err != nil || !rlsEnabled {
 		cancel()
 		pool.Close()
+		// Banco sem as migrations de isolamento — a fixture não tem o que exercitar.
+		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("skipping: isolation migrations not applied (RLS off on builds)")
 	}
 

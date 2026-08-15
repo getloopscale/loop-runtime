@@ -110,6 +110,10 @@ func TestBackgroundPoolReach_OwnerRefused(t *testing.T) {
 		t.Fatalf("measure: %v", err)
 	}
 	if !posture.IsOwner && !posture.BypassRLS {
+		// Nada a afirmar: o alvo deste teste é a recusa do DONO, e este DSN não é
+		// o dono. Não é a mesma tensão do #289 (auditoria que pula por padrão) —
+		// aqui a condição do teste simplesmente não existe neste banco.
+		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("DATABASE_URL is not the owner (%s) — nothing to assert here", posture)
 	}
 
