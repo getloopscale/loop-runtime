@@ -3634,7 +3634,8 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-14`. `taskfiles/test.yml` roda `cd infra/tests && go test ./unit/...`, o que deixa três subárvores fora: `helm/` (27 arquivos de teste, **verde** — ligado nesta fatia), `scripts/` (11, **vermelho**) e `config/` (5, **vermelho**). Os dois vermelhos acusam coisas reais: `TestLoopZeroCloudImageOverlayUsesGHCRCanonical` (`loopzero_cloud_ghcr_canonical_test.go:62`) diz que `infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl` não referencia `ghcr.io/getloopscale/loopzero-cloud` (issue #104), e `TestB31ImageTagsPinned` (`regression_bugs_early_test.go:245`) diz que a tag em `infra/helm/loopzero-api/values.yaml` viola o ADR-0020 D1.
 why_now: são 16 testes que ninguém executa e que estão reprovando — a forma exata do `B-088` um nível abaixo do módulo. O gate `test-target-coverage` criado na mesma fatia **não os vê**: a granularidade dele é o módulo, e `infra/tests` conta como coberto por causa do `./unit/...`.
-status: raw
+status: triaged
+blocked_by: nada técnico — **as três balas do DoD estão cumpridas e medidas em 2026-08-15** (ver a seção de execução abaixo). O fechamento aguarda a ratificação do `MEET-ASYNC-AMENDMENT-2026-08-15-unrun-tests-froze-a-superseded-contract`, porque a mudança é T2 (pipeline) e altera o contrato afirmado por dois testes de regressão.
 severity: alta — dois testes de regressão estão vermelhos há tempo indeterminado, e o que eles acusam (imagem apontando para registro errado, tag fora do contrato) é a classe que o `B-016` já mostrou custar cluster parado.
 dod:
   - `scripts/` e `config/` entram num alvo que roda
@@ -3644,6 +3645,52 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-14`. `helm/` foi ligado na mesma fatia por estar
 > verde; os dois vermelhos ficam de fora porque adicioná-los deixaria `task test:unit` vermelho sem
 > consertar o que acusam — e um alvo vermelho vira alvo desligado, que é o defeito de origem.
+
+---
+
+### Executado em 2026-08-15 — e os dois `FAIL` eram falsos, em formas diferentes
+
+**O primeiro comparava a grafia da fonte.** `TestLoopZeroCloudImageOverlayUsesGHCRCanonical` T3 exigia a
+substring `ghcr.io/getloopscale/loopzero-cloud` num arquivo cujo repositório é **montado**:
+`repository: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopzero-cloud`. O valor
+renderizado é exatamente o canônico no caminho padrão; o que não existe é a substring contígua, porque
+uma expressão de template separa o prefixo do sufixo. **A asserção reprovava o arquivo correto.** É a
+mesma doença que o `B-110` mede no `helm-drift`.
+
+**O segundo permitia o que o desenho rejeitou.** `TestB31ImageTagsPinned` aceitava
+`semver | sha-* | latest`. O valor real é a sentinela `SET-BY-CI`, escolhida sob a issue #232 com 17
+linhas de justificativa em `infra/helm/loopzero-api/values.yaml:17-33` — onde **`latest` é rejeitado por
+nome**, por dar a falha mais silenciosa possível. A asserção permitia `latest` e recusava a sentinela.
+
+**Esse é o achado, e ele é maior que o registrado.** Um teste que ninguém roda não apenas deixa de
+proteger: ele **congela um contrato vencido** e bloquearia o desenho correto no dia em que fosse
+ligado. O item foi registrado como *"16 testes que ninguém executa e que estão reprovando"*; o custo
+medido inclui a afirmação envelhecer sem que nada acusasse.
+
+**O que foi feito.** As duas regex saíram de dentro de um `if` e viraram funções puras com tabela —
+`renderedImageRepository` (7 casos) e `imageTagVerdict` (10 casos), 17 subtestes. Uma regex dentro de
+um `if` é afirmação sem casos: não é revisável, só alargável até passar. Uma tabela declara o que é
+aceito e o que não é, **com a razão ao lado**, e a mudança de contrato — `latest` passa a ser recusado
+— vira uma linha que alguém pode contestar. A renderização usa `text/template` da biblioteca padrão
+com `FuncMap` de duas funções, medido como suficiente (o overlay usa **uma**, `env`), e falha **alto**
+se aparecer função que ela não carrega.
+
+**A varredura da população achou o que a contagem dos vermelhos escondia** — a disciplina do `B-109`.
+São **três** subárvores sem alvo, não duas: `performance/` tem 23 arquivos de teste, roda em 37 ms sem
+infraestrutura nenhuma, está **verde**, e não era alcançada por alvo nenhum. Passou despercebida
+exatamente por estar verde. As três entraram: `task test:unit` agora roda
+`./unit/... ./helm/... ./scripts/... ./config/... ./performance/...`, 6 pacotes verdes.
+
+**Bala 3 — decidida por medição.** A granularidade de pacote **é viável e o custo é pequeno**: dos
+alvos do repositório, todo módulo tem um `./...` **exceto** `infra/tests`, e ali as subárvores restantes
+(`e2e`, `chaos`, `charts`, `livetest`) já têm alvo próprio ou exigem cluster. A granularidade de módulo
+foi o que permitiu este item existir — `infra/tests` contava como coberto por causa do `./unit/...`.
+A implementação vai no `B-114`; o que esta bala pedia era a decisão, e ela está tomada com o número.
+
+**O que a varredura de tags achou e este item não conserta:** a asserção lê **um** arquivo, e existem
+**16** charts declarando `image.tag`. Os **7 publicados** — os que o ArgoCD entrega — declaram
+`tag: dev`. Não expandi o teste para reprová-los: deixaria o alvo recém-ligado vermelho, que é o
+defeito que este item existe para não repetir. Virou `B-113`.
 
 ## B-093 — O validador do `services.json` não bloqueia os prefixos que a plataforma injeta   [ ]
 
@@ -4162,4 +4209,37 @@ dod:
   - `8787` volta a ser publicada pelo `therag_api`, ou a `ALLOW_EXTERNAL` deixa de declará-la e o gate passa a sondar o caminho que existe
 
 > Registrado 2026-08-15, ao re-medir o `B-028`. É o inverso exato do que o autor do firewall quis evitar: ele manteve a porta aberta para preservar o gate, e o gate cegou pelo lado que ninguém vigiava.
+
+## B-113 — A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-15 ao executar o `B-092`. `TestB31ImageTagsPinned` lê **um** arquivo — `infra/helm/loopzero-api/values.yaml`. Varrendo `infra/helm/**/values.yaml` e `charts/**/values.yaml`, **16** charts declaram `image.tag`: 2 usam a sentinela `SET-BY-CI`, 1 usa semver, 5 são de terceiros com versão upstream (`1.22.6`, `2.5.4`, `0.96.0`, `1.32.5`, `2024.12.2`), 1 usa `latest-20260420`, e **7 — todos os `charts/loopzero-*` publicados — declaram `tag: dev`**.
+why_now: os sete são justamente os charts OCI publicados que o ArgoCD entrega aos tenants (L3), e `dev` é mutável: dois deploys do mesmo chart em momentos diferentes podem trazer imagens distintas sem que nada mude no git. O `ADR-0020 D1` existe contra exatamente isso, e a asserção que deveria vigiá-lo cobre o único chart que **não** é publicado.
+status: triaged
+severity: média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados.
+dod:
+  - está decidido se `tag: dev` nos charts publicados é aceito, sobrescrito no install, ou violação — com a evidência de qual dos três é
+  - a asserção passa a varrer a população de charts em vez de um caminho fixo, com isenção **nomeada** para chart de terceiro (cuja tag é a versão upstream e não nossa para policiar)
+
+> Registrado 2026-08-15 pela varredura de população do `B-092`. É a terceira vez nesta sessão que uma guarda verificada contra uma instância cobria uma fração da população — a classe está no `B-109`.
+
+## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-15 ao executar o `B-092`. O gate afirma que todo módulo Go tem seus testes rodados por um alvo do Taskfile. `infra/tests` **passava** — por causa do `./unit/...` — enquanto `scripts/` (12), `config/` (6) e `performance/` (23) não rodavam em alvo nenhum: **41 arquivos de teste invisíveis num módulo que o gate reportava coberto**.
+why_now: o custo da granularidade de pacote está medido e é pequeno. Dos alvos do repositório, **todo módulo tem um `go test ./...` exceto `infra/tests`**; os padrões restritos dos outros (`api ./internal/contract/...`, `cmd/loopzero-ops ./internal/quality/deadlineratchet/...`) são alvos focados **adicionais**, sobre módulos já cobertos por `./...`. Então a mudança morde num módulo só, e ali as subárvores restantes (`e2e`, `chaos`, `charts`, `livetest`) já têm alvo próprio ou exigem cluster — isenção nomeada, que é o mecanismo que o gate já tem.
+status: triaged
+severity: média — o gate não está errado no que afirma; está errado na granularidade em que afirma, e é a granularidade que decide o que ele consegue ver.
+dod:
+  - o gate resolve os padrões de cada alvo para o conjunto de pacotes que eles realmente casam, e compara com os pacotes que têm `_test.go`
+  - subárvore que exige cluster entra por isenção **nomeada com a razão**, não por o padrão do módulo acidentalmente cobri-la
+  - existe caso de teste que reprova a forma exata que o `B-092` expôs: módulo com `./sub/...` num alvo e um `./outra/` sem alvo nenhum
+
+> Registrado 2026-08-15. A decisão sobre a granularidade é a terceira bala do DoD do `B-092`, e foi tomada lá com o número acima; este item carrega a implementação.
 

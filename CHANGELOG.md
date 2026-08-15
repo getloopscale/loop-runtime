@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Dois testes de regressão voltaram a rodar — e os dois acusavam coisa errada.** Eles viviam em pastas que nenhum comando executava, e por isso ninguém percebeu que tinham envelhecido. Um exigia que o endereço da imagem aparecesse escrito por extenso no arquivo, quando o endereço é **montado** a partir de um parâmetro com valor padrão: o resultado final estava certo, e o teste reprovava o arquivo correto. O outro aceitava a etiqueta `latest` e recusava a etiqueta que a equipe havia escolhido em seu lugar — exatamente ao contrário da decisão registrada, que rejeitou `latest` por ser a que falha mais silenciosamente. As duas verificações passaram a comparar o **valor final**, cada regra virou um caso com sua justificativa ao lado, e `latest` deixou de ser aceito nesse chart. (B-092)
+- **Mais 41 arquivos de teste passaram a rodar.** Três pastas do repositório não eram alcançadas por nenhum comando de teste. Duas estavam vermelhas — são as do item acima. A terceira estava **verde**, roda em menos de um décimo de segundo e não precisa de infraestrutura alguma; passou despercebida justamente por não reclamar. (B-092)
+
 ### Security
 - **A chave de idempotência deixou de ser um espaço de nomes compartilhado entre clientes.** Ela vem do header da requisição — texto que o cliente escolhe — e a chave primária cobria só ela: dois clientes que usassem a mesma string (`deploy-1`, a data do dia, o nome do branch) disputavam a mesma linha, e o segundo recebia erro de violação **depois** que o trabalho já tinha rodado. Pior, o espaço era ocupável de propósito: dava para preencher as strings prováveis e negar o serviço a outro cliente sem tocar em nada dele. O que **não** acontecia, e importa dizer: nenhuma resposta vazou — a leitura sempre casou chave **e** cliente. É defeito de disponibilidade e de acoplamento, não de confidencialidade. (migration 000066)
 

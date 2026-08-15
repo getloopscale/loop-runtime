@@ -109,11 +109,30 @@ tasks:
       - cd operators && go test ./... -short
       - cd operators/api && go test ./... -short
       - cd api && go test ./... -short
-      # `helm/` tem 27 arquivos de teste e nao rodava em task nenhuma — o mesmo
-      # defeito do B-088, um nivel abaixo do modulo. `scripts/` (11) e `config/`
-      # (5) tambem nao rodam E estao VERMELHOS; entram por item proprio, porque
-      # adiciona-los aqui deixaria o alvo vermelho sem consertar o que acusam.
-      - cd infra/tests && go test ./unit/... ./helm/... -short
+      # `helm/` (29 arquivos) nao rodava em task nenhuma — o mesmo defeito do
+      # B-088, um nivel abaixo do modulo. `scripts/` (11) e `config/` (5)
+      # tambem nao rodavam E estavam VERMELHOS, e por isso ficaram de fora:
+      # adiciona-los sem consertar o que acusavam deixaria o alvo vermelho, e
+      # um alvo vermelho vira alvo desligado.
+      #
+      # B-092 mediu os dois FAIL e os dois eram FALSOS, em formas diferentes.
+      # Um comparava a GRAFIA da fonte contra um repositorio que e MONTADO por
+      # template, entao a substring canonica nunca aparecia contigua. O outro
+      # aceitava `latest` e recusava a sentinela `SET-BY-CI` — permitindo o que
+      # a issue #232 rejeitou por nome e recusando o que ela escolheu.
+      #
+      # O segundo e o achado que justifica ligar isto: um teste que ninguem roda
+      # nao apenas deixa de proteger, ele CONGELA um contrato vencido, e
+      # bloquearia o desenho correto no dia em que fosse ligado.
+      #
+      # E a varredura da populacao — nao so das duas subarvores que o item
+      # nomeava — achou uma terceira: `performance/` tem 23 arquivos de teste,
+      # roda em 37ms sem infraestrutura nenhuma, esta VERDE, e nao era alcancada
+      # por alvo nenhum. Passou despercebida porque o item contou as vermelhas.
+      #
+      # `e2e/`, `chaos/`, `charts/` e `livetest/` seguem fora deste alvo por
+      # terem alvo proprio ou exigirem cluster, que e outra classe.
+      - cd infra/tests && go test ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
       # cmd/loopzero-ops e onde vivem os 123 quality gates. Os testes que provam que
       # um gate reprova o que deve reprovar nao rodavam por caminho nenhum —
       # `quality:hermetic` fazia `go build`, nao `go test`. B-088.

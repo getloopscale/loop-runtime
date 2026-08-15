@@ -13,9 +13,10 @@ package config
 
 import (
 	"os"
-	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
@@ -228,21 +229,25 @@ func TestB31ImageTagsPinned(t *testing.T) {
 	files := []string{
 		"../../helm/loopzero-api/values.yaml",
 	}
-	semverRE := regexp.MustCompile(`(?m)^\s*tag:\s*v\d+\.\d+\.\d+(-[a-z0-9.-]+)?\s*$`)
-	shaRE := regexp.MustCompile(`(?m)^\s*tag:\s*(sha-)?[a-f0-9]{8,40}\s*$`)
-	latestRE := regexp.MustCompile(`(?m)^\s*tag:\s*latest\s*$`)
-	branchRE := regexp.MustCompile(`(?m)^\s*tag:\s*(chg|feat|fix|hotfix|achado)[a-z0-9-]*\s*$`)
+	// The shape rules used to live here as four whole-file regexes. They moved
+	// into `imageTagVerdict`, which judges the tag VALUE and states its reason —
+	// see image_tag_policy_test.go for why the contract also changed (`latest`
+	// is now refused, the `SET-BY-CI` sentinel accepted, per issue #232).
 	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		s := string(data)
-		if branchRE.MatchString(s) {
-			t.Errorf("B31 regression: %s pins to a branch-name tag (banned by ADR-0020 D1)", f)
+		var doc struct {
+			Image struct {
+				Tag string `yaml:"tag"`
+			} `yaml:"image"`
 		}
-		if !(semverRE.MatchString(s) || shaRE.MatchString(s) || latestRE.MatchString(s)) {
-			t.Errorf("B31 regression: %s tag must match semver | sha-* | latest (ADR-0020 D1)", f)
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		if ok, reason := imageTagVerdict(doc.Image.Tag); !ok {
+			t.Errorf("B31 regression: %s declares image.tag %q — %s", f, doc.Image.Tag, reason)
 		}
 	}
 }
