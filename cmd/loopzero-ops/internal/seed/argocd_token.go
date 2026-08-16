@@ -75,6 +75,14 @@ func (s *ArgoCDTokenSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("mint account token: %v", err)}
 	}
 	// Step 3: sync to loopzero-api-tokens
+	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed argocd-token`), que e' como um
+	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
+	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
+	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
+	// o namespace ja existe, que e' o caminho canonico.
+	if err := ensureNamespace(d, d.Kube, minioNamespace); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", minioNamespace, err)}
+	}
 	sec := secretOf(minioNamespace, loopzeroAPITokensSecret,
 		map[string][]byte{loopzeroAPITokensKey: []byte(token)})
 	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx, sec); err != nil {
