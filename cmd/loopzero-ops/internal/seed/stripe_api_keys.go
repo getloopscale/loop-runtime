@@ -60,6 +60,14 @@ func (s *StripeAPIKeysSeed) Run(d Deps) Result {
 	if d.DryRun {
 		return Result{Verdict: PASS, Reason: "dry-run: would apply loopzero-stripe-api-keys + rollout loopzero-cloud"}
 	}
+	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed stripe-api-keys`), que e' como um
+	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
+	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
+	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
+	// o namespace ja existe, que e' o caminho canonico.
+	if err := ensureNamespace(d, d.Kube, stripeAPIKeysNamespace); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", stripeAPIKeysNamespace, err)}
+	}
 	data := map[string][]byte{
 		stripeAPIKeyKey:       []byte(strings.TrimRight(d.Creds.Stripe.APIKey, "\n")),
 		stripePriceStarterKey: []byte(strings.TrimRight(d.Creds.Stripe.PriceStarter, "\n")),

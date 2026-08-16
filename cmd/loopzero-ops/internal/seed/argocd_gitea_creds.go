@@ -57,6 +57,14 @@ func (s *ArgoCDGiteaCredsSeed) Run(d Deps) Result {
 	if d.DryRun {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would apply %s/%s", argocdNamespace, argocdRepoCredsName)}
 	}
+	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed argocd-gitea-creds`), que e' como um
+	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
+	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
+	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
+	// o namespace ja existe, que e' o caminho canonico.
+	if err := ensureNamespace(d, d.Kube, argocdNamespace); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", argocdNamespace, err)}
+	}
 	secret := repoCredsSecretOf(user, token)
 	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx, secret); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("apply %s/%s: %v", argocdNamespace, argocdRepoCredsName, err)}

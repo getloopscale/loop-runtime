@@ -89,6 +89,14 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 
 	// Layer 3: sync 3 consumer Secrets.
 	tokenBytes := []byte(token)
+	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed gitea-token`), que e' como um
+	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
+	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
+	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
+	// o namespace ja existe, que e' o caminho canonico.
+	if err := ensureNamespace(d, d.Kube, giteaAdminNamespace); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", giteaAdminNamespace, err)}
+	}
 	if err := d.Kube.PatchSecretData(d.Ctx, giteaAdminNamespace, giteaAdminSecretName,
 		map[string][]byte{giteaAdminTokenSecretKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a: %v", err)}

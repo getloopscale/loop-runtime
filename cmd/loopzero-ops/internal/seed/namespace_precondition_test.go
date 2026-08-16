@@ -29,6 +29,27 @@ var seedsRequiringTheirNamespace = map[string]string{
 	"github_app_dev.go": "B-021 — ran before loopzero-system existed on a fresh cleanroom, the webhook " +
 		"secret was never written, and the endpoint 404'd with no error anywhere in our logs",
 	"broker.go": "ensured its namespace since it was written",
+
+	// B-108, medido em 2026-08-16. Os cinco gravam no MESMO namespace,
+	// `loopzero-system`, e a cadeia canônica realmente o garante:
+	// `core.helmfile.yaml.gotmpl` declara `createNamespace: true` e tem 16
+	// releases ali, e `task setup` roda antes do `seed-post-cleanroom-all.sh`.
+	//
+	// A garantia é da CADEIA, não do seed — e essa diferença é o defeito. Cada um
+	// destes é um subcomando invocável sozinho (`loopzero-ops seed gitea-token`), que
+	// é como um operador conserta uma peça sem repetir os dezesseis passos. Foi
+	// exatamente assim que o B-021 falhou.
+	//
+	// Resposta à pergunta do item: a posição garante, e isso não basta.
+	"gitea_token.go": "B-108 — passo 6; garantido pela cadeia, não pela invocação avulsa",
+	// Este grava em `argocd`, nao em loopzero-system — a constante que o arquivo
+	// DECLARA no topo (giteaAdminNamespace) e a que ele USA na escrita
+	// (argocdNamespace, via repoCredsSecretOf) nao sao a mesma pergunta, e
+	// ler a primeira foi o atalho que me deu a resposta errada.
+	"argocd_gitea_creds.go":    "B-108 — passo 6b; grava em `argocd`, cujo ciclo de vida e do release do ArgoCD",
+	"argocd_token.go":          "B-108 — passo 13; grava em loopzero-system via minioNamespace",
+	"stripe_webhook_secret.go": "B-108 — passo 15",
+	"stripe_api_keys.go":       "B-108 — passo 16",
 }
 
 // TestSeedsEnsureTheirNamespaceBeforeWriting is a structural assertion, and it is

@@ -4183,6 +4183,49 @@ dod:
 
 > Registrado 2026-08-14, ao consertar o `B-021` — a auditoria adversarial de fechamento achou a instância, a medição achou a classe.
 
+---
+
+### Executado em 2026-08-16 — a posição garante, e isso não basta
+
+O DoD mandava medir **antes** de consertar, e a medição mudou duas coisas.
+
+**Onde cada um grava** — e a primeira leitura estava errada num deles:
+
+| seed | namespace | passo |
+|---|---|---|
+| `gitea_token.go` | `loopzero-system` | 6 |
+| `argocd_gitea_creds.go` | **`argocd`** | 6b |
+| `argocd_token.go` | `loopzero-system` (via `minioNamespace`) | 13 |
+| `stripe_webhook_secret.go` | `loopzero-system` | 15 |
+| `stripe_api_keys.go` | `loopzero-system` | 16 |
+
+O `argocd_gitea_creds.go` **declara** `giteaAdminNamespace = "loopzero-system"` no topo — de onde a
+leitura apressada o tirou — mas a escrita passa por `repoCredsSecretOf`, que usa
+`argocdNamespace = "argocd"`. **A constante que um arquivo declara e a que ele usa na escrita não são
+a mesma pergunta**, e ler a primeira é o atalho que dá a resposta errada. Corrigido no registro e no
+contrato.
+
+**E a cadeia garante os dois namespaces.** `core.helmfile.yaml.gotmpl` declara `createNamespace: true`
+nos `helmDefaults` e tem **16 releases** em `loopzero-system`; o `argocd` vem do release do próprio
+ArgoCD. O `task setup` roda antes do `seed-post-cleanroom-all.sh`.
+
+**Então a resposta à pergunta do item é: a posição garante — e isso não basta.** Cada seed é um
+subcomando invocável sozinho (`loopzero-ops seed gitea-token`), que é como um operador conserta uma peça
+sem repetir os dezesseis passos. Ali não existe ordem que garanta nada, e foi exatamente assim que o
+`B-021` falhou: numa sala limpa, o `github_app_dev` rodou antes de `loopzero-system` existir e o efeito só
+apareceu como **404 no log de entrega do GitHub** — sistema de terceiros, não o nosso.
+
+Um pré-requisito satisfeito pela ordem só vale enquanto a ordem for seguida, e o modo de invocação
+suportado a quebra.
+
+**Os cinco passaram a garantir**, com `ensureNamespace` (get-or-create idempotente: um `Get` no
+caminho canônico), e entraram no contrato `seedsRequiringTheirNamespace` — **7 de 7 verdes**. As três
+balas do DoD estão cumpridas: medido caso a caso, os não-garantidos-na-invocação-avulsa passaram a
+garantir, e a razão de cada um ficou escrita para ninguém re-perguntar.
+
+status permanece `raw` no campo acima; o fechamento aguarda a ratificação do
+`MEET-ASYNC-AMENDMENT-2026-08-16-seeds-ensure-their-namespace`.
+
 ## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [ ]
 
 domain: engine-go
