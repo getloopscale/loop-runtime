@@ -80,11 +80,19 @@ var (
 	// with `@sha256:` (already a digest) and lines with `loopzero-common.image`
 	// include (helper handles digest at template time).
 	hardcodedTagRe = regexp.MustCompile(`^\s*image:\s*["']?[^"'#@]+:[A-Za-z0-9._-]+\s*$`)
-	// Matches `image: {{ include "loopzero-common.image" ... }}` — the
-	// helper template, which handles digest preference itself. NOT
-	// a violation regardless of digest field state — the violation
-	// surfaces at the values.yaml level when digest is missing, but
-	// at render-time the helper produces correct output.
+	// Matches `image: {{ include "loopzero-common.image" ... }}` — the helper
+	// template, which handles digest preference itself. NOT a violation at the
+	// template layer: the helper prefers `.Values.image.digest`.
+	//
+	// The violation surfaces at the values.yaml level when digest is missing —
+	// and for three months that sentence lived here describing a check nobody had
+	// written. `scanChartValues` is that check now (B-113).
+	//
+	// The companion claim this comment used to make — "at render-time the helper
+	// produces correct output" — is true only GIVEN a digest. Without one the
+	// helper produces a tag, correctly, and the output is mutable. Measured
+	// 2026-08-16: all seven published charts used the helper, none declared a
+	// digest, all declared `tag: dev`.
 	helperIncludeRe = regexp.MustCompile(`include\s+"loopzero-common\.image"`)
 	leadWSRe        = regexp.MustCompile(`^\s*`)
 )
@@ -124,6 +132,14 @@ func Check(cfg Config) (*Outcome, error) {
 				return nil, err
 			}
 		}
+	}
+
+	// B-113: the values layer. The template scan above deliberately clears every
+	// chart that defers to `loopzero-common.image`, so without this the gate reports
+	// PASS on a chart whose effective default is a mutable tag — which is what it
+	// did, on all seven published charts, for three months.
+	if err := scanChartValues(filepath.Join(cfg.Root, "charts"), out); err != nil {
+		return nil, err
 	}
 
 	// Warn-mode: report violations but stay Pass=true. Sponsor flips
