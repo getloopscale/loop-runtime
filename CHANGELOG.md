@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.76.3] - 2026-08-16
+
 ### Fixed
 - **Cinco rotinas de configuração deixaram de pressupor que a pasta onde escrevem já existe.** Elas gravam credenciais em áreas do cluster criadas por um passo anterior — o que é verdade quando a instalação roda inteira, e deixa de ser quando alguém executa uma delas sozinha para consertar uma peça. Já aconteceu: uma rodou cedo demais, parou no pré-requisito, e o efeito só apareceu como uma entrega recusada por um serviço externo, horas depois, sem erro nenhum do nosso lado. Agora cada uma garante a própria área antes de escrever. (B-108)
 
