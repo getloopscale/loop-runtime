@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-08-16
+
 ### Added
 - **Uma parte do sistema que se desligava em silêncio agora avisa.** Quando falta a credencial que o recebimento de eventos do GitHub usa para conferir que uma entrega é legítima, o endereço correspondente simplesmente deixava de existir — e o único vestígio era uma linha de registro no arranque. Na prática isso significa que o `git push` de um cliente não dispara construção nenhuma, e ninguém fica sabendo. Passou a existir uma medida que diz, para cada parte da interface, se ela está no ar ou desligada e por quê. Uma trava impede que uma parte nova nasça muda. (B-104)
 - **Cada permissão de "esta dependência pode faltar" passou a carregar a razão.** Medido no ambiente de desenvolvimento: **seis das dez** fontes de configuração que a API monta não existiam, e a API estava de pé servindo — cobrança, administração e armazenamento de objetos desligados sem aviso. Agora cada permissão dessas explica por que a ausência é tolerável e o que ela desliga, e uma verificação recusa uma permissão nova sem justificativa. (B-104)
