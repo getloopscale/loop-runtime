@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Duas tarefas agendadas de manutenção de criptografia chamam um comando que o programa não tem.** Se alguém as ligasse, elas subiriam uma segunda cópia do servidor em vez de fazer o trabalho, e apareceriam como falha de tempo esgotado duas horas depois — não como "comando não existe". A verificação automática que as protege conferia a grafia do comando no arquivo de configuração, nunca que ele existe. (B-125)
+
 - **Quem é dono do registro de implantação de cada cliente deixou de ser adivinhação, e uma mensagem que aparecia para operadores parou de culpar o componente errado.** Três lugares do sistema mexem nesse registro; agora cada um diz, no próprio código, o que pode e o que não pode fazer com ele. A mensagem de estado dizia que a limpeza era responsabilidade da API — que nunca a fez; ela agora nomeia quem realmente limpa. O guia do repositório descrevia esse problema como algo a resolver à mão entre testes, com duas referências que já não existiam e uma descrição corrigida dois dias depois de ela ser escrita. (B-050)
 
 - **O pacote de instalação "tudo junto" passou a dizer que instala tudo junto.** Ele reúne doze componentes que, no caminho normal, rodam em três ambientes separados — e os instalava num só, sem avisar. A limitação agora está escrita nele, com o que se perde ao usá-lo, e há um índice dizendo a que ambiente cada componente pertence **e como isso foi verificado** — porque três das doze atribuições são deduzidas do nome, não comprovadas, e apagar essa diferença faria o índice afirmar uma checagem que não houve. (B-048)
