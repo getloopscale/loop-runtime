@@ -43,6 +43,31 @@ func TestAnalyze_ContaSuperficieGuardadaSemGravacao(t *testing.T) {
 	}
 }
 
+func TestAnalyze_FormaRecordedNaCondicaoConta(t *testing.T) {
+	// A forma canônica nova põe o relato na CONDIÇÃO do guard, não no corpo.
+	// Um gate que só olhasse o corpo reportaria como muda uma superfície que
+	// relata — e a resposta seria voltar à forma verbosa para agradar o gate,
+	// que é o gate governando o desenho em vez de protegê-lo.
+	const viaHelper = `package server
+func NewRouter(cfg Config) *chi.Mux {
+	r := chi.NewRouter()
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil, "razao") {
+		r.Post("/internal/bootstrap", h)
+	}
+	return r
+}`
+	got, err := Analyze(viaHelper)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if got.Guarded != 1 {
+		t.Fatalf("guardadas = %d, esperado 1", got.Guarded)
+	}
+	if len(got.Silent) != 0 {
+		t.Errorf("a forma `Recorded` foi contada como muda: %+v", got.Silent)
+	}
+}
+
 func TestAnalyze_GuardaSemRotaNaoConta(t *testing.T) {
 	// Nem todo `if cfg.X != nil` registra superfície: alguns só montam
 	// middleware ou configuram um handler já registrado. Contá-los inflaria a

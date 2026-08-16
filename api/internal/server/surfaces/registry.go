@@ -50,6 +50,43 @@ const (
 	// GitHubWebhook is the inbound GitHub delivery endpoint. Off means a
 	// customer's `git push` triggers no build. B-104.
 	GitHubWebhook = "github_webhook"
+
+	// B-115 slice 1 — the platform's own control paths: the surfaces that
+	// platform controllers and operators call, never a customer. They are
+	// converted first because their absence is invisible from the product side:
+	// nobody files a ticket when the ESO broker stops answering, the fleet just
+	// stops converging.
+
+	// Bootstrap is /internal/bootstrap — how a tenant is admitted.
+	Bootstrap = "bootstrap"
+	// ArgoCallback is /internal/argocd-callback — how GitOps reports sync back.
+	ArgoCallback = "argocd_callback"
+	// SecretFetch is /internal/v1/secret-fetch — the broker the external-secrets
+	// operator calls to resolve a tenant secret. Off means every ExternalSecret
+	// reconcile in every workload namespace gets a 404.
+	SecretFetch = "secret_fetch"
+	// AdminEvict is the operator primitive that tears a tenant down.
+	AdminEvict = "admin_evict"
+	// AdminPin is the ONLY path that moves a tenant between cells.
+	AdminPin = "admin_pin"
+	// ReleaseInspect is the read-only on-call view of a release's signing and
+	// attestation chain.
+	ReleaseInspect = "release_inspect"
+	// AuthProtected is the whole authenticated route group. Off means every
+	// customer-facing route disappears at once.
+	AuthProtected = "auth_protected"
+	// ActiveTeam is persistent team selection (/auth/team/switch).
+	//
+	// NESTED under AuthProtected: its guard sits inside the authenticated group,
+	// so it is only evaluated — and therefore only recorded — when that group is
+	// on. With auth off this series is ABSENT rather than zero.
+	//
+	// That ambiguity is tolerated here because the parent's own zero dominates
+	// it: an operator seeing `auth_protected == 0` already knows every
+	// customer-facing route is gone, and the state of one route inside it is not
+	// the question they are asking. It would NOT be tolerable for a top-level
+	// surface, which is why every other constant in this block is one.
+	ActiveTeam = "active_team"
 )
 
 // Surface is one registration decision the router made.
@@ -111,6 +148,31 @@ func (r *Registry) Record(name string, enabled bool, reason string) error {
 	}
 	r.byName[name] = Surface{Name: name, Enabled: enabled, Reason: reason}
 	return nil
+}
+
+// Recorded records a registration decision and returns it, so the guard that
+// decides IS the guard that reports:
+//
+//	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
+//	    "…") {
+//	    r.Post("/internal/bootstrap", …)
+//	}
+//
+// The alternative — an `if`, then a `Record(…, true, …)` in the body and another
+// in an `else` — is three places that have to agree, repeated once per surface.
+// Thirty-four repetitions of a three-way agreement is a defect waiting for the
+// first person in a hurry, and it is the same reason `patchStatus` exists in the
+// application controller: an invariant that survives by everyone remembering is
+// not an invariant.
+//
+// The error is swallowed on purpose. Record only fails on programmer error —
+// empty name, duplicate name, disabled with no reason — and every call site is a
+// literal in this repository, so a failure is caught by the package's own tests
+// and by the `silent-surface` gate rather than at runtime. Returning an error
+// here would force every guard into a two-statement form and defeat the point.
+func Recorded(r *Registry, name string, enabled bool, reason string) bool {
+	_ = r.Record(name, enabled, reason)
+	return enabled
 }
 
 // All returns every recorded surface, ordered by name.

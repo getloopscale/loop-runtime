@@ -4320,6 +4320,53 @@ dod:
 
 > Registrado 2026-08-16 pela varredura de população do `B-104`. Decisão que separou este item daquele: `MEET-ASYNC-AMENDMENT-2026-08-16-observable-silent-surfaces`.
 
+---
+
+### Fatia 1 executada em 2026-08-16 — base 34 → 26
+
+**O critério de ordenação que este item registrou estava errado, e a medição o corrigiu.** O DoD dizia
+*"as superfícies cuja dependência está medida como ausente entram primeiro"*, apoiado num mapeamento
+que eu havia feito por suposição. Medindo os sítios de atribuição:
+
+| suposição | medição |
+|---|---|
+| `BillingHandler` cai por falta do Secret do Stripe | cai por falta de **banco** (`setup_server.go:255`); as chaves do Stripe afetam o **comportamento** da cobrança (checkout devolve 503), não a existência da rota |
+| `AdminEvictor`/`AdminPinner` caem por falta de `loopzero-api-admin` | caem por falta de **banco**; o Secret alimenta a chave que o middleware confere, e sem ela o acesso é **negado** (falha fechada), não aberto |
+
+Das 34, **uma só** tem dependência medida como ausente hoje: `SecretFetchHandler`, que exige
+`LOOPZERO_BROKER_TOKEN` — e o Secret `loopzero-broker-token` não existe em dev-public. Uma fatia de uma
+superfície não vale um corte de release, então adotei o critério que se sustenta: **coesão e
+consequência**.
+
+**As oito da fatia 1 são os caminhos de controle da própria plataforma** — admissão de tenant,
+retorno do ArgoCD, o broker do ESO, remoção e realocação de tenant, inspeção de release, o grupo
+autenticado inteiro e a troca de equipe. Foram primeiro porque a ausência delas é **invisível do lado
+do produto**: ninguém abre chamado quando o broker de segredos para de responder — a frota
+simplesmente deixa de convergir.
+
+**Encapsulamento antes de repetir.** Converter 34 vezes um `if/else` com gravação nos dois ramos é
+uma concordância de três partes repetida 34 vezes — defeito esperando a primeira pessoa com pressa.
+`surfaces.Recorded(reg, nome, condição, razão)` grava e **devolve** a decisão, então a condição do
+guard **é** o relato: não dá para registrar a rota sem gravar. Mesma razão do `patchStatus` no
+controller de aplicação — invariante que sobrevive por todo mundo lembrar não é invariante.
+
+**E o gate teve de aprender a forma nova.** A primeira versão dele só reconhecia `cfg.X != nil` como
+condição **inteira**; na forma nova o teste é um **argumento** da chamada. Um gate que não a
+reconhecesse contaria como "nenhuma superfície" justamente a forma que ele pede que se adote — e a
+base cairia pelo motivo errado. Corrigido com caso próprio, e o reconhecimento de `Record` **e**
+`Recorded` está pinado.
+
+**Uma limitação nova, declarada em vez de escondida.** `active_team` é **aninhada** no grupo
+autenticado: a guarda dela só é avaliada quando a mãe está ligada, então com auth desligada a série
+fica **ausente** em vez de zero. Tolerável só porque o zero da mãe domina a pergunta — quem vê
+`auth_protected == 0` já sabe que toda rota de cliente sumiu. **Não seria tolerável numa superfície de
+topo**, e o teste afirma a semântica em vez de fingir que ela não existe.
+
+**Provas:** 26/26 verde, catraca reprovando mutante injetado no valor novo, `task test:unit` verde com
+263 pacotes, e um teste estrutural que recusa reuso de constante entre superfícies — o modo de falha
+que os testes de comportamento não veem, porque `Recorded` engole por desenho o erro que `Record`
+devolveria.
+
 ## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [ ]
 
 domain: engine-go

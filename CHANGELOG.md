@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Os caminhos internos da plataforma passaram a dizer quando estão desligados.** São as partes que só os controladores e os operadores usam — admissão de um cliente novo, retorno do entregador, o serviço que resolve segredos para as aplicações, remoção e realocação de um cliente, e a inspeção de uma versão publicada. A ausência delas é invisível do lado do produto: ninguém abre chamado quando o resolvedor de segredos para de responder; a frota simplesmente deixa de convergir. Oito partes agora reportam se estão no ar e, quando não estão, qual dependência falta. (B-115)
+
 ## [0.75.0] - 2026-08-16
 
 ### Added

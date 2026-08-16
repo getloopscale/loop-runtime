@@ -55,9 +55,18 @@ import (
 // "guard that does not guard" this repository keeps paying for.
 //
 // It may only ever go DOWN: each decrement is one surface that became
-// observable. Lowering it is the job of the follow-up item; raising it is what
-// this gate exists to refuse.
-const Baseline = 34
+// observable. Raising it is what this gate exists to refuse.
+//
+// # Ledger
+//
+//	34  2026-08-16  B-104 landed: the GitHub webhook reports; 34 do not.
+//	26  2026-08-16  B-115 slice 1: the platform's own control paths — bootstrap,
+//	                argocd-callback, secret-fetch, admin evict/pin, release
+//	                inspect, the authenticated group, and active-team. Converted
+//	                first because their absence is invisible from the product
+//	                side: nobody files a ticket when the ESO broker stops
+//	                answering, the fleet just stops converging.
+const Baseline = 26
 
 // RouterPath is the file the gate reads, relative to the repository root.
 const RouterPath = "api/internal/server/router.go"
@@ -130,6 +139,20 @@ var registrarMethods = map[string]bool{
 // enough: the fix records once for the surface either way.
 func guardedField(cond ast.Expr) string {
 	switch c := cond.(type) {
+	case *ast.CallExpr:
+		// The `Recorded` form wraps the test in a call:
+		//   if surfaces.Recorded(reg, name, cfg.X != nil, "…") { … }
+		// The field lives in an argument, so recurse into them. Recognising
+		// only the bare `cfg.X != nil` shape would make the gate blind to the
+		// very form it asks authors to adopt — it would count a reporting
+		// surface as no surface at all, and the baseline would drift down for
+		// the wrong reason.
+		for _, arg := range c.Args {
+			if f := guardedField(arg); f != "" {
+				return f
+			}
+		}
+		return ""
 	case *ast.BinaryExpr:
 		if c.Op == token.LAND {
 			if f := guardedField(c.X); f != "" {
@@ -178,7 +201,23 @@ func containsRouteRegistration(n ast.Node) bool {
 	return found
 }
 
-// containsRecord reports whether a node calls Surfaces.Record.
+// recorderNames are the two spellings that report a registration decision.
+//
+// `Record` is the registry method — the explicit if/else form. `Recorded` is the
+// helper that records AND returns the decision, so the guard's own condition is
+// the report:
+//
+//	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.X != nil, "…") {
+//
+// The gate has to know both. A fence that only recognises the spelling its
+// author reached for reports clean because it is looking away — the same lesson
+// `status-writer-contract` learned when a two-line alias evaded it.
+var recorderNames = map[string]bool{"Record": true, "Recorded": true}
+
+// containsRecord reports whether a node reports a registration decision.
+//
+// The whole if-statement is inspected, including its CONDITION, because the
+// `Recorded` form puts the report there rather than in the body.
 func containsRecord(n ast.Node) bool {
 	found := false
 	ast.Inspect(n, func(node ast.Node) bool {
@@ -186,7 +225,7 @@ func containsRecord(n ast.Node) bool {
 		if !ok {
 			return true
 		}
-		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Record" {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && recorderNames[sel.Sel.Name] {
 			found = true
 			return false
 		}

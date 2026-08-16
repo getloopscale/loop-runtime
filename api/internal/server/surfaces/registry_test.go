@@ -97,6 +97,35 @@ func TestRegistry_AllDevolveLigadasEDesligadas(t *testing.T) {
 	}
 }
 
+func TestRecorded_DevolveADecisaoEAGrava(t *testing.T) {
+	r := NewRegistry()
+
+	if Recorded(r, "ligada", true, "") != true {
+		t.Error("Recorded devolveu false para uma superfície ligada — o valor de " +
+			"retorno É a condição do guard, então inverter isto muda o roteamento")
+	}
+	if Recorded(r, "desligada", false, "razão medida") != false {
+		t.Error("Recorded devolveu true para uma superfície desligada")
+	}
+
+	all := r.All()
+	if len(all) != 2 {
+		t.Fatalf("All() = %d, esperado 2 — a decisão tem de ficar gravada, não só devolvida", len(all))
+	}
+	if len(r.Disabled()) != 1 {
+		t.Errorf("Disabled() = %d, esperado 1", len(r.Disabled()))
+	}
+}
+
+func TestRecorded_RegistroNuloNaoEntraEmPanico(t *testing.T) {
+	// Centenas de testes constroem o roteador sem registro. Se Recorded
+	// entrasse em pânico com receptor nulo, o encapsulamento teria trocado uma
+	// convenção frágil por uma quebra dura.
+	if Recorded(nil, "qualquer", true, "") != true {
+		t.Error("Recorded com registro nulo não devolveu a decisão")
+	}
+}
+
 func TestRegistry_NomeVazioERecusado(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Record("  ", true, ""); err == nil {

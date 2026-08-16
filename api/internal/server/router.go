@@ -130,11 +130,15 @@ func NewRouter(cfg Config) *chi.Mux {
 	r.Get("/v1/version", version.FleetVersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
-	if cfg.BootstrapStore != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
+		"sem banco — o BootstrapStore é `PostgresBootstrapStore` (setup_stores.go:117) "+
+			"e só é construído dentro do bloco que exige `dbAdapter`") {
 		bootstrap := bootstrap.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
-	if cfg.ArgoCallbackHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.ArgoCallback, cfg.ArgoCallbackHandler != nil,
+		"as dependências do orquestrador não subiram — o handler vem de `orchDeps` "+
+			"(setup_server.go:236), que é nil quando a orquestração de build não foi montada") {
 		r.Post("/internal/argocd-callback", cfg.ArgoCallbackHandler.Handle)
 	}
 	// Layer 2 ESO sync broker (plan 2026-06-10-j22-openbao-transit-eso-sync
@@ -149,7 +153,11 @@ func NewRouter(cfg Config) *chi.Mux {
 	// nil-safe: when transit/store/cellStore/token are missing the
 	// handler stays nil and the route is not registered — ESO sees 404
 	// and retries with backoff (safer than registering a broken handler).
-	if cfg.SecretFetchHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.SecretFetch, cfg.SecretFetchHandler != nil,
+		"falta uma de quatro dependências, e main.go:429-441 exige as quatro: transit "+
+			"do OpenBao, banco, cellStore e `LOOPZERO_BROKER_TOKEN`. Medido em dev-public "+
+			"2026-08-16: o Secret `loopzero-broker-token` NÃO EXISTE, então esta é a "+
+			"superfície que já está desligada agora") {
 		// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
 		// (revised 2026-06-11 LIVE catch — ESO v1beta1 CRD rejects
 		// `remoteRef.metadata` as unknown field): 2-segment URL where
@@ -186,26 +194,46 @@ func NewRouter(cfg Config) *chi.Mux {
 	// (canonical) + _PREVIOUS — NOT the legacy LOOPZERO_SERVICE_AUTH_SECRET that
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
 	// still enforces LOOPZERO_ADMIN_API=true as a separate defense-in-depth gate.
-	if cfg.AdminEvictor != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminEvict, cfg.AdminEvictor != nil,
+		"sem banco — `buildAdminEvictor` (setup_server.go:290) roda dentro do bloco "+
+			"que exige `dbAdapter`. A ausência do Secret `loopzero-api-admin` NÃO desliga "+
+			"esta rota: ele alimenta a chave que o middleware confere, e sem ela o "+
+			"acesso é NEGADO (falha fechada), não aberto") {
 		r.With(middleware.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
 			admin.AdminEvictHandler(cfg.AdminEvictor),
 		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
-	if cfg.AdminPinner != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminPin, cfg.AdminPinner != nil,
+		"sem banco — o CellPinner é construído sobre `PostgresCellStore` "+
+			"(setup_server.go:299). Esta é a ÚNICA rota que move um tenant de célula, "+
+			"então desligada ela não degrada: ela remove a operação") {
 		r.Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. The handler
 	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
-	if cfg.ReleaseInspector != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.ReleaseInspector != nil,
+		"sem banco — construído em setup_server.go:315, dentro do bloco que exige "+
+			"`dbAdapter`. É a visão de plantão sobre a cadeia de assinatura de uma "+
+			"release; desligada, o plantão perde o diagnóstico exatamente quando precisa") {
 		r.Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
 	}
 
 	// Protected routes (auth required)
-	if cfg.TokenValidator != nil && cfg.MemberStore != nil {
+	//
+	// A superfície de maior alcance do roteador: desligada, TODA rota de cliente
+	// desaparece de uma vez. Medido: `TokenValidator` é construído
+	// incondicionalmente (setup_auth.go:75), entao em producao a guarda depende
+	// so' do `MemberStore` — a condicao existe para os testes poderem montar um
+	// roteador sem auth.
+	if surfaces.Recorded(cfg.Surfaces, surfaces.AuthProtected,
+		cfg.TokenValidator != nil && cfg.MemberStore != nil,
+		"sem validador de token ou sem MemberStore. Em producao o validador e' "+
+			"sempre construido (setup_auth.go:75), logo na pratica isto significa "+
+			"MemberStore ausente — que depende do banco") {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))
 			r.Use(middleware.AuditLog(cfg.Logger, cfg.AuditWriter))
@@ -233,7 +261,10 @@ func NewRouter(cfg Config) *chi.Mux {
 			}
 
 			// Plan T2.5 D8 full — POST /team/switch with rate limiting.
-			if cfg.ActiveTeamStore != nil {
+			if surfaces.Recorded(cfg.Surfaces, surfaces.ActiveTeam, cfg.ActiveTeamStore != nil,
+				"sem banco — `NewPostgresActiveTeamStore` (setup_server.go:288) roda "+
+					"dentro do bloco que exige `dbAdapter`. Desligada, /whoami cai na "+
+					"heurística do middleware e a troca de equipe some") {
 				r.With(rateLimitMiddlewares...).Post("/api/v1/auth/team/switch", auth.SwitchTeam)
 			}
 
