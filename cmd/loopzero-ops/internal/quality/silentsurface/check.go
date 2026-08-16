@@ -72,7 +72,17 @@ import (
 //	                that begins at `if dbAdapter != nil` (main.go:167), so the
 //	                whole group shares one root cause and their reasons name the
 //	                chain rather than the rung.
-const Baseline = 13
+//	 0  2026-08-16  B-115 slice 3: the remainder. GREEN — every one of the 35
+//	                route-registering guards reports its decision.
+//
+// # What a baseline of zero changes
+//
+// The ratchet stops being a migration tracker and becomes an absolute invariant:
+// any new surface that registers a route without reporting fails immediately,
+// with nothing to compare against. That is the state the whole item was walking
+// toward, and it is why the number may never be raised — raising it would not
+// be relaxing a target, it would be re-opening the hole.
+const Baseline = 0
 
 // RouterPath is the file the gate reads, relative to the repository root.
 const RouterPath = "api/internal/server/router.go"

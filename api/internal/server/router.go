@@ -560,7 +560,8 @@ func registerProtectedRoutes(
 		"sem banco — vem de `orchDeps` (setup_server.go), que exige `dbAdapter`") {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
-	if cfg.BuildListHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildList, cfg.BuildListHandler != nil,
+		"sem banco — vem de `orchDeps` (setup_server.go), que só é construído dentro de `if dbAdapter != nil` (main.go:167)") {
 		r.Get("/api/v1/projects/{name}/builds", cfg.BuildListHandler.List)
 		// T2.2 + ADR D3 + EC-2: distinct envs the project has built into,
 		// feeds dashboard /deployments dynamic filter chips. The handler
@@ -568,20 +569,24 @@ func registerProtectedRoutes(
 		// NewBuildListHandlerWithGate (setup_orchestrator.go).
 		r.Get("/api/v1/projects/{name}/build-envs", cfg.BuildListHandler.BuildEnvs)
 	}
-	if cfg.BuildStatsHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildStats, cfg.BuildStatsHandler != nil,
+		"sem banco — vem de `orchDeps`. Desligada, o painel perde o agregado de deploys") {
 		// J-06 D2: tenant-scoped deploys aggregate for the Overview sparkline.
 		// Static /builds/stats — chi matches it before /projects/{name}/builds.
 		r.Get("/api/v1/builds/stats", cfg.BuildStatsHandler.Stats)
 	}
-	if cfg.RollbackHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Rollback, cfg.RollbackHandler != nil,
+		"sem banco — vem de `orchDeps`. Desligada, não há caminho de reversão de uma release") {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
 	}
-	if cfg.PromoteHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Promote, cfg.PromoteHandler != nil,
+		"sem banco — vem de `orchDeps`") {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/promote", cfg.PromoteHandler.Create)
 	}
 
 	// Team routes
-	if cfg.TeamHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Teams, cfg.TeamHandler != nil,
+		"sem banco — construído sobre `PostgresTeamStore` (setup_server.go:283)") {
 		r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
 		r.With(append(rateLimitMiddlewares, seatEnforcement)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
@@ -589,7 +594,8 @@ func registerProtectedRoutes(
 	}
 
 	// Tenant deletion routes (MEET-052)
-	if cfg.TenantDeletionStore != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.TenantDeletion, cfg.TenantDeletionStore != nil,
+		"NUNCA ATRIBUIDO — medido em 2026-08-16: `Config.TenantDeletionStore` e declarado e nao recebe valor em nenhum ponto do codigo de producao, entao estas tres rotas nunca existiram em deployment nenhum. Nao e falta de dependencia: e falta de fiacao") {
 		tenantHandler := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/tenants/{id}", tenantHandler.Delete)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/tenants/{id}/restore", tenantHandler.Restore)
@@ -599,7 +605,8 @@ func registerProtectedRoutes(
 	// Billing routes — T1.6 of deep-review-remediation-plan (closes
 	// find_billing_route_not_wired HIGH). CLI commands loopzero billing and
 	// loopzero billing portal hit silent 404 pre-T1.6.
-	if cfg.BillingHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Billing, cfg.BillingHandler != nil,
+		"sem banco — construído dentro do bloco que exige `dbAdapter` (setup_server.go:255). As chaves do Stripe NAO desligam esta rota: sem elas o checkout responde 503 tipado, que e outro estado") {
 		r.Get("/api/v1/billing", cfg.BillingHandler.Get)
 		// `owner` porque o loopzero-cloud exige o mesmo para a MESMA capacidade
 		// (loopzero-cloud/cmd/main.go:1572). A rota estava com rate-limit e mais nada, e a
@@ -611,7 +618,8 @@ func registerProtectedRoutes(
 	}
 
 	// Environment routes
-	if cfg.EnvironmentHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Environments, cfg.EnvironmentHandler != nil,
+		"sem o cliente de Kubernetes ou sem banco — construído no literal do Config (setup_server.go:131) sobre `k8sDeps.TenantCRMgr` e `dbAdapter.Pool`, entao em producao ele e sempre nao-nil e esta guarda serve aos testes") {
 		r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
 		r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
 		r.With(append(rateLimitMiddlewares, envEnforcement)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
@@ -619,7 +627,8 @@ func registerProtectedRoutes(
 	}
 
 	// Custom domain routes (MEET-2026-04-05-033)
-	if cfg.DomainHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Domains, cfg.DomainHandler != nil,
+		"passado por quem monta o servidor (parâmetro de setupServerConfig, setup_server.go:75) — nil quando o chamador não o construiu") {
 		r.Get("/api/v1/domains", cfg.DomainHandler.List)
 		r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
 		r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
@@ -635,7 +644,8 @@ func registerProtectedRoutes(
 	}
 
 	// Repository connection routes (GitHub App — auto-deploy)
-	if cfg.RepositoryHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Repositories, cfg.RepositoryHandler != nil,
+		"sem as dependências do GitHub — vem de `ghDeps` (setup_server.go:252), que exige credenciais do GitHub App e, antes delas, o banco") {
 		r.Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
 		r.Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
@@ -645,7 +655,8 @@ func registerProtectedRoutes(
 	// Lists every repo the given installation has authorised, sanitised to
 	// {full_name, default_branch, private, language}. Tenant-scoped via the
 	// installation row; cross-tenant returns 403.
-	if cfg.IntegrationsGitHubHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.IntegrationsGitHub, cfg.IntegrationsGitHubHandler != nil,
+		"sem as dependências do GitHub — mesma cadeia de `ghDeps`") {
 		r.Get("/api/v1/integrations/github/installations/{id}/repositories", cfg.IntegrationsGitHubHandler.ListRepositories)
 	}
 
@@ -653,14 +664,16 @@ func registerProtectedRoutes(
 	// URL shape matches the CLI: /api/v1/projects/{project}/previews[...].
 	// POST is rate-limited and idempotent (creating the same PR twice
 	// upserts into the same row). DELETE is rate-limited.
-	if cfg.PreviewHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Previews, cfg.PreviewHandler != nil,
+		"sem banco — construído sobre `PostgresProjectStore` (setup_server.go:369)") {
 		r.Get("/api/v1/projects/{project}/previews", cfg.PreviewHandler.List)
 		r.Get("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Get)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Delete)
 		r.With(append(idempotentMiddlewares, rateLimitMiddlewares...)...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
 	}
 
-	if cfg.AuditHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Audit, cfg.AuditHandler != nil,
+		"sem banco — construído sobre `PostgresAuditStore` (setup_server.go:289). Desligada, o registro de auditoria deixa de ser consultável") {
 		r.Get("/api/v1/audit", cfg.AuditHandler.List)
 	}
 	// NOTE: Admin endpoints are deliberately registered OUTSIDE this function

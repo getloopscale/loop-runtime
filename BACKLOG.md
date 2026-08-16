@@ -4367,6 +4367,30 @@ topo**, e o teste afirma a semântica em vez de fingir que ela não existe.
 que os testes de comportamento não veem, porque `Recorded` engole por desenho o erro que `Record`
 devolveria.
 
+### Fatias 2 e 3 — base 26 → 13 → **0**
+
+**Fatia 2 (13).** Medindo antes de escrever treze razões distintas: as 26 restantes **não têm 26
+causas**. Agrupadas pelo bloco que as constrói — `orchDeps` 10, `stores` 3, `dbAdapter` 3, `ghDeps` 2 —
+e subindo a cadeia, `orchDeps` nasce dentro de `if dbAdapter != nil` (`main.go:167`). Quase todas caem
+por uma causa só: **sem banco**. As estruturas intermediárias são degraus da mesma escada, e as razões
+nomeiam a **cadeia** em vez do degrau, porque o degrau não é o que o operador conserta.
+
+E a conversão achou um defeito de documentação: o comentário do proxy de métricas afirmava que o
+handler devolve `503 prometheus_not_configured` *"quando MetricsProxyHandler é nil"*. Com o handler
+nil a rota nem é registrada — a resposta é **404**. Medido: `NewMetricsProxyHandler` nunca devolve
+nil; quem pode ser nil é o cliente do Prometheus, e é esse caso que produz o 503. Um operador seguindo
+o texto anterior checaria `LOOPZERO_PROMETHEUS_ADDRESS` quando o problema é o banco.
+
+**Fatia 3 (13) — e o achado que justifica o item inteiro.** Escrever a razão de cada guarda obriga a
+medir o que a torna nil, e uma delas **não tinha o que medir**:
+`Config.TenantDeletionStore` é declarado e **nunca atribuído**. Três rotas — exclusão, restauração e
+exclusão em massa de tenant — existem no código e **nunca existiram em deployment nenhum**. Virou
+`B-117`. Um zero permanente naquela série teria mostrado isso no dia em que entrou.
+
+**Estado final: 0 mudas em 35 guardas.** A catraca deixa de ser rastreador de migração e vira
+invariante absoluta — superfície nova que registre rota sem reportar reprova de imediato, sem nada
+com que comparar. Provado contra mutante: um só já reprova.
+
 ## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [ ]
 
 domain: engine-go
@@ -4383,4 +4407,20 @@ dod:
   - se não puder, o arranque falha alto; se puder, a degradação é observável como as outras superfícies e a prontidão reflete que o serviço não pode servir
 
 > Registrado 2026-08-16 pela medição do `B-104`. É o `optional: true` de maior alcance do deployment, e o único cuja razão continua sendo uma pergunta aberta.
+
+## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: medido em 2026-08-16 ao converter a fatia 3 do `B-115`. `server.Config.TenantDeletionStore` (`api/internal/server/server.go:211`) é **declarado e nunca atribuído** — `grep -rn 'TenantDeletionStore' --include='*.go'` sobre todo o repositório devolve a declaração da interface (`domain/types.go:445`), menções em SQL gerado e em comentários de tabelas sensíveis, e **nenhuma atribuição** em `cmd/`. O guard `if cfg.TenantDeletionStore != nil` (`router.go`) nunca é verdadeiro, então `DELETE /api/v1/tenants/{id}`, `POST /api/v1/tenants/{id}/restore` e `POST /api/v1/tenants/bulk-delete` **não existem em deployment nenhum**.
+why_now: é o padrão *"implementado mas não ligado"* que o `CLAUDE.md` nomeia por esse título, na forma mais completa possível: a interface existe, a implementação Postgres existe (o SQL gerado a cita), o handler existe, as três rotas estão escritas, e o campo fica nil. E é o argumento mais forte do `B-104`/`B-115` inteiros — um zero permanente em `loopzero_api_surface_enabled{surface="tenant_deletion"}` teria tornado isto visível no dia em que entrou, em vez de sete meses depois por varredura.
+status: triaged
+severity: alta — exclusão e restauração de tenant não são acessórios: sem elas não há caminho de saída de cliente pela API, e a operação vira intervenção manual no banco.
+dod:
+  - está decidido se as três rotas devem existir; se sim, o campo é atribuído e um teste prova a rota alcançável, se não, o handler e as rotas são removidos junto com a interface
+  - a métrica `loopzero_api_surface_enabled{surface="tenant_deletion"}` deixa de valer 0 permanentemente — ou porque a superfície ligou, ou porque deixou de ser declarada
+
+> Registrado 2026-08-16 pela fatia 3 do `B-115`. Achado pela conversão, não por busca: escrever a razão de cada guarda obrigou a medir o que torna cada uma nil, e esta não tinha o que medir.
 

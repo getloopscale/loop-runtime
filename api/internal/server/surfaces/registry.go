@@ -129,6 +129,44 @@ const (
 	StatusStream = "status_stream"
 	// Scale is manual scaling.
 	Scale = "scale"
+
+	// B-115 slice 3 — the remainder, and the one that was never wired at all.
+
+	// BuildList is the deploy history read.
+	BuildList = "build_list"
+	// BuildStats is the deploys aggregate behind the Overview sparkline.
+	BuildStats = "build_stats"
+	// Rollback is one-command revert.
+	Rollback = "rollback"
+	// Promote moves a release between environments.
+	Promote = "promote"
+	// Teams is team membership management.
+	Teams = "teams"
+	// TenantDeletion is soft-delete, restore and bulk-delete of a tenant.
+	//
+	// Measured 2026-08-16: `Config.TenantDeletionStore` is declared and NEVER
+	// ASSIGNED anywhere in production code. The interface exists, the Postgres
+	// implementation exists, the handler exists, the three routes are written —
+	// and the field stays nil in every deployment, so none of them has ever been
+	// reachable. This is the "implemented but not wired" pattern CLAUDE.md names
+	// by that title, and it is the single strongest argument for this whole item:
+	// a permanent zero on this series would have made it visible from the day it
+	// landed. Tracked as its own item.
+	TenantDeletion = "tenant_deletion"
+	// Billing is the plan + usage read.
+	Billing = "billing"
+	// Environments is environment CRUD.
+	Environments = "environments"
+	// Domains is custom-domain management.
+	Domains = "domains"
+	// Repositories is the connected-repository surface.
+	Repositories = "repositories"
+	// IntegrationsGitHub is the dashboard repo picker.
+	IntegrationsGitHub = "integrations_github"
+	// Previews is preview-environment management.
+	Previews = "previews"
+	// Audit is the audit-log read.
+	Audit = "audit"
 )
 
 // Surface is one registration decision the router made.
