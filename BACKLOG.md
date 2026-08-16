@@ -421,7 +421,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-10 durante a suíte completa do módulo `pkg`. `pkg/vault/transit_client_test.go:622-625` reprovou com `allowed: got 11 want 10 (burst capacity)` e `rate limited: got 4 want 5 (N - burst)` — o balde deixou passar uma requisição a mais do que a capacidade de rajada. Reexecutado isoladamente **5 vezes seguidas: 5 PASS**. O arquivo do teste não contém a palavra `cell` nenhuma vez (`grep -c cell` = 0), então não tem relação com a renomeação que estava em curso; o gatilho é a suíte inteira rodando em paralelo, que muda o tempo de parede entre a criação do balde e a rajada.
 why_now: apareceu ao rodar a suíte completa dos quatro módulos de uma vez, o que raramente é feito — a execução por pacote esconde a corrida. Um teste que reprova conforme a carga da máquina reprova em CI compartilhada, e o custo é a suíte inteira perder credibilidade: quem vê vermelho intermitente passa a reexecutar em vez de investigar, e o próximo defeito real vira ruído.
-status: raw
+status: triaged
 severity: média — não há defeito de produto, mas `.claude/rules/testing.md` § 3 é explícito: *"Tests MUST be deterministic. Flaky tests are bugs — fix or delete."*
 dod:
   - o teste afirma a capacidade de rajada sem depender do relógio de parede — relógio injetado, ou asserção sobre a decisão do limitador em vez da contagem observada
@@ -438,7 +438,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido no droplet app-dev em 2026-08-10, durante a reconstrução total. Ao vendorizar as dependências de todos os charts, dois falharam contra o upstream: `infra/helm/k6-operator/` — *"can't get a valid version for 1 subchart(s): \"k6-operator\" (repository https://grafana.github.io/helm-charts, version 3.10.0)"* — e `infra/helm/keda-http-addon/` — *"http-add-on chart not found in repo https://kedacore.github.io/charts"*. Os outros 16 charts com dependências vendorizaram sem erro. Nenhum dos dois está no caminho de `task setup` (a instalação completou com eles falhando), então o impacto hoje é potencial, não atual.
 why_now: apareceu porque a reconstrução a partir de clone limpo é a única situação que exercita `helm dependency build` em todos os charts de uma vez — o `B-015` é filho direto do defeito que o `9918556b` corrigiu. Enquanto ninguém instalava do zero, as duas quebras ficaram invisíveis. Elas mordem no dia em que alguém precisar de k6 ou do KEDA HTTP add-on, que é exatamente um dia em que já se está resolvendo outro problema.
-status: raw
+status: triaged
 severity: baixa — nada instalado hoje depende deles; alta no dia em que depender, porque a falha aparece no meio de uma instalação e não no momento em que a versão sumiu do upstream.
 dod:
   - cada um dos dois tem versão (ou nome de chart) válida contra o repositório upstream atual, ou está declarado como removido com a razão
@@ -598,7 +598,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-10, ao perseguir o último pod vermelho da reconstrução. `drill-watchdog-*` ficava em `ImagePullBackOff` no cluster de build; o container falho é `main=registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, declarado em `infra/helm/loopzero-ci-workflows/values.yaml:11`. **Não é credencial**: o `doctl` está autenticado (`paulohenriquevn@gmail.com`) e `doctl registry get` responde **`404 registry does not exist`** — o registro DigitalOcean inteiro foi deletado. Ninguém consegue puxar essa imagem, com token ou sem. Os **quatro** crons do chart (`drillWatchdog` a cada 6h, `weeklySoak`, `coverageReport`, `cosignDeadline`) executam a mesma imagem, então os quatro só podem falhar — o watchdog apenas dispara com mais frequência e por isso apareceu primeiro.
 why_now: enquanto o registro existiu, isto era invisível. A reconstrução total expôs porque destruir os clusters apagou o cache de imagens, e nenhum `imagePullSecret` resolve um registro que não existe. Um agendamento que produz pod vermelho a cada disparo é pior que automação ausente: treina quem olha o cluster a ignorar vermelho — foi exatamente esse ruído que fez este ser o último item investigado.
-status: raw
+status: triaged
 severity: média — nenhum dos quatro serve o app-dev, mas `cosignDeadline` verifica o prazo do corte keyless do cosign e `coverageReport` alimenta a cobertura; ambos silenciosamente não rodam há tanto tempo quanto o registro não existe.
 dod:
   - `loopzero-ops` está publicada num registro alcançável, ou os crons executam uma imagem que existe
@@ -748,7 +748,7 @@ suggested_mode: evolve
 source: discover-live-test
 evidence: medido em 2026-08-10, por acidente. Ao sincronizar o Caddyfile canônico por cima do servidor, o `loopzero-cloud` ficou sem upstream alcançável — e **`/engine/*` e `/v1/*` devolveram 502 juntos**, embora o `loopzero-api` estivesse saudável o tempo todo (`curl http://localhost:13001/api/v1/health` → 200 durante toda a janela). A razão está em `loopzero-cloud/cmd/main.go:1678`: `r.Route("/engine")` tira o prefixo, aplica `requireJWT` e repassa ao motor. Ou seja, o painel é o proxy autenticador do motor, e cair leva os dois caminhos junto.
 why_now: o arranjo é deliberado e tem valor real — `r.Use(requireJWT)` no grupo `/engine` é o que mantém o `loopzero-api` **nunca exposto diretamente**: quem autentica é o plano de controle, e o motor só recebe o que já passou por ele. O que não está registrado é o custo: o CLI, que fala com o motor e não com o painel, fica sem deploy quando um componente de dashboard cai. Nenhum incidente até hoje veio disso — a medição veio de um acidente meu, não de uma queda real.
-status: raw
+status: triaged
 severity: baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele.
 dod:
   - está decidido se o caminho do motor mantém a dependência do painel ou ganha uma rota própria autenticada — e a decisão está num ADR, porque muda a fronteira de autenticação
@@ -784,7 +784,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-10. `loopzero-ops seed patch-kratos` reprovou com `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found` — e o ConfigMap existia. O contexto padrão do kubectl estava em `k3d-loopzero-secrets` (deixado por `task k3d:secrets:create`), e o seed operou o cluster errado. Trocado o contexto para `k3d-loopzero-core`, o mesmo comando passou com 7 correções.
 why_now: o `k3d:secrets:create` passou a fazer parte do caminho canônico há poucas semanas, e ele muda o contexto ativo como efeito colateral. Qualquer seed rodado depois dele opera o cluster de segredos sem avisar. A mensagem de erro é o que torna isto caro: ela nomeia o recurso ausente, não o cluster errado — quem a lê procura o ConfigMap, que está lá.
-status: raw
+status: triaged
 severity: média — não corrompe nada (o cluster errado simplesmente não tem os recursos), mas manda quem depura para o lugar errado, e o custo é tempo em cima de um sistema já quebrado.
 dod:
   - os seeds fixam o cluster que operam em vez de herdar o contexto ativo, ou falham dizendo qual contexto usaram
@@ -801,7 +801,7 @@ suggested_mode: review
 source: discover-live-test
 evidence: medido em 2026-08-10 ao revalidar a topologia. `app.loopzero.example`, `auth.loopzero.example` e `cloud.loopzero.example` — **sem** o sufixo `-dev` — têm bloco próprio no Caddyfile e não servem nada: `app` devolve **502** porque encaminha para `localhost:5173`, um servidor Vite de desenvolvimento que não está rodando (`ss -ltn` na 5173 devolve zero sockets); `auth` e `cloud` devolvem **404**. Os três estão declarados em `infra/quality/proxy-exposure.txt`, e a declaração de `app.loopzero.example /sessions/whoami` diz literalmente *"now consumer-less, delete after the new bundle"*. O `setup-dev-public-dns.sh` só gerencia `auth-dev` e `app-dev`, então nem DNS eles têm por parte deste repositório.
 why_now: apareceu ao medir para onde a borda encaminha, e não por sondagem de host — a sonda `loopzero-ops leak live` só cobre `app-dev` e `auth-dev`, então estes três nunca foram medidos. O `app.loopzero.example` é o mais relevante: ele encaminha para um servidor de **desenvolvimento** (Vite), e o Red Team já fechou dois achados sobre justamente isso (loopzero-cloud#66 e #141, sobre o bundle de produção e o bloqueio de caminhos de dev-server). Um bloco vivo apontando para o Vite reabre a mesma superfície se alguém subir a 5173 na máquina.
-status: raw
+status: triaged
 severity: média — hoje não servem nada, então não vazam. O risco é o bloco existir e alguém subir o Vite: aí `app.loopzero.example` passa a servir código-fonte na internet, que é exatamente o que o #66 fechou.
 dod:
   - está decidido se os três hosts são removidos ou se voltam a servir — e a decisão vale para os três, não só para o que devolve 502
@@ -840,7 +840,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-10 ao verificar por onde o CLI fala com o motor. `src/commands/doctor.ts:124` — quando a checagem de rede falha, a ação sugerida é *"verify https://api.loopzero.example is accessible"*. Esse endereço **não resolve em DNS** (verificado com `getent hosts`, junto com `api-dev.loopzero.example`, que também não). O próprio repositório já sabe: `src/config/constants.ts:34` marca `https://api-dev.loopzero.example` como *"stale value … does NOT resolve in DNS — issue #130 lock 2026-06-21"*. A correção de junho passou pelo valor padrão e não pela mensagem de diagnóstico.
 why_now: a mensagem só aparece para quem **já está com problema de rede** — e manda a pessoa investigar um endereço inexistente, que vai falhar de novo e confirmar o diagnóstico errado. É o pior lugar possível para uma informação obsoleta: o caminho de depuração de quem já está travado. O endereço canônico hoje é `https://app-dev.loopzero.example/engine`, documentado três linhas acima no mesmo repositório.
-status: raw
+status: triaged
 severity: baixa em impacto de sistema, alta em custo humano — ninguém perde dado, mas quem seguir a sugestão perde tempo e conclui a coisa errada sobre a própria rede.
 dod:
   - a ação sugerida cita o endereço que o CLI realmente usa, e não um literal fixo — idealmente derivado de `getDefaultApiUrl()`, que é quem sabe para onde a requisição foi
@@ -936,7 +936,7 @@ suggested_mode: review
 source: human
 evidence: medido em 2026-08-11 ao mapear a separação de domínios. O `loopzero-cloud` é o dono declarado do faturamento (`cycle-backlog.md` roteia `control-plane` para ele, e ele tem `internal/billing/` com 5+ arquivos), mas **os dois repositórios falam com o Stripe, por caminhos diferentes**: o `loopzero-cloud` monta requisições HTTP à mão contra `https://api.stripe.com/v1` (`internal/billing/stripe.go:28`), enquanto o `loopzero` importa a biblioteca oficial `github.com/stripe/stripe-go/v82` e abre sessão do portal em `api/internal/services/billing/stripe_portal.go`. São duas implementações da mesma integração, em domínios diferentes. Além disso, **21 arquivos do engine** conhecem limites de plano e 6 mencionam Stripe.
 why_now: apareceu ao responder se a separação de domínios está clara. A tabela de roteamento diz que faturamento é `control-plane`; o código diz que é dos dois. Enquanto ninguém precisa mudar a integração, o custo é zero — no dia em que a API do Stripe mudar, ou uma chave rotacionar, são dois lugares a acertar, em repositórios diferentes, com o risco de acertar um só.
-status: raw
+status: triaged
 severity: média — nada quebrado hoje. O risco é de divergência silenciosa: já aconteceu com este par (o `CLAUDE.md` documenta o bug do `Idempotency-Key` com janela de 1h no `cloud/internal/billing/stripe.go`, e o da ordem de webhooks no mesmo arquivo).
 dod:
   - está decidido qual repositório é dono da integração com o Stripe, e o outro consome por contrato em vez de reimplementar
@@ -1154,7 +1154,7 @@ evidence: |
 why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê essa tabela
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
-status: raw
+status: triaged
 dod:
   - `cost_counters` recebendo linhas no app-dev, com data recente
   - um teste que prove o portão NEGANDO ao estourar, e não só permitindo
@@ -1176,7 +1176,7 @@ evidence: |
 why_now: o item de assinatura é o endereço para onde o consumo é enviado no Stripe. Sem ele,
   a metade "quanto cobrar" da cobrança não fecha, mesmo que a medição comece a produzir
   linhas amanhã. O cliente existe no Stripe; a assinatura, não.
-status: raw
+status: triaged
 dod:
   - uma conta paga no app-dev com `stripe_subscription_item_id` preenchido
   - o reporter enviando ao menos um registro, provado pelo lado do Stripe
@@ -1201,7 +1201,7 @@ why_now: o passo canônico funciona e nunca rodou nesta reconstrução. Enquanto
   enviava eventos para um endpoint cujo destinatário não conseguia verificar a assinatura —
   pagamento confirmado, upgrade de plano, falha de cobrança, todos descartados em silêncio.
   Semear à mão fechou o sintoma hoje; o item é a causa: por que a corrente não cobriu.
-status: raw
+status: triaged
 dod:
   - `loopzero-stripe-webhook` presente após uma execução limpa da corrente pós-cleanroom
   - um evento real do Stripe processado no app-dev, provado pelo lado do Stripe e pelo log
@@ -1223,7 +1223,7 @@ evidence: |
 why_now: `SKIP-graceful` é a política certa para um seed opcional e a errada para a credencial
   que autoriza cobrar. O resultado é uma corrente que passa inteira num ambiente que não
   consegue faturar nem verificar pagamento — e um verde que afirma o contrário.
-status: raw
+status: triaged
 dod:
   - um ambiente que declara cobrança e não tem credencial FALHA, em vez de pular
   - o teste que prove isso falha antes da correção
@@ -1245,7 +1245,7 @@ evidence: |
 why_now: `optional: true` é o que transforma "não temos credencial" em "subiu normalmente".
   É a terceira camada do mesmo padrão, e a mais silenciosa: as outras duas ao menos deixam
   uma linha de log. Esta não deixa nada.
-status: raw
+status: triaged
 dod:
   - um ambiente que declara cobrança não sobe sem as credenciais, ou sobe declarando-se
     sem cobrança de forma visível — nunca as duas coisas ao mesmo tempo
@@ -1274,7 +1274,7 @@ why_now: cada uma dessas escolhas é defensável isolada. Juntas formam um siste
   de qualquer configuração faltante, cobra menos e barra menos — e informa isso a ninguém.
   A direção do erro é o achado: um sistema de cobrança que erra sempre para o mesmo lado
   não está sendo tolerante, está tendo um viés.
-status: raw
+status: triaged
 dod:
   - uma verificação em `loopzero-ops` que enumere as camadas de cobrança e reprove quando
     qualquer uma esteja degradada — no espírito do registro fechado-por-padrão de portas
@@ -1336,7 +1336,7 @@ evidence: |
 why_now: implantar um conserto no painel exigiu descobrir onde o código mora, corrigir o
   refspec e desfazer um remendo local — três passos que não estão em runbook nenhum. A
   próxima pessoa que precisar implantar às pressas paga a mesma descoberta.
-status: raw
+status: triaged
 dod:
   - um caminho canônico e documentado de onde o painel é construído no droplet
   - `git fetch && git switch workspace` funciona ali sem intervenção
@@ -2467,7 +2467,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-12. O `helmfile-context-parity` varre `Taskfile.yml` + `taskfiles/*.yml` e reporta 8 comparadas contra 20 fora de alcance estático. As 12 invocações do `Taskfile.yml` caem em "parametrizadas" porque o `cell.helmfile` declara `requiredEnv`, então nenhuma delas é comparada. E os invocadores em script — `infra/scripts/local/vault-bootstrap-dev.sh:267-268`, `infra/scripts/production/operator-cutover-execute.sh:142,204`, `infra/scripts/openbao/enable-vault-backup.sh:205` — não são varridos.
 why_now: o gate mede menos do que a leitura casual do seu nome sugere. Enquanto 20 de 28 invocações estiverem fora de alcance, a proteção é parcial — e é melhor que isso esteja escrito num item do que subentendido no `Summary()`.
-status: raw
+status: triaged
 severity: média — o que ele compara, compara certo; o problema é a cobertura.
 dod:
   - os invocadores em script são varridos, ou está escrito por que não são
@@ -2487,7 +2487,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-12 na fatia slice-4. Quatro símbolos de `api/internal/db` atravessam a superfície pública de `services/deploycontracts` — `shared_contracts.go:207` (`WithLock(..., fn func(tx db.DBTX) error)`), `delivery.go:37` (`Activate(ctx, build *db.Build, ...)`), `delivery.go:55` (`TargetRelease *db.Release`) e `manifest_builder.go:23` (`Apps []db.BuildAppSpec`). **35 arquivos, em 10 pacotes, dependem do sink**, logo dependem transitivamente da persistência. Custo de remoção, contado: `WithLock` **34** call sites, `db.BuildAppSpec` **18**, `TargetRelease` **6**, `Activate(ctx` **5** — **63** no total (linhas fora de `_test.go` em `api/`, regra única; a primeira contagem citou 57 misturando três regras, e a revisão a desmentiu). Mais o alargamento da cerca `dbgeneratedboundary` para `api/internal/db`, que atingiria **71** arquivos (`services` 51, `cmd` 18, `routes` 2) sob a semântica do gate, que inclui `_test.go` de propósito — a DoD do `B-049` afirmava que isso era *"literalmente uma string"*, e a medição desmente.
 why_now: a fatia slice-4 travou o vazamento com o gate `domain-sink-purity`, mas travar não é fechar. Enquanto os 4 estiverem lá, os 35 dependentes carregam persistência que não pediram — e `WithLock` é o primitivo do environment-lock que a Regra Inquebrável 6 põe em toda mutação, então mexer nele exige o cleanroom que `cleanroom-up-live-test-mandate.md` torna obrigatório para validação LIVE.
-status: raw
+status: triaged
 scope_reduced: 2026-08-12 pela fatia slice-6 — a bala de `db.DBTX` na camada de interface saiu deste item porque foi ENTREGUE. Resta: (a) os 4 tipos de persistencia + 3 de aplicacao na superficie de deploycontracts, e (b) alargar a cerca para `services` (51) e `cmd` (18). `server` e `routes` ja estao cercados.
 severity: média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde.
 dod:
@@ -2993,7 +2993,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 na revisão da fatia slice-5. `httpio.WriteLoopZeroError` é pass-through puro para `errorshttp.WriteJSON` — ele não inventa vocabulário nem o filtra. Alimentado com `"ArgoCD sync failed for tenant_id tn-1; check Gitea and MinIO"`, os quatro termos banidos chegam ao corpo em `detail` **e** `message`, verbatim, e o writer está funcionando exatamente como projetado. A superfície de risco real são as **277** mensagens autoradas nos call sites, e entre os 122 gates **não existe nenhum** sobre o vocabulário delas.
 why_now: a Regra Inquebrável 3 proíbe `ArgoCD`, `GitOps`, `CRD`, `tenant_id`, `Gitea`, `MinIO`, `Kaniko` e outros em saída ao usuário, e hoje isso é honrado por disciplina. A revisão confirmou que nenhuma mensagem em `routes` carrega termo banido **hoje** — então o risco é de regressão, não presente, e um gate agora é barato porque nasce verde.
-status: raw
+status: triaged
 severity: média — nada quebrado hoje; o que falta é o que impede a próxima mensagem de quebrar.
 dod:
   - existe gate que varre as mensagens de erro autoradas em `routes/` (e `services/`) contra a lista da Regra 3
@@ -3012,7 +3012,7 @@ suggested_mode: bug
 source: discover-review
 evidence: observado em 2026-08-12. Um run de `task quality:gates` reprovou com `FAIL: infra/helm/loopzero-api: env LOOPZERO_VAULT_ADDR MISSING` e `FAILURES: 1/15`. O mesmo script, rodado isoladamente antes **e** depois da mudança em stash, saiu **0** nas duas vezes; e o run seguinte de `quality:gates` completo saiu **0**. A variável `LOOPZERO_VAULT_ADDR` não está no ambiente nos dois casos, então a diferença não é ambiental de forma óbvia — o teste renderiza o chart e procura a env var no resultado (`infra/tests/secrets/check-loopzero-api-vault-projected-token_test.sh:154,180`).
 why_now: `.claude/rules/testing.md` é categórico — *"testes devem ser determinísticos; se falha de forma intermitente, é um bug e deve ser corrigido ou removido"*. Um gate que reprova uma vez em N bloqueia um push por motivo que não se reproduz, e o custo real disso é ensinar o time a re-rodar até passar, que é como um gate morre.
-status: raw
+status: triaged
 severity: média — não indica defeito de produto; indica um gate em que não se pode confiar de forma binária.
 dod:
   - a causa da intermitência está medida (render em paralelo? cache do helm? dependência de ordem entre os 15 sub-testes?)
@@ -3030,7 +3030,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12, ao fechar o `B-009`. Aquele item mediu *"11 achados, todos em `operators/`"* — e os 11 estão em zero agora. Mas `cd api && golangci-lint run ./...` devolve **88**: 44 `gosec`, 34 `staticcheck`, 7 `unused`, 1 `errorlint`, 1 `errcheck`. **Nenhum** deles está nos arquivos que a sessão de fatias tocou (`routes/secrets.go`, `routes/projects.go`, `db/query_executor.go`, `db/dbtx/`, `routes/httpio/`) — são pré-existentes. A medição original do `B-009` provavelmente parou no primeiro módulo que reprovou: `task lint` roda os módulos em comandos separados e o Task aborta no primeiro erro.
 why_now: `task lint` é uma das linhas do `CLAUDE.md § Pre-completion checklist`, e continua não-marcável — agora por um corpo diferente e maior do que o item que a explicava. O `task lint:baseline` passa (88 < 200), então há duas tasks com veredictos opostos sobre a mesma coisa, e a que aparece na checklist é a estrita.
-status: raw
+status: triaged
 severity: média — nada quebrado; o custo é uma linha de checklist que ninguém pode marcar, que é como uma checklist deixa de ser checklist.
 dod:
   - os 88 estão corrigidos, ou a fração irredutível está allowlistada com sunset conforme `code-quality-allowlist.txt`
@@ -3426,7 +3426,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão independente da fatia `slice-10`. O resolvedor de ADR do gate `docs-contract-refs` aceita como documentação qualquer `.md` sob `docs/` ou `.claude/` que **não** esteja em `cycleArtifactDirs` (`cmd/loopzero-ops/internal/quality/docsrefs/check.go:258-265`, `:286-317`) — e `docs/wiki/decisions/` não está na lista. O ADR `docs/wiki/decisions/2026-08-12-status-writer-contract.md` cita `ADR-0024` cinco vezes **para dizer que ele não existe**, e com isso `ADR-0024` passou a resolver. É textualmente o que o comentário do gate proíbe em `check.go:256` — *"Writing the document that records an absence must not manufacture a presence"* — e o que `TestCheck_CycleArtifactsAreNotADRDocumentation` (`check_test.go:257-275`) fecha para `.claude/knowledge-base/`, um diretório ao lado. Sem efeito hoje: nenhum comentário Go cita mais `ADR-0024`, e a isenção que os cobria foi retirada do allowlist na mesma fatia.
 why_now: a fatia `slice-10` deletou as 8 citações que o `B-052` registrou, então o gate ficou sem nada para resolver — e a armadilha ficou latente em vez de visível. A próxima citação a um ADR fantasma que já tenha sido tema de um ADR passa despercebida.
-status: raw
+status: triaged
 severity: média — latente, não ativa. Vira alta na primeira citação nova a um id de ADR que algum documento de decisão já mencione.
 dod:
   - uma menção a `ADR-NNNN` dentro de um documento que **decide sobre** esse ADR deixa de contar como documentação dele
@@ -3638,7 +3638,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`, rodando seis variantes contra `Check` numa árvore temporária — **todas as seis** devolveram `err=nil`: `ToUpper` içado para ACIMA do range e usado dentro dele (a que um refactor normal produz); laço por índice em vez de `range`; `range` sobre uma variável que aliasa o slice; `slices.ContainsFunc`; `import str "strings"`; `bytes.ToUpper`. `casematch.go` só inspeciona `*ast.RangeStmt` cujo `X` é o identificador do símbolo.
 why_now: o eixo da caixa acabou de ser decidido (`B-070`) e a asserção que o protege tem uma porta larga. A variante içada restaura exatamente o comportamento que o ADR proíbe, e o gate segue verde.
-status: raw
+status: triaged
 severity: média — o passo vazio (site sem loop) já foi fechado, e o teste comportamental do linter pega todas as seis; mas esse teste não roda (`B-088`), e a cópia vigiada é código morto (`B-070`).
 dod:
   - a variante içada é detectada, ou está escrito por que não é
@@ -3656,7 +3656,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 na fatia `slice-13`, ao remover a baseline órfã que o `B-045` nomeia. Dos quatro arquivos em `infra/quality/`, `coverage-baseline.json` e `host-ports.txt` têm 3 leitores em código cada; `dry-run-baseline.txt` tem **zero** — nenhuma referência em `*.go`, `*.yml` ou `*.sh`. É a mesma classe do `environment-lock-baseline.txt` removido nesta fatia.
 why_now: o `B-045` nomeou uma baseline órfã e ela era duas. Um arquivo em `infra/quality/` é lido como insumo de gate; sem leitor, ele parece contrato e não é.
-status: raw
+status: triaged
 severity: baixa — não quebra nada; é ruído que se disfarça de garantia. Mesmo argumento do `B-045`.
 dod:
   - `dry-run-baseline.txt` é removido ou ganha consumidor
@@ -3739,7 +3739,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 na fatia `slice-15`. `api/internal/source/validator_env.go` bloqueia sequestro de processo (`LD_PRELOAD`, `DYLD_*`, `PATH`, `SHELL`) mais `LOOPZERO_` e `KUBERNETES_`. Ele **não** bloqueia `AWS_`, `DO_` nem `GOOGLE_` — os prefixos que `api/internal/services/deploycontracts/build_plan.go` reserva porque a plataforma os injeta. Um tenant que declare `AWS_ACCESS_KEY_ID` no `services.json` passa pelo validador. Verificado por teste de não-regressão (`TestReservedEnv_ThreatsBlockedAreUnchanged`), que trava o estado atual de propósito para que fechar isto seja uma decisão e não um efeito colateral.
 why_now: o ADR `2026-08-13-reserved-env-two-rules` separou as duas regras e, ao fazê-lo, deixou visível que a fronteira de sombreamento tem um lado desguarnecido. Enquanto as duas eram lidas como cópias, a lacuna parecia divergência de conjunto.
-status: raw
+status: triaged
 severity: média — **rebaixada na revisão da mesma fatia.** A metade alcançável está medida: o env do `services.json` chega ao contêiner do workload (`validator_services.go:58` → `services_input_mapping.go:158` → `renderer_deployment.go:77-84`). A outra metade **não se sustenta**: para haver sombreamento, a plataforma teria de injetar `AWS_`/`DO_`/`GOOGLE_` **naquele mesmo contêiner**, e `renderer_deployment.go:51-53` injeta apenas `PORT` mais um `envFrom` do Secret do usuário. O `B-051` já media que não existe injeção de `GOOGLE_*` em env de workload. Vira alta se alguma injeção desse tipo aparecer.
 dod:
   - está medido se o env do `services.json` alcança o mesmo processo que recebe a injeção da plataforma
@@ -3762,7 +3762,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-15`. `api/internal/services/deploycontracts/build_plan.go:120` chama `isReservedEnvKey` dentro de `for k, v := range unit.Env` (`:114`). `unit.Env` vem de `app_unit.go:130` ← `raw.Env` ← `AppSpec.Env` (`shared_contracts.go:32`). **Nenhum site de produção popula esse campo**, e o tipo de fronteira HTTP `routes.AppInput` (`builds.go:53-67`) sequer o declara — verificado também em `adapters/build_adapter.go:39-52`, `api/cmd/autodeploy_adapters.go:131-137`, `loopzero_yaml_apps.go`, `workflow_builder.go` e `languages.go`. O laço nunca itera; a regra não dispara.
 why_now: três artefatos afirmavam, no presente, que essa regra **impede** sombreamento — o doc-comment de `validator_env.go`, o ADR `2026-08-13-reserved-env-two-rules` e a saída do gate `env-prefix-parity`. As três foram corrigidas na mesma fatia, mas o código continua: uma regra de segurança inalcançável que parece cobertura, e um gate verde comparando duas cópias dela.
-status: raw
+status: triaged
 severity: média — não há vulnerabilidade aberta (o caminho que ela guardaria também não existe); o custo é a aparência de proteção, que é a classe do `B-055` e do `B-045`.
 dod:
   - está decidido se `AppSpec.Env` deve ser populado (e então a regra passa a valer) ou removido (e então a regra sai com ele)
@@ -3781,7 +3781,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 na fatia `slice-16`. `infra/helm/admission-policies/templates/vap-tenant-namespace.yaml:26-29` casa `loopzero.io` `tenants` **e** `environments` — os mesmos recursos que a `vap-tenant-cr-shape`, portanto também exclusivos do cluster mgmt. Mas `tenantNamespace` é `false` no `values.yaml` base **e** no `values-mgmt.yaml`, então ela não renderiza em cluster nenhum. O comentário do base diz *"Default OFF: toggle on via overlay AFTER T3.3 migration ran successfully"* — e o overlay que ligaria é justamente o do mgmt, onde ela está `false`.
 why_now: a fatia `slice-16` mediu a colocação da cerca irmã e, ao fazê-lo, tornou visível que esta não está em lugar nenhum. Enquanto a `tenantCrShape` estava desligada no mgmt, as duas pareciam ter o mesmo estado; agora só uma está resolvida.
-status: raw
+status: triaged
 severity: média — não há regressão nova (ela nunca renderizou), e o comentário indica uma migração como pré-condição. Vira alta se a T3.2/T3.3 do ADR-0018 v2 já tiver rodado, porque então a cerca está pronta e desligada.
 dod:
   - está medido se a migração T3.3 que ela aguarda já rodou
@@ -3800,7 +3800,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-16`. `charts/loopzero-api/templates/deployment.yaml:35` deriva a SA de `loopzero-common.fullname` (`charts/loopzero-common/templates/_helpers.tpl:170-176`) com `serviceAccount.name: ""` (`charts/loopzero-api/values.yaml:189-191`). `helm template t charts/loopzero-api` rende `t-loopzero-api`; como subchart de `charts/loopzero-platform` sob o release `loopzero-platform`, a regra de colapso (`_helpers.tpl:29-32`) não dispara e a SA vira `loopzero-platform-loopzero-api`. As VAPs isentam `system:serviceaccount:loopzero-system:loopzero-api` — **nenhum desses dois nomes**. O chart de bootstrap (`infra/helm/loopzero-api/templates/deployment.yaml:48`) usa o nome fixo e está correto.
 why_now: a fatia `slice-16` ligou a `loopzero-tenant-cr-shape` no mgmt, cuja validação de imutabilidade de `cellID` isenta o `loopzero-api`. Se algum dia o deploy passar pelo chart publicado, `cell_pinner.go:163` é negado — e `:170` registra um Warn **sem reverter o banco**, que é exatamente o split-brain DB/CR que o comentário da isenção existe para evitar.
-status: raw
+status: triaged
 severity: média — **latente**: nenhum caminho de deploy usa o chart publicado para o `loopzero-api` hoje. Vira alta no dia em que usar.
 dod:
   - a SA renderizada pelo chart publicado é a mesma que as VAPs isentam, ou as VAPs cobrem as duas formas
@@ -3818,7 +3818,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-16`. `api/internal/services/placement/cell_pinner.go:172` emite, como remédio manual, `kubectl -n loopzero-system patch tenant <id> --type=merge -p '{"spec":{"cellID":...}}'`. A validação de imutabilidade da `loopzero-tenant-cr-shape` (`vap-tenant-cr-shape.yaml:58-61`) nega exatamente isso, exceto para `system:masters` ou a SA do `loopzero-api`.
 why_now: a cerca foi habilitada no mgmt em 2026-08-13. O comportamento é provavelmente o desejado — a mensagem da própria política diz *"Use 'loopzero admin tenants pin' to move a team"* —, mas o código emite um remédio que a política bloqueia, e quem o seguir com um kubeconfig sem privilégio recebe um `Denied` sem entender por quê.
-status: raw
+status: triaged
 severity: baixa — quem opera o mgmt normalmente tem kubeconfig admin (`system:masters`), que é isento; o custo é uma mensagem que engana.
 dod:
   - a mensagem de `cell_pinner.go:172` diz que o patch direto é negado pela política, ou deixa de oferecê-lo
@@ -3834,7 +3834,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 na fatia `slice-17`. `infra/helm/openbao-init/values.yaml` declara quatro entradas com nome parecido: `loopzero-api-read` (:126), `loopzero-api-transit-encrypt` (:131), `loopzero-api` (:188 — a policy) e `loopzero-api` (:328 — um **role** no mount `k8s-core`). Só a terceira é referenciada: o role em `:334-335` lista `policies: [loopzero-api]`. **nenhum role neste arquivo as liga** — treze roles declaram `policies:`, e o único que nomeia uma policy `loopzero-api-*` é o de k8s-core, que liga `loopzero-api`. (A redação anterior dizia que um `grep` repo-wide devolvia zero; **falso** — `docs/operations/vault-cluster-local-runbook.md:202` liga `loopzero-api-read` a um role, e há outras menções em runbooks e auditorias. A afirmação certa é sobre este arquivo, e é ela que o item precisa.) Duas policies existem, são aplicadas pelo `helmfile sync`, e nenhuma identidade as carrega.
 why_now: ao corrigir o `B-072` eu apliquei o patch na policy errada — `loopzero-api-transit-encrypt`, porque o padrão casou primeiro. Só o teste novo pegou. Quatro nomes parecidos, dois deles inertes, e um que é um role: quem for editar a policy do `api` tem quatro candidatos e três estão errados.
-status: raw
+status: triaged
 severity: média — não há risco de segurança (uma policy sem role não concede nada a ninguém); o custo é o mesmo do `B-055` e do `B-045`, dívida que parece cobertura, e neste caso já custou um patch no lugar errado.
 dod:
   - está decidido se as duas são removidas ou ligadas a alguma identidade
@@ -3953,6 +3953,47 @@ dod:
   - cada um dos 43 é verificado individualmente e recebe o status que sua evidência sustenta — `triaged` se a medição vale, `raw` com `evidence: none-yet` se o campo foi preenchido por engano
   - fica escrito por que a intake por `--sweep` nasce com evidência e mesmo assim é registrada `raw`, ou o `/backlog-item` passa a registrá-la `triaged`
   - `check_backlog_structure.py` sai sem nenhum `raw_with_evidence` contra o registro real
+
+---
+
+### Executado em 2026-08-16 — as três balas cumpridas
+
+**A lista nominal envelheceu nas duas direções.** Eram 43 em 13/08; medidos hoje, **32**. Itens foram
+fechados e outros entraram — inclusive dois que eu mesmo registrei `raw` nesta sessão, com evidência
+de varredura, e só percebi porque o verificador reclamou.
+
+**E meu primeiro extrator tinha ruído.** Ele colhia todo `B-NNN` da linha do achado, e a mensagem
+inclui o **texto da evidência** — que às vezes cita outros itens (`B-083` diz *"ao fechar o
+`B-009`"*). Quatro falsos membros entraram assim, e só apareceram porque a substituição não os pegou:
+`B-009`, `B-045` e `B-049` estão `planned`/`shipped`, e `B-021` já era `triaged`. **O erro de medição
+se revelou pelo resultado, não pela leitura.**
+
+**Os 32 foram lidos um a um**, como o DoD exige, e **nenhum** tem o campo preenchido por engano. Todos
+carregam medição real — data, `arquivo:linha`, contagem, saída de comando. Os mais fracos (`B-036`,
+`B-037`, sem data) carregam duas referências `arquivo:linha` cada. A resposta ser uniforme é
+**resultado**, não premissa: uma substituição em massa teria promovido suposição a medição sem
+ninguém saber.
+
+**O verificador saiu de 32 achados `major` para zero** — `SHIPPABLE_WITH_CAVEATS`, 0 blockers, 0
+majors, 3 minors. O diff no registro é de **32 inserções e 32 deleções, todas em linhas `status:`**.
+
+**A assimetria que permitiu isso durar.** `triaged_without_evidence` — afirmar medição que não se tem
+— era **blocker** desde o início. `raw_with_evidence` — ter medição e negá-la — era só `major`. Os
+dois corrompem a mesma coisa: `cycle-maintenance § SELECT` ordena `triaged` antes de `raw` porque
+medido vence não-medido, e desempata por idade. A diferença é que **este lado é invisível** — ninguém
+nota trabalho que silenciosamente nunca é escolhido. A assimetria era resíduo de qual checagem foi
+escrita primeiro, não decisão de ninguém. Agora os dois bloqueiam.
+
+**Bala 2, medida em vez de escrita de novo:** o `cycle-backlog.md:44` **já declarava**
+`status: triaged` para achado de varredura, com a razão — *"chega com a evidência que a entrada manual
+não pode exigir"*. A regra não faltava; faltava consequência. Ela ficou registrada onde a regra vive.
+
+**Provas:** 33 testes do verificador verdes (dois novos — o blocker e a garantia de que `raw` +
+`none-yet`, o estado legítimo de intake, continua limpo), mutante injetado reprovando com
+`INVALID`, e `task test:unit` verde com 264 pacotes.
+
+status permanece `triaged`; o fechamento aguarda a ratificação do
+`MEET-ASYNC-AMENDMENT-2026-08-16-raw-with-evidence-blocks`.
 
 > Registrado 2026-08-13 pela fatia que fechou o `closure_note_without_shipped`. **Deliberadamente não
 > corrigido em lote:** virar 43 status sem abrir cada item é exatamente o atalho que produziu a deriva.
@@ -4213,7 +4254,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-14 ao consertar o `B-021`. Sete arquivos de `cmd/loopzero-ops/internal/seed/` gravam Secret via `CreateOrUpdateSecret`, e antes desta medição **um** garantia o namespace antes (`broker.go`). O `github_app_dev.go` foi consertado porque a falha dele está medida — numa sala limpa ele rodou antes de `loopzero-system` existir, falhou no pré-requisito, e o efeito só apareceu como `404` no log de entrega do GitHub. Restam **cinco** com a mesma forma: `argocd_gitea_creds.go`, `argocd_token.go`, `gitea_token.go`, `stripe_api_keys.go`, `stripe_webhook_secret.go`.
 why_now: a falha do `B-021` não foi de código, foi de **ordem** — o seed pressupôs um namespace que a cadeia ainda não tinha criado. A pressuposição é a mesma nos cinco; o que não se sabe é se a posição de cada um na cadeia já a garante. Consertar os cinco sem medir seria adivinhar, e adivinhar é o que produziu o item que os revelou.
-status: raw
+status: triaged
 severity: média — nenhum está medido falhando hoje, mas o modo de falha é silencioso por construção: o seed falha, a cadeia segue, e o efeito aparece num sistema de terceiros
 dod:
   - para cada um dos cinco, está medido se o namespace é garantido pela posição na cadeia ou não
@@ -4278,7 +4319,7 @@ evidence: |
 
   Das seis guardas criadas nesta sessão, **cinco** tiveram varredura de população (checkbox 23 achados, marcador de fechamento 6, seeds 7→1, padrão de pacote 1 real, `Status().Update` 83 arquivos) e **uma** não. A que não teve é a que só existia como teste de pacote.
 why_now: mutante sintético prova que a guarda **enxerga** a forma; varredura prova quantas vezes a forma **já aconteceu**. As duas perguntas são diferentes, e a segunda é a que encontra defeito hoje em vez de prevenir defeito amanhã. Esta sessão gastou três correções em cima de itens que mediram o mecanismo e não a população.
-status: raw
+status: triaged
 severity: média — nenhuma guarda está errada; o que falta é o passo que transforma cada uma de prevenção em achado
 dod:
   - a regra "toda guarda nova roda contra a população real antes de ser declarada pronta" está escrita onde as guardas são escritas
@@ -4297,7 +4338,7 @@ evidence: |
   medido em 2026-08-14 ao fechar o `B-076`. O `helm-drift` compara as **listas de arquivos** de `templates/` dos dois charts de um par. Renderizando os dois com `helm template` sob values padrão e comparando os **kinds efetivamente produzidos**, **4 das 21** divergências que ele reporta não existem no que é instalado: `service.yaml` nos dois pares e `clusterrole.yaml`/`clusterrolebinding.yaml` no `loopzero-api` — os dois charts renderizam esses recursos, e só o arquivo que os declara tem nome diferente.
   Outras **9** são condicionais: o arquivo existe de um lado só e **nenhum dos dois** produz o recurso sob os values padrão. Só **8** são assimetria real de recurso renderizado.
 why_now: o gate existe para vigiar assimetria de instalação, e 13 de 21 do que ele reporta não é isso. Cada falso reporte precisa de uma entrada de allowlist, e cada entrada de allowlist é uma linha que alguém lê como "divergência aceita" — o ruído desloca a atenção do que importa. É a mesma lição do `B-077`: medir o render, não a presença de arquivo.
-status: raw
+status: triaged
 severity: média — não esconde defeito hoje (as 8 reais estão nomeadas), mas infla o allowlist com 13 aprovações de coisa que não é divergência, e um allowlist inflado é um allowlist que ninguém revisa
 
 > **Bala 3 medida em 2026-08-14: o custo não é obstáculo.**
