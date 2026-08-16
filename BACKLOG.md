@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 3 · **Closed** 50
+124 items — **Open** 71 · **In flight** 2 · **Closed** 51
 
 ### Open (71)
 
@@ -146,15 +146,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (3)
+### In flight (2)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
-| [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 
-### Closed (50)
+### Closed (51)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -183,6 +182,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
 | [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
+| [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm---x) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `shipped` | média |
 | [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela---x) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `shipped` | alta |
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
@@ -1859,7 +1859,7 @@ dod:
 > violação e passou a **proibi-la**: `openbao-bootstrap-in-core-task` está ligado e sai
 > *"PASS — no mgmt-cluster OpenBao shortcut (5144 lines scanned)"*.
 
-## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [ ]
+## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1867,7 +1867,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `charts/loopzero-platform` declara como dependências os componentes de control plane, build plane e workload plane e os instala **num único release**, enquanto o caminho de desenvolvimento gasta **quatro helmfiles separados** construindo exatamente essa separação. `charts/loopzero-platform/profiles/dev.yaml:53` liga `loopzero-admission-policies` por condição; o mesmo padrão vale para os demais. Nenhum documento em `infra/` ou `charts/` mapeia chart → plano: `docs/architecture/helm-topology.md:24` **diz explicitamente** que o lado `charts/` não tem essa atribuição.
 why_now: a separação de planos que a auditoria mediu como real (5 clusters, 4 helmfiles) **desaparece no caminho publicado**. Quem instalar pelo chart guarda-chuva recebe os três planos num cluster, e nada no chart diz que isso é diferente do que o desenvolvimento faz. Junto com o B-046, é o segundo caso em que a superfície publicada é mais fraca que a de dev.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md — e composicao single-cluster deliberada, e isso passa a estar escrito no chart. A pergunta que fica (o chart deveria existir?) e o B-073
 severity: média — hoje o caminho publicado é pouco usado; o risco é ele virar o caminho de produção sem que a diferença esteja documentada.
 dod:
@@ -1876,6 +1876,17 @@ dod:
   - existe um índice chart → plano em `infra/` — hoje não existe nenhum `.md` em `infra/*.md`, `infra/helm/*.md` nem `infra/helmfile/*.md`
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Fechado 2026-08-16 — DoD 3/3.**
+>
+> **(1) Decidido, e já estava.** `docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md` (ACCEPTED, T2): o guarda-chuva **é** composição single-cluster, deliberadamente. A evidência que decidiu: o README dele já marcava os três planos como `Required: Yes`, e o bootstrap do ArgoCD referencia **sub-charts individualmente, nunca o guarda-chuva** — os únicos `path: charts/*` em `infra/argocd-bootstrap/apps/` são quatro Applications, uma por operator.
+>
+> **(2) Escrito no chart, com o que se perde.** A limitação foi para `charts/loopzero-platform/README.md` (seção própria, no topo) e para o `Chart.yaml` como anotação `loopzero.io/topology: single-cluster` + `loopzero.io/planes-collapsed: "core,build,cell"` — anotação porque é o que uma ferramenta lê, README porque é o que uma pessoa lê. O que se perde está nomeado: a separação que **quatro helmfiles** constroem, o plano de build deixando de ser cluster próprio, o isolamento entre control plane e workload, e um `helm uninstall` alcançando os três de uma vez.
+>
+> **(3) Índice criado:** `infra/CHART-PLANE-INDEX.md`, com uma coluna que o item não pediu e sem a qual ele mentiria — **como o plano foi provado**. Seis charts são **provados** (um helmfile declara `chart: ../../charts/<nome>`, então a linha fala do mesmo artefato); três são **inferidos pelo nome**, porque nenhum helmfile os declara a partir de `charts/`; e dois (`loopzero-monitoring`, `loopzero-dashboard`) **não são declarados em lugar nenhum**. Apagar essa diferença faria o índice afirmar verificação que não houve — é a armadilha do sistema dual de charts que a v1.1 do próprio ADR teve de corrigir.
+>
+> **Fronteira com o `B-073`:** aqui está decidido **o que ele é**; lá se decide **se vale mantê-lo**. Medido nesta fatia: nenhum consumidor de produção — todos os medidos são teste ou template.
+
 
 ## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [x]
 

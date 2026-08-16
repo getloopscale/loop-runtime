@@ -2,6 +2,26 @@
 
 LoopZeroCloud platform umbrella chart. Composes all platform components (CRDs, API, operators, cloud, dashboard, build templates, monitoring, admission policies) for ArgoCD-driven Day-2 GitOps installation.
 
+## This is a SINGLE-CLUSTER composition, by design
+
+Its 12 dependencies span **three planes** — core, build and cell — and this chart installs them
+as **one Helm release, in one cluster**. That is the design, not an oversight: decided in ADR
+[`2026-08-12-umbrella-chart-plane-separation`](../../docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md)
+(`B-048`), and stated here rather than left to be inferred from silence.
+
+**What you give up by installing it:** the plane separation that the development path spends
+**four helmfiles** building (`infra/helmfile/{core,build,cell-0,secrets}.helmfile.yaml.gotmpl`).
+The build plane stops being a cluster of its own; the isolation between control plane and workload
+goes away; and a single `helm uninstall` reaches all three at once.
+
+**What uses it today: nothing in production.** The ArgoCD bootstrap references sub-charts
+individually — the only `path: charts/*` entries in `infra/argocd-bootstrap/apps/` are four
+Applications, one per operator. Every measured consumer of this chart is a test or a template
+(`taskfiles/helm.yml`, `infra/tests/helm/`).
+
+Which plane each chart belongs to, and how that was proven, is in
+[`infra/CHART-PLANE-INDEX.md`](../../infra/CHART-PLANE-INDEX.md).
+
 ## Quick Start
 
 ```bash

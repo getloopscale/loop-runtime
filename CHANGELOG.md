@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **O pacote de instalação "tudo junto" passou a dizer que instala tudo junto.** Ele reúne doze componentes que, no caminho normal, rodam em três ambientes separados — e os instalava num só, sem avisar. A limitação agora está escrita nele, com o que se perde ao usá-lo, e há um índice dizendo a que ambiente cada componente pertence **e como isso foi verificado** — porque três das doze atribuições são deduzidas do nome, não comprovadas, e apagar essa diferença faria o índice afirmar uma checagem que não houve. (B-048)
+
 - **A criação de chaves de criptografia por cliente deixou de ter dois donos, sendo que um deles nunca existiu.** O operador declarava fazer esse trabalho e não fazia — o campo que o ligaria nunca foi preenchido em nenhum ambiente, por dez semanas. Quem realmente cria a chave é a API, no primeiro uso. A declaração morta foi removida e a decisão ficou registrada. No caminho, uma armadilha: se alguém ligasse a outra metade dessa peça (a que apaga chaves, ainda em aberto), **todo cliente novo ficaria preso em provisionamento para sempre**, esperando uma etapa que já não roda. (B-042)
 
 - **O guia do repositório parou de apontar para nove documentos que não existem.** Cinco contratos foram apagados juntos há dez dias por serem inconsistentes; o guia continuou citando os cinco, mais quatro outros. Cada assunto foi reapontado para onde ele realmente vive — nenhum foi recriado por adivinhação, porque documentação inventada é pior que a ausência dela. De passagem: o arquivo declarava **dois números diferentes** de verificações de qualidade e nenhum batia, e os **quatro** nomes de cluster estavam desatualizados. (B-052)
