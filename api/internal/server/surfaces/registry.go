@@ -87,6 +87,48 @@ const (
 	// the question they are asking. It would NOT be tolerable for a top-level
 	// surface, which is why every other constant in this block is one.
 	ActiveTeam = "active_team"
+
+	// B-115 slice 2 — the product data plane: what a customer actually uses.
+	//
+	// Measured 2026-08-16: every one of these is built inside a chain that begins
+	// at `if dbAdapter != nil` (main.go:167). The intermediate structures —
+	// `orchDeps`, `stores`, `dbDeps` — are rungs of that one ladder, so the whole
+	// group shares a single root cause: no database. Their reasons name the chain
+	// rather than the rung, because the rung is not what an operator can fix.
+
+	// SourceUpload is bundle upload — the first step of every deploy.
+	SourceUpload = "source_upload"
+	// Projects is the project CRUD surface.
+	Projects = "projects"
+	// EventsStream is the SSE event feed the CLI follows during a deploy.
+	EventsStream = "events_stream"
+	// Secrets is tenant secret management.
+	Secrets = "secrets"
+	// Builds is submit/get/cancel — off means no deploy can start.
+	Builds = "builds"
+	// BuildAttestation is the supply-chain attestation read.
+	BuildAttestation = "build_attestation"
+	// BuildSBOM is the per-app SBOM read.
+	BuildSBOM = "build_sbom"
+	// BuildLogs is the build log read.
+	BuildLogs = "build_logs"
+	// LogStream is live build and runtime log streaming.
+	LogStream = "log_stream"
+	// ProjectStatus is the project health read.
+	ProjectStatus = "project_status"
+	// MetricsProxy is the Prometheus range proxy behind the dashboard charts.
+	//
+	// Its absence and its degradation are DIFFERENT states, and the router used
+	// to conflate them: the handler is built unconditionally
+	// (`NewMetricsProxyHandler` never returns nil), so a nil here means the whole
+	// orchestration chain is down and the route answers 404. The documented 503
+	// `prometheus_not_configured` happens when the handler EXISTS and its
+	// Prometheus client does not.
+	MetricsProxy = "metrics_proxy"
+	// StatusStream is the SSE signal.changed stream.
+	StatusStream = "status_stream"
+	// Scale is manual scaling.
+	Scale = "scale"
 )
 
 // Surface is one registration decision the router made.

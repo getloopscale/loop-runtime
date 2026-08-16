@@ -343,7 +343,9 @@ func registerProtectedRoutes(
 	buildCostGate func(http.Handler) http.Handler,
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
-	if cfg.SourceStore != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.SourceUpload, cfg.SourceStore != nil,
+		"sem banco — o SourceStore vem de `stores` (setup_server.go), que exige `dbAdapter`. "+
+			"Desligada, o primeiro passo de todo deploy — subir o pacote — desaparece") {
 		var sourceOpts []func(*source.SourceHandler)
 		if cfg.ObjectUploader != nil {
 			sourceOpts = append(sourceOpts, source.WithObjectUploader(cfg.ObjectUploader))
@@ -359,7 +361,10 @@ func registerProtectedRoutes(
 	}
 
 	// Project routes
-	if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Projects,
+		cfg.ProjectStore != nil && cfg.TenantCRMgr != nil,
+		"sem banco ou sem acesso ao cluster — o ProjectStore vem de `dbDeps` e o "+
+			"TenantCRMgr do cliente de Kubernetes; a rota exige os dois") {
 		projects := projects.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
 		if cfg.ProjectDeleter != nil {
 			projects.SetDeleter(cfg.ProjectDeleter)
@@ -388,7 +393,10 @@ func registerProtectedRoutes(
 	}
 
 	// SSE stream route (read-only)
-	if cfg.EventStore != nil && cfg.BuildStoreReader != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.EventsStream,
+		cfg.EventStore != nil && cfg.BuildStoreReader != nil,
+		"sem banco — ambos vêm de `stores`. Desligada, o CLI perde o acompanhamento "+
+			"do deploy e fica sem saber se ele avançou") {
 		sseOpts := []sse.StreamOption{sse.WithLogger(cfg.Logger)}
 		if cfg.SSEHeartbeatInterval > 0 {
 			sseOpts = append(sseOpts, sse.WithHeartbeatInterval(cfg.SSEHeartbeatInterval))
@@ -424,7 +432,8 @@ func registerProtectedRoutes(
 	}
 
 	// Secret routes
-	if cfg.SecretStore != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Secrets, cfg.SecretStore != nil,
+		"sem banco — o SecretStore vem de `stores` (setup_server.go:230)") {
 		secretHandler := secrets.NewSecretHandler(cfg.SecretStore)
 		if cfg.SecretK8sSync != nil {
 			secretHandler.SetK8sSync(cfg.SecretK8sSync)
@@ -464,7 +473,13 @@ func registerProtectedRoutes(
 	}
 
 	// Build routes — use the single BuildHandler from Config (C-08).
-	if cfg.BuildHandler != nil {
+	//
+	// Toda esta familia cai junto: `NewBuildHandler` devolve nil quando `orchDeps`
+	// e nil (main.go:477), e `orchDeps` so' e construido dentro de
+	// `if dbAdapter != nil` (main.go:167). A cadeia inteira comeca no banco.
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Builds, cfg.BuildHandler != nil,
+		"sem banco — a cadeia é banco → orchDeps → BuildHandler (main.go:167 e :477). "+
+			"Desligada, nenhum deploy pode começar") {
 		r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
 		// Wave 1 T1.9: chain is rate-limit → idempotency → rate cap (buildEnforcement)
 		// → cost cap (buildCostGate) → handler. Both enforcement layers can
@@ -477,38 +492,54 @@ func registerProtectedRoutes(
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: supply-chain attestation
 	// endpoint. Returns the cosign signature reference + sha256 digest
 	// for a build's release. Behind requireAuth (parent group middleware).
-	if cfg.BuildAttestationHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildAttestation, cfg.BuildAttestationHandler != nil,
+		"sem banco — mesma cadeia da família de build (main.go:167). Desligada, a "+
+			"cadeia de assinatura de uma release deixa de ser consultável") {
 		r.Get("/api/v1/builds/{id}/attestation", cfg.BuildAttestationHandler.Get)
 	}
 
 	// Sprint 6 / T1.2: per-app SBOM endpoint. Returns metadata + presigned
 	// download URL for the CycloneDX/SPDX SBOM of every signed image in
 	// the build. Behind requireAuth (parent group middleware).
-	if cfg.BuildSBOMHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildSBOM, cfg.BuildSBOMHandler != nil,
+		"sem banco — mesma cadeia da família de build (main.go:167)") {
 		r.Get("/api/v1/builds/{id}/sbom", cfg.BuildSBOMHandler.Get)
 	}
 
-	if cfg.LogsHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildLogs, cfg.LogsHandler != nil,
+		"sem banco — vem de `orchDeps` (setup_server.go:236), que exige `dbAdapter`") {
 		r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
 	}
-	if cfg.LogStreamHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.LogStream, cfg.LogStreamHandler != nil,
+		"sem banco — vem de `orchDeps`. Desligada, o acompanhamento ao vivo de um "+
+			"deploy some e o cliente fica sem retorno durante a construção") {
 		r.Get("/api/v1/builds/{id}/logs/stream", cfg.LogStreamHandler.StreamBuildLogs)
 		r.Get("/api/v1/projects/{name}/logs/stream", cfg.LogStreamHandler.StreamRuntimeLogs)
 	}
-	if cfg.StatusHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.ProjectStatus, cfg.StatusHandler != nil,
+		"sem banco — vem de `orchDeps`") {
 		r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
 	}
-	// T1.2 J-18 — Prometheus query_range proxy for J-18 SignalDetailSheet
-	// histogram rendering. Handler returns 503 prometheus_not_configured when
-	// MetricsProxyHandler is nil (operator did not configure
-	// LOOPZERO_PROMETHEUS_ADDRESS) — honest degraded UI per ADR D2 of plan
-	// 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
-	if cfg.MetricsProxyHandler != nil {
+	// T1.2 J-18 — Prometheus query_range proxy for the SignalDetailSheet
+	// histograms (ADR D2, plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1).
+	//
+	// AUSENCIA e DEGRADACAO sao estados DIFERENTES, e este comentario dizia que
+	// eram o mesmo. Ele afirmava que o handler devolve 503
+	// `prometheus_not_configured` "quando MetricsProxyHandler e nil" — mas com o
+	// handler nil a rota nem e registrada, entao a resposta e 404. Medido:
+	// `NewMetricsProxyHandler` (metrics_proxy.go:76) NUNCA devolve nil; quem pode
+	// ser nil e o cliente do Prometheus, e e' esse caso que produz o 503.
+	// Um operador seguindo o texto anterior iria checar LOOPZERO_PROMETHEUS_ADDRESS
+	// quando o problema e' o banco.
+	if surfaces.Recorded(cfg.Surfaces, surfaces.MetricsProxy, cfg.MetricsProxyHandler != nil,
+		"sem banco — vem de `orchDeps`. Isto NAO e' o mesmo que o Prometheus nao "+
+			"estar configurado: naquele caso o handler existe e devolve 503") {
 		r.Get("/api/v1/projects/{name}/metrics", cfg.MetricsProxyHandler.Get)
 	}
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream for J-18 useStatusStream
 	// consumer; backed by canonical sse.EventStore infrastructure.
-	if cfg.StatusSSEHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.StatusStream, cfg.StatusSSEHandler != nil,
+		"sem banco — vem de `orchDeps`") {
 		r.Get("/api/v1/projects/{name}/signals/stream", cfg.StatusSSEHandler.Get)
 	}
 	// T5.1 — canonical Deploy Timeline SSE stream per plan
@@ -525,7 +556,8 @@ func registerProtectedRoutes(
 				return uc.TenantID, true
 			})
 	}
-	if cfg.ScaleHandler != nil {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Scale, cfg.ScaleHandler != nil,
+		"sem banco — vem de `orchDeps` (setup_server.go), que exige `dbAdapter`") {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
 	if cfg.BuildListHandler != nil {

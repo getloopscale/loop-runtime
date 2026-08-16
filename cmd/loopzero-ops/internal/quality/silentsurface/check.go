@@ -66,7 +66,13 @@ import (
 //	                first because their absence is invisible from the product
 //	                side: nobody files a ticket when the ESO broker stops
 //	                answering, the fleet just stops converging.
-const Baseline = 26
+//	13  2026-08-16  B-115 slice 2: the product data plane — upload, projects,
+//	                events, secrets, the build family, logs, status, metrics
+//	                proxy and scale. Measured: every one is built inside a chain
+//	                that begins at `if dbAdapter != nil` (main.go:167), so the
+//	                whole group shares one root cause and their reasons name the
+//	                chain rather than the rung.
+const Baseline = 13
 
 // RouterPath is the file the gate reads, relative to the repository root.
 const RouterPath = "api/internal/server/router.go"
