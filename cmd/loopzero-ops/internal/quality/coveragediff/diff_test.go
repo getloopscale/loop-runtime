@@ -77,9 +77,9 @@ func TestParseDiffLine_Malformed(t *testing.T) {
 	for _, entry := range []string{
 		"",
 		"no-colon",
-		":justline",        // no path
-		"path-only:",       // no line
-		"path:not-number",  // bad line
+		":justline",       // no path
+		"path-only:",      // no line
+		"path:not-number", // bad line
 	} {
 		_, _, ok := parseDiffLine(entry)
 		assert.False(t, ok, "should reject: %q", entry)

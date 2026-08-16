@@ -49,7 +49,7 @@ func TestClusterKubectlArgs_DefaultK3D(t *testing.T) {
 	if len(args) < 3 || args[0] != "kubectl" || args[1] != "--context" {
 		t.Fatalf("default (k3d) should emit kubectl --context <ctx>, got %v", args)
 	}
-	if !strings.Contains(args[2], "k3d") && !strings.Contains(args[2], "loopzero-mgmt") {
+	if !strings.Contains(args[2], "k3d") && !strings.Contains(args[2], "loopzero-core") {
 		t.Errorf("default context should target k3d mgmt, got %q", args[2])
 	}
 }

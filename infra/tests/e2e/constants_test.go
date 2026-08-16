@@ -138,7 +138,7 @@ const (
 	// e2eTraefikPort is the default local Traefik HTTPS port.
 	e2eTraefikPort = "8443"
 
-	// e2eTraefikPortCell2 is the Traefik port for cell-2.
+	// e2eTraefikPortCell2 is the Traefik port for cell-1.
 	e2eTraefikPortCell2 = "8444"
 
 	// e2eBaseDomainLocal is the local k3d base domain.
@@ -148,11 +148,11 @@ const (
 	e2eBaseDomainDrill = "loopzero-drill.example"
 
 	// mgmtKubeContext is the kubectl context for the management cluster.
-	mgmtKubeContext = "k3d-loopzero-mgmt"
+	mgmtKubeContext = "k3d-loopzero-core"
 
 	// buildKubeContext is the kubectl context for the build cluster.
 	buildKubeContext = "k3d-loopzero-build"
 
 	// workloadKubeContext is the kubectl context for the workload cluster.
-	workloadKubeContext = "k3d-loopzero-workload"
+	workloadKubeContext = "k3d-loopzero-cell-0"
 )

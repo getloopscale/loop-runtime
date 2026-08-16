@@ -33,7 +33,7 @@ SCENARIO=""
 BASELINE_DURATION="5m"
 DRY_RUN=0
 NO_CLEANUP=0
-TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
+TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-core}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

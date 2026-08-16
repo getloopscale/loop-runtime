@@ -39,7 +39,7 @@ prometheus:
         metrics_path: /metrics
         static_configs:
           - targets:
-              # Workload cluster LB IP on k3d-loopzero-workload network.
+              # Workload cluster LB IP on k3d-loopzero-cell-0 network.
               # Updated by: bash infra/scripts/local/update-cross-cluster-ips.sh
               - "172.18.0.13:30091"
             labels:

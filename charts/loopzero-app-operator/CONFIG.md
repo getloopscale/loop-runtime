@@ -9,7 +9,7 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 |---|---|---|
 | `BASE_DOMAIN` | (empty) | operator runtime config |
 | `OPERATOR_INSECURE_SKIP_TLS` | `false` | operator runtime config |
-| `LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG` | `false` | operator runtime config |
+| `LOOPZERO_REQUIRE_CELL_0_KUBECONFIG` | `false` | operator runtime config |
 | `LOOPZERO_REAPER_GRACE_PERIOD_SECONDS` | `300` | operator runtime config |
 | `LOOPZERO_PPROF_ADDR` | (empty) | operator runtime config |
 | `LOOPZERO_PPROF_ENABLED` | `false` | operator runtime config |
@@ -23,4 +23,4 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 
 ## Deliberately NOT chart-ConfigMap keys (deployment-set / platform-mounted)
 
-- **RUNTIME_KUBECONFIG** — file-PATH value set directly on the Deployment `env:`; the kubeconfig **content** is mounted as a volume from the platform Secret `loopzero-cluster-kubeconfigs` (not a chart ConfigMap/Secret key). EC-1. (`BUILD_KUBECONFIG` is read only by the tenant binary.)
+- **CELL_0_KUBECONFIG** — file-PATH value set directly on the Deployment `env:`; the kubeconfig **content** is mounted as a volume from the platform Secret `loopzero-cluster-kubeconfigs` (not a chart ConfigMap/Secret key). EC-1. (`BUILD_KUBECONFIG` is read only by the tenant binary.)

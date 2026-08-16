@@ -41,7 +41,7 @@ export function bootstrapBuildCluster(
   );
 
   // Object storage credentials — needed by CWTs for source download and cache.
-  // On DigitalOcean: uses DO Spaces (S3-compatible), NOT the mgmt-cluster MinIO.
+  // On DigitalOcean: uses DO Spaces (S3-compatible), NOT the core-cluster MinIO.
   // The build cluster has no network access to MinIO in the mgmt cluster.
   // MEET-2026-03-27-012: cross-cluster networking fix.
   new k8s.core.v1.Secret(

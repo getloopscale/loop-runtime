@@ -99,22 +99,22 @@ func TestVaultBootstrapDev_TransitAutoUnseal(t *testing.T) {
 		t.Error("T2.1 traceability missing — add a comment citing T2.1 / issue #111 / Jeito A so future operator understands why the auto-unseal toggle exists")
 	}
 
-	// T6. Helmfile vault.helmfile.yaml.gotmpl declares a conditional
+	// T6. Helmfile secrets.helmfile.yaml.gotmpl declares a conditional
 	// `seal "transit"` stanza for the vault-local env, gated by
 	// `.Values.transitAutoUnsealEnabled` (default off in the env file).
 	// The opt-in toggle preserves the existing manual-Shamir path for
 	// the default vault-local config.
-	hf := readOverlayHF(t, "helmfile/vault.helmfile.yaml.gotmpl")
+	hf := readOverlayHF(t, "helmfile/secrets.helmfile.yaml.gotmpl")
 	if !regexp.MustCompile(`seal\s+"transit"`).MatchString(hf) {
-		t.Error("vault.helmfile.yaml.gotmpl missing `seal \"transit\"` stanza — T2.1 contract: add a conditional auto-unseal block in the vault-local server.standalone.config HCL")
+		t.Error("secrets.helmfile.yaml.gotmpl missing `seal \"transit\"` stanza — T2.1 contract: add a conditional auto-unseal block in the vault-local server.standalone.config HCL")
 	}
 	if !strings.Contains(hf, "transitAutoUnsealEnabled") {
-		t.Error("vault.helmfile.yaml.gotmpl missing `.Values.transitAutoUnsealEnabled` gate — the seal stanza MUST be opt-in (default off) so existing Shamir installs keep working")
+		t.Error("secrets.helmfile.yaml.gotmpl missing `.Values.transitAutoUnsealEnabled` gate — the seal stanza MUST be opt-in (default off) so existing Shamir installs keep working")
 	}
 
 	// T7. Helmfile cites T2.1 / issue #111.
 	if !regexp.MustCompile(`T2\.1|issue #111|dev-public-cross-cluster-secrets`).MatchString(hf) {
-		t.Error("vault.helmfile.yaml.gotmpl missing T2.1 / issue #111 traceability comment")
+		t.Error("secrets.helmfile.yaml.gotmpl missing T2.1 / issue #111 traceability comment")
 	}
 }
 

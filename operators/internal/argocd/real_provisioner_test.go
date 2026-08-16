@@ -196,7 +196,7 @@ func TestBuildApplicationObject_HasNoSkipReconcile(t *testing.T) {
 		RepoURL:        "http://gitea/loopzero/acme-gitops.git",
 		TargetRevision: "main",
 		Path:           "production",
-		DestinationURL: "https://workload-cluster:6443",
+		DestinationURL: "https://cell-0-cluster:6443",
 		DestinationNS:  "acme-production",
 	}
 	obj := buildApplicationObject(spec)
@@ -305,7 +305,7 @@ func TestEnsureApplication_PreservaStatusExistente(t *testing.T) {
 	err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-default",
+		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-0",
 	})
 	if err != nil {
 		t.Fatalf("EnsureApplication: %v", err)
@@ -349,7 +349,7 @@ func TestEnsureAppProject_PreservaStatusExistente(t *testing.T) {
 		Name: "acme", Namespace: "argocd", TenantID: "acme",
 		SourceRepos:           []string{"http://gitea/acme-gitops.git"},
 		DestinationNamespaces: []string{"loopzero-acme-web-production"},
-		CellID:                "cell-default",
+		CellID:                "cell-0",
 	})
 	if err != nil {
 		t.Fatalf("EnsureAppProject: %v", err)
@@ -376,7 +376,7 @@ func TestEnsureApplication_StatusVazioEPreservadoComoVazio(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-staging", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "staging", DestinationNS: "loopzero-acme-web-staging", CellID: "cell-default",
+		Path: "staging", DestinationNS: "loopzero-acme-web-staging", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestEnsureApplication_RetryUsaStatusDaReleitura(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-default",
+		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication sob conflito: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestEnsureApplication_CreateNaoInventaStatus(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-novo", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-default",
+		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication (create): %v", err)
 	}

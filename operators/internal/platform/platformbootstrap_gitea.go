@@ -21,7 +21,7 @@ import (
 
 // reconcileGiteaPhase handles the ConfiguringGitea phase.
 // Steps: check reachability, validate/create admin token, ensure orgs exist.
-func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
 	ctx, span := reconcilehelpers.StartChildSpan(ctx, "bootstrap.gitea.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
@@ -31,28 +31,28 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 	// Step 1: Check Gitea reachable.
 	if err := giteaClient.CheckVersion(ctx); err != nil {
 		logger.Info("gitea unreachable", "url", pb.Spec.Gitea.InternalURL, "error", err)
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("Gitea unreachable: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("Gitea unreachable: %v", err))
 	}
 
 	// Step 2: Get admin credentials from Secret.
 	adminSecret, err := r.getSecret(ctx, pb.Spec.Gitea.AdminSecretRef.Name, pb.Namespace)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("admin secret not found: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("admin secret not found: %v", err))
 	}
 
 	username, err := secretString(adminSecret, constants.KeyUsername)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("admin secret missing key %q", constants.KeyUsername))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("admin secret missing key %q", constants.KeyUsername))
 	}
 	password, err := secretString(adminSecret, constants.KeyPassword)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("admin secret missing key %q", constants.KeyPassword))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("admin secret missing key %q", constants.KeyPassword))
 	}
 
 	// Step 3: Check if token already exists in platform-tokens Secret.
 	platformSecret, err := r.getSecret(ctx, constants.SecretPlatformTokens, pb.Namespace)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("platform tokens secret not found: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("platform tokens secret not found: %v", err))
 	}
 
 	existingToken, _ := secretString(platformSecret, constants.KeyGiteaToken)
@@ -62,11 +62,11 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 			logger.Info("existing Gitea token is valid, skipping token creation")
 			// Token valid, proceed to ensure orgs.
 			if err := r.ensureGiteaOrgs(ctx, giteaClient, existingToken, pb.Spec.Gitea.Organizations); err != nil {
-				return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to ensure orgs: %v", err))
+				return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to ensure orgs: %v", err))
 			}
 
 			r.setCondition(pb, conditions.TypeGiteaReady, metav1.ConditionTrue, conditions.ReasonReady, "Gitea configured")
-			return r.transitionToNextPhase(ctx, pb, statemachine.PBPEventGiteaReady, "Gitea configuration complete")
+			return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventGiteaReady, "Gitea configuration complete")
 		}
 		logger.Info("existing Gitea token is invalid, will create new one")
 	}
@@ -79,21 +79,21 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 
 	token, err := r.createGiteaToken(ctx, giteaClient, username, password, tokenName)
 	if err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to create Gitea token: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to create Gitea token: %v", err))
 	}
 
 	// Step 5: Store token in platform-tokens Secret.
 	if err := r.updateSecretData(ctx, platformSecret, constants.KeyGiteaToken, token); err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to store Gitea token: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to store Gitea token: %v", err))
 	}
 
 	// Step 6: Ensure organizations exist.
 	if err := r.ensureGiteaOrgs(ctx, giteaClient, token, pb.Spec.Gitea.Organizations); err != nil {
-		return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to ensure orgs: %v", err))
+		return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("failed to ensure orgs: %v", err))
 	}
 
 	r.setCondition(pb, conditions.TypeGiteaReady, metav1.ConditionTrue, conditions.ReasonReady, "Gitea configured")
-	return r.transitionToNextPhase(ctx, pb, statemachine.PBPEventGiteaReady, "Gitea configuration complete")
+	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventGiteaReady, "Gitea configuration complete")
 }
 
 // createGiteaToken creates a new admin API token. It first checks if a token

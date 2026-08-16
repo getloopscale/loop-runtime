@@ -33,7 +33,7 @@ config:
   loopzeroTracingEnabled: "false"
 
 kubeconfig:
-  runtime:
+  cell0:
     existingConfigMap: ""
 
 # Operator binary arguments

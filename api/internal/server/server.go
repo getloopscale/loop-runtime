@@ -6,6 +6,20 @@ package server
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/admin"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/routes/auth"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,8 +29,22 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
+	// Apelidado porque `routes/metrics` (a familia de rotas do proxy, importada
+	// acima) ja ocupa o nome `metrics` neste arquivo. Mesma colisao que
+	// `routes/source` x `internal/source`, resolvida do mesmo jeito.
+	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
+	"github.com/getloopscale/loopzero/api/internal/routes/billing"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
+	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
+	"github.com/getloopscale/loopzero/api/internal/routes/preview"
+	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
+	"github.com/getloopscale/loopzero/api/internal/routes/scale"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -38,13 +66,13 @@ type Config struct {
 	// fall back to slog.Default. Production wiring in api/cmd/main.go
 	// SHOULD set this (Beta Logs Gate requirement).
 	ContextLogger  *pkglogging.ContextLogger
-	DB             routes.DBHealthChecker
-	HealthServices []routes.ServiceHealthChecker
+	DB             health.DBHealthChecker
+	HealthServices []health.ServiceHealthChecker
 	TokenValidator middleware.TokenValidator
 	MemberStore    middleware.MembershipStore
-	ProjectStore   routes.ProjectStore
-	TenantCRMgr    routes.TenantCRManager
-	ProjectDeleter routes.ProjectDeleter
+	ProjectStore   domain.ProjectStore
+	TenantCRMgr    domain.TenantCRManager
+	ProjectDeleter domain.ProjectDeleter
 	// PlanTierStore wires the canonical tier resolver (subscriptions.plan
 	// active row → PlanTier enum per ADR D4 of plan
 	// 2026-06-15-code-review-49-findings-remediation). nil-safe — when
@@ -61,31 +89,31 @@ type Config struct {
 	// build handler — single source of truth for env creation / PG
 	// environments row writes. nil-safe: when nil, ProjectHandler.Create
 	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).
-	ProjectEnvEnsurer routes.EnvironmentEnsurer
+	ProjectEnvEnsurer promote.EnvironmentEnsurer
 	IdempotencyStore  middleware.IdempotencyStore
 	SourceStore       source.SourceStore
-	ObjectUploader    routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
-	SourceBucket      string                // S3 bucket name for source bundles (env: SOURCE_BUCKET)
+	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
+	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
 	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
 	ArgoCallbackSecret string
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
-	SecretStore        routes.SecretStore
-	BootstrapStore     routes.BootstrapStore
+	SecretStore        secrets.SecretStore
+	BootstrapStore     domain.BootstrapStore
 	BootstrapSecret    string                      // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement      routes.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
-	CellDiscovery      routes.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
+	CellPlacement      domain.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
+	CellDiscovery      health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc
-	BuildHandler       *routes.BuildHandler
+	BuildHandler       *builds.BuildHandler
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.
-	BuildAttestationHandler *routes.BuildAttestationHandler
+	BuildAttestationHandler *builds.BuildAttestationHandler
 	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
 	// per-app SBOM metadata + presigned download URLs from S3.
-	BuildSBOMHandler    *routes.BuildSBOMHandler
-	ArgoCallbackHandler *routes.ArgoCallbackHandler
+	BuildSBOMHandler    *builds.BuildSBOMHandler
+	ArgoCallbackHandler *argocd.ArgoCallbackHandler
 	RateLimiter         *middleware.RateLimiter
 	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
 	// When non-nil, mounted as the FIRST middleware so brute-force attempts
@@ -105,25 +133,25 @@ type Config struct {
 	SSEPollInterval         time.Duration
 	SSESafetyTimeout        time.Duration
 	SSEMaxConcurrentStreams int64
-	LogsHandler             *routes.LogsHandler
-	LogStreamHandler        *routes.LogStreamHandler
-	RollbackHandler         *routes.RollbackHandler
-	PromoteHandler          *routes.PromoteHandler
-	StatusHandler           *routes.StatusHandler
-	MetricsProxyHandler     *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
-	StatusSSEHandler        *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	LogsHandler             *logs.LogsHandler
+	LogStreamHandler        *logs.LogStreamHandler
+	RollbackHandler         *rollback.RollbackHandler
+	PromoteHandler          *promote.PromoteHandler
+	StatusHandler           *status.StatusHandler
+	MetricsProxyHandler     *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
+	StatusSSEHandler        *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
 	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
 	// nil, the route is omitted (legacy / test paths). Production wires
 	// aggregator.SSEEventSink-backed PostgresEventStore that satisfies
 	// the DeployTimelineEventStore contract.
-	DeployTimelineStore routes.DeployTimelineEventStore
-	ScaleHandler        *routes.ScaleHandler
-	BuildListHandler    *routes.BuildListHandler
+	DeployTimelineStore timeline.DeployTimelineEventStore
+	ScaleHandler        *scale.ScaleHandler
+	BuildListHandler    *builds.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
-	BuildStatsHandler *routes.BuildStatsHandler
-	SecretK8sSync       routes.SecretK8sSync
+	BuildStatsHandler *builds.BuildStatsHandler
+	SecretK8sSync     secrets.SecretK8sSync
 	// SecretEnvLocker injects the environment lock into SecretHandler so
 	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.
 	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
@@ -131,7 +159,7 @@ type Config struct {
 	// using the same *adapters.PoolEnvironmentLocker injected into build
 	// orchestrators. nil-safe: when nil, SecretHandler falls back to
 	// the legacy non-locked path (test-friendly).
-	SecretEnvLocker routes.SecretEnvLocker
+	SecretEnvLocker secrets.SecretEnvLocker
 	// SecretProjectChecker injects the cross-tenant binding check (T1.2 of
 	// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk
 	// resolves the requested project's owning tenant via the tenant-scoped
@@ -140,7 +168,7 @@ type Config struct {
 	// existence-leak prevention / CWE-204 defense). nil-safe: when nil,
 	// Bulk skips the check (legacy/test path). Production wires the
 	// existing *store.PostgresProjectStore directly (signature matches).
-	SecretProjectChecker routes.SecretProjectChecker
+	SecretProjectChecker secrets.SecretProjectChecker
 	// SecretTransit injects the OpenBao transit encrypt path into the Bulk
 	// handler (T2.3+T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync
 	// v1.2). When wired, Bulk encrypts every entry.Value via Encrypt
@@ -150,38 +178,44 @@ type Config struct {
 	// prefix and passes through (no double-encrypt). Production wires
 	// the same *vault.TransitClient that the secret store dispatches
 	// through; nil disables the handler-layer encrypt (legacy AES path).
-	SecretTransit routes.SecretTransit
+	SecretTransit secrets.SecretTransit
 	// SecretFetchHandler exposes /internal/v1/secret-fetch/{tenant_id}/{name}
 	// for ESO ClusterSecretStore webhook backend to resolve secrets via
 	// loopzero-api (T4.1 of openbao-adoption v1.3). Wired by setup_secret_fetch.go
 	// in api/cmd/. nil-safe: when nil, route is not registered (LIVE 404 ⇒
 	// ESO retries with backoff — safer than registering a broken handler).
 	SecretFetchHandler http.HandlerFunc
-	EnvironmentHandler *routes.EnvironmentHandler
-	TeamHandler        *routes.TeamHandler
+	EnvironmentHandler *environments.EnvironmentHandler
+	TeamHandler        *teams.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by store.PostgresTeamStore.
-	AuthUserLookup routes.UsernameLookup
+	AuthUserLookup auth.UsernameLookup
 	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
 	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
-	ActiveTeamStore      routes.ActiveTeamStore
-	DomainHandler        *routes.DomainHandler
+	ActiveTeamStore      auth.ActiveTeamStore
+	DomainHandler        *domains.DomainHandler
 	GitHubWebhookHandler http.Handler
-	RepositoryHandler    *routes.RepositoryHandler
+	// Surfaces collects the router's registration decisions so a surface that
+	// was skipped for a missing dependency can be SEEN — via
+	// `loopzero_api_surface_enabled` — instead of only being discovered by whoever
+	// hits the 404. Nil is legal and means "nobody is observing", which is what
+	// a focused unit test wants; the production path wires it. B-104.
+	Surfaces          *surfaces.Registry
+	RepositoryHandler *repositories.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
-	IntegrationsGitHubHandler *routes.IntegrationsGitHubHandler
-	PreviewHandler            *routes.PreviewHandler // Sprint 5 / T2.3 — preview environments
+	IntegrationsGitHubHandler *integrations.IntegrationsGitHubHandler
+	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               middleware.AuditWriter
-	AuditHandler              *routes.AuditHandler
-	TenantDeletionStore       routes.TenantDeletionStore
+	AuditHandler              *audit.AuditHandler
+	TenantDeletionStore       tenants.TenantDeletionStore
 	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
 	// skipped and CLI returns its own error rather than 404.
-	BillingHandler *routes.BillingHandler
-	AdminEvictor   routes.TenantEvictor
-	AdminPinner    routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
+	BillingHandler *billing.BillingHandler
+	AdminEvictor   admin.TenantEvictor
+	AdminPinner    admin.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure: diagnostic
 	// read-only endpoint for on-call. Nil-safe — when unset, the route
 	// is not mounted and the handler answers 404 like the other admin
@@ -217,7 +251,24 @@ func Run(cfg Config) error {
 		cfg.ShutdownCancel = cancel
 	}
 
+	// B-104: the router decides, per surface, whether to register it. Those
+	// decisions used to vanish. A registry collects them, the gauge publishes
+	// them, and the summary below names every surface that is off — so a missing
+	// dependency is something operations can alert on rather than something a
+	// customer discovers when their `git push` builds nothing.
+	if cfg.Surfaces == nil {
+		cfg.Surfaces = surfaces.NewRegistry()
+	}
+
 	router := NewRouter(cfg)
+
+	appmetrics.PublishSurfaces(cfg.Surfaces.All())
+	if off := cfg.Surfaces.Disabled(); len(off) > 0 && cfg.Logger != nil {
+		for _, s := range off {
+			cfg.Logger.Warn("http surface disabled — a dependency it needs is absent",
+				"surface", s.Name, "reason", s.Reason)
+		}
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

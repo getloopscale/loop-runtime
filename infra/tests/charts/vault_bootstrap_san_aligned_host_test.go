@@ -4,13 +4,13 @@
 // F1 regression-lock — guards the SAN-aligned kubernetes_host fix landed in
 // loopzero commit `7c255524`. The fix derives `k3d-${cluster}-serverlb` (a name
 // included in the k3d mgmt API cert SAN list) for the `kubernetes_host=`
-// value written to `auth/k8s-mgmt/config` by `vault-bootstrap-dev.sh`.
+// value written to `auth/k8s-core/config` by `vault-bootstrap-dev.sh`.
 //
 // Using `host.k3d.internal` as that `kubernetes_host` triggers TLS SAN
 // mismatch ("no alternative certificate subject name matches target
 // hostname 'host.k3d.internal'") that OpenBao's strict Go HTTP client
 // classifies as a generic blanket `permission denied` from
-// `auth/k8s-mgmt/login` for EVERY role (eso, loopzero-api, loopzero-app-operator,
+// `auth/k8s-core/login` for EVERY role (eso, loopzero-api, loopzero-app-operator,
 // ...) — the F1 symptom of the dev-public T3.1 LIVE iteration 2026-06-20.
 //
 // SCOPE DISCIPLINE — read this before extending the guard:
@@ -18,7 +18,7 @@
 //   `host.k3d.internal` is STILL correct for the vault REACH (the
 //   ClusterSecretStore `server: https://host.k3d.internal:8200` → OpenBao's
 //   own cert, whose SAN includes `host.k3d.internal`). This guard ONLY
-//   asserts the `auth/k8s-mgmt/config` `kubernetes_host` value — it does
+//   asserts the `auth/k8s-core/config` `kubernetes_host` value — it does
 //   NOT forbid `host.k3d.internal` globally in the script. Extending the
 //   guard to a global forbid would re-break the canonical CSS reach.
 //
@@ -46,15 +46,15 @@ import (
 // Regex inventory — all use raw strings so the in-file escape sequences map
 // cleanly to the on-disk bytes. The script line that ships F1 (7c255524) is:
 //
-//   MGMT_CLUSTER="${TARGET_CONTEXT#k3d-}"
-//   SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"
+//   CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"
+//   SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
 //   MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
 var (
-	reServerlbHostVar  = regexp.MustCompile(`SERVERLB_HOST="k3d-\$\{MGMT_CLUSTER\}-serverlb"`)
-	reMgmtClusterDeriv = regexp.MustCompile(`MGMT_CLUSTER="\$\{TARGET_CONTEXT#k3d-\}"`)
+	reServerlbHostVar  = regexp.MustCompile(`SERVERLB_HOST="k3d-\$\{CORE_CLUSTER\}-serverlb"`)
+	reMgmtClusterDeriv = regexp.MustCompile(`CORE_CLUSTER="\$\{TARGET_CONTEXT#k3d-\}"`)
 	reSedTargetServ    = regexp.MustCompile(`//\$\{SERVERLB_HOST\}\\\\2\|`)
 	reSedAltHostK3d    = regexp.MustCompile(`host\\\\\.k3d\\\\\.internal`)
-	reBaoWriteConfig   = regexp.MustCompile(`bao write auth/k8s-mgmt/config`)
+	reBaoWriteConfig   = regexp.MustCompile(`bao write auth/k8s-core/config`)
 	reKubeHostMgmtVar  = regexp.MustCompile(`kubernetes_host="\$MGMT_HOST"`)
 )
 
@@ -79,16 +79,16 @@ func loadVaultBootstrapDev(t *testing.T) string {
 func auditSANAlignedKubernetesHost(body string) []string {
 	var errs []string
 
-	// (a1) Script derives `MGMT_CLUSTER` from `TARGET_CONTEXT` — the serverlb
+	// (a1) Script derives `CORE_CLUSTER` from `TARGET_CONTEXT` — the serverlb
 	//      name depends on this assignment.
 	if !reMgmtClusterDeriv.MatchString(body) {
-		errs = append(errs, "(a1) script does NOT derive `MGMT_CLUSTER=\"${TARGET_CONTEXT#k3d-}\"` — the serverlb container name in the cert SAN depends on this derivation (F1 fix, loopzero commit 7c255524).")
+		errs = append(errs, "(a1) script does NOT derive `CORE_CLUSTER=\"${TARGET_CONTEXT#k3d-}\"` — the serverlb container name in the cert SAN depends on this derivation (F1 fix, loopzero commit 7c255524).")
 	}
-	// (a2) Script derives `SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"` —
+	// (a2) Script derives `SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"` —
 	//      the SAN-aligned name `vault-bootstrap-dev.sh` writes into
-	//      `auth/k8s-mgmt/config`.
+	//      `auth/k8s-core/config`.
 	if !reServerlbHostVar.MatchString(body) {
-		errs = append(errs, "(a2) script does NOT assign `SERVERLB_HOST=\"k3d-${MGMT_CLUSTER}-serverlb\"` — required to produce a `kubernetes_host` whose hostname is in the k3d mgmt API cert SAN list (F1 fix, loopzero commit 7c255524).")
+		errs = append(errs, "(a2) script does NOT assign `SERVERLB_HOST=\"k3d-${CORE_CLUSTER}-serverlb\"` — required to produce a `kubernetes_host` whose hostname is in the k3d mgmt API cert SAN list (F1 fix, loopzero commit 7c255524).")
 	}
 
 	// (b1) The MGMT_HOST rewrite sed expression MUST use `${SERVERLB_HOST}`
@@ -97,7 +97,7 @@ func auditSANAlignedKubernetesHost(body string) []string {
 	//      SAN; `host.k3d.internal` is NOT in the SAN and triggers the F1
 	//      blanket-403.
 	if !reSedTargetServ.MatchString(body) {
-		errs = append(errs, "(b1) MGMT_HOST rewrite sed replacement target is NOT `${SERVERLB_HOST}\\2` — auth/k8s-mgmt/config `kubernetes_host` would not be SAN-aligned, re-introducing the F1 blanket-403 (loopzero commit 7c255524).")
+		errs = append(errs, "(b1) MGMT_HOST rewrite sed replacement target is NOT `${SERVERLB_HOST}\\2` — auth/k8s-core/config `kubernetes_host` would not be SAN-aligned, re-introducing the F1 blanket-403 (loopzero commit 7c255524).")
 	}
 	// (b2) The MGMT_HOST rewrite sed alternation MUST include
 	//      `host.k3d.internal` in the FROM-set, so a kubeconfig variant whose
@@ -106,11 +106,11 @@ func auditSANAlignedKubernetesHost(body string) []string {
 	if !reSedAltHostK3d.MatchString(body) {
 		errs = append(errs, "(b2) MGMT_HOST rewrite sed alternation does NOT include `host.k3d.internal` in the FROM-set — a future kubeconfig that exposes host.k3d.internal would slip past the rewrite and re-introduce the F1 SAN mismatch.")
 	}
-	// (b3) The `bao write auth/k8s-mgmt/config` block MUST consume the
+	// (b3) The `bao write auth/k8s-core/config` block MUST consume the
 	//      rewritten value via `kubernetes_host="$MGMT_HOST"` — a direct
 	//      literal would bypass the SAN-aligned rewrite.
 	if !reBaoWriteConfig.MatchString(body) || !reKubeHostMgmtVar.MatchString(body) {
-		errs = append(errs, "(b3) `bao write auth/k8s-mgmt/config` block does NOT consume `kubernetes_host=\"$MGMT_HOST\"` — a hardcoded literal would bypass the SAN-aligned rewrite, breaking F1.")
+		errs = append(errs, "(b3) `bao write auth/k8s-core/config` block does NOT consume `kubernetes_host=\"$MGMT_HOST\"` — a hardcoded literal would bypass the SAN-aligned rewrite, breaking F1.")
 	}
 
 	// (c) Audit-trail comment cites F1 + SAN mismatch + the commit. Operators

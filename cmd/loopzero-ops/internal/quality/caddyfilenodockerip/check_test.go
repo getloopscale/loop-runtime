@@ -89,7 +89,7 @@ func TestCheck_ProdDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 }
 
 *.prod-dev.loopzero.example {
-  reverse_proxy https://loopzero-workload.local:443
+  reverse_proxy https://loopzero-cell-0.local:443
 }
 `
 	root := writeFixture(t, body)
@@ -101,7 +101,7 @@ func TestCheck_ProdDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 
 func TestCheck_PreviewDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 	body := `*.preview-dev.loopzero.example {
-  reverse_proxy https://loopzero-workload.local:443
+  reverse_proxy https://loopzero-cell-0.local:443
 }
 *.prod-dev.loopzero.example {
   reverse_proxy https://127.0.0.1:8443

@@ -171,12 +171,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
-	if runtimeKubeconfig == "" {
-		setupLog.Error(nil, "RUNTIME_KUBECONFIG is required")
+	cell0Kubeconfig := os.Getenv("CELL_0_KUBECONFIG")
+	if cell0Kubeconfig == "" {
+		setupLog.Error(nil, "CELL_0_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
 	if err != nil {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)

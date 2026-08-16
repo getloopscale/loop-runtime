@@ -136,9 +136,13 @@ CREATE FUNCTION public.populate_cell_id_from_tenant() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    IF NEW.cell_id = 'cell-default' OR NEW.cell_id IS NULL THEN
+    IF NEW.cell_id IS NULL THEN
         SELECT cell_id INTO NEW.cell_id FROM tenants WHERE id = NEW.tenant_id;
-        IF NEW.cell_id IS NULL THEN NEW.cell_id := 'cell-default'; END IF;
+        IF NEW.cell_id IS NULL THEN
+            RAISE EXCEPTION
+                'cell_id nao resolvido para tenant % na tabela %: o tenant nao existe ou nao tem cell',
+                NEW.tenant_id, TG_TABLE_NAME;
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -227,6 +231,8 @@ CREATE TABLE public.app_scaling_config (
     CONSTRAINT chk_scale_to_zero_requires_min_zero CHECK (((NOT scale_to_zero) OR (min_replicas = 0)))
 );
 
+ALTER TABLE ONLY public.app_scaling_config FORCE ROW LEVEL SECURITY;
+
 -- Name: audit_log; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.audit_log (
@@ -240,6 +246,8 @@ CREATE TABLE public.audit_log (
     metadata jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE ONLY public.audit_log FORCE ROW LEVEL SECURITY;
 
 -- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 
@@ -285,7 +293,7 @@ CREATE TABLE public.builds (
     workflow_id text,
     error_message text,
     duration_seconds integer,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text NOT NULL,
     processing_by text,
     processing_since timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -294,6 +302,8 @@ CREATE TABLE public.builds (
     bundle_digest text,
     CONSTRAINT builds_status_check CHECK ((status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text, 'RELEASING'::text, 'SUCCEEDED'::text, 'FAILED'::text, 'CANCELLING'::text, 'CANCELLED'::text])))
 );
+
+ALTER TABLE ONLY public.builds FORCE ROW LEVEL SECURITY;
 
 -- Name: cells; Type: TABLE; Schema: public; Owner: -
 
@@ -339,6 +349,8 @@ CREATE TABLE public.cost_counters (
     CONSTRAINT cost_counters_plan_tier_check CHECK ((plan_tier = ANY (ARRAY['starter'::text, 'pro'::text, 'team'::text, 'enterprise'::text])))
 );
 
+ALTER TABLE ONLY public.cost_counters FORCE ROW LEVEL SECURITY;
+
 -- Name: custom_domains; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.custom_domains (
@@ -367,6 +379,8 @@ CREATE TABLE public.custom_domains (
     CONSTRAINT custom_domains_tls_status_check CHECK ((tls_status = ANY (ARRAY['pending'::text, 'issuing'::text, 'issued'::text, 'failed'::text])))
 );
 
+ALTER TABLE ONLY public.custom_domains FORCE ROW LEVEL SECURITY;
+
 -- Name: deploy_events; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.deploy_events (
@@ -383,6 +397,8 @@ CREATE TABLE public.deploy_events (
     CONSTRAINT deploy_events_event_type_check CHECK ((event_type = ANY (ARRAY['deploy.succeeded'::text, 'deploy.failed'::text]))),
     CONSTRAINT deploy_events_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text))
 );
+
+ALTER TABLE ONLY public.deploy_events FORCE ROW LEVEL SECURITY;
 
 -- Name: deploy_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 
@@ -414,6 +430,8 @@ CREATE TABLE public.environment_targets (
     CONSTRAINT environment_targets_kind_check CHECK ((kind = ANY (ARRAY['permanent'::text, 'preview'::text])))
 );
 
+ALTER TABLE ONLY public.environment_targets FORCE ROW LEVEL SECURITY;
+
 -- Name: github_installations; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.github_installations (
@@ -424,6 +442,8 @@ CREATE TABLE public.github_installations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE ONLY public.github_installations FORCE ROW LEVEL SECURITY;
 
 -- Name: github_webhook_deliveries; Type: TABLE; Schema: public; Owner: -
 
@@ -446,11 +466,13 @@ CREATE TABLE public.idempotency_keys (
     expires_at timestamp with time zone NOT NULL
 );
 
+ALTER TABLE ONLY public.idempotency_keys FORCE ROW LEVEL SECURITY;
+
 -- Name: leader_generations; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.leader_generations (
     name text NOT NULL,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     holder text NOT NULL,
     generation_id bigint DEFAULT 1 NOT NULL,
     acquired_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -475,12 +497,49 @@ CREATE TABLE public.lens_alert_rules (
     last_triggered_at timestamp with time zone,
     renotify_interval_seconds integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    monitor_id text,
+    prompt_name text,
     CONSTRAINT lens_alert_rules_comparator_check CHECK ((comparator = ANY (ARRAY['gt'::text, 'gte'::text, 'lt'::text, 'lte'::text]))),
-    CONSTRAINT lens_alert_rules_metric_check CHECK ((metric = ANY (ARRAY['error_rate'::text, 'cost'::text, 'p95_latency'::text]))),
+    CONSTRAINT lens_alert_rules_metric_check CHECK ((metric = ANY (ARRAY['error_rate'::text, 'cost'::text, 'p95_latency'::text, 'monitor_breach'::text, 'prompt_resolutions'::text]))),
+    CONSTRAINT lens_alert_rules_monitor_pairing_check CHECK (((metric = 'monitor_breach'::text) = (monitor_id IS NOT NULL))),
     CONSTRAINT lens_alert_rules_name_check CHECK (((length(name) >= 1) AND (length(name) <= 64))),
+    CONSTRAINT lens_alert_rules_prompt_pairing_check CHECK (((metric = 'prompt_resolutions'::text) = (prompt_name IS NOT NULL))),
     CONSTRAINT lens_alert_rules_renotify_interval_seconds_check CHECK (((renotify_interval_seconds IS NULL) OR (renotify_interval_seconds > 0))),
     CONSTRAINT lens_alert_rules_status_check CHECK ((status = ANY (ARRAY['OK'::text, 'TRIGGERED'::text]))),
     CONSTRAINT lens_alert_rules_window_seconds_check CHECK ((window_seconds > 0))
+);
+
+ALTER TABLE ONLY public.lens_alert_rules FORCE ROW LEVEL SECURITY;
+
+-- Name: lens_dashboards; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.lens_dashboards (
+    id text NOT NULL,
+    tenant_id text NOT NULL,
+    created_by text NOT NULL,
+    name text NOT NULL,
+    config jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lens_dashboards_name_check CHECK (((length(name) >= 1) AND (length(name) <= 64)))
+);
+
+-- Name: lens_fired_alerts; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.lens_fired_alerts (
+    id text NOT NULL,
+    rule_id text NOT NULL,
+    tenant_id text NOT NULL,
+    metric text NOT NULL,
+    comparator text NOT NULL,
+    threshold double precision NOT NULL,
+    value double precision NOT NULL,
+    fired_at timestamp with time zone NOT NULL,
+    transition_id text NOT NULL,
+    delivery_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lens_fired_alerts_comparator_check CHECK ((comparator = ANY (ARRAY['gt'::text, 'gte'::text, 'lt'::text, 'lte'::text]))),
+    CONSTRAINT lens_fired_alerts_metric_check CHECK ((metric = ANY (ARRAY['error_rate'::text, 'cost'::text, 'p95_latency'::text, 'monitor_breach'::text, 'prompt_resolutions'::text])))
 );
 
 -- Name: lens_saved_views; Type: TABLE; Schema: public; Owner: -
@@ -496,6 +555,8 @@ CREATE TABLE public.lens_saved_views (
     CONSTRAINT lens_saved_views_query_string_check CHECK (((length(query_string) >= 1) AND (length(query_string) <= 4096)))
 );
 
+ALTER TABLE ONLY public.lens_saved_views FORCE ROW LEVEL SECURITY;
+
 -- Name: memory_exports; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.memory_exports (
@@ -510,6 +571,8 @@ CREATE TABLE public.memory_exports (
     completed_at timestamp with time zone,
     CONSTRAINT memory_exports_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text])))
 );
+
+ALTER TABLE ONLY public.memory_exports FORCE ROW LEVEL SECURITY;
 
 -- Name: memory_webhook_deliveries; Type: TABLE; Schema: public; Owner: -
 
@@ -546,6 +609,8 @@ CREATE TABLE public.memory_webhooks (
     CONSTRAINT memory_webhooks_url_check CHECK ((url ~* '^https?://'::text))
 );
 
+ALTER TABLE ONLY public.memory_webhooks FORCE ROW LEVEL SECURITY;
+
 -- Name: metering_config; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.metering_config (
@@ -562,6 +627,8 @@ CREATE TABLE public.metering_cursor (
     cell_id text NOT NULL,
     last_metered_at timestamp with time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.metering_cursor FORCE ROW LEVEL SECURITY;
 
 -- Name: plan_limits; Type: TABLE; Schema: public; Owner: -
 
@@ -588,7 +655,7 @@ CREATE TABLE public.preview_environments (
     repo_full_name text,
     installation_id bigint,
     expires_at timestamp with time zone NOT NULL,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
@@ -596,6 +663,8 @@ CREATE TABLE public.preview_environments (
     CONSTRAINT preview_environments_pr_number_check CHECK ((pr_number > 0)),
     CONSTRAINT preview_environments_status_check CHECK ((status = ANY (ARRAY['creating'::text, 'active'::text, 'expiring'::text, 'deleting'::text, 'deleted'::text, 'failed'::text, 'cleanup_failed'::text])))
 );
+
+ALTER TABLE ONLY public.preview_environments FORCE ROW LEVEL SECURITY;
 
 -- Name: preview_slot; Type: TABLE; Schema: public; Owner: -
 
@@ -609,6 +678,8 @@ CREATE TABLE public.preview_slot (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT preview_slot_all_or_nothing CHECK ((((active_pr_number IS NULL) AND (active_branch IS NULL) AND (url IS NULL)) OR ((active_pr_number IS NOT NULL) AND (active_branch IS NOT NULL))))
 );
+
+ALTER TABLE ONLY public.preview_slot FORCE ROW LEVEL SECURITY;
 
 -- Name: project_repositories; Type: TABLE; Schema: public; Owner: -
 
@@ -626,6 +697,8 @@ CREATE TABLE public.project_repositories (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+ALTER TABLE ONLY public.project_repositories FORCE ROW LEVEL SECURITY;
+
 -- Name: projects; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.projects (
@@ -636,6 +709,8 @@ CREATE TABLE public.projects (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE ONLY public.projects FORCE ROW LEVEL SECURITY;
 
 -- Name: release_app_attestations; Type: TABLE; Schema: public; Owner: -
 
@@ -650,7 +725,7 @@ CREATE TABLE public.release_app_attestations (
     sbom_s3_key text,
     sbom_format text,
     sbom_component_count integer,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT release_app_attestations_digest_format CHECK ((image_digest ~~ 'sha256:%'::text)),
@@ -658,6 +733,8 @@ CREATE TABLE public.release_app_attestations (
     CONSTRAINT release_app_attestations_sbom_count_nonneg CHECK (((sbom_component_count IS NULL) OR (sbom_component_count >= 0))),
     CONSTRAINT release_app_attestations_sbom_format_value CHECK (((sbom_format IS NULL) OR (sbom_format = ANY (ARRAY['cyclonedx-json'::text, 'spdx-json'::text]))))
 );
+
+ALTER TABLE ONLY public.release_app_attestations FORCE ROW LEVEL SECURITY;
 
 -- Name: releases; Type: TABLE; Schema: public; Owner: -
 
@@ -675,7 +752,7 @@ CREATE TABLE public.releases (
     artifacts jsonb,
     side_effects jsonb,
     apps jsonb,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text NOT NULL,
     processing_by text,
     processing_since timestamp with time zone,
     image_digest text,
@@ -685,6 +762,8 @@ CREATE TABLE public.releases (
     image_attestation_rekor_url text,
     CONSTRAINT releases_status_check CHECK ((status = ANY (ARRAY['READY'::text, 'PENDING'::text, 'ACTIVE'::text, 'GIT_MIRROR_FAILED'::text, 'SYNC_FAILED'::text, 'DRIFT_ALERT'::text, 'SUPERSEDED'::text, 'ROLLING_BACK'::text, 'ROLLED_BACK'::text, 'ROLLBACK_FAILED'::text, 'CANCELLED'::text, 'ARCHIVED'::text])))
 );
+
+ALTER TABLE ONLY public.releases FORCE ROW LEVEL SECURITY;
 
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 
@@ -706,6 +785,8 @@ CREATE TABLE public.secrets (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE ONLY public.secrets FORCE ROW LEVEL SECURITY;
 
 -- Name: sse_events; Type: TABLE; Schema: public; Owner: -
 
@@ -730,6 +811,21 @@ CREATE SEQUENCE public.sse_events_id_seq
 
 ALTER SEQUENCE public.sse_events_id_seq OWNED BY public.sse_events.id;
 
+-- Name: storage_objects; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.storage_objects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id text NOT NULL,
+    name text NOT NULL,
+    size_bytes bigint NOT NULL,
+    mime_type text DEFAULT 'application/octet-stream'::text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT storage_objects_size_bytes_check CHECK ((size_bytes >= 0)),
+    CONSTRAINT storage_objects_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'committed'::text])))
+);
+
 -- Name: subscriptions; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.subscriptions (
@@ -751,6 +847,8 @@ CREATE TABLE public.subscriptions (
     CONSTRAINT subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'incomplete'::text, 'trialing'::text, 'unpaid'::text])))
 );
 
+ALTER TABLE ONLY public.subscriptions FORCE ROW LEVEL SECURITY;
+
 -- Name: tenant_members; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.tenant_members (
@@ -761,6 +859,8 @@ CREATE TABLE public.tenant_members (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT tenant_members_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'member'::text])))
 );
+
+ALTER TABLE ONLY public.tenant_members FORCE ROW LEVEL SECURITY;
 
 -- Name: tenant_tombstones; Type: TABLE; Schema: public; Owner: -
 
@@ -775,6 +875,8 @@ CREATE TABLE public.tenant_tombstones (
     anonymized_at timestamp with time zone
 );
 
+ALTER TABLE ONLY public.tenant_tombstones FORCE ROW LEVEL SECURITY;
+
 -- Name: tenants; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.tenants (
@@ -782,11 +884,13 @@ CREATE TABLE public.tenants (
     display_name text DEFAULT ''::text NOT NULL,
     slug text NOT NULL,
     owner_id text NOT NULL,
-    cell_id text DEFAULT 'cell-default'::text NOT NULL,
+    cell_id text DEFAULT 'cell-0'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     account_id text NOT NULL
 );
+
+ALTER TABLE ONLY public.tenants FORCE ROW LEVEL SECURITY;
 
 -- Name: tenants_pending_deletion; Type: TABLE; Schema: public; Owner: -
 
@@ -801,6 +905,8 @@ CREATE TABLE public.tenants_pending_deletion (
     last_error text,
     last_error_at timestamp with time zone
 );
+
+ALTER TABLE ONLY public.tenants_pending_deletion FORCE ROW LEVEL SECURITY;
 
 -- Name: loopzero_api_keys; Type: TABLE; Schema: public; Owner: -
 
@@ -823,6 +929,8 @@ CREATE TABLE public.loopzero_api_keys (
     CONSTRAINT loopzero_api_keys_scopes_check CHECK ((jsonb_typeof(scopes) = 'array'::text))
 );
 
+ALTER TABLE ONLY public.loopzero_api_keys FORCE ROW LEVEL SECURITY;
+
 -- Name: usage_records; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.usage_records (
@@ -835,6 +943,8 @@ CREATE TABLE public.usage_records (
     reported_to_stripe boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE ONLY public.usage_records FORCE ROW LEVEL SECURITY;
 
 -- Name: user_identity_map; Type: TABLE; Schema: public; Owner: -
 
@@ -922,6 +1032,8 @@ CREATE TABLE public.workspace_webhook_deliveries (
     CONSTRAINT workspace_webhook_deliveries_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'delivering'::text, 'delivered'::text, 'failed'::text, 'dead_letter'::text])))
 );
 
+ALTER TABLE ONLY public.workspace_webhook_deliveries FORCE ROW LEVEL SECURITY;
+
 -- Name: workspace_webhooks; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.workspace_webhooks (
@@ -938,6 +1050,8 @@ CREATE TABLE public.workspace_webhooks (
     CONSTRAINT workspace_webhooks_label_check CHECK (((length(label) >= 1) AND (length(label) <= 64))),
     CONSTRAINT workspace_webhooks_url_check CHECK ((url ~* '^https?://'::text))
 );
+
+ALTER TABLE ONLY public.workspace_webhooks FORCE ROW LEVEL SECURITY;
 
 -- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: -
 
@@ -1043,7 +1157,7 @@ ALTER TABLE ONLY public.github_webhook_deliveries
 -- Name: idempotency_keys idempotency_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.idempotency_keys
-    ADD CONSTRAINT idempotency_keys_pkey PRIMARY KEY (key);
+    ADD CONSTRAINT idempotency_keys_pkey PRIMARY KEY (tenant_id, key);
 
 -- Name: leader_generations leader_generations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1054,6 +1168,16 @@ ALTER TABLE ONLY public.leader_generations
 
 ALTER TABLE ONLY public.lens_alert_rules
     ADD CONSTRAINT lens_alert_rules_pkey PRIMARY KEY (id);
+
+-- Name: lens_dashboards lens_dashboards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_dashboards
+    ADD CONSTRAINT lens_dashboards_pkey PRIMARY KEY (id);
+
+-- Name: lens_fired_alerts lens_fired_alerts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_fired_alerts
+    ADD CONSTRAINT lens_fired_alerts_pkey PRIMARY KEY (id);
 
 -- Name: lens_saved_views lens_saved_views_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1154,6 +1278,16 @@ ALTER TABLE ONLY public.secrets
 
 ALTER TABLE ONLY public.sse_events
     ADD CONSTRAINT sse_events_pkey PRIMARY KEY (id);
+
+-- Name: storage_objects storage_objects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.storage_objects
+    ADD CONSTRAINT storage_objects_pkey PRIMARY KEY (id);
+
+-- Name: storage_objects storage_objects_tenant_name_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.storage_objects
+    ADD CONSTRAINT storage_objects_tenant_name_uniq UNIQUE (tenant_id, name);
 
 -- Name: subscriptions subscriptions_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1310,9 +1444,25 @@ CREATE INDEX idx_leader_generations_heartbeat ON public.leader_generations USING
 
 CREATE INDEX idx_lens_alert_rules_enabled ON public.lens_alert_rules USING btree (tenant_id) WHERE enabled;
 
+-- Name: idx_lens_alert_rules_monitor; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_alert_rules_monitor ON public.lens_alert_rules USING btree (monitor_id) WHERE (monitor_id IS NOT NULL);
+
 -- Name: idx_lens_alert_rules_owner; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_lens_alert_rules_owner ON public.lens_alert_rules USING btree (tenant_id, subject);
+
+-- Name: idx_lens_alert_rules_prompt; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_alert_rules_prompt ON public.lens_alert_rules USING btree (prompt_name) WHERE (prompt_name IS NOT NULL);
+
+-- Name: idx_lens_dashboards_tenant; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_dashboards_tenant ON public.lens_dashboards USING btree (tenant_id);
+
+-- Name: idx_lens_fired_alerts_rule_time; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_lens_fired_alerts_rule_time ON public.lens_fired_alerts USING btree (rule_id, tenant_id, fired_at DESC);
 
 -- Name: idx_lens_saved_views_owner; Type: INDEX; Schema: public; Owner: -
 
@@ -1538,9 +1688,21 @@ CREATE INDEX idx_workspace_webhook_deliveries_webhook ON public.workspace_webhoo
 
 CREATE INDEX idx_workspace_webhooks_owner ON public.workspace_webhooks USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
 
+-- Name: storage_objects_tenant_prefix; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX storage_objects_tenant_prefix ON public.storage_objects USING btree (tenant_id, name text_pattern_ops);
+
+-- Name: storage_objects_tenant_usage; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX storage_objects_tenant_usage ON public.storage_objects USING btree (tenant_id) INCLUDE (size_bytes);
+
 -- Name: uniq_preview_active_per_pr; Type: INDEX; Schema: public; Owner: -
 
 CREATE UNIQUE INDEX uniq_preview_active_per_pr ON public.preview_environments USING btree (tenant_id, project_id, pr_number) WHERE (deleted_at IS NULL);
+
+-- Name: uq_lens_fired_alerts_transition; Type: INDEX; Schema: public; Owner: -
+
+CREATE UNIQUE INDEX uq_lens_fired_alerts_transition ON public.lens_fired_alerts USING btree (rule_id, transition_id);
 
 -- Name: releases releases_attestation_url_audit; Type: TRIGGER; Schema: public; Owner: -
 
@@ -1597,7 +1759,7 @@ CREATE CONSTRAINT TRIGGER trg_tenant_members_audit AFTER INSERT OR DELETE OR UPD
 -- Name: accounts accounts_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.accounts
-    ADD CONSTRAINT accounts_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id);
+    ADD CONSTRAINT accounts_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE RESTRICT;
 
 -- Name: build_apps build_apps_build_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -1644,6 +1806,21 @@ ALTER TABLE ONLY public.lens_alert_rules
 ALTER TABLE ONLY public.lens_alert_rules
     ADD CONSTRAINT lens_alert_rules_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES public.workspace_webhooks(id) ON DELETE CASCADE;
 
+-- Name: lens_dashboards lens_dashboards_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_dashboards
+    ADD CONSTRAINT lens_dashboards_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+-- Name: lens_fired_alerts lens_fired_alerts_rule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_fired_alerts
+    ADD CONSTRAINT lens_fired_alerts_rule_id_fkey FOREIGN KEY (rule_id) REFERENCES public.lens_alert_rules(id) ON DELETE CASCADE;
+
+-- Name: lens_fired_alerts lens_fired_alerts_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.lens_fired_alerts
+    ADD CONSTRAINT lens_fired_alerts_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
 -- Name: lens_saved_views lens_saved_views_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.lens_saved_views
@@ -1667,12 +1844,12 @@ ALTER TABLE ONLY public.memory_webhooks
 -- Name: preview_environments preview_environments_build_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.preview_environments
-    ADD CONSTRAINT preview_environments_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.builds(id);
+    ADD CONSTRAINT preview_environments_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.builds(id) ON DELETE SET NULL;
 
 -- Name: preview_environments preview_environments_release_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.preview_environments
-    ADD CONSTRAINT preview_environments_release_id_fkey FOREIGN KEY (release_id) REFERENCES public.releases(id);
+    ADD CONSTRAINT preview_environments_release_id_fkey FOREIGN KEY (release_id) REFERENCES public.releases(id) ON DELETE SET NULL;
 
 -- Name: preview_environments preview_environments_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -1717,7 +1894,7 @@ ALTER TABLE ONLY public.releases
 -- Name: subscriptions subscriptions_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.subscriptions
-    ADD CONSTRAINT subscriptions_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+    ADD CONSTRAINT subscriptions_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
 
 -- Name: subscriptions subscriptions_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -1737,7 +1914,7 @@ ALTER TABLE ONLY public.tenant_members
 -- Name: tenants tenants_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.tenants
-    ADD CONSTRAINT tenants_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+    ADD CONSTRAINT tenants_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE RESTRICT;
 
 -- Name: tenants tenants_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -1752,12 +1929,12 @@ ALTER TABLE ONLY public.tenants_pending_deletion
 -- Name: loopzero_api_keys loopzero_api_keys_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.loopzero_api_keys
-    ADD CONSTRAINT loopzero_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+    ADD CONSTRAINT loopzero_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
 
 -- Name: loopzero_api_keys loopzero_api_keys_rotated_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.loopzero_api_keys
-    ADD CONSTRAINT loopzero_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES public.loopzero_api_keys(id);
+    ADD CONSTRAINT loopzero_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES public.loopzero_api_keys(id) ON DELETE SET NULL;
 
 -- Name: loopzero_api_keys loopzero_api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -1789,101 +1966,484 @@ ALTER TABLE ONLY public.workspace_webhook_deliveries
 ALTER TABLE ONLY public.workspace_webhooks
     ADD CONSTRAINT workspace_webhooks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
+-- Name: app_scaling_config; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.app_scaling_config ENABLE ROW LEVEL SECURITY;
+
+-- Name: app_scaling_config app_scaling_config_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY app_scaling_config_cloud_cross_tenant ON public.app_scaling_config TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: app_scaling_config app_scaling_config_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY app_scaling_config_tenant_isolation ON public.app_scaling_config USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: app_scaling_config app_scaling_config_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY app_scaling_config_worker_cross_tenant ON public.app_scaling_config TO loopzero_worker USING (true) WITH CHECK (true);
+
 -- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
+-- Name: audit_log audit_log_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY audit_log_cloud_cross_tenant ON public.audit_log TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: audit_log audit_log_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY audit_log_tenant_isolation ON public.audit_log USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY audit_log_tenant_isolation ON public.audit_log USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: audit_log audit_log_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY audit_log_worker_cross_tenant ON public.audit_log TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: builds; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.builds ENABLE ROW LEVEL SECURITY;
 
+-- Name: builds builds_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY builds_cloud_cross_tenant ON public.builds TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: builds builds_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY builds_tenant_isolation ON public.builds USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY builds_tenant_isolation ON public.builds USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: builds builds_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY builds_worker_cross_tenant ON public.builds TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: cost_counters; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.cost_counters ENABLE ROW LEVEL SECURITY;
 
+-- Name: cost_counters cost_counters_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY cost_counters_cloud_cross_tenant ON public.cost_counters TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: cost_counters cost_counters_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY cost_counters_tenant_isolation ON public.cost_counters USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY cost_counters_tenant_isolation ON public.cost_counters USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: cost_counters cost_counters_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY cost_counters_worker_cross_tenant ON public.cost_counters TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: custom_domains; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.custom_domains ENABLE ROW LEVEL SECURITY;
+
+-- Name: custom_domains custom_domains_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY custom_domains_cloud_cross_tenant ON public.custom_domains TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: custom_domains custom_domains_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY custom_domains_tenant_isolation ON public.custom_domains USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: custom_domains custom_domains_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY custom_domains_worker_cross_tenant ON public.custom_domains TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: deploy_events; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.deploy_events ENABLE ROW LEVEL SECURITY;
+
+-- Name: deploy_events deploy_events_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY deploy_events_cloud_cross_tenant ON public.deploy_events TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: deploy_events deploy_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY deploy_events_tenant_isolation ON public.deploy_events USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: deploy_events deploy_events_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY deploy_events_worker_cross_tenant ON public.deploy_events TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: environment_targets; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.environment_targets ENABLE ROW LEVEL SECURITY;
 
+-- Name: environment_targets environment_targets_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY environment_targets_cloud_cross_tenant ON public.environment_targets TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: environment_targets environment_targets_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY environment_targets_tenant_isolation ON public.environment_targets USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY environment_targets_tenant_isolation ON public.environment_targets USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: environment_targets environment_targets_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY environment_targets_worker_cross_tenant ON public.environment_targets TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: github_installations; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.github_installations ENABLE ROW LEVEL SECURITY;
+
+-- Name: github_installations github_installations_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY github_installations_cloud_cross_tenant ON public.github_installations TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: github_installations github_installations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY github_installations_tenant_isolation ON public.github_installations USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: github_installations github_installations_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY github_installations_worker_cross_tenant ON public.github_installations TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: idempotency_keys; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.idempotency_keys ENABLE ROW LEVEL SECURITY;
 
+-- Name: idempotency_keys idempotency_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY idempotency_keys_cloud_cross_tenant ON public.idempotency_keys TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: idempotency_keys idempotency_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY idempotency_keys_tenant_isolation ON public.idempotency_keys USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY idempotency_keys_tenant_isolation ON public.idempotency_keys USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: idempotency_keys idempotency_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY idempotency_keys_worker_cross_tenant ON public.idempotency_keys TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: lens_alert_rules; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.lens_alert_rules ENABLE ROW LEVEL SECURITY;
+
+-- Name: lens_alert_rules lens_alert_rules_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY lens_alert_rules_cloud_cross_tenant ON public.lens_alert_rules TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: lens_alert_rules lens_alert_rules_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY lens_alert_rules_tenant_isolation ON public.lens_alert_rules USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: lens_alert_rules lens_alert_rules_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY lens_alert_rules_worker_cross_tenant ON public.lens_alert_rules TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: lens_saved_views; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.lens_saved_views ENABLE ROW LEVEL SECURITY;
+
+-- Name: lens_saved_views lens_saved_views_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY lens_saved_views_cloud_cross_tenant ON public.lens_saved_views TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: lens_saved_views lens_saved_views_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY lens_saved_views_tenant_isolation ON public.lens_saved_views USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: lens_saved_views lens_saved_views_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY lens_saved_views_worker_cross_tenant ON public.lens_saved_views TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: memory_exports; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.memory_exports ENABLE ROW LEVEL SECURITY;
+
+-- Name: memory_exports memory_exports_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY memory_exports_cloud_cross_tenant ON public.memory_exports TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: memory_exports memory_exports_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY memory_exports_tenant_isolation ON public.memory_exports USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: memory_exports memory_exports_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY memory_exports_worker_cross_tenant ON public.memory_exports TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: memory_webhooks; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.memory_webhooks ENABLE ROW LEVEL SECURITY;
+
+-- Name: memory_webhooks memory_webhooks_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY memory_webhooks_cloud_cross_tenant ON public.memory_webhooks TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: memory_webhooks memory_webhooks_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY memory_webhooks_tenant_isolation ON public.memory_webhooks USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: memory_webhooks memory_webhooks_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY memory_webhooks_worker_cross_tenant ON public.memory_webhooks TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: metering_cursor; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.metering_cursor ENABLE ROW LEVEL SECURITY;
+
+-- Name: metering_cursor metering_cursor_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY metering_cursor_cloud_cross_tenant ON public.metering_cursor TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: metering_cursor metering_cursor_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY metering_cursor_tenant_isolation ON public.metering_cursor USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: metering_cursor metering_cursor_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY metering_cursor_worker_cross_tenant ON public.metering_cursor TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: preview_environments; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.preview_environments ENABLE ROW LEVEL SECURITY;
 
+-- Name: preview_environments preview_environments_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY preview_environments_cloud_cross_tenant ON public.preview_environments TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: preview_environments preview_environments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY preview_environments_tenant_isolation ON public.preview_environments USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY preview_environments_tenant_isolation ON public.preview_environments USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: preview_environments preview_environments_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY preview_environments_worker_cross_tenant ON public.preview_environments TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: preview_slot; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.preview_slot ENABLE ROW LEVEL SECURITY;
 
+-- Name: preview_slot preview_slot_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY preview_slot_cloud_cross_tenant ON public.preview_slot TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: preview_slot preview_slot_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY preview_slot_tenant_isolation ON public.preview_slot USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY preview_slot_tenant_isolation ON public.preview_slot USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: preview_slot preview_slot_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY preview_slot_worker_cross_tenant ON public.preview_slot TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: project_repositories; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.project_repositories ENABLE ROW LEVEL SECURITY;
+
+-- Name: project_repositories project_repositories_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY project_repositories_cloud_cross_tenant ON public.project_repositories TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: project_repositories project_repositories_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY project_repositories_tenant_isolation ON public.project_repositories USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: project_repositories project_repositories_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY project_repositories_worker_cross_tenant ON public.project_repositories TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: projects; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
+-- Name: projects projects_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY projects_cloud_cross_tenant ON public.projects TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: projects projects_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY projects_tenant_isolation ON public.projects USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY projects_tenant_isolation ON public.projects USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: projects projects_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY projects_worker_cross_tenant ON public.projects TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: release_app_attestations; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.release_app_attestations ENABLE ROW LEVEL SECURITY;
 
+-- Name: release_app_attestations release_app_attestations_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY release_app_attestations_cloud_cross_tenant ON public.release_app_attestations TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: release_app_attestations release_app_attestations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY release_app_attestations_tenant_isolation ON public.release_app_attestations USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY release_app_attestations_tenant_isolation ON public.release_app_attestations USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: release_app_attestations release_app_attestations_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY release_app_attestations_worker_cross_tenant ON public.release_app_attestations TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: releases; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.releases ENABLE ROW LEVEL SECURITY;
 
+-- Name: releases releases_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY releases_cloud_cross_tenant ON public.releases TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: releases releases_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY releases_tenant_isolation ON public.releases USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY releases_tenant_isolation ON public.releases USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: releases releases_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY releases_worker_cross_tenant ON public.releases TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: secrets; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.secrets ENABLE ROW LEVEL SECURITY;
 
+-- Name: secrets secrets_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY secrets_cloud_cross_tenant ON public.secrets TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: secrets secrets_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY secrets_tenant_isolation ON public.secrets USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY secrets_tenant_isolation ON public.secrets USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: secrets secrets_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY secrets_worker_cross_tenant ON public.secrets TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: subscriptions; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Name: subscriptions subscriptions_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY subscriptions_cloud_cross_tenant ON public.subscriptions TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: subscriptions subscriptions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY subscriptions_tenant_isolation ON public.subscriptions USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: subscriptions subscriptions_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY subscriptions_worker_cross_tenant ON public.subscriptions TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: tenant_members; Type: ROW SECURITY; Schema: public; Owner: -
 
 ALTER TABLE public.tenant_members ENABLE ROW LEVEL SECURITY;
 
+-- Name: tenant_members tenant_members_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenant_members_cloud_cross_tenant ON public.tenant_members TO loopzero_cloud USING (true) WITH CHECK (true);
+
 -- Name: tenant_members tenant_members_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenant_members_tenant_isolation ON public.tenant_members USING (((tenant_id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.tenant_id'::text, true) IS NULL) OR (current_setting('app.tenant_id'::text, true) = ''::text)));
+CREATE POLICY tenant_members_tenant_isolation ON public.tenant_members USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: tenant_members tenant_members_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenant_members_worker_cross_tenant ON public.tenant_members TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: tenant_tombstones; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.tenant_tombstones ENABLE ROW LEVEL SECURITY;
+
+-- Name: tenant_tombstones tenant_tombstones_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenant_tombstones_cloud_cross_tenant ON public.tenant_tombstones TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: tenant_tombstones tenant_tombstones_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenant_tombstones_tenant_isolation ON public.tenant_tombstones USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: tenant_tombstones tenant_tombstones_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenant_tombstones_worker_cross_tenant ON public.tenant_tombstones TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: tenants; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
+
+-- Name: tenants tenants_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenants_cloud_cross_tenant ON public.tenants TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: tenants_pending_deletion; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.tenants_pending_deletion ENABLE ROW LEVEL SECURITY;
+
+-- Name: tenants_pending_deletion tenants_pending_deletion_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenants_pending_deletion_cloud_cross_tenant ON public.tenants_pending_deletion TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: tenants_pending_deletion tenants_pending_deletion_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenants_pending_deletion_tenant_isolation ON public.tenants_pending_deletion USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: tenants_pending_deletion tenants_pending_deletion_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenants_pending_deletion_worker_cross_tenant ON public.tenants_pending_deletion TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: tenants tenants_self_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenants_self_isolation ON public.tenants USING ((id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: tenants tenants_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY tenants_worker_cross_tenant ON public.tenants TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: loopzero_api_keys; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.loopzero_api_keys ENABLE ROW LEVEL SECURITY;
+
+-- Name: loopzero_api_keys loopzero_api_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY loopzero_api_keys_cloud_cross_tenant ON public.loopzero_api_keys TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: loopzero_api_keys loopzero_api_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY loopzero_api_keys_tenant_isolation ON public.loopzero_api_keys USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: loopzero_api_keys loopzero_api_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY loopzero_api_keys_worker_cross_tenant ON public.loopzero_api_keys TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: usage_records; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.usage_records ENABLE ROW LEVEL SECURITY;
+
+-- Name: usage_records usage_records_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY usage_records_cloud_cross_tenant ON public.usage_records TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: usage_records usage_records_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY usage_records_tenant_isolation ON public.usage_records USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: usage_records usage_records_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY usage_records_worker_cross_tenant ON public.usage_records TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: workspace_webhook_deliveries; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.workspace_webhook_deliveries ENABLE ROW LEVEL SECURITY;
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY workspace_webhook_deliveries_cloud_cross_tenant ON public.workspace_webhook_deliveries TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY workspace_webhook_deliveries_tenant_isolation ON public.workspace_webhook_deliveries USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: workspace_webhook_deliveries workspace_webhook_deliveries_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY workspace_webhook_deliveries_worker_cross_tenant ON public.workspace_webhook_deliveries TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: workspace_webhooks; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.workspace_webhooks ENABLE ROW LEVEL SECURITY;
+
+-- Name: workspace_webhooks workspace_webhooks_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY workspace_webhooks_cloud_cross_tenant ON public.workspace_webhooks TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: workspace_webhooks workspace_webhooks_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY workspace_webhooks_tenant_isolation ON public.workspace_webhooks USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: workspace_webhooks workspace_webhooks_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY workspace_webhooks_worker_cross_tenant ON public.workspace_webhooks TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- PostgreSQL database dump complete
-

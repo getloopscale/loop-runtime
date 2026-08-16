@@ -9,16 +9,16 @@
 // env vars carrying secret values that must live in Vault under D11 ESO
 // pattern. Three rule layers:
 //
-//   FORBIDDEN (FAIL): exact names `GITHUB_APP_PRIVATE_KEY`,
-//     `LOOPZERO_SECRET_ENCRYPTION_KEY`, `COSIGN_PASSWORD` — these are migrated
-//     per T2.2/T2.3/T2.4 to Vault paths; reintroducing as env var = regression.
+//	FORBIDDEN (FAIL): exact names `GITHUB_APP_PRIVATE_KEY`,
+//	  `LOOPZERO_SECRET_ENCRYPTION_KEY`, `COSIGN_PASSWORD` — these are migrated
+//	  per T2.2/T2.3/T2.4 to Vault paths; reintroducing as env var = regression.
 //
-//   PATTERN-WARN (FAIL by default, WARN with --warn-only): regex on env name
-//     ending in `_PRIVATE_KEY`, `_TOKEN`, `_SECRET`, `_PASSWORD` —
-//     heuristic flag. Allowlist exempts legitimate cases (e.g., feature flags
-//     coincidentally matching pattern).
+//	PATTERN-WARN (FAIL by default, WARN with --warn-only): regex on env name
+//	  ending in `_PRIVATE_KEY`, `_TOKEN`, `_SECRET`, `_PASSWORD` —
+//	  heuristic flag. Allowlist exempts legitimate cases (e.g., feature flags
+//	  coincidentally matching pattern).
 //
-//   ALLOWLIST: explicit exception strings; matched env var skips both layers.
+//	ALLOWLIST: explicit exception strings; matched env var skips both layers.
 //
 // All hits include file:line + actionable suggestion ("move to Vault via
 // ExternalSecret CR at <suggested path>").
@@ -88,23 +88,23 @@ var (
 // OR secrets sourced via valueFrom.secretKeyRef (ESO-managed K8s Secret).
 // Operator can extend via Config.Allowlist (merged at Check time).
 var DefaultAllowlist = []string{
-	"GITEA_TOKEN",                            // legitimate via ESO secretKeyRef (vault-INT gitea-admin)
-	"ARGOCD_TOKEN",                           // legitimate via ESO loopzero-api-tokens
-	"CF_API_TOKEN",                           // legitimate via ESO loopzero-api-tokens (iter 20 follow-up)
-	"GITHUB_WEBHOOK_SECRET",                  // legitimate via ESO loopzero-api-github
-	"STRIPE_SECRET_KEY",                      // legitimate via ESO loopzero-api-stripe
-	"BAO_TOKEN",                              // openbao client config — operational token, not app secret
-	"PULUMI_CONFIG_PASSPHRASE",               // pulumi local secret encryption
-	"PULUMI_ACCESS_TOKEN",                    // pulumi cloud auth
-	"LOOPZERO_ADMIN_API_KEY",                     // legitimate via ESO loopzero-api-admin
-	"LOOPZERO_ADMIN_API_KEY_PREVIOUS",            // legitimate via ESO loopzero-api-admin
-	"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET",         // legitimate via ESO loopzero-api-admin
+	"GITEA_TOKEN",                             // legitimate via ESO secretKeyRef (vault-INT gitea-admin)
+	"ARGOCD_TOKEN",                            // legitimate via ESO loopzero-api-tokens
+	"CF_API_TOKEN",                            // legitimate via ESO loopzero-api-tokens (iter 20 follow-up)
+	"GITHUB_WEBHOOK_SECRET",                   // legitimate via ESO loopzero-api-github
+	"STRIPE_SECRET_KEY",                       // legitimate via ESO loopzero-api-stripe
+	"BAO_TOKEN",                               // openbao client config — operational token, not app secret
+	"PULUMI_CONFIG_PASSPHRASE",                // pulumi local secret encryption
+	"PULUMI_ACCESS_TOKEN",                     // pulumi cloud auth
+	"LOOPZERO_ADMIN_API_KEY",                      // legitimate via ESO loopzero-api-admin
+	"LOOPZERO_ADMIN_API_KEY_PREVIOUS",             // legitimate via ESO loopzero-api-admin
+	"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET",          // legitimate via ESO loopzero-api-admin
 	"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS", // legitimate via ESO loopzero-api-admin
-	"LOOPZERO_BOOTSTRAP_SECRET",                  // legitimate via ESO loopzero-api-internal
-	"LOOPZERO_ARGO_CALLBACK_SECRET",              // legitimate via ESO loopzero-api-internal
-	"LOOPZERO_SERVICE_AUTH_NONCE_REDIS_PASSWORD", // legitimate via ESO loopzero-service-auth-redis
-	"AWS_SECRET_ACCESS_KEY",                  // openbao-snapshot-s3-creds Secret (D12 backup)
-	"AWS_ACCESS_KEY_ID",                      // openbao-snapshot-s3-creds Secret (D12 backup)
+	"LOOPZERO_BOOTSTRAP_SECRET",                   // legitimate via ESO loopzero-api-internal
+	"LOOPZERO_ARGO_CALLBACK_SECRET",               // legitimate via ESO loopzero-api-internal
+	"LOOPZERO_SERVICE_AUTH_NONCE_REDIS_PASSWORD",  // legitimate via ESO loopzero-service-auth-redis
+	"AWS_SECRET_ACCESS_KEY",                   // openbao-snapshot-s3-creds Secret (D12 backup)
+	"AWS_ACCESS_KEY_ID",                       // openbao-snapshot-s3-creds Secret (D12 backup)
 }
 
 // Check scans for forbidden + pattern-matching env vars and returns Outcome.

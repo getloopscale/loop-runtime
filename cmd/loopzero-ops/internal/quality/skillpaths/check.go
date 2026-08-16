@@ -61,12 +61,12 @@ type Outcome struct {
 var ErrViolations = errors.New("SKILL.md file references at least one missing infra/scripts path OR non-existent task")
 
 var (
-	scriptRefRE     = regexp.MustCompile(`infra/scripts/[a-zA-Z0-9_./-]+\.sh`)
-	drillAbbrevRE   = regexp.MustCompile(`drill/[a-zA-Z0-9_-]+\.sh`)
-	backtickTaskRE  = regexp.MustCompile("`task ([a-z][a-z0-9_:-]+)`")
-	taskNameLineRE  = regexp.MustCompile(`^  ([a-z][a-z0-9:_-]*):[[:space:]]*(#.*)?$`)
-	dogfoodGHTokRE  = regexp.MustCompile(`GH_TOKEN.*\.env|\.env.*GH_TOKEN`)
-	toPlanTeardown  = regexp.MustCompile(`\btask teardown\b`)
+	scriptRefRE    = regexp.MustCompile(`infra/scripts/[a-zA-Z0-9_./-]+\.sh`)
+	drillAbbrevRE  = regexp.MustCompile(`drill/[a-zA-Z0-9_-]+\.sh`)
+	backtickTaskRE = regexp.MustCompile("`task ([a-z][a-z0-9_:-]+)`")
+	taskNameLineRE = regexp.MustCompile(`^  ([a-z][a-z0-9:_-]*):[[:space:]]*(#.*)?$`)
+	dogfoodGHTokRE = regexp.MustCompile(`GH_TOKEN.*\.env|\.env.*GH_TOKEN`)
+	toPlanTeardown = regexp.MustCompile(`\btask teardown\b`)
 )
 
 // Check runs the full audit and returns Outcome + err.

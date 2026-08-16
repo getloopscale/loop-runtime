@@ -61,8 +61,8 @@ import yaml
 CLUSTER_MAP = {
     # logical name → (k3d cluster context, k3d container, kubeconfig data key, (sa_namespace, sa_name))
     "build":    ("k3d-loopzero-build",    "k3d-loopzero-build-server-0",    "build.kubeconfig",    ("argo", "loopzero-workflow-submitter")),
-    "runtime":  ("k3d-loopzero-workload", "k3d-loopzero-workload-server-0", "runtime.kubeconfig",  ("kube-system", "default")),
-    "runtime2": ("k3d-loopzero-runtime-2","k3d-loopzero-runtime-2-server-0","runtime2.kubeconfig", ("kube-system", "default")),
+    "runtime":  ("k3d-loopzero-cell-0", "k3d-loopzero-cell-0-server-0", "cell-0.kubeconfig",  ("kube-system", "default")),
+    "runtime2": ("k3d-loopzero-cell-1","k3d-loopzero-cell-1-server-0","runtime2.kubeconfig", ("kube-system", "default")),
 }
 
 
@@ -99,8 +99,8 @@ def mint_token(context: str, namespace: str, sa: str) -> str:
 
 
 def get_ca_b64(context: str) -> str:
-    raw = subprocess.check_output(["k3d","kubeconfig","get", context.replace("k3d-loopzero-","loopzero-").replace("loopzero-workload","loopzero-workload")], text=True)
-    # k3d kubeconfig get accepts cluster short name (loopzero-build / loopzero-workload / loopzero-runtime-2)
+    raw = subprocess.check_output(["k3d","kubeconfig","get", context.replace("k3d-loopzero-","loopzero-").replace("loopzero-cell-0","loopzero-cell-0")], text=True)
+    # k3d kubeconfig get accepts cluster short name (loopzero-build / loopzero-cell-0 / loopzero-cell-1)
     parsed = yaml.safe_load(raw)
     return parsed["clusters"][0]["cluster"]["certificate-authority-data"]
 
@@ -131,12 +131,12 @@ def build_kubeconfig(server_ip: str, ca_b64: str, token: str) -> str:
 
 def patch_secret(data_key: str, kc_yaml: str) -> None:
     sec = json.loads(subprocess.check_output(
-        ["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        ["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
          "get","secret","loopzero-cluster-kubeconfigs","-o","json"]
     ))
     sec["data"][data_key] = base64.b64encode(kc_yaml.encode()).decode()
     proc = subprocess.run(
-        ["kubectl","--context=k3d-loopzero-mgmt","apply","-f","-"],
+        ["kubectl","--context=k3d-loopzero-core","apply","-f","-"],
         input=json.dumps(sec), text=True, capture_output=True,
     )
     if proc.returncode != 0:
@@ -167,9 +167,9 @@ def main() -> int:
         regen_one(t)
 
     if args.verify:
-        subprocess.run(["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        subprocess.run(["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
                         "rollout","restart","deploy/loopzero-api"], check=True)
-        subprocess.run(["kubectl","--context=k3d-loopzero-mgmt","-n","loopzero-system",
+        subprocess.run(["kubectl","--context=k3d-loopzero-core","-n","loopzero-system",
                         "rollout","status","deploy/loopzero-api","--timeout=120s"], check=True)
         print("[regen] --verify rollout complete; check `kubectl logs deploy/loopzero-api` for absence of `build cluster auth failed`")
 

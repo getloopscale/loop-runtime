@@ -7,9 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 type fakeBuildLookup struct {
@@ -62,7 +61,7 @@ func TestPostgresStore_DeployTenantID_UnknownReturnsNotFound(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewPostgresDeployTimelineStore(tt.l, &fakeReader{})
 			_, err := s.DeployTenantID(context.Background(), "dep-x")
-			if !errors.Is(err, routes.ErrDeployNotFound) {
+			if !errors.Is(err, timeline.ErrDeployNotFound) {
 				t.Errorf("expected ErrDeployNotFound; got %v", err)
 			}
 		})
@@ -78,7 +77,7 @@ func TestPostgresStore_GetAfterForDeploy_TenantMismatch(t *testing.T) {
 		&fakeReader{rows: []SSEEventRow{{ID: 1, EventType: "x", Data: json.RawMessage(`{}`)}}},
 	)
 	_, err := s.GetAfterForDeploy(context.Background(), "tn-attacker", "dep-1", 0)
-	if !errors.Is(err, routes.ErrDeployNotFound) {
+	if !errors.Is(err, timeline.ErrDeployNotFound) {
 		t.Errorf("expected ErrDeployNotFound; got %v", err)
 	}
 }

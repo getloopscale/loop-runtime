@@ -64,7 +64,7 @@ KUBECONFIG_PATH="${3:-}"
 # a clean machine, silently wrong on a box carrying context residue. A
 # ClusterCredential written to the wrong cluster is invisible to the operator
 # reconcile loop, so the cell simply never comes up and nothing reports why.
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 LOOPZERO_NS="${LOOPZERO_NS:-loopzero-system}"

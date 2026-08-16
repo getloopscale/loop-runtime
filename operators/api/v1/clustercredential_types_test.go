@@ -13,7 +13,7 @@ import (
 func TestClusterCredential_SpecFields(t *testing.T) {
 	cc := ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workload-cluster-01",
+			Name:      "cell-0-cluster-01",
 			Namespace: "loopzero-system",
 		},
 		Spec: ClusterCredentialSpec{

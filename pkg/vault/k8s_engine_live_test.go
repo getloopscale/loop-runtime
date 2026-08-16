@@ -13,7 +13,7 @@ import (
 )
 
 // TestLIVE_K8sEngine_Roles_Provisioned verifies T7.2 LIVE — all 3 K8s engine
-// roles (loopzero-runtime-{mgmt,build,workload}) exist with correct namespace
+// roles (loopzero-cell-0-{mgmt,build,workload}) exist with correct namespace
 // scope + TTL 1h max 24h. T7.5 (LIVE cell access via token) requires a
 // configured kubernetes/config (operator-time) so is gated separately.
 func TestLIVE_K8sEngine_Roles_Provisioned(t *testing.T) {
@@ -37,9 +37,9 @@ func TestLIVE_K8sEngine_Roles_Provisioned(t *testing.T) {
 		expectedNamespaces []string
 		expectedSAName    string
 	}{
-		{"loopzero-runtime-mgmt", []string{"argocd", "external-secrets", "loopzero-system"}, "loopzero-runtime"},
-		{"loopzero-runtime-build", []string{"argo"}, "loopzero-build"},
-		{"loopzero-runtime-workload", []string{"loopzero-system"}, "loopzero-runtime"},
+		{"loopzero-cell-0-mgmt", []string{"argocd", "external-secrets", "loopzero-system"}, "loopzero-cell-0"},
+		{"loopzero-cell-0-build", []string{"argo"}, "loopzero-build"},
+		{"loopzero-cell-0-workload", []string{"loopzero-system"}, "loopzero-cell-0"},
 	}
 
 	for _, want := range roles {
@@ -79,7 +79,7 @@ func TestLIVE_K8sEngine_Roles_Provisioned(t *testing.T) {
 }
 
 // TestLIVE_K8sAuthMounts_Isolation verifies T5.x cross-cluster trust boundary —
-// roles registered on k8s-mgmt MUST NOT also appear on cell-* mounts, and vice
+// roles registered on k8s-core MUST NOT also appear on cell-* mounts, and vice
 // versa. This protects against accidental policy leak when adding new roles.
 func TestLIVE_K8sAuthMounts_Isolation(t *testing.T) {
 	addr, token := liveAddr(t)
@@ -97,14 +97,14 @@ func TestLIVE_K8sAuthMounts_Isolation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// loopzero-api SHOULD be on k8s-mgmt only.
-	mgmt, err := c.Logical().ReadWithContext(ctx, "auth/k8s-mgmt/role/loopzero-api")
+	// loopzero-api SHOULD be on k8s-core only.
+	mgmt, err := c.Logical().ReadWithContext(ctx, "auth/k8s-core/role/loopzero-api")
 	if err != nil || mgmt == nil {
-		t.Errorf("LIVE FAIL: auth/k8s-mgmt/role/loopzero-api missing: %v", err)
+		t.Errorf("LIVE FAIL: auth/k8s-core/role/loopzero-api missing: %v", err)
 	}
 
 	// loopzero-api MUST NOT be on cell mounts (isolation invariant).
-	for _, cellMount := range []string{"k8s-cell-default", "k8s-cell-1", "k8s-cell-2"} {
+	for _, cellMount := range []string{"k8s-cell-0", "k8s-cell-0", "k8s-cell-1"} {
 		s, err := c.Logical().ReadWithContext(ctx, "auth/"+cellMount+"/role/loopzero-api")
 		// Vault returns nil + nil err for missing roles; or 404 wrapped.
 		if err == nil && s != nil {
@@ -113,16 +113,16 @@ func TestLIVE_K8sAuthMounts_Isolation(t *testing.T) {
 	}
 
 	// external-secrets-broker SHOULD be on each cell mount.
-	for _, cellMount := range []string{"k8s-cell-default", "k8s-cell-1", "k8s-cell-2"} {
+	for _, cellMount := range []string{"k8s-cell-0", "k8s-cell-0", "k8s-cell-1"} {
 		s, err := c.Logical().ReadWithContext(ctx, "auth/"+cellMount+"/role/external-secrets-broker")
 		if err != nil || s == nil {
 			t.Errorf("LIVE FAIL: auth/%s/role/external-secrets-broker missing: %v", cellMount, err)
 		}
 	}
 
-	// external-secrets-broker MUST NOT be on k8s-mgmt (isolation invariant).
-	s, err := c.Logical().ReadWithContext(ctx, "auth/k8s-mgmt/role/external-secrets-broker")
+	// external-secrets-broker MUST NOT be on k8s-core (isolation invariant).
+	s, err := c.Logical().ReadWithContext(ctx, "auth/k8s-core/role/external-secrets-broker")
 	if err == nil && s != nil {
-		t.Error("LIVE FAIL: external-secrets-broker LEAKED to k8s-mgmt (isolation broken)")
+		t.Error("LIVE FAIL: external-secrets-broker LEAKED to k8s-core (isolation broken)")
 	}
 }

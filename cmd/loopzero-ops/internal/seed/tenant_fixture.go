@@ -50,10 +50,10 @@ func NewTenantFixtureSeed() *TenantFixtureSeed { return &TenantFixtureSeed{} }
 func (s *TenantFixtureSeed) Name() string      { return "tenant-fixture" }
 
 const (
-	tenantFixtureDefaultCloudBase     = "https://app-dev.loopzero.example"
+	tenantFixtureDefaultCloudBase      = "https://app-dev.loopzero.example"
 	tenantFixtureDefaultInstallationID = "138325349"
-	tenantFixtureDefaultAccountLogin  = "getloopscale"
-	tenantFixtureDefaultPlanTier      = "team"
+	tenantFixtureDefaultAccountLogin   = "getloopscale"
+	tenantFixtureDefaultPlanTier       = "team"
 
 	tenantFixtureCloudBaseEnv    = "LOOPZERO_CLOUD_BASE"
 	tenantFixtureInstallIDEnv    = "LOOPZERO_GH_INSTALLATION_ID"
@@ -64,7 +64,7 @@ const (
 	tenantFixtureHelmfileEnvKey  = "LOOPZERO_HELMFILE_ENV"
 
 	tenantFixtureNamespace   = "loopzero-system"
-	tenantFixtureCellID      = "cell-default"
+	tenantFixtureCellID      = "cell-0"
 	tenantFixtureProject     = "teste"
 	tenantFixtureEnvName     = "production"
 	tenantFixtureEnvCluster  = "workload"
@@ -307,8 +307,8 @@ func ensureAppProject(ctx context.Context, cli ctrlclient.Client, tenantID strin
 	project.SetNamespace("argocd")
 	project.SetName("loopzero-" + tenantID)
 	spec := map[string]any{
-		"description":  fmt.Sprintf("Canonical AppProject for tenant %s", tenantID),
-		"sourceRepos":  []any{"*"},
+		"description": fmt.Sprintf("Canonical AppProject for tenant %s", tenantID),
+		"sourceRepos": []any{"*"},
 		"destinations": []any{
 			map[string]any{"namespace": fmt.Sprintf("loopzero-%s-*", tenantID), "server": "*"},
 			map[string]any{"namespace": tenantFixtureNamespace, "server": "*"},
@@ -339,4 +339,3 @@ func applyUnstructured(ctx context.Context, cli ctrlclient.Client, obj *unstruct
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	return cli.Update(ctx, obj)
 }
-

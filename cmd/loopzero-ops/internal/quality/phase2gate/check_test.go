@@ -95,13 +95,13 @@ func TestT2_3a_HelmfileSyncPresent(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl") {
+	if !strings.Contains(content, "helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl") {
 		t.Errorf("Taskfile should invoke helmfile sync for mgmt cluster")
 	}
 	if !strings.Contains(content, "helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl") {
 		t.Errorf("Taskfile should invoke helmfile sync for build cluster")
 	}
-	if !strings.Contains(content, "helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl") {
+	if !strings.Contains(content, "helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl") {
 		t.Errorf("Taskfile should invoke helmfile sync for runtime cluster")
 	}
 }
@@ -178,7 +178,7 @@ func TestT2_1_MappingDocExists(t *testing.T) {
 //
 // T3.5 of plan 2026-06-11-code-review-remediation v1.2: the original
 // end-marker `infra:install:build:` was too broad — a NEW sibling task
-// `infra:install:mgmt-dashboard-only:` (legitimately using --selector
+// `infra:install:core-dashboard-only:` (legitimately using --selector
 // profile=dashboard-only by design — that's its entire purpose) landed
 // in between, causing the gate to false-positive. Tightened endMarker
 // to the immediate next task header so we scan ONLY install:mgmt's
@@ -191,8 +191,8 @@ func TestT2_3a_NoBareSelector_InInstallMgmt(t *testing.T) {
 	}
 	content := string(data)
 	// Find install:mgmt block boundaries
-	startMarker := "infra:install:mgmt:"
-	endMarker := "infra:install:mgmt-dashboard-only:"
+	startMarker := "infra:install:core:"
+	endMarker := "infra:install:core-dashboard-only:"
 	startIdx := strings.Index(content, startMarker)
 	endIdx := strings.Index(content, endMarker)
 	if startIdx == -1 || endIdx == -1 {

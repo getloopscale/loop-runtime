@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package platform holds the reconcilers that bootstrap and maintain the
+// platform itself — cluster credentials, CA material and the PlatformBootstrap
+// lifecycle.
+//
 // kubeRootCAFetcher reads the live cluster CA from the target cluster's
 // kube-root-ca.crt ConfigMap on every reconcile. Used by
 // ClusterCredentialReconciler.reconcileArgoCDClusterSecret to populate the

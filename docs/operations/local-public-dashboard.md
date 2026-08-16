@@ -57,11 +57,11 @@ For component-isolated debug (no public DNS needed), legacy `task setup` +
 # 1. Recover or provision the k3d clusters
 task k3d:up                                 # 4 clusters (mgmt+build+workload+runtime-2)
 
-# 2. Install the 16 mgmt-cluster releases the dashboard demo needs.
+# 2. Install the 16 core-cluster releases the dashboard demo needs.
 #    Skips harbor/opencost/chaos-mesh/monitoring/loki/tempo/otel/blackbox/etc.
 #    v1.1 EC-01 guards against empty selector + v1.1 EC-02 includes the
 #    platform/preview operators that are essential for tenant provisioning.
-task infra:install:mgmt-dashboard-only ENV=standalone-public
+task infra:install:core-dashboard-only ENV=standalone-public
 
 # 3. Bring up the public-flow plumbing (port-forwards + Caddy + seed data)
 task cloud:port-forward:up                  # 4 persistent port-forwards w/ backoff
@@ -72,10 +72,10 @@ task demo:seed                              # 2 projects + 8 builds + 5 releases
 task cloud:stripe:listen
 #    Copy the printed whsec_* and store it as a K8s Secret:
 WHSEC='<paste whsec here>'
-kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-stripe-webhook \
+kubectl --context k3d-loopzero-core -n loopzero-system create secret generic loopzero-stripe-webhook \
   --from-literal=STRIPE_WEBHOOK_SECRET="$WHSEC" \
-  --dry-run=client -o yaml | kubectl --context k3d-loopzero-mgmt apply -f -
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-cloud
+  --dry-run=client -o yaml | kubectl --context k3d-loopzero-core apply -f -
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-cloud
 
 # 5. Bring up vite dev server for the dashboard (separate terminal)
 cd cloud/dashboard && npm run dev           # binds :5173
@@ -278,7 +278,7 @@ Operator action ledger:
 
 2. Create K8s Secret:
    ```bash
-   kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-stripe-webhook-dev \
+   kubectl --context k3d-loopzero-core -n loopzero-system create secret generic loopzero-stripe-webhook-dev \
      --from-literal=STRIPE_WEBHOOK_SECRET="$LOOPZERO_STRIPE_WEBHOOK_SECRET_DEV" \
      --dry-run=client -o yaml | kubectl apply -f -
    ```

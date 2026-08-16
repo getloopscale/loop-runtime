@@ -14,6 +14,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -22,7 +29,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/source"
 )
@@ -100,18 +109,18 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
-		BuildHandler:         routes.NewBuildHandler(nil, logger),
-		LogsHandler:          routes.NewLogsHandler(nil, nil),
-		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
-		BuildListHandler:     routes.NewBuildListHandler(nil),
-		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
-		TeamHandler:          routes.NewTeamHandler(nil),
-		DomainHandler:        routes.NewDomainHandler(nil, nil, nil, "test.local"),
-		RepositoryHandler:    routes.NewRepositoryHandler(nil),
-		AuditHandler:         routes.NewAuditHandler(nil),
-		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
-		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		BuildHandler:         builds.NewBuildHandler(nil, logger),
+		LogsHandler:          logs.NewLogsHandler(nil, nil),
+		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
+		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
+		BuildListHandler:     builds.NewBuildListHandler(nil),
+		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
+		TeamHandler:          teams.NewTeamHandler(nil),
+		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
+		RepositoryHandler:    repositories.NewRepositoryHandler(nil),
+		AuditHandler:         audit.NewAuditHandler(nil),
+		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		AdminEvictor:         &stubTenantEvictor{},

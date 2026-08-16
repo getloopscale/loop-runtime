@@ -47,7 +47,7 @@ type PostgresBootstrapStore struct {
 // Repeated calls are safe — each INSERT is ON CONFLICT DO NOTHING.
 //
 // Default values applied wrapper-side (legacy contract):
-//   - cellID  → "cell-default" when BootstrapRequest.CellID empty
+//   - cellID  → "cell-0" when BootstrapRequest.CellID empty
 //   - plan    → "starter"      when BootstrapRequest.Plan empty
 //   - display → tenant slug    when BootstrapRequest.TenantDisplayName empty
 //   - email   → "{login}@users.noreply.github.com" (GitHub convention)
@@ -103,11 +103,11 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.Boots
 		displayName = req.TenantSlug
 	}
 	// ADR-0008: cell_id assigned by PlacementEngine via BootstrapRequest.
-	// Phase 0: always "cell-default". Phase 1+: PlacementEngine provides
+	// Phase 0: always "cell-0". Phase 1+: PlacementEngine provides
 	// real cell_id.
 	cellID := req.CellID
 	if cellID == "" {
-		cellID = "cell-default"
+		cellID = "cell-0"
 	}
 	n, err = q.InsertBootstrapTenant(ctx, gdb, generated.InsertBootstrapTenantParams{
 		ID:          tenantID,

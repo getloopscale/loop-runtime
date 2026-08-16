@@ -37,7 +37,11 @@ tasks:
       Validates the shared deadlineratchet gate across
       dormant/within-budget/slip-alert/block/exception states.
     cmds:
-      - cd pkg && go test ./quality/deadlineratchet/...
+      # M9 relocated the gate out of the shared base into the ops binary; this
+      # target kept pointing at the old home and had been failing ever since,
+      # unseen because nothing asserted the PACKAGE PATTERN of a `go test` —
+      # only the `cd` argument, and `pkg` still exists (B-087).
+      - cd cmd/loopzero-ops && go test ./internal/quality/deadlineratchet/... -count=1
 
   service-auth-ed25519:check-rotation-deadline:
     desc: |

@@ -216,10 +216,10 @@ func TestCheck_MigrationsDirMissingPasses(t *testing.T) {
 
 func TestCheck_MultipleMigrationsMixed(t *testing.T) {
 	root := setup(t, map[string]string{
-		"api/internal/db/migrations/000001_initial_schema.up.sql": "-- init",       // exempt
-		"api/internal/db/migrations/000020_add_a.up.sql":          "-- ...",        // test present
-		"api/internal/db/migrations/000021_add_b.up.sql":          "-- ...",        // MISSING
-		"api/internal/db/migrations/000022_add_c.up.sql":          "-- ...",        // test present
+		"api/internal/db/migrations/000001_initial_schema.up.sql": "-- init", // exempt
+		"api/internal/db/migrations/000020_add_a.up.sql":          "-- ...",  // test present
+		"api/internal/db/migrations/000021_add_b.up.sql":          "-- ...",  // MISSING
+		"api/internal/db/migrations/000022_add_c.up.sql":          "-- ...",  // test present
 		"api/tests/unit/migration_000020_a_test.go":               "package unit",
 		"api/tests/unit/migration_000022_c_test.go":               "package unit",
 	})

@@ -42,9 +42,9 @@ REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 SEED_SCRIPT="${REPO_ROOT}/infra/helmfile/scripts/seed-local-user.sh"
 TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"
 
-MGMT_CTX="k3d-loopzero-mgmt"
+MGMT_CTX="k3d-loopzero-core"
 BUILD_CTX="k3d-loopzero-build"
-WORKLOAD_CTX="k3d-loopzero-workload"
+WORKLOAD_CTX="k3d-loopzero-cell-0"
 
 # Each check appends one entry to RESULTS as JSON object.
 declare -a RESULTS=()
@@ -287,9 +287,9 @@ check_traefik_lb() {
     return
   fi
   local ports
-  ports=$(docker port k3d-loopzero-workload-serverlb 2>/dev/null || true)
+  ports=$(docker port k3d-loopzero-cell-0-serverlb 2>/dev/null || true)
   if [[ -z "$ports" ]]; then
-    record "$id" "FAIL" "k3d-loopzero-workload-serverlb container not running"
+    record "$id" "FAIL" "k3d-loopzero-cell-0-serverlb container not running"
     return
   fi
   if ! grep -q '443/tcp' <<<"$ports"; then
@@ -422,7 +422,7 @@ check_cluster_issuer() {
 }
 
 # -----------------------------------------------------------------------------
-# T0.9 — ESO ClusterSecretStore `loopzero-mgmt-store` Ready=True
+# T0.9 — ESO ClusterSecretStore `loopzero-core-store` Ready=True
 # -----------------------------------------------------------------------------
 # Discovered live during journey-03 (CHG-2026-04-29-DOGFOOD-REAL-E2E):
 # standalone-multi (helmfile L2) não provisionava o CSS que Pulumi
@@ -432,13 +432,13 @@ check_cluster_issuer() {
 check_eso_cluster_secret_store() {
   local id="T0.9"
   local status
-  status=$(kubectl --context "$WORKLOAD_CTX" get clustersecretstore loopzero-mgmt-store \
+  status=$(kubectl --context "$WORKLOAD_CTX" get clustersecretstore loopzero-core-store \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
   if [[ "$status" != "True" ]]; then
-    record "$id" "FAIL" "ClusterSecretStore loopzero-mgmt-store not Ready (got: '$status'). Run: bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"
+    record "$id" "FAIL" "ClusterSecretStore loopzero-core-store not Ready (got: '$status'). Run: bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"
     return
   fi
-  record "$id" "PASS" "ClusterSecretStore loopzero-mgmt-store Ready=True (ESO can sync mgmt→runtime secrets)"
+  record "$id" "PASS" "ClusterSecretStore loopzero-core-store Ready=True (ESO can sync mgmt→runtime secrets)"
 }
 
 # -----------------------------------------------------------------------------
@@ -463,7 +463,7 @@ check_no_terminating_namespaces() {
 # T0.11 — No dangling kubeconfig contexts (WARN level)
 # -----------------------------------------------------------------------------
 # DOKS contexts ficam em ~/.kube/config após pulumi destroy. Operator typos
-# tipo `kubectl --context loopzero-mgmt` (sem prefixo k3d-) podem mirar cluster
+# tipo `kubectl --context loopzero-core` (sem prefixo k3d-) podem mirar cluster
 # inexistente e produzir errors confusos. Detecta via 5s probe; reporta WARN
 # (não FAIL — usuário pode legitimamente ter DOKS dormindo).
 check_dangling_kubecontexts() {

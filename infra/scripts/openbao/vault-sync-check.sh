@@ -14,7 +14,7 @@
 #
 # Usage:
 #   bash infra/scripts/openbao/vault-sync-check.sh \
-#     --context k3d-loopzero-mgmt \
+#     --context k3d-loopzero-core \
 #     [--namespace loopzero-system] \
 #     [--threshold 10] \
 #     [--inventory <path>] \
@@ -39,7 +39,7 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 # CLI args
 # ----------------------------------------------------------------------------
-CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 NAMESPACE="loopzero-system"
 THRESHOLD=10
 INVENTORY="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helm/loopzero-external-secrets/values.yaml"
@@ -53,7 +53,7 @@ USAGE
   $0 [options]
 
 OPTIONS
-  --context <ctx>      kubectl context (default: k3d-loopzero-mgmt; env KUBECTL_CONTEXT)
+  --context <ctx>      kubectl context (default: k3d-loopzero-core; env KUBECTL_CONTEXT)
   --namespace <ns>     ExternalSecret CR namespace (default: loopzero-system)
   --threshold <N>      Min synced count to PASS (default: 10 — per Phase 9 acceptance "5+/10 keys")
   --inventory <path>   Override inventory path (default: loopzero-external-secrets/values.yaml)
@@ -62,10 +62,10 @@ OPTIONS
 
 EXAMPLES
   # Standalone-multi (local k3d) sync check, threshold 10/13:
-  $0 --context k3d-loopzero-mgmt --threshold 10
+  $0 --context k3d-loopzero-core --threshold 10
 
   # Prod-like smoke (T9.3): assert all 13 Ready=True (strict prod gate):
-  $0 --context loopzero-mgmt-prod --threshold 13
+  $0 --context loopzero-core-prod --threshold 13
 
   # JSON for CI pipeline ingestion:
   $0 --threshold 5 --json | jq '.synced'

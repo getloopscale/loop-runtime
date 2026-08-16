@@ -106,4 +106,3 @@ func TestIsTestFile_AllExtensions(t *testing.T) {
 		}
 	}
 }
-

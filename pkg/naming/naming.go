@@ -191,6 +191,24 @@ func EnvironmentCRName(tenantName, projectSlug, envName string) (string, error) 
 	return composeName("environment CR name", "%s-%s-%s", tenantName, projectSlug, envName)
 }
 
+// AppCertSecretName returns the TLS certificate secret name for one app of one project.
+// Format: "tls-{projectSlug}-{appName}"
+//
+// This is the name the manifest renderer actually creates
+// (api/internal/manifests/renderer_ingress.go). It carries the project because two
+// projects of one tenant may run an app with the same name, and they must not share a
+// certificate secret.
+//
+// It exists as a shared function because the name was previously derived twice, by two
+// different formulas: the renderer built "tls-{project}-{app}" while the exposure
+// controller looked for CertSecretName(hostname) => "{sanitized-hostname}-tls". They never
+// matched, so every ExposedRoute stayed Pending with a valid certificate sitting next to
+// it — 27 days in app-dev before anyone noticed (issue #277). Deriving the same name in
+// two places is what produced that; there is now one place.
+func AppCertSecretName(projectSlug, appName string) (string, error) {
+	return composeName("app cert secret name", "tls-%s-%s", projectSlug, appName)
+}
+
 // CertSecretName returns the TLS certificate secret name for a hostname.
 // Format: "{sanitized-hostname}-tls"
 // The hostname is sanitized (dots become hyphens) and truncated to fit

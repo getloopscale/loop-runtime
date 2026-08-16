@@ -17,14 +17,14 @@
 // those fields).
 //
 // What this gate detects:
-//   - Removed `<Field> <Type> `json:"<tag>"`` lines in tracked Go files under:
-//       api/internal/domain/types.go
-//       api/internal/routes/*.go
-//       api/internal/db/generated/*.go
+//   - Removed `<Field> <Type> `json:"<tag>"“ lines in tracked Go files under:
+//     api/internal/domain/types.go
+//     api/internal/routes/*.go
+//     api/internal/db/generated/*.go
 //   - For each removed field, greps consumers in:
-//       cloud/dashboard/src/  (TS/TSX)
-//       cli/src/              (TS)
-//       api/internal/         (Go)
+//     cloud/dashboard/src/  (TS/TSX)
+//     cli/src/              (TS)
+//     api/internal/         (Go)
 //     for `.<tag>` references (e.g., `p.apps_count`, `b.apps`,
 //     `project.last_deploy`).
 //   - Findings reported with file:line + the dropped field's JSON tag.
@@ -43,6 +43,7 @@ package contractconsumers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -98,7 +99,7 @@ var consumerRoots = []string{
 	"api/internal/",
 }
 
-// jsonFieldRegex matches `Name Type `json:"tag[,opts]"`` style declarations.
+// jsonFieldRegex matches `Name Type `json:"tag[,opts]"“ style declarations.
 // Captures the JSON tag (group 1) before any comma options like `,omitempty`.
 var jsonFieldRegex = regexp.MustCompile("json:\"([^\",]+)")
 
@@ -181,12 +182,60 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 		seen[tag] = struct{}{}
 	}
 
+	// A removed LINE is not a removed TAG. The diff says the line changed; only
+	// HEAD says whether the field still exists. Any edit that rewrites the line
+	// — gofmt collapsing padding before a trailing comment, a renamed Go field,
+	// a reworded comment — puts the tag on the "-" side while the contract is
+	// untouched.
+	//
+	// Measured on the routes split (B-080): `gofmt -w` turned
+	//   -\tRepo string `json:"repo"`            // "owner/repo"
+	//   +\tRepo string `json:"repo"` // "owner/repo"
+	// into a reported drop of `repo`, with nine named "consumers", and blocked
+	// a push that changed no contract at all. A gate that blames whitespace for
+	// a wire break is a gate people learn to push past.
 	tags := make([]string, 0, len(seen))
 	for t := range seen {
+		still, err := tagExistsAt(root, head, t)
+		if err != nil {
+			return nil, err
+		}
+		if still {
+			continue
+		}
 		tags = append(tags, t)
 	}
 	sort.Strings(tags)
 	return tags, nil
+}
+
+// tagExistsAt reports whether `json:"<tag>"` is still declared anywhere in the
+// tracked files at the given revision.
+//
+// It deliberately does NOT care which file holds it: moving a struct between
+// packages does not change the wire contract, and the whole point of this
+// check is to answer "does the field still exist" rather than "did this line
+// survive".
+func tagExistsAt(root, rev, tag string) (bool, error) {
+	// The tag ends at a quote or at the option list (`,omitempty`).
+	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
+
+	args := []string{"-C", root, "grep", "-lE", pattern, rev, "--"}
+	args = append(args, trackedFiles...)
+	cmd := exec.Command("git", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if stdout.Len() > 0 {
+		return true, nil
+	}
+	// `git grep` exits 1 on no match, which is the answer, not a failure.
+	var exitErr *exec.ExitError
+	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
+		return false, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
+	}
+	return false, nil
 }
 
 // grepConsumersForTag runs `git grep` for the dropped tag across consumer

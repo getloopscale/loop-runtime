@@ -2,13 +2,13 @@
 # Phase 8 D12 of plan 2026-06-02-loopzero-api-vault-integration v1.8.
 #
 # Wrapper para openbao-snapshot-agent v0.3.0 (upstream openbao org).
-# Deploys CronJob no loopzero-vault cluster que faz `bao operator raft snapshot
+# Deploys CronJob no loopzero-secrets cluster que faz `bao operator raft snapshot
 # save` periodicamente + upload S3-compatible para DO Spaces.
 #
 # Pre-reqs (operator-time):
-#   1. loopzero-vault cluster up + openbao-init Job completed (Vault role
+#   1. loopzero-secrets cluster up + openbao-init Job completed (Vault role
 #      `bao-snapshot` provisioned via openbao-init authRoles extension)
-#   2. K8s Secret `openbao-snapshot-s3-creds` em vault-system NS contendo
+#   2. K8s Secret `openbao-snapshot-s3-creds` em secrets-system NS contendo
 #      AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (DO Spaces creds from
 #      ~/.openbao-<env>-resources.env per SCRIPT.5)
 #

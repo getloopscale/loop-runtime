@@ -106,7 +106,7 @@ These are reconciled by `task bootstrap:standalone` (local) or by Pulumi+Helmfil
 | `gitea-admin` | loopzero-system | `generate-secrets.sh:157-158` | `password`, `token` | Gitea pod + tenant operator + app operator | rotate via Gitea admin UI + re-run `provision-api-tokens.sh` |
 | `loopzero-api-tokens` | loopzero-system | `provision-api-tokens.sh:100` | `gitea-token`, `argocd-token` | loopzero-api `/health/deep` probe | rotate via re-run script |
 | `argocd-creds-gitea` | argocd | `provision-api-tokens.sh:119` | `username`, `password`, `url` | ArgoCD repo-creds (Gitea HTTPS) | rotate with gitea-admin |
-| `cluster-cell-default` | argocd | `provision-api-tokens.sh:155` | `server`, `name`, `config` | ArgoCD destination resolution | n/a (kubeconfig embedded) |
+| `cluster-cell-0` | argocd | `provision-api-tokens.sh:155` | `server`, `name`, `config` | ArgoCD destination resolution | n/a (kubeconfig embedded) |
 | `minio-credentials` | argo | `generate-build-secrets.sh:108` | `accesskey`, `secretkey` | Argo Workflows + BuildKit cache S3 | rotate with minio root |
 | `cosign-signing-key` | argo | `generate-build-secrets.sh:87` | `cosign.key`, `cosign.password`, `cosign.pub` | cosign-signer Argo step | **quarterly** (cosign-rotation-drill.yml) |
 | `buildkit-registry-config` | argo | `generate-build-secrets.sh:100` | `config.json` | BuildKit `--registry-config` | rotate with registry creds |
@@ -118,7 +118,7 @@ These are reconciled by `task bootstrap:standalone` (local) or by Pulumi+Helmfil
 | `loopzero-registry-pull` | loopzero-system (workload cluster) | `bootstrap-cluster.sh:76` (doctl) | `.dockerconfigjson` | every loopzero-* Deployment imagePullSecret | rotate via `doctl registry kubernetes-manifest` |
 
 **ESO-managed (synced from mgmt → workload):**
-- The ClusterCredential CR's kubeconfig Secret in `loopzero-system` (mgmt) is synced by ESO into the workload cluster as `runtime.kubeconfig` for loopzero-api consumption (per CLAUDE.md B34).
+- The ClusterCredential CR's kubeconfig Secret in `loopzero-system` (mgmt) is synced by ESO into the workload cluster as `cell-0.kubeconfig` for loopzero-api consumption (per CLAUDE.md B34).
 
 ---
 
@@ -151,7 +151,7 @@ Render-time grep gate (added in T1.3) will FAIL CI if any literal reaches a rend
 ```bash
 # 1. Update Secret value
 NEW_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=')"
-kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-db-credentials \
+kubectl --context k3d-loopzero-core -n loopzero-system create secret generic loopzero-db-credentials \
   --from-literal=password="$NEW_PASSWORD" --dry-run=client -o yaml \
   | kubectl apply -f -
 
@@ -160,8 +160,8 @@ PGPASSWORD="<current>" psql -h localhost -p 15432 -U loopzero -d postgres -c \
   "ALTER USER loopzero WITH PASSWORD '$NEW_PASSWORD';"
 
 # 3. Restart consumers (they cache DSN at boot)
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-api
-kubectl --context k3d-loopzero-mgmt -n loopzero-auth rollout restart deploy/hydra deploy/kratos
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-api
+kubectl --context k3d-loopzero-core -n loopzero-auth rollout restart deploy/hydra deploy/kratos
 
 # 4. Verify health
 task doctor
@@ -175,7 +175,7 @@ bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
 bash infra/scripts/production/provision-api-tokens.sh
 
 # ArgoCD repo-server cache invalidation:
-kubectl --context k3d-loopzero-mgmt -n argocd rollout restart deploy/argocd-repo-server
+kubectl --context k3d-loopzero-core -n argocd rollout restart deploy/argocd-repo-server
 ```
 
 ### `cosign-signing-key`

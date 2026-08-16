@@ -5,7 +5,7 @@ package unit
 
 import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 )
 
 // =============================================================================
@@ -40,7 +40,7 @@ import (
 // is wired.
 
 // TestPostgresSecretStore_Implements_RoutesInterface verifies the
-// PostgresSecretStore still satisfies the routes.SecretStore contract
+// PostgresSecretStore still satisfies the secrets.SecretStore contract
 // after the T2.2 #4 migration. Pure compile-time assertion — no
 // DBTX dependency.
-var _ routes.SecretStore = (*store.PostgresSecretStore)(nil)
+var _ secrets.SecretStore = (*store.PostgresSecretStore)(nil)

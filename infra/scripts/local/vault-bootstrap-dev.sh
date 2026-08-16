@@ -11,15 +11,15 @@
 #
 # SPLIT-CONTEXT contract (T1.1 / Jeito A canonical sponsor mandate
 # INQUEBRÁVEL 2026-06-19, issue #111): OpenBao runs in a SEPARATE
-# k3d-loopzero-vault cluster (NOT mgmt). This script splits the kubectl
+# k3d-loopzero-secrets cluster (NOT mgmt). This script splits the kubectl
 # fan-out into:
-#   - OPENBAO_CONTEXT (default k3d-loopzero-vault) → bao operator init /
-#     auth/approle / SPKI read — the vault-cluster side
-#   - TARGET_CONTEXT  (default k3d-loopzero-mgmt)  → loopzero-openbao-approle +
+#   - OPENBAO_CONTEXT (default k3d-loopzero-secrets) → bao operator init /
+#     auth/approle / SPKI read — the secrets-cluster side
+#   - TARGET_CONTEXT  (default k3d-loopzero-core)  → loopzero-openbao-approle +
 #     openbao-spki-pin Secret apply (where loopzero-api Deployment envFrom
-#     reads from) — the mgmt-cluster side
+#     reads from) — the core-cluster side
 # Legacy single-context invocations (everything against mgmt) were
-# canonical only under the superseded `task k3d:vault:bootstrap-in-mgmt`
+# canonical only under the superseded `task k3d:secrets:bootstrap-in-core`
 # shortcut. Jeito A INQUEBRÁVEL forbids that shortcut.
 #
 # Per ADR D2: idempotent aggregator (re-run no-ops on already-initialized
@@ -39,21 +39,21 @@
 #   10. kubectl create secret loopzero-openbao-approle (external-secrets ns) +
 #       kubectl create secret openbao-spki-pin from openbao-tls cert SPKI
 #
-# Wired in: taskfiles/k3d.yml as `task k3d:vault:bootstrap-dev`.
+# Wired in: taskfiles/k3d.yml as `task k3d:secrets:bootstrap-dev`.
 # Allowlist entry: KEEP-OPERATOR (live-cluster orchestration, irreducible).
 
 set -uo pipefail
 
 # SPLIT-CONTEXT (T1.1 — Jeito A INQUEBRÁVEL — issue #111).
-# OPENBAO_CONTEXT is the vault-cluster side (bao init/unseal/approle/SPKI).
-# TARGET_CONTEXT is the mgmt-cluster side (Secret apply that loopzero-api
+# OPENBAO_CONTEXT is the secrets-cluster side (bao init/unseal/approle/SPKI).
+# TARGET_CONTEXT is the core-cluster side (Secret apply that loopzero-api
 # Deployment envFrom reads from loopzero-system ns).
-OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-vault}"
-TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
+OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-secrets}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-core}"
 # Backwards-compat alias preserved for inline log lines + helmfile sync
 # selectors that pre-date the T1.1 split. New code MUST use one of the
 # two split variables above.
-NS="${OPENBAO_NAMESPACE:-vault-system}"
+NS="${OPENBAO_NAMESPACE:-secrets-system}"
 POD="${OPENBAO_POD:-openbao-0}"
 UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
 # T2.1 of plan dev-public-cross-cluster-secrets (issue #111).
@@ -72,7 +72,7 @@ UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
 # startup and the EC-3 contract requires the Transit backend to be
 # reachable (sys/health 200) BEFORE main init.
 AUTO_UNSEAL_MODE="${AUTO_UNSEAL_MODE:-shamir}"
-OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.vault-system.svc.cluster.local:8200}"
+OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.secrets-system.svc.cluster.local:8200}"
 # Cleanroom mandate run 2026-06-18 caught Finding #2 (issue #91): the
 # legacy default external-secrets ns put the loopzero-openbao-approle
 # Secret out of reach of loopzero-api Deployment (envFrom reads from
@@ -98,15 +98,15 @@ log "Step 1: pre-flight — OpenBao pod state in $OPENBAO_CONTEXT"
 if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&1; then
   log "FAIL: OpenBao pod $POD not found in $OPENBAO_CONTEXT/$NS."
   log "Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19, issue #111):"
-  log "  1. Provision separate vault cluster: task k3d:vault:create"
-  log "  2. Install OpenBao chart:            task k3d:vault:bootstrap"
+  log "  1. Provision separate vault cluster: task k3d:secrets:create"
+  log "  2. Install OpenBao chart:            task k3d:secrets:bootstrap"
   log "  3. Sponsor JUNTOS Shamir init + unseal × 3 (see docs/operations/openbao-init-runbook.md)"
   log "Override OPENBAO_CONTEXT env if your vault cluster has a different name."
   exit 1
 fi
 
 # T-A4 LIVE finding 2026-06-20 (follow-up to ADR 2026-06-20-dev-public-vault-automated-init):
-# When `task k3d:vault:bootstrap` returns (helm install completes), the openbao-0
+# When `task k3d:secrets:bootstrap` returns (helm install completes), the openbao-0
 # pod may still be Pending without a host assigned — the openbao chart declares
 # `wait: false` (per memory feedback_helmfile_wait_false_for_bootstrap_deps). The
 # very first `kubectl exec` then fails with "pod openbao-0 does not have a host
@@ -251,9 +251,9 @@ fi
 # `bao_auth` function was historically defined later (after Step 5.5)
 # alongside other auth-required steps. Step 5.5 therefore called an
 # undefined function — `bao_auth auth list` produced no stdout, the
-# Python check evaluated `'k8s-mgmt/' in {}` → False every iteration,
-# the 180s wait loop ALWAYS timed out, and `auth/k8s-mgmt/config` was
-# NEVER written. Downstream consequence: CSS loopzero-vault-secrets stayed
+# Python check evaluated `'k8s-core/' in {}` → False every iteration,
+# the 180s wait loop ALWAYS timed out, and `auth/k8s-core/config` was
+# NEVER written. Downstream consequence: CSS loopzero-secrets-secrets stayed
 # `Ready=False reason=InvalidProviderConfig` (1b-vault-bootstrap-eso
 # FAIL), and ESO cross-cluster workload-identity path silently
 # broke. Define bao_auth NOW (after ROOT_TOKEN is set, before Step 5.5
@@ -262,27 +262,27 @@ bao_auth() { kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec "$POD" -- env BA
 
 # === Step 5: openbao-init helmfile sync ===
 log "Step 5: helmfile sync openbao-init (T5.1-T5.9 provisioning)"
-if [[ -f "infra/helmfile/vault.helmfile.yaml.gotmpl" ]]; then
+if [[ -f "infra/helmfile/secrets.helmfile.yaml.gotmpl" ]]; then
   ENV_NAME="${HELMFILE_ENV:-vault-local}"
-  run helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e "$ENV_NAME" \
+  run helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e "$ENV_NAME" \
     --kube-context "$OPENBAO_CONTEXT" --selector name=openbao-init sync || \
     log "WARN: openbao-init helmfile sync had issues — manual inspect recommended"
 fi
 
-# === Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt ===
+# === Step 5.5: R3 — canonical TokenReview config for auth/k8s-core ===
 # R3 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
-# 2026-06-19). The openbao-init Job (Step 5) provisions the `k8s-mgmt`
+# 2026-06-19). The openbao-init Job (Step 5) provisions the `k8s-core`
 # auth mount + the `eso` role bound to eso-vault-reader@loopzero-system.
-# But the mount needs `auth/k8s-mgmt/config` (kubernetes_host + CA +
+# But the mount needs `auth/k8s-core/config` (kubernetes_host + CA +
 # token_reviewer_jwt) for OpenBao to validate mgmt-issued SA tokens
 # via the TokenReview API. The canonical operator runbook documented
 # this as "operator-time" — codifying it here closes seed chain FAIL=11
 # for the cross-cluster ESO read path (per
 # docs/operations/openbao-multi-cluster-auth-runbook.md).
 #
-# Mount-precedence guard: bao MUST report `k8s-mgmt/` enabled before
-# `bao write auth/k8s-mgmt/config` — else Vault returns 404
-# `no handler for route auth/k8s-mgmt/config`. Sponsor reinforced.
+# Mount-precedence guard: bao MUST report `k8s-core/` enabled before
+# `bao write auth/k8s-core/config` — else Vault returns 404
+# `no handler for route auth/k8s-core/config`. Sponsor reinforced.
 #
 # Long-lived token contract: K8s ≥1.24 `kubectl create token` produces
 # bounded TokenRequest JWTs that expire — useless for OpenBao's
@@ -294,10 +294,10 @@ fi
 # This step only runs when the TARGET_CONTEXT (mgmt) is different from
 # OPENBAO_CONTEXT (vault) — single-cluster setups don't need
 # cross-cluster TokenReview wiring.
-log "Step 5.5: R3 — canonical TokenReview config for auth/k8s-mgmt"
+log "Step 5.5: R3 — canonical TokenReview config for auth/k8s-core"
 if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
-  # Wait for openbao-init Job to provision the k8s-mgmt mount.
-  log "  Waiting for auth/k8s-mgmt/ mount (openbao-init Job creates it)"
+  # Wait for openbao-init Job to provision the k8s-core mount.
+  log "  Waiting for auth/k8s-core/ mount (openbao-init Job creates it)"
   # LIVE-measured 2026-06-19 Cleanroom: the openbao-init Job takes
   # ~78s to complete (helmfile sync + Job init + bao auth enable across
   # 6 mounts + transit keys). The 60s budget skipped R3 mid-LIVE; bumped
@@ -305,15 +305,15 @@ if [[ "$OPENBAO_CONTEXT" != "$TARGET_CONTEXT" && "$DRY_RUN" -eq 0 ]]; then
   MOUNT_READY=0
   for i in $(seq 1 90); do  # 90 * 2s = 180s budget
     if bao_auth auth list -format=json 2>/dev/null | python3 -c \
-        "import sys,json; d=json.loads(sys.stdin.read() or '{}'); sys.exit(0 if 'k8s-mgmt/' in d else 1)" 2>/dev/null; then
+        "import sys,json; d=json.loads(sys.stdin.read() or '{}'); sys.exit(0 if 'k8s-core/' in d else 1)" 2>/dev/null; then
       MOUNT_READY=1
-      log "  OK: auth/k8s-mgmt/ mount present (attempt $i)"
+      log "  OK: auth/k8s-core/ mount present (attempt $i)"
       break
     fi
     sleep 2
   done
   if [[ "$MOUNT_READY" -eq 0 ]]; then
-    log "  WARN: auth/k8s-mgmt/ mount not present after 180s — skipping R3 config write (seed chain FAIL=11 will surface)"
+    log "  WARN: auth/k8s-core/ mount not present after 180s — skipping R3 config write (seed chain FAIL=11 will surface)"
   else
     # MGMT side: ensure vault-tokenreviewer SA + CRB exist.
     log "  Applying vault-tokenreviewer SA + CRB on $TARGET_CONTEXT"
@@ -370,44 +370,44 @@ TR_EOF
       # pod's network namespace. Regression-locked by
       # infra/tests/charts/vault_bootstrap_san_aligned_host_test.go (F1 guard).
       # Two requirements MUST hold simultaneously:
-      #   (a) reachability — from the vault pod (in loopzero-vault cluster), the URL
+      #   (a) reachability — from the vault pod (in loopzero-secrets cluster), the URL
       #       must resolve to + connect to the mgmt API server on the host.
       #   (b) TLS hostname/SAN — OpenBao's Go HTTP client verifies the server cert
       #       strictly. The k3d-mgmt API cert SAN list is:
-      #         DNS: k3d-loopzero-mgmt-server-0, k3d-loopzero-mgmt-serverlb,
+      #         DNS: k3d-loopzero-core-server-0, k3d-loopzero-core-serverlb,
       #              kubernetes(.default(.svc(.cluster.local))), localhost
       #         IP : 0.0.0.0, 10.43.0.1, 127.0.0.1, <mgmt-server-0-IP>
       #       `host.k3d.internal` is NOT in the SAN list — using it triggers
       #       SAN-mismatch ("x509: certificate is valid for ... not host.k3d.internal")
       #       which OpenBao surfaces to callers as a generic "permission denied"
-      #       from auth/k8s-mgmt/login for every role (blanket 403).
+      #       from auth/k8s-core/login for every role (blanket 403).
       #
       # The canonical SAN-aligned + cross-cluster-reachable name is the k3d
       # serverlb docker container name `k3d-${cluster_name}-serverlb`, derived
-      # from TARGET_CONTEXT (e.g., `k3d-loopzero-mgmt` → `k3d-loopzero-mgmt-serverlb`).
+      # from TARGET_CONTEXT (e.g., `k3d-loopzero-core` → `k3d-loopzero-core-serverlb`).
       # k3d injects this name into every cluster's CoreDNS NodeHosts via the
-      # shared docker network, so it resolves canonically from loopzero-vault.
+      # shared docker network, so it resolves canonically from loopzero-secrets.
       MGMT_HOST_ORIG="$MGMT_HOST"
-      MGMT_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-mgmt → loopzero-mgmt
-      SERVERLB_HOST="k3d-${MGMT_CLUSTER}-serverlb"
+      CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-core → loopzero-core
+      SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
       MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
       if [[ "$MGMT_HOST" != "$MGMT_HOST_ORIG" ]]; then
-        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-vault)"
+        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-secrets)"
       fi
       if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
         log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"
       else
-        # Write auth/k8s-mgmt/config inside the OpenBao pod (avoids
+        # Write auth/k8s-core/config inside the OpenBao pod (avoids
         # CA distribution overhead — pod has bao CLI + connectivity).
-        log "  Writing auth/k8s-mgmt/config with MGMT_HOST=$MGMT_HOST"
+        log "  Writing auth/k8s-core/config with MGMT_HOST=$MGMT_HOST"
         kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec -i "$POD" -- \
           env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true \
-          bao write auth/k8s-mgmt/config \
+          bao write auth/k8s-core/config \
             kubernetes_host="$MGMT_HOST" \
             kubernetes_ca_cert="$MGMT_CA" \
             token_reviewer_jwt="$TR_JWT" \
             disable_iss_validation=true 2>&1 | tail -5 || \
-          log "  WARN: bao write auth/k8s-mgmt/config returned non-zero"
+          log "  WARN: bao write auth/k8s-core/config returned non-zero"
         log "  R3 codification complete"
       fi
     fi
@@ -416,30 +416,37 @@ else
   log "  Skip R3: OPENBAO_CONTEXT == TARGET_CONTEXT (single-cluster topology) OR DRY_RUN"
 fi
 
-# === Step 6+7: approle + policy ===
-log "Step 6+7: approle + loopzero-api policy"
+# === Step 6+7: approle (a policy e do chart) ===
+log "Step 6+7: approle loopzero-api (policy vem do chart openbao-init)"
 export BAO_TOKEN="$ROOT_TOKEN"
 # `bao_auth` is now defined right after ROOT_TOKEN is set (Step 4) so
-# Step 5.5's auth/k8s-mgmt wait-loop can actually call it. The legacy
+# Step 5.5's auth/k8s-core wait-loop can actually call it. The legacy
 # duplicate definition here was the source of the silent R3 skip
 # (issue #111 cross-cluster ESO path).
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
-# loopzero-api policy with transit/keys/* wildcard (catch #8 from session)
-POLICY='path "transit/keys/*" { capabilities = ["create","read","update","delete","list"] }
-path "transit/encrypt/*" { capabilities = ["update"] }
-path "transit/decrypt/*" { capabilities = ["update"] }
-path "kv/data/loopzero/*" { capabilities = ["read"] }
-path "kv/metadata/loopzero/*" { capabilities = ["list"] }'
-
+# A policy NAO e escrita aqui. Ela e declarada no chart infra/helm/openbao-init
+# e aplicada pelo helmfile no passo 5, logo acima.
+#
+# Ate 2026-08-13 este bloco fazia `bao policy write loopzero-api` com
+# transit/keys/* incluindo delete e list — minutos DEPOIS de o chart aplicar uma
+# policy do mesmo nome. Ultimo escritor vence, entao a versao versionada, que e a
+# que passa por revisao, nunca alcancava runtime nenhum: a correcao do B-072
+# ficou invisivel. E o conjunto daqui concedia `delete` em chave transit, que e o
+# verbo de crypto-shredding, a uma identidade que (B-075) nao tem caminho de
+# shredding nenhum.
+#
+# Medido antes de remover: o TransitClient monta exatamente tres caminhos, todos
+# sob loopzero-tenants-<id> (encrypt, keys, decrypt), mais o login por AppRole.
+# Nenhum LIST, nenhum DELETE, nenhum KV. O conjunto do chart cobre os tres.
+#
+# O que fica aqui e o ciclo de vida da CREDENCIAL — criar o AppRole, gerar o
+# secret_id, materializar o Secret — porque isso so roda contra um cofre vivo e
+# nao se declara em template.
+#
+# Decisao: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  # LIVE bug fix 2026-06-15 Phase 4 Cleanroom: `policy write` invocation
-  # via stdin pipe was missing BAO_SKIP_VERIFY=true; cert chain x509
-  # verification failed inside the pod (no CA bundle for openbao-tls).
-  # Mirrors the bao() / bao_auth() helper fixes.
-  echo "$POLICY" | kubectl --context "$OPENBAO_CONTEXT" -n "$NS" exec -i "$POD" -- \
-    env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao policy write loopzero-api - || true
   bao_auth write auth/approle/role/loopzero-api \
     token_policies=loopzero-api \
     token_ttl=24h \

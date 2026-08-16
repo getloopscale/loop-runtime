@@ -30,7 +30,7 @@ Re-run for any of:
 ## Prerequisites
 
 - `bao` CLI installed locally OR exec into `openbao-0` pod
-- `kubectl` access to mgmt + build + cell-default + cell-1 + cell-2 (5 clusters in prod; LOCAL = single k3d cluster acting as all 5)
+- `kubectl` access to mgmt + build + cell-0 + cell-0 + cell-1 (5 clusters in prod; LOCAL = single k3d cluster acting as all 5)
 - `BAO_ADDR` + `BAO_TOKEN` (root token for first-run; restricted token thereafter)
 - `jq` for parsing
 
@@ -41,11 +41,11 @@ Provisioned by `openbao-init`:
 | Mount | Binds | Used by |
 |---|---|---|
 | `auth/kubernetes` | Legacy/backward compat | spki-extractor, bao-snapshot, tenant-controller-transit |
-| `auth/k8s-mgmt` | mgmt cluster SAs | loopzero-api, loopzero-{tenant,app,preview,platform}-operator |
+| `auth/k8s-core` | mgmt cluster SAs | loopzero-api, loopzero-{tenant,app,preview,platform}-operator |
 | `auth/k8s-build` | build cluster SAs | argo-workflows |
-| `auth/k8s-cell-default` | cell-default workload SAs | external-secrets-broker |
+| `auth/k8s-cell-0` | cell-0 workload SAs | external-secrets-broker |
+| `auth/k8s-cell-0` | cell-0 workload SAs | external-secrets-broker |
 | `auth/k8s-cell-1` | cell-1 workload SAs | external-secrets-broker |
-| `auth/k8s-cell-2` | cell-2 workload SAs | external-secrets-broker |
 
 Each mount needs `auth/<X>/config` with:
 - `kubernetes_host` — that cluster's K8s API server URL (HTTPS)
@@ -61,7 +61,7 @@ The pattern repeats 5× (or 6 if you also configure the legacy `auth/kubernetes`
 ### Step 1 — Identify the target cluster's K8s API server
 
 ```bash
-TARGET_CONTEXT=k3d-loopzero-mgmt   # or k3d-loopzero-build, ...
+TARGET_CONTEXT=k3d-loopzero-core   # or k3d-loopzero-build, ...
 
 K8S_HOST=$(kubectl --context "${TARGET_CONTEXT}" config view --minify \
   -o jsonpath='{.clusters[0].cluster.server}')
@@ -127,11 +127,11 @@ echo "TokenReviewer JWT minted (${#TOKEN_REVIEWER_JWT} chars)"
 ```bash
 # Determine which Vault auth mount this cluster maps to
 case "${TARGET_CONTEXT}" in
-  *loopzero-mgmt*)    MOUNT=k8s-mgmt ;;
+  *loopzero-core*)    MOUNT=k8s-core ;;
   *loopzero-build*)   MOUNT=k8s-build ;;
-  *cell-default*) MOUNT=k8s-cell-default ;;
+  *cell-0*) MOUNT=k8s-cell-0 ;;
+  *cell-0*)       MOUNT=k8s-cell-0 ;;
   *cell-1*)       MOUNT=k8s-cell-1 ;;
-  *cell-2*)       MOUNT=k8s-cell-2 ;;
   *) echo "ERR: cannot map ${TARGET_CONTEXT} to a Vault auth mount"; exit 1 ;;
 esac
 
@@ -151,7 +151,7 @@ echo "auth/${MOUNT}/config written"
 Pick one of the per-binary roles that should work for this mount.
 
 ```bash
-# Example for k8s-mgmt: loopzero-api role expects loopzero-api SA in loopzero-system NS
+# Example for k8s-core: loopzero-api role expects loopzero-api SA in loopzero-system NS
 TEST_NS=loopzero-system
 TEST_SA=loopzero-api
 TEST_ROLE=loopzero-api
@@ -194,13 +194,13 @@ After all 5 mounts are configured, verify rotation works:
 
 ```bash
 # Rotate tokenReviewer JWT (kube-system SA)
-NEW_JWT=$(kubectl --context k3d-loopzero-mgmt -n kube-system \
+NEW_JWT=$(kubectl --context k3d-loopzero-core -n kube-system \
   create token vault-tokenreviewer --duration=8760h)
 
 # Update Vault config
-bao write auth/k8s-mgmt/config \
-  kubernetes_host="$(kubectl --context k3d-loopzero-mgmt config view --minify -o jsonpath='{.clusters[0].cluster.server}')" \
-  kubernetes_ca_cert="$(kubectl --context k3d-loopzero-mgmt -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}')" \
+bao write auth/k8s-core/config \
+  kubernetes_host="$(kubectl --context k3d-loopzero-core config view --minify -o jsonpath='{.clusters[0].cluster.server}')" \
+  kubernetes_ca_cert="$(kubectl --context k3d-loopzero-core -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}')" \
   token_reviewer_jwt="${NEW_JWT}" \
   disable_iss_validation=true
 
@@ -213,7 +213,7 @@ After running this runbook, capture state for audit:
 
 ```bash
 bao auth list -detailed | tee ~/openbao-auth-mounts-$(date -u +%Y-%m-%d).txt
-for mount in kubernetes k8s-mgmt k8s-build k8s-cell-default k8s-cell-1 k8s-cell-2; do
+for mount in kubernetes k8s-core k8s-build k8s-cell-0 k8s-cell-0 k8s-cell-1; do
   echo "=== auth/${mount}/config ==="
   bao read "auth/${mount}/config"
   echo "=== auth/${mount}/role (list) ==="

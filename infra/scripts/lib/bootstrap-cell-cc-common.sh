@@ -16,7 +16,7 @@ set -euo pipefail
 # bootstrap_cell_cc CELL_ID K3D_CLUSTER_NAME [--dry-run]
 #
 # Args:
-#   CELL_ID          — logical cell identifier (e.g., cell-default, cell-1, cell-2)
+#   CELL_ID          — logical cell identifier (e.g., cell-0, cell-0, cell-1)
 #                      Used as ClusterCredential CR name, Secret name prefix,
 #                      and spec.cellID + spec.clusterName (F-08 alignment).
 #   K3D_CLUSTER_NAME — k3d cluster suffix (e.g., workload, runtime-2).
@@ -36,7 +36,7 @@ bootstrap_cell_cc() {
   local K3D_CLUSTER="${2:?bootstrap_cell_cc requires K3D_CLUSTER_NAME}"
   local DRY_RUN="${3:-}"
 
-  local CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+  local CTX="${MGMT_CTX:-k3d-loopzero-core}"
   local NS="${LOOPZERO_NS:-loopzero-system}"
   local SCOPED_LIB
   SCOPED_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/../helmfile/scripts/lib/scoped-kubeconfig.sh"

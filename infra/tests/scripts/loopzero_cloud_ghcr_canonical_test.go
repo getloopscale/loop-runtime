@@ -55,11 +55,22 @@ func TestLoopZeroCloudImageOverlayUsesGHCRCanonical(t *testing.T) {
 		t.Error("infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl still USES `repository: k3d-loopzero-registry:5000/loopzero-cloud` — issue #104 Architecture A")
 	}
 
-	// T3. Overlay MUST reference the canonical GHCR repository
-	// `ghcr.io/getloopscale/loopzero-cloud`. This is where the AM6 workflow
-	// pushes loopzero-cloud images (`loopzero/.github/workflows/build-publish.yml:12`).
-	if !strings.Contains(overlay, "ghcr.io/getloopscale/loopzero-cloud") {
-		t.Error("infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl does NOT reference canonical GHCR repository `ghcr.io/getloopscale/loopzero-cloud` — issue #104 Architecture A")
+	// T3. The overlay MUST RESOLVE to the canonical GHCR repository
+	// `ghcr.io/getloopscale/loopzero-cloud` — where the AM6 workflow pushes
+	// loopzero-cloud images (`loopzero/.github/workflows/build-publish.yml:12`).
+	//
+	// Asserted on the RENDERED value, not on the source text. The repository is
+	// built from a parameterised prefix (`{{ env … | default "ghcr.io/getloopscale/" }}`
+	// followed by the literal `loopzero-cloud`), so the canonical string never
+	// appears contiguously and a substring match reported this correct file as
+	// broken — for an indeterminate time, because this package ran in no task
+	// target until B-092. See TestRenderedImageRepository for the contract.
+	gotRepo, err := renderedImageRepository(overlay)
+	if err != nil {
+		t.Errorf("could not render infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl: %v", err)
+	} else if gotRepo != "ghcr.io/getloopscale/loopzero-cloud" {
+		t.Errorf("dev-public overlay renders image.repository = %q, want the canonical GHCR repository %q — issue #104 Architecture A",
+			gotRepo, "ghcr.io/getloopscale/loopzero-cloud")
 	}
 
 	// T4. Overlay MUST reference the `ghcr-pull` imagePullSecret —

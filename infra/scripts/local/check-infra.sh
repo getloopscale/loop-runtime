@@ -34,10 +34,10 @@ set -uo pipefail
 JSON_MODE=0
 [[ "${1:-}" == "--json" ]] && JSON_MODE=1
 
-MGMT_CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+MGMT_CTX="${MGMT_CTX:-k3d-loopzero-core}"
 BUILD_CTX="${BUILD_CTX:-k3d-loopzero-build}"
-WORKLOAD_CTX="${WORKLOAD_CTX:-k3d-loopzero-workload}"
-RUNTIME2_CTX="${RUNTIME2_CTX:-k3d-loopzero-runtime-2}"
+WORKLOAD_CTX="${WORKLOAD_CTX:-k3d-loopzero-cell-0}"
+RUNTIME2_CTX="${RUNTIME2_CTX:-k3d-loopzero-cell-1}"
 
 PASS=0
 FAIL=0
@@ -128,14 +128,14 @@ fi
 
 # C3.2 — same for runtime slot
 runtime_kc=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret loopzero-cluster-kubeconfigs \
-  -o go-template='{{index .data "runtime.kubeconfig" | base64decode}}' 2>/dev/null || true)
+  -o go-template='{{index .data "cell-0.kubeconfig" | base64decode}}' 2>/dev/null || true)
 if [[ -z "$runtime_kc" ]]; then
-  record "C3.2" "FAIL" "loopzero-cluster-kubeconfigs.runtime.kubeconfig MISSING"
+  record "C3.2" "FAIL" "loopzero-cluster-kubeconfigs.cell-0.kubeconfig MISSING"
 elif printf '%s' "$runtime_kc" | grep -q "kubernetes.default.svc"; then
-  record "C3.2" "FAIL" "loopzero-cluster-kubeconfigs.runtime.kubeconfig holds default placeholder — run task k3d:heal"
+  record "C3.2" "FAIL" "loopzero-cluster-kubeconfigs.cell-0.kubeconfig holds default placeholder — run task k3d:heal"
 else
   server=$(printf '%s' "$runtime_kc" | grep -oE "server: https://[^ ]+" | head -1)
-  record "C3.2" "PASS" "loopzero-cluster-kubeconfigs.runtime.kubeconfig has real $server"
+  record "C3.2" "PASS" "loopzero-cluster-kubeconfigs.cell-0.kubeconfig has real $server"
 fi
 
 # C3.3 — gitea-admin.token must be a REAL 40-char API token with scopes (not 32-char placeholder)
@@ -212,7 +212,7 @@ done
 # -----------------------------------------------------------------------------
 heading "C5: Multi-cell topology"
 
-for cell in cell-default cell-1 cell-2; do
+for cell in cell-0 cell-0 cell-1; do
   status=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$cell" \
     -o jsonpath='{.status.connected}' 2>/dev/null || echo "")
   if [[ "$status" == "true" ]]; then

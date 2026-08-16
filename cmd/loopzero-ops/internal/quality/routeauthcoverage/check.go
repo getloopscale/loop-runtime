@@ -67,6 +67,13 @@ var ErrViolations = errors.New("at least one router.go route lacks middleware.Au
 // ErrRouterNotFound is emitted when api/internal/server/router.go is missing.
 var ErrRouterNotFound = errors.New("router.go not found")
 
+// ErrNoRoutesEnumerated means the walker found the structural markers but no
+// route registrations at all. A coverage gate that examined nothing has not
+// passed — it has abstained, and reporting that as PASS is how the auth
+// invariant over the whole public surface would disappear in silence during the
+// routes split (B-040, B-041).
+var ErrNoRoutesEnumerated = errors.New("router.go parsed and the Auth group located, but ZERO route registrations were enumerated — the gate examined nothing, so it cannot vouch for anything")
+
 // ErrAuthGroupMissing is emitted when the Auth chi.Router group cannot be
 // located — that itself is a systemic regression the gate refuses to gloss over.
 var ErrAuthGroupMissing = errors.New("could not locate the middleware.Auth chi.Router group in router.go")
@@ -150,6 +157,19 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(violations) > 0 {
 		return outcome, ErrViolations
+	}
+	// The enumeration floor (B-040). Order matters and is load-bearing: this
+	// runs AFTER ErrViolations, and it counts routes ENUMERATED — approved plus
+	// violating — not routes approved.
+	//
+	// Written over PassCount alone it would be wrong in the worst possible
+	// direction. PassCount counts only APPROVED routes, so it is also zero when
+	// EVERY route violates; the gate would then answer "enumerated nothing" — an
+	// instrumentation error — for the most serious finding this repository can
+	// produce, a public surface with no authentication. See EC-1 of
+	// .claude/knowledge-base/reviews/slice-1-tripwires-edge-cases-2026-08-11.md.
+	if outcome.PassCount+len(violations) == 0 {
+		return outcome, ErrNoRoutesEnumerated
 	}
 	return outcome, nil
 }

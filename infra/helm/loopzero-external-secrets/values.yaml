@@ -18,10 +18,10 @@
 # Required for all path constructions.
 envName: ""
 
-# ClusterSecretStore name (Phase 3.1 — loopzero-vault-secrets).
+# ClusterSecretStore name (Phase 3.1 — loopzero-secrets-secrets).
 secretStoreRef:
   kind: ClusterSecretStore
-  name: loopzero-vault-secrets
+  name: loopzero-secrets-secrets
 
 # Default refresh interval (override per-secret for high-rotation cases).
 defaultRefreshInterval: 1h
@@ -262,11 +262,11 @@ externalSecrets:
 openbaoTransit:
   enabled: false
   # OpenBao service URL — production points at the in-cluster service
-  # (https://openbao.vault-system.svc:8200). NOT a public hostname.
+  # (https://openbao.secrets-system.svc:8200). NOT a public hostname.
   # T1.2 of dev-public-cross-cluster-secrets (issue #111): for Jeito A
-  # topology (OpenBao in separate loopzero-vault cluster), the URL stays at
+  # topology (OpenBao in separate loopzero-secrets cluster), the URL stays at
   # the canonical intra-cluster DNS name (preserves cert SAN); mgmt
-  # CoreDNS host-alias rewrites the DNS to the vault-cluster NodePort
+  # CoreDNS host-alias rewrites the DNS to the secrets-cluster NodePort
   # at resolve time (T2.2).
   server: ""
   # T1.2 of dev-public-cross-cluster-secrets (issue #111): auth.kind
@@ -336,7 +336,7 @@ broker:
   # prod will template per-cell.
   apiURL: "http://loopzero-api.loopzero-system.svc.cluster.local:3001"
   # Default single-cluster cell for dev-public.
-  cellID: "cell-default"
+  cellID: "cell-0"
   # K8s Secret holding the opaque Bearer token. Same value MUST be set in
   # the loopzero-api Deployment via envFrom: loopzero-broker-token Secret in
   # loopzero-system ns. Rotate by re-rolling both sides simultaneously.

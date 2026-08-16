@@ -55,9 +55,9 @@ log() { printf '[seed-local-user] %s\n' "$*" >&2; }
 # regen step fails with no useful hint about WHY.
 #
 # Fix: pin the management-cluster context explicitly. SEED_CTX overrides
-# for non-default deployments; default is k3d-loopzero-mgmt which matches
+# for non-default deployments; default is k3d-loopzero-core which matches
 # the standalone-multi local layout this script was written for.
-SEED_CTX="${SEED_CTX:-k3d-loopzero-mgmt}"
+SEED_CTX="${SEED_CTX:-k3d-loopzero-core}"
 
 # 1) Resolve postgresql pod.
 PG_POD=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)

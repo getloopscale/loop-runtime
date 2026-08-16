@@ -129,7 +129,7 @@ export const runtimeClusterName = infra.runtimeCluster.clusterName;
 export const runtimeClusterEndpoint = infra.runtimeCluster.endpoint;
 export const runtimeKubeconfig = pulumi.secret(infra.runtimeCluster.kubeconfig);
 
-// Runtime cluster (cell-2) — physically provisioned, activation handled at L2.
+// Runtime cluster (cell-1) — physically provisioned, activation handled at L2.
 // T7.5 (plan 2026-05-21-deep-review-remediation): align with pulumi-drill
 // convention. pulumi-drill exports `runtimeCluster2{Id,Name,Endpoint,
 // Kubeconfig}` (Naming ADR Rule 2: no numeric suffix without semantic

@@ -8,13 +8,13 @@
 // declared in the corresponding pkg/statemachine/*.go file. No more, no less.
 //
 // Why this exists:
-//   * find_data_001 (CRITICAL): migration 000010 missed DRIFT_ALERT and
+//   - find_data_001 (CRITICAL): migration 000010 missed DRIFT_ALERT and
 //     ROLLBACK_FAILED → state machine can panic on transition because DB
 //     CHECK rejects the row.
-//   * find_data_002 (CRITICAL): migration 000008 introduced phantom states
+//   - find_data_002 (CRITICAL): migration 000008 introduced phantom states
 //     BUILDING and FAILED that no state machine declares → DB allows values
 //     the runtime cannot represent.
-//   * find_test_001 (HIGH): the previous safety-net test queried the wrong
+//   - find_test_001 (HIGH): the previous safety-net test queried the wrong
 //     constraint name and was fail-open. This test is fail-closed via
 //     canary assertions.
 //

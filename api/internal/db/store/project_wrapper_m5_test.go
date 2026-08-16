@@ -69,7 +69,7 @@ func TestEnforceProjectCapTx_BlocksWhenAtCap(t *testing.T) {
 	before := testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", "starter"))
 
 	// Act
-	err := enforceProjectCapTx(context.Background(), fake, "acct-1", "starter", 1)
+	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-1", "starter", 1)
 
 	// Assert: typed PROJECTS_EXCEED_PLAN + metric incremented by exactly 1.
 	var te *loopzeroerrors.LoopZeroError
@@ -86,7 +86,7 @@ func TestEnforceProjectCapTx_AllowsUnderCap(t *testing.T) {
 	fake := &dbtest.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}} // count(*) = 0
 	before := testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", "pro"))
 
-	err := enforceProjectCapTx(context.Background(), fake, "acct-2", "pro", 3)
+	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-2", "pro", 3)
 
 	if err != nil {
 		t.Fatalf("under cap should be allowed, got %v", err)
@@ -101,7 +101,7 @@ func TestEnforceProjectCapTx_CapZeroFailsClosed(t *testing.T) {
 	// cap == 0 (misconfigured) → count(0) >= 0 → reject (never insert unbounded).
 	fake := &dbtest.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}}
 
-	err := enforceProjectCapTx(context.Background(), fake, "acct-3", "starter", 0)
+	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-3", "starter", 0)
 
 	var te *loopzeroerrors.LoopZeroError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
@@ -113,7 +113,7 @@ func TestEnforceProjectCapTx_CountErrorPropagates(t *testing.T) {
 	// A DB error on the count must propagate (never silently allow).
 	fake := &dbtest.FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("boom")}}
 
-	err := enforceProjectCapTx(context.Background(), fake, "acct-4", "starter", 1)
+	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-4", "starter", 1)
 
 	if err == nil {
 		t.Fatal("count error must propagate, got nil")

@@ -138,7 +138,7 @@ func TestCheck_ExcludesVendorNodeModules(t *testing.T) {
 		`| LP-001 | foo | OPEN |
 `,
 		map[string]string{
-			"api/main.go":                  "// LOCAL ONLY (LP-001)\n",
+			"api/main.go":                   "// LOCAL ONLY (LP-001)\n",
 			"cli/src/node_modules/x/dep.go": "// LOCAL ONLY (LP-888)\n", // must be ignored
 		})
 	outcome, err := Check(Config{RepoRoot: root})

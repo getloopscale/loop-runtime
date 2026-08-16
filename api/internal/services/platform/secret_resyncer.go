@@ -54,7 +54,7 @@ type SecretResyncStore interface {
 	ListForResync(ctx context.Context, tenantID, projectID, env string) ([]store.SecretResyncEntry, error)
 }
 
-// SecretK8sCreator is the workload-cluster write contract — creates or
+// SecretK8sCreator is the cell-0-cluster write contract — creates or
 // updates ExternalSecrets. Same signature as the existing
 // k8s.SecretK8sManager.CreateSecret used by POST /api/v1/secrets, so the
 // resyncer can reuse the same wired implementation.

@@ -6,6 +6,16 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,7 +26,9 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -49,16 +61,16 @@ func (s *stubMemberStore) GetMemberships(_ context.Context, _ string) ([]middlew
 // stubProjectStore implements routes.ProjectStore.
 type stubProjectStore struct{}
 
-func (s *stubProjectStore) CreateProject(_ context.Context, _ routes.CreateProjectInput) (routes.ProjectResult, error) {
-	return routes.ProjectResult{}, nil
+func (s *stubProjectStore) CreateProject(_ context.Context, _ domain.CreateProjectInput) (domain.ProjectResult, error) {
+	return domain.ProjectResult{}, nil
 }
-func (s *stubProjectStore) GetByName(_ context.Context, _, _ string) (*routes.ProjectResult, error) {
-	return &routes.ProjectResult{Name: "test"}, nil
+func (s *stubProjectStore) GetByName(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+	return &domain.ProjectResult{Name: "test"}, nil
 }
-func (s *stubProjectStore) ListByTenant(_ context.Context, _ string) ([]routes.ProjectResult, error) {
+func (s *stubProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.ProjectResult, error) {
 	return nil, nil
 }
-func (s *stubProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]routes.ProjectSummary, error) {
+func (s *stubProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]domain.ProjectSummary, error) {
 	return nil, nil
 }
 func (s *stubProjectStore) DeleteProject(_ context.Context, _, _ string) error { return nil }
@@ -66,7 +78,7 @@ func (s *stubProjectStore) DeleteProject(_ context.Context, _, _ string) error {
 // stubTenantCRManager implements routes.TenantCRManager.
 type stubTenantCRManager struct{}
 
-func (s *stubTenantCRManager) EnsureTenant(_ context.Context, _ string, _ routes.TenantCRSpec) error {
+func (s *stubTenantCRManager) EnsureTenant(_ context.Context, _ string, _ domain.TenantCRSpec) error {
 	return nil
 }
 
@@ -104,7 +116,7 @@ func (s *stubBuildReader) GetByID(_ context.Context, id string) (*sse.BuildInfo,
 // stubBootstrapStore implements routes.BootstrapStore.
 type stubBootstrapStore struct{}
 
-func (s *stubBootstrapStore) Bootstrap(_ context.Context, _ routes.BootstrapRequest) (string, string, bool, error) {
+func (s *stubBootstrapStore) Bootstrap(_ context.Context, _ domain.BootstrapRequest) (string, string, bool, error) {
 	return "user-1", "tenant-1", false, nil
 }
 
@@ -115,17 +127,17 @@ func (s *stubGitHubWebhookHandler) ServeHTTP(w http.ResponseWriter, _ *http.Requ
 	w.WriteHeader(http.StatusOK)
 }
 
-// stubTenantDeletionStore implements routes.TenantDeletionStore.
+// stubTenantDeletionStore implements tenants.TenantDeletionStore.
 type stubTenantDeletionStore struct{}
 
-func (s *stubTenantDeletionStore) RequestDeletion(_ context.Context, _ routes.DeletionRequest) (*routes.DeletionRecord, error) {
-	return &routes.DeletionRecord{}, nil
+func (s *stubTenantDeletionStore) RequestDeletion(_ context.Context, _ tenants.DeletionRequest) (*tenants.DeletionRecord, error) {
+	return &tenants.DeletionRecord{}, nil
 }
 func (s *stubTenantDeletionStore) CancelDeletion(_ context.Context, _ string) error { return nil }
-func (s *stubTenantDeletionStore) GetPendingDeletion(_ context.Context, _ string) (*routes.DeletionRecord, error) {
+func (s *stubTenantDeletionStore) GetPendingDeletion(_ context.Context, _ string) (*tenants.DeletionRecord, error) {
 	return nil, nil
 }
-func (s *stubTenantDeletionStore) WriteTombstone(_ context.Context, _ routes.TombstoneRecord) error {
+func (s *stubTenantDeletionStore) WriteTombstone(_ context.Context, _ tenants.TombstoneRecord) error {
 	return nil
 }
 
@@ -139,7 +151,7 @@ func (s *stubTenantEvictor) EnqueueEviction(_ context.Context, _ []string) (stri
 	return "job-1", nil
 }
 
-// stubDBHealthChecker implements routes.DBHealthChecker.
+// stubDBHealthChecker implements health.DBHealthChecker.
 type stubDBHealthChecker struct{}
 
 func (s *stubDBHealthChecker) Ping() error { return nil }
@@ -176,52 +188,52 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// The auth middleware returns 401 for requests without tokens, which is fine.
 	// For routes behind auth, we provide a valid Bearer token so auth passes.
 
-	buildHandler := routes.NewBuildHandler(nil, logger)
-	logsHandler := routes.NewLogsHandler(nil, nil)
-	rollbackHandler := routes.NewRollbackHandler(nil, nil, "test.local")
-	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
-	buildListHandler := routes.NewBuildListHandler(nil)
-	environmentHandler := routes.NewEnvironmentHandler(nil)
-	teamHandler := routes.NewTeamHandler(nil)
-	domainHandler := routes.NewDomainHandler(nil, nil, nil, "test.local")
-	repositoryHandler := routes.NewRepositoryHandler(nil)
+	buildHandler := builds.NewBuildHandler(nil, logger)
+	logsHandler := logs.NewLogsHandler(nil, nil)
+	rollbackHandler := rollback.NewRollbackHandler(nil, nil, "test.local")
+	statusHandler := status.NewStatusHandler(nil, nil, nil, "test.local", "", "")
+	buildListHandler := builds.NewBuildListHandler(nil)
+	environmentHandler := environments.NewEnvironmentHandler(nil)
+	teamHandler := teams.NewTeamHandler(nil)
+	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
+	repositoryHandler := repositories.NewRepositoryHandler(nil)
 	// Plan J-09 T2.1: dashboard repo picker -- wired with nil lister/store
 	// because router-level test only verifies route registration, never
 	// invokes the handler body (handler unit tests own that contract).
-	integrationsGitHubHandler := routes.NewIntegrationsGitHubHandler(nil, nil)
-	auditHandler := routes.NewAuditHandler(nil)
-	argoCallbackHandler := routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
+	integrationsGitHubHandler := integrations.NewIntegrationsGitHubHandler(nil, nil)
+	auditHandler := audit.NewAuditHandler(nil)
+	argoCallbackHandler := argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 
 	cfg := server.Config{
-		Port:                "0",
-		Logger:              logger,
-		DB:                  &stubDBHealthChecker{},
-		TokenValidator:      &stubTokenValidator{},
-		MemberStore:         &stubMemberStore{},
-		ProjectStore:        &stubProjectStore{},
-		TenantCRMgr:         &stubTenantCRManager{},
-		SourceStore:         &stubSourceStore{},
-		IdempotencyStore:    &stubIdempotencyStore{},
-		EventStore:          &stubEventStore{},
-		BuildStoreReader:    &stubBuildReader{},
-		BootstrapStore:      &stubBootstrapStore{},
-		BootstrapSecret:     "test-bootstrap-secret",
-		BuildHandler:        buildHandler,
-		LogsHandler:         logsHandler,
-		RollbackHandler:     rollbackHandler,
-		StatusHandler:       statusHandler,
-		BuildListHandler:    buildListHandler,
-		EnvironmentHandler:  environmentHandler,
-		TeamHandler:         teamHandler,
-		DomainHandler:       domainHandler,
-		RepositoryHandler:   repositoryHandler,
+		Port:                      "0",
+		Logger:                    logger,
+		DB:                        &stubDBHealthChecker{},
+		TokenValidator:            &stubTokenValidator{},
+		MemberStore:               &stubMemberStore{},
+		ProjectStore:              &stubProjectStore{},
+		TenantCRMgr:               &stubTenantCRManager{},
+		SourceStore:               &stubSourceStore{},
+		IdempotencyStore:          &stubIdempotencyStore{},
+		EventStore:                &stubEventStore{},
+		BuildStoreReader:          &stubBuildReader{},
+		BootstrapStore:            &stubBootstrapStore{},
+		BootstrapSecret:           "test-bootstrap-secret",
+		BuildHandler:              buildHandler,
+		LogsHandler:               logsHandler,
+		RollbackHandler:           rollbackHandler,
+		StatusHandler:             statusHandler,
+		BuildListHandler:          buildListHandler,
+		EnvironmentHandler:        environmentHandler,
+		TeamHandler:               teamHandler,
+		DomainHandler:             domainHandler,
+		RepositoryHandler:         repositoryHandler,
 		IntegrationsGitHubHandler: integrationsGitHubHandler,
-		AuditHandler:        auditHandler,
-		ArgoCallbackHandler: argoCallbackHandler,
-		LogStreamHandler:    routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
-		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
-		TenantDeletionStore:  &stubTenantDeletionStore{},
-		AdminEvictor:         &stubTenantEvictor{},
+		AuditHandler:              auditHandler,
+		ArgoCallbackHandler:       argoCallbackHandler,
+		LogStreamHandler:          logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
+		GitHubWebhookHandler:      &stubGitHubWebhookHandler{},
+		TenantDeletionStore:       &stubTenantDeletionStore{},
+		AdminEvictor:              &stubTenantEvictor{},
 	}
 
 	router := server.NewRouter(cfg)

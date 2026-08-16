@@ -23,7 +23,7 @@ title: Pulumi Vault Provider Bootstrap Runbook
 
 ## Prerequisites
 
-1. **Vault stack active** — `task k3d:bootstrap-vault-cluster` already ran (or
+1. **Vault stack active** — `task k3d:bootstrap-secrets-cluster` already ran (or
    prod equivalent). Vault unsealed + reachable from operator workstation.
 2. **`@pulumi/vault` installed** — `cd infra/pulumi && npm install` picks up
    the v7.4.0 dep added in `0b876ad1`.
@@ -77,10 +77,10 @@ this with `--dry-run` and `--env <stack>` flags (read-only by default).
 
 ```bash
 pulumi config set --stack dev vault:address \
-  https://openbao.vault-system.svc.cluster.local:8200
+  https://openbao.secrets-system.svc.cluster.local:8200
 pulumi config set --stack dev vault:token "$(bao print token)"
 # Production: use Vault K8s auth instead of static token
-# pulumi config set --stack prod vault:authLogin '{"path": "auth/k8s-mgmt/login", "parameters": {"role": "pulumi-ci", "jwt": "..."}}'
+# pulumi config set --stack prod vault:authLogin '{"path": "auth/k8s-core/login", "parameters": {"role": "pulumi-ci", "jwt": "..."}}'
 ```
 
 ### Step 5 — Refactor Pulumi TS to read from Vault

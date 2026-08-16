@@ -28,8 +28,12 @@ clusterImagePolicy:
   # (prod.yaml) retains `policyMode: warn` until Sprint 9 readiness
   # review delivers cosign keyless + 7-day dual-signing window.
   #
-  # Mode flip is gated by infra/scripts/check_clusterimagepolicy_mode.sh
-  # which now recognizes ADR-0050 as the bypass reference.
+  # Mode flip is gated by the `clusterimagepolicy-mode` quality gate, which
+  # requires an ADR signing the deny-flip. That ADR is
+  # .claude/knowledge-base/decisions/2026-08-12-clusterimagepolicy-deny-flip.md
+  # (B-045). The two references that stood here before — `ADR-0050` and
+  # `infra/scripts/check_clusterimagepolicy_mode.sh` — did not exist; measured
+  # 2026-08-12, same class as the phantom ADR-0024 of B-052.
   #
   # warn    — log audit, admit
   # enforce — reject unsigned images (current default — local + dev)
@@ -89,9 +93,14 @@ vaps:
   # M14 gap #2 — validate loopzero.io Tenant CR shape at the API-server boundary
   # (CEL VAP, plan ADR D1). Closes the M2 legacy-namespace incident class where
   # a direct kubectl apply created a CR the REST layer would have rejected.
-  # Default ON: shape + immutability invariants are always desirable, unlike the
-  # migration-gated tenantNamespace/noRuntimeImageMutations toggles below.
-  tenantCrShape: true
+  # Default OFF: this fence matches `loopzero.io/v1 tenants`, and the CRD that
+  # defines them is installed by `loopzero-crds` — which appears 6 times in
+  # core.helmfile.yaml.gotmpl and ZERO times in cell.helmfile.yaml.gotmpl. The
+  # base values are what the CELL clusters receive, and a policy matching a
+  # resource that does not exist there can never fire while reading as coverage.
+  # Turned ON in values-mgmt.yaml, where the Tenants live (B-077, ADR
+  # 2026-08-13-tenant-cr-fence-placement).
+  tenantCrShape: false
   # ADR-0018 v2 / T3.2 — Tenant + Environment CRs MUST live in `loopzero-system`.
   # Default OFF: toggle on via overlay AFTER T3.3 migration ran successfully
   # (mandatory deployment order C4 in MEET-ADR-0018 rollout runbook).

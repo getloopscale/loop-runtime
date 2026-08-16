@@ -17,7 +17,7 @@ load("ext://namespace", "namespace_create")
 namespace_create("loopzero-system")
 
 # Use the mgmt cluster context
-allow_k8s_contexts("k3d-loopzero-mgmt")
+allow_k8s_contexts("k3d-loopzero-core")
 
 # ---------------------------------------------------------------------------
 # gomod_token — required by api/Dockerfile to fetch private loopzero-contracts
@@ -40,7 +40,7 @@ if not os.path.exists(GOMOD_TOKEN_PATH):
 # ---------------------------------------------------------------------------
 # Helm dependencies (PostgreSQL, Gitea, MinIO)
 # ---------------------------------------------------------------------------
-# These are installed via `task infra:install:mgmt` during `task setup`.
+# These are installed via `task infra:install:core` during `task setup`.
 # Tilt observes them as existing resources for dependency ordering.
 # They are NOT managed by Tilt — `tilt down` will NOT uninstall them.
 # This prevents accidental data loss when stopping the dev loop.
@@ -48,21 +48,21 @@ if not os.path.exists(GOMOD_TOKEN_PATH):
 # Probe existing Helm releases so Tilt can track readiness without managing lifecycle.
 local_resource(
     "postgresql",
-    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status statefulset/postgresql --timeout=60s",
+    cmd="kubectl --context k3d-loopzero-core -n loopzero-system rollout status statefulset/postgresql --timeout=60s",
     resource_deps=[],
     labels=["infra"],
 )
 
 local_resource(
     "gitea",
-    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deployment/gitea --timeout=60s",
+    cmd="kubectl --context k3d-loopzero-core -n loopzero-system rollout status deployment/gitea --timeout=60s",
     resource_deps=["postgresql"],
     labels=["infra"],
 )
 
 local_resource(
     "minio",
-    cmd="kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deployment/minio --timeout=60s",
+    cmd="kubectl --context k3d-loopzero-core -n loopzero-system rollout status deployment/minio --timeout=60s",
     resource_deps=["postgresql"],
     labels=["infra"],
 )
@@ -126,7 +126,7 @@ k8s_resource(
 # `tilt up` session and auto-restarts when postgresql-0 restarts.
 local_resource(
     "pg-port-forward",
-    serve_cmd="kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432",
+    serve_cmd="kubectl --context k3d-loopzero-core port-forward -n loopzero-system svc/postgresql 15432:5432",
     resource_deps=["postgresql"],
     auto_init=True,
     allow_parallel=True,
@@ -192,9 +192,11 @@ docker_build(
 # Without this, the Deployment's envFrom: configMapRef/secretRef references resolve to
 # missing resources and Pod fails CrashLoopBackOff. Output written to .tilt-rendered/
 # (gitignored) — re-rendered on every values-dev.yaml or template edit.
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml"
+
 local_resource(
     "loopzero-api-runtime",
-    cmd="mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml",
+    cmd=_API_RUNTIME_RENDER,
     deps=[
         "infra/helm/loopzero-api/values-dev.yaml",
         "infra/helm/loopzero-api/templates/configmap-runtime.yaml",
@@ -202,12 +204,25 @@ local_resource(
     ],
     labels=["loopzero"],
 )
+
+# Renderiza uma vez durante o CARREGAMENTO do Tiltfile, antes do k8s_yaml abaixo.
+#
+# Sem isto o Tiltfile nao carrega num clone novo, e o erro nao aponta para a causa:
+# `.tilt-rendered/` e gitignored, `k8s_yaml` le o arquivo no momento em que o Tiltfile
+# e avaliado, e quem o produz e o `local_resource` acima — que so roda DEPOIS que o
+# Tiltfile carregou. O recurso dependia do artefato que ele mesmo gera. Medido no
+# droplet app-dev em 2026-08-10, durante a reconstrucao total: `tilt up` abortou com
+# "open .tilt-rendered/loopzero-api-runtime.yaml: no such file or directory".
+#
+# O `local_resource` continua existindo e nao e redundante: ele re-renderiza quando os
+# `deps` mudam, que e o laco de desenvolvimento. Este `local()` so garante o primeiro.
+local(_API_RUNTIME_RENDER, quiet=True)
 k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
 
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
     "loopzero-api",
-    # No port_forwards — k3d mgmt-cluster.yaml already maps localhost:3001 → NodePort 30001.
+    # No port_forwards — k3d core-cluster.yaml already maps localhost:3001 → NodePort 30001.
     # Adding port_forwards here would conflict with k3d's loadbalancer binding.
     # loopzero-api-runtime added as dep: Pod needs the ConfigMap+Secret rendered before envFrom can resolve.
     resource_deps=["db-migrate", "postgresql", "loopzero-api-runtime"],
@@ -289,7 +304,7 @@ k8s_resource(
 local_resource(
     "dev-seed",
     cmd="""
-        kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432 &
+        kubectl --context k3d-loopzero-core port-forward -n loopzero-system svc/postgresql 15432:5432 &
         PF_PID=$!
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 3

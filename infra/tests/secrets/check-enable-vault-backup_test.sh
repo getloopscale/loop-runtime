@@ -51,7 +51,7 @@ EOF
 chmod 600 "$WORKDIR/creds_no_secret.env"
 
 # Fixture helmfile (just needs to exist; not actually parsed)
-touch "$WORKDIR/vault.helmfile.yaml.gotmpl"
+touch "$WORKDIR/secrets.helmfile.yaml.gotmpl"
 
 # Mock kubectl
 cat > "$MOCK_BIN/kubectl" <<'EOF'
@@ -101,7 +101,7 @@ run() {
       --env vault-local \
       --creds-file "$WORKDIR/creds.env" \
       --vault-context k3d-mock \
-      --helmfile-path "$WORKDIR/vault.helmfile.yaml.gotmpl" "$@"
+      --helmfile-path "$WORKDIR/secrets.helmfile.yaml.gotmpl" "$@"
   ) >"$out" 2>"$err"
   rc=$?
   local ok=1
@@ -134,7 +134,7 @@ rm -f "$out" "$err"
 out=$(mktemp); err=$(mktemp)
 PATH="$MOCK_BIN:$PATH" bash "$TARGET_SCRIPT" \
   --env vault-local --creds-file "$WORKDIR/nonexistent.env" \
-  --helmfile-path "$WORKDIR/vault.helmfile.yaml.gotmpl" \
+  --helmfile-path "$WORKDIR/secrets.helmfile.yaml.gotmpl" \
   --vault-context k3d-mock >"$out" 2>"$err"; rc=$?
 if [[ "$rc" == "1" ]] && grep -q "creds file not found" "$err"; then
   printf '  PASS: test_missing_creds_file_fails\n'; PASS=$((PASS+1))
@@ -147,7 +147,7 @@ rm -f "$out" "$err"
 out=$(mktemp); err=$(mktemp)
 PATH="$MOCK_BIN:$PATH" bash "$TARGET_SCRIPT" \
   --env vault-local --creds-file "$WORKDIR/creds_no_access.env" \
-  --helmfile-path "$WORKDIR/vault.helmfile.yaml.gotmpl" \
+  --helmfile-path "$WORKDIR/secrets.helmfile.yaml.gotmpl" \
   --vault-context k3d-mock >"$out" 2>"$err"; rc=$?
 if [[ "$rc" == "1" ]] && grep -q "OPENBAO_BACKUP_ACCESS_KEY_ID not set" "$err"; then
   printf '  PASS: test_creds_missing_access_key_fails\n'; PASS=$((PASS+1))
@@ -162,7 +162,7 @@ rm -f "$out" "$err"
 out=$(mktemp); err=$(mktemp)
 PATH="$MOCK_BIN:$PATH" bash "$TARGET_SCRIPT" \
   --env vault-local --creds-file "$WORKDIR/creds_no_secret.env" \
-  --helmfile-path "$WORKDIR/vault.helmfile.yaml.gotmpl" \
+  --helmfile-path "$WORKDIR/secrets.helmfile.yaml.gotmpl" \
   --vault-context k3d-mock >"$out" 2>"$err"; rc=$?
 if [[ "$rc" == "1" ]] && grep -q "OPENBAO_BACKUP_SECRET_ACCESS_KEY not set" "$err"; then
   printf '  PASS: test_creds_missing_secret_key_fails\n'; PASS=$((PASS+1))
@@ -177,7 +177,7 @@ rm -f "$out" "$err"
 out=$(mktemp); err=$(mktemp)
 PATH="$MOCK_BIN:$PATH" SKIP_PREFLIGHT=1 bash "$TARGET_SCRIPT" \
   --env vault-local --creds-file "$WORKDIR/creds.env" \
-  --vault-context k3d-mock --helmfile-path "$WORKDIR/vault.helmfile.yaml.gotmpl" \
+  --vault-context k3d-mock --helmfile-path "$WORKDIR/secrets.helmfile.yaml.gotmpl" \
   --dry-run >"$out" 2>"$err"; rc=$?
 if [[ "$rc" == "0" ]] \
    && grep -q "STEP 1/3" "$err" \
@@ -196,7 +196,7 @@ rm -f "$out" "$err"
 out=$(mktemp); err=$(mktemp)
 PATH="$MOCK_BIN:$PATH" SKIP_PREFLIGHT=1 bash "$TARGET_SCRIPT" \
   --env vault-local --creds-file "$WORKDIR/creds.env" \
-  --vault-context k3d-mock --helmfile-path "$WORKDIR/vault.helmfile.yaml.gotmpl" \
+  --vault-context k3d-mock --helmfile-path "$WORKDIR/secrets.helmfile.yaml.gotmpl" \
   --dry-run >"$out" 2>"$err"; rc=$?
 # Must NOT contain literal access key value or secret value
 if [[ "$rc" == "0" ]] \

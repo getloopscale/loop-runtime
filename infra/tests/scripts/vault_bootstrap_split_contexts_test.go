@@ -11,16 +11,16 @@ import (
 
 // TestVaultBootstrapDev_SplitContexts locks T1.1 of plan
 // dev-public-cross-cluster-secrets (issue #111). The legacy
-// vault-bootstrap-dev.sh defaulted CONTEXT to k3d-loopzero-mgmt and applied
+// vault-bootstrap-dev.sh defaulted CONTEXT to k3d-loopzero-core and applied
 // every kubectl call (both the OpenBao read-side AND the mgmt-side
 // Secret writes) against the SAME context — incompatible with Jeito A
 // canonical (sponsor mandate INQUEBRÁVEL 2026-06-19) which keeps
-// OpenBao in a separate k3d-loopzero-vault cluster.
+// OpenBao in a separate k3d-loopzero-secrets cluster.
 //
 // Post-T1.1 the script splits into two contexts:
-//   - OPENBAO_CONTEXT (default k3d-loopzero-vault) → reads bao operator init
+//   - OPENBAO_CONTEXT (default k3d-loopzero-secrets) → reads bao operator init
 //     state + mints AppRole + reads SPKI
-//   - TARGET_CONTEXT (default k3d-loopzero-mgmt) → applies the
+//   - TARGET_CONTEXT (default k3d-loopzero-core) → applies the
 //     loopzero-openbao-approle / openbao-spki-pin Secrets where loopzero-api
 //     Deployment envFrom can reach them
 //
@@ -33,28 +33,28 @@ import (
 func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 	body := readScript(t, "vault-bootstrap-dev.sh")
 
-	// T1. OPENBAO_CONTEXT default is k3d-loopzero-vault (Jeito A canonical).
+	// T1. OPENBAO_CONTEXT default is k3d-loopzero-secrets (Jeito A canonical).
 	// Pattern accepts the canonical assignment whether the variable is
 	// renamed to OPENBAO_CONTEXT (preferred) OR kept as CONTEXT with the
-	// new default — but the DEFAULT VALUE must be k3d-loopzero-vault.
+	// new default — but the DEFAULT VALUE must be k3d-loopzero-secrets.
 	openbaoDefaultRe := regexp.MustCompile(`(?m)^(?:OPENBAO_CONTEXT|CONTEXT)="\$\{OPENBAO_CONTEXT:-([^}]+)\}"$`)
 	openbaoDefault := openbaoDefaultRe.FindStringSubmatch(body)
 	if openbaoDefault == nil {
-		t.Fatalf("could not find OPENBAO_CONTEXT default-resolution line — expected pattern like `OPENBAO_CONTEXT=\"${OPENBAO_CONTEXT:-k3d-loopzero-vault}\"`")
+		t.Fatalf("could not find OPENBAO_CONTEXT default-resolution line — expected pattern like `OPENBAO_CONTEXT=\"${OPENBAO_CONTEXT:-k3d-loopzero-secrets}\"`")
 	}
-	if got, want := openbaoDefault[1], "k3d-loopzero-vault"; got != want {
-		t.Errorf("OPENBAO_CONTEXT default = %q; want %q (Jeito A sponsor mandate INQUEBRÁVEL 2026-06-19 — OpenBao lives in separate loopzero-vault cluster, NOT mgmt)", got, want)
+	if got, want := openbaoDefault[1], "k3d-loopzero-secrets"; got != want {
+		t.Errorf("OPENBAO_CONTEXT default = %q; want %q (Jeito A sponsor mandate INQUEBRÁVEL 2026-06-19 — OpenBao lives in separate loopzero-secrets cluster, NOT mgmt)", got, want)
 	}
 
-	// T2. TARGET_CONTEXT variable exists and defaults to k3d-loopzero-mgmt
+	// T2. TARGET_CONTEXT variable exists and defaults to k3d-loopzero-core
 	// (consumer side where loopzero-openbao-approle Secret + loopzero-api
 	// Deployment envFrom both live).
 	targetContextRe := regexp.MustCompile(`(?m)^TARGET_CONTEXT="\$\{TARGET_CONTEXT:-([^}]+)\}"$`)
 	targetContextMatch := targetContextRe.FindStringSubmatch(body)
 	if targetContextMatch == nil {
-		t.Fatalf("TARGET_CONTEXT variable declaration missing — split-context contract requires `TARGET_CONTEXT=\"${TARGET_CONTEXT:-k3d-loopzero-mgmt}\"` (the mgmt-side write context)")
+		t.Fatalf("TARGET_CONTEXT variable declaration missing — split-context contract requires `TARGET_CONTEXT=\"${TARGET_CONTEXT:-k3d-loopzero-core}\"` (the mgmt-side write context)")
 	}
-	if got, want := targetContextMatch[1], "k3d-loopzero-mgmt"; got != want {
+	if got, want := targetContextMatch[1], "k3d-loopzero-core"; got != want {
 		t.Errorf("TARGET_CONTEXT default = %q; want %q (loopzero-api Deployment envFrom reads from mgmt cluster loopzero-system ns)", got, want)
 	}
 
@@ -82,12 +82,12 @@ func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 	}
 
 	// T6. Bao reads (operator init / kv put / approle mint) use
-	// OPENBAO_CONTEXT (the vault-cluster side). Look for at least one
+	// OPENBAO_CONTEXT (the secrets-cluster side). Look for at least one
 	// kubectl exec / kubectl get that uses --context "$OPENBAO_CONTEXT"
 	// targeting the openbao pod.
 	openbaoExecRe := regexp.MustCompile(`kubectl[^\n]*--context "\$OPENBAO_CONTEXT"[^\n]*(?:exec|get)[^\n]*"\$POD"`)
 	if !openbaoExecRe.MatchString(body) {
-		t.Error("OpenBao read-side calls do not use --context \"$OPENBAO_CONTEXT\" — Jeito A split-context contract requires the bao operator/exec calls to target the loopzero-vault cluster")
+		t.Error("OpenBao read-side calls do not use --context \"$OPENBAO_CONTEXT\" — Jeito A split-context contract requires the bao operator/exec calls to target the loopzero-secrets cluster")
 	}
 
 	// T7. No literal `-n external-secrets` regression (preserves the

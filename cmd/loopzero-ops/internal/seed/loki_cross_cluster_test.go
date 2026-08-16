@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -98,10 +99,11 @@ func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
 	deps := Deps{
-		Ctx:        context.Background(),
-		Kube:       NewKubeClient(mgmtC),
-		CtrlClient: mgmtC,
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmtC),
+		CtrlClient:           mgmtC,
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	}
 
 	got := NewLokiCrossClusterSeed().Run(deps)
@@ -153,9 +155,10 @@ func TestLokiCrossClusterSeed_Run_DryRunReports(t *testing.T) {
 	buildC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(pt).Build()
 
 	deps := Deps{
-		Ctx:        context.Background(),
-		DryRun:     true,
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		DryRun:               true,
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	}
 
 	got := NewLokiCrossClusterSeed().Run(deps)
@@ -171,8 +174,9 @@ func TestLokiCrossClusterSeed_Run_DryRunReports(t *testing.T) {
 func TestLokiCrossClusterSeed_Run_FailsWhenPromtailSecretMissing(t *testing.T) {
 	buildC := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	deps := Deps{
-		Ctx:        context.Background(),
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	}
 	got := NewLokiCrossClusterSeed().Run(deps)
 	if got.Verdict != FAIL {
@@ -251,9 +255,10 @@ func TestLokiCrossClusterSeed_Verify_PassWhenCanonical(t *testing.T) {
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
 	deps := Deps{
-		Ctx:        context.Background(),
-		CtrlClient: mgmtC,
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		CtrlClient:           mgmtC,
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	}
 	got := NewLokiCrossClusterSeed().Verify(deps)
 	if got.Verdict != PASS {
@@ -281,9 +286,10 @@ func TestLokiCrossClusterSeed_Verify_FailWhenEnvEmpty(t *testing.T) {
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
 	deps := Deps{
-		Ctx:        context.Background(),
-		CtrlClient: mgmtC,
-		ClientCtor: buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		CtrlClient:           mgmtC,
+		ClientCtor:           buildClientCtorFor(lokiBuildContext, NewKubeClient(buildC)),
 	}
 	got := NewLokiCrossClusterSeed().Verify(deps)
 	if got.Verdict != FAIL {

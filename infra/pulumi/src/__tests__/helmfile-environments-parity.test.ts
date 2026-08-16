@@ -66,7 +66,7 @@ describe('helmfile environments parity (ADR D4)', () => {
     return;
   }
 
-  const helmfiles = ['mgmt.helmfile.yaml.gotmpl', 'runtime.helmfile.yaml.gotmpl', 'build.helmfile.yaml.gotmpl'];
+  const helmfiles = ['core.helmfile.yaml.gotmpl', 'cell.helmfile.yaml.gotmpl', 'build.helmfile.yaml.gotmpl'];
 
   it('all 4 environment files exist', () => {
     for (const e of ['prod.yaml', 'standalone.yaml', 'standalone-multi.yaml', 'dev.yaml']) {

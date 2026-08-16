@@ -145,3 +145,15 @@ affinity:
 
 tolerations: []
 nodeSelector: {}
+
+# billing.required declara que ESTE ambiente cobra de verdade.
+#
+# Medido em 2026-08-11: o painel rodou 20h sem os Secrets de cobrança, `Running`, sem um
+# único evento — porque a opcionalidade era um literal `true`, igual em todo ambiente. Um
+# literal não pode divergir; um valor pode, e é essa divergência que separa o hermético
+# (que roda sem Stripe de propósito) do público (que mostra plano e preço na tela).
+#
+# Falso por padrão: preserva o caminho de boot sem Stripe. O ambiente que promete cobrar
+# liga isto explicitamente — declarar é o ato consciente, não o esquecimento.
+billing:
+  required: false

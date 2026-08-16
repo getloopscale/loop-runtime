@@ -49,6 +49,9 @@ func seedColumnCascadeRow(t *testing.T, pool *pgxpool.Pool) (*db.Release, string
 	correlationID := "corr-cascade-" + suffix
 	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=" + suffix
 
+	// Mesma dívida do gatilho 000061 descrita em release_attestation_url_test.go:
+	// o build só entra se o tenant existir e tiver cell.
+	seedTenantForBuild(t, pool, tenantID)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 		 VALUES ($1, $2, 'proj-cascade', 'production', 'SUCCEEDED', $3, 'system:test')`,
@@ -107,7 +110,7 @@ func assertRekorURL(t *testing.T, label string, got *db.Release, wantURL string)
 // them silently dropped image_attestation_rekor_url from its column
 // list, this test fails — exactly the bug class CR-9 introduced.
 func TestReleaseStore_ColumnCascade_AllSelectsRoundTrip(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	adapter := &db.PgxAdapter{Pool: pool}
 	relStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
@@ -168,7 +171,7 @@ func TestReleaseStore_ColumnCascade_AllSelectsRoundTrip(t *testing.T) {
 // for a NULL DB cell, downstream code that gates on URL != "" would
 // produce false-positive audit rows.
 func TestReleaseStore_ColumnCascade_NullURL_NoFalseString(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	adapter := &db.PgxAdapter{Pool: pool}
 	relStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
@@ -180,6 +183,9 @@ func TestReleaseStore_ColumnCascade_NullURL_NoFalseString(t *testing.T) {
 	releaseID := "rel-cascade-null-" + suffix
 	correlationID := "corr-cascade-null-" + suffix
 
+	// Mesma dívida do gatilho 000061 descrita em release_attestation_url_test.go:
+	// o build só entra se o tenant existir e tiver cell.
+	seedTenantForBuild(t, pool, tenantID)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 		 VALUES ($1, $2, 'proj-cascade-null', 'production', 'SUCCEEDED', $3, 'system:test')`,

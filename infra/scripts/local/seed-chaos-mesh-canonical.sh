@@ -2,7 +2,7 @@
 # seed-chaos-mesh-canonical.sh
 #
 # T1.1 of plan m2-promote-11-canonical-seeds (v1.1 SHIPPABLE 95.2).
-# Canonical chaos-mesh helm install in k3d-loopzero-mgmt cluster.
+# Canonical chaos-mesh helm install in k3d-loopzero-core cluster.
 #
 # Idempotent: helm upgrade --install is upgrade-no-op when chart already
 # installed at same version. Pre-check `helm list` avoids round-trip on warm.
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-MGMT_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
 VERIFY=0
 DRY_RUN=0
 for arg in "$@"; do
@@ -37,17 +37,17 @@ done
 log() { printf "%s [seed-chaos-mesh] %s\n" "$(date -u +%H:%M:%SZ)" "$*"; }
 
 # Idempotency pre-check: existing release detection
-if helm list -n chaos-mesh --kube-context "$MGMT_CONTEXT" 2>/dev/null | grep -q '^chaos-mesh'; then
+if helm list -n chaos-mesh --kube-context "$CORE_CONTEXT" 2>/dev/null | grep -q '^chaos-mesh'; then
   log "chaos-mesh release already exists (upgrade-no-op semantic for same chart version)"
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  log "DRY: helm upgrade --install chaos-mesh $REPO_ROOT/infra/helm/chaos-mesh --kube-context $MGMT_CONTEXT -n chaos-mesh --create-namespace -f values.yaml -f values-k3d.yaml"
+  log "DRY: helm upgrade --install chaos-mesh $REPO_ROOT/infra/helm/chaos-mesh --kube-context $CORE_CONTEXT -n chaos-mesh --create-namespace -f values.yaml -f values-k3d.yaml"
   exit 0
 fi
 
 helm upgrade --install chaos-mesh "$REPO_ROOT/infra/helm/chaos-mesh" \
-  --kube-context "$MGMT_CONTEXT" \
+  --kube-context "$CORE_CONTEXT" \
   -n chaos-mesh \
   --create-namespace \
   -f "$REPO_ROOT/infra/helm/chaos-mesh/values.yaml" \
@@ -55,7 +55,7 @@ helm upgrade --install chaos-mesh "$REPO_ROOT/infra/helm/chaos-mesh" \
 
 if [[ "$VERIFY" == "1" ]]; then
   log "verifying 6/6 pods Running..."
-  running=$(kubectl get pods -n chaos-mesh --context "$MGMT_CONTEXT" -o jsonpath='{.items[*].status.phase}' 2>/dev/null | tr ' ' '\n' | grep -c "^Running$" || true)
+  running=$(kubectl get pods -n chaos-mesh --context "$CORE_CONTEXT" -o jsonpath='{.items[*].status.phase}' 2>/dev/null | tr ' ' '\n' | grep -c "^Running$" || true)
   if [[ "$running" -lt 6 ]]; then
     log "FAIL — only $running pods Running (expected ≥ 6 per CLAUDE.md § Known issues)"
     exit 1

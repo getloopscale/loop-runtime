@@ -5,10 +5,12 @@ package contract
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -17,8 +19,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // M1.4 T1.2 — producer conformance.
@@ -47,8 +47,10 @@ const (
 )
 
 // registeredRouteRE matches chi registrations in either form:
-//   r.Get("/api/v1/health", ...)
-//   r.With(mw...).Post("/api/v1/builds", ...)   (middleware-wrapped)
+//
+//	r.Get("/api/v1/health", ...)
+//	r.With(mw...).Post("/api/v1/builds", ...)   (middleware-wrapped)
+//
 // — i.e. any `.<Method>("<path>"` chain, not only the bare `r.<Method>(` form.
 var registeredRouteRE = regexp.MustCompile(`\.(Get|Post|Put|Delete|Patch)\(\s*"([^"]+)"`)
 
@@ -75,18 +77,31 @@ func registeredRoutes(t *testing.T) map[string]bool {
 		}
 	}
 	scan(src)
-	// Also scan the routes package for helper-registered routes (non-test .go).
-	if entries, derr := os.ReadDir(routesDir); derr == nil {
-		for _, e := range entries {
-			n := e.Name()
-			if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
-				continue
-			}
-			if b, rerr := os.ReadFile(routesDir + "/" + n); rerr == nil {
-				scan(b)
-			}
+	// Also scan the routes tree for helper-registered routes (non-test .go).
+	//
+	// WALKED, not listed. The first version used os.ReadDir and saw only the top
+	// level, which was enough while `routes` was one flat package. The moment the
+	// families were split into subpackages (B-080), a route registered by a helper
+	// that had moved — RegisterDeployTimelineRoute, mounting
+	// GET /api/v1/deploys/{deployID}/timeline — became invisible, and this test
+	// reported it as a phantom spec entry. The route was registered the whole time;
+	// the scan had stopped reaching the file that spelled it.
+	//
+	// Monotonic either way: scanning more files only ADDS to the registered set, so
+	// it can never introduce a new phantom-spec failure.
+	_ = filepath.Walk(routesDir, func(path string, info os.FileInfo, werr error) error {
+		if werr != nil || info == nil || info.IsDir() {
+			return nil //nolint:nilerr // a missing subtree is not this test's failure
 		}
-	}
+		n := info.Name()
+		if !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			return nil
+		}
+		if b, rerr := os.ReadFile(filepath.Clean(path)); rerr == nil {
+			scan(b)
+		}
+		return nil
+	})
 	return set
 }
 
@@ -120,7 +135,7 @@ func TestEngineConformance_VersionResponseConformsToSpec(t *testing.T) {
 		t.Fatalf("build router from spec: %v", err)
 	}
 
-	srv := httptest.NewServer(routes.VersionHandler())
+	srv := httptest.NewServer(version.VersionHandler())
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/version", nil)

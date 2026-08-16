@@ -160,10 +160,10 @@ for var in LOOPZERO_VAULT_ADDR LOOPZERO_VAULT_K8S_AUTH_PATH LOOPZERO_VAULT_ROLE 
 done
 
 # Specific value assertions
-if echo "${RENDER_INFRA_ON}" | grep -qE '"k8s-mgmt"'; then
-  pass "infra/helm/loopzero-api: LOOPZERO_VAULT_K8S_AUTH_PATH = k8s-mgmt (T5.1 mount)"
+if echo "${RENDER_INFRA_ON}" | grep -qE '"k8s-core"'; then
+  pass "infra/helm/loopzero-api: LOOPZERO_VAULT_K8S_AUTH_PATH = k8s-core (T5.1 mount)"
 else
-  fail "infra/helm/loopzero-api: LOOPZERO_VAULT_K8S_AUTH_PATH != k8s-mgmt"
+  fail "infra/helm/loopzero-api: LOOPZERO_VAULT_K8S_AUTH_PATH != k8s-core"
 fi
 
 blue "== infra/helm/loopzero-api: vault.enabled=false (default) =="

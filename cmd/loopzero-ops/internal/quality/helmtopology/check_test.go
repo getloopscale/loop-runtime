@@ -264,7 +264,7 @@ func TestReprovaQuandoChartNovoNaoEstaNoIndice(t *testing.T) {
 	}
 
 	// A new chart lands in a helmfile; the committed index no longer covers the source.
-	hf := filepath.Join(root, helmfileDir, "mgmt.helmfile.yaml.gotmpl")
+	hf := filepath.Join(root, helmfileDir, "core.helmfile.yaml.gotmpl")
 	if err := os.WriteFile(hf,
 		[]byte("releases:\n  - name: a\n    chart: ../helm/a\n  - name: b\n    chart: ../helm/b\n"),
 		0o600); err != nil {

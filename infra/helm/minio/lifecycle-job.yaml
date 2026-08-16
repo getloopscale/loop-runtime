@@ -2,7 +2,7 @@
 # Applies ILM (Information Lifecycle Management) rules to the loopzero-builds bucket
 # so old cache entries expire automatically instead of growing unbounded.
 #
-# Applied by: task infra:install:mgmt (after MinIO is ready)
+# Applied by: task infra:install:core (after MinIO is ready)
 apiVersion: batch/v1
 kind: Job
 metadata:

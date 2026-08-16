@@ -7,14 +7,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	gh "github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 )
 
-// repoStoreAdapter bridges store.PostgresRepositoryStore → routes.RepositoryStore.
+// repoStoreAdapter bridges store.PostgresRepositoryStore → repositories.RepositoryStore.
 type repoStoreAdapter struct {
 	store *store.PostgresRepositoryStore
 }
@@ -27,12 +28,12 @@ func (a *repoStoreAdapter) UnlinkRepository(ctx context.Context, tenantID, proje
 	return a.store.UnlinkRepository(ctx, tenantID, projectName)
 }
 
-func (a *repoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (*routes.ProjectRepository, error) {
+func (a *repoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (*repositories.ProjectRepository, error) {
 	r, err := a.store.GetByProject(ctx, tenantID, projectName)
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &routes.ProjectRepository{
+	return &repositories.ProjectRepository{
 		ID:             r.ID,
 		TenantID:       r.TenantID,
 		ProjectName:    r.ProjectName,
@@ -45,12 +46,12 @@ func (a *repoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectNa
 	}, nil
 }
 
-func (a *repoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (*routes.ProjectRepository, error) {
+func (a *repoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (*repositories.ProjectRepository, error) {
 	r, err := a.store.GetByRepo(ctx, repoFullName)
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &routes.ProjectRepository{
+	return &repositories.ProjectRepository{
 		ID:             r.ID,
 		TenantID:       r.TenantID,
 		ProjectName:    r.ProjectName,
@@ -76,12 +77,12 @@ type installationLookupAdapter struct {
 	store *store.PostgresRepositoryStore
 }
 
-func (a *installationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*routes.InstallationRecord, error) {
+func (a *installationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*integrations.InstallationRecord, error) {
 	inst, err := a.store.GetInstallation(ctx, installationID)
 	if err != nil || inst == nil {
 		return nil, err
 	}
-	return &routes.InstallationRecord{
+	return &integrations.InstallationRecord{
 		ID:       inst.ID,
 		TenantID: inst.TenantID,
 	}, nil
@@ -97,18 +98,18 @@ type installationRepoListerAdapter struct {
 	client *gh.AppClient
 }
 
-func (a *installationRepoListerAdapter) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]routes.InstallationRepository, error) {
+func (a *installationRepoListerAdapter) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]integrations.InstallationRepository, error) {
 	repos, err := a.client.ListInstallationRepositories(ctx, installationID, page)
 	if err != nil {
 		var revoked *gh.InstallationRevokedError
 		if errors.As(err, &revoked) {
-			return nil, fmt.Errorf("github installation %d revoked: %w", installationID, routes.ErrInstallationRevoked)
+			return nil, fmt.Errorf("github installation %d revoked: %w", installationID, integrations.ErrInstallationRevoked)
 		}
 		return nil, err
 	}
-	out := make([]routes.InstallationRepository, 0, len(repos))
+	out := make([]integrations.InstallationRepository, 0, len(repos))
 	for _, r := range repos {
-		out = append(out, routes.InstallationRepository{
+		out = append(out, integrations.InstallationRepository{
 			FullName:      r.FullName,
 			DefaultBranch: r.DefaultBranch,
 			Private:       r.Private,

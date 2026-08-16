@@ -29,7 +29,7 @@ func TestScrubEventWithCount_ReturnsAccurateReplacementCount(t *testing.T) {
 		{"no replacements on clean input", PhaseEvent{Phase: "build", Status: "in_progress"}, 0},
 		{"one replacement on ArgoCD term", PhaseEvent{DegradedReason: "ArgoCD sync failed"}, 1},
 		{"two replacements across fields", PhaseEvent{
-			DegradedReason:  "cosign verify failed in cell-default",
+			DegradedReason:  "cosign verify failed in cell-0",
 			SubstateMessage: "Kaniko build failed",
 		}, 3},
 	}
@@ -69,7 +69,7 @@ func TestScrubEvent_RemovesCosignTerm(t *testing.T) {
 func TestScrubEvent_HandlesAllDenyListEntries(t *testing.T) {
 	denylist := []string{
 		"ArgoCD", "cosign", "BuildKit", "Kaniko", "Argo Rollouts",
-		"cell-default", "cell-1", "Gitea", "Webpack", "Turbopack",
+		"cell-0", "cell-0", "Gitea", "Webpack", "Turbopack",
 		"esbuild", "Lambda",
 	}
 	for _, term := range denylist {
@@ -81,10 +81,10 @@ func TestScrubEvent_HandlesAllDenyListEntries(t *testing.T) {
 	}
 }
 
-// EC-1 absorption: cell topology variants (`cell-2`, `cell-runtime-N`).
+// EC-1 absorption: cell topology variants (`cell-1`, `cell-runtime-N`).
 func TestScrubEvent_HandlesAllCellTopologyVariants(t *testing.T) {
 	variants := []string{
-		"cell-default", "cell-1", "cell-2", "cell-3",
+		"cell-0", "cell-0", "cell-1", "cell-3",
 		"cell-runtime-2", "cell-runtime-default", "cell-mgmt",
 	}
 	for _, v := range variants {
@@ -145,7 +145,7 @@ func TestScrub_SourceFileContainsNoLeakedTerms(t *testing.T) {
 	stripped := text[:mapStart] + text[mapStart+mapEnd:]
 	// Now stripped should NOT contain any denylist term as a literal.
 	forbidden := []string{"ArgoCD", "argo-cd", "cosign", "BuildKit", "Kaniko",
-		"Argo Rollouts", "argo-rollouts", "cell-default", "Gitea",
+		"Argo Rollouts", "argo-rollouts", "cell-0", "Gitea",
 		"Webpack", "Turbopack", "esbuild"}
 	for _, term := range forbidden {
 		if strings.Contains(stripped, term) {

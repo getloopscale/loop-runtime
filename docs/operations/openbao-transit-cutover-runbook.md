@@ -42,10 +42,10 @@ If any step above fails → STOP. Surface to Claude before proceeding.
 > **Pre-requisite OpenBao server.** The transit chain requires a reachable
 > OpenBao server at the URL declared in `OPENBAO_VAULT_ADDR`. Local k3d
 > dev-public typically targets a helmfile-deployed instance in the
-> `vault-system` namespace.
+> `secrets-system` namespace.
 >
 > **Major delegation update (iter 23, cleanroom-audit 2026-06-10):** the
-> canonical `task k3d:vault:bootstrap` + `helmfile sync --selector
+> canonical `task k3d:secrets:bootstrap` + `helmfile sync --selector
 > name=openbao-init` pipeline ALREADY provisions ~80% of what J-22
 > Transit needs out-of-the-box (transit engine enabled, master keys
 > created, `loopzero-api-transit-encrypt` policy written). This runbook
@@ -60,7 +60,7 @@ Run the canonical pipeline — installs OpenBao chart + does Shamir init
 auth mounts (all idempotent):
 
 ```bash
-task k3d:vault:bootstrap        # creates loopzero-vault cluster + OpenBao
+task k3d:secrets:bootstrap        # creates loopzero-secrets cluster + OpenBao
                                  # chart (PRODLIKE.2 — HA Raft + Shamir 5/3)
 
 # Then follow the operator-only Shamir ceremony:
@@ -73,7 +73,7 @@ helmfile sync --selector name=openbao-init   # T5.1-T5.9 provisioning
                                               # Enables: transit engine,
                                               # kv-v2, database engine,
                                               # kubernetes engine, K8s
-                                              # auth mounts (k8s-mgmt /
+                                              # auth mounts (k8s-core /
                                               # k8s-build / k8s-cell-*),
                                               # loopzero-api-* policies
 ```
@@ -89,12 +89,12 @@ These remaining ~20% are step 1.2 through 1.4 below.
 ### 1.2 — Enable AppRole auth method + write the J-22 transit policy
 
 ```bash
-# Port-forward OpenBao for local CLI access (loopzero-vault cluster, not mgmt)
-kubectl --context k3d-loopzero-vault -n vault-system port-forward svc/openbao 8200:8200 &
+# Port-forward OpenBao for local CLI access (loopzero-secrets cluster, not mgmt)
+kubectl --context k3d-loopzero-secrets -n secrets-system port-forward svc/openbao 8200:8200 &
 export VAULT_ADDR=https://localhost:8200
-export VAULT_TOKEN=$(kubectl --context k3d-loopzero-vault -n vault-system get secret openbao-init-token -o jsonpath='{.data.BAO_TOKEN}' | base64 -d)
+export VAULT_TOKEN=$(kubectl --context k3d-loopzero-secrets -n secrets-system get secret openbao-init-token -o jsonpath='{.data.BAO_TOKEN}' | base64 -d)
 export VAULT_CACERT=/tmp/openbao-ca.pem
-kubectl --context k3d-loopzero-vault -n vault-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > $VAULT_CACERT
+kubectl --context k3d-loopzero-secrets -n secrets-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > $VAULT_CACERT
 
 # Enable AppRole auth method (idempotent — bao returns "already enabled" OK)
 bao auth enable approle 2>&1 | grep -v "already enabled" || true
@@ -114,24 +114,24 @@ bao auth enable approle 2>&1 | grep -v "already enabled" || true
 # the key name. The hyphen convention is implemented in
 # pkg/vault/transit_client.go via the tenantKeyName() helper; this
 # policy MUST match.
-bao policy write loopzero-api-approle - <<'EOF'
-path "transit/encrypt/loopzero-tenants-*" {
-  capabilities = ["update"]
-}
-path "transit/decrypt/loopzero-tenants-*" {
-  capabilities = ["update"]
-}
-path "transit/keys/loopzero-tenants-*" {
-  # NOTE: "update" is required IN ADDITION to "create" because the
-  # `bao write` CLI (and the Go client's POST to /v1/transit/keys/<name>)
-  # uses HTTP PUT, which OpenBao policy-enforces as "update" semantics
-  # even when the key does not yet exist. LIVE-caught 2026-06-10 J-22
-  # walkthrough: with only ["create", "read"], the AppRole token's
-  # `bao token capabilities` reported "create, read" but the actual PUT
-  # returned 403 "permission denied" because PUT requires "update".
-  capabilities = ["create", "read", "update"]
-}
-EOF
+# A policy NÃO é escrita aqui, desde 2026-08-13.
+#
+# Ela é declarada em `infra/helm/openbao-init/values.yaml` (policy `loopzero-api`) e
+# aplicada pelo helmfile. Escrevê-la também daqui reintroduz a disputa de nome que
+# o B-099 mediu: dois escritores da mesma policy, e o último vence — o que fez a
+# versão versionada nunca alcançar runtime nenhum.
+#
+# Este runbook usava um TERCEIRO nome (`loopzero-api-approle`), que o chart não
+# declara. O nome canônico é `loopzero-api`.
+#
+# Decisão: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
+# O que continua aqui é o ciclo de vida da credencial, abaixo.
+#
+# As regras que ficavam neste bloco — encrypt/decrypt/keys sob loopzero-tenants-*,
+# com a nota LIVE-caught de 2026-06-10 sobre `update` ser exigido junto de
+# `create` porque o PUT do cliente Go é aplicado com semântica de update — estão
+# em infra/helm/openbao-init/values.yaml, policy `loopzero-api`, e são conferidas por
+# TestOpenBaoInitAuth_ChartGrantsTheKeyPrefixTheCodeNames.
 ```
 
 ### 1.3 — Create the AppRole + capture role_id
@@ -141,7 +141,7 @@ EOF
 # for dev-public; prod uses 1h + response-wrapping auto-rotation (separate
 # runbook for prod cutover ships when J-22 promotes).
 bao write auth/approle/role/loopzero-api \
-  token_policies="loopzero-api-approle" \
+  token_policies="loopzero-api" \
   token_ttl=1h \
   token_max_ttl=4h \
   secret_id_ttl=24h \
@@ -175,39 +175,49 @@ Save this value too. The LoopZero TransitClient refuses to talk to any server pr
 
 ## Open Question — Cross-cluster reachability (iter 23 cleanroom-audit catch)
 
-**Found during productive-idle iter 23 (2026-06-10):** `task k3d:vault:bootstrap` deploys OpenBao to k3d cluster `loopzero-vault` (NOT mgmt). But the loopzero-api chart values default `OPENBAO_VAULT_ADDR=https://openbao.vault-system.svc.cluster.local:8200` — that's in-cluster service DNS resolvable only from WITHIN the same cluster.
+**Found during productive-idle iter 23 (2026-06-10):** `task k3d:secrets:bootstrap` deploys OpenBao to k3d cluster `loopzero-secrets` (NOT mgmt). But the loopzero-api chart values default `OPENBAO_VAULT_ADDR=https://openbao.secrets-system.svc.cluster.local:8200` — that's in-cluster service DNS resolvable only from WITHIN the same cluster.
 
-loopzero-api runs in `k3d-loopzero-mgmt`. Reaching openbao in `k3d-loopzero-vault` requires one of:
+loopzero-api runs in `k3d-loopzero-core`. Reaching openbao in `k3d-loopzero-secrets` requires one of:
 
 | Option | Implementation | Trade-off |
 |---|---|---|
-| (a) Shared Docker network DNS | Override `OPENBAO_VAULT_ADDR` to `https://k3d-loopzero-vault-server-0:NODEPORT/` | Works for k3d only; not portable to prod (DOKS); SPKI pin breaks because hostname doesn't match cert SAN |
-| (b) NodePort + host networking | Expose openbao Service as NodePort, point loopzero-api at `k3d-loopzero-vault-serverlb:NODEPORT` | k3d-specific; same SPKI issue |
-| (c) Deploy OpenBao in mgmt cluster's vault-system ns | Override `task k3d:vault:bootstrap --kube-context k3d-loopzero-mgmt`. Or create a parallel helmfile release in mgmt's helmfile chain. | Simplest reachability; loses isolation between control plane and secret storage; deviates from canonical 5-cluster topology |
-| (d) Add a Service-of-services bridge | Create a Service in mgmt with `type: ExternalName` pointing at the k3d-loopzero-vault container hostname | Requires manual port-forward maintenance OR cluster-spanning network policy work |
+| (a) Shared Docker network DNS | Override `OPENBAO_VAULT_ADDR` to `https://k3d-loopzero-secrets-server-0:NODEPORT/` | Works for k3d only; not portable to prod (DOKS); SPKI pin breaks because hostname doesn't match cert SAN |
+| (b) NodePort + host networking | Expose openbao Service as NodePort, point loopzero-api at `k3d-loopzero-secrets-serverlb:NODEPORT` | k3d-specific; same SPKI issue |
+| ~~(c) Deploy OpenBao in mgmt cluster's secrets-system ns~~ | **PROIBIDA desde 2026-08-12** (`B-047`) | violação de topologia em **todo** tier, não atalho |
+| (d) Add a Service-of-services bridge | Create a Service in mgmt with `type: ExternalName` pointing at the k3d-loopzero-secrets container hostname | Requires manual port-forward maintenance OR cluster-spanning network policy work |
 
-**Sponsor decision needed before LIVE step 1:**
+## A opção (c) está fechada — não é mais uma decisão em aberto
 
-Recommended for dev-public iter 1 LIVE: **option (c)** — single-cluster reachability is the lowest-risk path. The 5-cluster isolation pattern is canonical for prod but adds operational complexity that LIVE test 1 doesn't need to validate. Promote to multi-cluster (option a or d) when J-22 promotes from dev to staging.
+O texto abaixo desta seção descrevia a escolha entre (a)-(d) como pendente de sponsor, e
+**recomendava a (c)**. Ela foi decidida e **fechada** em 2026-08-12 pelo ADR
+`docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md` (`B-047`): instalar o OpenBao no
+cluster de gerenciamento é proibido em **todo** tier, incluindo dev-public, e a task de atalho foi
+removida.
 
-**If sponsor picks option (c):** a turn-key task shortcut shipped iter 24 collapses step 1.1 (~5min) into one command:
+Isto vale também para o **override por linha de comando** que a linha (c) oferecia
+(`task k3d:secrets:bootstrap --kube-context k3d-loopzero-core`): nenhum gate pega um override digitado
+no terminal, e é por isso que ele está dito aqui em vez de apenas travado em código.
+
+O gate `openbao-bootstrap-in-core-task` foi **invertido** — em vez de travar a *forma* do atalho com
+18 asserções, ele reprova qualquer task que instale o plano de secrets no cluster mgmt, inclusive
+sob outro nome, porque a checagem é pelo **efeito**. O `helmfile-context-parity`, ligado na mesma
+mudança, cobre a divergência de contexto que a checagem por linha não alcança.
+
+### Passo 1.1 — caminho canônico
 
 ```bash
-task k3d:vault:bootstrap-in-mgmt
+task k3d:secrets:create && task k3d:secrets:bootstrap   # instala em k3d-loopzero-secrets
 
-# Then the operator Shamir init ceremony (unchanged from canonical):
+# Depois, a cerimônia de Shamir do operador (inalterada):
 # bao operator init -key-shares=5 -key-threshold=3 -format=json
 # bao operator unseal <shard1> <shard2> <shard3>
 # kubectl create secret generic openbao-init-token --from-literal=BAO_TOKEN=<root>
 
-helmfile sync --selector name=openbao-init   # T5.1-T5.9 provisioning
-                                              # NOTE: under option (c) the
-                                              # default kube-context already
-                                              # points at mgmt, so this works
-                                              # without --kube-context override
+# O provisionamento T5.1-T5.9 exige AS DUAS flags — o contexto default NÃO
+# aponta para o cluster de secrets:
+helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl \
+  --kube-context k3d-loopzero-secrets --selector name=openbao-init sync
 ```
-
-The shortcut is contract-locked via `infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh` (18 hermetic assertions). When the upstream `task k3d:vault:bootstrap` evolves, the test fails so the shortcut catches up.
 
 Until sponsor decides, steps 2-4 below assume reachability is handled — they take `OPENBAO_VAULT_ADDR` as an opaque URL.
 
@@ -224,15 +234,15 @@ Until sponsor decides, steps 2-4 below assume reachability is handled — they t
 ### 2.1 — Create the K8s Secret holding the AppRole secret_id
 
 ```bash
-kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-openbao-approle \
+kubectl --context k3d-loopzero-core -n loopzero-system create secret generic loopzero-openbao-approle \
   --from-literal=OPENBAO_VAULT_SECRET_ID="$SECRET_ID" \
-  --dry-run=client -o yaml | kubectl --context k3d-loopzero-mgmt apply -f -
+  --dry-run=client -o yaml | kubectl --context k3d-loopzero-core apply -f -
 ```
 
 Verify:
 
 ```bash
-kubectl --context k3d-loopzero-mgmt -n loopzero-system get secret loopzero-openbao-approle -o jsonpath='{.metadata.resourceVersion}'
+kubectl --context k3d-loopzero-core -n loopzero-system get secret loopzero-openbao-approle -o jsonpath='{.metadata.resourceVersion}'
 ```
 
 Record the resourceVersion in the baseline so the next baseline-capture can prove
@@ -255,7 +265,7 @@ So 4 literals are wired via `env:` in `infra/helmfile/values/dev-public/loopzero
 env:
   # ... existing keys ...
   OPENBAO_TRANSIT_ENABLED: "true"
-  OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"
+  OPENBAO_VAULT_ADDR: "https://openbao.secrets-system.svc.cluster.local:8200"
   OPENBAO_VAULT_ROLE_ID: "<role_id from step 1.4>"
   OPENBAO_SPKI_PIN_SHA256: "<spki_pin from step 1.5>"
 ```
@@ -306,9 +316,9 @@ Iter 25 shipped a pre-authored helmfile env overlay so step 2.3 of ESO chart con
 2. Create the Secret in the `external-secrets` namespace too (step 2.1 also created it in `loopzero-system` for the loopzero-api envFrom path; ESO reads ClusterSecretStore secretRefs from its own controller ns):
 
 ```bash
-kubectl --context k3d-loopzero-mgmt -n external-secrets create secret generic loopzero-openbao-approle \
+kubectl --context k3d-loopzero-core -n external-secrets create secret generic loopzero-openbao-approle \
   --from-literal=OPENBAO_VAULT_SECRET_ID="$SECRET_ID" \
-  --dry-run=client -o yaml | kubectl --context k3d-loopzero-mgmt apply -f -
+  --dry-run=client -o yaml | kubectl --context k3d-loopzero-core apply -f -
 ```
 
 3. Apply the chart:
@@ -320,7 +330,7 @@ helmfile -e dev-public apply -l name=loopzero-external-secrets
 4. Verify the ClusterSecretStore is Ready (ESO controller polls every 5min by default; first reconcile is immediate):
 
 ```bash
-kubectl --context k3d-loopzero-mgmt get clustersecretstore openbao-transit -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+kubectl --context k3d-loopzero-core get clustersecretstore openbao-transit -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
 # Expected: "True"
 ```
 
@@ -331,21 +341,21 @@ The overlay contract is locked by `infra/tests/check-dev-public-loopzero-externa
 ### 2.4 — Restart loopzero-api + verify boot log
 
 ```bash
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-api
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api --timeout=120s
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-api
+kubectl --context k3d-loopzero-core -n loopzero-system rollout status deploy/loopzero-api --timeout=120s
 ```
 
 Expected boot log (per `api/internal/config/config.go` EC-05 absorption):
 
 ```text
-crypto_mode=transit openbao_addr=https://openbao.vault-system.svc.cluster.local:8200 aes_key_ignored=false spki_pinned=true
-openbao transit client constructed addr=https://openbao.vault-system.svc.cluster.local:8200 spki_pinned=true rate_limit_per_sec=10 lru_max_entries=10000
+crypto_mode=transit openbao_addr=https://openbao.secrets-system.svc.cluster.local:8200 aes_key_ignored=false spki_pinned=true
+openbao transit client constructed addr=https://openbao.secrets-system.svc.cluster.local:8200 spki_pinned=true rate_limit_per_sec=10 lru_max_entries=10000
 secret store wired with openbao transit dispatch legacy_aes_key_present=false
 ```
 
 ```bash
 # Capture the boot log slice for the post-fix baseline
-kubectl --context k3d-loopzero-mgmt -n loopzero-system logs deploy/loopzero-api --since=2m | grep -E "crypto_mode|openbao transit|secret store wired"
+kubectl --context k3d-loopzero-core -n loopzero-system logs deploy/loopzero-api --since=2m | grep -E "crypto_mode|openbao transit|secret store wired"
 ```
 
 If `crypto_mode=transit` is NOT in the log → STOP. The 4 OpenBao env vars
@@ -391,9 +401,9 @@ unwrap. Fix via `pkg/vault/redaction.go` slog.Handler wrapper extension.
 
 ### Architectural finding — ESO controller absent in mgmt (iter 31 LIVE pre-flight)
 
-**Discovered 2026-06-10 during the first LIVE attempt:** `kubectl get pods -n external-secrets` returns no resources in k3d-loopzero-mgmt. ESO controller is deployed in workload + runtime-2 clusters only (`infra/helmfile/runtime.helmfile.yaml.gotmpl` line 108-110), NOT in mgmt. The full T4.1 6/6 scenarios (B/C/F that depend on ESO sync) cannot succeed under Option (c) — they require either:
+**Discovered 2026-06-10 during the first LIVE attempt:** `kubectl get pods -n external-secrets` returns no resources in k3d-loopzero-core. ESO controller is deployed in workload + runtime-2 clusters only (`infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110), NOT in mgmt. The full T4.1 6/6 scenarios (B/C/F that depend on ESO sync) cannot succeed under Option (c) — they require either:
 
-- (B-extend) ESO controller ALSO deployed in mgmt — add release to `infra/helmfile/mgmt.helmfile.yaml.gotmpl`
+- (B-extend) ESO controller ALSO deployed in mgmt — add release to `infra/helmfile/core.helmfile.yaml.gotmpl`
 - (C-extend) Cross-cluster ExternalSecret targeting — design pattern where mgmt ESO reads from mgmt OpenBao + writes K8s Secrets to workload cluster (requires multi-cluster secret push)
 
 Either path requires ~1h+ of additional architectural work. For dev-public iter 1 LIVE, the pragmatic scope is the **write-path subset** below.
@@ -404,7 +414,8 @@ Run only scenarios A + D + E that validate the canonical "no plaintext at rest" 
 
 ```bash
 # Pre-requisite: scenarios A+D+E require:
-#   1. OpenBao in mgmt cluster (task k3d:vault:bootstrap-in-mgmt — runbook step 1.1)
+#   1. OpenBao no cluster loopzero-secrets (task k3d:secrets:create + k3d:secrets:bootstrap)
+#      — a variante em cluster mgmt foi removida em 2026-08-12 (B-047)
 #   2. AppRole configured (runbook steps 1.2-1.4)
 #   3. K8s Secret loopzero-openbao-approle in loopzero-system ns (runbook step 2.1)
 #   4. OPENBAO_TRANSIT_ENABLED=true + 4 env vars on loopzero-api (runbook step 2.2)
@@ -499,8 +510,8 @@ Sponsor opens dev-public dashboard at `https://app-dev.loopzero.example`, logs i
    Expected: `preview` column starts with `vault:v1:` (NOT random bytes — that would indicate AES legacy path still wired).
 4. Trigger a redeploy of the test app (so workload pod picks up the new ESO-synced env). Verify pod env:
    ```bash
-   POD=$(kubectl --context k3d-loopzero-workload -n tn-<id> get pod -o name | head -1)
-   kubectl --context k3d-loopzero-workload -n tn-<id> exec $POD -- printenv LIVE_PROBE_<timestamp>
+   POD=$(kubectl --context k3d-loopzero-cell-0 -n tn-<id> get pod -o name | head -1)
+   kubectl --context k3d-loopzero-cell-0 -n tn-<id> exec $POD -- printenv LIVE_PROBE_<timestamp>
    ```
    Expected: prints `liveprobe-<uuid>` exactly (plaintext via ESO + envFrom).
 5. Sponsor verbatim: *"Funcionou!"* OR surface what didn't work.
@@ -533,11 +544,11 @@ git restore infra/helm/loopzero-api/templates/deployment.yaml
 helmfile -e dev-public apply -l name=loopzero-api
 
 # Step 2 — flip env back to aes-local
-kubectl --context k3d-loopzero-mgmt -n loopzero-system set env deploy/loopzero-api OPENBAO_TRANSIT_ENABLED=false
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-api
+kubectl --context k3d-loopzero-core -n loopzero-system set env deploy/loopzero-api OPENBAO_TRANSIT_ENABLED=false
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-api
 
 # Step 3 — verify boot log shows crypto_mode=aes-local
-kubectl --context k3d-loopzero-mgmt -n loopzero-system logs deploy/loopzero-api --since=2m | grep crypto_mode
+kubectl --context k3d-loopzero-core -n loopzero-system logs deploy/loopzero-api --since=2m | grep crypto_mode
 
 # Step 4 — secrets written during the failed cutover stay in PG with vault:v1: prefix.
 # The dual-read path in secret_wrapper.decryptFromStore still detects the prefix +
@@ -553,8 +564,8 @@ kubectl --context k3d-loopzero-mgmt -n loopzero-system logs deploy/loopzero-api 
 - **Production cutover.** Dev-public AppRole TTL is 24h; prod requires 1h
   + auto-rotation via OpenBao's response-wrapping mint flow. Separate
   runbook ships when J-22 promotes to prod.
-- **Multi-cluster.** Per ADR D4 of the plan: vault-system namespace is
-  mgmt-cluster-only. Workload + build clusters reach it via cross-cluster
+- **Multi-cluster.** Per ADR D4 of the plan: secrets-system namespace is
+  core-cluster-only. Workload + build clusters reach it via cross-cluster
   ClusterCredentials, NOT direct connection.
 - **AES-to-transit migration of existing rows.** Pre-T2.5 rows in the
   secrets table carry the AES envelope. The dual-read path in

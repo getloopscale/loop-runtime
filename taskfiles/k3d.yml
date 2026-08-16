@@ -9,7 +9,7 @@ version: "3"
 
 tasks:
   # Migration target: extract from Taskfile.yml lines around 641-697 (registry,
-  # clusters), 1320-1352 (k3d:bootstrap-workload, k3d:heal).
+  # clusters), 1320-1352 (k3d:bootstrap-cell-0, k3d:heal).
   # Until migration: tasks remain in Taskfile.yml. Adding new k3d:* tasks here
   # works because Task v3 includes merge namespaces.
 
@@ -71,25 +71,25 @@ tasks:
           exit 1
         fi
         echo "  [PASS] inotify limits OK (instances=$ACTUAL_INSTANCES, watches=$ACTUAL_WATCHES)"
-      - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
-      - kubectl --context {{.MGMT_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      - k3d cluster list -o json | grep -q '"name":"loopzero-core"' || k3d cluster create --config infra/k3d/core-cluster.yaml
+      - kubectl --context {{.CORE_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
       - kubectl --context {{.BUILD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
-      - kubectl --context {{.WORKLOAD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      # cell-2-activation-plan T0.1: loopzero-runtime-2 maps to cells.cell_id='cell-2'.
+      - k3d cluster list -o json | grep -q '"name":"loopzero-cell-0"' || k3d cluster create --config infra/k3d/cell-0-cluster.yaml
+      - kubectl --context {{.CELL_0_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      # cell-1-activation-plan T0.1: loopzero-cell-1 maps to cells.cell_id='cell-1'.
       # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
-      - k3d cluster list -o json | grep -q '"name":"loopzero-runtime-2"' || k3d cluster create --config infra/k3d/runtime-2-cluster.yaml
-      - kubectl --context {{.RUNTIME2_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      - k3d cluster list -o json | grep -q '"name":"loopzero-cell-1"' || k3d cluster create --config infra/k3d/cell-1-cluster.yaml
+      - kubectl --context {{.CELL_1_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - task: clusters:verify
 
   clusters:verify:
     desc: Verify all clusters are reachable
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} cluster-info
+      - kubectl --context {{.CORE_CONTEXT}} cluster-info
       - kubectl --context {{.BUILD_CONTEXT}} cluster-info
-      - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
-      - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
+      - kubectl --context {{.CELL_0_CONTEXT}} cluster-info
+      - kubectl --context {{.CELL_1_CONTEXT}} cluster-info
 
   k3d:recover-degraded:
     desc: |
@@ -110,7 +110,7 @@ tasks:
   k3d:regen-scoped:
     desc: |
       Regenerate scoped SA kubeconfigs for every ClusterCredential except
-      cell-default (which is bootstrap-managed by bootstrap-cell-default-cc.sh).
+      cell-0 (which is bootstrap-managed by bootstrap-cell-0-cc.sh).
       Plan: 2026-05-13-corrections-txt-definitive-fix-sprint T2.1 (item N).
 
       Idempotent. Use after node-pool changes that invalidate prior SA tokens.
@@ -123,46 +123,51 @@ tasks:
   clusters:delete:
     desc: Delete all k3d clusters
     cmds:
-      - k3d cluster delete loopzero-mgmt || true
+      - k3d cluster delete loopzero-core || true
       - k3d cluster delete loopzero-build || true
-      - k3d cluster delete loopzero-workload || true
-      - k3d cluster delete loopzero-runtime-2 || true
+      - k3d cluster delete loopzero-cell-0 || true
+      - k3d cluster delete loopzero-cell-1 || true
 
   clusters:recreate:
-    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
+    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- cell-0)
     cmds:
+      # O rotulo do case E o sufixo do cluster — `loopzero-${CLUSTER}` logo abaixo deriva o
+      # nome dele daqui. Enquanto o rotulo foi `mgmt` e o config `core-cluster.yaml`, esta
+      # task apagava `loopzero-mgmt` (inexistente, no-op silencioso) e criava `loopzero-core`: o
+      # "Recreating…" mentia e nenhum cluster era de fato recriado. Manter rotulo e nome
+      # 1:1 e o que impede a divergencia de voltar.
       - |
         CLUSTER="{{.CLI_ARGS}}"
         if [ -z "$CLUSTER" ]; then
-          echo "Usage: task clusters:recreate -- <mgmt|build|workload|runtime-2>"
+          echo "Usage: task clusters:recreate -- <core|build|cell-0|cell-1>"
           exit 1
         fi
         case "$CLUSTER" in
-          mgmt)       CONFIG="infra/k3d/mgmt-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
-          build)      CONFIG="infra/k3d/build-cluster.yaml";      INSTALL_TASK="infra:install:build" ;;
-          workload)   CONFIG="infra/k3d/workload-cluster.yaml";   INSTALL_TASK="infra:install:workload" ;;
-          runtime-2)  CONFIG="infra/k3d/runtime-2-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
-          *)          echo "Unknown cluster: $CLUSTER. Use mgmt, build, workload, or runtime-2."; exit 1 ;;
+          core)    CONFIG="infra/k3d/core-cluster.yaml";   INSTALL_TASK="infra:install:core" ;;
+          build)   CONFIG="infra/k3d/build-cluster.yaml";  INSTALL_TASK="infra:install:build" ;;
+          cell-0)  CONFIG="infra/k3d/cell-0-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loopzero-cell-0" ;;
+          cell-1)  CONFIG="infra/k3d/cell-1-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loopzero-cell-1" ;;
+          *)       echo "Unknown cluster: $CLUSTER. Use core, build, cell-0, or cell-0."; exit 1 ;;
         esac
         echo "Recreating loopzero-${CLUSTER}..."
         k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true
         k3d cluster create --config "$CONFIG"
         echo "Installing components..."
-        task "$INSTALL_TASK"
+        task "$INSTALL_TASK" ${CELL_CTX_ARG:+CELL_CTX="$CELL_CTX_ARG"}
         echo "Done. loopzero-${CLUSTER} recreated."
 
   # ---------------------------------------------------------------------------
   # VK — Vault K3d local cluster (T3 validation for vault cluster isolation)
   # Per sponsor-direct decision 2026-06-02. Opt-in (not part of default
   # `task setup` flow). Used to validate vault cluster topology + cross-cluster
-  # auth pattern before provisioning DOKS loopzero-vault-prod.
+  # auth pattern before provisioning DOKS loopzero-secrets-prod.
   # ---------------------------------------------------------------------------
 
-  k3d:vault:create:
+  k3d:secrets:create:
     desc: |
-      Create the loopzero-vault k3d cluster (single-node, kubeAPI=6447).
+      Create the loopzero-secrets k3d cluster (single-node, kubeAPI=6447).
       Idempotent — skips if cluster already exists.
-      Bootstrap OpenBao after via `task k3d:vault:bootstrap`.
+      Bootstrap OpenBao after via `task k3d:secrets:bootstrap`.
     cmds:
       # Pre-flight inotify gate — same as clusters:create
       - |
@@ -173,29 +178,29 @@ tasks:
           exit 1
         fi
       - task: registry:create
-      - k3d cluster list -o json | grep -q '"name":"loopzero-vault"' || k3d cluster create --config infra/k3d/vault-cluster.yaml
-      - kubectl --context k3d-loopzero-vault wait --for=condition=Ready node --all --timeout=120s
-      - kubectl --context k3d-loopzero-vault cluster-info
-      - echo "[OK] loopzero-vault cluster ready. Next:- task k3d:vault:bootstrap"
+      - k3d cluster list -o json | grep -q '"name":"loopzero-secrets"' || k3d cluster create --config infra/k3d/secrets-cluster.yaml
+      - kubectl --context k3d-loopzero-secrets wait --for=condition=Ready node --all --timeout=120s
+      - kubectl --context k3d-loopzero-secrets cluster-info
+      - echo "[OK] loopzero-secrets cluster ready. Next:- task k3d:secrets:bootstrap"
 
-  k3d:vault:destroy:
+  k3d:secrets:destroy:
     desc: |
-      Destroy loopzero-vault cluster. State is lost (in-memory devMode).
+      Destroy loopzero-secrets cluster. State is lost (in-memory devMode).
       Use this when iterating on cluster config or testing fresh cleanroom.
     cmds:
-      - k3d cluster delete loopzero-vault || true   # idempotent-by-construction (matches clusters:delete L126); issue #234
-      - echo "[OK] loopzero-vault destroyed."
+      - k3d cluster delete loopzero-secrets || true   # idempotent-by-construction (matches clusters:delete L126); issue #234
+      - echo "[OK] loopzero-secrets destroyed."
 
-  k3d:vault:bootstrap:
+  k3d:secrets:bootstrap:
     desc: |
-      Bootstrap OpenBao on loopzero-vault cluster: cert-manager + cluster-issuer +
+      Bootstrap OpenBao on loopzero-secrets cluster: cert-manager + cluster-issuer +
       openbao-cert + openbao (official chart, HA Raft PRODLIKE.2). Idempotent.
-      Pre-requisite:- task k3d:vault:create.
+      Pre-requisite:- task k3d:secrets:create.
 
       BUG8.E LIVE pivot 2026-06-02: removed bank-vaults-operator step.
       Now using openbao/openbao official chart direct (zero operator layer).
 
-      Phase A revalidation 2026-06-03 (post k3d-loopzero-vault destruction during
+      Phase A revalidation 2026-06-03 (post k3d-loopzero-secrets destruction during
       trio clean:deep): added openbao-cert step — without it the Secret
       openbao-tls is never created and openbao-0 pod is stuck in
       ContainerCreating with FailedMount. Description updated from "devMode"
@@ -210,84 +215,28 @@ tasks:
         helmfile sync --selector name=openbao-init  # T5.1-T5.9 provisioning
     cmds:
       - |
-        kubectl --context k3d-loopzero-vault get nodes >/dev/null 2>&1 || {
-          echo "ERROR: loopzero-vault cluster not running. Run: task k3d:vault:create" >&2
+        kubectl --context k3d-loopzero-secrets get nodes >/dev/null 2>&1 || {
+          echo "ERROR: loopzero-secrets cluster not running. Run: task k3d:secrets:create" >&2
           exit 1
         }
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cert-manager sync
-      - kubectl --context k3d-loopzero-vault -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao-cert sync
-      - kubectl --context k3d-loopzero-vault -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao sync
-      - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:vault:status"
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=cert-manager sync
+      - kubectl --context k3d-loopzero-secrets -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=openbao-cert sync
+      - kubectl --context k3d-loopzero-secrets -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=openbao sync
+      - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status"
 
-  k3d:vault:bootstrap-in-mgmt:
+  k3d:secrets:status:
     desc: |
-      Option (c) shortcut from docs/operations/openbao-transit-cutover-runbook.md
-      § Open Question (iter 23 cleanroom-audit 2026-06-10). Deploys OpenBao
-      directly into the EXISTING mgmt cluster's vault-system namespace,
-      eliminating the cross-cluster reachability gap between loopzero-api
-      (mgmt) and OpenBao (would be loopzero-vault under canonical bootstrap).
-
-      Trade-off:
-      - PRO: single-cluster service DNS works out of the box
-        (openbao.vault-system.svc.cluster.local:8200), no cross-cluster
-        NodePort dance, SPKI pin remains stable.
-      - CON: loses isolation between control plane and secret storage.
-        Recommended for dev-public iter 1 LIVE only — prod cutover MUST
-        use canonical task k3d:vault:bootstrap pattern (5-cluster
-        isolation).
-
-      Pre-requisite: task setup ran (mgmt cluster ready + cert-manager
-      already installed per task setup canonical chain).
-
-      Post-bootstrap manual operator steps (NOT in this task, same as
-      canonical bootstrap):
-        bao operator init -key-shares=5 -key-threshold=3 -format=json
-        bao operator unseal <shard1> <shard2> <shard3>
-        kubectl create secret generic openbao-init-token --from-literal=BAO_TOKEN=<root>
-        helmfile sync --selector name=openbao-init  # T5.1-T5.9 provisioning
+      Show loopzero-secrets cluster status: pods, services, OpenBao seal state.
     cmds:
+      - kubectl --context k3d-loopzero-secrets get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
+      - kubectl --context k3d-loopzero-secrets -n secrets-system get svc 2>/dev/null || echo "secrets-system namespace not present yet"
       - |
-        kubectl --context k3d-loopzero-mgmt get nodes >/dev/null 2>&1 || {
-          echo "ERROR: mgmt cluster not running. Run: task setup" >&2
-          exit 1
-        }
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=cert-manager sync
-      - kubectl --context k3d-loopzero-mgmt -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=openbao-cert sync
-      - kubectl --context k3d-loopzero-mgmt -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-mgmt --selector name=openbao sync
-      - echo "[OK] OpenBao bootstrapped in mgmt cluster vault-system ns (single-cluster mode). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:vault:status-in-mgmt"
-
-  k3d:vault:status-in-mgmt:
-    desc: |
-      Show mgmt cluster vault-system status (sibling of k3d:vault:status
-      for option (c) single-cluster OpenBao deployment).
-    cmds:
-      - kubectl --context k3d-loopzero-mgmt get pods -n vault-system 2>&1 | head -10
-      - kubectl --context k3d-loopzero-mgmt get pods -n cert-manager 2>&1 | head -5
-      - |
-        echo ""
-        echo "Seal status (port-forward + bao status):"
-        kubectl --context k3d-loopzero-mgmt -n vault-system port-forward svc/openbao 18200:8200 &
-        PF=$!
-        sleep 3
-        VAULT_ADDR=https://localhost:18200 VAULT_SKIP_VERIFY=true bao status 2>&1 | head -8 || true
-        kill $PF 2>/dev/null || true
-
-  k3d:vault:status:
-    desc: |
-      Show loopzero-vault cluster status: pods, services, OpenBao seal state.
-    cmds:
-      - kubectl --context k3d-loopzero-vault get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
-      - kubectl --context k3d-loopzero-vault -n vault-system get svc 2>/dev/null || echo "vault-system namespace not present yet"
-      - |
-        if kubectl --context k3d-loopzero-vault -n vault-system get pod openbao-0 >/dev/null 2>&1; then
+        if kubectl --context k3d-loopzero-secrets -n secrets-system get pod openbao-0 >/dev/null 2>&1; then
           echo "--- OpenBao seal status ---"
-          kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
+          kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
         fi
 
   # ---------------------------------------------------------------------------

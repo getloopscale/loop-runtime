@@ -31,14 +31,14 @@ import (
 //
 // Run:
 //
-//	kubectl --context=$LOOPZERO_MGMT_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
+//	kubectl --context=$LOOPZERO_CORE_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
 //
 //	LOOPZERO_CAPACITY=1 \
 //	LOOPZERO_API_URL=https://api.dev.loopzero.example \
 //	LOOPZERO_API_METRICS_URL=http://localhost:19090 \
 //	LOOPZERO_SERVICE_AUTH=... \
 //	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
-//	LOOPZERO_MGMT_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
+//	LOOPZERO_CORE_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGoMemory -v -timeout 45m \
 //	  -args -workers=10
 func TestCapacityGoMemory(t *testing.T) {
@@ -48,7 +48,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	metricsURL := os.Getenv("LOOPZERO_API_METRICS_URL")
 	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
 	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
-	mgmtCtx := os.Getenv("LOOPZERO_MGMT_CONTEXT")
+	mgmtCtx := os.Getenv("LOOPZERO_CORE_CONTEXT")
 	if apiURL == "" || metricsURL == "" || serviceAuth == "" || appDomain == "" {
 		t.Fatal("LOOPZERO_API_URL, LOOPZERO_API_METRICS_URL, LOOPZERO_SERVICE_AUTH, LOOPZERO_APP_DOMAIN required")
 	}

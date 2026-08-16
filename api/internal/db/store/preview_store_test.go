@@ -70,7 +70,7 @@ func TestPreviewRecord_ToDomain_PopulatesAllFields(t *testing.T) {
 		URL:       &url,
 		BuildID:   &build,
 		ExpiresAt: now.Add(72 * time.Hour),
-		CellID:    "cell-default",
+		CellID:    "cell-0",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

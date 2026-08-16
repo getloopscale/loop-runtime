@@ -17,7 +17,7 @@ defaultDenyIngress: true
 # Apply order per EC-5 of edge-case review:
 #   1. loopzeroSystemAllowEgress=true (no breakage; tests do not change behavior).
 #   2. T8.5c staging soak — operator manually flips defaultDenyEgress=true on
-#      cell-1, observes 1h.
+#      cell-0, observes 1h.
 #   3. After staging clean, flip defaultDenyEgress=true in production cells
 #      one-at-a-time per PR.
 defaultDenyEgress: false

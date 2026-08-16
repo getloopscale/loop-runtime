@@ -68,7 +68,7 @@ answer an operational question.
 
 - [`operations/openbao-init-runbook.md`](operations/openbao-init-runbook.md) — Shamir unseal ceremony
 - [`operations/openbao-transit-cutover-runbook.md`](operations/openbao-transit-cutover-runbook.md) · [`operations/openbao-multi-cluster-auth-runbook.md`](operations/openbao-multi-cluster-auth-runbook.md) · [`operations/openbao-aws-resources-runbook.md`](operations/openbao-aws-resources-runbook.md)
-- [`operations/vault-cluster-local-runbook.md`](operations/vault-cluster-local-runbook.md) · [`operations/vault-secret-migration-runbook.md`](operations/vault-secret-migration-runbook.md)
+- [`operations/secrets-cluster-local-runbook.md`](operations/secrets-cluster-local-runbook.md) · [`operations/vault-secret-migration-runbook.md`](operations/vault-secret-migration-runbook.md)
 - [`operations/service-auth-rotation.md`](operations/service-auth-rotation.md) · [`operations/session-token-rotation-runbook.md`](operations/session-token-rotation-runbook.md) · [`operations/build-cluster-token-rotation.md`](operations/build-cluster-token-rotation.md)
 - [`operations/break-glass-runbook.md`](operations/break-glass-runbook.md) — time-boxed emergency cluster-admin
 
@@ -84,7 +84,7 @@ answer an operational question.
 - [`operations/cell-drain-runbook.md`](operations/cell-drain-runbook.md) · [`operations/production-canary-stage4-runbook.md`](operations/production-canary-stage4-runbook.md) · [`operations/production-canary-stage5-runbook.md`](operations/production-canary-stage5-runbook.md)
 - [`operations/crd-conversion-procedure.md`](operations/crd-conversion-procedure.md) · [`operations/pv-rebind-runbook.md`](operations/pv-rebind-runbook.md)
 - [`runbooks/migration-rollback.md`](runbooks/migration-rollback.md) · [`runbooks/bootstrap-regression-matrix.md`](runbooks/bootstrap-regression-matrix.md)
-- [`runbooks/vap-delete-guardrail.md`](runbooks/vap-delete-guardrail.md) — the mgmt-cluster delete guardrail: which identities are exempt and why, what to do when it fires, and the rollback (a values toggle, no rebuild). Read the failure mode at the end before touching it: a `DELETE` policy that stops exempting the cluster GC deadlocks namespaces in `Terminating`.
+- [`runbooks/vap-delete-guardrail.md`](runbooks/vap-delete-guardrail.md) — the core-cluster delete guardrail: which identities are exempt and why, what to do when it fires, and the rollback (a values toggle, no rebuild). Read the failure mode at the end before touching it: a `DELETE` policy that stops exempting the cluster GC deadlocks namespaces in `Terminating`.
 - [`runbooks/alerts/`](runbooks/alerts/) — one runbook per Prometheus alert
 
 **Cost, observability, billing**

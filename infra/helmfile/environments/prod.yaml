@@ -8,10 +8,10 @@ dnsZone: loopzero.example
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Prod placeholder per T8.2 acceptance criteria: enable ONLY após
-# (a) DOKS loopzero-vault-prod cluster up (separate cluster, Shamir 5/3 + Raft +
+# (a) DOKS loopzero-secrets-prod cluster up (separate cluster, Shamir 5/3 + Raft +
 #     HTTPS + Kubernetes auth via cross-cluster CA chain);
 # (b) openbao-init Job ran (engines + auth + policies bootstrapped);
-# (c) ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests);
+# (c) ClusterSecretStore loopzero-secrets-secrets applied (Phase 3.1 manifests);
 # (d) seed-loopzero-secrets.sh ran for env=prod with real prod secret values
 #     (operator-provided file gitignored, ~$HOME/.loopzero-secrets-prod.yaml);
 # (e) T9.3 prod-like smoke validated (loopzero-api boot + 1 KvGet success +
@@ -87,14 +87,14 @@ inClusterPostgres: false
 underlyingStorageClass: do-block-storage
 
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.2 — multi-cell metadata.
-# Production: runtime → cell-1, runtime-2 → cell-2. Seeded in cells
-# table (migration 000006). cell-2 in 'maintenance' until canary
+# Production: runtime → cell-0, runtime-2 → cell-1. Seeded in cells
+# table (migration 000006). cell-1 in 'maintenance' until canary
 # stage 4 (T7.1) flips it 'active' with explicit customer opt-in.
-runtimeCellId: cell-1
-runtime2CellId: cell-2
+cell0Id: cell-0
+cell1Id: cell-1
 
-# DynamicRouter enabled in production — but cell-2 admission gated by
-# cells.status, so production traffic routes to cell-1 only until
+# DynamicRouter enabled in production — but cell-1 admission gated by
+# cells.status, so production traffic routes to cell-0 only until
 # canary promotion.
 dynamicRouter: true
 

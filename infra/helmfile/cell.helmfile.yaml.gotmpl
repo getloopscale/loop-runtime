@@ -1,0 +1,300 @@
+# Runtime Cluster — Helmfile (L2 Bootstrap)
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 / T2.3
+#
+# Replaces `infra/pulumi/src/components/runtime-bootstrap.ts` and friends.
+# Reusable for runtime, runtime-2, ..., runtime-N via KUBECONFIG override.
+#
+# Invocation:
+#   KUBECONFIG=~/.kube/loopzero-cell-0.yaml \
+#     LOOPZERO_CF_TUNNEL_TOKEN="$(pulumi stack output cfTunnelToken --show-secrets)" \
+#     helmfile -f infra/helmfile/cell.helmfile.yaml -e dev sync
+#   # repeat with KUBECONFIG=~/.kube/loopzero-cell-1.yaml for cell-1
+
+environments:
+  dev:
+    values:
+      - environments/dev.yaml
+  prod:
+    values:
+      - environments/prod.yaml
+  standalone:
+    values:
+      - environments/standalone.yaml
+  standalone-multi:
+    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
+    values:
+      - environments/standalone-multi.yaml
+  drill:
+    # Bug #30 LIVE fix (2026-05-17 iter 21): drill runtime + runtime-2
+    # clusters need Traefik + cert-manager + cf-tunnel bootstrap.
+    # Reuses drill.yaml env values.
+    values:
+      - environments/drill.yaml
+
+---
+helmDefaults:
+  # O cluster deste plano, declarado onde o plano vive.
+  #
+  # Sem esta linha, um `helmfile sync` SEM --kube-context nao herda nada do
+  # arquivo: ele usa o contexto ATIVO do kubectl. Medido contra helmfile 1.1.6.
+  # Foi esse o defeito que o B-024 pagou noutro lugar — um seed operou o cluster
+  # errado e a mensagem de erro culpou o recurso ausente, nao o cluster.
+  #
+  # A flag CONTINUA vencendo quando passada (medido: sobrescreve em silencio,
+  # sem erro). Quem transforma uma divergencia em reprovacao e o gate
+  # `helmfile-context-parity`, nao o helmfile. Ver ADR D1 da fatia slice-3.
+  #
+  # AQUI o contexto e PARAMETRO, e nao literal como nos outros tres planos: este
+  # helmfile serve N celulas. Amarrar `k3d-loopzero-cell-0` recriaria exatamente o
+  # defeito que os comentarios de taskfiles/infra.yml descrevem — a task
+  # instalando as 28 releases SEMPRE na primeira celula, medido em 2026-08-10.
+  # `requiredEnv` falha ALTO quando ninguem exporta; um `env ... | default`
+  # escolheria uma celula em silencio, que e a forma do defeito, nao a correcao.
+  #
+  # Quem invoca DEVE exportar LOOPZERO_CELL_CONTEXT. Uma var do Task NAO e var de
+  # ambiente: `taskfiles/infra.yml` passava o contexto so como flag, e amarrar
+  # aqui quebrou `task infra:install:cell` ate a task exportar a variavel a
+  # partir do mesmo CELL_CTX. O gate reprova essa omissao (ErrRequiredEnvNotSet).
+  kubeContext: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" }}
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: false
+  createNamespace: true
+
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: traefik
+    url: https://traefik.github.io/charts
+  - name: external-secrets
+    url: https://charts.external-secrets.io
+  - name: kedacore
+    url: https://kedacore.github.io/charts
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+  - name: sigstore
+    url: https://sigstore.github.io/helm-charts
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+  - name: metrics-server
+    url: https://kubernetes-sigs.github.io/metrics-server/
+  # argo-rollouts-progressive-delivery-plan T0.2 — Argo Rollouts
+  # controller manages canary Rollouts on workload clusters. Repo
+  # already used by mgmt helmfile for Argo Workflows.
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
+
+# Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
+#   bash infra/helmfile/scripts/generate-runtime-secrets.sh <env> <cluster-id>
+#     - cloudflared-tunnel-token in loopzero-system (ADR D9)
+#     - loopzero-eso-source for ExternalSecrets
+# Hooks moved out of helmfile so list/lint/diff work without cluster access.
+
+# ---------------------------------------------------------------------------
+# Releases
+# ---------------------------------------------------------------------------
+releases:
+  # Wave -3: Foundation
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.14.5
+    values:
+      - ../helm/cert-manager/values.yaml
+    set:
+      - name: installCRDs
+        value: "true"
+
+  # B62 (end-to-end-deploy-validation-plan T2.3) — same as B26: metrics-server
+  # is pre-installed by k3d/DOKS managed control plane. Helm install fails
+  # with "invalid ownership metadata". Default skip; opt-in for bare-metal.
+  - name: metrics-server
+    namespace: kube-system
+    chart: metrics-server/metrics-server
+    version: 3.12.1
+    installed: {{ .Values | get "installMetricsServer" false }}
+    values:
+      - ../helm/monitoring/values-metrics-server.yaml
+
+  # Wave -2: Ingress
+  - name: traefik
+    namespace: traefik
+    chart: traefik/traefik
+    version: 28.3.0
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/traefik/values.yaml
+
+  # Wave -1: Secrets and metrics
+  - name: external-secrets
+    namespace: external-secrets
+    chart: external-secrets/external-secrets
+    version: 0.14.3
+    values:
+      - ../helm/external-secrets/values.yaml
+
+  - name: kube-state-metrics
+    namespace: monitoring
+    chart: prometheus-community/kube-state-metrics
+    version: 5.25.1
+    values:
+      - ../helm/monitoring/values-kube-state-metrics.yaml
+
+  # Wave 0: Autoscaling + admission control + tunnel
+  - name: keda
+    namespace: keda
+    chart: kedacore/keda
+    version: 2.16.1
+    values:
+      - ../helm/keda/values.yaml
+
+  - name: keda-http-addon
+    namespace: keda
+    chart: kedacore/keda-add-ons-http
+    version: 0.8.0
+    # Bug #31 LIVE fix (2026-05-17 iter 22): keda-http-addon webhook readiness
+    # times out at 900s on DOKS small nodes. Drill L2 harness (50 deploys)
+    # doesn't exercise scale-to-zero — KEDA itself is enough. Skip the
+    # HTTP addon in drill to unblock Phase 4a runtime sync.
+    installed: {{ ne .Environment.Name "drill" }}
+    needs:
+      - keda/keda
+    values:
+      - ../helm/keda-http-addon/values.yaml
+
+  # argo-rollouts-progressive-delivery-plan T0.2 — Progressive delivery
+  # controller. Manages Rollout/AnalysisRun/AnalysisTemplate/Experiment
+  # CRDs and orchestrates canary traffic via Traefik plugin (D5).
+  # needs: cert-manager (Rollouts admission webhook needs TLS certs).
+  - name: argo-rollouts
+    namespace: argo-rollouts
+    chart: ../helm/argo-rollouts
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/argo-rollouts/values.yaml
+
+  - name: policy-controller
+    namespace: cosign-system
+    chart: sigstore/policy-controller
+    # Pinned to 0.8.1 — last release in 0.8.x line. 0.9.x available but
+    # CHG-2026-04-28-LAYERED-BOOTSTRAP keeps 0.8.x compatibility.
+    # validate:helm-charts confirms this version exists in the repo index.
+    version: 0.8.1
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/policy-controller/values.yaml
+
+  # B16 — ClusterImagePolicy (loopzero-images-warn) shipped as Helm chart per T0.1.
+  - name: admission-policies
+    namespace: cosign-system
+    chart: ../helm/admission-policies
+    needs:
+      - cosign-system/policy-controller
+    values:
+      - ../helm/admission-policies/values.yaml
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      # B64 (end-to-end-deploy-validation-plan T2.3) — standalone-multi uses
+      # prometheus-community/prometheus (no Operator CRDs). Disable PrometheusRule.
+      - alerts:
+          enabled: false
+{{- end }}
+    set:
+      - name: clusterImagePolicy.mode
+        value: "{{ .Values.policyMode }}"
+      - name: domain
+        value: "{{ .Values.domain }}"
+{{- if has .Environment.Name (list "standalone-multi" "dev-public" "standalone-public") }}
+      # Plan 2026-06-04 dev-public-domain-canonicalization — local envs run
+      # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this
+      # allowlist entry the tenant pods are rejected by VAP
+      # loopzero-restrict-image-registries on admission. Production envs (drill/prod)
+      # leave it empty so DOCR/Harbor remain the only acceptable prefixes
+      # (defense-in-depth supply-chain).
+      - name: registries.additionalPrefixes[0]
+        value: "k3d-loopzero-registry:5000/"
+{{- end }}
+
+  # T2.2 Sigstore Scaffolding REMOVED from Helmfile per ADR-2026-05-27-T2.2-OFFLINE-TUF
+  # § "Engineering deliverables" #8: GitOps two-writers veto applied —
+  # Pulumi `Sigstore` ComponentResource at infra/pulumi-platform/src/services/sigstore.ts
+  # is the SOLE writer. Reasons:
+  #   - Helm-only path cannot enforce tufPreMintedKeys requirement (offline ceremony)
+  #   - Pulumi provides cleaner secret references + cert-manager wiring + DNS
+  #     coordination (Cloudflare records needed for fulcio.<domain>/rekor.<domain>)
+  #   - Two writers per resource = drift risk (GitOps conditional veto)
+  #
+  # Sponsor activates via Pulumi: stack config set { enabled: true,
+  # tufPreMintedKeys: <ceremony output>, rekorWitness: <public sigstore>,
+  # fulcioHostname, rekorHostname, oidcIssuer }.
+  #
+  # See: docs/operations/tuf-root-ceremony.md (TODO) for ceremony procedure.
+
+  - name: promtail
+    namespace: monitoring
+    chart: grafana/promtail
+    version: 6.16.6
+    values:
+      - ../helm/promtail/values.yaml.gotmpl
+
+  # ADR D9 — cloudflared Deployment migrated from Pulumi tunnel.ts to Helmfile.
+  # Token comes via env var LOOPZERO_CF_TUNNEL_TOKEN (from `pulumi stack output`).
+  # B61 (end-to-end-deploy-validation-plan T2.2) — standalone-multi has no
+  # real CF Tunnel; cloudflared scaled to 0 replicas to avoid CrashLoop.
+  - name: cloudflared
+    namespace: loopzero-system
+    chart: ../helm/cloudflared
+    values:
+      - ../helm/cloudflared/values.yaml
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      - replicaCount: 0
+{{- end }}
+
+  # Wave 1: ClusterIssuer + RBAC (depend on cert-manager + traefik ready)
+  - name: cluster-issuer
+    namespace: cert-manager
+    chart: ../helm/cluster-issuer
+    needs:
+      - cert-manager/cert-manager
+      - traefik/traefik
+    values:
+      - ../helm/cluster-issuer/values.yaml
+
+  - name: rbac
+    namespace: loopzero-system
+    chart: ../helm/network-policies
+    values:
+      - ../helm/network-policies/values.yaml
+
+  # B82 (end-to-end-deploy-validation-plan iter 12) — Service `static-assets`
+  # in loopzero-system is the in-cluster S3 gateway used by static-frontend
+  # IngressRoutes generated by api/internal/manifests/renderer_static.go.
+  # In standalone-multi we point at core-cluster MinIO via docker bridge IP.
+  # In dev/prod we point at DO Spaces (override s3.server / s3.proto).
+  - name: static-assets
+    namespace: loopzero-system
+    chart: ../helm/static-assets
+    # Bug #32 LIVE fix (2026-05-17 iter 24): static-assets readiness times
+    # out at 15m on DOKS. Drill L2 harness doesn't deploy static apps —
+    # only dynamic deploys (Rollout-backed services). Skip in drill to
+    # unblock Phase 4a runtime sync.
+    installed: {{ ne .Environment.Name "drill" }}
+    needs:
+      - loopzero-system/rbac
+    values:
+      - ../helm/static-assets/values.yaml
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      # In standalone-multi the workload cluster cannot resolve the core-cluster
+      # service DNS, so we use the docker-bridge mgmt IP + NodePort
+      # exposed by minio (32000 → 9000). This mirrors the build cluster pattern.
+      # LOOPZERO_MGMT_BRIDGE_IP is resolved by wire-clusters.sh or defaults to
+      # the k3d mgmt server container IP.
+      - s3:
+          bucket: loopzero-static-assets
+          server: {{ env "LOOPZERO_MGMT_BRIDGE_IP" | default "172.18.0.3" }}
+          port: 32000
+          proto: http
+{{- end }}

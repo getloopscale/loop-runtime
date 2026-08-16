@@ -9,7 +9,7 @@
 # Why this exists
 # ---------------
 # Drill fault-finding run 2026-05-16 (Finding #4 MEDIUM/BLOCKER L2) observed:
-# `helmfile -e drill list` reads LOCAL k3d-loopzero-mgmt context (cleanroom
+# `helmfile -e drill list` reads LOCAL k3d-loopzero-core context (cleanroom
 # artifacts) instead of drill mgmt cluster. Plan T2.1 of parent
 # 2026-05-16-drill-prod-identical-multicluster documented "operator populates
 # from Pulumi outputs during helmfile sync" — automation gap. Bootstrap LoopZero
@@ -140,10 +140,10 @@ done
 # overlay (values-loopzero-api-drill.yaml.gotmpl) consome via `requiredEnv` —
 # substitui kubectl-set-env workaround pós-sync (que era revertido a cada
 # re-sync). Names extraídos do current-context line dos kubeconfigs baixados.
-export MGMT_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
+export CORE_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
 export BUILD_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
-export RUNTIME_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
-log "  ✓ Exported DOKS context names: mgmt=$MGMT_KUBE_CONTEXT build=$BUILD_KUBE_CONTEXT runtime=$RUNTIME_KUBE_CONTEXT"
+export CELL_0_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
+log "  ✓ Exported DOKS context names: mgmt=$CORE_KUBE_CONTEXT build=$BUILD_KUBE_CONTEXT runtime=$CELL_0_KUBE_CONTEXT"
 
 # --- Phase 1: Read Pulumi outputs ---
 log "Phase 1/4: Reading Pulumi outputs (v2 flat named exports)..."
@@ -204,7 +204,7 @@ export HELMFILE_ENVIRONMENT="$HELMFILE_ENV"
 # Cross-cluster URLs (mgmt → others) for helmfile templates
 MGMT_ENDPOINT=$(pulumi_out mgmtClusterEndpoint || true)
 if [[ -n "$MGMT_ENDPOINT" ]]; then
-  export MGMT_CLUSTER_ENDPOINT="$MGMT_ENDPOINT"
+  export CORE_CLUSTER_ENDPOINT="$MGMT_ENDPOINT"
 fi
 
 log "  PG_SSLMODE=require (T2.1.bis EC-02 fix)"
@@ -270,8 +270,8 @@ log "  4 DSN env vars exported (kratos, hydra, gitea split-4, loopzero-api)"
 # against Pulumi output mgmtClusterEndpoint. DOKS API endpoints are
 # `<uuid>.k8s.ondigitalocean.com` — UUID match guarantees same cluster.
 log "T2.1.bis EC-2 guard: validating KUBECONFIG cluster identity..."
-MGMT_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
-CTX_INFO=$(KUBECONFIG="$MGMT_KUBECONFIG" kubectl cluster-info 2>/dev/null | head -1 || true)
+CORE_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
+CTX_INFO=$(KUBECONFIG="$CORE_KUBECONFIG" kubectl cluster-info 2>/dev/null | head -1 || true)
 EXPECTED_ENDPOINT=$(pulumi_out mgmtClusterEndpoint || true)
 
 # Extract UUID from both endpoint strings (format: https://UUID.k8s.ondigitalocean.com)
@@ -297,8 +297,8 @@ log "  ✓ KUBECONFIG validated (UUID match: $CTX_UUID)"
 
 # Pre-create namespaces (idempotent — silent if exists)
 for ns in loopzero-system loopzero-auth; do
-  KUBECONFIG="$MGMT_KUBECONFIG" kubectl create namespace "$ns" --dry-run=client -o yaml | \
-    KUBECONFIG="$MGMT_KUBECONFIG" kubectl apply -f - >/dev/null
+  KUBECONFIG="$CORE_KUBECONFIG" kubectl create namespace "$ns" --dry-run=client -o yaml | \
+    KUBECONFIG="$CORE_KUBECONFIG" kubectl apply -f - >/dev/null
 done
 
 # Create per-service Secrets via dry-run|apply (idempotent + safe re-run)
@@ -312,11 +312,11 @@ for key in "${!SECRET_TARGETS[@]}"; do
   secret_name="${key%%:*}"
   namespace="${key##*:}"
   dsn_val="${SECRET_TARGETS[$key]}"
-  KUBECONFIG="$MGMT_KUBECONFIG" kubectl create secret generic "$secret_name" \
+  KUBECONFIG="$CORE_KUBECONFIG" kubectl create secret generic "$secret_name" \
     --namespace "$namespace" \
     --from-literal=dsn="$dsn_val" \
     --dry-run=client -o yaml | \
-    KUBECONFIG="$MGMT_KUBECONFIG" kubectl apply -f - >/dev/null
+    KUBECONFIG="$CORE_KUBECONFIG" kubectl apply -f - >/dev/null
 done
 log "  ✓ 4 DSN secrets reconciled to drill mgmt cluster"
 
@@ -343,14 +343,14 @@ log "Phase 2.5/4: Generate platform Secrets via generate-secrets.sh (Bug #13 fix
 # Bug #14 LIVE FIX (caught 2026-05-17 iter 4 on velero install):
 # Without exporting KUBECONFIG to drill mgmt, generate-secrets.sh inherits
 # the parent shell's KUBECONFIG which often points to a local k3d cluster
-# (loopzero-mgmt). The platform Secrets get created on the WRONG cluster and
+# (loopzero-core). The platform Secrets get created on the WRONG cluster and
 # velero install on drill mgmt fails: "MountVolume.SetUp failed for volume
 # 'cloud-credentials' : secret 'velero-s3-credentials' not found".
 #
-# Phase 2 uses inline `KUBECONFIG=$MGMT_KUBECONFIG kubectl ...` (no export)
+# Phase 2 uses inline `KUBECONFIG=$CORE_KUBECONFIG kubectl ...` (no export)
 # so the inherited KUBECONFIG at this point is whatever the parent task set.
 # Export drill mgmt kubeconfig explicitly to scope generate-secrets.sh.
-export KUBECONFIG="$MGMT_KUBECONFIG"
+export KUBECONFIG="$CORE_KUBECONFIG"
 
 export LOOPZERO_DB_HOST="$(pulumi_out pgHost false)"
 export LOOPZERO_DB_PORT="$(pulumi_out pgPort false)"
@@ -434,25 +434,25 @@ log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero
 # (loopzero.io/v1 CRs valid after CRDs registered), THEN proceed with full
 # helmfile sync (loopzero-api will find the cells at startup).
 log "Phase 2.6/4: Install loopzero-crds + bootstrap ClusterCredentials (Bug #19 fix)..."
-helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/mgmt.helmfile.yaml.gotmpl" --selector name=loopzero-crds sync \
+helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/core.helmfile.yaml.gotmpl" --selector name=loopzero-crds sync \
   --args "--timeout ${HELMFILE_RELEASE_TIMEOUT:-900}s --wait" 2>&1 | tee -a "/tmp/helmfile-mgmt.log" | tail -5 || {
   log "ERROR: loopzero-crds install failed (Bug #19 fix pre-step)"
   exit 3
 }
-log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-default + cell-1 + cell-2)..."
-export DRILL_KUBECONFIG="$MGMT_KUBECONFIG"
+log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-0 + cell-0 + cell-1)..."
+export DRILL_KUBECONFIG="$CORE_KUBECONFIG"
 # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
 CELL_SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
 bash "$CELL_SCRIPT" --cell default --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-default failed"
+  log "ERROR: bootstrap cell-0 failed"
   exit 3
 }
 bash "$CELL_SCRIPT" --cell 1 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-1 failed"
+  log "ERROR: bootstrap cell-0 failed"
   exit 3
 }
 bash "$CELL_SCRIPT" --cell 2 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-2 failed"
+  log "ERROR: bootstrap cell-1 failed"
   exit 3
 }
 log "  ✓ 3 ClusterCredentials applied"
@@ -464,7 +464,7 @@ log "  ✓ 3 ClusterCredentials applied"
 # are reachable (we provisioned them), so set status.connected=true
 # manually via kubectl patch. Mirrors `task k3d:heal` H13 pattern.
 log "Bug #22 fix: patching status.connected=true on 3 CCs..."
-for cell in cell-default cell-1 cell-2; do
+for cell in cell-0 cell-0 cell-1; do
   kubectl patch clustercredential "$cell" --type=merge --subresource=status \
     -p '{"status":{"connected":true,"lastReconciledAt":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}' \
     --namespace loopzero-system 2>&1 | grep -E "patched|^Error" | head -1
@@ -484,17 +484,17 @@ else
 fi
 
 # Bug #26 LIVE FIX (caught 2026-05-17 iter 19): operators require BUILD_KUBECONFIG
-# + RUNTIME_KUBECONFIG env vars pointing to mounted files. Chart mounts when
+# + CELL_0_KUBECONFIG env vars pointing to mounted files. Chart mounts when
 # kubeconfig.{build,runtime}.existingConfigMap is set. Create ConfigMaps now
 # from drill kubeconfigs we already have at /tmp/drill-kc/.
 log "Bug #26 fix: creating build + runtime kubeconfig ConfigMaps for operators..."
 kubectl create configmap loopzero-build-kubeconfig --namespace loopzero-system \
   --from-file=config="$DRILL_KUBECONFIG_DIR/build.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-kubectl create configmap loopzero-runtime-kubeconfig --namespace loopzero-system \
+kubectl create configmap loopzero-cell-0-kubeconfig --namespace loopzero-system \
   --from-file=config="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-runtime-kubeconfig created"
+log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-cell-0-kubeconfig created"
 
 # Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
 # generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
@@ -534,9 +534,9 @@ fi
 # was too late. Override here pre-empts.
 log "Bug #56 ordering fix: overriding loopzero-cluster-kubeconfigs Secret with REAL drill kubeconfigs PRE-Phase-3..."
 kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
-  --from-file=mgmt.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
+  --from-file=core.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
   --from-file=build.kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
-  --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=cell-0.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 log "  ✓ loopzero-cluster-kubeconfigs Secret now has 4 REAL kubeconfigs (mgmt+build+runtime+runtime-2)"
@@ -574,12 +574,12 @@ for cluster in "${CLUSTERS[@]}"; do
   fi
 
   # Per-cluster helmfile file mapping (iter 11 LIVE bug fix — no unified helmfile.yaml exists):
-  #   mgmt    → mgmt.helmfile.yaml.gotmpl
+  #   mgmt    → core.helmfile.yaml.gotmpl
   #   build   → build.helmfile.yaml.gotmpl
-  #   runtime → runtime.helmfile.yaml.gotmpl
-  #   runtime-2 → runtime.helmfile.yaml.gotmpl (reuses runtime, same workload pattern)
+  #   runtime → cell.helmfile.yaml.gotmpl
+  #   runtime-2 → cell.helmfile.yaml.gotmpl (reuses runtime, same workload pattern)
   case "$cluster" in
-    runtime-2) CLUSTER_HELMFILE="runtime.helmfile.yaml.gotmpl" ;;
+    runtime-2) CLUSTER_HELMFILE="cell.helmfile.yaml.gotmpl" ;;
     *)         CLUSTER_HELMFILE="${cluster}.helmfile.yaml.gotmpl" ;;
   esac
   # Iter 12 LIVE bug fix: helmfile default timeout (5min) insufficient for drill
@@ -831,14 +831,14 @@ log "  ✓ loopzero-api env: REGISTRY_URL/BASE_DOMAIN/MINIO_* set"
 # KUBE_CONTEXT env vars matching DOKS context names.
 log "Bug #56 fix: loopzero-cluster-kubeconfigs Secret with REAL drill kubeconfigs..."
 kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
-  --from-file=mgmt.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
+  --from-file=core.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
   --from-file=build.kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
-  --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=cell-0.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
 # REMOVED kubectl-set-env workaround (lines 790-797 pre-fix). MGMT/BUILD/
-# RUNTIME_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
+# CELL_0_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
 # e consumidas pelo Helm chart via .Values.kubeContexts (sobrevive re-sync).
 log "  ✓ Real kubeconfigs mounted (context names provided to chart via export at Phase 0)"
 

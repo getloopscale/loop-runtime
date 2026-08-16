@@ -20,9 +20,9 @@
 #   bash infra/scripts/openbao/enable-vault-backup.sh \
 #     --env vault-local \
 #     [--creds-file ~/.openbao-vault-local-resources.env] \
-#     [--vault-context k3d-loopzero-vault] \
-#     [--vault-namespace vault-system] \
-#     [--helmfile-path infra/helmfile/vault.helmfile.yaml.gotmpl] \
+#     [--vault-context k3d-loopzero-secrets] \
+#     [--vault-namespace secrets-system] \
+#     [--helmfile-path infra/helmfile/secrets.helmfile.yaml.gotmpl] \
 #     [--dry-run] \
 #     [--skip-helmfile]  # only sync Secret, skip helmfile (manual flip)
 #
@@ -41,9 +41,9 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 ENV=""
 CREDS_FILE=""
-VAULT_CONTEXT="${LOOPZERO_VAULT_CONTEXT:-k3d-loopzero-vault}"
-VAULT_NAMESPACE="vault-system"
-HELMFILE_PATH="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helmfile/vault.helmfile.yaml.gotmpl"
+SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
+VAULT_NAMESPACE="secrets-system"
+HELMFILE_PATH="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helmfile/secrets.helmfile.yaml.gotmpl"
 DRY_RUN=0
 SKIP_HELMFILE=0
 SECRET_NAME="openbao-snapshot-s3-creds"
@@ -60,9 +60,9 @@ REQUIRED
 
 OPTIONAL
   --creds-file <path>  Operator creds file (default: ~/.openbao-<env>-resources.env)
-  --vault-context <ctx>   kubectl context (default: k3d-loopzero-vault; env LOOPZERO_VAULT_CONTEXT)
-  --vault-namespace <ns>  Vault NS (default: vault-system)
-  --helmfile-path <p>  Path to vault.helmfile (default: infra/helmfile/vault.helmfile.yaml.gotmpl)
+  --vault-context <ctx>   kubectl context (default: k3d-loopzero-secrets; env LOOPZERO_SECRETS_CONTEXT)
+  --vault-namespace <ns>  Vault NS (default: secrets-system)
+  --helmfile-path <p>  Path to secrets.helmfile (default: infra/helmfile/secrets.helmfile.yaml.gotmpl)
   --skip-helmfile      Sync Secret only; skip helmfile sync (operator does it manually)
   --dry-run            Print planned actions without executing
   --help               Show this help
@@ -94,7 +94,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --env) ENV="$2"; shift 2 ;;
     --creds-file) CREDS_FILE="$2"; shift 2 ;;
-    --vault-context) VAULT_CONTEXT="$2"; shift 2 ;;
+    --vault-context) SECRETS_CONTEXT="$2"; shift 2 ;;
     --vault-namespace) VAULT_NAMESPACE="$2"; shift 2 ;;
     --helmfile-path) HELMFILE_PATH="$2"; shift 2 ;;
     --skip-helmfile) SKIP_HELMFILE=1; shift ;;
@@ -141,8 +141,8 @@ if [ -r "$CREDS_FILE" ]; then
 fi
 
 if [ "${SKIP_PREFLIGHT:-0}" != "1" ] && [ "$DRY_RUN" -eq 0 ]; then
-  if ! kubectl --context "$VAULT_CONTEXT" version --request-timeout=5s >/dev/null 2>&1; then
-    echo "ERROR: kubectl context '$VAULT_CONTEXT' not reachable" >&2
+  if ! kubectl --context "$SECRETS_CONTEXT" version --request-timeout=5s >/dev/null 2>&1; then
+    echo "ERROR: kubectl context '$SECRETS_CONTEXT' not reachable" >&2
     exit 1
   fi
 fi
@@ -164,8 +164,8 @@ if [ -z "${OPENBAO_BACKUP_SECRET_ACCESS_KEY:-}" ]; then
   exit 1
 fi
 
-echo "[INFO] env=$ENV creds=$CREDS_FILE vault-ctx=$VAULT_CONTEXT dry-run=$DRY_RUN" >&2
-echo "[INFO] Secret target: $VAULT_CONTEXT:$VAULT_NAMESPACE/$SECRET_NAME" >&2
+echo "[INFO] env=$ENV creds=$CREDS_FILE vault-ctx=$SECRETS_CONTEXT dry-run=$DRY_RUN" >&2
+echo "[INFO] Secret target: $SECRETS_CONTEXT:$VAULT_NAMESPACE/$SECRET_NAME" >&2
 echo "" >&2
 
 # ----------------------------------------------------------------------------
@@ -178,11 +178,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "  [DRY-RUN]   --from-literal=AWS_SECRET_ACCESS_KEY=<${#OPENBAO_BACKUP_SECRET_ACCESS_KEY} chars>" >&2
   echo "  [DRY-RUN]   --dry-run=client -o yaml | kubectl apply -f -" >&2
 else
-  if kubectl --context "$VAULT_CONTEXT" -n "$VAULT_NAMESPACE" create secret generic "$SECRET_NAME" \
+  if kubectl --context "$SECRETS_CONTEXT" -n "$VAULT_NAMESPACE" create secret generic "$SECRET_NAME" \
       --from-literal=AWS_ACCESS_KEY_ID="$OPENBAO_BACKUP_ACCESS_KEY_ID" \
       --from-literal=AWS_SECRET_ACCESS_KEY="$OPENBAO_BACKUP_SECRET_ACCESS_KEY" \
       --dry-run=client -o yaml \
-      | kubectl --context "$VAULT_CONTEXT" apply -f - >/dev/null 2>&1; then
+      | kubectl --context "$SECRETS_CONTEXT" apply -f - >/dev/null 2>&1; then
     echo "  [OK] Secret synced" >&2
   else
     echo "  [FAIL] Secret apply failed" >&2
@@ -202,7 +202,7 @@ else
     echo "  [DRY-RUN] helmfile -f $HELMFILE_PATH -e $ENV --selector name=openbao-snapshot-agent sync" >&2
   else
     if helmfile -f "$HELMFILE_PATH" -e "$ENV" \
-        --kube-context "$VAULT_CONTEXT" \
+        --kube-context "$SECRETS_CONTEXT" \
         --selector name=openbao-snapshot-agent sync >/dev/null 2>&1; then
       echo "  [OK] helmfile sync complete" >&2
     else
@@ -222,13 +222,13 @@ if [ "$DRY_RUN" -eq 1 ]; then
 elif [ "$SKIP_HELMFILE" -eq 1 ]; then
   echo "  [SKIP] verification deferred (helmfile not synced)" >&2
 else
-  schedule=$(kubectl --context "$VAULT_CONTEXT" -n "$VAULT_NAMESPACE" \
+  schedule=$(kubectl --context "$SECRETS_CONTEXT" -n "$VAULT_NAMESPACE" \
     get cronjob openbao-snapshot -o jsonpath='{.spec.schedule}' 2>/dev/null)
   if [ -n "$schedule" ]; then
     echo "  [OK] CronJob registered (schedule: $schedule)" >&2
   else
     echo "  [WARN] CronJob not yet registered — wait 10s for helmfile reconcile, then re-run verification:" >&2
-    echo "         kubectl --context $VAULT_CONTEXT -n $VAULT_NAMESPACE get cronjob openbao-snapshot" >&2
+    echo "         kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE get cronjob openbao-snapshot" >&2
   fi
 fi
 
@@ -243,7 +243,7 @@ else
   echo "" >&2
   echo "Next steps:" >&2
   echo "  - Inspect CronJob logs after first run:" >&2
-  echo "      kubectl --context $VAULT_CONTEXT -n $VAULT_NAMESPACE logs -l app=openbao-snapshot-agent --tail=50" >&2
+  echo "      kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE logs -l app=openbao-snapshot-agent --tail=50" >&2
   echo "  - Verify snapshot uploaded to DO Spaces bucket per env" >&2
 fi
 exit 0

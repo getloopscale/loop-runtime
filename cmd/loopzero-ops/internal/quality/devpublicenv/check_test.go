@@ -26,18 +26,15 @@ func writeFixture(t *testing.T, body string) string {
 
 const canonical = `# dev-public.yaml canonical shape
 publicAuthUrl: "https://auth-dev.loopzero.example"
-publicCloudUrl: "https://cloud-dev.loopzero.example"
+publicCloudUrl: "https://app-dev.loopzero.example"
 uiBaseUrl: "https://app-dev.loopzero.example"
-dashboardOrigin: "https://cloud-dev.loopzero.example"
+dashboardOrigin: "https://app-dev.loopzero.example"
 cookieDomain: "loopzero.example"
 corsAllowedOrigins:
   - "https://app-dev.loopzero.example"
-  - "https://cloud-dev.loopzero.example"
 allowedReturnUrls:
   - "https://app-dev.loopzero.example"
   - "https://app-dev.loopzero.example/"
-  - "https://cloud-dev.loopzero.example"
-  - "https://cloud-dev.loopzero.example/"
 stripe:
   webhookSecretRef: loopzero-stripe-webhook-dev
 `
@@ -110,4 +107,18 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 		abs = filepath.Dir(abs)
 	}
 	t.Skip("could not locate dev-public.yaml within 8 parent dirs")
+}
+
+// TestCheck_CloudDevReappearingFails trava o que a remocao do host comprou.
+//
+// `cloud-dev` foi removido em 2026-08-10 por ser um segundo nome para o mesmo painel,
+// servindo apenas 301. O risco real nao e alguem recriar o host — e alguem devolver a
+// string a `corsAllowedOrigins` ou a `allowedReturnUrls` numa correcao apressada, e com
+// isso autorizar em auth uma origem que NAO RESPONDE. Uma origem autorizada que ninguem
+// controla e pior que uma origem a menos.
+func TestCheck_CloudDevReappearingFails(t *testing.T) {
+	root := writeFixture(t, canonical+"\n  - \"https://cloud-dev.loopzero.example\"\n")
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrViolations) {
+		t.Fatalf("esperava ErrViolations ao reintroduzir cloud-dev numa lista de origens, obteve %v", err)
+	}
 }

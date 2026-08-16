@@ -27,7 +27,7 @@
 #   - bao + kubectl + jq in PATH
 #   - BAO_ADDR + BAO_TOKEN env vars set
 #   - BAO_SKIP_VERIFY=true if vault-local self-signed CA
-#   - kubectl contexts k3d-loopzero-mgmt (production: loopzero-mgmt) reachable
+#   - kubectl contexts k3d-loopzero-core (production: loopzero-core) reachable
 #
 # Plan: 2026-06-02-loopzero-api-vault-integration v1.8 T8.1 EC-22 mitigation.
 # Companion to: seed-loopzero-secrets.sh (initial provisioning T8.1 EC-21).
@@ -83,9 +83,9 @@ VALUE=""
 DRY_RUN=0
 SKIP_VERIFY=0
 NAMESPACE="loopzero-system"
-MGMT_CONTEXT="${LOOPZERO_MGMT_CONTEXT:-k3d-loopzero-mgmt}"
-VAULT_CONTEXT="${LOOPZERO_VAULT_CONTEXT:-k3d-loopzero-vault}"
-VAULT_NAMESPACE="${LOOPZERO_VAULT_NAMESPACE:-vault-system}"
+CORE_CONTEXT="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
+SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
+VAULT_NAMESPACE="${LOOPZERO_VAULT_NAMESPACE:-secrets-system}"
 WAIT_TIMEOUT="${ROTATE_WAIT_TIMEOUT:-300}"  # rollout status timeout (s)
 
 usage() {
@@ -111,8 +111,8 @@ ENV VARS
   BAO_ADDR              Vault address (REQUIRED unless --dry-run)
   BAO_TOKEN             Vault token (REQUIRED unless --dry-run)
   BAO_SKIP_VERIFY       set to true for self-signed CA (vault-local)
-  LOOPZERO_MGMT_CONTEXT     kubectl context for mgmt cluster (default: k3d-loopzero-mgmt)
-  LOOPZERO_VAULT_CONTEXT    kubectl context for vault cluster (default: k3d-loopzero-vault)
+  LOOPZERO_CORE_CONTEXT     kubectl context for mgmt cluster (default: k3d-loopzero-core)
+  LOOPZERO_SECRETS_CONTEXT    kubectl context for vault cluster (default: k3d-loopzero-secrets)
   ROTATE_WAIT_TIMEOUT   rollout status timeout in seconds (default: 300)
 
 EXAMPLES
@@ -221,9 +221,9 @@ echo "[STEP 2/4] Force ESO refresh on ExternalSecrets: $EXTERNALSECRETS" >&2
 IFS=',' read -ra ES_ARRAY <<< "$EXTERNALSECRETS"
 for es in "${ES_ARRAY[@]}"; do
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "  [DRY-RUN] kubectl --context $MGMT_CONTEXT -n $NAMESPACE annotate externalsecret $es force-sync=\$(date +%s) --overwrite" >&2
+    echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT -n $NAMESPACE annotate externalsecret $es force-sync=\$(date +%s) --overwrite" >&2
   else
-    if kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" annotate externalsecret "$es" \
+    if kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" annotate externalsecret "$es" \
         "force-sync=$(date +%s)" --overwrite >/dev/null 2>&1; then
       echo "  [OK] externalsecret/$es annotated" >&2
     else
@@ -249,7 +249,7 @@ else
   POLL_START=$(date +%s)
   for es in "${ES_ARRAY[@]}"; do
     until [ "$(($(date +%s) - POLL_START))" -ge 60 ]; do
-      synced=$(kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" get externalsecret "$es" \
+      synced=$(kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" get externalsecret "$es" \
         -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
       if [ "$synced" = "True" ]; then
         echo "  [OK] externalsecret/$es Ready" >&2
@@ -273,10 +273,10 @@ IFS=',' read -ra BIN_ARRAY <<< "$BINARIES"
 RESTART_FAILED=0
 for bin in "${BIN_ARRAY[@]}"; do
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "  [DRY-RUN] kubectl --context $MGMT_CONTEXT -n $NAMESPACE rollout restart deployment $bin" >&2
-    echo "  [DRY-RUN] kubectl --context $MGMT_CONTEXT -n $NAMESPACE rollout status deployment $bin --timeout=${WAIT_TIMEOUT}s" >&2
+    echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT -n $NAMESPACE rollout restart deployment $bin" >&2
+    echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT -n $NAMESPACE rollout status deployment $bin --timeout=${WAIT_TIMEOUT}s" >&2
   else
-    if kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" rollout restart deployment "$bin" >/dev/null 2>&1; then
+    if kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" rollout restart deployment "$bin" >/dev/null 2>&1; then
       echo "  [OK] rollout restart deployment/$bin triggered" >&2
     else
       echo "  [FAIL] rollout restart deployment/$bin returned non-zero" >&2
@@ -285,7 +285,7 @@ for bin in "${BIN_ARRAY[@]}"; do
     fi
     # Wait for rollout convergence — non-blocking restart is dangerous per
     # § Common Mistakes "kubectl rollout restart is non-blocking — race with downstream operations"
-    if kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" rollout status deployment "$bin" \
+    if kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" rollout status deployment "$bin" \
         --timeout="${WAIT_TIMEOUT}s" >/dev/null 2>&1; then
       echo "  [OK] rollout status deployment/$bin converged" >&2
     else

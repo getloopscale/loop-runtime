@@ -56,12 +56,12 @@ describe("topology parser", () => {
     const t = parseTopology({
       mgmt: [{ id: "mgmt-default", region: "sfo3", nodeClass: "small", minNodes: 3 }],
       build: [{ id: "build-default", region: "sfo3", nodeClass: "medium", minNodes: 2 }],
-      runtime: [{ id: "runtime-default", cellId: "cell-default", region: "sfo3", nodeClass: "small", minNodes: 2 }],
+      runtime: [{ id: "runtime-default", cellId: "cell-0", region: "sfo3", nodeClass: "small", minNodes: 2 }],
     });
     expect(t.mgmt).toHaveLength(1);
     expect(t.build).toHaveLength(1);
     expect(t.runtime).toHaveLength(1);
-    expect(t.runtime[0].cellId).toBe("cell-default");
+    expect(t.runtime[0].cellId).toBe("cell-0");
   });
 
   it("parses multi-cluster topology", () => {
@@ -87,7 +87,7 @@ describe("topology parser", () => {
         { id: "build-sfo3", region: "sfo3", nodeClass: "medium", minNodes: 2 },
         { id: "build-nyc3", region: "nyc3", nodeClass: "large", minNodes: 3 },
       ],
-      runtime: [{ id: "runtime-default", cellId: "cell-default", region: "sfo3", nodeClass: "small", minNodes: 2 }],
+      runtime: [{ id: "runtime-default", cellId: "cell-0", region: "sfo3", nodeClass: "small", minNodes: 2 }],
     });
     expect(t.build).toHaveLength(2);
   });
@@ -96,7 +96,7 @@ describe("topology parser", () => {
     expect(() => parseTopology({
       mgmt: [{ id: "shared-id", region: "sfo3", nodeClass: "small", minNodes: 3 }],
       build: [{ id: "shared-id", region: "sfo3", nodeClass: "medium", minNodes: 2 }],
-      runtime: [{ id: "runtime-default", cellId: "cell-default", region: "sfo3", nodeClass: "small", minNodes: 2 }],
+      runtime: [{ id: "runtime-default", cellId: "cell-0", region: "sfo3", nodeClass: "small", minNodes: 2 }],
     })).toThrow("duplicate cluster id");
   });
 

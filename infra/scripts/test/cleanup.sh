@@ -21,7 +21,7 @@ set -euo pipefail
 
 set -uo pipefail
 
-TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"
+TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-core}"
 ALL_CONTEXTS=0
 
 while [[ $# -gt 0 ]]; do
@@ -102,7 +102,7 @@ cleanup_context() {
 }
 
 if [[ "$ALL_CONTEXTS" == "1" ]]; then
-  for ctx in k3d-loopzero-mgmt k3d-loopzero-build k3d-loopzero-workload k3d-loopzero-runtime-2; do
+  for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-cell-0 k3d-loopzero-cell-1; do
     cleanup_context "$ctx"
   done
 else

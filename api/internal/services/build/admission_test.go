@@ -21,20 +21,20 @@ func TestBuildAdmission_CellCapacityReject(t *testing.T) {
 	// Fill to capacity with different tenants.
 	tenants := []string{"tenant-a", "tenant-b", "tenant-c"}
 	for i := 0; i < 3; i++ {
-		if err := gate.Admit(context.Background(), tenants[i], "cell-default"); err != nil {
+		if err := gate.Admit(context.Background(), tenants[i], "cell-0"); err != nil {
 			t.Fatalf("admit %d: unexpected error: %v", i, err)
 		}
 	}
 
 	// Next admission must be rejected.
-	err := gate.Admit(context.Background(), "tenant-y", "cell-default")
+	err := gate.Admit(context.Background(), "tenant-y", "cell-0")
 	if err != ErrCellAtCapacity {
 		t.Errorf("expected ErrCellAtCapacity, got %v", err)
 	}
 
 	// Release one slot — next admission should succeed.
-	gate.Release("cell-default")
-	if err := gate.Admit(context.Background(), "tenant-y", "cell-default"); err != nil {
+	gate.Release("cell-0")
+	if err := gate.Admit(context.Background(), "tenant-y", "cell-0"); err != nil {
 		t.Errorf("admit after release: unexpected error: %v", err)
 	}
 }
@@ -49,19 +49,19 @@ func TestBuildAdmission_TenantFairness(t *testing.T) {
 
 	// Tenant A fills its per-tenant quota.
 	for i := 0; i < 2; i++ {
-		if err := gate.Admit(context.Background(), "tenant-a", "cell-default"); err != nil {
+		if err := gate.Admit(context.Background(), "tenant-a", "cell-0"); err != nil {
 			t.Fatalf("admit tenant-a %d: %v", i, err)
 		}
 	}
 
 	// Tenant A's 3rd build is rejected (per-tenant limit).
-	err := gate.Admit(context.Background(), "tenant-a", "cell-default")
+	err := gate.Admit(context.Background(), "tenant-a", "cell-0")
 	if err != ErrTenantAtCapacity {
 		t.Errorf("expected ErrTenantAtCapacity for tenant-a, got %v", err)
 	}
 
 	// Tenant B can still submit (cell has capacity, tenant-b has no builds).
-	if err := gate.Admit(context.Background(), "tenant-b", "cell-default"); err != nil {
+	if err := gate.Admit(context.Background(), "tenant-b", "cell-0"); err != nil {
 		t.Errorf("admit tenant-b: unexpected error: %v", err)
 	}
 }
@@ -74,9 +74,9 @@ func TestBuildAdmission_RetryAfterPresent(t *testing.T) {
 		MaxConcurrentPerTenant: 1,
 	})
 
-	_ = gate.Admit(context.Background(), "t", "cell-default")
+	_ = gate.Admit(context.Background(), "t", "cell-0")
 
-	err := gate.Admit(context.Background(), "t2", "cell-default")
+	err := gate.Admit(context.Background(), "t2", "cell-0")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -101,11 +101,11 @@ func TestBuildAdmission_ConcurrentSafety(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		go func() {
 			defer func() { done <- struct{}{} }()
-			if err := gate.Admit(context.Background(), "t", "cell-default"); err != nil {
+			if err := gate.Admit(context.Background(), "t", "cell-0"); err != nil {
 				rejected.Add(1)
 			} else {
 				admitted.Add(1)
-				gate.Release("cell-default")
+				gate.Release("cell-0")
 			}
 		}()
 	}

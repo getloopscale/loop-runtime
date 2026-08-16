@@ -121,7 +121,7 @@ func (v *Validator) Validate(domainInput string) error {
 	return nil
 }
 
-// DNSVerifier implements routes.DomainVerifier using net.LookupTXT.
+// DNSVerifier implements domains.DomainVerifier using net.LookupTXT.
 type DNSVerifier struct{}
 
 // VerifyTXT checks if the expected TXT record exists for _loopzero-verify.{domain}.

@@ -27,7 +27,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- name: InsertBootstrapTenant :execrows
 -- ADR-0008: cell_id assigned by PlacementEngine via
--- BootstrapRequest.CellID (defaults to 'cell-default' for Phase 0
+-- BootstrapRequest.CellID (defaults to 'cell-0' for Phase 0
 -- when wrapper-side default fires). ON CONFLICT (id) DO NOTHING.
 INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
 VALUES ($1, $2, $3, $4, $5)

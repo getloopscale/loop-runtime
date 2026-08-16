@@ -52,9 +52,9 @@ type Config struct {
 
 // Outcome captures the result.
 type Outcome struct {
-	Pass          bool
-	MatchCount    int      // total matches (allowlisted + blocked)
-	Blocked       []string // "path:lineno: content" for un-allowlisted matches
+	Pass       bool
+	MatchCount int      // total matches (allowlisted + blocked)
+	Blocked    []string // "path:lineno: content" for un-allowlisted matches
 }
 
 var (

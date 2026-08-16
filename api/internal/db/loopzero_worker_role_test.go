@@ -213,6 +213,10 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 	tenantB := "tn-rls-B-" + suffix
 
 	for _, tenant := range []string{tenantA, tenantB} {
+		// O gatilho da migration 000061 resolve builds.cell_id a partir do tenant
+		// e falha alto se ele não existir; a fixture é anterior ao gatilho.
+		seedTenantRow(t, pool, tenant)
+
 		buildID := "bld-rls-" + tenant
 		releaseID := "rel-rls-" + tenant
 		_, err := pool.Exec(ctx,
@@ -257,7 +261,19 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 		t.Skipf("T3.1 RLS test skipped: SET ROLE no-op (current_user=%q); grant membership: GRANT loopzero_worker TO loopzero;", currentUser)
 	}
 
-	// Set app.tenant_id to A — RLS should filter to A only.
+	// O CONTRATO MUDOU NA MIGRATION 000062, e este teste guardava o anterior.
+	//
+	// O desenho de 000023 era: o worker é filtrado pelo contexto como todo mundo,
+	// e "atravessa" pondo `app.tenant_id` em string VAZIA. 000062 tornou as
+	// policies fail-closed — vazio passou a casar com NADA — e deu ao worker uma
+	// policy NOMEADA (`releases_worker_cross_tenant`, USING true). A travessia
+	// agora vem do PAPEL, não do valor do contexto.
+	//
+	// É a mesma crença que o `withCrossWorkspaceScope` dos produtos TS carregava:
+	// contexto vazio lido como "sem filtro", quando fail-closed lê como "nenhuma
+	// linha". Lá devolvia zero em silêncio; aqui o teste afirmava que o worker
+	// enxergaria um tenant só — e afirmar isso de um papel que atravessa por
+	// desenho é descrever um isolamento que ele deliberadamente não tem.
 	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantA); err != nil {
 		t.Fatalf("set_config A: %v", err)
 	}
@@ -274,12 +290,16 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 		visible = append(visible, tid)
 	}
 	rows.Close()
-	if len(visible) != 1 || visible[0] != tenantA {
-		t.Errorf("with app.tenant_id=A expect only A; got %v", visible)
+	if len(visible) != 2 {
+		t.Errorf("loopzero_worker atravessa tenants pela policy NOMEADA de 000062, então mesmo com "+
+			"app.tenant_id=A ele deve ver A e B; got %v — se aqui vier 1, a policy "+
+			"releases_worker_cross_tenant sumiu e os loops de background pararam de enxergar", visible)
 	}
 
-	// Empty-string scope: cross-tenant scan (reaper path) — RLS predicate
-	// permissive branch fires.
+	// Contexto vazio: NÃO é mais o que concede a travessia (000062 removeu o
+	// disjunto permissivo). O worker continua vendo os dois porque a policy do
+	// PAPEL admite tudo — o vazio simplesmente deixou de importar. Mantido como
+	// asserção justamente para pegar uma volta do desenho antigo.
 	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', '', true)"); err != nil {
 		t.Fatalf("set_config empty: %v", err)
 	}
@@ -297,7 +317,8 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 	}
 	rows.Close()
 	if len(visible) != 2 {
-		t.Errorf("with app.tenant_id='' expect both tenants (cross-tenant scan); got %v", visible)
+		t.Errorf("com app.tenant_id='' o worker segue vendo os dois — a travessia vem do papel, "+
+			"não do vazio; got %v", visible)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -16,41 +17,40 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // --- Fake BuildOrchestrator ---
 
 type fakeBuildOrchestrator struct {
-	submitResp *routes.SubmitBuildResult
+	submitResp *builds.SubmitBuildResult
 	submitErr  error
 
 	// Track calls
-	lastSubmitReq *routes.SubmitBuildInput
+	lastSubmitReq *builds.SubmitBuildInput
 
 	// GetBuild
-	getBuild    *routes.BuildStatusResponse
+	getBuild    *builds.BuildStatusResponse
 	getBuildErr error
 
 	// OnBuildCompleted
 	onCompletedErr   error
 	onCompletedCalls int
-	lastCallbackReq  *routes.BuildCallbackInput
+	lastCallbackReq  *builds.BuildCallbackInput
 	lastCallbackID   string
 
 	// For duplicate detection
 	buildTerminal bool
 
 	// CancelBuild
-	cancelErr          error
-	lastCancelBuildID  string
+	cancelErr         error
+	lastCancelBuildID string
 
 	// SEC-4: tenant ownership check
 	buildTenantID string
 }
 
-func (f *fakeBuildOrchestrator) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
+func (f *fakeBuildOrchestrator) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
 	f.lastSubmitReq = &req
 	if f.submitErr != nil {
 		return nil, f.submitErr
@@ -58,14 +58,14 @@ func (f *fakeBuildOrchestrator) SubmitBuild(ctx context.Context, req routes.Subm
 	return f.submitResp, nil
 }
 
-func (f *fakeBuildOrchestrator) GetBuildStatus(ctx context.Context, buildID string) (*routes.BuildStatusResponse, error) {
+func (f *fakeBuildOrchestrator) GetBuildStatus(ctx context.Context, buildID string) (*builds.BuildStatusResponse, error) {
 	if f.getBuildErr != nil {
 		return nil, f.getBuildErr
 	}
 	return f.getBuild, nil
 }
 
-func (f *fakeBuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
+func (f *fakeBuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
 	f.onCompletedCalls++
 	f.lastCallbackID = buildID
 	f.lastCallbackReq = &result
@@ -100,17 +100,17 @@ func (f *fakeBuildOrchestrator) GetBuildTenantID(ctx context.Context, buildID st
 
 // GetRedeploySource — Plan J-17 T6.4. Stub for legacy builds_route_test.go
 // (redeploy paths are covered by api/internal/routes/builds_test.go).
-func (f *fakeBuildOrchestrator) GetRedeploySource(_ context.Context, _, _ string) (*routes.RedeploySource, error) {
+func (f *fakeBuildOrchestrator) GetRedeploySource(_ context.Context, _, _ string) (*builds.RedeploySource, error) {
 	return nil, nil
 }
 
 // --- Test helpers ---
 
-func newBuildHandler(orch *fakeBuildOrchestrator, callbackSecret string) *routes.BuildHandler {
-	return routes.NewBuildHandler(orch, slog.Default())
+func newBuildHandler(orch *fakeBuildOrchestrator, callbackSecret string) *builds.BuildHandler {
+	return builds.NewBuildHandler(orch, slog.Default())
 }
 
-func buildRouter(handler *routes.BuildHandler) *chi.Mux {
+func buildRouter(handler *builds.BuildHandler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Post("/api/v1/builds", handler.Create)
 	r.Get("/api/v1/builds/{id}", handler.Get)
@@ -124,7 +124,7 @@ func TestBuildsRoute(t *testing.T) {
 	t.Run("POST /builds happy path returns 202 with build_id and stream_url", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			submitResp: &routes.SubmitBuildResult{
+			submitResp: &builds.SubmitBuildResult{
 				BuildID:   "build-abcd1234",
 				StreamURL: "/api/v1/builds/build-abcd1234/stream",
 			},
@@ -310,7 +310,7 @@ func TestBuildsRoute(t *testing.T) {
 	t.Run("POST /builds environment valid lowercase returns 202", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			submitResp: &routes.SubmitBuildResult{
+			submitResp: &builds.SubmitBuildResult{
 				BuildID:   "build-abcd1234",
 				StreamURL: "/api/v1/builds/build-abcd1234/stream",
 			},
@@ -375,7 +375,7 @@ func TestBuildsRoute(t *testing.T) {
 	t.Run("POST /builds passes commit_sha to orchestrator", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			submitResp: &routes.SubmitBuildResult{
+			submitResp: &builds.SubmitBuildResult{
 				BuildID:   "build-abcd1234",
 				StreamURL: "/api/v1/builds/build-abcd1234/stream",
 			},
@@ -427,7 +427,7 @@ func TestBuildsGetRoute(t *testing.T) {
 	t.Run("GET /builds/:id returns 200 with build data", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			getBuild: &routes.BuildStatusResponse{
+			getBuild: &builds.BuildStatusResponse{
 				BuildID:     "build-abcd1234",
 				ProjectID:   "proj-xxx",
 				Environment: "production",
@@ -546,7 +546,7 @@ func TestEnvironmentValidation(t *testing.T) {
 	for _, env := range validEnvs {
 		t.Run("valid: "+env, func(t *testing.T) {
 			orch := &fakeBuildOrchestrator{
-				submitResp: &routes.SubmitBuildResult{
+				submitResp: &builds.SubmitBuildResult{
 					BuildID:   "build-abcd1234",
 					StreamURL: "/api/v1/builds/build-abcd1234/stream",
 				},
@@ -588,7 +588,7 @@ func TestEnvironmentValidation(t *testing.T) {
 }
 
 // Verify that the fake implements the interface (compile-time check)
-var _ routes.BuildOrchestratorService = (*fakeBuildOrchestrator)(nil)
+var _ builds.BuildOrchestratorService = (*fakeBuildOrchestrator)(nil)
 
 func TestBuildsCancelRoute(t *testing.T) {
 	t.Run("POST /builds/:id/cancel running build returns 202", func(t *testing.T) {

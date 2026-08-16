@@ -95,6 +95,15 @@ func TestMigration006CellsAuditColumns(t *testing.T) {
 	}
 }
 
+// Lê HISTÓRIA: a `000006` semeia as células com os nomes que elas tinham —
+// `cell-default`, `cell-1`, `cell-2`. A `000061` depois fundiu `cell-default` +
+// `cell-1` em `cell-0`, mas renomear no presente não muda o que esta migração
+// executou em todo banco onde já rodou, e `docs/README.md` proíbe reescrever um
+// registro datado para parecer atual.
+//
+// A versão anterior deste teste procurava a identidade NOVA no arquivo ANTIGO —
+// e listava `'cell-0'` DUAS vezes, o que fazia a mesma falha ser reportada em
+// duplicata e escondia que a terceira entrada nunca fora verificada (B-071).
 func TestMigration006CellsSeedRows(t *testing.T) {
 	sql := readMigration006Cells(t)
 	for _, want := range []string{"'cell-default'", "'cell-1'", "'cell-2'"} {
@@ -102,12 +111,13 @@ func TestMigration006CellsSeedRows(t *testing.T) {
 			t.Errorf("seed row missing %q", want)
 		}
 	}
-	// cell-2 must seed in 'maintenance' so placement rejects pinning until
-	// canary stage 1 flips it 'active'. This is the safety gate.
+	// A terceira célula semeia em 'maintenance' para que o placement recuse fixar
+	// nela até o estágio 1 do canário virá-la 'active'. Este é o portão de
+	// segurança, e ele vale sob qualquer nome que a célula venha a ter.
 	if !strings.Contains(sql, "'cell-2', 'Cell 2 (runtime-2)',\n                     'maintenance'") {
-		// tolerate single-line variant if formatter changes layout
+		// tolera variante em linha única se a formatação mudar
 		if !strings.Contains(sql, "cell-2") || !strings.Contains(sql, "'maintenance'") {
-			t.Fatal("expected cell-2 seeded in 'maintenance' status (safety gate)")
+			t.Fatal("expected cell-1 seeded in 'maintenance' status (safety gate)")
 		}
 	}
 	// Idempotent re-run.

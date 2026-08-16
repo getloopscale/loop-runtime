@@ -27,7 +27,7 @@ type LiveConfig struct {
 	PollInterval  time.Duration // default 5s
 	BuildTimeout  time.Duration // default 15m (Buildkit cold cache)
 	HTTPProbeURL  string        // assigned after deploy success
-	KubeContext   string        // k3d-loopzero-workload (for verification)
+	KubeContext   string        // k3d-loopzero-cell-0 (for verification)
 	TenantNs      string        // loopzero-{tenant-slug}-{project}-{env} per canonical formula
 }
 
@@ -40,7 +40,7 @@ func DefaultLiveConfig(timestamp string) LiveConfig {
 		EnvName:      "production",
 		PollInterval: 5 * time.Second,
 		BuildTimeout: 15 * time.Minute,
-		KubeContext:  "k3d-loopzero-workload",
+		KubeContext:  "k3d-loopzero-cell-0",
 	}
 }
 

@@ -118,12 +118,44 @@ var _ = Describe("ExposureController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			// Create the TLS secret that simulates cert-manager output.
-			// naming.CertSecretName("cert-test.dev.loopzero.example") => "cert-test-dev-loopzero-dev-tls"
+			// #277: o Secret vive na cell do workload, no namespace do tenant, com o nome
+			// que o renderer cria — tls-{project}-{app} — e NÃO derivado do hostname.
+			// A cadeia é ExposedRoute -> LoopZeroApplication -> Tenant -> cellID -> namespace.
+			tenant := &loopzerov1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "tn-cert", Namespace: "default"},
+				Spec: loopzerov1.TenantSpec{
+					CellID:      "cell-0",
+					DisplayName: "cert test tenant",
+					Plan:        loopzerov1.PlanStarter,
+					GitOps:      loopzerov1.GitOpsSpec{RepoName: "loopzero-tn-cert", Branch: "main"},
+					Limits:      loopzerov1.ResourceLimits{MaxBuildConcurrency: 1},
+					Environments: []loopzerov1.TenantEnvironmentEntry{
+						{Name: "production", Cluster: "workload", Project: "certproj"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+
+			loopzeroApp := &loopzerov1.LoopZeroApplication{
+				ObjectMeta: metav1.ObjectMeta{Name: appRef, Namespace: "default"},
+				Spec: loopzerov1.LoopZeroApplicationSpec{
+					TenantRef:   "tn-cert",
+					Project:     "certproj",
+					Environment: "production",
+					ServiceName: serviceName,
+				},
+			}
+			Expect(k8sClient.Create(ctx, loopzeroApp)).To(Succeed())
+
+			certNS := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "loopzero-tn-cert-certproj-production"},
+			}
+			_ = k8sClient.Create(ctx, certNS) // idempotente entre execuções do suite
+
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cert-test-dev-loopzero-dev-tls",
-					Namespace: "default",
+					Name:      "tls-certproj-" + serviceName,
+					Namespace: "loopzero-tn-cert-certproj-production",
 				},
 				Type: corev1.SecretTypeTLS,
 				Data: map[string][]byte{
@@ -154,9 +186,12 @@ var _ = Describe("ExposureController", Ordered, func() {
 		AfterAll(func() {
 			deleteRouteWithFinalizer(routeName)
 			secret := &corev1.Secret{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cert-test-dev-loopzero-dev-tls", Namespace: "default"}, secret); err == nil {
+			if err := k8sClient.Get(ctx, types.NamespacedName{
+				Name: "tls-certproj-" + serviceName, Namespace: "loopzero-tn-cert-certproj-production",
+			}, secret); err == nil {
 				_ = k8sClient.Delete(ctx, secret)
 			}
+			deleteAppWithFinalizer(appRef)
 		})
 	})
 

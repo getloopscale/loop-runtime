@@ -93,7 +93,7 @@ func Test_OperatorPredicates_LabelChange_Reconciled(t *testing.T) {
 		},
 	}
 	updated := old.DeepCopy()
-	updated.Labels["loopzero.io/cell-id"] = "cell-1"
+	updated.Labels["loopzero.io/cell-id"] = "cell-0"
 
 	if !p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}) {
 		t.Errorf("OperatorPredicates.Update returned false on label add; expected true")

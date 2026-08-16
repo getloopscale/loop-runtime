@@ -40,11 +40,11 @@ metadata:
   namespace: loopzero-system
 EOF
 
-cat > "$MANIFEST_DIR/loopzero-vault-secrets.yaml" <<'EOF'
+cat > "$MANIFEST_DIR/loopzero-secrets-secrets.yaml" <<'EOF'
 apiVersion: external-secrets.io/v1beta1
 kind: ClusterSecretStore
 metadata:
-  name: loopzero-vault-secrets
+  name: loopzero-secrets-secrets
 EOF
 
 # Valid PEM CA for happy path (will be base64-encoded by mock kubectl response)
@@ -81,7 +81,7 @@ case "\$*" in
     echo "apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: loopzero-vault-ca"
+  name: loopzero-secrets-ca"
     exit 0
     ;;
   *"apply -f -"*) cat >/dev/null 2>&1 || true; exit "\${MOCK_APPLY_EXIT:-0}" ;;

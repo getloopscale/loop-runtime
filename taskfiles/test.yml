@@ -107,8 +107,40 @@ tasks:
     cmds:
       - cd pkg && go test ./... -short
       - cd operators && go test ./... -short
+      - cd operators/api && go test ./... -short
       - cd api && go test ./... -short
-      - cd infra/tests && go test ./unit/... -short
+      # `helm/` (29 arquivos) nao rodava em task nenhuma — o mesmo defeito do
+      # B-088, um nivel abaixo do modulo. `scripts/` (11) e `config/` (5)
+      # tambem nao rodavam E estavam VERMELHOS, e por isso ficaram de fora:
+      # adiciona-los sem consertar o que acusavam deixaria o alvo vermelho, e
+      # um alvo vermelho vira alvo desligado.
+      #
+      # B-092 mediu os dois FAIL e os dois eram FALSOS, em formas diferentes.
+      # Um comparava a GRAFIA da fonte contra um repositorio que e MONTADO por
+      # template, entao a substring canonica nunca aparecia contigua. O outro
+      # aceitava `latest` e recusava a sentinela `SET-BY-CI` — permitindo o que
+      # a issue #232 rejeitou por nome e recusando o que ela escolheu.
+      #
+      # O segundo e o achado que justifica ligar isto: um teste que ninguem roda
+      # nao apenas deixa de proteger, ele CONGELA um contrato vencido, e
+      # bloquearia o desenho correto no dia em que fosse ligado.
+      #
+      # E a varredura da populacao — nao so das duas subarvores que o item
+      # nomeava — achou uma terceira: `performance/` tem 23 arquivos de teste,
+      # roda em 37ms sem infraestrutura nenhuma, esta VERDE, e nao era alcancada
+      # por alvo nenhum. Passou despercebida porque o item contou as vermelhas.
+      #
+      # `e2e/`, `chaos/`, `charts/` e `livetest/` seguem fora deste alvo por
+      # terem alvo proprio ou exigirem cluster, que e outra classe.
+      - cd infra/tests && go test ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
+      # cmd/loopzero-ops e onde vivem os 123 quality gates. Os testes que provam que
+      # um gate reprova o que deve reprovar nao rodavam por caminho nenhum —
+      # `quality:hermetic` fazia `go build`, nao `go test`. B-088.
+      - cd cmd/loopzero-ops && go test ./... -short
+      # Fora do go.work por desenho (constroem sozinhos, sem dependencia), entao
+      # exigem GOWORK=off. Nunca foram nomeados por nenhuma task. B-088.
+      - cd tools/loopzero-dockerfile-lint && GOWORK=off go test ./... -short
+      - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -short
 
   test:integration:
     desc: Run integration tests (requires running clusters)
@@ -500,23 +532,45 @@ tasks:
         fi
   validate:helm-deps:
     desc: |
-      Run `helm dependency build` on every chart with file:// deps so
-      umbrella charts (loopzero-platform) + 4 split-operator charts can
-      `helm template` cleanly. Closes condition C24 of
+      Vendoriza as dependências de TODO chart que declara `dependencies:`, nas duas
+      árvores (`charts/` e `infra/helm/`). Fecha a condição C24 de
       MEET-INFRA-NORMALIZE-T3-operator-split.
+
+      Por que descoberta e não lista fixa: `charts/*/charts/` é gitignored, então um
+      clone novo não tem dependência nenhuma vendorizada. Enquanto esta task listava
+      9 charts à mão e só de `charts/`, `task setup` reprovava num clone limpo —
+      medido em 2026-08-10 no droplet app-dev, primeiro em `loopzero-crds` (dep local
+      `loopzero-common`) e, depois de corrigido, em `opencost` (dep remota, sob
+      `infra/helm/`). Uma lista fixa só cobre os charts que alguém lembrou de
+      adicionar; a descoberta cobre o que existe.
+
+      Falha de dependência REMOTA não aborta: um chart cujo upstream saiu do ar ou
+      renomeou a versão não é motivo para impedir toda instalação nova, e as falhas
+      são impressas com o erro do upstream em vez de engolidas. Dependência local
+      (`file://`) é outra coisa — ela vive neste repositório, então falhar nela é
+      defeito nosso e aborta.
     cmds:
       - |
-        set -e
-        for chart in charts/loopzero-api charts/loopzero-app-operator charts/loopzero-cloud \
-                     charts/loopzero-crds charts/loopzero-dashboard \
-                     charts/loopzero-platform charts/loopzero-platform-operator \
-                     charts/loopzero-preview-operator \
-                     charts/loopzero-tenant-operator; do
-          if [[ -d "$chart" ]]; then
-            echo "==> helm dependency build: $chart"
-            (cd "$chart" && helm dependency build) || exit 1
+        set -uo pipefail
+        falhas=0; ok=0
+        for chart in charts/*/ infra/helm/*/; do
+          [[ -f "$chart/Chart.yaml" ]] || continue
+          grep -q "^dependencies:" "$chart/Chart.yaml" || continue
+          if helm dependency build "$chart" >/tmp/helm-dep.out 2>&1 \
+             || helm dependency update "$chart" >/tmp/helm-dep.out 2>&1; then
+            ok=$((ok+1))
+          else
+            falhas=$((falhas+1))
+            echo "  [FALHA] $chart"
+            tail -2 /tmp/helm-dep.out | sed 's/^/          /'
+            # Dependência local quebrada é defeito deste repositório, não do upstream.
+            if grep -q "file://" "$chart/Chart.yaml"; then
+              echo "  [ABORT] $chart declara dependência file:// — isto e defeito nosso." >&2
+              exit 1
+            fi
           fi
         done
+        echo "[validate:helm-deps] $ok chart(s) com dependências vendorizadas, $falhas com upstream indisponível"
 
   generate:rbac:
     desc: |
@@ -694,9 +748,9 @@ tasks:
       - task: validate:helmfile-templates
       - bash infra/helmfile/scripts/test_helpers/run-all.sh
       - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
-      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
-      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - LOOPZERO_CELL_CONTEXT=${LOOPZERO_CELL_CONTEXT:-k3d-loopzero-cell-0} helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e dev list >/dev/null
       - echo "✓ All layered-bootstrap offline validations PASS"
 
   validate:k3d-integration:
@@ -997,7 +1051,7 @@ tasks:
 
       Each probe is a single kubectl call returning <1s; total rehearsal
       runtime ~5s. Forwards env vars LOOPZERO_KUBE_CONTEXT to the wrapped
-      script for non-k3d-loopzero-mgmt cluster targeting.
+      script for non-k3d-loopzero-core cluster targeting.
     cmds:
       - bash infra/tests/e2e/live/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
 

@@ -179,6 +179,10 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 		DryRun:          dryRun,
 		ClientCtor:      buildKubeClient,
 		PortForwardCtor: pfCtor,
+		// A política de exigência é resolvida AQUI, na raiz de composição, e em
+		// nenhum outro lugar: é o que impede que cada seed volte a ler o ambiente
+		// por conta própria e a responder a mesma pergunta de um jeito diferente.
+		Policy: seed.PolicyFromEnvironment(),
 	}, nil
 }
 

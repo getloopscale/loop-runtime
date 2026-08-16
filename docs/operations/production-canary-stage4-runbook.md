@@ -13,12 +13,12 @@ title: Production Canary Stage 4 Runbook (Traffic Split via Argo Rollouts)
 
 ## Purpose
 
-Promover novo workload de cell-2 (ou novo deploy production) através de 4 fases de canary com aprovação manual entre fases. Stage 4 do plano "Path to 4.0" — last gate antes do customer trial (Stage 5).
+Promover novo workload de cell-1 (ou novo deploy production) através de 4 fases de canary com aprovação manual entre fases. Stage 4 do plano "Path to 4.0" — last gate antes do customer trial (Stage 5).
 
 ## Pre-conditions
 
-- [ ] Argo Rollouts CRDs instaladas em runtime cluster (cell-2): `kubectl get crd rollouts.argoproj.io`
-- [ ] Argo Rollouts controller Running em cell-2
+- [ ] Argo Rollouts CRDs instaladas em runtime cluster (cell-1): `kubectl get crd rollouts.argoproj.io`
+- [ ] Argo Rollouts controller Running em cell-1
 - [ ] AnalysisTemplate `loopzero-success-rate` existe em namespace tenant
 - [ ] TraefikService routing weights configurados (stable=100, canary=0 initially)
 - [ ] Operator tem `LOOPZERO_SERVICE_AUTH` para approval API calls
@@ -26,7 +26,7 @@ Promover novo workload de cell-2 (ou novo deploy production) através de 4 fases
 
 Verificar AnalysisTemplate existe para target environment:
 ```bash
-kubectl --context cell-2 get analysistemplate -n <tenant>-prod
+kubectl --context cell-1 get analysistemplate -n <tenant>-prod
 # Expected: loopzero-success-rate, loopzero-latency-p95 (at minimum)
 ```
 
@@ -37,12 +37,12 @@ kubectl --context cell-2 get analysistemplate -n <tenant>-prod
 **Promote canary to 1% traffic:**
 
 ```bash
-kubectl --context cell-2 argo rollouts set image \
+kubectl --context cell-1 argo rollouts set image \
   <project>-<app> <project>-<app>=<new-image-digest> \
   -n <tenant>-prod
 
 # Verify rollout entered Progressing state
-kubectl --context cell-2 argo rollouts get rollout <project>-<app> -n <tenant>-prod
+kubectl --context cell-1 argo rollouts get rollout <project>-<app> -n <tenant>-prod
 ```
 
 **Watch window: 1 hour.** Monitor:
@@ -56,13 +56,13 @@ kubectl --context cell-2 argo rollouts get rollout <project>-<app> -n <tenant>-p
 # Manual operator review of metrics dashboard
 # If GREEN → proceed to Phase B
 # If RED  → auto-abort triggers OR manual abort:
-kubectl --context cell-2 argo rollouts abort <project>-<app> -n <tenant>-prod
+kubectl --context cell-1 argo rollouts abort <project>-<app> -n <tenant>-prod
 ```
 
 ### Phase B — 10% canary (watch 4h)
 
 ```bash
-kubectl --context cell-2 argo rollouts promote <project>-<app> -n <tenant>-prod
+kubectl --context cell-1 argo rollouts promote <project>-<app> -n <tenant>-prod
 # Promotes to next step: weight=10
 ```
 
@@ -76,7 +76,7 @@ kubectl --context cell-2 argo rollouts promote <project>-<app> -n <tenant>-prod
 ### Phase C — 50% canary (watch 8h)
 
 ```bash
-kubectl --context cell-2 argo rollouts promote <project>-<app> -n <tenant>-prod
+kubectl --context cell-1 argo rollouts promote <project>-<app> -n <tenant>-prod
 # Promotes to next step: weight=50
 ```
 
@@ -87,7 +87,7 @@ kubectl --context cell-2 argo rollouts promote <project>-<app> -n <tenant>-prod
 ### Phase D — 100% (promote stable)
 
 ```bash
-kubectl --context cell-2 argo rollouts promote <project>-<app> -n <tenant>-prod --full
+kubectl --context cell-1 argo rollouts promote <project>-<app> -n <tenant>-prod --full
 # Promote to 100% AND mark canary as new stable
 ```
 
@@ -115,10 +115,10 @@ Auto-abort actions:
 
 ```bash
 # Abort current rollout
-kubectl --context cell-2 argo rollouts abort <project>-<app> -n <tenant>-prod
+kubectl --context cell-1 argo rollouts abort <project>-<app> -n <tenant>-prod
 
 # Rollback to previous revision
-kubectl --context cell-2 argo rollouts undo <project>-<app> -n <tenant>-prod
+kubectl --context cell-1 argo rollouts undo <project>-<app> -n <tenant>-prod
 
 # Or via CLI (preferred — audit_log entry)
 loopzero rollback --project <project> --env production
@@ -140,7 +140,7 @@ Operator MUST abort canary se qualquer signal triggers:
 
 Argo Rollouts dashboard:
 ```bash
-kubectl --context cell-2 argo rollouts dashboard
+kubectl --context cell-1 argo rollouts dashboard
 # Browser: http://localhost:3100
 ```
 

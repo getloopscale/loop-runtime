@@ -22,7 +22,7 @@ func TestRouteAdapter_Admit(t *testing.T) {
 	}, DefaultConfig(), true)
 	adapter := NewRouteAdapter(gate)
 
-	admitted, retryAfter, code, _, err := adapter.Check(context.Background(), "cell-default", "tn-a")
+	admitted, retryAfter, code, _, err := adapter.Check(context.Background(), "cell-0", "tn-a")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestRouteAdapter_RejectCellAtCapacity_ReturnsCELL_AT_CAPACITY(t *testing.T)
 	}, cfg, true)
 	adapter := NewRouteAdapter(gate)
 
-	admitted, retryAfter, code, message, err := adapter.Check(context.Background(), "cell-default", "tn-a")
+	admitted, retryAfter, code, message, err := adapter.Check(context.Background(), "cell-0", "tn-a")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRouteAdapter_RejectTenantQuota_ReturnsTENANT_BUILD_QUOTA(t *testing.T) 
 	}, cfg, true)
 	adapter := NewRouteAdapter(gate)
 
-	admitted, _, code, _, err := adapter.Check(context.Background(), "cell-default", "tn-noisy")
+	admitted, _, code, _, err := adapter.Check(context.Background(), "cell-0", "tn-noisy")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestRouteAdapter_NilGate_Admits(t *testing.T) {
 	// NewRouteAdapter(nil) returns nil, and nil adapter.Check must
 	// always admit so call sites can pass the adapter unconditionally.
 	var adapter *RouteAdapter // nil adapter, not zero-value
-	admitted, _, _, _, err := adapter.Check(context.Background(), "cell-default", "tn-a")
+	admitted, _, _, _, err := adapter.Check(context.Background(), "cell-0", "tn-a")
 	if err != nil {
 		t.Errorf("unexpected err: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRouteAdapter_PropagatesGateError(t *testing.T) {
 	gate := NewBuildGate(&fakeQuerier{err: boom}, DefaultConfig(), true)
 	adapter := NewRouteAdapter(gate)
 
-	admitted, _, _, _, err := adapter.Check(context.Background(), "cell-default", "tn-a")
+	admitted, _, _, _, err := adapter.Check(context.Background(), "cell-0", "tn-a")
 	// The gate fails-open (Admit) on query error but still surfaces
 	// the error to the caller. The adapter must forward both.
 	if err == nil {

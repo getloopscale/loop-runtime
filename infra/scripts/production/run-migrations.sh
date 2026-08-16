@@ -43,20 +43,20 @@ fi
 # Plan 2026-05-16 T2.4 — parameterize cluster reference for drill.
 #
 # Two modes:
-#   1. Local k3d (default): kubectl --context k3d-loopzero-mgmt
+#   1. Local k3d (default): kubectl --context k3d-loopzero-core
 #   2. Drill DOKS:          kubectl --kubeconfig <DRILL_KUBECONFIG>
 #
 # Drill mode triggered when DRILL_KUBECONFIG env var is set + readable.
-# This avoids hardcoding `k3d-loopzero-mgmt` (which doesn't exist in drill DOKS
+# This avoids hardcoding `k3d-loopzero-core` (which doesn't exist in drill DOKS
 # kubeconfig) and prevents the current-context drift surface that caused
 # finding-2026-05-16-drill-teardown-kubeconfig-orphan.md.
 
-MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 NAMESPACE="${NAMESPACE:-loopzero-system}"
 PG_USER="${PG_USER:-loopzero}"
 # T1.3 (plan 2026-05-21-deep-review-remediation): read from K8s Secret SoT.
 # Fail fast if neither env nor Secret provides it.
-PG_PASS="${PG_PASS:-$(kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
+PG_PASS="${PG_PASS:-$(kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
 if [[ -z "$PG_PASS" ]]; then
   echo "ERROR: PG_PASS unset AND loopzero-db-credentials Secret missing in $NAMESPACE" >&2
   echo "       Run generate-secrets.sh first OR set PG_PASS env var" >&2
@@ -85,13 +85,13 @@ kctl() {
     fi
     command kubectl --kubeconfig "$DRILL_KUBECONFIG" "$@"
   else
-    command kubectl --context "$MGMT_CONTEXT" "$@"
+    command kubectl --context "$CORE_CONTEXT" "$@"
   fi
 }
 
 log() { echo "[run-migrations] $*"; }
 
-# Resolve pod label that includes both mgmt-cluster loopzero-api and any future
+# Resolve pod label that includes both core-cluster loopzero-api and any future
 # replicas (Recreate strategy means single pod at a time).
 LOOPZERO_API_POD="$(kctl -n "$NAMESPACE" get pod -l app=loopzero-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 
@@ -175,7 +175,7 @@ if [[ -z "${LOOPZERO_API_POD}" || "$LOOPZERO_API_READY" != "true" ]]; then
       " >/dev/null 2>&1 && log "  schema_migrations seeded version=$HIGHEST_FILE_VERSION"
     exit 0
   fi
-  log "ERROR: loopzero-api pod not found in $MGMT_CONTEXT/$NAMESPACE"
+  log "ERROR: loopzero-api pod not found in $CORE_CONTEXT/$NAMESPACE"
   log "       (label selector app=loopzero-api). Is tilt up + cluster healthy?"
   exit 1
 fi

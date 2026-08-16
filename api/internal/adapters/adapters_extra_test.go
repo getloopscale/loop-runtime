@@ -6,12 +6,12 @@ package adapters
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -41,7 +41,7 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 	_ = adapter // compile-time check that the struct exists
 
 	// Verify the output mapping is correct with a direct construction
-	output := &routes.RollbackOutput{
+	output := &rollback.RollbackOutput{
 		RolledBackReleaseID:  orch.result.RolledBackRelease.ID,
 		ReactivatedReleaseID: orch.result.ReactivatedRelease.ID,
 		Environment:          orch.result.Environment,

@@ -41,9 +41,38 @@ var reservedEnvKeys = map[string]struct{}{
 	"LD_LIBRARY_PATH": {},
 }
 
-// reservedEnvKeyPrefixes blocks any key starting with one of these strings.
+// runtimeHijackEnvPrefixes blocks any key starting with one of these strings.
 // Order is insignificant — matching is OR over the slice.
-var reservedEnvKeyPrefixes = []string{
+//
+// NOT the same rule as `reservedEnvKeyPrefixes` in
+// api/internal/services/deploycontracts/build_plan.go and
+// tools/loopzero-dockerfile-lint. Those two are copies of find_sec_004, whose subject
+// is SHADOWING of what the platform injects (LOOPZERO_/AWS_/DO_/GOOGLE_/KUBERNETES_)
+// over BUILD ARGS.
+//
+// Whether they protect anything today is a separate question, and the honest
+// answer measured 2026-08-13 is no: `build_plan.go` iterates `unit.Env`, tracing
+// back to `AppSpec.Env`, a field no production site populates and which the HTTP
+// boundary type `routes.AppInput` does not declare. Registered as its own item.
+// This comment said "stops a tenant from shadowing" in its first version — a
+// present-tense claim about an unreachable loop.
+//
+// THIS list is reachable and does run: it guards `ServiceEntry.Env` from
+// services.json, which reaches the workload container env
+// (validator_services.go → services_input_mapping.go → renderer_deployment.go).
+// It stops a tenant from HIJACKING THE PROCESS — see the
+// categories above: LD_PRELOAD and DYLD_* load an attacker's library before the
+// real one; PATH/SHELL redirect what gets executed.
+//
+// The two overlap on LOOPZERO_ and KUBERNETES_ because both threats need them, for
+// different reasons — KUBERNETES_* overrides service discovery here, and is
+// platform injection there.
+//
+// They shared this name until 2026-08-13, and the collision cost a backlog item
+// filed on the false premise that they were three diverging copies of one rule
+// (B-089, ADR docs/wiki/decisions/2026-08-13-reserved-env-two-rules.md). Naming
+// the threat is what keeps the next reader from repeating it.
+var runtimeHijackEnvPrefixes = []string{
 	"DYLD_",
 	"KUBERNETES_",
 	"LOOPZERO_",
@@ -69,7 +98,7 @@ func isReservedEnvKey(key string) bool {
 	if _, ok := reservedEnvKeys[key]; ok {
 		return true
 	}
-	for _, prefix := range reservedEnvKeyPrefixes {
+	for _, prefix := range runtimeHijackEnvPrefixes {
 		if strings.HasPrefix(key, prefix) {
 			return true
 		}

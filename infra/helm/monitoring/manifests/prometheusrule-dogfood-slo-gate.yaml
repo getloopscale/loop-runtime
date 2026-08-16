@@ -91,7 +91,7 @@ spec:
             description: |
               `loopzero_rollback_duration_seconds` p95 over the 4h gate
               window exceeded 705ms (the LIVE baseline observed
-              2026-05-02 during cell-2 activation). Sustained for 5m
+              2026-05-02 during cell-1 activation). Sustained for 5m
               means the gate is failing.
               The 4h soak SHOULD be aborted; investigate per the
               dogfood-slo-gate-runbook.md decision tree.

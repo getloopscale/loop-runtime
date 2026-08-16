@@ -133,9 +133,9 @@ func TestSave_RoundTrip(t *testing.T) {
 func TestSave_AlphabeticalKeyOrder(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "sorted.json")
 	b := &Baseline{Packages: map[string]PackageBaseline{
-		"z-late":    {Coverage: 90, MinRequired: 80},
-		"a-first":   {Coverage: 91, MinRequired: 80},
-		"m-middle":  {Coverage: 92, MinRequired: 80},
+		"z-late":   {Coverage: 90, MinRequired: 80},
+		"a-first":  {Coverage: 91, MinRequired: 80},
+		"m-middle": {Coverage: 92, MinRequired: 80},
 	}}
 	require.NoError(t, Save(tmp, b))
 

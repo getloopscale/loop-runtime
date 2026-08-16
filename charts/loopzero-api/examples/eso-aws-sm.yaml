@@ -56,11 +56,11 @@ spec:
       remoteRef: { key: "loopzero/api", property: "openbao_vault_secret_id" }
     - secretKey: CF_API_TOKEN
       remoteRef: { key: "loopzero/api", property: "cf_api_token" }
-    - secretKey: MGMT_KUBECONFIG
+    - secretKey: CORE_KUBECONFIG
       remoteRef: { key: "loopzero/api", property: "mgmt_kubeconfig" }
     - secretKey: BUILD_KUBECONFIG
       remoteRef: { key: "loopzero/api", property: "build_kubeconfig" }
-    - secretKey: RUNTIME_KUBECONFIG
+    - secretKey: CELL_0_KUBECONFIG
       remoteRef: { key: "loopzero/api", property: "runtime_kubeconfig" }
     - secretKey: STRIPE_SECRET_KEY
       remoteRef: { key: "loopzero/api", property: "stripe_secret_key" }

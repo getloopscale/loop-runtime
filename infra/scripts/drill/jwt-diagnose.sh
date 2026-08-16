@@ -286,7 +286,7 @@ main() {
     exit 1
   fi
 
-  local mgmt_ctx="${MGMT_CONTEXT:-k8s-drill-mgmt}"
+  local mgmt_ctx="${CORE_CONTEXT:-k8s-drill-mgmt}"
   local mgmt_ns="${MGMT_NAMESPACE:-loopzero-system}"
 
   local ts

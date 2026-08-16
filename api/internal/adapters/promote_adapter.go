@@ -5,10 +5,9 @@ package adapters
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // PromoteServiceAdapter bridges the promotion orchestrator to the route handler interface.
@@ -18,7 +17,7 @@ type PromoteServiceAdapter struct {
 }
 
 // Promote converts route-layer types to service-layer types and delegates to the orchestrator.
-func (a *PromoteServiceAdapter) Promote(ctx context.Context, req routes.PromoteInput) (*routes.PromoteOutput, error) {
+func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promote.PromoteInput) (*promote.PromoteOutput, error) {
 	result, err := a.Orchestrator.Promote(ctx, release.PromotionRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
@@ -32,7 +31,7 @@ func (a *PromoteServiceAdapter) Promote(ctx context.Context, req routes.PromoteI
 		return nil, err
 	}
 
-	return &routes.PromoteOutput{
+	return &promote.PromoteOutput{
 		PromotionID:     result.PromotionID,
 		SourceReleaseID: result.SourceRelease.ID,
 		NewReleaseID:    result.NewRelease.ID,

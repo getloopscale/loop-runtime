@@ -67,6 +67,11 @@ type ExposureReconciler struct {
 	Scheme                *runtime.Scheme
 	HTTPClient            *http.Client
 	AllowProbeURLOverride bool // only true in test environments (SEC-005: prevents SSRF via annotation)
+
+	// RuntimeFactory resolves a client for the cell where the workload runs. The TLS
+	// secret lives there, next to the app — not in this cluster. Nil means the check
+	// degrades to "not ready", which is the honest answer when we cannot look (#277).
+	RuntimeFactory reconcilehelpers.RuntimeClientFactory
 }
 
 // exposureDetailTypes per ADR-0025 D3.
@@ -105,17 +110,21 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	ctx = correlation.WithID(ctx, route.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.ExposedRoute{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, exposureDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	//
+	// The shared helper, not the hand-rolled copy this file used to carry. That
+	// copy predated slice-10 and reproduced the two defects that slice fixed:
+	// it persisted with Status().Update, so a conditions write — an ARRAY, which
+	// RFC 7386 treats as a scalar — could erase a concurrent write of the whole
+	// array with no error anywhere; and it DISCARDED the error (`_ =`), making a
+	// dropped status write silent in the one place that has nowhere to return to.
+	//
+	// DeferReadinessSummary carries MergeFromWithOptimisticLock and logs the
+	// failure. Duplicated knowledge is why this file still had the pre-fix shape
+	// months after the fix (B-085).
+	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.ExposedRoute { return &loopzerov1.ExposedRoute{} },
+		func(x *loopzerov1.ExposedRoute) *[]metav1.Condition { return &x.Status.Conditions },
+		exposureDetailTypes)()
 
 	// Handle deletion — remove finalizer immediately (v1: no external resources to clean up,
 	// namespace deletion handles IngressRoute/Certificate cleanup).
@@ -133,6 +142,22 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// The base snapshot for every status write below.
+	//
+	// AFTER EnsureFinalizer above, which writes metadata and bumps
+	// resourceVersion: a patch derived from an earlier snapshot carries the stale
+	// version and becomes an optimistic lock frozen at snapshot time — a WIDER
+	// conflict window than the refetch this contract removes. Measured as a real
+	// 409 in slice-18.
+	//
+	// And before the phase initialisation below, which mutates .Status: a
+	// snapshot taken after it would diff the phase against itself and the patch
+	// would silently omit the very transition it exists to persist.
+	//
+	// The deletion path returns above and writes no status, so it needs no base
+	// of its own.
+	base := route.DeepCopy()
 
 	// Initialize phase via state machine (T3.6 / ARCH-002).
 	if route.Status.Phase == "" {
@@ -167,7 +192,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		}
 		route.Status.ObservedGeneration = route.Generation
 
-		if err := r.Status().Update(ctx, &route); err != nil {
+		if err := r.Status().Patch(ctx, &route, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating route status: %w", err)
 		}
 		logger.Info("certificate not ready, requeuing", "route", route.Name)
@@ -270,7 +295,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	route.Status.ObservedGeneration = route.Generation
 
-	if err := r.Status().Update(ctx, &route); err != nil {
+	if err := r.Status().Patch(ctx, &route, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating route status: %w", err)
 	}
 
@@ -289,23 +314,75 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
-// checkCertificateReady checks if the TLS certificate secret exists.
-// If TLS is disabled, returns true (no certificate needed).
+// checkCertificateReady reports whether the TLS certificate secret exists in the cell
+// where the workload runs. If TLS is disabled, returns true (no certificate needed).
+//
+// # WHERE IT LOOKS, AND WHY THAT WAS WRONG
+//
+// It used to call r.Get on route.Namespace with a name derived from the hostname. Both
+// were wrong: the ExposedRoute lives in loopzero-system on the MGMT cluster, while the Secret
+// is created by the manifest renderer in the tenant namespace on the WORKLOAD cluster,
+// under the name tls-{project}-{app}. A Get against a Secret that cannot exist returns
+// NotFound, the function returned false, and the route logged "certificate not ready,
+// requeuing" every 30s — for 27 days in app-dev, with a valid certificate sitting beside
+// the pods (issue #277).
+//
+// The lookup now walks the same chain reconcileWorkloadStatus already walks:
+// ExposedRoute -> LoopZeroApplication -> Tenant -> cellID -> runtime client -> tenant namespace.
+//
+// Every failure along that chain logs. The previous silence is what let a wrong lookup
+// look like a pending certificate for four weeks.
 func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *loopzerov1.ExposedRoute) bool {
 	if !route.Spec.TLS.Enabled {
 		return true
 	}
+	logger := log.FromContext(ctx)
 
-	secretName, err := naming.CertSecretName(route.Spec.Hostname)
-	if err != nil {
+	if r.RuntimeFactory == nil {
+		logger.Info("cert check: no runtime factory — cannot look where the secret lives",
+			"route", route.Name)
 		return false
 	}
-	var secret corev1.Secret
-	key := types.NamespacedName{
-		Name:      secretName,
-		Namespace: route.Namespace,
+
+	var app loopzerov1.LoopZeroApplication
+	appKey := types.NamespacedName{Name: route.Spec.ApplicationRef, Namespace: route.Namespace}
+	if err := r.Get(ctx, appKey, &app); err != nil {
+		logger.Info("cert check: LoopZeroApplication not readable",
+			"route", route.Name, "application", route.Spec.ApplicationRef, "error", err)
+		return false
 	}
-	if err := r.Get(ctx, key, &secret); err != nil {
+
+	var tenant loopzerov1.Tenant
+	if err := r.Get(ctx, types.NamespacedName{Name: app.Spec.TenantRef, Namespace: route.Namespace}, &tenant); err != nil {
+		logger.Info("cert check: Tenant not readable",
+			"route", route.Name, "tenant", app.Spec.TenantRef, "error", err)
+		return false
+	}
+
+	workloadClient, err := r.RuntimeFactory.For(ctx, tenant.Spec.CellID)
+	if err != nil {
+		logger.Info("cert check: runtime client unavailable",
+			"route", route.Name, "cell_id", tenant.Spec.CellID, "error", err)
+		return false
+	}
+
+	ns, err := naming.Namespace(tenant.Name, app.Spec.Project, app.Spec.Environment)
+	if err != nil {
+		logger.Info("cert check: namespace compute failed",
+			"route", route.Name, "project", app.Spec.Project, "error", err)
+		return false
+	}
+	secretName, err := naming.AppCertSecretName(app.Spec.Project, app.Spec.ServiceName)
+	if err != nil {
+		logger.Info("cert check: secret name compute failed",
+			"route", route.Name, "project", app.Spec.Project, "error", err)
+		return false
+	}
+
+	var secret corev1.Secret
+	if err := workloadClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: ns}, &secret); err != nil {
+		logger.Info("cert check: TLS secret not found in the workload cell",
+			"route", route.Name, "secret", secretName, "namespace", ns, "error", err)
 		return false
 	}
 	return secret.Type == corev1.SecretTypeTLS
@@ -352,6 +429,11 @@ type ExposureControllerConfig struct {
 	// AllowProbeURLOverride enables the loopzero.io/probe-url-override annotation.
 	// Must only be true in test environments (SEC-005: prevents SSRF).
 	AllowProbeURLOverride bool
+
+	// RuntimeFactory resolves the client for the cell where the workload — and its
+	// TLS secret — actually lives. Without it the cert check cannot look in the right
+	// place and reports not-ready, which is the honest answer (#277).
+	RuntimeFactory reconcilehelpers.RuntimeClientFactory
 }
 
 // SetupExposureController registers the ExposureController with the manager.
@@ -368,5 +450,6 @@ func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig)
 			Scheme:                mgr.GetScheme(),
 			HTTPClient:            httpclient.NewWithTimeout(constants.ProbeTimeout),
 			AllowProbeURLOverride: cfg.AllowProbeURLOverride,
+			RuntimeFactory:        cfg.RuntimeFactory,
 		})
 }

@@ -10,19 +10,19 @@
 //
 // Skip semantics:
 //   - Skipped when LOOPZERO_E2E unset (suite-level gate via skipIfNotE2E)
-//   - Skipped when vault-system namespace missing (chart not deployed)
+//   - Skipped when secrets-system namespace missing (chart not deployed)
 //   - Skipped when openbaoEnabled flag false in env (default; chart
 //     installed:false per F1.7 Helmfile gate)
 //
 // Coverage matrix (OB- prefix):
 //   * OB-1: bank-vaults-operator pod Running (operator deployment)
-//   * OB-2: openbao pod Running in vault-system (instance deployment)
+//   * OB-2: openbao pod Running in secrets-system (instance deployment)
 //   * OB-3: openbao Service ClusterIP exposes port 8200
 //   * OB-4: cert-manager Certificate openbao-tls Ready
 //   * OB-5: NetworkPolicy openbao-allow-egress exists with port 443 rule
 //   * OB-6: NetworkPolicy openbao-allow-ingress lists loopzero-system
 //   * OB-7: ValidatingAdmissionPolicy openbao-no-devmode-in-prod exists
-//   * OB-8: BaoConfiguration CR `openbao` exists in vault-system
+//   * OB-8: BaoConfiguration CR `openbao` exists in secrets-system
 //   * OB-9: bao status returns Initialized=true Sealed=false (dev-mode)
 //   * OB-10: kv-v2 engine enabled at path secret/ (post-init smoke)
 //
@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	openbaoNamespace       = "vault-system"
+	openbaoNamespace       = "secrets-system"
 	bankVaultsOperatorNs   = "bank-vaults-operator"
 	openbaoReleaseName     = "openbao"
 	openbaoServiceName     = "openbao"
@@ -72,7 +72,7 @@ func baoCLIAvailable() bool {
 	return err == nil
 }
 
-// openbaoNs builds a kubectl command scoped to vault-system.
+// openbaoNs builds a kubectl command scoped to secrets-system.
 func openbaoNs(args ...string) *exec.Cmd {
 	return kubectlForCluster(ClusterMgmt,
 		append([]string{"-n", openbaoNamespace}, args...)...)
@@ -107,7 +107,7 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 		)
 	})
 
-	It("OB-2: openbao pod(s) are Running in vault-system", func() {
+	It("OB-2: openbao pod(s) are Running in secrets-system", func() {
 		Eventually(func() string {
 			cmd := openbaoNs("get", "pods",
 				"-l", "app.kubernetes.io/name=openbao",
@@ -186,12 +186,12 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 			"VAP openbao-no-devmode-in-prod must exist (EC-04 B33 pattern): %s", string(out))
 	})
 
-	It("OB-8: BaoConfiguration CR openbao exists in vault-system", func() {
+	It("OB-8: BaoConfiguration CR openbao exists in secrets-system", func() {
 		cmd := openbaoNs("get", "baoconfiguration", openbaoReleaseName,
 			"--no-headers", "-o", "name")
 		out, err := cmd.CombinedOutput()
 		Expect(err).ToNot(HaveOccurred(),
-			"BaoConfiguration CR openbao must exist in vault-system: %s", string(out))
+			"BaoConfiguration CR openbao must exist in secrets-system: %s", string(out))
 	})
 
 	It("OB-9: bao status returns Initialized=true + Sealed=false (dev-mode)", func() {

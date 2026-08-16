@@ -2,10 +2,33 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package deploycontracts is the leaf shared-kernel of the services contexts:
-// cross-context deploy DTOs and consumer-defined DIP ports. It is the pure sink
-// of the services acyclic DAG (every other context may import it; it imports no
+// cross-context deploy DTOs and consumer-defined DIP ports. It is the sink of the
+// services acyclic DAG (every other context may import it; it imports no
 // sibling). M9 Step 6 created it as `shared`; renamed to `deploycontracts` per the
 // architecture re-audit §7 (MEET-2026-07-03-002) to name its real responsibility.
+//
+// # It is the sink, and it is NOT pure
+//
+// This doc-comment said "the pure sink" until 2026-08-12. Measured, it is not:
+// four persistence types and three application types cross its public boundary,
+// and 35 files in 10 packages depend on this package, so all of them depend
+// transitively on persistence.
+//
+//	shared_contracts.go:207   WithLock(..., fn func(tx db.DBTX) error) error
+//	delivery.go:37            Activate(ctx, build *db.Build, ...) error
+//	delivery.go:55            TargetRelease *db.Release
+//	manifest_builder.go:23    Apps []db.BuildAppSpec
+//
+// Plus manifest_builder.go:11, which imports api/internal/manifests — an
+// application-layer package.
+//
+// Removing them costs 63 call sites, 34 of them `WithLock`, the environment-lock
+// primitive Unbreakable Rule 6 puts on every mutation. That work is tracked as
+// B-079. Until it lands, the `domain-sink-purity` gate freezes exactly this set
+// and refuses a fifth: the leak is not closed, but it has stopped growing.
+//
+// Claiming purity here would have been the cheapest thing to keep and the most
+// expensive thing to believe — every new consumer reads this comment first.
 package deploycontracts
 
 import "fmt"

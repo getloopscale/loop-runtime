@@ -13,13 +13,13 @@
 #
 # OPERATOR HARD STOP per .claude/rules/cleanroom-up-live-test-mandate.md
 # INQUEBRÁVEL for full --live coverage (requires valid JWT + dev-public
-# reachable + kubectl context k3d-loopzero-mgmt). The hermetic --skip-live
+# reachable + kubectl context k3d-loopzero-core). The hermetic --skip-live
 # path is the CI-safe entry.
 set -euo pipefail
 
 PLAN_SLUG="m37-tenant-cr-project-sync-canonical-fix"
 CLOUD_BASE="${LOOPZERO_CLOUD_URL:?LOOPZERO_CLOUD_URL must be set (e.g. https://app-dev.loopzero.example)}"
-MGMT_CTX="${LOOPZERO_MGMT_KUBECONTEXT:-k3d-loopzero-mgmt}"
+MGMT_CTX="${LOOPZERO_MGMT_KUBECONTEXT:-k3d-loopzero-core}"
 JWT_PATH="${LOOPZERO_SESSION_JWT_PATH:-$HOME/.loopzero/local-dogfood-session-jwt.txt}"
 WAIT_BUDGET_SECONDS="${LOOPZERO_DEPLOY_LIVE_URL_WAIT_BUDGET:-1800}"  # 30min CLI ceiling
 SKIP_LIVE=0

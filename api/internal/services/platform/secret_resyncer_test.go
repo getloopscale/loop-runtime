@@ -107,7 +107,7 @@ func (f *fakeSecretK8sCreator) callsCopy() []secretCall {
 
 // TestSecretResyncer_L20_FirstDeploy (T7.2 RED #1): secret pre-set in
 // PG before the first deploy → ResyncEnv invokes K8s.CreateSecret with
-// the same tuple. This proves the pipeline reaches the workload-cluster
+// the same tuple. This proves the pipeline reaches the cell-0-cluster
 // sync that the original POST /secrets call missed.
 func TestSecretResyncer_L20_FirstDeploy(t *testing.T) {
 	store := &fakeSecretResyncStore{

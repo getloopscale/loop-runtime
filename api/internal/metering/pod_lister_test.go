@@ -110,7 +110,7 @@ func TestCellPodListerFactory_PodListerForCell(t *testing.T) {
 	cs := fake.NewSimpleClientset(podInNS("p", "ns"))
 	factory := NewCellPodListerFactory(&fakeCellClientProvider{client: cs})
 
-	lister, err := factory.PodListerForCell(context.Background(), "cell-1")
+	lister, err := factory.PodListerForCell(context.Background(), "cell-0")
 	if err != nil {
 		t.Fatalf("PodListerForCell: %v", err)
 	}

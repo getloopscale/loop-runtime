@@ -112,15 +112,15 @@ func main() {
 	// ExposedRoute Reachable.
 	//
 	// T1.4 of deep-review-remediation-plan (closes find_arch_007 MEDIUM partial,
-	// per ADR D3 of the plan): RUNTIME_KUBECONFIG should be MANDATORY in
+	// per ADR D3 of the plan): CELL_0_KUBECONFIG should be MANDATORY in
 	// production, but EC-4 of the edge-case review warned that flipping the
 	// guard mid-rollout (when the Helm chart hasn't yet mounted the Secret)
 	// CrashLoopBackOffs every operator pod. Compromise:
 	//
-	//   - Set LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true to opt into fail-fast mode
+	//   - Set LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true to opt into fail-fast mode
 	//     (post-T1.4a Helm chart deploy). Operator exits with non-zero if
-	//     RUNTIME_KUBECONFIG is missing OR factory creation fails.
-	//   - Leave LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG unset (default) for graceful
+	//     CELL_0_KUBECONFIG is missing OR factory creation fails.
+	//   - Leave LOOPZERO_REQUIRE_CELL_0_KUBECONFIG unset (default) for graceful
 	//     fallback (legacy path; warning emitted; no fast-path Healthy).
 	//
 	// Production cells flip the env var to true ONCE T1.4a Helm mount is
@@ -128,13 +128,13 @@ func main() {
 	// cell_factory_disabled_total counter (T1.5/find_arch_007 wired) provides
 	// observability of the degraded mode.
 	var appFactory reconcilehelpers.RuntimeClientFactory
-	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG") == "true"
-	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
-	if runtimeKubeconfig != "" {
-		runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_CELL_0_KUBECONFIG") == "true"
+	cell0Kubeconfig := os.Getenv("CELL_0_KUBECONFIG")
+	if cell0Kubeconfig != "" {
+		runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
 		if err != nil {
 			if requireKubeconfig {
-				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true — refusing to start")
+				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true — refusing to start")
 				os.Exit(1)
 			}
 			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled (degraded)")
@@ -145,10 +145,10 @@ func main() {
 		}
 	} else {
 		if requireKubeconfig {
-			setupLog.Error(nil, "RUNTIME_KUBECONFIG required (LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true) but not set — refusing to start")
+			setupLog.Error(nil, "CELL_0_KUBECONFIG required (LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true) but not set — refusing to start")
 			os.Exit(1)
 		}
-		setupLog.Info("RUNTIME_KUBECONFIG not set — Application fast-path Healthy disabled (legacy mode)")
+		setupLog.Info("CELL_0_KUBECONFIG not set — Application fast-path Healthy disabled (legacy mode)")
 	}
 
 	if err := app.SetupApplicationControllerWithFactory(mgr, baseDomain, appFactory); err != nil {
@@ -156,7 +156,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := app.SetupExposureController(mgr); err != nil {
+	// #277: o ExposureController precisa do mesmo factory que o ApplicationController —
+	// o Secret TLS que ele procura vive na cell do workload, não neste cluster.
+	if err := app.SetupExposureController(mgr, app.ExposureControllerConfig{
+		RuntimeFactory: appFactory,
+	}); err != nil {
 		setupLog.Error(err, "unable to setup ExposureController")
 		os.Exit(1)
 	}

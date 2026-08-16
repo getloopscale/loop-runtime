@@ -123,12 +123,12 @@ SCRIPT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TOKEN=""
 if declare -f mint_vault_k8s_token >/dev/null 2>&1; then
-  # Vault role naming convention (T7.2): loopzero-runtime-<cluster-type>.
-  # Map CLUSTER_ID prefix to role name; default to loopzero-runtime-mgmt.
+  # Vault role naming convention (T7.2): loopzero-cell-0-<cluster-type>.
+  # Map CLUSTER_ID prefix to role name; default to loopzero-cell-0-mgmt.
   case "${CLUSTER_ID:-}" in
-    build*) VAULT_ROLE="loopzero-runtime-build" ;;
-    cell*|workload*) VAULT_ROLE="loopzero-runtime-workload" ;;
-    *)       VAULT_ROLE="loopzero-runtime-mgmt" ;;
+    build*) VAULT_ROLE="loopzero-cell-0-build" ;;
+    cell*|workload*) VAULT_ROLE="loopzero-cell-0-workload" ;;
+    *)       VAULT_ROLE="loopzero-cell-0-mgmt" ;;
   esac
   if TOKEN=$(mint_vault_k8s_token "${VAULT_ROLE}" "${NAMESPACE}" 2>/dev/null) && [[ -n "${TOKEN}" ]]; then
     log "T7.3: SA token fetched via Vault kubernetes engine role=${VAULT_ROLE} (TTL 1h)"
@@ -176,7 +176,7 @@ SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}
 
 # B82 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29): in k3d local
 # clusters the kubeconfig server is `https://0.0.0.0:6444` (or similar) — that
-# resolves to localhost inside the mgmt-cluster ArgoCD pod and yields silent
+# resolves to localhost inside the core-cluster ArgoCD pod and yields silent
 # OutOfSync with no resources applied. Substitute the docker-bridge IP of the
 # target cluster's *server-0* container, which IS in the cert SAN list and IS
 # routable from inside the mgmt cluster. DOKS / cloud kubeconfigs already use

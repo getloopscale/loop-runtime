@@ -39,7 +39,7 @@ set -euo pipefail
 PLAN_SLUG="billing-stripe-price-ids-seed-canonical"
 ISSUE_REF="loopzero/loopzero#155"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
-MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"
 SKIP_LIVE=0
 JSON_OUTPUT=0
@@ -54,7 +54,7 @@ BILLING_NOT_CONFIGURED — Stripe price IDs unset in dev pod).
 
 Environment:
   PUBLIC_CLOUD_URL  default https://app-dev.loopzero.example
-  MGMT_CONTEXT      default k3d-loopzero-mgmt
+  CORE_CONTEXT      default k3d-loopzero-core
   SESSION_JWT_FILE  default ~/.loopzero/local-dogfood-session-jwt.txt (or canonical)
 
 Per cleanroom-up-live-test-mandate.md INQUEBRÁVEL. Operator-side. Not for CI.
@@ -124,7 +124,7 @@ if want_scenario A ; then
     elif ! command -v kubectl >/dev/null 2>&1 ; then
         record_fail A "kubectl not on PATH"
     else
-        val=$(kubectl --context "$MGMT_CONTEXT" -n loopzero-system get secret loopzero-stripe-api-keys -o jsonpath='{.data.STRIPE_PRICE_PRO}' 2>/dev/null || true)
+        val=$(kubectl --context "$CORE_CONTEXT" -n loopzero-system get secret loopzero-stripe-api-keys -o jsonpath='{.data.STRIPE_PRICE_PRO}' 2>/dev/null || true)
         if [ -n "$val" ] ; then
             record_pass A "STRIPE_PRICE_PRO present (base64 len=${#val})"
         else
@@ -143,7 +143,7 @@ if want_scenario B ; then
     elif ! command -v kubectl >/dev/null 2>&1 ; then
         record_fail B "kubectl not on PATH"
     else
-        pod=$(kubectl --context "$MGMT_CONTEXT" -n loopzero-system get pods -l app=loopzero-cloud -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        pod=$(kubectl --context "$CORE_CONTEXT" -n loopzero-system get pods -l app=loopzero-cloud -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
         if [ -z "$pod" ] ; then
             record_fail B "no loopzero-cloud pod found"
         else
@@ -154,7 +154,7 @@ if want_scenario B ; then
             # that the Secret data has STRIPE_PRICE_PRO (Scenario A) AND
             # that the pod's envFrom references it — this proves the
             # wire at pod-config level without needing shell in the pod.
-            wired=$(kubectl --context "$MGMT_CONTEXT" -n loopzero-system get pod "$pod" -o jsonpath='{range .spec.containers[*].envFrom[*].secretRef}{.name}{"\n"}{end}' 2>/dev/null | grep -c '^loopzero-stripe-api-keys$' || true)
+            wired=$(kubectl --context "$CORE_CONTEXT" -n loopzero-system get pod "$pod" -o jsonpath='{range .spec.containers[*].envFrom[*].secretRef}{.name}{"\n"}{end}' 2>/dev/null | grep -c '^loopzero-stripe-api-keys$' || true)
             if [ "$wired" -ge 1 ] ; then
                 record_pass B "pod envFrom references loopzero-stripe-api-keys — Secret keys wired at pod-config level"
             else

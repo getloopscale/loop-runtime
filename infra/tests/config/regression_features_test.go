@@ -168,12 +168,16 @@ func TestF07VersionEndpointRegistered(t *testing.T) {
 	if !strings.Contains(s, `r.Get("/api/v1/version"`) {
 		t.Error("F-07 regression: router must register GET /api/v1/version")
 	}
-	if !strings.Contains(s, "routes.VersionHandler") {
-		t.Error("F-07 regression: route must call routes.VersionHandler()")
+	// The family moved to its own subpackage (B-041 slice-8), so the qualifier is
+	// the family name, not the parent package. What F-07 protects is that the
+	// route is REGISTERED and its handler EXISTS — both survive the move; only
+	// the two spellings changed.
+	if !strings.Contains(s, "version.VersionHandler") {
+		t.Error("F-07 regression: route must call version.VersionHandler()")
 	}
 	// Handler module exists.
-	if _, err := os.Stat("../../../api/internal/routes/version.go"); err != nil {
-		t.Errorf("F-07 regression: api/internal/routes/version.go missing: %v", err)
+	if _, err := os.Stat("../../../api/internal/routes/version/version.go"); err != nil {
+		t.Errorf("F-07 regression: api/internal/routes/version/version.go missing: %v", err)
 	}
 }
 

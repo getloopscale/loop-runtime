@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +41,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
@@ -56,7 +56,7 @@ type buildOrchestratorAdapter struct {
 	buildStore db.BuildStore
 }
 
-func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.SubmitBuildInput) (*routes.SubmitBuildResult, error) {
+func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
 	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
@@ -86,18 +86,18 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 		return nil, err
 	}
 
-	return &routes.SubmitBuildResult{
+	return &builds.SubmitBuildResult{
 		BuildID:   resp.BuildID,
 		StreamURL: resp.StreamURL,
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*routes.BuildStatusResponse, error) {
+func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*builds.BuildStatusResponse, error) {
 	build, err := a.buildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return nil, err
 	}
-	return &routes.BuildStatusResponse{
+	return &builds.BuildStatusResponse{
 		BuildID:     build.ID,
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
@@ -107,7 +107,7 @@ func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result routes.BuildCallbackInput) error {
+func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
 	var apps []deploycontracts.AppRelease
 	for _, app := range result.Apps {
 		apps = append(apps, deploycontracts.AppRelease{
@@ -150,7 +150,7 @@ func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 // GetRedeploySource — Plan J-17 T6.4. Stub for integration tests; not
 // exercised by concurrent-builds scenarios. The production adapter
 // (api/internal/adapters/build_adapter.go) carries the real impl.
-func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*routes.RedeploySource, error) {
+func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*builds.RedeploySource, error) {
 	return nil, nil
 }
 
@@ -286,7 +286,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	// Create real server with real middleware
 	logger := logging.NewLogger("test")
 
-	buildHandler := routes.NewBuildHandler(orchAdapter, logger)
+	buildHandler := builds.NewBuildHandler(orchAdapter, logger)
 	router := server.NewRouter(server.Config{
 		Port:               "0",
 		Logger:             logger,
@@ -365,6 +365,14 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 	// Clean up any existing test data (idempotent)
 	cleanupTestData(t, pool)
 
+	withTenantContext(t, pool, "tenant-test", func(conn *pgxpool.Conn) {
+		seedTestDataOn(t, ctx, conn)
+	})
+}
+
+func seedTestDataOn(t *testing.T, ctx context.Context, pool *pgxpool.Conn) {
+	t.Helper()
+
 	// Create test user (username NOT NULL + UNIQUE per migration 000034 —
 	// user-test is stable so the ON CONFLICT still catches re-seeds).
 	_, err := pool.Exec(ctx,
@@ -375,10 +383,24 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("failed to seed user: %v", err)
 	}
 
+	// Create the account the tenant belongs to. `tenants.account_id` became NOT
+	// NULL when accounts were introduced, and this fixture predates that — it is
+	// the same class of drift the CI comment names for the cell_id trigger: a
+	// fixture frozen at an older schema. `accounts` carries no tenant column and
+	// is deliberately outside RLS (it is the parent of the tenant, so scoping it
+	// per tenant would be circular).
+	_, err = pool.Exec(ctx,
+		`INSERT INTO accounts (id, display_name, owner_id)
+		 VALUES ('acct-test', 'Test Account', 'user-test')
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("failed to seed account: %v", err)
+	}
+
 	// Create test tenant
 	_, err = pool.Exec(ctx,
-		`INSERT INTO tenants (id, display_name, slug, owner_id)
-		 VALUES ('tenant-test', 'Test Tenant', 'test-tenant', 'user-test')
+		`INSERT INTO tenants (id, display_name, slug, owner_id, account_id)
+		 VALUES ('tenant-test', 'Test Tenant', 'test-tenant', 'user-test', 'acct-test')
 		 ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		t.Fatalf("failed to seed tenant: %v", err)
@@ -409,7 +431,9 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	ctx := context.Background()
 
-	// Clean up in reverse dependency order
+	// Clean up in reverse dependency order. Mesmo motivo do seed: DELETE também
+	// é filtrado pela RLS, então sem contexto ele apaga zero linhas em silêncio —
+	// e o teste seguinte herda o estado do anterior.
 	tables := []string{
 		"DELETE FROM sse_events WHERE build_id IN (SELECT id FROM builds WHERE tenant_id = 'tenant-test')",
 		"DELETE FROM idempotency_keys WHERE tenant_id = 'tenant-test'",
@@ -419,11 +443,38 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 		"DELETE FROM builds WHERE tenant_id = 'tenant-test'",
 	}
 
-	for _, q := range tables {
-		if _, err := pool.Exec(ctx, q); err != nil {
-			t.Logf("cleanup query %q: %v", q, err)
+	withTenantContext(t, pool, "tenant-test", func(conn *pgxpool.Conn) {
+		for _, q := range tables {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Logf("cleanup query %q: %v", q, err)
+			}
 		}
+	})
+}
+
+// withTenantContext runs fn on ONE connection whose `app.tenant_id` is set.
+//
+// A fixture writes the way production writes: inside the tenant's context. Since
+// migration 000062 the tables are fail-closed and 000064 removed the owner's
+// standing bypass, so a seed without context is refused — correctly. What makes
+// this a helper instead of one `set_config` line is the pool: `set_config(...,
+// false)` is SESSION-scoped, and `pool.Exec` may hand the next statement a
+// different connection, which would silently have no context. Holding one
+// connection for the whole fixture is what makes the context apply to all of it.
+func withTenantContext(t *testing.T, pool *pgxpool.Pool, tenantID string, fn func(conn *pgxpool.Conn)) {
+	t.Helper()
+
+	ctx := context.Background()
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire connection for tenant context: %v", err)
 	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, `SELECT set_config('app.tenant_id', $1, false)`, tenantID); err != nil {
+		t.Fatalf("set tenant context: %v", err)
+	}
+	fn(conn)
 }
 
 // --- Helper functions ---
@@ -463,6 +514,11 @@ func readBody(t *testing.T, resp *http.Response) []byte {
 
 // --- Tests ---
 
+// POST /api/v1/builds passou a EXIGIR `Idempotency-Key` (middleware
+// MISSING_IDEMPOTENCY_KEY). Estas fixtures mandavam `nil` e recebiam 400 antes
+// de exercitar o lock — outra fixture congelada num contrato anterior. Cada
+// submissão leva a SUA chave: uma chave compartilhada transformaria a segunda
+// chamada num replay idempotente, que é o oposto do que estes testes medem.
 func TestConcurrentBuildSubmission(t *testing.T) {
 	// Two goroutines both call POST /builds simultaneously for the same
 	// (tenant, project, environment). Exactly one should get 202, the other 409.
@@ -476,7 +532,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
 		"environment": "production",
-		"apps":        []string{"api"},
+		"apps":        []map[string]any{{"name": "api"}},
 	}
 
 	// Use a barrier to synchronize both goroutines
@@ -494,7 +550,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 			defer wg.Done()
 			<-ready // Wait for barrier
 
-			resp, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
+			resp, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, map[string]string{"Idempotency-Key": fmt.Sprintf("concurrent-%d-%d", time.Now().UnixNano(), idx)}) //nolint:bodyclose // closed via readBody helper below
 			if err != nil {
 				t.Errorf("goroutine %d: request failed: %v", idx, err)
 				return
@@ -536,12 +592,16 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	// Assert: 409 response contains DEPLOY_IN_PROGRESS error code
 	for i, r := range results {
 		if r.status == http.StatusConflict {
-			var errResp map[string]string
+			// map[string]any, não map[string]string: o corpo de erro é RFC 7807 e
+			// carrega `status` numérico. Com map[string]string o Unmarshal falha
+			// inteiro e o teste morre ANTES de olhar o código do erro — outra
+			// fixture congelada num formato de resposta anterior.
+			var errResp map[string]any
 			if err := json.Unmarshal(r.body, &errResp); err != nil {
-				t.Fatalf("failed to parse 409 response body: %v", err)
+				t.Fatalf("failed to parse 409 response body: %v — body: %s", err, string(r.body))
 			}
 			if errResp["code"] != "DEPLOY_IN_PROGRESS" {
-				t.Fatalf("goroutine %d: expected error code DEPLOY_IN_PROGRESS, got %s", i, errResp["code"])
+				t.Fatalf("goroutine %d: expected error code DEPLOY_IN_PROGRESS, got %v", i, errResp["code"])
 			}
 			break
 		}
@@ -562,6 +622,12 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	}
 }
 
+// O corpo de POST /api/v1/builds declara `apps` como uma lista de OBJETOS
+// (`[]AppInput`, com `name` obrigatório), não de strings. Estas fixtures ficaram
+// na forma antiga e o handler as rejeitava com 400 INVALID_REQUEST antes de
+// tocar em qualquer regra — os testes mediam o parser, não o comportamento.
+// Mesma família de deriva do gatilho cell_id: fixture congelada num contrato
+// anterior.
 func TestIdempotencyReplay(t *testing.T) {
 	// First call with Idempotency-Key gets 202.
 	// Second call with SAME key + SAME payload gets 202 (replay).
@@ -573,7 +639,7 @@ func TestIdempotencyReplay(t *testing.T) {
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
 		"environment": "staging",
-		"apps":        []string{"web"},
+		"apps":        []map[string]any{{"name": "web"}},
 	}
 
 	idempotencyKey := fmt.Sprintf("idem-replay-%d", time.Now().UnixNano())
@@ -647,13 +713,13 @@ func TestIdempotencyMismatch(t *testing.T) {
 	payloadA := map[string]interface{}{
 		"project_id":  "proj-test1234",
 		"environment": "dev",
-		"apps":        []string{"api"},
+		"apps":        []map[string]any{{"name": "api"}},
 	}
 
 	payloadB := map[string]interface{}{
 		"project_id":  "proj-test1234",
 		"environment": "staging",
-		"apps":        []string{"web"},
+		"apps":        []map[string]any{{"name": "web"}},
 	}
 
 	idempotencyKey := fmt.Sprintf("idem-mismatch-%d", time.Now().UnixNano())
@@ -705,11 +771,11 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
 		"environment": "production",
-		"apps":        []string{"api"},
+		"apps":        []map[string]any{{"name": "api"}},
 	}
 
 	// Submit build 1
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, map[string]string{"Idempotency-Key": fmt.Sprintf("lock-1-%d", time.Now().UnixNano())}) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first build request failed: %v", err)
 	}
@@ -758,7 +824,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	}
 
 	// Submit build 2: should succeed because build 1 is no longer active
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, map[string]string{"Idempotency-Key": fmt.Sprintf("lock-2-%d", time.Now().UnixNano())}) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second build request failed: %v", err)
 	}

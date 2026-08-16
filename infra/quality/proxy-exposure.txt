@@ -53,12 +53,21 @@ auth-dev.loopzero.example - | reviewed | Kratos public surface by design (login/
 auth-dev.loopzero.example /oauth2/* | reviewed | Hydra OAuth2/OIDC endpoints; public by the OIDC spec
 auth-dev.loopzero.example /.well-known/* | reviewed | OIDC discovery + JWKS; public by the OIDC spec
 auth-dev.loopzero.example /userinfo | reviewed | OIDC UserInfo; returns the bearer's own claims, public by spec
-auth-dev.loopzero.example /credentials | reviewed | Hydra client credentials endpoint; public by spec, admin surface is denied separately (handle /admin/* -> 404)
+# `/credentials` e `credentials_endpoint_draft_00` — um RASCUNHO do OAuth que o Hydra
+# ANUNCIA no documento de descoberta e NAO implementa nesta versao. Medido em 2026-08-10:
+# devolve 404, e a rota da borda existe encaminhando para o Hydra. A declaracao anterior
+# dizia "public by spec", o que confundia anunciado com servido.
+#
+# Mantida declarada, e nao apagada, porque a rota da borda EXISTE: o gate proxy-exposure
+# exige declaracao para todo reverse_proxy, e apagar a linha reprovaria o gate sem tirar a
+# rota. Quando o Hydra passar a implementar o rascunho, esta linha ja cobre a superficie.
+auth-dev.loopzero.example /credentials | reviewed | rascunho do OAuth que o Hydra anuncia e nao implementa nesta versao — 404 medido em 2026-08-10; a rota da borda existe e por isso segue declarada
 auth-dev.loopzero.example /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
 auth-dev.loopzero.example /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
 
-# --- cloud-dev.loopzero.example ---------------------------------------------------
-cloud-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; response consumed by GitHub
+# cloud-dev.loopzero.example foi REMOVIDO em 2026-08-10 — era um segundo nome para o mesmo
+# painel, servindo 301, e o webhook do GitHub que justificava o host ja e registrado
+# contra app-dev (ver a linha app-dev.loopzero.example /api/v1/webhooks/github acima).
 
 # --- app/cloud/auth.loopzero.example — same droplet, non-"-dev" hostnames ---------
 # Same Caddy process and same upstreams as the -dev hosts (see the file header:

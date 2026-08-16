@@ -61,7 +61,7 @@ spec:
         {{- if .Values.vault.enabled }}
         # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
         # token with bounded audience + expiration. Read by pkg/vault.Client
-        # at /var/run/secrets/vault.loopzero.io/token; sent to auth/k8s-mgmt/login.
+        # at /var/run/secrets/vault.loopzero.io/token; sent to auth/k8s-core/login.
         # Vault TokenReview validates audience claim cryptographically,
         # preventing token re-use against K8s API or other audiences.
         - name: vault-sa-token
@@ -102,27 +102,27 @@ spec:
               readOnly: true
             {{- end }}
           env:
-            - name: MGMT_KUBECONFIG
-              value: /etc/loopzero/kubeconfigs/mgmt.kubeconfig
+            - name: CORE_KUBECONFIG
+              value: /etc/loopzero/kubeconfigs/core.kubeconfig
             - name: BUILD_KUBECONFIG
               value: /etc/loopzero/kubeconfigs/build.kubeconfig
-            - name: RUNTIME_KUBECONFIG
-              value: /etc/loopzero/kubeconfigs/runtime.kubeconfig
+            - name: CELL_0_KUBECONFIG
+              value: /etc/loopzero/kubeconfigs/cell-0.kubeconfig
             # Plan 2026-05-19-drill-skills-rigor-restoration T2.1: REMOVED
             # hardcoded "in-cluster" defaults that caused loopzero-api CrashLoop
             # quando overlay drill (DOKS) tem real context names like
-            # "do-sfo3-loopzero-drill-mgmt-cluster". Bootstrap script tinha
+            # "do-sfo3-loopzero-drill-core-cluster". Bootstrap script tinha
             # workaround kubectl-set-env post-sync (T2 follow-up tag) que
             # NÃO sobrevivia a re-sync. Comment "Pulumi sets these to actual
             # DOKS context names" era FALSA — Pulumi nunca setou.
             # NOW: values fornecem context names via .Values.kubeContexts
             # com fallback default "in-cluster" para local k3d synthetic.
-            - name: MGMT_KUBE_CONTEXT
-              value: {{ .Values.kubeContexts.mgmt | default "in-cluster" | quote }}
+            - name: CORE_KUBE_CONTEXT
+              value: {{ .Values.kubeContexts.core | default "in-cluster" | quote }}
             - name: BUILD_KUBE_CONTEXT
               value: {{ .Values.kubeContexts.build | default "in-cluster" | quote }}
-            - name: RUNTIME_KUBE_CONTEXT
-              value: {{ .Values.kubeContexts.runtime | default "in-cluster" | quote }}
+            - name: CELL_0_KUBE_CONTEXT
+              value: {{ .Values.kubeContexts.cell0 | default "in-cluster" | quote }}
             {{- range $k, $v := .Values.env }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}
@@ -285,9 +285,39 @@ spec:
               value: "/var/run/secrets/vault.loopzero.io/token"
             {{- end }}
           envFrom:
+            # B-104 — cada `optional: true` abaixo carrega a razao de ser opcional.
+            # `optional: true` faz o kubelet iniciar o container mesmo sem a fonte,
+            # entao ele e' o mecanismo que permite uma dependencia sumir sem que o
+            # arranque diga nada. Medido em dev-public em 2026-08-16: SEIS das dez
+            # fontes abaixo NAO EXISTEM no cluster (topology, broker-token, minio,
+            # internal, stripe, admin) e a API esta' de pe' servindo. Isso nao e'
+            # hipotese — e' o estado de agora, e e' o motivo de a consequencia ter
+            # virado observavel via `loopzero_api_surface_enabled`.
+            #
+            # A wiring ConfigMap distribui a topologia da plataforma (enderecos dos
+            # cluster peers). optional porque o chart e' instalado antes dela existir
+            # na ordem de bootstrap: a ConfigMap e' criada por um passo posterior do
+            # helmfile, e exigi-la aqui tornaria o bootstrap circular. Sem ela a API
+            # sobe com os defaults de `config.go` — que apontam para os enderecos
+            # in-cluster canonicos, logo o caminho feliz de instalacao unica funciona.
+            # AUSENTE em dev-public 2026-08-16.
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}
                 optional: true
+            # ATENCAO — este e' o `optional` de maior alcance, e a razao dele e' uma
+            # PERGUNTA ABERTA, nao uma decisao registrada.
+            #
+            # Medido: `api/cmd/setup_database.go:43-49` trata `DATABASE_URL` ausente
+            # como *"graceful degradation"* — emite Warn e devolve `nil, nil`. Com
+            # este `optional: true`, a combinacao faz a API SUBIR SEM BANCO, e como
+            # a maioria das superficies do roteador depende do banco, um segredo
+            # faltando apaga a maior parte do produto de uma vez. O `/health` continua
+            # respondendo.
+            #
+            # Nao mudo isso aqui: o comportamento esta' documentado no codigo como
+            # deliberado, e eu medi o COMPORTAMENTO, nao a INTENCAO. Trocar uma
+            # degradacao declarada intencional por um crash, sem decisao registrada,
+            # seria substituir um defeito por outro. Registrado como item proprio.
             - secretRef:
                 name: {{ .Values.dbCredentialsSecret | quote }}
                 optional: true
@@ -331,22 +361,37 @@ spec:
                 optional: true
             # Phase 3.3 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
             # 5 NEW Secrets created por ExternalSecret CRs (chart
-            # loopzero-external-secrets) pulling from loopzero-vault. Keys são
+            # loopzero-external-secrets) pulling from loopzero-secrets. Keys são
             # UPPER_SNAKE matching env var names (envFrom 1:1 mapping).
             # All optional=true — fallback ao env var legacy se ESO desabilitado
             # (vaultEnabled=false) OR Secret ainda não sincronizado.
+            # Credenciais do armazenamento de objetos (bundles de fonte). Sem elas o
+            # upload cai no default in-cluster de `config.go`. AUSENTE em dev-public
+            # 2026-08-16.
             - secretRef:
                 name: loopzero-api-minio
                 optional: true
+            # Segredos de chamada interna entre componentes da plataforma. AUSENTE em
+            # dev-public 2026-08-16.
             - secretRef:
                 name: loopzero-api-internal
                 optional: true
+            # Credenciais do GitHub App (id + chave privada). Sem elas o introspector
+            # de repositorio fica nil e o painel nao lista repos. PRESENTE em
+            # dev-public 2026-08-16. O segredo HMAC do webhook e' outro (`loopzero-github-webhook`)
+            # e a ausencia DELE e' o que este item tornou observavel.
             - secretRef:
                 name: loopzero-api-github
                 optional: true
+            # Chaves do Stripe. Sem elas a jornada de cobranca responde erro tipado
+            # em vez de sumir — e' o caminho que ja' falha alto. AUSENTE em dev-public
+            # 2026-08-16, logo a cobranca esta' desligada agora.
             - secretRef:
                 name: loopzero-api-stripe
                 optional: true
+            # Chave da API administrativa. Sem ela `validateAdminAPIKey` FALHA FECHADO
+            # (chave vazia recusa antes da comparacao), entao a ausencia nega acesso em
+            # vez de conceder — o caminho correto. AUSENTE em dev-public 2026-08-16.
             - secretRef:
                 name: loopzero-api-admin
                 optional: true

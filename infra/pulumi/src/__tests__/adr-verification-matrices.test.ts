@@ -85,10 +85,10 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
   });
 
   it("D2 — T3.x archive tooling shipped (single Pulumi project)", () => {
-    // pulumi-archive.sh migrated to pure-Go (pkg/pulumi/archive) per T1.1 of
+    // pulumi-archive.sh migrated to pure-Go (cmd/loopzero-ops/internal/pulumi/archive) per T1.1 of
     // plan 2026-05-23-incremental-bash-to-go-migration; wired via
     // `loopzero-ops pulumi archive` in pulumi-archive.yml.
-    expect(fileExists("pkg/pulumi/archive/check.go")).toBe(true);
+    expect(fileExists("cmd/loopzero-ops/internal/pulumi/archive/check.go")).toBe(true);
     // pulumi-orphan-rm.sh deleted 2026-05-22 (unwired standalone tool — recreate
     // ad-hoc if pulumi orphan cleanup is needed).
   });
@@ -122,7 +122,7 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
   });
 
   // D9 + D10 assertions removed per MEET-2026-05-12 D5 + T1.1 scope:
-  // - D9 referenced docs/customer-comms/cell-2-canary-template.md (deleted in fc1793dd,
+  // - D9 referenced docs/customer-comms/cell-1-canary-template.md (deleted in fc1793dd,
   //   superseded by .claude/knowledge-base/concepts/operations/incident-templates/* per T1.10)
   // - D10 referenced docs/plans/infra-normalize-multicell-plan.md (deleted in fc1793dd,
   //   superseded by .claude/knowledge-base/plans/2026-05-12-launch-readiness-waves-plan.md)

@@ -57,10 +57,10 @@ spec:
               in spec section 9.2.
             properties:
               cellID:
-                default: cell-default
+                default: cell-0
                 description: |-
                   CellID identifies which Cell this tenant's workloads run in.
-                  ADR-0008: Phase 0 defaults to "cell-default" (single Cell).
+                  ADR-0008: Phase 0 defaults to "cell-0" (single Cell).
                   Phase 1+ PlacementEngine assigns tenants to specific Cells.
                 minLength: 1
                 type: string

@@ -13,11 +13,11 @@ domain: dev.loopzero.example
 dnsZone: loopzero.example
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
-# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
-# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Opt-in flag: when true, core.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
 # Default false → secrets continue via legacy env var / K8s Secret pattern.
-# Set to true ONLY after DOKS loopzero-vault-dev cluster up + openbao-init Job ran +
-# ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests) +
+# Set to true ONLY after DOKS loopzero-secrets-dev cluster up + openbao-init Job ran +
+# ClusterSecretStore loopzero-secrets-secrets applied (Phase 3.1 manifests) +
 # seed-loopzero-secrets.sh ran for env=dev (T8.1 EC-21).
 vaultEnabled: false
 
@@ -73,15 +73,15 @@ underlyingStorageClass: do-block-storage
 # audit Gap 3: cell-id is K8s/ArgoCD metadata, NOT cloud infra — so it
 # lives in helmfile env (not Pulumi.dev.yaml).
 #
-# In dev: runtime cluster maps to cell-1; runtime-2 to cell-2. Both
-# seeded in cells SQL table (migration 000006); cell-2 starts in
+# In dev: runtime cluster maps to cell-0; runtime-2 to cell-1. Both
+# seeded in cells SQL table (migration 000006); cell-1 starts in
 # 'maintenance' status (no traffic until canary stage 1 flips it).
-runtimeCellId: cell-1
-runtime2CellId: cell-2
+cell0Id: cell-0
+cell1Id: cell-1
 
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — enable DynamicRouter
 # in loopzero-api so it consumes ClusterCredential CRs and routes per-tenant
-# to cell-1 or cell-2. Audit T0.1 Gap 4 (was: silently single-cell).
+# to cell-0 or cell-1. Audit T0.1 Gap 4 (was: silently single-cell).
 dynamicRouter: true
 
 # velero-backup-dr-plan v1.0 / T0.2 — Velero BSL config. Bucket name comes

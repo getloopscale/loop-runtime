@@ -81,7 +81,7 @@ func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
 		t.Errorf("expected M2 namespace %q in LogQL: got %q", expectedM2, got)
 	}
 	// A alternativa legada de dois segmentos foi deletada: namespaces de tenant caem na
-	// retenção padrão de 168h do Loki (só vault-system tem o stream de 90 dias) e o
+	// retenção padrão de 168h do Loki (só secrets-system tem o stream de 90 dias) e o
 	// rename M2 é de 2026-06-12 — aqueles logs expiraram semanas atrás. O seletor tem de
 	// ser igualdade exata, e não pode reintroduzir a forma antiga.
 	legacyDeletado := `"loopzero-tn-x-staging-eu-1"`

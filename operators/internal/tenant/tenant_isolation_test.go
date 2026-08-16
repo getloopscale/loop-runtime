@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/operators/operatortest"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // newGoldenTenant creates a minimal Tenant CR for golden test use.

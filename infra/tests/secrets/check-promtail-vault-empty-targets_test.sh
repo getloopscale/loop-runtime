@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Trio compatibility regression test for T8.1 promtail vault-audit scrape
-# in clusters WITHOUT vault-system NS (cleanroom loopzero-mgmt default).
+# in clusters WITHOUT secrets-system NS (cleanroom loopzero-core default).
 #
 # Validates that:
-#   - The kubernetes_sd_configs filter restricts to vault-system NS only
+#   - The kubernetes_sd_configs filter restricts to secrets-system NS only
 #   - When the NS doesn't exist, promtail finds 0 targets (NO ERROR)
 #   - The scrape config is structurally valid YAML
 
@@ -30,13 +30,13 @@ else
   fail "namespaces filter MISSING — would scrape ALL NS (privacy + perf bug)"
 fi
 
-if echo "${BLOCK}" | grep -qE '\- vault-system'; then
-  pass "vault-system NS in names list (correct target)"
+if echo "${BLOCK}" | grep -qE '\- secrets-system'; then
+  pass "secrets-system NS in names list (correct target)"
 else
-  fail "vault-system NS NOT in names — wrong target"
+  fail "secrets-system NS NOT in names — wrong target"
 fi
 
-blue "== Namespace filter is ONLY vault-system (no leak to other NS) =="
+blue "== Namespace filter is ONLY secrets-system (no leak to other NS) =="
 # Count namespace entries; should be exactly 1
 NS_COUNT=$(echo "${BLOCK}" | awk '/namespaces:/,/pipeline_stages:/' | grep -cE '^\s+- ' || echo 0)
 if [ "${NS_COUNT}" -eq 1 ]; then
@@ -64,7 +64,7 @@ else
   fail "error extraction MISSING"
 fi
 
-blue "== When vault-system NS is ABSENT (cleanroom), behavior is no-op =="
+blue "== When secrets-system NS is ABSENT (cleanroom), behavior is no-op =="
 # K8s SD discovery returns empty set; promtail accepts it as valid (proven by
 # Loki upstream behavior — kubernetes_sd_configs with non-existent NS is OK).
 # We verify the static config syntax does NOT depend on NS being live.

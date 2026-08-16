@@ -68,50 +68,50 @@ func readCellID(t *testing.T, client *dynamicfake.FakeDynamicClient, tenantID, n
 // =============================================================================
 
 func TestCellPinner_WithKubeClient_NilClientReturnsReceiverUnchanged(t *testing.T) {
-	store := &mockPinnerStore{prevCell: "cell-1"}
+	store := &mockPinnerStore{prevCell: "cell-0"}
 	p := NewCellPinner(store)
 	cp := p.WithKubeClient(nil, "")
 	if cp == nil {
 		t.Fatal("WithKubeClient(nil, ...) must not return nil")
 	}
 	// Ensure the no-client path still works (DB only, no patch attempt).
-	prev, err := cp.Pin(context.Background(), "tn-x", "cell-2")
+	prev, err := cp.Pin(context.Background(), "tn-x", "cell-1")
 	if err != nil {
 		t.Fatalf("Pin: %v", err)
 	}
-	if prev != "cell-1" {
-		t.Errorf("expected prev=cell-1, got %q", prev)
+	if prev != "cell-0" {
+		t.Errorf("expected prev=cell-0, got %q", prev)
 	}
 }
 
 func TestCellPinner_WithKubeClient_PatchesCROnSuccess(t *testing.T) {
-	store := &mockPinnerStore{prevCell: "cell-default"}
-	client := newFakeTenantClient(t, "tn-acme", "cell-default", "loopzero-system")
+	store := &mockPinnerStore{prevCell: "cell-0"}
+	client := newFakeTenantClient(t, "tn-acme", "cell-0", "loopzero-system")
 	p := NewCellPinner(store).WithKubeClient(client, "loopzero-system")
 
-	prev, err := p.Pin(context.Background(), "tn-acme", "cell-2")
+	prev, err := p.Pin(context.Background(), "tn-acme", "cell-1")
 	if err != nil {
 		t.Fatalf("Pin: %v", err)
 	}
-	if prev != "cell-default" {
-		t.Errorf("expected prev=cell-default, got %q", prev)
+	if prev != "cell-0" {
+		t.Errorf("expected prev=cell-0, got %q", prev)
 	}
-	if got := readCellID(t, client, "tn-acme", "loopzero-system"); got != "cell-2" {
-		t.Errorf("expected CR spec.cellID=cell-2 after patch, got %q", got)
+	if got := readCellID(t, client, "tn-acme", "loopzero-system"); got != "cell-1" {
+		t.Errorf("expected CR spec.cellID=cell-1 after patch, got %q", got)
 	}
 }
 
 func TestCellPinner_WithKubeClient_StoreErrorSkipsCRPatch(t *testing.T) {
 	store := &mockPinnerStore{err: errors.New("db down")}
-	client := newFakeTenantClient(t, "tn-acme", "cell-default", "loopzero-system")
+	client := newFakeTenantClient(t, "tn-acme", "cell-0", "loopzero-system")
 	p := NewCellPinner(store).WithKubeClient(client, "loopzero-system")
 
-	_, err := p.Pin(context.Background(), "tn-acme", "cell-2")
+	_, err := p.Pin(context.Background(), "tn-acme", "cell-1")
 	if err == nil {
 		t.Fatal("expected error from store")
 	}
-	// CR must remain at cell-default (no patch attempted when store fails).
-	if got := readCellID(t, client, "tn-acme", "loopzero-system"); got != "cell-default" {
+	// CR must remain at cell-0 (no patch attempted when store fails).
+	if got := readCellID(t, client, "tn-acme", "loopzero-system"); got != "cell-0" {
 		t.Errorf("CR was modified despite store error: %q", got)
 	}
 }
@@ -121,7 +121,7 @@ func TestCellPinner_WithKubeClient_CRPatchFailureDoesNotRollbackDB(t *testing.T)
 	// tenant — patch will return a not-found error. Pin() must:
 	//   - return prev_cell from the store (DB succeeded)
 	//   - NOT return the CR error to the caller (logged + manual fix)
-	store := &mockPinnerStore{prevCell: "cell-default"}
+	store := &mockPinnerStore{prevCell: "cell-0"}
 	scheme := runtime.NewScheme()
 	gvrToListKind := map[schema.GroupVersionResource]string{
 		tenantGVR: "TenantList",
@@ -129,35 +129,35 @@ func TestCellPinner_WithKubeClient_CRPatchFailureDoesNotRollbackDB(t *testing.T)
 	emptyClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind)
 	p := NewCellPinner(store).WithKubeClient(emptyClient, "loopzero-system")
 
-	prev, err := p.Pin(context.Background(), "tn-missing", "cell-2")
+	prev, err := p.Pin(context.Background(), "tn-missing", "cell-1")
 	if err != nil {
 		t.Fatalf("Pin must NOT return CR-patch errors to caller: %v", err)
 	}
-	if prev != "cell-default" {
-		t.Errorf("expected prev=cell-default from successful DB update, got %q", prev)
+	if prev != "cell-0" {
+		t.Errorf("expected prev=cell-0 from successful DB update, got %q", prev)
 	}
 }
 
 func TestCellPinner_WithKubeClient_RespectsCustomNamespace(t *testing.T) {
-	store := &mockPinnerStore{prevCell: "cell-1"}
-	client := newFakeTenantClient(t, "tn-x", "cell-1", "loopzero-prod")
+	store := &mockPinnerStore{prevCell: "cell-0"}
+	client := newFakeTenantClient(t, "tn-x", "cell-0", "loopzero-prod")
 	p := NewCellPinner(store).WithKubeClient(client, "loopzero-prod")
-	if _, err := p.Pin(context.Background(), "tn-x", "cell-2"); err != nil {
+	if _, err := p.Pin(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("Pin: %v", err)
 	}
-	if got := readCellID(t, client, "tn-x", "loopzero-prod"); got != "cell-2" {
+	if got := readCellID(t, client, "tn-x", "loopzero-prod"); got != "cell-1" {
 		t.Errorf("custom namespace patch not applied; got %q", got)
 	}
 }
 
 func TestCellPinner_WithKubeClient_DefaultNamespaceWhenEmpty(t *testing.T) {
-	store := &mockPinnerStore{prevCell: "cell-1"}
-	client := newFakeTenantClient(t, "tn-x", "cell-1", "loopzero-system")
+	store := &mockPinnerStore{prevCell: "cell-0"}
+	client := newFakeTenantClient(t, "tn-x", "cell-0", "loopzero-system")
 	p := NewCellPinner(store).WithKubeClient(client, "")
-	if _, err := p.Pin(context.Background(), "tn-x", "cell-2"); err != nil {
+	if _, err := p.Pin(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("Pin: %v", err)
 	}
-	if got := readCellID(t, client, "tn-x", "loopzero-system"); got != "cell-2" {
+	if got := readCellID(t, client, "tn-x", "loopzero-system"); got != "cell-1" {
 		t.Errorf("default namespace not honored; got %q", got)
 	}
 }
@@ -165,8 +165,8 @@ func TestCellPinner_WithKubeClient_DefaultNamespaceWhenEmpty(t *testing.T) {
 func TestCellPinner_PatchPayloadIsMergePatch(t *testing.T) {
 	// Verifies the patch is a strategic merge (not full replacement) so
 	// other CR fields (annotations, labels, status) are preserved.
-	store := &mockPinnerStore{prevCell: "cell-1"}
-	client := newFakeTenantClient(t, "tn-x", "cell-1", "loopzero-system")
+	store := &mockPinnerStore{prevCell: "cell-0"}
+	client := newFakeTenantClient(t, "tn-x", "cell-0", "loopzero-system")
 
 	// Pre-populate the CR with extra fields that must survive the patch.
 	got, _ := client.Resource(tenantGVR).Namespace("loopzero-system").Get(context.Background(), "tn-x", metav1Get())
@@ -178,7 +178,7 @@ func TestCellPinner_PatchPayloadIsMergePatch(t *testing.T) {
 	}
 
 	p := NewCellPinner(store).WithKubeClient(client, "loopzero-system")
-	if _, err := p.Pin(context.Background(), "tn-x", "cell-2"); err != nil {
+	if _, err := p.Pin(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("Pin: %v", err)
 	}
 	after, _ := client.Resource(tenantGVR).Namespace("loopzero-system").Get(context.Background(), "tn-x", metav1Get())
@@ -187,8 +187,8 @@ func TestCellPinner_PatchPayloadIsMergePatch(t *testing.T) {
 	if displayName != "preserved-display" {
 		t.Errorf("MergePatch dropped spec.displayName (was: %q, expected preserved)", displayName)
 	}
-	if cellID != "cell-2" {
-		t.Errorf("expected cellID=cell-2 after merge patch, got %q", cellID)
+	if cellID != "cell-1" {
+		t.Errorf("expected cellID=cell-1 after merge patch, got %q", cellID)
 	}
 	if !strings.Contains(cellID, "cell") {
 		t.Errorf("unexpected cellID format: %q", cellID)

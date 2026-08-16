@@ -79,7 +79,7 @@ func (r *TenantReconciler) buildApplicationSpecs(
 ) ([]argocd.ApplicationSpec, error) {
 	cellID := tenant.Spec.CellID
 	if cellID == "" {
-		cellID = "cell-default"
+		cellID = "cell-0"
 	}
 
 	specs := make([]argocd.ApplicationSpec, 0, len(tenant.Spec.Environments)+len(previewEnvs))

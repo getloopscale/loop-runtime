@@ -24,7 +24,7 @@ import (
 func cleanupTenant(tenantID string, timeout time.Duration) {
 	kubeCtx := os.Getenv("LOOPZERO_KUBE_CONTEXT")
 	if kubeCtx == "" {
-		kubeCtx = "k3d-loopzero-mgmt"
+		kubeCtx = "k3d-loopzero-core"
 	}
 
 	cmd := exec.Command("kubectl", "--context", kubeCtx,

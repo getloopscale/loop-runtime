@@ -9,7 +9,7 @@
 #
 # Usage: generate-secrets.sh <env> <cluster>
 #   env:     dev | prod | standalone
-#   cluster: mgmt | runtime
+#   cluster: core | runtime
 #
 # Optional env vars (override existing — used for explicit rotation):
 #   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME, LOOPZERO_DB_USER, LOOPZERO_DB_PASSWORD
@@ -28,15 +28,15 @@ CLUSTER="${2:?usage: $0 <env> <cluster>}"
 
 # Canonical 2026-06-20 (issue #115): pin kubectl context to the mgmt cluster.
 # This script applies Secrets to mgmt — without the pin, an active shell
-# context residue (e.g. `k3d-loopzero-vault` from a prior T0.1 / vault-bootstrap
+# context residue (e.g. `k3d-loopzero-secrets` from a prior T0.1 / vault-bootstrap
 # session) silently misprovisions Secrets to the wrong cluster, and
-# `task setup` fails at `infra:install:mgmt` with the secrets landed in
-# loopzero-vault. Override via `KUBECTL_CONTEXT` for non-k3d targets (DOKS prod,
+# `task setup` fails at `infra:install:core` with the secrets landed in
+# loopzero-secrets. Override via `KUBECTL_CONTEXT` for non-k3d targets (DOKS prod,
 # drill cluster). The `kubectl()` function override below injects
 # `--context="$KUBECTL_CONTEXT"` on every call — all bare `kubectl` calls
 # downstream inherit the canonical context by construction. Regression-locked
 # by infra/tests/charts/generate_secrets_context_pin_test.go.
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 log() { printf '[generate-secrets] %s\n' "$*" >&2; }
@@ -129,8 +129,11 @@ if out:
   fi
 }
 
-if [[ "$CLUSTER" != "mgmt" ]]; then
-  log "noop: cluster=$CLUSTER (only mgmt handled by this script)"
+# O cluster central chama-se `core` desde o rename de 2026-08-09 (ADR
+# docs/decisions/2026-08-09-cluster-topology-naming-adr.md). Chamador e guarda mudaram
+# juntos: enquanto os dois diziam `mgmt` nada quebrava, mas o vocabulario ficava preso.
+if [[ "$CLUSTER" != "core" ]]; then
+  log "noop: cluster=$CLUSTER (only core handled by this script)"
   exit 0
 fi
 
@@ -460,7 +463,7 @@ if [[ "${LOOPZERO_PROFILE:-standalone}" == "standalone" ]] || [[ -z "${LOOPZERO_
   # with `https://kubernetes.default.svc` placeholders. The `k3d:heal`
   # script (`infra/scripts/local/k3d-cross-cluster-heal.sh` H2) is meant
   # to patch the Secret with real container IPs + SA tokens AFTER
-  # bootstrap. But ANY subsequent `task infra:install:mgmt` re-ran
+  # bootstrap. But ANY subsequent `task infra:install:core` re-ran
   # generate-secrets.sh and wiped those real values back to placeholders
   # → loopzero-api submitted Workflow CRs to mgmt cluster (no
   # workflows.argoproj.io CRD) → "the server could not find the
@@ -504,7 +507,7 @@ KUBECONFIG_EOF
 )
 
   resolve_slot() {
-    # $1 = slot key (mgmt.kubeconfig | build.kubeconfig | runtime.kubeconfig)
+    # $1 = slot key (core.kubeconfig | build.kubeconfig | cell-0.kubeconfig)
     local key="$1"
     local existing
     existing=$(kubectl get secret loopzero-cluster-kubeconfigs -n loopzero-system \
@@ -518,14 +521,14 @@ KUBECONFIG_EOF
     fi
   }
 
-  MGMT_KC="$(resolve_slot mgmt.kubeconfig)"
+  MGMT_KC="$(resolve_slot core.kubeconfig)"
   BUILD_KC="$(resolve_slot build.kubeconfig)"
-  RUNTIME_KC="$(resolve_slot runtime.kubeconfig)"
+  RUNTIME_KC="$(resolve_slot cell-0.kubeconfig)"
 
   apply_secret loopzero-cluster-kubeconfigs loopzero-system \
-    --from-literal=mgmt.kubeconfig="$MGMT_KC" \
+    --from-literal=core.kubeconfig="$MGMT_KC" \
     --from-literal=build.kubeconfig="$BUILD_KC" \
-    --from-literal=runtime.kubeconfig="$RUNTIME_KC"
+    --from-literal=cell-0.kubeconfig="$RUNTIME_KC"
 fi
 
 # 8) Backup all LoopZero-managed Secrets for disaster recovery.

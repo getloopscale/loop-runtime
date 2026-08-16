@@ -161,12 +161,12 @@ spec:
               value: "argocd"
             - name: BUILD_KUBECONFIG
               value: "/etc/loopzero/build-kubeconfig"
-            - name: RUNTIME_KUBECONFIG
+            - name: CELL_0_KUBECONFIG
               value: "/etc/loopzero/runtime-kubeconfig"
             - name: BASE_DOMAIN
               value: "loopzero.local"
             - name: WORKLOAD_CLUSTER_URL
-              value: "https://k3d-loopzero-workload-server-0:6443"
+              value: "https://k3d-loopzero-cell-0-server-0:6443"
             - name: OPERATOR_INSECURE_SKIP_TLS
               value: "true"
             - name: INGRESS_NAMESPACE
@@ -228,7 +228,7 @@ spec:
                 path: build-kubeconfig
         - name: runtime-kubeconfig
           configMap:
-            name: loopzero-runtime-kubeconfig
+            name: loopzero-cell-0-kubeconfig
             items:
               - key: config
                 path: runtime-kubeconfig

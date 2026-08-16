@@ -83,13 +83,13 @@ func TestSecretCellClientProvider_ClientFor_ResolvesFromSecret(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(secretCellScheme(t)).
 		WithObjects(
-			clusterCredential("cell-1", "cc-secret"),
+			clusterCredential("cell-0", "cc-secret"),
 			kubeconfigSecret("cc-secret", map[string][]byte{"kubeconfig": []byte(minimalKubeconfig)}),
 		).
 		Build()
 	p := NewSecretCellClientProvider(c, "loopzero-system")
 
-	client, err := p.ClientFor(context.Background(), "cell-1")
+	client, err := p.ClientFor(context.Background(), "cell-0")
 	if err != nil {
 		t.Fatalf("ClientFor: %v", err)
 	}
@@ -104,17 +104,17 @@ func TestSecretCellClientProvider_ClientFor_CachesClient(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(secretCellScheme(t)).
 		WithObjects(
-			clusterCredential("cell-1", "cc-secret"),
+			clusterCredential("cell-0", "cc-secret"),
 			kubeconfigSecret("cc-secret", map[string][]byte{"kubeconfig": []byte(minimalKubeconfig)}),
 		).
 		Build()
 	p := NewSecretCellClientProvider(c, "loopzero-system")
 
-	first, err := p.ClientFor(context.Background(), "cell-1")
+	first, err := p.ClientFor(context.Background(), "cell-0")
 	if err != nil {
 		t.Fatalf("first ClientFor: %v", err)
 	}
-	second, err := p.ClientFor(context.Background(), "cell-1")
+	second, err := p.ClientFor(context.Background(), "cell-0")
 	if err != nil {
 		t.Fatalf("second ClientFor: %v", err)
 	}
@@ -140,13 +140,13 @@ func TestSecretCellClientProvider_ClientFor_SecretMissingKubeconfig_Errors(t *te
 	c := fake.NewClientBuilder().
 		WithScheme(secretCellScheme(t)).
 		WithObjects(
-			clusterCredential("cell-1", "cc-secret"),
+			clusterCredential("cell-0", "cc-secret"),
 			kubeconfigSecret("cc-secret", map[string][]byte{"other": []byte("x")}),
 		).
 		Build()
 	p := NewSecretCellClientProvider(c, "loopzero-system")
 
-	if _, err := p.ClientFor(context.Background(), "cell-1"); err == nil {
+	if _, err := p.ClientFor(context.Background(), "cell-0"); err == nil {
 		t.Fatal("ClientFor must error when the Secret has no data.kubeconfig")
 	}
 }

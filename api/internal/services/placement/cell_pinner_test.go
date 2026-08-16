@@ -32,19 +32,19 @@ func (m *mockPinnerStore) PinTenantToCell(_ context.Context, tenantID, cellID st
 }
 
 func TestCellPinner_Pin_DelegatesToStore(t *testing.T) {
-	store := &mockPinnerStore{prevCell: "cell-default"}
+	store := &mockPinnerStore{prevCell: "cell-0"}
 	p := NewCellPinner(store)
-	prev, err := p.Pin(context.Background(), "tn-x", "cell-2")
+	prev, err := p.Pin(context.Background(), "tn-x", "cell-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if prev != "cell-default" {
-		t.Errorf("prev = %q, want cell-default", prev)
+	if prev != "cell-0" {
+		t.Errorf("prev = %q, want cell-0", prev)
 	}
 	if !store.captured.called {
 		t.Error("store not called")
 	}
-	if store.captured.tenantID != "tn-x" || store.captured.cellID != "cell-2" {
+	if store.captured.tenantID != "tn-x" || store.captured.cellID != "cell-1" {
 		t.Errorf("captured: tenant=%q cell=%q", store.captured.tenantID, store.captured.cellID)
 	}
 }
@@ -63,7 +63,7 @@ func TestCellPinner_Pin_PropagatesStoreError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &mockPinnerStore{err: tc.storeErr}
 			p := NewCellPinner(store)
-			_, err := p.Pin(context.Background(), "tn-x", "cell-2")
+			_, err := p.Pin(context.Background(), "tn-x", "cell-1")
 			if !errors.Is(err, tc.storeErr) {
 				t.Errorf("error = %v, want %v", err, tc.storeErr)
 			}
@@ -73,7 +73,7 @@ func TestCellPinner_Pin_PropagatesStoreError(t *testing.T) {
 
 func TestCellPinner_Pin_NilStore_Errors(t *testing.T) {
 	p := NewCellPinner(nil)
-	_, err := p.Pin(context.Background(), "tn-x", "cell-2")
+	_, err := p.Pin(context.Background(), "tn-x", "cell-1")
 	if err == nil {
 		t.Fatal("expected error when store nil")
 	}

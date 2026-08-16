@@ -5,8 +5,8 @@
 //
 // Root cause of Red Team loopzero-cloud#127: the canonical Caddyfile reverse_proxy
 // upstream was hardcoded to `https://172.18.0.10:443` — a Docker network IP
-// assigned by DHCP that drifted from k3d-loopzero-workload-serverlb to
-// k3d-loopzero-vault-serverlb after `docker restart`. Every customer-app request
+// assigned by DHCP that drifted from k3d-loopzero-cell-0-serverlb to
+// k3d-loopzero-secrets-serverlb after `docker restart`. Every customer-app request
 // then routed to the VAULT cluster → 502 sustentado for the ENTIRE dev-public
 // probe surface. The stable host-port form 127.0.0.1:8443 does NOT drift.
 //

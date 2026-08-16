@@ -23,7 +23,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/events"
+	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -40,7 +40,7 @@ type ReleaseConvergenceLoopConfig struct {
 	// MaxConcurrent bounds parallel release verifications.
 	MaxConcurrent int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
-	// "cell-default" means single-cell / backward-compatible behavior.
+	// "cell-0" means single-cell / backward-compatible behavior.
 	CellID string
 }
 

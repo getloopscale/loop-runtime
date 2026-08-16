@@ -238,7 +238,7 @@ func runLokiRetentionSchema(args []string) int {
 		}
 		return 1
 	}
-	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream vault-system + priority int + defaults) clean")
+	fmt.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream secrets-system + priority int + defaults) clean")
 	return 0
 }
 

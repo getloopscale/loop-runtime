@@ -481,7 +481,7 @@ func TestDevPublic_DeployBuildPromote_CliLogsListbuildsInference(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var parsed struct {
-		Total  int `json:"total"`
+		Total  int              `json:"total"`
 		Builds []map[string]any `json:"builds"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&parsed))

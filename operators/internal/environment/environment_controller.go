@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package environment holds the Environment reconciler and the resources it
+// owns per environment — namespace, quota, network policy and RBAC.
+//
+// Its status has exactly ONE writer, which persists with a merge patch off a
+// base snapshot taken right after the initial Get: a merge patch carries no
+// resourceVersion, so it never 409s against a concurrent spec write by another
+// controller.
 package environment
 
 import (
@@ -42,7 +49,7 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 //   - r.RuntimeFactory  -> cell-aware factory: returns the right runtime client
 //     based on tenant.spec.cellID (fix-all-platform-issues-plan T1.1, parity
 //     with operators/internal/controller/environment_controller.go from
-//     cell-2-activation-plan iter 4 BUG-FIX).
+//     cell-1-activation-plan iter 4 BUG-FIX).
 //
 // All namespace/RBAC/NetworkPolicy/Quota writes MUST go through
 // runtimeClientForEnv() — direct r.RuntimeClient calls bypass cell awareness.
@@ -309,6 +316,15 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 
 	logger.Info("environment is being deleted", "environment", env.Name)
 
+	// This path's own base snapshot.
+	//
+	// Reconcile branches here BEFORE the finalizer block, so the base the main
+	// path takes does not exist yet — and one taken at the top of Reconcile to
+	// serve both would be stale for the main path. Two snapshots in disjoint
+	// scopes make picking the wrong one impossible; the shape validated in
+	// slice-21 (B-085).
+	base := env.DeepCopy()
+
 	// Transition to Deleting via state machine (Rule 8).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
 		next, err := environmentSM.TryTransition(statemachine.EnvironmentPhase(env.Status.Phase), statemachine.EPEventDeleteRequested)
@@ -317,7 +333,7 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 			return ctrl.Result{}, err
 		}
 		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
-		if err := r.Status().Update(ctx, env); err != nil {
+		if err := r.Status().Patch(ctx, env, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -357,10 +373,10 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 // every environment regardless of cellID.
 //
 // Multi-cell mode: pass a CellAwareRuntimeClientFactory built from
-// mgr.GetClient() (mgmt) + runtimeClient (legacy fallback for cell-default).
+// mgr.GetClient() (mgmt) + runtimeClient (legacy fallback for cell-0).
 //
 // fix-all-platform-issues-plan T1.1 — split-binary parity with the
-// monolithic controller from cell-2-activation-plan iter 4.
+// monolithic controller from cell-1-activation-plan iter 4.
 //
 // Quality-Gate Phase 3: SetupEnvironmentController legacy wrapper removed
 // — all callers (cmd/* binaries + operatortest envtest_suite) now invoke

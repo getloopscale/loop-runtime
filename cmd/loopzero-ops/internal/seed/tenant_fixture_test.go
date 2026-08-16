@@ -45,11 +45,14 @@ func (r *stubPgRow) Scan(dest ...any) error {
 }
 
 type stubPgConn struct {
-	mu       sync.Mutex
-	rowScan  map[string]*stubPgRow // SQL prefix → row
-	execs    []struct{ sql string; args []any }
-	execErr  error
-	closed   bool
+	mu      sync.Mutex
+	rowScan map[string]*stubPgRow // SQL prefix → row
+	execs   []struct {
+		sql  string
+		args []any
+	}
+	execErr error
+	closed  bool
 }
 
 func (c *stubPgConn) QueryRow(ctx context.Context, sql string, args ...any) pgRow {
@@ -65,7 +68,10 @@ func (c *stubPgConn) QueryRow(ctx context.Context, sql string, args ...any) pgRo
 func (c *stubPgConn) Exec(ctx context.Context, sql string, args ...any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.execs = append(c.execs, struct{ sql string; args []any }{sql, args})
+	c.execs = append(c.execs, struct {
+		sql  string
+		args []any
+	}{sql, args})
 	return c.execErr
 }
 func (c *stubPgConn) Close(ctx context.Context) error { c.closed = true; return nil }

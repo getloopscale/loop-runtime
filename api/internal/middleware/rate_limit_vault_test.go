@@ -87,11 +87,11 @@ func TestAllow_MaxCellsCap_RejectsNewCells(t *testing.T) {
 		Burst:     100,
 		MaxCells:  2,
 	})
+	if !rl.Allow("cell-0") {
+		t.Error("cell-0 should pass")
+	}
 	if !rl.Allow("cell-1") {
 		t.Error("cell-1 should pass")
-	}
-	if !rl.Allow("cell-2") {
-		t.Error("cell-2 should pass")
 	}
 	if rl.Allow("cell-3") {
 		t.Error("cell-3 must be rejected (MaxCells cap)")
@@ -129,7 +129,7 @@ func TestMiddleware_HappyPath_Passes(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest("POST", srv.URL, nil)
-	req.Header.Set("X-Cell-ID", "cell-default")
+	req.Header.Set("X-Cell-ID", "cell-0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("http.DefaultClient.Do: %v", err)

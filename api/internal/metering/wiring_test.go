@@ -21,7 +21,7 @@ import (
 // Worker + Loop. Asserts the [CRITICAL] guardrail: MaxDelta MUST be < one billing
 // period (ADR-8 / SC-7), else a stale-cursor catch-up could span two periods.
 func TestNewWorkerLoop_ThreadsTunablesAndLease(t *testing.T) {
-	lease := leader.Lease{Name: "compute-metering", CellID: "cell-1", GenerationID: 7}
+	lease := leader.Lease{Name: "compute-metering", CellID: "cell-0", GenerationID: 7}
 	loop := NewWorkerLoop(nil, nil, &fakeCellClientProvider{}, LoopConfig{
 		Interval:       time.Minute,
 		MaxDelta:       time.Hour,

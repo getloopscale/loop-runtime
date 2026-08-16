@@ -29,7 +29,7 @@ import (
 
 const (
 	docPath             = "docs/operations/option-b-mgmt-helmfile-eso-deploy.md"
-	runtimeHelmfilePath = "infra/helmfile/runtime.helmfile.yaml.gotmpl"
+	runtimeHelmfilePath = "infra/helmfile/cell.helmfile.yaml.gotmpl"
 )
 
 // Config controls the check.
@@ -137,8 +137,8 @@ func Check(cfg Config) (Outcome, error) {
 	// I: cross-references section + canonical pattern source.
 	assertRE("Cross-references section header (^## Cross-references)", `(?m)^## Cross-references`)
 	xrefsBody := extractTailSection(doc, "## Cross-references")
-	if !strings.Contains(xrefsBody, "runtime.helmfile.yaml.gotmpl") {
-		failures = append(failures, "MISSING: Cross-references body must cite runtime.helmfile.yaml.gotmpl as canonical pattern source")
+	if !strings.Contains(xrefsBody, "cell.helmfile.yaml.gotmpl") {
+		failures = append(failures, "MISSING: Cross-references body must cite cell.helmfile.yaml.gotmpl as canonical pattern source")
 	}
 
 	// J: anti-patterns.

@@ -170,7 +170,7 @@ pulumi up -s dev
 pulumi stack output --json
 pulumi stack output execution --json
 pulumi stack output wiring --json
-pulumi stack output mgmtKubeconfig --show-secrets > mgmt.kubeconfig
+pulumi stack output mgmtKubeconfig --show-secrets > core.kubeconfig
 pulumi stack output runtimeKubeconfig --show-secrets > runtime.kubeconfig
 ```
 

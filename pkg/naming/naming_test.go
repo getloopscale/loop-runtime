@@ -714,3 +714,37 @@ func TestEnvironmentCRName_projetoVazioFalhaAlto(t *testing.T) {
 		t.Error("projeto vazio deve devolver erro, não um nome degenerado")
 	}
 }
+
+// AppCertSecretName — #277: o renderer nomeia o Secret TLS como "tls-{project}-{app}"
+// (api/internal/manifests/renderer_ingress.go), enquanto o exposure controller o procurava
+// por CertSecretName(hostname) => "{hostname-sanitizado}-tls". Duas fórmulas para o mesmo
+// objeto, que nunca coincidiram: o ExposedRoute ficou Pending por 27 dias com o
+// certificado emitido e válido.
+
+func TestAppCertSecretName_bateComORenderer(t *testing.T) {
+	got, err := AppCertSecretName("teste", "app")
+	if err != nil {
+		t.Fatalf("AppCertSecretName: %v", err)
+	}
+	// Este valor foi observado em app-dev: o Secret real criado pelo renderer.
+	if got != "tls-teste-app" {
+		t.Errorf("AppCertSecretName = %q, want %q — o renderer produz tls-{project}-{app}", got, "tls-teste-app")
+	}
+}
+
+func TestAppCertSecretName_projetosDistintosNaoCompartilhamCert(t *testing.T) {
+	a, _ := AppCertSecretName("alpha", "api")
+	b, _ := AppCertSecretName("beta", "api")
+	if a == b {
+		t.Fatalf("dois projetos com o mesmo nome de app compartilhariam o cert: %q", a)
+	}
+}
+
+func TestAppCertSecretName_argumentoVazioFalhaAlto(t *testing.T) {
+	if _, err := AppCertSecretName("", "api"); err == nil {
+		t.Error("projeto vazio deve falhar alto")
+	}
+	if _, err := AppCertSecretName("alpha", ""); err == nil {
+		t.Error("app vazio deve falhar alto")
+	}
+}

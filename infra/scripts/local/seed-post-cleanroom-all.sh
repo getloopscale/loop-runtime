@@ -115,33 +115,33 @@ skip_step() {
 VERIFY_FLAG=""
 [[ "$VERIFY" == "1" ]] && VERIFY_FLAG="--verify"
 
-# Step 0 (NEW 2026-06-20) — auto-provision the separate loopzero-vault k3d
+# Step 0 (NEW 2026-06-20) — auto-provision the separate loopzero-secrets k3d
 # cluster + OpenBao chart BEFORE Step 1 (vault-bootstrap-dev.sh) attempts
 # init/unseal. Gated on LOOPZERO_HELMFILE_ENV=dev-public per ADR
 # 2026-06-20-dev-public-vault-automated-init (sponsor-accepted risk: the
 # dev-public TEST tier uses an AUTOMATED Shamir init; the witness +
 # distributed-shard ceremony is scoped to prod/persistent vaults only).
 #
-# Jeito A INQUEBRÁVEL: this uses `task k3d:vault:create` +
-# `task k3d:vault:bootstrap` against the SEPARATE k3d-loopzero-vault cluster.
-# `task k3d:vault:bootstrap-in-mgmt` remains PROHIBITED (independent of
+# Jeito A INQUEBRÁVEL: this uses `task k3d:secrets:create` +
+# `task k3d:secrets:bootstrap` against the SEPARATE k3d-loopzero-secrets cluster.
+# `task k3d:secrets:bootstrap-in-core` remains PROHIBITED (independent of
 # witness scope — separate-cluster topology violation).
 #
-# Both tasks are idempotent: k3d:vault:create skips if cluster exists;
-# k3d:vault:bootstrap re-syncs helm releases (cert-manager + cluster-issuer
+# Both tasks are idempotent: k3d:secrets:create skips if cluster exists;
+# k3d:secrets:bootstrap re-syncs helm releases (cert-manager + cluster-issuer
 # + openbao-cert + openbao chart) without destroying existing state. So
 # this Step 0 is a no-op on a warm-vault re-run, and the only cost on a
 # Cleanroom-fresh run is the cluster create + ~3min helm sync.
 #
 # In other envs (standalone-multi / unset / prod) this Step 0 is SKIPPED —
-# standalone doesn't run loopzero-vault, and prod requires the witnessed
+# standalone doesn't run loopzero-secrets, and prod requires the witnessed
 # ceremony per the mandate § Sub-step 2.5 prod/persistent path.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
-  run_step "0a-vault-cluster-create" "cd $REPO_ROOT && task k3d:vault:create"
-  run_step "0b-vault-cluster-bootstrap" "cd $REPO_ROOT && task k3d:vault:bootstrap"
+  run_step "0a-secrets-cluster-create" "cd $REPO_ROOT && task k3d:secrets:create"
+  run_step "0b-secrets-cluster-bootstrap" "cd $REPO_ROOT && task k3d:secrets:bootstrap"
 else
-  skip_step "0a-vault-cluster-create" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "0b-vault-cluster-bootstrap" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "0a-secrets-cluster-create" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "0b-secrets-cluster-bootstrap" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 1
@@ -157,15 +157,15 @@ fi
 # per the canonical runbook (VK.5) — codified here closes the seed chain
 # FAIL=11 for the cross-cluster ESO read path. Reuses the existing
 # canonical vault-bootstrap-eso.sh (NOT a new .sh — Rule 9 + un-homed-logic).
-# Only meaningful under Jeito A (separate loopzero-vault cluster); single-
+# Only meaningful under Jeito A (separate loopzero-secrets cluster); single-
 # cluster runs no-op via the script's own preflight.
 if [[ "$SKIP_VAULT" == "1" ]]; then
   skip_step "1b-vault-bootstrap-eso" "skipped together with step 1 (operator already ran vault chain)"
 else
   ESO_BOOTSTRAP="$SCRIPT_DIR/../openbao/vault-bootstrap-eso.sh"
   if [[ -f "$ESO_BOOTSTRAP" ]]; then
-    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopzero-mgmt --vault-context k3d-loopzero-vault" || \
-      log "  (continuing — CSS loopzero-vault-secrets may need operator triage)"
+    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopzero-core --vault-context k3d-loopzero-secrets" || \
+      log "  (continuing — CSS loopzero-secrets-secrets may need operator triage)"
   else
     skip_step "1b-vault-bootstrap-eso" "vault-bootstrap-eso.sh not found at $ESO_BOOTSTRAP (skipped)"
   fi
@@ -332,7 +332,7 @@ run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopzero-ops && 
 # whether the poller is enabled is decided by helmfile overlay per env
 # (dev-public: enabled=true; standalone-multi: not declared → treated
 # as disabled). Legacy shell-env override kept for local dev workflows.
-POLLER_ENABLED_CFG="$(kubectl --context "${MGMT_CONTEXT:-k3d-loopzero-mgmt}" \
+POLLER_ENABLED_CFG="$(kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" \
   -n loopzero-system get configmap loopzero-app-operator \
   -o jsonpath='{.data.LOOPZERO_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
 if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then

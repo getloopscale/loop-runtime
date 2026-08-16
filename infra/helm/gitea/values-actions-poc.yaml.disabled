@@ -2,7 +2,7 @@
 #
 # Per ADR-2026-05-27-T0.2 (`.claude/knowledge-base/decisions/2026-05-27-T0.2-ci-platform-choice.md`).
 # Sponsor renames `.disabled` → `.yaml` after Cenário A meeting approval, then
-# adds this file to helmfile values list in `infra/helmfile/mgmt.helmfile.yaml.gotmpl`
+# adds this file to helmfile values list in `infra/helmfile/core.helmfile.yaml.gotmpl`
 # under the gitea release.
 #
 # Why Cenário A: reuses LoopZero's existing Gitea install (zero new infra cost),

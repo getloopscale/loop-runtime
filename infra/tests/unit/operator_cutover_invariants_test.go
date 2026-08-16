@@ -231,13 +231,13 @@ func TestT12_MultiCellObservabilityShipped(t *testing.T) {
 	}
 }
 
-// T-13 — live cell-2 canary stage 1 GREEN.
+// T-13 — live cell-1 canary stage 1 GREEN.
 // SKIP: requires cloud cluster + 1h soak (Phase 5 T5.6).
 func TestT13_Cell2Stage1_Live(t *testing.T) {
 	t.Skip("requires cloud cluster + 1h soak — Phase 5 T5.6 cloud-pendente")
 }
 
-// T-14 — live cell-2 canary stage 2 GREEN.
+// T-14 — live cell-1 canary stage 2 GREEN.
 // SKIP: requires 24h soak (Phase 5 T5.7).
 func TestT14_Cell2Stage2_Live(t *testing.T) {
 	t.Skip("requires cloud cluster + 24h soak — Phase 5 T5.7 cloud-pendente")

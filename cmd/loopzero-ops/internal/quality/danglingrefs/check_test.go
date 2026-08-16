@@ -92,7 +92,7 @@ func run(t *testing.T, root string) *Outcome {
 // (full-path form) is a dangling reference → Pass=false.
 func TestDangling_LiveSkillRef_Fails(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/dr/preflight.sh":         "#!/usr/bin/env bash\necho hi\n",
+		"infra/scripts/dr/preflight.sh":           "#!/usr/bin/env bash\necho hi\n",
 		".claude/skills/cleanroom-drill/SKILL.md": "Run: `bash infra/scripts/dr/preflight.sh`\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
@@ -112,7 +112,7 @@ func TestDangling_LiveSkillRef_Fails(t *testing.T) {
 func TestDangling_AbbreviatedSkillRef_Fails(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
 		"infra/scripts/dr/teardown-validator.sh": "#!/usr/bin/env bash\n",
-		".claude/skills/drill-test/SKILL.md":      "- Pular `dr/teardown-validator.sh` (audit cleanup)\n",
+		".claude/skills/drill-test/SKILL.md":     "- Pular `dr/teardown-validator.sh` (audit cleanup)\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
 		"infra/scripts/dr/teardown-validator.sh": "<DELETE>",
@@ -144,9 +144,9 @@ func TestDangling_CommentOnly_Passes(t *testing.T) {
 // basename must NOT trigger a false positive.
 func TestDangling_BasenameCollision_Passes(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/dr/preflight.sh":      "#!/usr/bin/env bash\n",
-		"infra/tests/parity/preflight.sh":    "#!/usr/bin/env bash\n",
-		".github/workflows/multi-cell.yml":   "        run: bash infra/tests/parity/preflight.sh\n",
+		"infra/scripts/dr/preflight.sh":    "#!/usr/bin/env bash\n",
+		"infra/tests/parity/preflight.sh":  "#!/usr/bin/env bash\n",
+		".github/workflows/multi-cell.yml": "        run: bash infra/tests/parity/preflight.sh\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
 		"infra/scripts/dr/preflight.sh": "<DELETE>",
@@ -161,8 +161,8 @@ func TestDangling_BasenameCollision_Passes(t *testing.T) {
 // path is still referenced is a dangling reference.
 func TestDangling_Rename_TreatedAsDelete(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/old-name.sh":   "#!/usr/bin/env bash\necho content that is identical so git detects rename\n",
-		".github/workflows/ci.yml":     "        run: bash infra/scripts/old-name.sh\n",
+		"infra/scripts/old-name.sh": "#!/usr/bin/env bash\necho content that is identical so git detects rename\n",
+		".github/workflows/ci.yml":  "        run: bash infra/scripts/old-name.sh\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
 		"infra/scripts/old-name.sh": "<RENAME>:infra/scripts/new-name.sh",
@@ -194,8 +194,8 @@ func TestDangling_DeletedAndAllRefsRemoved_Passes(t *testing.T) {
 // every script; a deleted script lingering in the allowlist is not "live".
 func TestDangling_AllowlistRefIgnored_Passes(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/dr/cost-report.sh":            "#!/usr/bin/env bash\n",
-		".claude/rules/shell-scripts-allowlist.md":   "| infra/scripts/dr/cost-report.sh | 159 | grandfathered |\n",
+		"infra/scripts/dr/cost-report.sh":          "#!/usr/bin/env bash\n",
+		".claude/rules/shell-scripts-allowlist.md": "| infra/scripts/dr/cost-report.sh | 159 | grandfathered |\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
 		"infra/scripts/dr/cost-report.sh": "<DELETE>",

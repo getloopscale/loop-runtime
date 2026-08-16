@@ -147,8 +147,8 @@ func TestTenantVAP_RejectsCellIDMutation(t *testing.T) {
 	_, immutable, _ := loadTenantVAP(t)
 	vars := map[string]any{
 		"request":   map[string]any{"operation": "UPDATE"},
-		"oldObject": map[string]any{"spec": map[string]any{"cellID": "cell-1"}},
-		"object":    map[string]any{"spec": map[string]any{"cellID": "cell-2"}},
+		"oldObject": map[string]any{"spec": map[string]any{"cellID": "cell-0"}},
+		"object":    map[string]any{"spec": map[string]any{"cellID": "cell-1"}},
 	}
 	if evalCEL(t, immutable, vars) {
 		t.Error("cellID mutation should be denied (immutability expr returned true)")
@@ -160,8 +160,8 @@ func TestTenantVAP_AllowsCellIDUnchanged(t *testing.T) {
 	_, immutable, _ := loadTenantVAP(t)
 	vars := map[string]any{
 		"request":   map[string]any{"operation": "UPDATE"},
-		"oldObject": map[string]any{"spec": map[string]any{"cellID": "cell-1"}},
-		"object":    map[string]any{"spec": map[string]any{"cellID": "cell-1"}},
+		"oldObject": map[string]any{"spec": map[string]any{"cellID": "cell-0"}},
+		"object":    map[string]any{"spec": map[string]any{"cellID": "cell-0"}},
 	}
 	if !evalCEL(t, immutable, vars) {
 		t.Error("unchanged cellID should be admitted (immutability expr returned false)")

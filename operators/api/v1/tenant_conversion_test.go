@@ -25,7 +25,7 @@ func TestTenantConversion_RoundTripIdentity(t *testing.T) {
 	original := &Tenant{}
 	original.Name = "tn-abc"
 	original.Spec.DisplayName = "Acme"
-	original.Spec.CellID = "cell-1"
+	original.Spec.CellID = "cell-0"
 	original.Spec.Environments = []TenantEnvironmentEntry{{Name: "production"}}
 
 	got := roundTripThroughHub(original)

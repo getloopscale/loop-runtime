@@ -34,7 +34,7 @@ var (
 
 // Heading anchors used to identify scanned sections.
 const (
-	ChecklistHeading       = "## Quality Gates Checklist"
+	ChecklistHeading        = "## Quality Gates Checklist"
 	NAJustificationsHeading = "### N/A justifications"
 )
 

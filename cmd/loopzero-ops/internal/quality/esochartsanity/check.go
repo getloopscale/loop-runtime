@@ -10,7 +10,7 @@
 //     (`^  - targetSecret:` entries in values.yaml)
 //  2. all metadata.name entries are unique (no duplicate target Secret names)
 //  3. all CRs have refreshInterval set
-//  4. all CRs reference the loopzero-vault-secrets ClusterSecretStore
+//  4. all CRs reference the loopzero-secrets-secrets ClusterSecretStore
 //  5. chart renders successfully for standalone-multi + dev + drill + prod
 //  6. vaultBinaryOverride: loopzero-tenant-operator CR data block has ≥ 3
 //     api/secrets/* path entries (GITEA_TOKEN + MINIO_ACCESS_KEY + MINIO_SECRET_KEY)
@@ -115,10 +115,10 @@ func Check(cfg Config) (Outcome, error) {
 		failures = append(failures, fmt.Sprintf("refreshInterval count %d != %d", refresh, expected))
 	}
 
-	// (4) All CRs reference loopzero-vault-secrets ClusterSecretStore.
-	css := countMatches(renderVL, `name: loopzero-vault-secrets`)
+	// (4) All CRs reference loopzero-secrets-secrets ClusterSecretStore.
+	css := countMatches(renderVL, `name: loopzero-secrets-secrets`)
 	if css != expected {
-		failures = append(failures, fmt.Sprintf("loopzero-vault-secrets ref count %d != %d", css, expected))
+		failures = append(failures, fmt.Sprintf("loopzero-secrets-secrets ref count %d != %d", css, expected))
 	}
 
 	// (5) Chart renders for all canonical envs.

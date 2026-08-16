@@ -90,14 +90,14 @@ func (s *HydraURLsSeed) Verify(d Deps) Result {
 // URL rewrite patterns (compiled once for perf; parallel to the bash script's
 // python3 regex block).
 var (
-	reHydraIssuer   = regexp.MustCompile(`issuer: http://ory-hydra-public[^\s]*`)
-	reHydraPublic   = regexp.MustCompile(`public: http://ory-hydra-public[^\s]*`)
-	reHydraVerify   = regexp.MustCompile(`verification: http://localhost:\d+/[\w-]*device-verify`)
-	reHydraSuccess  = regexp.MustCompile(`success: http://localhost:\d+/[\w-]*device-success`)
-	reHydraLogin    = regexp.MustCompile(`login: http://localhost:\d+/[\w/-]*login`)
-	reHydraConsent  = regexp.MustCompile(`consent: http://localhost:\d+/[\w/-]*consent`)
-	reHydraLogout   = regexp.MustCompile(`logout: http://localhost:\d+/[\w/-]*logout`)
-	reHydraError    = regexp.MustCompile(`error: http://localhost:\d+/[\w/-]*error`)
+	reHydraIssuer  = regexp.MustCompile(`issuer: http://ory-hydra-public[^\s]*`)
+	reHydraPublic  = regexp.MustCompile(`public: http://ory-hydra-public[^\s]*`)
+	reHydraVerify  = regexp.MustCompile(`verification: http://localhost:\d+/[\w-]*device-verify`)
+	reHydraSuccess = regexp.MustCompile(`success: http://localhost:\d+/[\w-]*device-success`)
+	reHydraLogin   = regexp.MustCompile(`login: http://localhost:\d+/[\w/-]*login`)
+	reHydraConsent = regexp.MustCompile(`consent: http://localhost:\d+/[\w/-]*consent`)
+	reHydraLogout  = regexp.MustCompile(`logout: http://localhost:\d+/[\w/-]*logout`)
+	reHydraError   = regexp.MustCompile(`error: http://localhost:\d+/[\w/-]*error`)
 )
 
 // rewriteHydraURLs is the pure function that mirrors the bash python3 block

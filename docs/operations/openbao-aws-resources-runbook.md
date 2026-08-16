@@ -98,7 +98,7 @@ helmfile -e prod sync --selector name=openbao
 helmfile -e prod sync --selector name=bank-vaults-operator
 ```
 
-The Helmfile gotmpl ([`infra/helmfile/mgmt.helmfile.yaml.gotmpl`](../../infra/helmfile/mgmt.helmfile.yaml.gotmpl))
+The Helmfile gotmpl ([`infra/helmfile/core.helmfile.yaml.gotmpl`](../../infra/helmfile/core.helmfile.yaml.gotmpl))
 uses `requiredEnv` for all `OPENBAO_*` keys — if any is missing the sync
 fails fast with a clear error.
 
@@ -147,11 +147,11 @@ aws kms enable-key-rotation --key-id "$NEW_KEY"
 
 # 2. Decrypt the existing OpenBao seal blob with the OLD key, re-encrypt with NEW key.
 #    OpenBao operator command for KMS seal rewrap:
-kubectl -n vault-system exec openbao-0 -- bao operator seal-rewrap
+kubectl -n secrets-system exec openbao-0 -- bao operator seal-rewrap
 
 # 3. Verify all pods are healthy + unsealed with new key
-kubectl -n vault-system get pods -l app.kubernetes.io/name=openbao
-kubectl -n vault-system exec openbao-0 -- bao status | grep -i sealed   # must be false
+kubectl -n secrets-system get pods -l app.kubernetes.io/name=openbao
+kubectl -n secrets-system exec openbao-0 -- bao status | grep -i sealed   # must be false
 
 # 4. Swap alias to point at new key
 aws kms update-alias --alias-name alias/loopzero-openbao-prod --target-key-id "$NEW_KEY"
@@ -207,12 +207,12 @@ aws --endpoint-url https://sfo3.digitaloceanspaces.com \
 helmfile -e prod sync --selector name=openbao
 
 # 4. Restore snapshot
-kubectl -n vault-system cp /tmp/<TIMESTAMP>.snap openbao-0:/tmp/snapshot.snap
-kubectl -n vault-system exec openbao-0 -- \
+kubectl -n secrets-system cp /tmp/<TIMESTAMP>.snap openbao-0:/tmp/snapshot.snap
+kubectl -n secrets-system exec openbao-0 -- \
     bao operator raft snapshot restore /tmp/snapshot.snap
 
 # 5. Validate: list a known secret to confirm decryption works end-to-end
-kubectl -n vault-system exec openbao-0 -- bao kv list secret/
+kubectl -n secrets-system exec openbao-0 -- bao kv list secret/
 ```
 
 Cross-reference: [break-glass-runbook.md](./break-glass-runbook.md) for
@@ -265,4 +265,4 @@ variable; with snapshot retention of 7d hourly + 30d daily + 12w weekly
 - [openbao-init-runbook.md](./openbao-init-runbook.md) — Shamir initialization ceremony
 - [break-glass-runbook.md](./break-glass-runbook.md) — Recovery without quorum
 - ADR `2026-06-02-openbao-adoption.md` (Q2 AWS KMS choice rationale)
-- Helmfile wiring: [`infra/helmfile/mgmt.helmfile.yaml.gotmpl`](../../infra/helmfile/mgmt.helmfile.yaml.gotmpl) (openbao release `set:` stanza)
+- Helmfile wiring: [`infra/helmfile/core.helmfile.yaml.gotmpl`](../../infra/helmfile/core.helmfile.yaml.gotmpl) (openbao release `set:` stanza)

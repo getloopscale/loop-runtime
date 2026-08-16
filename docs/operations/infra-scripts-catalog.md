@@ -67,7 +67,7 @@ o drill (gate de maturidade `a`), os gates de qualidade, ou a publicação de im
 | `clean-incremental.sh` | Remove builds/tenants/projects órfãos | **CRÍTICO** | LOCAL — limpeza de dev | 61 · 04-29 | Task, SKILL | KEEP-OPERATOR |
 | `ensure-project.sh` | Cria projeto default via API se não existir | **MÉDIO** | LOCAL/CI | 49 · 03-30 | Task | KEEP-CI-ORCHESTRATOR |
 | `k3d-cross-cluster-heal.sh` | Recovery idempotente cross-cluster (H1-H15) | **CRÍTICO** | **LOCAL** — só k3d (zero prod) | 1005 · 05-22 | Task | KEEP-OPERATOR |
-| `regen-all-scoped-kubeconfigs.sh` | Regenera SA tokens scoped por ClusterCredential | **CRÍTICO** | LOCAL — k3d (exclui cell-default) | 220 · 05-21 | Task | KEEP-OPERATOR |
+| `regen-all-scoped-kubeconfigs.sh` | Regenera SA tokens scoped por ClusterCredential | **CRÍTICO** | LOCAL — k3d (exclui cell-0) | 220 · 05-21 | Task | KEEP-OPERATOR |
 | `setup-cross-cluster-networking.sh` | Alcançabilidade entre nós k3d | **ALTO** | **LOCAL** — só k3d | 86 · 03-30 | Task | KEEP-OPERATOR |
 | `setup-host-inotify-limits.sh` | Persiste limites de inotify do kernel | **MÉDIO** | **LOCAL** — host de dev | 96 · 05-13 | Task | KEEP-OPERATOR |
 | `update-cross-cluster-ips.sh` | Atualiza IPs cross-cluster nos manifests | **ALTO** | **LOCAL** — k3d | 171 · 03-31 | Task, script | KEEP-OPERATOR |

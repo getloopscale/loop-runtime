@@ -47,8 +47,8 @@ ENV=""
 SNAPSHOT_KEY=""
 LIST_MODE=0
 EXECUTE=0
-VAULT_CONTEXT="${LOOPZERO_VAULT_CONTEXT:-k3d-loopzero-vault}"
-VAULT_NAMESPACE="vault-system"
+SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
+VAULT_NAMESPACE="secrets-system"
 VAULT_POD="openbao-0"
 DO_REGION="${OPENBAO_BACKUP_REGION:-sfo3}"
 S3_ENDPOINT="https://${DO_REGION}.digitaloceanspaces.com"
@@ -72,8 +72,8 @@ MODE (one of)
 
 OPTIONAL
   --execute              ACTUALLY perform restore (default: dry-run only)
-  --vault-context <ctx>  kubectl context (default: k3d-loopzero-vault)
-  --vault-namespace <ns> Vault NS (default: vault-system)
+  --vault-context <ctx>  kubectl context (default: k3d-loopzero-secrets)
+  --vault-namespace <ns> Vault NS (default: secrets-system)
   --vault-pod <name>     Vault pod name (default: openbao-0)
   --do-region <r>        DO Spaces region (default: sfo3; env OPENBAO_BACKUP_REGION)
   --help                 Show this help
@@ -99,7 +99,7 @@ EXAMPLES
 POST-RESTORE
   Vault will be RE-SEALED after restore (Raft state replaced; current root
   token + unseal shards may not match new state). Operator MUST re-run
-  Shamir unseal ceremony per docs/operations/vault-cluster-local-runbook.md P3.
+  Shamir unseal ceremony per docs/operations/secrets-cluster-local-runbook.md P3.
 EOF
 }
 
@@ -109,7 +109,7 @@ while [ $# -gt 0 ]; do
     --snapshot-key) SNAPSHOT_KEY="$2"; shift 2 ;;
     --list) LIST_MODE=1; shift ;;
     --execute) EXECUTE=1; shift ;;
-    --vault-context) VAULT_CONTEXT="$2"; shift 2 ;;
+    --vault-context) SECRETS_CONTEXT="$2"; shift 2 ;;
     --vault-namespace) VAULT_NAMESPACE="$2"; shift 2 ;;
     --vault-pod) VAULT_POD="$2"; shift 2 ;;
     --do-region) DO_REGION="$2"; S3_ENDPOINT="https://${DO_REGION}.digitaloceanspaces.com"; shift 2 ;;
@@ -145,7 +145,7 @@ if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
 fi
 
 BUCKET="${BUCKET_PREFIX}-${ENV}"
-echo "[INFO] env=$ENV bucket=s3://$BUCKET region=$DO_REGION vault-ctx=$VAULT_CONTEXT" >&2
+echo "[INFO] env=$ENV bucket=s3://$BUCKET region=$DO_REGION vault-ctx=$SECRETS_CONTEXT" >&2
 echo "" >&2
 
 # ----------------------------------------------------------------------------
@@ -203,9 +203,9 @@ fi
 echo "" >&2
 echo "[STEP 3/4] kubectl cp to $VAULT_POD:/tmp/snapshot.snap" >&2
 if [ "$EXECUTE" -eq 0 ]; then
-  echo "  [DRY-RUN] kubectl --context $VAULT_CONTEXT -n $VAULT_NAMESPACE cp $LOCAL_PATH $VAULT_POD:/tmp/snapshot.snap" >&2
+  echo "  [DRY-RUN] kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE cp $LOCAL_PATH $VAULT_POD:/tmp/snapshot.snap" >&2
 else
-  if kubectl --context "$VAULT_CONTEXT" -n "$VAULT_NAMESPACE" cp \
+  if kubectl --context "$SECRETS_CONTEXT" -n "$VAULT_NAMESPACE" cp \
       "$LOCAL_PATH" "$VAULT_POD:/tmp/snapshot.snap" >/dev/null 2>&1; then
     echo "  [OK] snapshot copied to pod" >&2
   else
@@ -219,19 +219,19 @@ fi
 echo "" >&2
 echo "[STEP 4/4] Restore Vault from snapshot (DESTRUCTIVE)" >&2
 if [ "$EXECUTE" -eq 0 ]; then
-  echo "  [DRY-RUN] kubectl --context $VAULT_CONTEXT -n $VAULT_NAMESPACE exec $VAULT_POD -- bao operator raft snapshot restore /tmp/snapshot.snap" >&2
+  echo "  [DRY-RUN] kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE exec $VAULT_POD -- bao operator raft snapshot restore /tmp/snapshot.snap" >&2
   echo "" >&2
   echo "🛑 To actually restore, re-run with --execute" >&2
   exit 0
 else
   echo "  [WARN] performing DESTRUCTIVE operation in 3 seconds (Ctrl-C to abort)" >&2
   sleep 3
-  if kubectl --context "$VAULT_CONTEXT" -n "$VAULT_NAMESPACE" exec "$VAULT_POD" -- \
+  if kubectl --context "$SECRETS_CONTEXT" -n "$VAULT_NAMESPACE" exec "$VAULT_POD" -- \
       bao operator raft snapshot restore /tmp/snapshot.snap >/dev/null 2>&1; then
     echo "  [OK] restore command completed" >&2
   else
     echo "  [FAIL] restore command failed — Vault state may be in inconsistent state" >&2
-    echo "  Manual recovery: kubectl --context $VAULT_CONTEXT -n $VAULT_NAMESPACE describe pod $VAULT_POD" >&2
+    echo "  Manual recovery: kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE describe pod $VAULT_POD" >&2
     rm -f "$LOCAL_PATH"
     exit 2
   fi
@@ -246,9 +246,9 @@ echo "[COMPLETE] Vault state restored from $SNAPSHOT_KEY" >&2
 echo "" >&2
 echo "🛑 POST-RESTORE STEPS (operator-time, MANDATORY):" >&2
 echo "  1. Vault is now likely RE-SEALED — verify status:" >&2
-echo "     kubectl --context $VAULT_CONTEXT -n $VAULT_NAMESPACE exec $VAULT_POD -- bao status" >&2
+echo "     kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE exec $VAULT_POD -- bao status" >&2
 echo "  2. If sealed: re-run Shamir unseal ceremony per" >&2
-echo "     docs/operations/vault-cluster-local-runbook.md P3" >&2
+echo "     docs/operations/secrets-cluster-local-runbook.md P3" >&2
 echo "  3. After unseal, verify KV data integrity:" >&2
 echo "     bash infra/scripts/openbao/vault-sync-check.sh --threshold 10" >&2
 exit 0

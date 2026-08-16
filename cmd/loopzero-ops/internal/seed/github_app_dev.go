@@ -55,6 +55,20 @@ func (s *GitHubAppDevSeed) Run(d Deps) Result {
 	// Byte-for-byte parity with the bash seed: `$(python3 ...)` expansion
 	// strips trailing newlines, then `printf "%s" > /tmp` writes without a
 	// terminator. Preserve that shape so the K8s Secret data is identical.
+	// The namespace before the Secret that lives in it.
+	//
+	// B-021: on a fresh cleanroom this seed ran before `loopzero-system` existed and
+	// failed on the prerequisite, so the webhook secret was never written, so the
+	// handler stayed nil, so the route was never registered — and the only symptom
+	// was a 404 in GitHub's delivery log. The chain never announced itself.
+	//
+	// Idempotent, and a no-op against the fake client the unit tests use, which is
+	// why the guard for this is the structural assertion in
+	// namespace_precondition_test.go rather than a behavioural one here.
+	if err := ensureNamespace(d, d.Kube, githubAppNamespace); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", githubAppNamespace, err)}
+	}
+
 	pem := []byte(strings.TrimRight(d.Creds.GitHub.AppPrivateKey, "\n"))
 	webhook := []byte(strings.TrimRight(d.Creds.GitHub.WebhookSecret, "\n"))
 	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx,

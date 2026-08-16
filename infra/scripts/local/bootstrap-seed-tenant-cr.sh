@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
+CTX="${MGMT_CTX:-k3d-loopzero-core}"
 NS="${LOOPZERO_NS:-loopzero-system}"
 TENANT_ID="${SEED_TENANT_ID:-tn-e2etest}"
 DISPLAY_NAME="${SEED_TENANT_DISPLAY:-${TENANT_ID}}"
@@ -36,7 +36,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: bootstrap-seed-tenant-cr
 spec:
-  cellID: cell-default
+  cellID: cell-0
   displayName: ${DISPLAY_NAME}
   plan: ${PLAN}
   # Empty by construction — canonical post-M2 plan T1.1
@@ -65,4 +65,4 @@ spec:
     maxBuildConcurrency: 2
 YAML
 
-log "Tenant CR ${NS}/${TENANT_ID} applied (cellID=cell-default plan=${PLAN})"
+log "Tenant CR ${NS}/${TENANT_ID} applied (cellID=cell-0 plan=${PLAN})"

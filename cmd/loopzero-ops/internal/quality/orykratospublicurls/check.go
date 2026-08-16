@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-const helmfileRel = "infra/helmfile/mgmt.helmfile.yaml.gotmpl"
+const helmfileRel = "infra/helmfile/core.helmfile.yaml.gotmpl"
 
 // Config controls the check.
 type Config struct {

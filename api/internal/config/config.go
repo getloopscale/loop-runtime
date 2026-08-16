@@ -189,7 +189,7 @@ type Config struct {
 	// reaching PG (the SecretEncryptionKey AES path is ignored; an EC-05
 	// boot log records `crypto_mode=transit aes_key_ignored=true`).
 	OpenBaoTransitEnabled bool   // OPENBAO_TRANSIT_ENABLED — opt-in
-	OpenBaoVaultAddr      string // OPENBAO_VAULT_ADDR (e.g. https://openbao.vault-system.svc:8200)
+	OpenBaoVaultAddr      string // OPENBAO_VAULT_ADDR (e.g. https://openbao.secrets-system.svc:8200)
 	OpenBaoVaultRoleID    string // OPENBAO_VAULT_ROLE_ID — AppRole role_id
 	OpenBaoVaultSecretID  string // OPENBAO_VAULT_SECRET_ID — AppRole secret_id
 	OpenBaoSPKIPinSHA256  string // OPENBAO_SPKI_PIN_SHA256 — hex-encoded SHA-256 of leaf cert SPKI (optional)
@@ -366,12 +366,12 @@ func Load() Config {
 		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
 
 		// Kubernetes Contexts
-		MgmtKubeconfig:  envOr("MGMT_KUBECONFIG", defaultKubeconfig),
-		MgmtKubeContext: envOr("MGMT_KUBE_CONTEXT", "k3d-loopzero-mgmt"),
+		MgmtKubeconfig:  envOr("CORE_KUBECONFIG", defaultKubeconfig),
+		MgmtKubeContext: envOr("CORE_KUBE_CONTEXT", "k3d-loopzero-core"),
 		BuildKubeconfig:   envOr("BUILD_KUBECONFIG", defaultKubeconfig),
 		BuildKubeContext:  envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
-		RuntimeKubeconfig: envOr("RUNTIME_KUBECONFIG", defaultKubeconfig),
-		RuntimeKubeContext: envOr("RUNTIME_KUBE_CONTEXT", "k3d-loopzero-workload"),
+		RuntimeKubeconfig: envOr("CELL_0_KUBECONFIG", defaultKubeconfig),
+		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loopzero-cell-0"),
 
 		// Service URLs
 		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),
@@ -716,7 +716,7 @@ func (c Config) validateOpenBaoTransit() error {
 		return nil
 	}
 	if c.OpenBaoVaultAddr == "" {
-		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ADDR (e.g. https://openbao.vault-system.svc:8200)")
+		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ADDR (e.g. https://openbao.secrets-system.svc:8200)")
 	}
 	if c.OpenBaoVaultRoleID == "" {
 		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ROLE_ID (AppRole role_id)")

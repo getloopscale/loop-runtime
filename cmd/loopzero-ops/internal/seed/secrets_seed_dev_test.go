@@ -22,9 +22,9 @@ import (
 // and records writes. GET /v1/kv/data/loopzero/dev/api/secrets/github returns
 // 200 if the path was written earlier.
 type openBaoStubState struct {
-	mu       sync.Mutex
-	writes   map[string]map[string]string
-	token    string
+	mu     sync.Mutex
+	writes map[string]map[string]string
+	token  string
 }
 
 func newOpenBaoStubServer(t *testing.T, token string) (*httptest.Server, *openBaoStubState) {

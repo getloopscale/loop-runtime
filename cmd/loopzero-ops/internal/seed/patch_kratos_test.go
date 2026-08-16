@@ -7,12 +7,13 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"gopkg.in/yaml.v3"
 )
 
 func makeKratosCreds() *Creds {
@@ -57,7 +58,7 @@ func TestPatchKratosYAML_UpdatesAllSeven(t *testing.T) {
 		CookieDomain:   kratosDefaultCookieDomain,
 		GitHubClientID: "ghid-1", GitHubSecret: "ghsec-1",
 		GoogleClientID: "ggid-2", GoogleSecret: "ggsec-2",
-		ResendAPIKey:   "re_abc",
+		ResendAPIKey: "re_abc",
 	}
 	got, err := patchKratosYAML(stubKratosYAML, cfg)
 	if err != nil {
@@ -139,7 +140,7 @@ func TestPatchKratosYAML_Idempotent(t *testing.T) {
 }
 
 func TestPatchKratosSeed_LoadConfig_SkipWhenCredsAbsent(t *testing.T) {
-	deps := Deps{Ctx: context.Background(), Creds: nil}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Creds: nil}
 	got := NewPatchKratosSeed().Run(deps)
 	if got.Verdict != SKIP {
 		t.Fatalf("Verdict = %s (%s), want SKIP", got.Verdict, got.Reason)
@@ -150,7 +151,7 @@ func TestPatchKratosSeed_LoadConfig_FailWhenMissingFields(t *testing.T) {
 	creds := &Creds{}
 	// Only github client_id populated — the rest missing → FAIL.
 	creds.GitHub.ClientID = "just-one"
-	deps := Deps{Ctx: context.Background(), Creds: creds}
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Creds: creds}
 	got := NewPatchKratosSeed().Run(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -173,10 +174,11 @@ func TestPatchKratosSeed_Run_PatchesAndRolloutsBoth(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm, dep, ss).Build()
 	deps := Deps{
-		Ctx:        context.Background(),
-		Kube:       NewKubeClient(c),
-		CtrlClient: c,
-		Creds:      makeKratosCreds(),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(c),
+		CtrlClient:           c,
+		Creds:                makeKratosCreds(),
 	}
 	got := NewPatchKratosSeed().Run(deps)
 	if got.Verdict != PASS {
@@ -208,10 +210,11 @@ func TestPatchKratosSeed_Run_DryRunNoWrite(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
 	deps := Deps{
-		Ctx:    context.Background(),
-		Kube:   NewKubeClient(c),
-		DryRun: true,
-		Creds:  makeKratosCreds(),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(c),
+		DryRun:               true,
+		Creds:                makeKratosCreds(),
 	}
 	got := NewPatchKratosSeed().Run(deps)
 	if got.Verdict != PASS {
@@ -244,9 +247,10 @@ func TestPatchKratosSeed_Run_PassWhenAlreadyCanonical(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
 	deps := Deps{
-		Ctx:   context.Background(),
-		Kube:  NewKubeClient(c),
-		Creds: makeKratosCreds(),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(c),
+		Creds:                makeKratosCreds(),
 	}
 	got := NewPatchKratosSeed().Run(deps)
 	if got.Verdict != PASS {
@@ -260,9 +264,10 @@ func TestPatchKratosSeed_Run_PassWhenAlreadyCanonical(t *testing.T) {
 func TestPatchKratosSeed_Run_FailWhenConfigMapMissing(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	deps := Deps{
-		Ctx:   context.Background(),
-		Kube:  NewKubeClient(c),
-		Creds: makeKratosCreds(),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(c),
+		Creds:                makeKratosCreds(),
 	}
 	got := NewPatchKratosSeed().Run(deps)
 	if got.Verdict != FAIL {
@@ -284,9 +289,10 @@ func TestPatchKratosSeed_Verify_PassWhenCanonical(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
 	deps := Deps{
-		Ctx:   context.Background(),
-		Kube:  NewKubeClient(c),
-		Creds: makeKratosCreds(),
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(c),
+		Creds:                makeKratosCreds(),
 	}
 	got := NewPatchKratosSeed().Verify(deps)
 	if got.Verdict != PASS {
@@ -302,9 +308,9 @@ func TestPatchKratosSeed_Name(t *testing.T) {
 
 func TestTrimTrailingSlash(t *testing.T) {
 	cases := map[string]string{
-		"http://x":    "http://x",
-		"http://x/":   "http://x",
-		"http://x//":  "http://x",
+		"http://x":   "http://x",
+		"http://x/":  "http://x",
+		"http://x//": "http://x",
 	}
 	for in, want := range cases {
 		if got := trimTrailingSlash(in); got != want {

@@ -291,4 +291,3 @@ func TestDevPublic_Helpers_AssertConformsToSpec_HealthReturns200Body(t *testing.
 	// EC-5 canonical: empty body of a declared status skips JSON parse.
 	assertConformsToSpec(t, http.MethodGet, "/api/v1/health", http.StatusOK, nil)
 }
-

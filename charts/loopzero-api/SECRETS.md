@@ -29,9 +29,9 @@ Generate a random hex secret with `openssl rand -hex 32` where indicated.
 | `OPENBAO_VAULT_ROLE_ID` | when-transit | from OpenBao AppRole | OpenBao AppRole role_id |
 | `OPENBAO_VAULT_SECRET_ID` | when-transit | from OpenBao AppRole | OpenBao AppRole secret_id |
 | `CF_API_TOKEN` | Y | from Cloudflare | Cloudflare API token |
-| `MGMT_KUBECONFIG` | Y | kubeconfig YAML | mgmt cluster kubeconfig |
+| `CORE_KUBECONFIG` | Y | kubeconfig YAML | mgmt cluster kubeconfig |
 | `BUILD_KUBECONFIG` | Y | kubeconfig YAML | build cluster kubeconfig |
-| `RUNTIME_KUBECONFIG` | Y | kubeconfig YAML | runtime cluster kubeconfig |
+| `CELL_0_KUBECONFIG` | Y | kubeconfig YAML | runtime cluster kubeconfig |
 | `STRIPE_SECRET_KEY` | Y | from Stripe | engine Stripe secret key |
 | `GITHUB_APP_PRIVATE_KEY` | Y | GitHub App PEM | GitHub App PKCS1 RSA private key |
 | `GITHUB_WEBHOOK_SECRET` | Y | openssl rand -hex 32 | GitHub webhook HMAC secret |

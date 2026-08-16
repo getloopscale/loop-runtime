@@ -231,7 +231,7 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 // the empty-cellID → CellDefault fallback is verified by
 // TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault
 // above (static-content guard on the wrapper source). The PG-level
-// backward-compat for rows with cell_id='cell-default' (migration
+// backward-compat for rows with cell_id='cell-0' (migration
 // 000029 default) is verified by the integration suite.
 
 // NOTE: Stale checkers (PostgresStaleBuildChecker, PostgresStaleReleaseChecker)

@@ -718,9 +718,27 @@ paths:
       tags:
       - health
       summary: Deep health check
+      description: >-
+        Superseded by /api/v1/health/ready, which answers identically. Kept because deployment
+        probes point at it; removal is a separate item after a deprecation deadline (B-123).
       responses:
         '200':
           description: deep health check
+  /api/v1/health/ready:
+    get:
+      tags:
+      - health
+      summary: Readiness — the service can take traffic
+      description: >-
+        The ecosystem-canonical readiness name (loopzero-contracts/httpsurface, D5). Checks the
+        database and every registered service; 200 when all are healthy, 503 when any is degraded.
+        Shares the handler with /api/v1/health/deep, whose name describes how the check is
+        implemented rather than what it answers.
+      responses:
+        '200':
+          description: every dependency answered; safe to route traffic here
+        '503':
+          description: a dependency is degraded; do not route traffic here
   /api/v1/projects/{name}/build-envs:
     parameters:
     - name: name

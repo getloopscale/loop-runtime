@@ -11,6 +11,7 @@
 // exported wrappers below.
 //
 // File is *_test.go so it does NOT compile into the operator binary.
+
 package platform
 
 import (

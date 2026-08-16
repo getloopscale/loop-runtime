@@ -133,7 +133,7 @@ func TestLoopZeroOperatorsEnvCompleteness(t *testing.T) {
 		t.Fatalf("resolve operators dir: %v", err)
 	}
 	// kubeconfig env keys are delivered via platform volume mount, not chart ConfigMap/Secret (EC-1).
-	platformDelivered := map[string]bool{"BUILD_KUBECONFIG": true, "RUNTIME_KUBECONFIG": true}
+	platformDelivered := map[string]bool{"BUILD_KUBECONFIG": true, "CELL_0_KUBECONFIG": true}
 	cmds := map[string]string{
 		"loopzero-tenant-operator":   "cmd/tenant-operator",
 		"loopzero-app-operator":      "cmd/app-operator",

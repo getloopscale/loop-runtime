@@ -22,11 +22,11 @@ import (
 //
 // Sets `OPENBAO_VAULT_ADDR=https://<serverlb-ip>:<nodeport>` on the mgmt/loopzero-system/
 // loopzero-api Deployment env so it can reach OpenBao that runs in the SEPARATE
-// k3d-loopzero-vault cluster (Jeito A per cleanroom-up-live-test-mandate.md).
+// k3d-loopzero-secrets cluster (Jeito A per cleanroom-up-live-test-mandate.md).
 //
 // Cross-cluster discovery:
-//  1. Vault Service `openbao.vault-system` in the vault cluster → https NodePort
-//  2. `docker inspect` on `k3d-loopzero-vault-serverlb` for the container IP
+//  1. Vault Service `openbao.secrets-system` in the vault cluster → https NodePort
+//  2. `docker inspect` on `k3d-loopzero-secrets-serverlb` for the container IP
 //
 // D1 exemption: `docker inspect` is a READ-ONLY container introspection —
 // docker is the only source-of-truth for the k3d loadbalancer's internal IP.
@@ -39,18 +39,18 @@ func NewVaultCrossClusterAddrSeed() *VaultCrossClusterAddrSeed {
 func (s *VaultCrossClusterAddrSeed) Name() string { return "vault-cross-cluster-addr" }
 
 const (
-	vaultContextName        = "k3d-loopzero-vault"
-	vaultNamespace          = "vault-system"
+	vaultContextName        = "k3d-loopzero-secrets"
+	vaultNamespace          = "secrets-system"
 	openbaoServiceName      = "openbao"
 	openbaoHTTPSPortName    = "https"
-	vaultServerLBContainer  = "k3d-loopzero-vault-serverlb"
+	vaultServerLBContainer  = "k3d-loopzero-secrets-serverlb"
 	openBaoVaultAddrEnvVar  = "OPENBAO_VAULT_ADDR"
-	loopzeroAPINamespaceInMgmt  = "loopzero-system"
-	loopzeroAPIDeploymentInMgmt = "loopzero-api"
+	loopzeroAPINamespaceInCore  = "loopzero-system"
+	loopzeroAPIDeploymentInCore = "loopzero-api"
 )
 
 func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
-	// Vault cluster is a separate context (`k3d-loopzero-vault`).
+	// Vault cluster is a separate context (`k3d-loopzero-secrets`).
 	vaultCli, err := d.ClientFor(vaultContextName)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("resolve vault context %s: %v", vaultContextName, err)}
@@ -59,10 +59,10 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 	// Step 1 — pull https NodePort from openbao Service.
 	np, err := vaultServiceHTTPSNodePort(d.Ctx, vaultCli)
 	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("openbao NodePort: %v (run task k3d:vault:bootstrap first)", err)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("openbao NodePort: %v (run task k3d:secrets:bootstrap first)", err)}
 	}
 
-	// Step 2 — docker inspect the k3d-loopzero-vault serverlb IP.
+	// Step 2 — docker inspect the k3d-loopzero-secrets serverlb IP.
 	ip, err := dockerInspectContainerIP(vaultServerLBContainer)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("docker inspect %s: %v", vaultServerLBContainer, err)}
@@ -70,23 +70,23 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 	vaultAddr := fmt.Sprintf("https://%s:%d", ip, np)
 
 	if d.DryRun {
-		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would set %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt)}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would set %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore)}
 	}
 
 	// EC-2 absorption: wait for any in-progress rollout to settle before
 	// triggering the env change (avoids double-rollout race).
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, 120*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle))
 
 	// Step 3 — set env on loopzero-api Deployment.
 	if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, openBaoVaultAddrEnvVar, vaultAddr); err != nil {
+		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultAddrEnvVar, vaultAddr); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("set env on loopzero-api: %v", err)}
 	}
 	// Rollout settle post-change.
-	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, 60*time.Second); err != nil {
+	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPIResettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("loopzero-api rollout: %v", err)}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("wired %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt)}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("wired %s=%s on %s/%s", openBaoVaultAddrEnvVar, vaultAddr, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore)}
 }
 
 func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
@@ -103,7 +103,7 @@ func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	wantAddr := fmt.Sprintf("https://%s:%d", ip, np)
-	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, openBaoVaultAddrEnvVar)
+	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultAddrEnvVar)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -114,7 +114,7 @@ func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
 }
 
 // vaultServiceHTTPSNodePort returns the openbao Service's https NodePort in the
-// vault-system namespace of the vault cluster.
+// secrets-system namespace of the vault cluster.
 func vaultServiceHTTPSNodePort(ctx context.Context, k KubeClient) (int32, error) {
 	// KubeClient has no Get-Service today; use the underlying ctrl.Client via a
 	// tiny helper. We shim through the interface by asking for the raw client.
@@ -216,6 +216,29 @@ func getDeploymentContainerEnv(ctx context.Context, cli ctrlclient.Client,
 	}
 	return "", nil
 }
+
+// Os prazos de espera de rollout, nomeados. Eles DIVERGEM de propósito, e cada
+// divergência tem uma razão que só sobrevive se estiver escrita:
+//
+//   - loopzeroAPISettle — o loopzero-api sobe pesado (migrações + conexão a vários
+//     clusters), então é o mais longo.
+//   - loopzeroAPIResettle — a segunda espera do MESMO seed, depois da mudança de env
+//     já ter sido aplicada. É metade porque o Deployment acabou de assentar na
+//     primeira; se demorar mais que isso, esperar não vai resolver.
+//   - kratosSettle — Deployment + StatefulSet, mais leves que o loopzero-api.
+//   - corednsSettle — o mais curto: um Deployment de sistema, leve e sem estado,
+//     que reinicia rápido.
+//
+// Antes eram sete literais espalhados por seis arquivos, e um oitavo chamador
+// escreveria o seu — a forma se propaga por ser lida. Nenhum deles é o prazo
+// EFETIVO: quem resolve é Deps.settleTimeout, para que um ambiente hermético
+// possa injetar o seu sem que o valor de produção mude.
+const (
+	loopzeroAPISettle   = 120 * time.Second
+	loopzeroAPIResettle = 60 * time.Second
+	kratosSettle    = 90 * time.Second
+	corednsSettle   = 60 * time.Second
+)
 
 // waitForRolloutSettled polls the Deployment until readyReplicas == desired
 // OR timeout. Errors are non-fatal on timeout: the seed can proceed and Kubernetes

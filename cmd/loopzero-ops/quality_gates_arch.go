@@ -5,8 +5,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routesacyclic"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/silentsurface"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/statuswritercontract"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,5 +334,150 @@ func runServicesAcyclic(args []string) int {
 		return 1
 	}
 	fmt.Printf("services-acyclic: PASS \u2014 %d .go files scanned; services bounded-context import graph is the frozen acyclic DAG (M9 Step 6)\n", outcome.Scanned)
+	return 0
+}
+
+// runDomainSinkPurity — B-049 / slice-4 T1.1.
+//
+// A ratchet, not a fence: it freezes the persistence symbols measured crossing
+// the services DAG sink and refuses the next one. Removing them costs 63
+// call sites (B-079); stopping the growth costs this.
+func runDomainSinkPurity(args []string) int {
+	fs := flag.NewFlagSet("domain-sink-purity", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	o, err := domainsinkpurity.Check(domainsinkpurity.Config{RepoRoot: *root})
+	fmt.Println(o.Summary())
+	for _, s := range o.New {
+		fmt.Printf("  NOVO VAZAMENTO %s — atravessa a fronteira do sink e alcança os 35 arquivos, em 10 pacotes, que dependem dele\n", s)
+	}
+	for _, s := range o.Gone {
+		fmt.Printf("  REMOVIDO %s — aperte o conjunto congelado em FrozenDefault para travar o ganho\n", s)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "domain-sink-purity: %v\n", err)
+		// 5 = could not measure; 1 = measured and found a violation. Collapsing
+		// the two is exactly the distinction B-040 cost this repo.
+		if errors.Is(err, domainsinkpurity.ErrSinkNotFound) || errors.Is(err, domainsinkpurity.ErrUnqualifiedImport) {
+			return 5
+		}
+		return 1
+	}
+	fmt.Printf("PASS — nenhum símbolo novo (persistência ou camada de aplicação) atravessa o sink (%d congelados, rastreados em B-079)\n", o.FrozenCount)
+	return 0
+}
+
+// runStatusWriterContract — B-085 bala 4.
+//
+// The gate the migration asked for in the same breath as the conversion, and
+// that for a while did not exist: an adversarial audit injected a fresh bare
+// Update into a package with no per-package ratchet and the whole operators
+// suite stayed green. A ratchet protects the package somebody remembered; a
+// walk fails on the ABSENCE of protection.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-status-writer-gate
+func runStatusWriterContract(args []string) int {
+	fs := flag.NewFlagSet("status-writer-contract", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	o, err := statuswritercontract.Check(statuswritercontract.Config{Root: *root})
+	fmt.Println(o.Summary())
+	for _, v := range o.Violations {
+		if v.Kind == statuswritercontract.UncoveredSummary {
+			fmt.Printf("  %s:%d — the package of %s() persists status and folds no readiness summary, "+
+				"in-line or deferred (ADR-0025 D3)\n", v.File, v.Line, v.Func)
+			continue
+		}
+		fmt.Printf("  %s:%d — %s() persists status with Update (reached by %s)\n",
+			v.File, v.Line, v.Func, v.Form)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "status-writer-contract: %v\n", err)
+		return 1
+	}
+	if !o.Pass {
+		fmt.Fprintln(os.Stderr, statuswritercontract.ActionableFix)
+		return 1
+	}
+	return 0
+}
+
+// runSilentSurface refuses NEW HTTP surfaces that vanish without saying so.
+//
+// The router decides fifty times whether to register a surface and, until B-104,
+// threw every decision away — measured on the droplet as a 404 on the GitHub
+// webhook while /health answered 405, with nothing anywhere reporting it.
+//
+// Converting all fifty in one commit was refused: router.go is the single
+// surface where the route set is read (Unbreakable Rule 5), so an error in any
+// one edit would be indistinguishable from the other forty-nine. This gate does
+// what unhomed-logic does instead — counts the debt and forbids it from growing.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-16-observable-silent-surfaces
+func runSilentSurface(args []string) int {
+	fs := flag.NewFlagSet("silent-surface", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	v, err := silentsurface.Check(silentsurface.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "silent-surface: %v\n", err)
+		return 1
+	}
+	fmt.Println(v.Summary())
+	if !v.Pass {
+		for _, s := range v.Silent {
+			fmt.Printf("  %s:%d — cfg.%s registra rota e não reporta a decisão\n",
+				silentsurface.RouterPath, s.Line, s.Field)
+		}
+		fmt.Fprintln(os.Stderr, silentsurface.ActionableFix)
+		return 1
+	}
+	return 0
+}
+
+// runRoutesAcyclic — B-041 / slice-5 T1.3.
+//
+// The fence that precedes the split. B-041 states the order explicitly: a fence
+// written after the move is written to fit what was already done.
+func runRoutesAcyclic(args []string) int {
+	fs := flag.NewFlagSet("routes-acyclic", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	o, err := routesacyclic.Check(routesacyclic.Config{RepoRoot: *root})
+	fmt.Println(o.Summary())
+	for _, u := range o.Unregistered {
+		fmt.Printf("  NÃO REGISTRADO %s — uma família de handlers que ninguém decidiu\n", u)
+	}
+	for _, e := range o.Edges {
+		// The two kinds need different fixes — one moves shared code into a
+		// leaf, the other moves the CALL into a _test.go — so a single label
+		// for both would point the reader at the wrong remedy.
+		if e.TestOnly {
+			fmt.Printf("  LEAF SÓ-DE-TESTE em produção %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
+			continue
+		}
+		fmt.Printf("  ARESTA IRMÃ %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "routes-acyclic: %v\n", err)
+		fmt.Fprintln(os.Stderr, routesacyclic.ActionableFix())
+		if errors.Is(err, routesacyclic.ErrEmptyAllowList) {
+			return 5
+		}
+		return 1
+	}
+	fmt.Println("PASS — todo subpacote de routes está registrado e nenhum importa um irmão")
 	return 0
 }

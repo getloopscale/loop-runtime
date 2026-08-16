@@ -34,6 +34,23 @@ type ProjectCapChecker interface {
 type PostgresProjectStore struct {
 	DB         db.DBTX
 	capChecker ProjectCapChecker
+	// crossTenant counts the Account's projects across ITS tenants. It is a
+	// connection whose cross-tenant reach is a NAMED policy (loopzero_worker), not
+	// the request pool — which since migration 000062 sees one tenant and would
+	// silently turn a per-account cap into a per-tenant one. Nil leaves the
+	// count on the caller's transaction (tests, un-provisioned databases).
+	crossTenant db.DBTX
+}
+
+// SetCrossTenantCounter wires the connection used to count an Account's
+// projects across its tenants. Called at composition, after the background pool
+// is built and its reach verified (see cmd/setup_background_database.go).
+//
+// Deliberately a separate setter rather than a constructor argument: the store
+// is built before the background pool exists, and the same post-wiring shape is
+// already used by SetProjectCapChecker.
+func (s *PostgresProjectStore) SetCrossTenantCounter(c db.DBTX) {
+	s.crossTenant = c
 }
 
 // SetProjectCapChecker wires the per-Account project-cap checker (M4). Mirrors

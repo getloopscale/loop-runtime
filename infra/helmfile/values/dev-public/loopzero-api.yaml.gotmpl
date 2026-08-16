@@ -23,17 +23,25 @@
 # restart`. `ghcr-pull` imagePullSecret is provisioned from
 # ~/.loopzero/ghcr-pull-token.txt by `task images:ghcr:pullsecret`.
 image:
-  repository: ghcr.io/getloopscale/loopzero-api
+# O prefixo do registro e sobrescrevivel por LOOPZERO_PLATFORM_IMAGE_PREFIX; o padrao continua
+# sendo o GHCR, entao quem tem token valido nao ve diferenca. Existe porque este ambiente
+# dependia SEM ALTERNATIVA de imagem publicada: medido no droplet app-dev em 2026-08-10,
+# com o token de pull expirado (HTTP 401), 13 pods ficaram em ImagePullBackOff e a
+# plataforma nao subia — embora todas estas imagens tenham Dockerfile neste repositorio e
+# sejam construiveis localmente. Um ambiente que so funciona com credencial valida para um
+# registro remoto nao tem como ser reconstruido do zero quando a credencial falha, que e
+# exatamente quando reconstruir importa (BACKLOG.md B-016).
+  repository: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopzero-api
   tag: develop
   pullPolicy: Always
 
 imagePullSecrets:
   - name: ghcr-pull
 
-# k3d-loopzero-mgmt LB has host port mapping 30001 → 13001. Exposing loopzero-api
+# k3d-loopzero-core LB has host port mapping 30001 → 13001. Exposing loopzero-api
 # as NodePort 30001 lets `curl localhost:13001/api/...` hit the cluster
 # loopzero-api Service directly — canonical pattern for CLI/dogfood from host.
-# See `k3d cluster list loopzero-mgmt -o json` portMappings.
+# See `k3d cluster list loopzero-core -o json` portMappings.
 service:
   type: NodePort
   port: 3001
@@ -60,12 +68,12 @@ env:
   OPENBAO_TRANSIT_ENABLED: "true"
   # T1.2 of dev-public-cross-cluster-secrets (issue #111): under Jeito A
   # (sponsor mandate INQUEBRÁVEL 2026-06-19) OpenBao runs in a SEPARATE
-  # k3d-loopzero-vault cluster. EC-2: the URL stays at the canonical
+  # k3d-loopzero-secrets cluster. EC-2: the URL stays at the canonical
   # intra-cluster DNS name so the cert SAN survives; mgmt CoreDNS
-  # host-alias (T2.2) rewrites this DNS to the loopzero-vault NodePort IP
+  # host-alias (T2.2) rewrites this DNS to the loopzero-secrets NodePort IP
   # at resolve time. Operators in a single-cluster topology
   # (standalone-multi) keep using this same literal — no per-env split.
-  OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"
+  OPENBAO_VAULT_ADDR: "https://openbao.secrets-system.svc.cluster.local:8200"
   OPENBAO_VAULT_ROLE_ID: "bf1a3367-4059-dd74-98bb-b1ae8ff0c9c7"
   # SPKI pin extracted dynamically from openbao-tls cert by
   # vault-bootstrap-dev.sh (Step 10b). Mounted as Secret env var by

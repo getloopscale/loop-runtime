@@ -3,8 +3,8 @@
 #
 # CORRECTIONS.txt item N enforcement (plan T2.1):
 # Regenerate the scoped SA token + kubeconfig for every ClusterCredential
-# in the mgmt cluster (EXCEPT cell-default, which is bootstrap-managed by
-# bootstrap-cell-default-cc.sh per EC-1 / H13 healing pattern).
+# in the mgmt cluster (EXCEPT cell-0, which is bootstrap-managed by
+# bootstrap-cell-0-cc.sh per EC-1 / H13 healing pattern).
 #
 # Use case: operator changed a node pool, manually rotated SA tokens, or
 # is recovering from CORRECTIONS.txt item N symptom ("scoped kubeconfigs
@@ -29,7 +29,7 @@ set -euo pipefail
 
 set -uo pipefail
 
-MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 LOCK_FILE="/tmp/loopzero-regen-scoped-kubeconfig.lock"
 LOCK_FD=200
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -81,7 +81,7 @@ trap cleanup_temps EXIT
 log "lock acquired ($LOCK_FILE)"
 
 # ---------------------------------------------------------------------------
-# Enumerate ClusterCredentials — EXCLUDING cell-default (EC-1)
+# Enumerate ClusterCredentials — EXCLUDING cell-0 (EC-1)
 # ---------------------------------------------------------------------------
 enumerate_cells() {
   if [[ -n "$FIXTURE" ]]; then
@@ -89,7 +89,7 @@ enumerate_cells() {
     cat "$FIXTURE"
     return
   fi
-  kubectl --context "$MGMT_CONTEXT" get clustercredentials -A -o json 2>/dev/null
+  kubectl --context "$CORE_CONTEXT" get clustercredentials -A -o json 2>/dev/null
 }
 
 CC_JSON=$(enumerate_cells)
@@ -98,14 +98,14 @@ if [[ -z "$CC_JSON" ]]; then
   exit 1
 fi
 
-# Filter out cell-default per EC-1 (bootstrap-cell-default-cc.sh owns it).
+# Filter out cell-0 per EC-1 (bootstrap-cell-0-cc.sh owns it).
 CELLS=$(echo "$CC_JSON" | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 for item in data.get("items", []):
     spec = item.get("spec", {})
     cell_id = spec.get("cellID", "")
-    if cell_id == "cell-default":
+    if cell_id == "cell-0":
         continue
     cluster_name = spec.get("clusterName", "")
     api_server = spec.get("apiServer", "")
@@ -118,12 +118,12 @@ for item in data.get("items", []):
 ')
 
 if [[ -z "$CELLS" ]]; then
-  log "no eligible cells found (cell-default skipped per EC-1; no other active CRs)."
+  log "no eligible cells found (cell-0 skipped per EC-1; no other active CRs)."
   exit 0
 fi
 
 n_cells=$(echo "$CELLS" | wc -l)
-log "found $n_cells eligible cell(s) for regen (cell-default excluded per EC-1)"
+log "found $n_cells eligible cell(s) for regen (cell-0 excluded per EC-1)"
 
 # ---------------------------------------------------------------------------
 # Per-cell regen — isolated failure per cell
@@ -156,7 +156,7 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   # Resolve raw kubeconfig source (test or live).
   # CR spec.clusterName is the operator-friendly label (e.g., "workload",
   # "runtime-2"). The actual k3d cluster name has a "loopzero-" prefix
-  # (e.g., "loopzero-workload", "loopzero-runtime-2"). For `k3d kubeconfig get`,
+  # (e.g., "loopzero-cell-0", "loopzero-cell-1"). For `k3d kubeconfig get`,
   # we need the k3d cluster name (loopzero-X). For scoped-kubeconfig.sh, we
   # pass the BARE cluster_name (X) — the lib INTERNALLY prepends `k3d-loopzero-`
   # to find the docker container, per its B81/B82 logic.
@@ -176,9 +176,9 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   TMP_FILES+=("$SCOPED_OUTPUT")
 
   # IMPORTANT (LIVE bug 2026-05-13): pass cluster_name (bare, e.g., "workload"),
-  # NOT cell_id ("cell-1") and NOT "loopzero-workload". The lib internally
-  # prepends `k3d-loopzero-` per its B81/B82 logic — passing "loopzero-workload"
-  # would produce double-prefix `k3d-loopzero-loopzero-workload-server-0` (does not exist).
+  # NOT cell_id ("cell-0") and NOT "loopzero-cell-0". The lib internally
+  # prepends `k3d-loopzero-` per its B81/B82 logic — passing "loopzero-cell-0"
+  # would produce double-prefix `k3d-loopzero-loopzero-cell-0-server-0` (does not exist).
   if ! bash "$LIB_SCOPED_KUBECONFIG" "$cluster_name" "$TMP_KC" "$SCOPED_OUTPUT" 2>&1 | sed 's/^/    [lib] /'; then
     log "  ERROR: scoped-kubeconfig.sh failed for $cell_id (cluster=$cluster_name)"
     FAILED=$((FAILED+1))
@@ -186,13 +186,13 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   fi
 
   # EC-3: optimistic-concurrency patch with --resource-version
-  RV=$(kubectl --context "$MGMT_CONTEXT" -n "$secret_ns" get secret "$secret_name" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || echo "")
+  RV=$(kubectl --context "$CORE_CONTEXT" -n "$secret_ns" get secret "$secret_name" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || echo "")
   KC_B64=$(base64 -w0 < "$SCOPED_OUTPUT")
 
   if [[ -z "$RV" ]]; then
     # EC-6: Secret doesn't exist — create it.
     log "  Secret absent; creating ${secret_ns}/${secret_name}"
-    if ! kubectl --context "$MGMT_CONTEXT" -n "$secret_ns" create secret generic "$secret_name" \
+    if ! kubectl --context "$CORE_CONTEXT" -n "$secret_ns" create secret generic "$secret_name" \
         --from-file=kubeconfig="$SCOPED_OUTPUT" 2>/dev/null; then
       log "  ERROR: create Secret ${secret_ns}/${secret_name} failed"
       FAILED=$((FAILED+1))
@@ -201,7 +201,7 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   else
     # Patch existing Secret with optimistic-concurrency lock.
     PATCH_BODY=$(printf '{"metadata":{"resourceVersion":"%s"},"data":{"kubeconfig":"%s"}}' "$RV" "$KC_B64")
-    if ! kubectl --context "$MGMT_CONTEXT" -n "$secret_ns" patch secret "$secret_name" \
+    if ! kubectl --context "$CORE_CONTEXT" -n "$secret_ns" patch secret "$secret_name" \
         --type=merge -p "$PATCH_BODY" 2>&1 | sed 's/^/    [patch] /'; then
       log "  ERROR: patch failed for ${secret_ns}/${secret_name} (possible optimistic-concurrency conflict — Secret modified mid-swap; operator should re-run)"
       FAILED=$((FAILED+1))

@@ -41,7 +41,7 @@ Transições válidas:
 ### Step 1 — Mark cell as draining
 
 ```bash
-loopzero admin cells update --cell cell-1 --status draining \
+loopzero admin cells update --cell cell-0 --status draining \
   --reason "scheduled-upgrade-2026-06" \
   --json
 ```
@@ -49,13 +49,13 @@ loopzero admin cells update --cell cell-1 --status draining \
 Effects:
 - `cells.status` PG column UPDATE
 - `loopzero_cell_status` metric muda labels
-- `CellPinner.Pin` daqui pra frente rejects target=cell-1 com erro `CELL_NOT_ACCEPTING`
+- `CellPinner.Pin` daqui pra frente rejects target=cell-0 com erro `CELL_NOT_ACCEPTING`
 - Tenants existentes continuam reconciling normalmente
 
 ### Step 2 — Inventory tenants pinned to cell
 
 ```bash
-loopzero admin tenants list --cell cell-1 --json | jq -r '.[].name'
+loopzero admin tenants list --cell cell-0 --json | jq -r '.[].name'
 ```
 
 Para cada tenant T retornado, decide destino (operator judgment):
@@ -66,10 +66,10 @@ Para cada tenant T retornado, decide destino (operator judgment):
 ### Step 3 — Pin each tenant to destination cell
 
 ```bash
-for tenant in $(loopzero admin tenants list --cell cell-1 --json | jq -r '.[].name'); do
+for tenant in $(loopzero admin tenants list --cell cell-0 --json | jq -r '.[].name'); do
   echo "Migrating $tenant..."
-  loopzero admin tenants pin --tenant "$tenant" --to cell-2 \
-    --reason "drain-cell-1-upgrade" \
+  loopzero admin tenants pin --tenant "$tenant" --to cell-1 \
+    --reason "drain-cell-0-upgrade" \
     --json
   sleep 5  # rate-limit avoid hammering ArgoCD reconcile queue
 done
@@ -78,10 +78,10 @@ done
 **Note:** Para cells com 500 tenants (capacity max default), bulk pinning script automatizado é separate scope (deferred — operator-driven for now per ADR-0021 D3 sticky-placement).
 
 Effects per tenant:
-- DB UPDATE `tenants.cell_id = 'cell-2'`
+- DB UPDATE `tenants.cell_id = 'cell-1'`
 - Tenant CR `spec.cellID` patched via MergePatch
-- Tenant operator reconciles + re-emits ArgoCD App/AppProject `destination.name=cell-2`
-- ArgoCD sync materializes resources on cell-2 cluster
+- Tenant operator reconciles + re-emits ArgoCD App/AppProject `destination.name=cell-1`
+- ArgoCD sync materializes resources on cell-1 cluster
 - Audit log entry written
 
 ### Step 4 — Monitor evacuation progress
@@ -95,12 +95,12 @@ watch -n 30 'kubectl exec -n loopzero-system deploy/loopzero-api -- \
 
 Loki query para monitor pin operations:
 ```
-{namespace="loopzero-system",app="loopzero-api"} |= "tenants.pin" | json | source_cell_id="cell-1"
+{namespace="loopzero-system",app="loopzero-api"} |= "tenants.pin" | json | source_cell_id="cell-0"
 ```
 
 Prometheus alert thresholds:
-- `loopzero_cell_tenant_count{cell="cell-1"}` deve diminuir monotonically
-- Se `loopzero_cell_pin_failures_total{cell="cell-1"}` > 0, investigar antes de prosseguir
+- `loopzero_cell_tenant_count{cell="cell-0"}` deve diminuir monotonically
+- Se `loopzero_cell_pin_failures_total{cell="cell-0"}` > 0, investigar antes de prosseguir
 
 ### Step 5 — Confirm zero tenants on drained cell
 
@@ -109,9 +109,9 @@ Prometheus alert thresholds:
 while true; do
   count=$(kubectl exec -n loopzero-system deploy/loopzero-api -- \
     wget -qO- http://localhost:9090/metrics 2>/dev/null | \
-    grep "loopzero_cell_tenant_count{.*cell_id=\"cell-1\"" | \
+    grep "loopzero_cell_tenant_count{.*cell_id=\"cell-0\"" | \
     awk '{print $NF}')
-  echo "cell-1 tenant count: $count"
+  echo "cell-0 tenant count: $count"
   [[ "$count" == "0" ]] && break
   sleep 60
 done
@@ -120,7 +120,7 @@ done
 ### Step 6 — Transition to maintenance (optional)
 
 ```bash
-loopzero admin cells update --cell cell-1 --status maintenance --json
+loopzero admin cells update --cell cell-0 --status maintenance --json
 ```
 
 Used when: upgrade/maintenance work happens (e.g., DOKS version bump, K8s version upgrade).
@@ -128,11 +128,11 @@ Used when: upgrade/maintenance work happens (e.g., DOKS version bump, K8s versio
 ### Step 7 — Final retirement (when no plans to reactivate)
 
 ```bash
-loopzero admin cells update --cell cell-1 --status retired --json
+loopzero admin cells update --cell cell-0 --status retired --json
 ```
 
 - ClusterCredential CR retained for audit trail
-- Cluster pode ser destroyed via Pulumi `pulumi destroy --stack workload-cell-1`
+- Cluster pode ser destroyed via Pulumi `pulumi destroy --stack workload-cell-0`
 - DB `cells.status='retired'` permanente
 
 ## SLO
@@ -146,14 +146,14 @@ loopzero admin cells update --cell cell-1 --status retired --json
 
 ## Rollback Procedure
 
-Within 24h of `draining` transition AND com tenants ainda pinned em cell-1:
+Within 24h of `draining` transition AND com tenants ainda pinned em cell-0:
 
 ```bash
-loopzero admin cells update --cell cell-1 --status active --json
+loopzero admin cells update --cell cell-0 --status active --json
 ```
 
 Effects:
-- CellPinner accepts new pins to cell-1 again
+- CellPinner accepts new pins to cell-0 again
 - Existing tenants já migrados NÃO retornam (sticky placement — operator must explicit pin-back se desejado)
 - Audit log captures the reactivation
 
@@ -163,7 +163,7 @@ Se tenants já 100% evacuated, rollback é cosmetic — para "undo" the drain, o
 
 Loki (cell-aware reconcile traces):
 ```
-{namespace="loopzero-system"} | json | cell_id="cell-1" | line_format "{{.timestamp}} {{.level}} {{.msg}}"
+{namespace="loopzero-system"} | json | cell_id="cell-0" | line_format "{{.timestamp}} {{.level}} {{.msg}}"
 ```
 
 Prometheus (tenant placement distribution):
@@ -173,7 +173,7 @@ sum by (cell_id) (loopzero_cell_tenant_count)
 
 Prometheus (drain progress):
 ```promql
-delta(loopzero_cell_tenant_count{cell_id="cell-1"}[1h])
+delta(loopzero_cell_tenant_count{cell_id="cell-0"}[1h])
 ```
 
 ## Failure modes
@@ -191,7 +191,7 @@ delta(loopzero_cell_tenant_count{cell_id="cell-1"}[1h])
 Toda operação grava `audit_log` row:
 - `action: cell_status_update | tenant_pin`
 - `actor: <operator>` (X-Service-Auth subject)
-- `target: cell-1 OR tenant=X`
+- `target: cell-0 OR tenant=X`
 - `metadata: {old_status, new_status, reason}`
 - `timestamp`
 

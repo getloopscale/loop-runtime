@@ -11,7 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.
@@ -19,7 +19,7 @@ type K8sDeps struct {
 	TenantCRMgr   *k8s.TenantCRManager
 	PreviewCRMgr  *k8s.PreviewCRManager
 	AppCRMgr      build.ApplicationCREnsurer
-	SecretK8sSync routes.SecretK8sSync
+	SecretK8sSync secrets.SecretK8sSync
 }
 
 // setupK8s creates the Kubernetes client managers for Tenant CRs, Application CRs,
@@ -36,7 +36,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 
 	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	// F-01 fix: Use interface variable to avoid Go nil interface trap.
-	var secretK8sSync routes.SecretK8sSync
+	var secretK8sSync secrets.SecretK8sSync
 	if mgr, err := k8s.NewSecretK8sManager(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,

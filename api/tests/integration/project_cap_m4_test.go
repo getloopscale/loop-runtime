@@ -48,7 +48,7 @@ func (c realProjectCapChecker) CheckProjectsValue(tenantID string, current int) 
 func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	t.Helper()
 	pool := testPool(t) // skips if pg unreachable
-	stdDB, err := sql.Open("pgx", dbURL())
+	stdDB, err := sql.Open("pgx", seedDBURL())
 	if err != nil {
 		t.Fatalf("open stdlib DB: %v", err)
 	}
@@ -87,8 +87,8 @@ func m4Seed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan string) {
 	}
 	exec(`INSERT INTO users (id,email,display_name,username) VALUES ($1,$1||'@e2e.test','O',$1)`, owner)
 	exec(`INSERT INTO accounts (id,display_name,plan,owner_id,created_at,updated_at) VALUES ($1,'A',$2,$3,now(),now())`, acct, plan, owner)
-	exec(`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id) VALUES ($1,'T1',$1,$2,$3,'cell-1')`, tn1, owner, acct)
-	exec(`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id) VALUES ($1,'T2',$1,$2,$3,'cell-1')`, tn2, owner, acct)
+	exec(`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id) VALUES ($1,'T1',$1,$2,$3,'cell-0')`, tn1, owner, acct)
+	exec(`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id) VALUES ($1,'T2',$1,$2,$3,'cell-0')`, tn2, owner, acct)
 	exec(`INSERT INTO subscriptions (id,tenant_id,account_id,plan,status) VALUES ($1,$2,$3,$4,'active') ON CONFLICT (account_id) DO NOTHING`, "sub-"+acct, tn1, acct, plan)
 }
 

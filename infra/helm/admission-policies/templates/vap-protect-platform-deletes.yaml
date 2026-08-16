@@ -10,7 +10,7 @@
 # `resources-finalizer.argocd.argoproj.io` (operators/internal/argocd/real_provisioner.go:205),
 # so deleting an Application deletes the resources it manages. Before this policy the mgmt
 # cluster had NO ValidatingAdmissionPolicy at all — the admission-policies chart is only
-# installed on the runtime cluster (infra/helmfile/runtime.helmfile.yaml.gotmpl:169), while
+# installed on the runtime cluster (infra/helmfile/cell.helmfile.yaml.gotmpl:169), while
 # these resources live on mgmt. Under BYOC that cascade reaches a customer's own cloud
 # account, which turns an internal incident into contractual damage.
 #

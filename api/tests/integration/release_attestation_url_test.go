@@ -60,8 +60,33 @@ func seedReleaseRow(t *testing.T, pool *pgxpool.Pool, rekorURL *string) (release
 	releaseID = "rel-rekor-" + suffix
 	correlationID = "corr-rekor-" + suffix
 
-	// Builds row (NOT NULL FK from releases.build_id).
+	// O tenant precisa EXISTIR antes do build: a migration 000061 pôs um gatilho
+	// que resolve `builds.cell_id` a partir de `tenants.cell_id` e falha alto
+	// quando o tenant não está lá. Esta fixture é anterior a esse gatilho e vinha
+	// inserindo o build direto — a dívida que o comentário do job de isolamento
+	// no CI descreve como "fixtures that predate the cell_id trigger".
 	_, err := pool.Exec(ctx,
+		`INSERT INTO users (id,email,display_name,username) VALUES ($1,$1||'@rekor.test','R',$1)
+		 ON CONFLICT (id) DO NOTHING`, "u-"+suffix)
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	_, err = pool.Exec(ctx,
+		`INSERT INTO accounts (id,display_name,plan,owner_id) VALUES ($1,'R','starter',$2)
+		 ON CONFLICT (id) DO NOTHING`, "acct-"+suffix, "u-"+suffix)
+	if err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+	_, err = pool.Exec(ctx,
+		`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id)
+		 VALUES ($1,$1,$1,$2,$3,'cell-0') ON CONFLICT (id) DO NOTHING`,
+		tenantID, "u-"+suffix, "acct-"+suffix)
+	if err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+
+	// Builds row (NOT NULL FK from releases.build_id).
+	_, err = pool.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 		 VALUES ($1, $2, 'proj-rekor', 'production', 'SUCCEEDED', $3, 'system:test')`,
 		buildID, tenantID, correlationID)
@@ -91,7 +116,7 @@ func seedReleaseRow(t *testing.T, pool *pgxpool.Pool, rekorURL *string) (release
 // TestReleaseStore_InsertWithRekorURL_WritesAuditLog (T2.1 RED #1):
 // AFTER INSERT trigger emits an audit_log row with the expected fields.
 func TestReleaseStore_InsertWithRekorURL_WritesAuditLog(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
@@ -140,7 +165,7 @@ func TestReleaseStore_InsertWithRekorURL_WritesAuditLog(t *testing.T) {
 // AFTER INSERT trigger does NOT emit an audit_log row when the
 // Rekor URL is NULL (legacy / attest-disabled path).
 func TestReleaseStore_InsertNullRekorURL_NoAuditLog(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
@@ -164,7 +189,7 @@ func TestReleaseStore_InsertNullRekorURL_NoAuditLog(t *testing.T) {
 // value (IS DISTINCT FROM is FALSE). This is important so idempotent
 // retry-paths don't trip the write-once gate.
 func TestReleaseStore_UpdateSameRekorURL_NoException(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
@@ -193,7 +218,7 @@ func TestReleaseStore_UpdateSameRekorURL_NoException(t *testing.T) {
 // to change the URL to a different non-NULL value (or to NULL — IS
 // DISTINCT FROM treats NULL as distinct).
 func TestReleaseStore_UpdateDifferentRekorURL_RaisesException(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
@@ -228,7 +253,7 @@ func TestReleaseStore_UpdateDifferentRekorURL_RaisesException(t *testing.T) {
 // path used by the build_reconcile_complete flow when attestation is
 // enriched post-INSERT.
 func TestReleaseStore_UpdateFirstSetFromNull_Allowed(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
@@ -279,7 +304,7 @@ func TestReleaseStore_UpdateFirstSetFromNull_Allowed(t *testing.T) {
 // silently create attestation-set audit rows for releases that never
 // existed, polluting compliance evidence).
 func TestReleaseStore_InsertRolledBack_AuditLogNotPersisted(t *testing.T) {
-	pool := setupHardeningTestDB(t)
+	pool := setupCrossTenantTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
@@ -289,6 +314,9 @@ func TestReleaseStore_InsertRolledBack_AuditLogNotPersisted(t *testing.T) {
 	releaseID := "rel-rekor-rb-" + suffix
 	correlationID := "corr-rekor-rb-" + suffix
 	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=666"
+
+	// Mesma dívida do gatilho 000061: o tenant precisa existir antes do build.
+	seedTenantForBuild(t, pool, tenantID)
 
 	// Pre-seed the build OUTSIDE the rolled-back tx so the FK can resolve.
 	_, err := pool.Exec(ctx,

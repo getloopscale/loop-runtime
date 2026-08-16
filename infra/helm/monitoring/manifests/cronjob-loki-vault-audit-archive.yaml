@@ -7,7 +7,7 @@
 # overlap between Loki + Spaces (defense in depth).
 #
 # Workflow:
-#   1. logcli query '{namespace="vault-system"}' --since=720h (last 30d)
+#   1. logcli query '{namespace="secrets-system"}' --since=720h (last 30d)
 #   2. compress via gzip
 #   3. upload to s3://loopzero-audit-logs-${env}/vault/${YYYY-MM}.jsonl.gz via
 #      mc (mc is installed in the container image; AWS_ACCESS_KEY_ID +
@@ -57,13 +57,13 @@ spec:
                   set -euo pipefail
                   TS=$(date -u +%Y-%m)
                   ARCHIVE="/tmp/vault-audit-${TS}.jsonl"
-                  echo "[archive] querying Loki for {namespace=vault-system} last 720h..."
+                  echo "[archive] querying Loki for {namespace=secrets-system} last 720h..."
                   logcli query \
                     --addr="http://loki:3100" \
                     --since=720h \
                     --output=jsonl \
                     --limit=1000000 \
-                    '{namespace="vault-system"}' \
+                    '{namespace="secrets-system"}' \
                     > "${ARCHIVE}"
                   echo "[archive] $(wc -c < "${ARCHIVE}") bytes captured"
                   gzip "${ARCHIVE}"

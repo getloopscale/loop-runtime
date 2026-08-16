@@ -81,8 +81,8 @@ bash infra/scripts/local/seed-stripe-api-keys-canonical.sh --verify
 bash infra/scripts/local/seed-stripe-secret-canonical.sh --verify
 
 # 2. Restart loopzero-cloud to pick up env from updated Secrets
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout restart deploy/loopzero-cloud
-kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status  deploy/loopzero-cloud --timeout=120s
+kubectl --context k3d-loopzero-core -n loopzero-system rollout restart deploy/loopzero-cloud
+kubectl --context k3d-loopzero-core -n loopzero-system rollout status  deploy/loopzero-cloud --timeout=120s
 
 # 3. Refresh admin JWT (15-min TTL)
 bash infra/scripts/local/seed-admin-loopzero-dev.sh --refresh-only

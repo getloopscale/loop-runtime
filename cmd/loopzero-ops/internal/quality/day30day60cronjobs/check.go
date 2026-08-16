@@ -7,7 +7,7 @@
 //   - Disabled-by-default: both crons absent when vault.*.enabled=false
 //     (default off).
 //   - Day 30 enabled: cron name + schedule "0 3 1 * *" + EC-12 filter flag
-//     + concurrencyPolicy: Forbid + security hardening (runAsNonRoot +
+//   - concurrencyPolicy: Forbid + security hardening (runAsNonRoot +
 //     readOnlyRootFilesystem).
 //   - Day 60 enabled: cron name + --dry-run=true + --shred-aes-key=false
 //     (safety defaults for irreversible ops) + migrate-to-transit subcmd +

@@ -116,9 +116,9 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 		}
 		if strings.Contains(line, forbiddenType) {
 			hits = append(hits, Hit{
-				File: relPath,
-				Line: lineNum,
-				Reason: "legacy SA-token Secret type — static long-lived token forbidden after T7 Vault kubernetes engine migration",
+				File:       relPath,
+				Line:       lineNum,
+				Reason:     "legacy SA-token Secret type — static long-lived token forbidden after T7 Vault kubernetes engine migration",
 				Suggestion: "remove the Secret; fetch dynamic SA token via Vault kubernetes engine (kubernetes/creds/<role>) with TTL bounded by Vault role policy; see openbao-adoption v1.3 T7",
 			})
 		}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD-REAL-E2E — Phase 5 follow-up
 #
-# Provisiona ESO ClusterSecretStore `loopzero-mgmt-store` no cluster runtime
+# Provisiona ESO ClusterSecretStore `loopzero-core-store` no cluster runtime
 # (paridade com Pulumi runtime-bootstrap.ts). Sem isso, qualquer pod com
 # secret declarado em loopzero.yaml fica em CreateContainerConfigError porque
 # ESO não consegue sync de Secrets do mgmt para tenant ns.
@@ -10,9 +10,9 @@
 #   1. ServiceAccount `eso-secret-reader` em mgmt cluster (ns loopzero-system)
 #   2. Role + RoleBinding scoped a [secrets get/list/watch] em loopzero-system
 #   3. SA Token Secret (long-lived) — fonte de verdade do bearer
-#   4. Secret `mgmt-cluster-token` em runtime cluster ns external-secrets
+#   4. Secret `core-cluster-token` em runtime cluster ns external-secrets
 #      contendo {token, ca} extraídos do SA Token (via base64 round-trip)
-#   5. ClusterSecretStore `loopzero-mgmt-store` em runtime apontando para
+#   5. ClusterSecretStore `loopzero-core-store` em runtime apontando para
 #      mgmt API server com bearer + CA
 #
 # Idempotente — re-rodar não muda o estado (SA Token é estável).
@@ -21,19 +21,19 @@
 #   bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh \
 #     [<mgmt-context>] [<runtime-context>]
 #
-#   defaults: k3d-loopzero-mgmt + k3d-loopzero-workload
+#   defaults: k3d-loopzero-core + k3d-loopzero-cell-0
 #
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
 
-MGMT_CTX="${1:-k3d-loopzero-mgmt}"
-RUNTIME_CTX="${2:-k3d-loopzero-workload}"
+MGMT_CTX="${1:-k3d-loopzero-core}"
+RUNTIME_CTX="${2:-k3d-loopzero-cell-0}"
 PLATFORM_NS="loopzero-system"
 ESO_NS="external-secrets"
 SA_NAME="eso-secret-reader"
 TOKEN_SECRET="${SA_NAME}-token"
-CSS_NAME="loopzero-mgmt-store"
+CSS_NAME="loopzero-core-store"
 
 log() { printf '[bootstrap-eso-css] %s\n' "$*" >&2; }
 fail() { printf '[bootstrap-eso-css] FAIL: %s\n' "$*" >&2; exit 1; }
@@ -130,18 +130,18 @@ MGMT_URL="https://${MGMT_IP}:6443"
 log "mgmt URL = $MGMT_URL"
 
 # ----------------------------------------------------------------------------
-# Step 4 — Secret mgmt-cluster-token in runtime cluster (ns external-secrets)
+# Step 4 — Secret core-cluster-token in runtime cluster (ns external-secrets)
 # ----------------------------------------------------------------------------
 log "ensuring namespace $ESO_NS on $RUNTIME_CTX"
 kubectl --context "$RUNTIME_CTX" create namespace "$ESO_NS" --dry-run=client -o yaml | \
   kubectl --context "$RUNTIME_CTX" apply -f - >/dev/null
 
-log "creating mgmt-cluster-token Secret on $RUNTIME_CTX (ns=$ESO_NS)"
+log "creating core-cluster-token Secret on $RUNTIME_CTX (ns=$ESO_NS)"
 kubectl --context "$RUNTIME_CTX" -n "$ESO_NS" apply -f - <<EOF >/dev/null
 apiVersion: v1
 kind: Secret
 metadata:
-  name: mgmt-cluster-token
+  name: core-cluster-token
   namespace: $ESO_NS
   labels:
     app.kubernetes.io/managed-by: loopzero-bootstrap
@@ -172,7 +172,7 @@ spec:
       auth:
         token:
           bearerToken:
-            name: mgmt-cluster-token
+            name: core-cluster-token
             namespace: $ESO_NS
             key: token
 EOF

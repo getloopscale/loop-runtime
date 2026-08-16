@@ -78,6 +78,6 @@
 * [LoopZero Bottleneck Simulator (M0)](loopzero-bottleneck-simulator-review.md)
 * [invocation convention](loopzero-ops.md)
 * [Offline TUF Root Ceremony](tuf-root-ceremony.md) — Offline TUF root signing ceremony procedure (3-of-5 quorum, hardware-backed, air-gapped) per ADR-2026-05-27-T2.2-OFFLINE-TUF. Mandatory before Sigstore activation OR annual rotation.
-* [Vault Cluster Local Runbook (loopzero-vault k3d)](vault-cluster-local-runbook.md)
+* [Vault Cluster Local Runbook (loopzero-secrets k3d)](secrets-cluster-local-runbook.md)
 * [Vault Integration Operator Handoff Guide](vault-INT-operator-handoff.md)
 * [Vault Secret Migration Runbook](vault-secret-migration-runbook.md)

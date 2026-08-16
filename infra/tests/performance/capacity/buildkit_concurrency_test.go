@@ -29,7 +29,7 @@ import (
 // Run:
 //
 //	# Port-forward loopzero-api metrics:
-//	kubectl --context=$LOOPZERO_MGMT_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
+//	kubectl --context=$LOOPZERO_CORE_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
 //
 //	LOOPZERO_CAPACITY=1 \
 //	LOOPZERO_API_URL=https://api.dev.loopzero.example \

@@ -10,7 +10,7 @@
 //
 //	seed.Run(seed.Config{
 //	    DatabaseURL: "postgres://...",
-//	    KubeContext: "k3d-loopzero-mgmt",
+//	    KubeContext: "k3d-loopzero-core",
 //	})
 package seed
 
@@ -63,7 +63,7 @@ const (
 type Config struct {
 	// DatabaseURL is the PostgreSQL connection string.
 	DatabaseURL string
-	// KubeContext is the kubectl context to use (default: k3d-loopzero-mgmt).
+	// KubeContext is the kubectl context to use (default: k3d-loopzero-core).
 	KubeContext string
 	// ReconcileTimeout is how long to wait for namespace reconciliation (default: 60s).
 	ReconcileTimeout time.Duration
@@ -86,7 +86,7 @@ func (c *Config) defaults() {
 		}
 	}
 	if c.KubeContext == "" {
-		c.KubeContext = "k3d-loopzero-mgmt"
+		c.KubeContext = "k3d-loopzero-core"
 	}
 	if c.ReconcileTimeout == 0 {
 		c.ReconcileTimeout = 60 * time.Second
@@ -138,26 +138,26 @@ WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> '%s';
 -- ScalingResolver sees pristine state when journeys (re)deploy fixtures.
 DELETE FROM app_scaling_config WHERE tenant_id = '%s';
 `+`
--- Defensive: ensure cell-default exists in cells before tenant INSERT
+-- Defensive: ensure cell-0 exists in cells before tenant INSERT
 -- (dogfood-2026-05-08-fixes T3.1, ADR D4 + EC-4 mitigation). Currently
--- tenants.cell_id has DEFAULT 'cell-default' so the INSERT below works
+-- tenants.cell_id has DEFAULT 'cell-0' so the INSERT below works
 -- even without an explicit value, but if a future migration adds a FK
 -- to cells.cell_id this guard prevents a violation. Idempotent.
 INSERT INTO cells (cell_id, display_name, status, region)
-VALUES ('cell-default', 'Default cell (local)', 'active', 'local')
+VALUES ('cell-0', 'Default cell (local)', 'active', 'local')
 ON CONFLICT (cell_id) DO NOTHING;
 
 INSERT INTO users (id, email, github_id, display_name, username)
 VALUES ('%s', '%s', %d, 'e2e-user', '%s')
 ON CONFLICT (id) DO NOTHING;
 
--- tenants.cell_id is NOT NULL with DEFAULT 'cell-default' so this INSERT
+-- tenants.cell_id is NOT NULL with DEFAULT 'cell-0' so this INSERT
 -- works even without an explicit value. Explicit cell_id improves clarity
 -- and ensures behaviour is identical regardless of future schema changes.
 -- COALESCE on conflict preserves any manual pin (e.g., from loopzero admin
 -- tenants pin) on re-seed (EC-11).
 INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
-VALUES ('%s', '%s', '%s', '%s', 'cell-default')
+VALUES ('%s', '%s', '%s', '%s', 'cell-0')
 ON CONFLICT (id) DO UPDATE SET cell_id = COALESCE(tenants.cell_id, EXCLUDED.cell_id);
 
 -- Pin the e2e tenant to the enterprise plan so the suite is not capped
@@ -223,7 +223,7 @@ ON CONFLICT (id) DO NOTHING;
 //
 // Per-cluster kubeconfig resolution (drill multi-cluster):
 //   - mgmt: $DRILL_KUBECONFIG (default for any context not in DRILL_KUBECONFIG_DIR)
-//   - k3d-loopzero-build / k3d-loopzero-workload: $DRILL_KUBECONFIG_DIR/build.yaml /
+//   - k3d-loopzero-build / k3d-loopzero-cell-0: $DRILL_KUBECONFIG_DIR/build.yaml /
 //     $DRILL_KUBECONFIG_DIR/runtime.yaml if DRILL_KUBECONFIG_DIR set, else
 //     defaults to mgmt kubeconfig.
 func kubectlArgs(kubeContext string) []string {
@@ -233,9 +233,9 @@ func kubectlArgs(kubeContext string) []string {
 		switch kubeContext {
 		case "k3d-loopzero-build":
 			return []string{"kubectl", "--kubeconfig", dir + "/build.yaml", "--insecure-skip-tls-verify"}
-		case "k3d-loopzero-workload":
+		case "k3d-loopzero-cell-0":
 			return []string{"kubectl", "--kubeconfig", dir + "/runtime.yaml", "--insecure-skip-tls-verify"}
-		case "k3d-loopzero-mgmt", "":
+		case "k3d-loopzero-core", "":
 			return []string{"kubectl", "--kubeconfig", dir + "/mgmt.yaml", "--insecure-skip-tls-verify"}
 		}
 	}
@@ -446,8 +446,8 @@ func ExpectedNamespacesByContext() []expectedNamespace {
 	return []expectedNamespace{
 		// Workload namespaces are created by the operator with "loopzero-" prefix
 		// on the workload cluster (cell context).
-		{context: "k3d-loopzero-workload", name: "loopzero-" + TenantID + "-production"},
-		{context: "k3d-loopzero-workload", name: "loopzero-" + TenantID + "-staging"},
+		{context: "k3d-loopzero-cell-0", name: "loopzero-" + TenantID + "-production"},
+		{context: "k3d-loopzero-cell-0", name: "loopzero-" + TenantID + "-staging"},
 		// Build namespace is created on the build cluster (no "loopzero-" prefix).
 		{context: "k3d-loopzero-build", name: "build-" + TenantID},
 	}

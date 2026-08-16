@@ -39,7 +39,7 @@ get_ip() {
 }
 
 # Mgmt server node IP (NodePorts: 30000=Gitea, 30001=API, 32000=MinIO)
-MGMT_SERVER=$(get_ip k3d-loopzero-mgmt-server-0)
+MGMT_SERVER=$(get_ip k3d-loopzero-core-server-0)
 if [ -z "$MGMT_SERVER" ]; then
   echo "ERROR: Cannot find mgmt server IP on ${SHARED_NETWORK}."
   echo "  Are all clusters running? Run: k3d cluster list"
@@ -48,7 +48,7 @@ fi
 echo "  Mgmt server: $MGMT_SERVER (Gitea:30000, API:30001, MinIO:32000)"
 
 # Workload LB IP (HTTP/HTTPS traffic via Traefik)
-WORKLOAD_LB=$(get_ip k3d-loopzero-workload-serverlb)
+WORKLOAD_LB=$(get_ip k3d-loopzero-cell-0-serverlb)
 if [ -z "$WORKLOAD_LB" ]; then
   echo "ERROR: Cannot find workload LB IP on ${SHARED_NETWORK}."
   exit 1
@@ -56,7 +56,7 @@ fi
 echo "  Workload LB: $WORKLOAD_LB (Traefik:80/443)"
 
 # Workload server IP (K8s API: 6443)
-WORKLOAD_SERVER=$(get_ip k3d-loopzero-workload-server-0)
+WORKLOAD_SERVER=$(get_ip k3d-loopzero-cell-0-server-0)
 echo "  Workload server: $WORKLOAD_SERVER (K8s API:6443)"
 
 # Build LB IP (monitoring scrape targets)
@@ -82,7 +82,7 @@ echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 echo ""
 echo "=== Patching loopzero-api-runtime-config ConfigMap (mgmt cluster) ==="
 
-MGMT_CTX="k3d-loopzero-mgmt"
+MGMT_CTX="k3d-loopzero-core"
 API_CM_NS="loopzero-system"
 API_CM_NAME="loopzero-api-runtime-config"
 

@@ -32,7 +32,7 @@
 # This script is idempotent — safe to run multiple times.
 set -euo pipefail
 
-MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 SHARED_NETWORK="k3d-loopzero"
 
 echo "=== Cross-cluster networking setup ==="
@@ -40,7 +40,7 @@ echo "=== Cross-cluster networking setup ==="
 # --- Step 1: Verify all clusters are on the shared network ---
 echo ""
 echo "Verifying cluster connectivity on ${SHARED_NETWORK}..."
-for container in k3d-loopzero-mgmt-server-0 k3d-loopzero-build-server-0 k3d-loopzero-workload-server-0; do
+for container in k3d-loopzero-core-server-0 k3d-loopzero-build-server-0 k3d-loopzero-cell-0-server-0; do
   IP=$(docker inspect "$container" --format "{{(index .NetworkSettings.Networks \"${SHARED_NETWORK}\").IPAddress}}" 2>/dev/null || true)
   if [ -n "$IP" ]; then
     echo "  [OK] $container: $IP"
@@ -66,17 +66,17 @@ echo "  Bridge gateway: $GATEWAY_IP"
 echo ""
 echo "Configuring CoreDNS in mgmt cluster..."
 
-NEEDS_UPDATE=$(kubectl --context "$MGMT_CONTEXT" get configmap coredns -n kube-system \
+NEEDS_UPDATE=$(kubectl --context "$CORE_CONTEXT" get configmap coredns -n kube-system \
     -o jsonpath='{.data.NodeHosts}' 2>/dev/null | grep -c "host.k3d.internal" || true)
 
 if [ "$NEEDS_UPDATE" -gt 0 ]; then
-    CURRENT_IP=$(kubectl --context "$MGMT_CONTEXT" get configmap coredns -n kube-system \
+    CURRENT_IP=$(kubectl --context "$CORE_CONTEXT" get configmap coredns -n kube-system \
         -o jsonpath='{.data.NodeHosts}' 2>/dev/null | grep "host.k3d.internal" | awk '{print $1}')
     if [ "$CURRENT_IP" = "$GATEWAY_IP" ]; then
         echo "  [OK] CoreDNS already has host.k3d.internal -> $GATEWAY_IP"
     else
         echo "  [UPDATE] Updating host.k3d.internal from $CURRENT_IP to $GATEWAY_IP"
-        kubectl --context "$MGMT_CONTEXT" get configmap coredns -n kube-system -o json | \
+        kubectl --context "$CORE_CONTEXT" get configmap coredns -n kube-system -o json | \
             python3 -c "
 import sys, json
 data = json.load(sys.stdin)
@@ -84,22 +84,22 @@ lines = [l for l in data['data']['NodeHosts'].splitlines() if 'host.k3d.internal
 lines.append('$GATEWAY_IP host.k3d.internal')
 data['data']['NodeHosts'] = '\n'.join(lines) + '\n'
 json.dump(data, sys.stdout)
-" | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null 2>&1
-        kubectl --context "$MGMT_CONTEXT" rollout restart deployment coredns -n kube-system >/dev/null 2>&1
-        kubectl --context "$MGMT_CONTEXT" rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
+" | kubectl --context "$CORE_CONTEXT" apply -f - >/dev/null 2>&1
+        kubectl --context "$CORE_CONTEXT" rollout restart deployment coredns -n kube-system >/dev/null 2>&1
+        kubectl --context "$CORE_CONTEXT" rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
         echo "  [OK] CoreDNS updated and restarted"
     fi
 else
     echo "  [ADD] Adding host.k3d.internal -> $GATEWAY_IP"
-    kubectl --context "$MGMT_CONTEXT" get configmap coredns -n kube-system -o json | \
+    kubectl --context "$CORE_CONTEXT" get configmap coredns -n kube-system -o json | \
         python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 data['data']['NodeHosts'] = data['data']['NodeHosts'].rstrip('\n') + '\n$GATEWAY_IP host.k3d.internal\n'
 json.dump(data, sys.stdout)
-" | kubectl --context "$MGMT_CONTEXT" apply -f - >/dev/null 2>&1
-    kubectl --context "$MGMT_CONTEXT" rollout restart deployment coredns -n kube-system >/dev/null 2>&1
-    kubectl --context "$MGMT_CONTEXT" rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
+" | kubectl --context "$CORE_CONTEXT" apply -f - >/dev/null 2>&1
+    kubectl --context "$CORE_CONTEXT" rollout restart deployment coredns -n kube-system >/dev/null 2>&1
+    kubectl --context "$CORE_CONTEXT" rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
     echo "  [OK] CoreDNS updated and restarted"
 fi
 

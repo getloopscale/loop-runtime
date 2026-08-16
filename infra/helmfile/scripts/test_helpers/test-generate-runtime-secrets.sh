@@ -27,7 +27,7 @@ export LOOPZERO_DB_PASSWORD="secret"
 # explicit KUBECONFIG, because it must never inherit an ambient kubecontext
 # when writing runtime Secrets. This harness is a caller, so it honours the
 # same contract a real caller does (taskfiles/infra.yml pins via
-# `KUBECONFIG=$(k3d kubeconfig write loopzero-workload)`).
+# `KUBECONFIG=$(k3d kubeconfig write loopzero-cell-0)`).
 #
 # The file is a throwaway: kubectl is shimmed by mock-kubectl.sh on PATH and
 # never reads it. Pointing at a real cluster here would be wrong — the value

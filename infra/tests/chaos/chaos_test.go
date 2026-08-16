@@ -690,7 +690,7 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// Cross-reference: full chaos test lives in
 			// cell_isolation_test.go::TestCellIsolation_K3dStop which
-			// performs actual `k3d cluster stop loopzero-workload`. This
+			// performs actual `k3d cluster stop loopzero-cell-0`. This
 			// Ginkgo Context exists for chaos suite coverage tracking
 			// but delegates to the standalone Go test for execution.
 			//

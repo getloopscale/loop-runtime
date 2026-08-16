@@ -33,12 +33,12 @@ domain: loopzero-drill.example
 dnsZone: loopzero-drill.example
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
-# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
-# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Opt-in flag: when true, core.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
 # Default false → drill uses ephemeral env-var secrets (consistent com
 # drill ephemeral lifecycle); flip to true APENAS quando drill scenario
 # explicitly testar Vault integration prod-identical (T9.2 Dogfood QA).
-# Requires: loopzero-vault drill cluster up (separate ephemeral DOKS) +
+# Requires: loopzero-secrets drill cluster up (separate ephemeral DOKS) +
 # ClusterSecretStore + seed-loopzero-secrets.sh ran for env=drill.
 vaultEnabled: false
 
@@ -109,16 +109,16 @@ inClusterPostgres: false
 underlyingStorageClass: do-block-storage
 
 # Per D3 cell mapping — drill mirrors prod cell-to-cluster topology:
-#   cell-default + cell-1 → runtimeCluster (pulumi-drill output key)
-#   cell-2              → runtimeCluster2 (pulumi-drill output key)
-# Single-cell `runtimeCellId: cell-drill` removed per CTO directive
+#   cell-0 + cell-0 → runtimeCluster (pulumi-drill output key)
+#   cell-1              → runtimeCluster2 (pulumi-drill output key)
+# Single-cell `cell0Id: cell-drill` removed per CTO directive
 # 2026-05-16 ("sistema NUNCA vai trabalhar com single cell").
 cells:
-  - id: cell-default
+  - id: cell-0
+    pulumiOutputKey: runtimeCluster
+  - id: cell-0
     pulumiOutputKey: runtimeCluster
   - id: cell-1
-    pulumiOutputKey: runtimeCluster
-  - id: cell-2
     pulumiOutputKey: runtimeCluster2
 
 # DynamicRouter enabled — drill exercises full cell discovery + routing

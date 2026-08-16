@@ -18,10 +18,11 @@ title: "Runbook: OpenBao Init Ceremony"
 > do **Sub-step 2.5** do mandate canonical
 > ``/.claude/rules/cleanroom-up-live-test-mandate.md § Sub-step 2.5`` *(removido do versionamento)*.
 > Disparado SEMPRE que `LOOPZERO_HELMFILE_ENV=dev-public` durante a chain
-> Cleanroom canonical. Standalone-multi usa o shortcut
-> `task k3d:vault:bootstrap-in-mgmt` (sem Shamir, sem sponsor JUNTOS) —
-> consulte memory `check-vault-bootstrap-in-mgmt-task_test.sh` para
-> trade-offs entre os dois paths.
+> Cleanroom canonical. Standalone-multi usava o shortcut
+> ~~`task k3d:secrets:bootstrap-in-core`~~ — **removida em 2026-08-12** (`B-047`). Instalar o
+> OpenBao no cluster mgmt e PROIBIDO em todo tier; use `task k3d:secrets:create` +
+> `task k3d:secrets:bootstrap` em todo tier. Histórico da decisão e trade-offs entre os dois
+> caminhos: `docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md`.
 
 ## Pre-flight (block ceremony if any fail)
 
@@ -44,14 +45,14 @@ title: "Runbook: OpenBao Init Ceremony"
 
 ```bash
 # From operator machine with mgmt cluster kubeconfig:
-kubectl -n vault-system get pods -l app.kubernetes.io/name=openbao
+kubectl -n secrets-system get pods -l app.kubernetes.io/name=openbao
 # Expected: openbao-{0,1,2} Running 1/1 (or pending if size=1 in standalone)
 
 # Port-forward + check seal status (expect Sealed: true, Initialized: false)
-kubectl -n vault-system port-forward svc/openbao 8200:8200 &
+kubectl -n secrets-system port-forward svc/openbao 8200:8200 &
 export VAULT_ADDR=https://localhost:8200
 export VAULT_CACERT=/tmp/openbao-ca.pem
-kubectl -n vault-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/openbao-ca.pem
+kubectl -n secrets-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/openbao-ca.pem
 bao status
 # Expected output BEFORE init:
 #   Sealed:    true

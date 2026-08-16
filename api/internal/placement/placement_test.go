@@ -20,15 +20,15 @@ import (
 
 func TestPassthroughRouter_Resolve(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:        "cell-default",
+		CellID:        "cell-0",
 		KubeConfig:    "/path/to/kubeconfig",
-		KubeContext:   "k3d-loopzero-workload",
+		KubeContext:   "k3d-loopzero-cell-0",
 		ArgocdURL:     "http://argocd:80",
 		ArgocdToken:   "test-token",
 		IngressDomain: "loopzero.local",
 	})
 
-	cfg, err := router.Resolve(context.Background(), "cell-default")
+	cfg, err := router.Resolve(context.Background(), "cell-0")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -42,7 +42,7 @@ func TestPassthroughRouter_Resolve(t *testing.T) {
 
 func TestPassthroughRouter_Resolve_AnyCellID(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:      "cell-default",
+		CellID:      "cell-0",
 		KubeContext: "default-context",
 	})
 
@@ -60,7 +60,7 @@ func TestPassthroughRouter_Resolve_AnyCellID(t *testing.T) {
 }
 
 func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
-	router := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
+	router := NewPassthroughRouter(CellConfig{CellID: "cell-0"})
 
 	_, err := router.Resolve(context.Background(), "")
 	if err == nil {
@@ -70,8 +70,8 @@ func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
 
 func TestPassthroughRouter_ListCells(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:      "cell-default",
-		KubeContext: "k3d-loopzero-workload",
+		CellID:      "cell-0",
+		KubeContext: "k3d-loopzero-cell-0",
 	})
 
 	cells, err := router.ListCells(context.Background())
@@ -81,8 +81,8 @@ func TestPassthroughRouter_ListCells(t *testing.T) {
 	if len(cells) != 1 {
 		t.Fatalf("expected 1 cell, got %d", len(cells))
 	}
-	if cells[0].CellID != "cell-default" {
-		t.Errorf("expected %q, got %q", "cell-default", cells[0].CellID)
+	if cells[0].CellID != "cell-0" {
+		t.Errorf("expected %q, got %q", "cell-0", cells[0].CellID)
 	}
 }
 
@@ -499,20 +499,20 @@ func TestPlacement_ConcurrentCreation_WithoutSerializerHotSpots(t *testing.T) {
 
 // TestRouting_CellDefault_BackwardCompat — roadmap 06 DoD.
 //
-// Existing tenants (pre-multi-cell) have cell_id = "cell-default". When
+// Existing tenants (pre-multi-cell) have cell_id = "cell-0". When
 // the controller wires a StaticRouter with multiple cells, that router
-// MUST still resolve "cell-default" if it is in its list, so legacy
+// MUST still resolve "cell-0" if it is in its list, so legacy
 // tenants are not orphaned.
 //
-// The test builds a StaticRouter containing cell-default alongside a new
-// cell, resolves cell-default, and asserts the returned CellConfig is
-// the cell-default entry (not the new cell).
+// The test builds a StaticRouter containing cell-0 alongside a new
+// cell, resolves cell-0, and asserts the returned CellConfig is
+// the cell-0 entry (not the new cell).
 func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 	router, err := NewStaticRouter([]CellConfig{
 		{
-			CellID:        "cell-default",
+			CellID:        "cell-0",
 			KubeConfig:    "/legacy/kubeconfig",
-			KubeContext:   "cell-default",
+			KubeContext:   "cell-0",
 			ArgocdURL:     "http://argocd-legacy.argocd.svc",
 			ArgocdToken:   "legacy-token",
 			IngressDomain: "dev.loopzero.example",
@@ -530,17 +530,17 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 		t.Fatalf("NewStaticRouter: %v", err)
 	}
 
-	// Legacy tenant lookup: cell-default must resolve to the legacy
+	// Legacy tenant lookup: cell-0 must resolve to the legacy
 	// cluster, not the new one.
-	cfg, err := router.Resolve(context.Background(), "cell-default")
+	cfg, err := router.Resolve(context.Background(), "cell-0")
 	if err != nil {
-		t.Fatalf("Resolve(cell-default): %v", err)
+		t.Fatalf("Resolve(cell-0): %v", err)
 	}
-	if cfg.CellID != "cell-default" {
-		t.Errorf("expected CellID=%q, got %q", "cell-default", cfg.CellID)
+	if cfg.CellID != "cell-0" {
+		t.Errorf("expected CellID=%q, got %q", "cell-0", cfg.CellID)
 	}
-	if cfg.KubeContext != "cell-default" {
-		t.Errorf("expected KubeContext=cell-default, got %q", cfg.KubeContext)
+	if cfg.KubeContext != "cell-0" {
+		t.Errorf("expected KubeContext=cell-0, got %q", cfg.KubeContext)
 	}
 	if cfg.ArgocdToken != "legacy-token" {
 		t.Errorf("expected ArgocdToken=legacy-token, got %q", cfg.ArgocdToken)
@@ -571,8 +571,8 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 // --- ExtractRegion tests ---
 
 func TestExtractRegion_Default(t *testing.T) {
-	if got := ExtractRegion("cell-default"); got != "default" {
-		t.Errorf("ExtractRegion(%q) = %q, want default", "cell-default", got)
+	if got := ExtractRegion("cell-0"); got != "default" {
+		t.Errorf("ExtractRegion(%q) = %q, want default", "cell-0", got)
 	}
 }
 
@@ -750,14 +750,14 @@ func TestDynamicRouter_SkipsEmptyCellID(t *testing.T) {
 // --- PassthroughRouter additional ---
 
 func TestPassthroughRouter_DiscoveredCellCount(t *testing.T) {
-	r := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
+	r := NewPassthroughRouter(CellConfig{CellID: "cell-0"})
 	if got := r.DiscoveredCellCount(); got != 1 {
 		t.Errorf("DiscoveredCellCount = %d, want 1", got)
 	}
 }
 
 func TestPassthroughRouter_IsDynamic(t *testing.T) {
-	r := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
+	r := NewPassthroughRouter(CellConfig{CellID: "cell-0"})
 	if r.IsDynamic() {
 		t.Error("PassthroughRouter.IsDynamic should return false")
 	}
@@ -873,7 +873,7 @@ func TestRoundRobinEngine_WithSerializer_PropagatesError(t *testing.T) {
 	}
 }
 
-// --- cell-2-activation-plan T1.1 / ADR C2 routing determinism ---
+// --- cell-1-activation-plan T1.1 / ADR C2 routing determinism ---
 //
 // These tests cement the INVARIANT documented on DynamicRouter.Resolve:
 // for a fixed cell_id, every call between two refreshes returns a
@@ -888,9 +888,9 @@ func TestRoundRobinEngine_WithSerializer_PropagatesError(t *testing.T) {
 func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
 	store := &fakeCellStore{
 		cells: []CellConfig{
-			{CellID: "cell-default", APIServer: "https://default.example", IngressDomain: "loopzero.local"},
+			{CellID: "cell-0", APIServer: "https://default.example", IngressDomain: "loopzero.local"},
+			{CellID: "cell-0", APIServer: "https://cell-0.example", IngressDomain: "loopzero.local", SecretRefName: "cell-0-kubeconfig", SecretRefNamespace: "loopzero-system"},
 			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopzero.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopzero-system"},
-			{CellID: "cell-2", APIServer: "https://cell-2.example", IngressDomain: "loopzero.local", SecretRefName: "cell-2-kubeconfig", SecretRefNamespace: "loopzero-system"},
 		},
 	}
 	// 24h interval so the ticker cannot fire during the test (we never
@@ -901,7 +901,7 @@ func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
 	}
 
 	const N = 100
-	for _, cellID := range []string{"cell-default", "cell-1", "cell-2"} {
+	for _, cellID := range []string{"cell-0", "cell-0", "cell-1"} {
 		first, err := router.Resolve(context.Background(), cellID)
 		if err != nil {
 			t.Fatalf("Resolve(%q) initial: %v", cellID, err)
@@ -934,7 +934,7 @@ func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
 func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
 	store := &fakeCellStore{
 		cells: []CellConfig{
-			{CellID: "cell-2", APIServer: "https://cell-2.example", IngressDomain: "loopzero.local", SecretRefName: "cell-2-kubeconfig", SecretRefNamespace: "loopzero-system"},
+			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopzero.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopzero-system"},
 		},
 	}
 	router := NewDynamicRouter(store, 24*time.Hour, slog.Default())
@@ -942,7 +942,7 @@ func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
 		t.Fatalf("refresh: %v", err)
 	}
 
-	canonical, err := router.Resolve(context.Background(), "cell-2")
+	canonical, err := router.Resolve(context.Background(), "cell-1")
 	if err != nil {
 		t.Fatalf("canonical Resolve: %v", err)
 	}
@@ -959,7 +959,7 @@ func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < callsPerG; i++ {
-				cur, err := router.Resolve(context.Background(), "cell-2")
+				cur, err := router.Resolve(context.Background(), "cell-1")
 				if err != nil {
 					errs.Add(1)
 					return

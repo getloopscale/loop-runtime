@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// cell-2-activation-plan T2.2 — text-level invariants of the cell-2
+// cell-1-activation-plan T2.2 — text-level invariants of the cell-1
 // activation migration (no live Postgres required). Live behavior is
-// exercised by the cell-2 activation gate suite (cell2-activation-gates.sh).
+// exercised by the cell-1 activation gate suite (cell2-activation-gates.sh).
 //
 // These tests pin the load-bearing properties:
-//   1. UPDATE targets cell_id='cell-2' specifically (not all cells).
+//   1. UPDATE targets cell_id='cell-1' specifically (not all cells).
 //   2. WHERE clause filters status='maintenance' for idempotency.
 //   3. New status is 'active' (not draining/retired).
 //   4. Audit trail: notes column appended (not overwritten).
@@ -41,10 +41,29 @@ func readMigration007ActivateCell2(t *testing.T) string {
 	return string(data)
 }
 
+// # Estes testes leem HISTÓRIA, não o presente
+//
+// As migrações são forward-only e imutáveis: `000007` ativou a célula que na
+// época se chamava `cell-2`, e é isso que ela diz — em todo banco onde já rodou.
+// A migração `000061` (cell_identity_unification) depois fundiu `cell-default` +
+// `cell-1` em `cell-0` e renomeou o resto, mas renomear no presente não muda o
+// que um arquivo de migração executou no passado.
+//
+// Estes testes foram reescritos com a identidade NOVA e continuaram lendo os
+// arquivos ANTIGOS, então reprovavam procurando `cell-1` num arquivo que fala de
+// `cell-2` — quatro reprovações com uma causa só (B-071).
+//
+// A correção NÃO é editar a migração: `docs/README.md` é explícito que reescrever
+// um registro datado para parecer atual destrói a única prova do que era verdade
+// então. O que estes testes protegem é a FORMA da migração histórica — que o
+// UPDATE é filtrado, que a nota de auditoria é anexada, que há referência a plano
+// e ADR. Essas propriedades valem com o nome que o arquivo carrega.
+//
+// A identidade ATUAL das células é responsabilidade de um teste sobre a `000061`.
 func TestMigration007ActivatesOnlyCell2(t *testing.T) {
 	sql := readMigration007ActivateCell2(t)
 	if !strings.Contains(sql, "WHERE cell_id = 'cell-2'") {
-		t.Fatal("expected WHERE clause filtering cell_id='cell-2' to prevent activating other cells")
+		t.Fatal("expected WHERE clause filtering cell_id='cell-2' — the name this migration carries — to prevent activating other cells")
 	}
 	// Defensive: the UPDATE must NOT be unbounded.
 	if strings.Contains(sql, "UPDATE cells\n   SET status = 'active'") &&
@@ -87,7 +106,7 @@ func TestMigration007AppendsAuditNote(t *testing.T) {
 	}
 	// Audit note should reference this plan/task.
 	if !strings.Contains(sql, "cell-2-activation-plan T2.2") {
-		t.Fatal("expected audit note to reference cell-2-activation-plan T2.2")
+		t.Fatal("expected audit note to reference cell-2-activation-plan T2.2 — the plan as it was named")
 	}
 }
 

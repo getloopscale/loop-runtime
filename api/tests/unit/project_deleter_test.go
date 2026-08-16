@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"strings"
 	"testing"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // --- Fakes for ProjectDeleter tests ---
@@ -217,7 +217,7 @@ func TestProjectDeleterDeleteSingleEnvironment(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -285,7 +285,7 @@ func TestProjectDeleterDeleteAllEnvironments(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -335,7 +335,7 @@ func TestProjectDeleterDeleteNoActiveBuilds(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -375,7 +375,7 @@ func TestProjectDeleterLockFailure(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -411,7 +411,7 @@ func TestProjectDeleterCancelBuildError(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -447,7 +447,7 @@ func TestProjectDeleterGitOpsFailureIsFatal(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -489,7 +489,7 @@ func TestProjectDeleterDeleteAllEnvsProjectDeleteFails(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -528,7 +528,7 @@ func TestProjectDeleterListByProjectError(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -564,7 +564,7 @@ func TestProjectDeleterDeleteTargetError(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -600,7 +600,7 @@ func TestProjectDeleterDeleteAllEnvsNoEnvironments(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -655,7 +655,7 @@ func TestProjectDeleterCancelsActiveWorkflows(t *testing.T) {
 		WorkflowCanceller: wfCanceller,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -703,7 +703,7 @@ func TestProjectDeleterSkipsBuildWithoutWorkflowID(t *testing.T) {
 		WorkflowCanceller: wfCanceller,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",
@@ -745,7 +745,7 @@ func TestProjectDeleterContinuesOnWorkflowCancelFailure(t *testing.T) {
 		WorkflowCanceller: wfCanceller,
 	})
 
-	req := routes.ProjectDeleteInput{
+	req := domain.ProjectDeleteInput{
 		TenantID:      "tenant-1",
 		ProjectID:     "proj-abc",
 		ProjectName:   "my-saas",

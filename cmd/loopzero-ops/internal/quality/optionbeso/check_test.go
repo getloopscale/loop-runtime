@@ -25,7 +25,7 @@ func writeFixture(t *testing.T, doc, runtime string) string {
 		}
 	}
 	if runtime != "" {
-		if err := os.WriteFile(filepath.Join(root, "infra", "helmfile", "runtime.helmfile.yaml.gotmpl"), []byte(runtime), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "infra", "helmfile", "cell.helmfile.yaml.gotmpl"), []byte(runtime), 0o644); err != nil {
 			t.Fatalf("write runtime: %v", err)
 		}
 	}
@@ -57,7 +57,7 @@ const canonicalDoc = "# Option B — mgmt helmfile ESO deploy\n\n" +
 	"|---|---|---|---|\n" +
 	"| B1 | low | low | recommended |\n\n" +
 	"## Cross-references\n\n" +
-	"See runtime.helmfile.yaml.gotmpl for canonical pattern.\n"
+	"See cell.helmfile.yaml.gotmpl for canonical pattern.\n"
 
 const canonicalRuntime = `releases:
   - name: external-secrets
@@ -127,7 +127,7 @@ func TestCheck_MissingRollbackFails(t *testing.T) {
 func TestCheck_MissingCrossRefsCanonicalFails(t *testing.T) {
 	// Cross-references present but does NOT cite runtime helmfile.
 	body := canonicalDoc
-	body = replaceLine(body, "See runtime.helmfile.yaml.gotmpl for canonical pattern.", "See somewhere else.")
+	body = replaceLine(body, "See cell.helmfile.yaml.gotmpl for canonical pattern.", "See somewhere else.")
 	root := writeFixture(t, body, canonicalRuntime)
 	_, err := Check(Config{RepoRoot: root})
 	if !errors.Is(err, ErrViolations) {

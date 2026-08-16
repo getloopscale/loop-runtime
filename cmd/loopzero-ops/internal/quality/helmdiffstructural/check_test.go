@@ -359,4 +359,3 @@ func TestSensitiveKinds(t *testing.T) {
 	assert.Contains(t, SensitiveKinds, "ClusterRoleBinding")
 	assert.Contains(t, SensitiveKinds, "PodSecurityPolicy")
 }
-

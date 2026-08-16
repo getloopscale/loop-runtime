@@ -5,6 +5,14 @@ package main
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/logs"
+	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"log/slog"
 	"net/http"
 	"time"
@@ -23,7 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/loki"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -70,19 +78,19 @@ func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapC
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
 	Orchestrator        *build.BuildOrchestrator
-	BuildOrchestrator   routes.BuildOrchestratorService
-	LogsHandler         *routes.LogsHandler
-	LogStreamHandler    *routes.LogStreamHandler
-	RollbackHandler     *routes.RollbackHandler
-	PromoteHandler      *routes.PromoteHandler
-	StatusHandler       *routes.StatusHandler
-	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
-	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
-	ScaleHandler        *routes.ScaleHandler
-	BuildListHandler    *routes.BuildListHandler
-	BuildStatsHandler   *routes.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
-	ProjectDeleter      routes.ProjectDeleter
-	ArgoCallbackHandler *routes.ArgoCallbackHandler
+	BuildOrchestrator   builds.BuildOrchestratorService
+	LogsHandler         *logs.LogsHandler
+	LogStreamHandler    *logs.LogStreamHandler
+	RollbackHandler     *rollback.RollbackHandler
+	PromoteHandler      *promote.PromoteHandler
+	StatusHandler       *status.StatusHandler
+	MetricsProxyHandler *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
+	StatusSSEHandler    *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	ScaleHandler        *scale.ScaleHandler
+	BuildListHandler    *builds.BuildListHandler
+	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
+	ProjectDeleter      domain.ProjectDeleter
+	ArgoCallbackHandler *argocd.ArgoCallbackHandler
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
@@ -174,8 +182,8 @@ func setupOrchestrator(
 	}
 	lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
 	logBuildStore := &adapters.LogBuildStoreAdapter{Store: stores.BuildStore}
-	logsHandler := routes.NewLogsHandler(logBuildStore, lokiClient)
-	logStreamHandler := routes.NewLogStreamHandler(logBuildStore, lokiClient, routes.LogStreamHandlerOpts{
+	logsHandler := logs.NewLogsHandler(logBuildStore, lokiClient)
+	logStreamHandler := logs.NewLogStreamHandler(logBuildStore, lokiClient, logs.LogStreamHandlerOpts{
 		Logger: logger,
 	})
 
@@ -196,7 +204,7 @@ func setupOrchestrator(
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
-	rollbackHandler := routes.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
+	rollbackHandler := rollback.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
 		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
@@ -219,12 +227,12 @@ func setupOrchestrator(
 		Logger:       logger,
 	})
 	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
-	promoteHandler := routes.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
+	promoteHandler := promote.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
-	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	statusHandler := status.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
 	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
 	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
@@ -232,22 +240,22 @@ func setupOrchestrator(
 	// ship nil so the handler returns 503 prometheus_not_configured honestly
 	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
 	// Go tests inject httptest-backed fakes.
-	var promClient routes.PrometheusQueryClient
+	var promClient metrics.PrometheusQueryClient
 	if cfg.PrometheusAddress != "" {
-		promClient = routes.NewPrometheusClient(cfg.PrometheusAddress, nil)
+		promClient = metrics.NewPrometheusClient(cfg.PrometheusAddress, nil)
 	}
-	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, promClient)
+	metricsProxyHandler := metrics.NewMetricsProxyHandler(projectStore, promClient)
 
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
 	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
 	// to project-scoped SSE endpoint. Handler enforces tenant ownership +
 	// env validation + Flusher safety + Last-Event-ID dedup per plan
 	// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
-	statusSSEHandler := routes.NewStatusSSEHandler(projectStore, stores.EventStore, routes.StatusSSEHandlerOpts{})
+	statusSSEHandler := status.NewStatusSSEHandler(projectStore, stores.EventStore, status.StatusSSEHandlerOpts{})
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
-	// The closure adapts routes.ScaleConfigInput ↔ store.ScalingConfig (avoids circular import).
+	// The closure adapts scale.ScaleConfigInput ↔ store.ScalingConfig (avoids circular import).
 	// scalingStore declared above (before BuildOrchestrator) — single instance
 	// shared by scaleApply (write path) and ScalingResolver (read path).
 	// T7.1 of deep-review-remediation-plan (closes find_data_003 HIGH).
@@ -257,7 +265,7 @@ func setupOrchestrator(
 	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
-	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
+	scaleApply := func(ctx context.Context, in scale.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
 			c := &store.ScalingConfig{
@@ -280,7 +288,7 @@ func setupOrchestrator(
 		})
 		return changed, err
 	}
-	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	scaleHandler := scale.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
@@ -306,7 +314,7 @@ func setupOrchestrator(
 	// so the /build-envs endpoint can reject cross-tenant probes with
 	// 404 PROJECT_NOT_FOUND (existence-leak prevention) BEFORE the
 	// underlying ListEnvsForProject query runs.
-	buildListHandler := routes.NewBuildListHandlerWithGate(
+	buildListHandler := builds.NewBuildListHandlerWithGate(
 		&adapters.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
@@ -314,7 +322,7 @@ func setupOrchestrator(
 	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
 	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
-	buildStatsHandler := routes.NewBuildStatsHandler(
+	buildStatsHandler := builds.NewBuildStatsHandler(
 		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
 	)
 
@@ -359,7 +367,7 @@ func setupOrchestrator(
 	} else {
 		logger.Warn("sync callback activator: dynamic client unavailable; falling back to LastIndex parser (code-005 hyphen ambiguity remains)")
 	}
-	argoCallbackHandler := routes.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
+	argoCallbackHandler := argocd.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
 		Orchestrator:        orch,

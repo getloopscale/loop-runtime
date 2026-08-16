@@ -8,7 +8,7 @@
 //   - Pulumi `mgmt-ory.ts`, `runtime-keda.ts`, `runtime-policy-controller.ts`,
 //     `mgmt-api.ts`, `mgmt-tenant-controller.ts` were DELETED in T1.1.
 //   - Their fixes now live in:
-//       * Helmfile `runtime.helmfile.yaml` (KEDA chart name, policy-controller install)
+//       * Helmfile `cell.helmfile.yaml` (KEDA chart name, policy-controller install)
 //       * Helm chart values (kratos-ui memory, loopzero-controller env)
 //
 // Only Fix #1 (registry adopt-or-create) remains in Pulumi (`infra.ts`) because
@@ -48,10 +48,10 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
     });
   });
 
-  describe("Fix #2: KEDA HTTP add-on chart name — migrated to runtime.helmfile.yaml", () => {
-    const helmfile = readIfExists("runtime.helmfile.yaml.gotmpl", helmfileDir);
+  describe("Fix #2: KEDA HTTP add-on chart name — migrated to cell.helmfile.yaml", () => {
+    const helmfile = readIfExists("cell.helmfile.yaml.gotmpl", helmfileDir);
 
-    it("runtime.helmfile.yaml.gotmpl exists (T2.3 deliverable)", () => {
+    it("cell.helmfile.yaml.gotmpl exists (T2.3 deliverable)", () => {
       expect(helmfile).not.toBeNull();
     });
 
@@ -61,8 +61,8 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
     });
   });
 
-  describe("Fix #3: policy-controller helm chart — runtime.helmfile.yaml", () => {
-    const helmfile = readIfExists("runtime.helmfile.yaml.gotmpl", helmfileDir);
+  describe("Fix #3: policy-controller helm chart — cell.helmfile.yaml", () => {
+    const helmfile = readIfExists("cell.helmfile.yaml.gotmpl", helmfileDir);
 
     it("policy-controller release present in runtime helmfile", () => {
       expect(helmfile).toMatch(/name:\s*policy-controller/);
@@ -78,7 +78,7 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
 
   describe("Fix #4: cloudflared K8s objects migrated from tunnel.ts to Helmfile (ADR D9)", () => {
     const tunnel = read(path.join("..", "providers", "cloudflare", "tunnel.ts"));
-    const helmfile = readIfExists("runtime.helmfile.yaml.gotmpl", helmfileDir);
+    const helmfile = readIfExists("cell.helmfile.yaml.gotmpl", helmfileDir);
 
     it("tunnel.ts no longer imports @pulumi/kubernetes", () => {
       expect(tunnel).not.toMatch(/import.*\*.*from\s+["']@pulumi\/kubernetes["']/);

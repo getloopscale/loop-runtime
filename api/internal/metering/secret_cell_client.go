@@ -40,7 +40,7 @@ type SecretCellClientProvider struct {
 	clientsByCel map[string]kubernetes.Interface
 }
 
-// NewSecretCellClientProvider wires the provider to the mgmt-cluster client (the
+// NewSecretCellClientProvider wires the provider to the core-cluster client (the
 // controller's controller-runtime client, which reads ClusterCredential CRs +
 // Secrets). mgmtNamespace defaults to loopzero-system (ADR-0018 — the canonical CR ns).
 func NewSecretCellClientProvider(mgmtClient client.Client, mgmtNamespace string) *SecretCellClientProvider {

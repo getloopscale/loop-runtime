@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 	"os"
 	"time"
@@ -20,15 +21,15 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
 // DatabaseDeps holds everything produced by setupDatabase.
 type DatabaseDeps struct {
 	DBAdapter    *db.PgxAdapter
 	MemberStore  middleware.MembershipStore
-	ProjectStore routes.ProjectStore
-	DBHealth     routes.DBHealthChecker
+	ProjectStore domain.ProjectStore
+	DBHealth     health.DBHealthChecker
 	PlanLimiter  *enforcement.PlanLimiter
 
 	// StdDB is the stdlib sql.DB used for plan enforcement (caller must defer Close).
@@ -57,6 +58,20 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		StatementTimeout:  cfg.DBStatementTimeout,
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	// Tenant isolation is a boot precondition, not a runtime hope.
+	//
+	// This pool serves HTTP requests. If its role can bypass RLS — by holding
+	// BYPASSRLS, or by owning the tables while FORCE is off — then every
+	// isolation policy is inert and a missing WHERE clause silently returns
+	// another tenant's rows. That was the measured state on 2026-08-14, and it
+	// survived review precisely because nothing observable changed.
+	//
+	// Failing to start is loud and fixed in seconds by pointing DATABASE_URL at
+	// loopzero_api. Serving cross-tenant data is neither.
+	if err := db.AssertRequestPoolIsolated(context.Background(), poolCfg.Pool); err != nil {
 		return nil, err
 	}
 

@@ -11,6 +11,12 @@ package server
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/routes/admin"
+	"github.com/getloopscale/loopzero/api/internal/routes/auth"
+	"github.com/getloopscale/loopzero/api/internal/routes/projects"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -18,7 +24,11 @@ import (
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -89,26 +99,39 @@ func NewRouter(cfg Config) *chi.Mux {
 	})
 
 	// Public routes (no auth required)
-	health := routes.NewHealthHandler(cfg.DB, cfg.HealthServices...)
+	health := health.NewHealthHandler(cfg.DB, cfg.HealthServices...)
 	if cfg.CellDiscovery != nil {
 		health.WithCellDiscovery(cfg.CellDiscovery)
 	}
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
+	// B-123 — `/health/ready` is the ecosystem's name for this answer
+	// (loopzero-contracts/httpsurface, D5). `deep` describes HOW the check is
+	// implemented; `ready` describes what it answers, which is the question an
+	// orchestrator asks before sending traffic.
+	//
+	// Same handler, not a copy: a second implementation of "check the database and
+	// every registered service" would drift, and the half that drifts quietly is
+	// degraded-detection — what keeps traffic off a node that cannot serve.
+	//
+	// `deep` stays. Deployment probes point at it and the maintenance middleware
+	// special-cases the health prefix; renaming takes the service out of rotation
+	// the moment this deploys. Removal is its own item after a deprecation deadline.
+	r.Get("/api/v1/health/ready", health.DeepHealth)
 	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
 	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
-	r.Get("/api/v1/version", routes.VersionHandler())
+	r.Get("/api/v1/version", version.VersionHandler())
 	// Contrato da FROTA de status: o coletor do dashboard sonda `/v1/version` e
 	// le' `{version, built_at}`. Mesma verdade do endpoint acima, no formato que
 	// os outros servicos da plataforma ja' falam — sem o qual o engine nao
 	// aparece no painel /status. Publico pelo mesmo motivo: metadado de build nao
 	// e' segredo e o coletor sonda sem sessao.
-	r.Get("/v1/version", routes.FleetVersionHandler())
+	r.Get("/v1/version", version.FleetVersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {
-		bootstrap := routes.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
+		bootstrap := bootstrap.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if cfg.ArgoCallbackHandler != nil {
@@ -138,8 +161,19 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 
 	// GitHub webhook (no auth — GitHub validates via HMAC signature internally)
+	//
+	// B-104: this decision is RECORDED, not just taken. Without the HMAC secret
+	// `setup_github.go` leaves the handler nil, the route is never registered,
+	// and the only trace is one Info line at startup — measured on the droplet as
+	// a 404 here against a 405 on /health. In production that means a customer's
+	// `git push` builds nothing, silently. The record surfaces as
+	// `loopzero_api_surface_enabled{surface="github_webhook"}`.
 	if cfg.GitHubWebhookHandler != nil {
 		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
+		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, true, "")
+	} else {
+		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, false,
+			"GITHUB_WEBHOOK_SECRET ausente — o segredo HMAC que valida as entregas do GitHub")
 	}
 
 	// Admin endpoints — operator primitives, X-Service-Auth only (no user
@@ -155,19 +189,19 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.AdminEvictor != nil {
 		r.With(middleware.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
-			routes.AdminEvictHandler(cfg.AdminEvictor),
+			admin.AdminEvictHandler(cfg.AdminEvictor),
 		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if cfg.AdminPinner != nil {
-		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
+		r.Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. The handler
 	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
 	if cfg.ReleaseInspector != nil {
-		r.Get("/api/v1/admin/releases/{id}/inspect", routes.AdminReleaseInspectHandler(cfg.ReleaseInspector))
+		r.Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
 	}
 
 	// Protected routes (auth required)
@@ -185,7 +219,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Plan T2.5 D8 full: pass ActiveTeamStore so /whoami reads the
 			// persistent users.active_tenant_id (migration 000018) and
 			// /team/switch can update it. EC-4 self-heal lives in Whoami.
-			auth := routes.NewAuthHandler(cfg.AuthUserLookup).
+			auth := auth.NewAuthHandler(cfg.AuthUserLookup).
 				WithMembershipLookup(cfg.MemberStore)
 			if cfg.ActiveTeamStore != nil {
 				auth = auth.WithActiveTeamStore(cfg.ActiveTeamStore)
@@ -279,23 +313,23 @@ func registerProtectedRoutes(
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
 	if cfg.SourceStore != nil {
-		var sourceOpts []func(*routes.SourceHandler)
+		var sourceOpts []func(*source.SourceHandler)
 		if cfg.ObjectUploader != nil {
-			sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
+			sourceOpts = append(sourceOpts, source.WithObjectUploader(cfg.ObjectUploader))
 		}
 		// CHG-2026-04-29-DOGFOOD iter 9 — WithProductionMode removed:
 		// upload errors are now always fatal when an object store is
 		// configured. Local must equal production (Rule 10).
 		if cfg.SourceBucket != "" {
-			sourceOpts = append(sourceOpts, routes.WithSourceBucket(cfg.SourceBucket))
+			sourceOpts = append(sourceOpts, source.WithSourceBucket(cfg.SourceBucket))
 		}
-		sourceHandler := routes.NewSourceHandler(cfg.SourceStore, sourceOpts...)
+		sourceHandler := source.NewSourceHandler(cfg.SourceStore, sourceOpts...)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/source/upload", sourceHandler.Upload)
 	}
 
 	// Project routes
 	if cfg.ProjectStore != nil && cfg.TenantCRMgr != nil {
-		projects := routes.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
+		projects := projects.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
 		if cfg.ProjectDeleter != nil {
 			projects.SetDeleter(cfg.ProjectDeleter)
 		}
@@ -360,21 +394,21 @@ func registerProtectedRoutes(
 
 	// Secret routes
 	if cfg.SecretStore != nil {
-		secrets := routes.NewSecretHandler(cfg.SecretStore)
+		secretHandler := secrets.NewSecretHandler(cfg.SecretStore)
 		if cfg.SecretK8sSync != nil {
-			secrets.SetK8sSync(cfg.SecretK8sSync)
+			secretHandler.SetK8sSync(cfg.SecretK8sSync)
 		}
 		// Sprint A T1.1 (closes comp-001 CRITICAL): wire the environment
 		// lock so Set/DeleteSecret serialize with concurrent `loopzero deploy`
 		// flows holding the same pg_advisory_xact_lock key.
 		if cfg.SecretEnvLocker != nil {
-			secrets.SetLocker(cfg.SecretEnvLocker)
+			secretHandler.SetLocker(cfg.SecretEnvLocker)
 		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
 		// the cross-tenant binding check (EC-03 absorption / CWE-204
 		// defense). Production injects *store.PostgresProjectStore directly.
 		if cfg.SecretProjectChecker != nil {
-			secrets.SetProjectChecker(cfg.SecretProjectChecker)
+			secretHandler.SetProjectChecker(cfg.SecretProjectChecker)
 		}
 		// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
 		// wire the OpenBao transit encrypt path into Bulk so plaintext
@@ -384,18 +418,18 @@ func registerProtectedRoutes(
 		// reads decrypt correctly. encryptForStore detects the
 		// vault:v1: prefix and passes through (no double-encrypt).
 		if cfg.SecretTransit != nil {
-			secrets.SetTransitClient(cfg.SecretTransit)
+			secretHandler.SetTransitClient(cfg.SecretTransit)
 		}
-		r.Get("/api/v1/secrets", secrets.List)
-		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
+		r.Get("/api/v1/secrets", secretHandler.List)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secretHandler.Set)
 		// J-22 T1.1: bulk endpoint POST /api/v1/secrets/bulk.
 		// Registered BEFORE /secrets/{name} so chi v5.2.5 radix tree resolves the
 		// literal `/bulk` prefix before the `{name}` wildcard. The reverse order
 		// causes chi to route POST /secrets/bulk through the {name} branch where
 		// only DELETE is registered → 405 METHOD_NOT_ALLOWED (caught LIVE 2026-06-13
 		// sponsor walkthrough post v0.14.0; loopzero-api log confirmed status=405).
-		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets/bulk", secrets.Bulk)
-		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets/bulk", secretHandler.Bulk)
+		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secretHandler.DeleteSecret)
 	}
 
 	// Build routes — use the single BuildHandler from Config (C-08).
@@ -451,7 +485,7 @@ func registerProtectedRoutes(
 	// tenant from middleware.GetUserContext (same auth contract as
 	// every other authenticated route in this group).
 	if cfg.DeployTimelineStore != nil {
-		routes.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore,
+		timeline.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore,
 			func(ctx context.Context) (string, bool) {
 				uc := middleware.GetUserContext(ctx)
 				if uc == nil || uc.TenantID == "" {
@@ -493,7 +527,7 @@ func registerProtectedRoutes(
 
 	// Tenant deletion routes (MEET-052)
 	if cfg.TenantDeletionStore != nil {
-		tenantHandler := routes.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
+		tenantHandler := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/tenants/{id}", tenantHandler.Delete)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/tenants/{id}/restore", tenantHandler.Restore)
 		r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete)
@@ -504,7 +538,13 @@ func registerProtectedRoutes(
 	// loopzero billing portal hit silent 404 pre-T1.6.
 	if cfg.BillingHandler != nil {
 		r.Get("/api/v1/billing", cfg.BillingHandler.Get)
-		r.With(rateLimitMiddlewares...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+		// `owner` porque o loopzero-cloud exige o mesmo para a MESMA capacidade
+		// (loopzero-cloud/cmd/main.go:1572). A rota estava com rate-limit e mais nada, e a
+		// divergencia sobreviveu porque nenhuma leitura de UM lado so a mostraria: e
+		// escalonamento horizontal — qualquer membro do time abria o portal de cobranca
+		// dele, com fatura, meio de pagamento e historico. As duas hierarquias sao
+		// identicas (`owner: 3`), entao alinhar foi aplicar o middleware que ja existia.
+		r.With(append(rateLimitMiddlewares, middleware.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
 	}
 
 	// Environment routes

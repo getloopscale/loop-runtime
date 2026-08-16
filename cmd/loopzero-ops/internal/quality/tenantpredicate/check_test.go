@@ -25,7 +25,7 @@ func TestActionableFix(t *testing.T) {
 // the load-bearing tables.
 func TestTenantTablesList(t *testing.T) {
 	mustHave := []string{
-		"tenants",                  // self-table
+		"tenants", // self-table
 		"projects",
 		"builds",
 		"releases",

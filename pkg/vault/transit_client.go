@@ -41,12 +41,12 @@ import (
 // read/write path) depends on. Production injects *TransitClient; tests
 // pass a fake.
 type Transit interface {
-	// Encrypt sends plaintext to /v1/transit/encrypt/loopzero-tenants/<tenantID>
+	// Encrypt sends plaintext to /v1/transit/encrypt/loopzero-tenants-<tenantID>
 	// and returns the OpenBao-shaped ciphertext (prefix "vault:v1:").
 	// Caller retains ownership of plaintext; Zeroize is the caller's job.
 	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (ciphertext string, err error)
 	// Decrypt sends a vault:v1:-prefixed ciphertext to
-	// /v1/transit/decrypt/loopzero-tenants/<tenantID> and returns the plaintext.
+	// /v1/transit/decrypt/loopzero-tenants-<tenantID> and returns the plaintext.
 	// Caller MUST Zeroize the returned slice when done.
 	Decrypt(ctx context.Context, tenantID string, ciphertext string) (plaintext []byte, err error)
 }
@@ -54,7 +54,7 @@ type Transit interface {
 // TransitConfig configures a TransitClient. Fields are immutable after
 // NewTransitClient returns.
 type TransitConfig struct {
-	// Addr is the OpenBao server URL (e.g. https://openbao.vault-system:8200).
+	// Addr is the OpenBao server URL (e.g. https://openbao.secrets-system:8200).
 	// MUST use https:// in production; http:// is allowed only for tests
 	// via httptest.NewTLSServer where the server URL is generated.
 	Addr string
@@ -271,8 +271,9 @@ func (c *TransitClient) acquireRateToken(tenantID string) error {
 
 // Encrypt sends plaintext to OpenBao's transit/encrypt endpoint scoped
 // to the per-tenant key path. On a 404 (transit key missing for this
-// tenant), EC-06 absorption fires: POST to /v1/transit/keys/loopzero-tenants/
-// <tenantID> to create the key idempotently, then retry the encrypt
+// tenant), EC-06 absorption fires: POST to
+// /v1/transit/keys/loopzero-tenants-<tenantID> to create the key idempotently
+// — HYPHEN, per the convention documented above — then retry the encrypt
 // exactly once. This self-heals the first-secret-for-tenant race where
 // the secret create call arrives before tenant-controller's transit key
 // bootstrap completes (openbao adoption Phase 3 task 4).
@@ -377,9 +378,16 @@ func (c *TransitClient) tryEncrypt(ctx context.Context, tenantID string, reqBody
 	return "", status, nil
 }
 
-// createTransitKey POSTs to /v1/transit/keys/loopzero-tenants/<tenantID> with
+// createTransitKey POSTs to /v1/transit/keys/loopzero-tenants-<tenantID> with
 // the standard aes256-gcm96 key type. Idempotent: when the key already
 // exists OpenBao returns 204. EC-06 absorption.
+//
+// The separator is a HYPHEN, and this comment said `loopzero-tenants/<id>` until
+// 2026-08-13. That form is not a typo with no consequence: transit reads the
+// slash as an endpoint delimiter and returns 404 "unsupported path" — the trap
+// the cutover runbook records as LIVE-caught on 2026-06-10. A reader trusting the
+// old comment writes the policy for a path that can never be reached, which is
+// the item this correction belongs to (B-072).
 func (c *TransitClient) createTransitKey(ctx context.Context, tenantID string) error {
 	token, err := c.tokenOrLogin(ctx)
 	if err != nil {

@@ -353,19 +353,26 @@ func Check(cfg Config) (*Outcome, error) {
 
 		// Invariant 15 (v1.6 — T3.3): auth-dev block declares
 		// `handle /self-service/registration/methods/password { ... }`
-		// reverse-proxying to localhost:13002 (loopzero-cloud BFF). Closes Red
-		// Team loopzero-cloud#43 at the routing layer.
+		// reverse-proxying to the loopzero-cloud BFF. Closes Red Team loopzero-cloud#43
+		// at the routing layer — o que importa e que o registro passe pelo BFF
+		// (que unifica a resposta e mata a enumeracao de contas), nao pelo Kratos
+		// direto.
+		//
+		// A PORTA mudou de 3002 para 3002 em 2026-08-10: o B-010 trocou o
+		// transporte do loopzero-cloud de `kubectl port-forward` para NodePort
+		// publicado pelo loadbalancer, e a 3002 deixou de existir. O invariante e
+		// o destino, e a porta e apenas o endereco dele.
 		registerRouteRe := regexp.MustCompile(`(?m)^\s*handle\s+/self-service/registration/methods/password\s*\{`)
 		if !registerRouteRe.MatchString(authBlock) {
 			out.Pass = false
 			out.Violations = append(out.Violations,
 				"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password { ... }` MISSING in auth-dev host block. Red Team loopzero-cloud#43 closure (BFF response-shape unifier per T3.1) is unreachable without this routing handle (T3.2).")
 		} else {
-			registerRouteBlockRe := regexp.MustCompile(`(?ms)handle\s+/self-service/registration/methods/password\s*\{[^}]*reverse_proxy\s+localhost:13002`)
+			registerRouteBlockRe := regexp.MustCompile(`(?ms)handle\s+/self-service/registration/methods/password\s*\{[^}]*reverse_proxy\s+localhost:3002`)
 			if !registerRouteBlockRe.MatchString(authBlock) {
 				out.Pass = false
 				out.Violations = append(out.Violations,
-					"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password` does NOT reverse_proxy to localhost:13002 (loopzero-cloud BFF). Red Team loopzero-cloud#43 closure requires this exact target.")
+					"assert_register_route_proxied_to_cloud — `handle /self-service/registration/methods/password` does NOT reverse_proxy to localhost:3002 (loopzero-cloud BFF). Red Team loopzero-cloud#43 closure requires this exact target.")
 			}
 		}
 	}

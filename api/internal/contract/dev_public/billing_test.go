@@ -50,7 +50,9 @@ func mockCloudBillingHandler(t *testing.T, stripeConfigured bool, priceIDs map[s
 			})
 		case "/v1/billing/checkout":
 			// #155 canonical: plan_pro requires STRIPE_PRICE_PRO env non-empty
-			var req struct{ Plan string `json:"plan"` }
+			var req struct {
+				Plan string `json:"plan"`
+			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			priceID, ok := priceIDs[req.Plan]
 			if !ok || priceID == "" {
@@ -63,11 +65,11 @@ func mockCloudBillingHandler(t *testing.T, stripeConfigured bool, priceIDs map[s
 			}
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"session_id":    "cs_test_abc",
-				"amount_total":  2900, // #157 canonical Pro = $29/mo
-				"currency":      "usd",
-				"price_id":      priceID,
-				"checkout_url":  "https://checkout.stripe.com/pay/cs_test_abc",
+				"session_id":   "cs_test_abc",
+				"amount_total": 2900, // #157 canonical Pro = $29/mo
+				"currency":     "usd",
+				"price_id":     priceID,
+				"checkout_url": "https://checkout.stripe.com/pay/cs_test_abc",
 			})
 		case "/v1/webhooks/stripe":
 			// #156: whsec_test_ real signing key OR reject with 400 (signature check).

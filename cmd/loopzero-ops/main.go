@@ -61,6 +61,8 @@ func run(args []string) int {
 		return runDrill(args[1:])
 	case "chaos":
 		return runChaos(args[1:])
+	case "leak":
+		return runLeak(args[1:])
 	case "seed":
 		return runSeed(args[1:])
 	default:

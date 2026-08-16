@@ -19,7 +19,7 @@
 #   3. export $(grep -E '^LOOPZERO_|^CLOUDFLARE_' .env | xargs)
 #   4. infra/scripts/local/setup-dev-public-dns.sh --verify
 #   5. infra/scripts/local/caddy-up-dev-public.sh --verify
-#   6. helmfile -e dev-public -f infra/helmfile/mgmt.helmfile.yaml.gotmpl sync
+#   6. helmfile -e dev-public -f infra/helmfile/core.helmfile.yaml.gotmpl sync
 #   7. task doctor (38/0)
 #   8. Browser: https://app-dev.loopzero.example/login
 
@@ -98,19 +98,25 @@ velero:
 # D1 of plan 2026-06-04: *-dev.loopzero.example hostnames
 # uiBaseUrl controla 4 URLs em Hydra: login, consent, logout,
 # post_device_done_url (device flow). Plan J-05 T2.2 D1.
+# Um painel, um nome. `cloud-dev` foi removido em 2026-08-10: ele declarava a MESMA
+# coisa que `app-dev` — dashboardOrigin e publicCloudUrl — e so funcionava porque
+# respondia 301 para ca. Era o mesmo defeito "duas palavras, mesma coisa" que motivou a
+# renomeacao dos clusters e a unificacao das cells, agora na camada de identidade, com o
+# agravante de autorizar em CORS e em URL de retorno um host que existia so para redirecionar.
+#
+# Verificado antes de remover que nada dependia dele: o webhook do GitHub e registrado
+# contra `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44), e o
+# `app-dev` ja tem o mesmo desvio direto para o loopzero-api que o `cloud-dev` tinha.
 uiBaseUrl: "https://app-dev.loopzero.example"
-dashboardOrigin: "https://cloud-dev.loopzero.example"
+dashboardOrigin: "https://app-dev.loopzero.example"
 publicAuthUrl: "https://auth-dev.loopzero.example"
-publicCloudUrl: "https://cloud-dev.loopzero.example"
+publicCloudUrl: "https://app-dev.loopzero.example"
 cookieDomain: "loopzero.example"
 corsAllowedOrigins:
   - "https://app-dev.loopzero.example"
-  - "https://cloud-dev.loopzero.example"
 allowedReturnUrls:
   - "https://app-dev.loopzero.example"
   - "https://app-dev.loopzero.example/"
-  - "https://cloud-dev.loopzero.example"
-  - "https://cloud-dev.loopzero.example/"
 dashboardRoute:
   login: /login
   register: /register
@@ -140,7 +146,7 @@ dashboardRoute:
 # loopzero-api Deployment can mount GITHUB_WEBHOOK_SECRET via envFrom. Without
 # the secret the webhook handler stays unmounted (router nil-guards) and
 # auto-deploy never fires. The secret value is the SAME string configured
-# on the GitHub App webhook URL https://cloud-dev.loopzero.example/api/v1/webhooks/github
+# on the GitHub App webhook URL https://app-dev.loopzero.example/api/v1/webhooks/github
 # so HMAC validation succeeds end-to-end.
 #
 # Runbook:

@@ -25,7 +25,7 @@ config:
         maxNodes: 3
     runtime:
       - id: runtime-nyc3
-        cellId: cell-default
+        cellId: cell-0
         region: nyc3
         nodeClass: small
         minNodes: 2

@@ -22,7 +22,7 @@ loki:
   # chunks (NoCredentialProviders → DNS lookup failure cascade), and
   # query path returned "connection reset by peer" because Loki's internal
   # state was broken. Switching to filesystem storage decouples build-cluster
-  # Loki from mgmt-cluster MinIO entirely — clean SoC: build-pipeline logs
+  # Loki from core-cluster MinIO entirely — clean SoC: build-pipeline logs
   # persist on the build cluster's local PV. Production (DOKS) gets cloud-
   # native object storage (DO Spaces) which IS network-reachable from the
   # build cluster — that wiring lives in pulumi-platform overrides, NOT in
@@ -39,12 +39,12 @@ loki:
     retention_period: 168h                   # 7 days (default)
     # T8.2 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
     # streams require 90-day retention for forensic + compliance review.
-    # Selector matches Vault server pod (vault-system NS). Higher priority
+    # Selector matches Vault server pod (secrets-system NS). Higher priority
     # overrides the default 168h. Other audit-bearing namespaces can be
     # added here (e.g., argocd, loopzero-system) as separate retention_stream
     # entries.
     retention_stream:
-      - selector: '{namespace="vault-system"}'
+      - selector: '{namespace="secrets-system"}'
         priority: 1
         period: 2160h                        # 90 days
     max_query_series: 500

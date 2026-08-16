@@ -5,12 +5,22 @@
 //
 // These tests verify:
 // 1. Role separation: loopzero_api cannot execute DDL
-// 2. RLS isolation: tenant-A cannot see tenant-B data
-// 3. RLS bypass: system queries (no tenant_id set) see all rows
-// 4. Reconciliation queries work cross-tenant with RLS active
+// 2. RLS is enabled AND forced on every tenant-scoped table
+// 3. CHECK constraints and indexes from the hardening migration exist
+// 4. audit_log is append-only
+// 5. Reconciliation reaches every tenant as loopzero_worker, via the named policy
 //
-// These tests require a real PostgreSQL instance with migration 000009 applied.
-// They skip gracefully if DATABASE_URL is not set and the default connection fails.
+// Item 3 used to read "RLS bypass: system queries (no tenant_id set) see all
+// rows". That was the exposure, not a feature: migration 000062 made the
+// policies fail-closed, and cross-tenant work now goes through an explicit
+// policy granted to loopzero_worker instead of an unset session variable.
+//
+// Tenant-isolation behaviour itself is covered in tenant_isolation_rls_audit_test.go,
+// which runs over the request-path role rather than the owner.
+//
+// These tests require a real PostgreSQL instance with the schema and migration
+// 000062 applied. They skip when DATABASE_URL is unreachable — set
+// LOOPZERO_RLS_AUDIT_REQUIRE=1 in CI so a missing database fails instead.
 package integration
 
 import (
@@ -48,106 +58,23 @@ func setupHardeningTestDB(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// TestRLSTenantIsolation verifies that RLS enforces tenant isolation.
-// When app.tenant_id is set, only rows matching that tenant are visible.
-func TestRLSTenantIsolation(t *testing.T) {
-	pool := setupHardeningTestDB(t)
-	ctx := context.Background()
-
-	// Setup: create test data for two tenants
-	tenantA := fmt.Sprintf("test-tenant-a-%d", time.Now().UnixNano())
-	tenantB := fmt.Sprintf("test-tenant-b-%d", time.Now().UnixNano())
-
-	// Insert builds for both tenants
-	buildA := fmt.Sprintf("bld-a-%d", time.Now().UnixNano())
-	buildB := fmt.Sprintf("bld-b-%d", time.Now().UnixNano())
-
-	_, err := pool.Exec(ctx,
-		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
-		 VALUES ($1, $2, 'proj-test', 'production', 'QUEUED', 'corr-1', 'test')`,
-		buildA, tenantA)
-	if err != nil {
-		t.Fatalf("failed to insert build for tenant A: %v", err)
-	}
-
-	_, err = pool.Exec(ctx,
-		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
-		 VALUES ($1, $2, 'proj-test', 'production', 'QUEUED', 'corr-2', 'test')`,
-		buildB, tenantB)
-	if err != nil {
-		t.Fatalf("failed to insert build for tenant B: %v", err)
-	}
-
-	// Cleanup
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, "DELETE FROM builds WHERE id IN ($1, $2)", buildA, buildB)
-	})
-
-	t.Run("tenant A cannot see tenant B builds when tenant_id is set", func(t *testing.T) {
-		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
-		if err != nil {
-			t.Fatalf("begin tx: %v", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-
-		// Set tenant context to tenant A
-		_, err = tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantA)
-		if err != nil {
-			t.Fatalf("set_config: %v", err)
-		}
-
-		// Query all builds — should only see tenant A's build
-		rows, err := tx.Query(ctx, "SELECT id, tenant_id FROM builds WHERE id IN ($1, $2)", buildA, buildB)
-		if err != nil {
-			t.Fatalf("query: %v", err)
-		}
-		defer rows.Close()
-
-		var count int
-		for rows.Next() {
-			var id, tid string
-			if err := rows.Scan(&id, &tid); err != nil {
-				t.Fatalf("scan: %v", err)
-			}
-			if tid != tenantA {
-				t.Errorf("expected tenant_id=%s, got %s (RLS leak!)", tenantA, tid)
-			}
-			count++
-		}
-
-		if count != 1 {
-			t.Errorf("expected 1 build visible to tenant A, got %d", count)
-		}
-	})
-
-	t.Run("system queries (no tenant_id set) see all builds", func(t *testing.T) {
-		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
-		if err != nil {
-			t.Fatalf("begin tx: %v", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-
-		// Do NOT set app.tenant_id — simulates reconciliation/reaper queries
-		rows, err := tx.Query(ctx, "SELECT id FROM builds WHERE id IN ($1, $2)", buildA, buildB)
-		if err != nil {
-			t.Fatalf("query: %v", err)
-		}
-		defer rows.Close()
-
-		var count int
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				t.Fatalf("scan: %v", err)
-			}
-			count++
-		}
-
-		if count != 2 {
-			t.Errorf("expected 2 builds visible to system query (no tenant_id), got %d", count)
-		}
-	})
-}
+// TestRLSTenantIsolation was removed by migration 000062's companion change.
+//
+// It connected through dbURL() — the OWNER role — and asserted isolation over a
+// connection that structurally cannot be isolated: an owner bypasses its own
+// policies, and (before 000062) FORCE was off. It also never executed, because
+// ci.yml had no `services:` block, so it skipped on an unreachable database and
+// reported green for five months over a control nobody had measured.
+//
+// Its coverage now lives in tenant_isolation_rls_audit_test.go, which runs over
+// LOOPZERO_API_DATABASE_URL (the real request-path role), refuses to run at all on a
+// role that can bypass RLS, and additionally covers the write direction and the
+// worker's cross-tenant reach:
+//
+//	TestTenantIsolation_ScopedRead_SeesOnlyOwnTenant
+//	TestTenantIsolation_MissingContext_SeesNothing
+//	TestTenantIsolation_CannotWriteForAnotherTenant
+//	TestTenantIsolation_WorkerRole_KeepsCrossTenantReach
 
 // TestRLSOnAllTenantTables verifies RLS is active on every tenant-scoped table.
 func TestRLSOnAllTenantTables(t *testing.T) {
@@ -304,7 +231,16 @@ func TestAuditLogAppendOnly(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()
 
-	// Insert a test audit entry
+	// A fixture escreve como produção escreve: DENTRO do contexto do tenant.
+	//
+	// Antes de 000064 esta linha entrava porque o dono carregava a policy
+	// audit_log_owner_maintenance (USING true) — o bypass que aquela migration
+	// removeu. Sem contexto, a RLS fail-closed recusa o INSERT, e é isso que
+	// deve acontecer: o teste é sobre o gatilho append-only, e semear a fixture
+	// por fora da barreira testava o gatilho num caminho que produção não tem.
+	if _, err := pool.Exec(ctx, `SELECT set_config('app.tenant_id', 'test-audit', false)`); err != nil {
+		t.Fatalf("set tenant context: %v", err)
+	}
 	_, err := pool.Exec(ctx,
 		`INSERT INTO audit_log (tenant_id, action, actor, resource_type, resource_id, correlation_id)
 		 VALUES ('test-audit', 'TEST', 'test', 'test', 'test-id', 'corr-test')`)
@@ -365,36 +301,26 @@ func TestAuditLogAppendOnly(t *testing.T) {
 // TestReconciliationQueriesWithRLS verifies that cross-tenant system queries
 // (FindActiveBuilds, FindPendingReleases patterns) work with RLS active.
 func TestReconciliationQueriesWithRLS(t *testing.T) {
-	pool := setupHardeningTestDB(t)
-	ctx := context.Background()
+	ctx, pool := auditPool(t, "DATABASE_URL", "owner")
 
-	tenantA := fmt.Sprintf("recon-a-%d", time.Now().UnixNano())
-	tenantB := fmt.Sprintf("recon-b-%d", time.Now().UnixNano())
-	buildA := fmt.Sprintf("bld-recon-a-%d", time.Now().UnixNano())
-	buildB := fmt.Sprintf("bld-recon-b-%d", time.Now().UnixNano())
+	// Reuses the shared fixture: builds carries a trigger that resolves cell_id
+	// from the tenant, so the row needs the real user → account → cell → tenant
+	// chain behind it. The previous inline seed inserted an orphan build and had
+	// been broken since migration 000061 added that trigger — invisible, because
+	// this test had never run against a database.
+	tenantA, tenantB, buildA, buildB := seedTwoTenants(t, ctx, pool)
 
-	// Insert QUEUED builds for two different tenants
-	for _, tc := range []struct {
-		id, tenant string
-	}{{buildA, tenantA}, {buildB, tenantB}} {
-		_, err := pool.Exec(ctx,
-			`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
-			 VALUES ($1, $2, 'proj-recon', 'production', 'QUEUED', 'corr-recon', 'test')`,
-			tc.id, tc.tenant)
-		if err != nil {
-			t.Fatalf("insert build %s: %v", tc.id, err)
-		}
-	}
+	// The reconciliation loop legitimately scans every tenant. Since migration
+	// 000062 it earns that reach through a named policy on loopzero_worker, not by
+	// leaving the context unset and falling through a permissive disjunct.
+	//
+	// The distinction matters operationally: a named grant is visible in
+	// pg_policy and shows up in an audit; an empty string that happens to
+	// disable the predicate looks like ordinary application code.
+	t.Run("FindActiveBuilds pattern reaches both tenants as loopzero_worker", func(t *testing.T) {
+		wctx, worker := auditPool(t, "LOOPZERO_WORKER_DATABASE_URL", "worker (loopzero_worker)")
 
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, "DELETE FROM builds WHERE id IN ($1, $2)", buildA, buildB)
-	})
-
-	t.Run("FindActiveBuilds pattern sees both tenants without tenant_id set", func(t *testing.T) {
-		// This simulates the reconciliation loop pattern:
-		// SELECT * FROM builds WHERE status IN ('QUEUED', 'RUNNING')
-		// No SET LOCAL app.tenant_id — system query
-		rows, err := pool.Query(ctx,
+		rows, err := worker.Query(wctx,
 			`SELECT id, tenant_id FROM builds
 			 WHERE status IN ('QUEUED', 'RUNNING')
 			 AND id IN ($1, $2)`,
@@ -414,7 +340,8 @@ func TestReconciliationQueriesWithRLS(t *testing.T) {
 		}
 
 		if !seen[tenantA] || !seen[tenantB] {
-			t.Errorf("reconciliation query must see both tenants, saw: %v", seen)
+			t.Errorf("reconciliation must reach both tenants as loopzero_worker, saw: %v.\n"+
+				"Check the *_worker_cross_tenant policies from migration 000062.", seen)
 		}
 	})
 }

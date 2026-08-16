@@ -95,14 +95,14 @@ env:
 
 # Plan 2026-05-19-drill-skills-rigor-restoration T2.1: kubeContexts é
 # env-specific (k3d synthetic uses "in-cluster"; drill/prod use DOKS context
-# names like "do-sfo3-loopzero-drill-mgmt-cluster"). Default fallback "in-cluster"
+# names like "do-sfo3-loopzero-drill-core-cluster"). Default fallback "in-cluster"
 # para local k3d standalone-multi; overlays drill+prod sobrescrevem.
 # Padrão environment-overlay-with-reuse: canonical define schema + fallback
 # safe-for-local; overlays supplem env-specific values via env templating.
 kubeContexts:
-  mgmt: "in-cluster"
+  core: "in-cluster"
   build: "in-cluster"
-  runtime: "in-cluster"
+  cell0: "in-cluster"
 
 # F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7) — bootstrap chart toggle for
 # OTel exporter. Default false because local k3d does not install Tempo;
@@ -115,8 +115,8 @@ kubeContexts:
 # of static token env var. Disabled by default (vault stack opt-in per env).
 vault:
   enabled: false
-  addr: "https://openbao.vault-system.svc.cluster.local:8200"
-  authMount: "k8s-mgmt"
+  addr: "https://openbao.secrets-system.svc.cluster.local:8200"
+  authMount: "k8s-core"
   role: "loopzero-api"
   audience: "vault.loopzero.io"
   tokenExpirationSeconds: 3600
@@ -176,13 +176,13 @@ serviceAuthEd25519:
 
 # T3.3 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — egress
 # NetworkPolicy scoped to loopzero-api pods that allows TCP/8200 ONLY to the
-# openbao pod(s) in vault-system. Disabled by default to preserve back-
+# openbao pod(s) in secrets-system. Disabled by default to preserve back-
 # wards compatibility with environments where network policy is not yet
 # enforced; flip to true once the default-deny-egress baseline ships.
 networkPolicy:
   vaultEgress:
     enabled: false
-    namespace: vault-system
+    namespace: secrets-system
     podName: openbao
     port: 8200
 

@@ -104,9 +104,9 @@ func SeedCrossTenantFixture(dbURL string) error {
 -- layer + the auth middleware membership check at the API layer must reject
 -- every cross-tenant request.
 --
--- Defensive: ensure cell-default exists in cells before tenant INSERT.
+-- Defensive: ensure cell-0 exists in cells before tenant INSERT.
 INSERT INTO cells (cell_id, display_name, status, region)
-VALUES ('cell-default', 'Default cell (local)', 'active', 'local')
+VALUES ('cell-0', 'Default cell (local)', 'active', 'local')
 ON CONFLICT (cell_id) DO NOTHING;
 
 -- Users (one per tenant).
@@ -119,8 +119,8 @@ ON CONFLICT (id) DO NOTHING;
 -- Tenants (one per user, distinct cells handled by DEFAULT).
 INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
 VALUES
-  ('%s', 'XT Tenant A', '%s', '%s', 'cell-default'),
-  ('%s', 'XT Tenant B', '%s', '%s', 'cell-default')
+  ('%s', 'XT Tenant A', '%s', '%s', 'cell-0'),
+  ('%s', 'XT Tenant B', '%s', '%s', 'cell-0')
 ON CONFLICT (id) DO UPDATE SET cell_id = COALESCE(tenants.cell_id, EXCLUDED.cell_id);
 
 -- Memberships: each user is a member of EXACTLY ONE tenant. NO crossover.

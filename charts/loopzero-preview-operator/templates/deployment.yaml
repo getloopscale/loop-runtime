@@ -68,10 +68,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "loopzero-common.fullname" . }}
-          {{- if .Values.kubeconfig.runtime.existingConfigMap }}
+          {{- if .Values.kubeconfig.cell0.existingConfigMap }}
           env:
-            - name: RUNTIME_KUBECONFIG
-              value: /etc/loopzero/runtime-kubeconfig
+            - name: CELL_0_KUBECONFIG
+              value: /etc/loopzero/cell-0-kubeconfig
           {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
           {{- with .Values.livenessProbe }}
@@ -87,9 +87,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            {{- if .Values.kubeconfig.runtime.existingConfigMap }}
-            - name: runtime-kubeconfig
-              mountPath: /etc/loopzero/runtime-kubeconfig
+            {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+            - name: cell-0-kubeconfig
+              mountPath: /etc/loopzero/cell-0-kubeconfig
               subPath: config
               readOnly: true
             {{- end }}
@@ -97,10 +97,10 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
-        {{- if .Values.kubeconfig.runtime.existingConfigMap }}
-        - name: runtime-kubeconfig
+        {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+        - name: cell-0-kubeconfig
           configMap:
-            name: {{ .Values.kubeconfig.runtime.existingConfigMap }}
+            name: {{ .Values.kubeconfig.cell0.existingConfigMap }}
             items:
               - key: config
                 path: config

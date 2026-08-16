@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/projects"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -15,7 +17,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 type fakeProjectStore struct {
@@ -24,39 +25,39 @@ type fakeProjectStore struct {
 	listErr   error
 }
 
-func (f *fakeProjectStore) CreateProject(ctx context.Context, p routes.CreateProjectInput) (routes.ProjectResult, error) {
+func (f *fakeProjectStore) CreateProject(ctx context.Context, p domain.CreateProjectInput) (domain.ProjectResult, error) {
 	if f.createErr != nil {
-		return routes.ProjectResult{}, f.createErr
+		return domain.ProjectResult{}, f.createErr
 	}
 	key := p.TenantID + "/" + p.Name
 	if f.projects[key] {
-		return routes.ProjectResult{}, routes.ErrProjectExists
+		return domain.ProjectResult{}, domain.ErrProjectExists
 	}
 	f.projects[key] = true
-	return routes.ProjectResult{
+	return domain.ProjectResult{
 		ID:     "proj-12345678",
 		Name:   p.Name,
 		TeamID: p.TenantID,
 	}, nil
 }
 
-func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*domain.ProjectResult, error) {
 	key := tenantID + "/" + name
 	if f.projects[key] {
-		return &routes.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
+		return &domain.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
 	}
 	return nil, nil
 }
 
-func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]routes.ProjectResult, error) {
+func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]domain.ProjectResult, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
-	var results []routes.ProjectResult
+	var results []domain.ProjectResult
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, routes.ProjectResult{
+			results = append(results, domain.ProjectResult{
 				ID:     "proj-12345678",
 				Name:   parts[1],
 				TeamID: tenantID,
@@ -64,7 +65,7 @@ func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]r
 		}
 	}
 	if results == nil {
-		results = []routes.ProjectResult{}
+		results = []domain.ProjectResult{}
 	}
 	return results, nil
 }
@@ -83,15 +84,15 @@ func splitKey(key string) [2]string {
 // route renders these in the response — these unit tests focus on the
 // shape/auth/error paths, not the summary semantics, which live in
 // status_mapper_test.go + integration tests).
-func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]routes.ProjectSummary, error) {
+func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]domain.ProjectSummary, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
-	var results []routes.ProjectSummary
+	var results []domain.ProjectSummary
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, routes.ProjectSummary{
+			results = append(results, domain.ProjectSummary{
 				ID:               "proj-12345678",
 				Name:             parts[1],
 				TeamID:           tenantID,
@@ -101,7 +102,7 @@ func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID s
 		}
 	}
 	if results == nil {
-		results = []routes.ProjectSummary{}
+		results = []domain.ProjectSummary{}
 	}
 	return results, nil
 }
@@ -112,11 +113,11 @@ func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
 
 type fakeTenantCRManager struct {
 	calls    int
-	lastSpec routes.TenantCRSpec
+	lastSpec domain.TenantCRSpec
 	err      error
 }
 
-func (f *fakeTenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec routes.TenantCRSpec) error {
+func (f *fakeTenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec domain.TenantCRSpec) error {
 	f.calls++
 	f.lastSpec = spec
 	return f.err
@@ -136,7 +137,7 @@ func TestProjectsRoute(t *testing.T) {
 	t.Run("POST /api/v1/projects → 201 with project ID", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		body := `{"name":"my-saas","apps":[{"name":"api","framework":"express","port":3000,"path":"."}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
@@ -162,7 +163,7 @@ func TestProjectsRoute(t *testing.T) {
 			projects: map[string]bool{"acme/my-saas": true},
 		}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		body := `{"name":"my-saas"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
@@ -180,7 +181,7 @@ func TestProjectsRoute(t *testing.T) {
 	t.Run("POST /api/v1/projects → 400 if name is not RFC 1123", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		body := `{"name":"My_Invalid Name!"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
@@ -198,7 +199,7 @@ func TestProjectsRoute(t *testing.T) {
 	t.Run("POST /api/v1/projects → 401 without auth", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		body := `{"name":"my-saas"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
@@ -215,7 +216,7 @@ func TestProjectsRoute(t *testing.T) {
 	t.Run("POST /api/v1/projects → calls TenantCRManager.EnsureTenant", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		body := `{"name":"my-saas"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
@@ -233,7 +234,7 @@ func TestProjectsRoute(t *testing.T) {
 	t.Run("POST /api/v1/projects → 503 if EnsureTenant fails (ADR-0006 Invariant D)", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{err: context.DeadlineExceeded}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		body := `{"name":"my-saas"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body)).
@@ -257,7 +258,7 @@ func TestProjectsRoute(t *testing.T) {
 	t.Run("concurrent POST same name → exactly one 201 and one 409", func(t *testing.T) {
 		store := &threadSafeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		const concurrency = 10
 		results := make([]int, concurrency)
@@ -305,11 +306,11 @@ func TestProjectListRoute(t *testing.T) {
 		store := &fakeProjectStore{
 			projects: map[string]bool{
 				"acme/api-service": true,
-				"acme/web-app":    true,
+				"acme/web-app":     true,
 			},
 		}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -335,7 +336,7 @@ func TestProjectListRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects → 200 with empty list when no projects", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -361,7 +362,7 @@ func TestProjectListRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects → 401 without auth", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
 		rec := httptest.NewRecorder()
@@ -376,12 +377,12 @@ func TestProjectListRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects → only returns tenant's own projects", func(t *testing.T) {
 		store := &fakeProjectStore{
 			projects: map[string]bool{
-				"acme/my-app":       true,
+				"acme/my-app":      true,
 				"other-tenant/app": true,
 			},
 		}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -408,7 +409,7 @@ func TestProjectGetRoute(t *testing.T) {
 			projects: map[string]bool{"acme/my-app": true},
 		}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app", nil)
 		rctx := chi.NewRouteContext()
@@ -437,7 +438,7 @@ func TestProjectGetRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name} → 404 when not found", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent", nil)
 		rctx := chi.NewRouteContext()
@@ -463,7 +464,7 @@ func TestProjectGetRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name} → 401 without auth", func(t *testing.T) {
 		store := &fakeProjectStore{projects: make(map[string]bool)}
 		crMgr := &fakeTenantCRManager{}
-		handler := routes.NewProjectHandler(store, crMgr)
+		handler := projects.NewProjectHandler(store, crMgr)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-app", nil)
 		rctx := chi.NewRouteContext()
@@ -485,40 +486,40 @@ type threadSafeProjectStore struct {
 	projects map[string]bool
 }
 
-func (f *threadSafeProjectStore) CreateProject(ctx context.Context, p routes.CreateProjectInput) (routes.ProjectResult, error) {
+func (f *threadSafeProjectStore) CreateProject(ctx context.Context, p domain.CreateProjectInput) (domain.ProjectResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	key := p.TenantID + "/" + p.Name
 	if f.projects[key] {
-		return routes.ProjectResult{}, routes.ErrProjectExists
+		return domain.ProjectResult{}, domain.ErrProjectExists
 	}
 	f.projects[key] = true
-	return routes.ProjectResult{
+	return domain.ProjectResult{
 		ID:     "proj-12345678",
 		Name:   p.Name,
 		TeamID: p.TenantID,
 	}, nil
 }
 
-func (f *threadSafeProjectStore) GetByName(_ context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+func (f *threadSafeProjectStore) GetByName(_ context.Context, tenantID, name string) (*domain.ProjectResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := tenantID + "/" + name
 	if f.projects[key] {
-		return &routes.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
+		return &domain.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
 	}
 	return nil, nil
 }
 
-func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]routes.ProjectResult, error) {
+func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]domain.ProjectResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var results []routes.ProjectResult
+	var results []domain.ProjectResult
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, routes.ProjectResult{
+			results = append(results, domain.ProjectResult{
 				ID:     "proj-12345678",
 				Name:   parts[1],
 				TeamID: tenantID,
@@ -526,20 +527,20 @@ func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string
 		}
 	}
 	if results == nil {
-		results = []routes.ProjectResult{}
+		results = []domain.ProjectResult{}
 	}
 	return results, nil
 }
 
 // T2.1 + ADR D2: thread-safe summary variant.
-func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]routes.ProjectSummary, error) {
+func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]domain.ProjectSummary, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var results []routes.ProjectSummary
+	var results []domain.ProjectSummary
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, routes.ProjectSummary{
+			results = append(results, domain.ProjectSummary{
 				ID:               "proj-12345678",
 				Name:             parts[1],
 				TeamID:           tenantID,
@@ -549,7 +550,7 @@ func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tena
 		}
 	}
 	if results == nil {
-		results = []routes.ProjectSummary{}
+		results = []domain.ProjectSummary{}
 	}
 	return results, nil
 }

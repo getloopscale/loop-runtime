@@ -70,7 +70,11 @@ BEGIN
 END$$;
 
 -- Grant database-level CONNECT so the worker can establish a connection.
-GRANT CONNECT ON DATABASE loopzero TO loopzero_worker;
+-- current_database(), not a literal: replaying this migration against any
+-- database not named `loopzero` (CI, an audit replay) failed here.
+DO $$ BEGIN
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO loopzero_worker', current_database());
+END$$;
 GRANT USAGE ON SCHEMA public TO loopzero_worker;
 
 -- Grant per-table privileges. Explicit GRANTs (not ALL TABLES IN SCHEMA)

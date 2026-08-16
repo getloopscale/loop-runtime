@@ -50,7 +50,7 @@ registries:
   use:
     - k3d-loopzero-registry:5000
   # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io via pull-through
-  # cache in k3d-loopzero-registry. See mgmt-cluster.yaml for full rationale.
+  # cache in k3d-loopzero-registry. See core-cluster.yaml for full rationale.
   config: |
     mirrors:
       "docker.io":

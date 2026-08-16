@@ -120,15 +120,15 @@ func TestMergeAuthsByHost_CorruptExistingDoesNotAbort(t *testing.T) {
 
 func TestContainsDOCRHost(t *testing.T) {
 	cases := map[string]bool{
-		"registry.digitalocean.com":              true,
-		"registry.digitalocean.com/v2":           true,
-		"registry.digitalocean.com/foo":          true,
-		"harbor.dev.loopzero.example":                 false,
-		"":                                       false,
-		"registry.example.com":                   false,
-		"my.registry.digitalocean.com.attacker":  false, // not a prefix match — must start with the canonical host
-		"registry.digitalocean.com.evil.com":     false, // prefix-spoof: exact domain + attacker suffix must NOT match
-		"registry.digitalocean.comx":             false, // prefix-spoof: single char suffix
+		"registry.digitalocean.com":             true,
+		"registry.digitalocean.com/v2":          true,
+		"registry.digitalocean.com/foo":         true,
+		"harbor.dev.loopzero.example":                false,
+		"":                                      false,
+		"registry.example.com":                  false,
+		"my.registry.digitalocean.com.attacker": false, // not a prefix match — must start with the canonical host
+		"registry.digitalocean.com.evil.com":    false, // prefix-spoof: exact domain + attacker suffix must NOT match
+		"registry.digitalocean.comx":            false, // prefix-spoof: single char suffix
 	}
 	for host, want := range cases {
 		got := containsDOCRHost(host)

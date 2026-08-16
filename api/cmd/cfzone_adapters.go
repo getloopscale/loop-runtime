@@ -7,20 +7,20 @@ import (
 	"context"
 
 	"github.com/getloopscale/loopzero/api/internal/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 )
 
-// cfZoneAdapter bridges cfzone.Client → routes.CFZoneManager.
+// cfZoneAdapter bridges cfzone.Client → domains.CFZoneManager.
 type cfZoneAdapter struct {
 	client *cfzone.Client
 }
 
-func (a *cfZoneAdapter) CreateZone(ctx context.Context, domain string) (*routes.CFZoneResult, error) {
+func (a *cfZoneAdapter) CreateZone(ctx context.Context, domain string) (*domains.CFZoneResult, error) {
 	zone, err := a.client.CreateZone(ctx, domain)
 	if err != nil {
 		return nil, err
 	}
-	return &routes.CFZoneResult{
+	return &domains.CFZoneResult{
 		ZoneID:      zone.ID,
 		Nameservers: zone.Nameservers,
 	}, nil
@@ -30,14 +30,14 @@ func (a *cfZoneAdapter) ScanDNSRecords(ctx context.Context, zoneID string) error
 	return a.client.ScanDNSRecords(ctx, zoneID)
 }
 
-func (a *cfZoneAdapter) ListDNSRecords(ctx context.Context, zoneID string) ([]routes.CFDNSRecord, error) {
+func (a *cfZoneAdapter) ListDNSRecords(ctx context.Context, zoneID string) ([]domains.CFDNSRecord, error) {
 	records, err := a.client.ListDNSRecords(ctx, zoneID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]routes.CFDNSRecord, len(records))
+	result := make([]domains.CFDNSRecord, len(records))
 	for i, r := range records {
-		result[i] = routes.CFDNSRecord{
+		result[i] = domains.CFDNSRecord{
 			ID:       r.ID,
 			Type:     r.Type,
 			Name:     r.Name,
@@ -50,7 +50,7 @@ func (a *cfZoneAdapter) ListDNSRecords(ctx context.Context, zoneID string) ([]ro
 	return result, nil
 }
 
-func (a *cfZoneAdapter) CreateDNSRecord(ctx context.Context, zoneID string, record routes.CFDNSRecord) (*routes.CFDNSRecord, error) {
+func (a *cfZoneAdapter) CreateDNSRecord(ctx context.Context, zoneID string, record domains.CFDNSRecord) (*domains.CFDNSRecord, error) {
 	rec, err := a.client.CreateDNSRecord(ctx, zoneID, cfzone.DNSRecord{
 		Type:     record.Type,
 		Name:     record.Name,
@@ -62,7 +62,7 @@ func (a *cfZoneAdapter) CreateDNSRecord(ctx context.Context, zoneID string, reco
 	if err != nil {
 		return nil, err
 	}
-	return &routes.CFDNSRecord{
+	return &domains.CFDNSRecord{
 		ID:       rec.ID,
 		Type:     rec.Type,
 		Name:     rec.Name,

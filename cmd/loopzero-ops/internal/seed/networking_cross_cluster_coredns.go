@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 )
 
 // NetworkingCrossClusterCorednsSeed is the Go port of
@@ -15,7 +14,7 @@ import (
 //
 // Patches mgmt cluster CoreDNS NodeHosts ConfigMap so mgmt pods can resolve
 // cross-cluster Service LoadBalancer hostnames (k3d-loopzero-build-serverlb,
-// k3d-loopzero-workload-serverlb, k3d-loopzero-vault-serverlb).
+// k3d-loopzero-cell-0-serverlb, k3d-loopzero-secrets-serverlb).
 //
 // Uses `docker inspect` to discover each container IP (READ-ONLY, D1-exempt).
 // Merges into the existing NodeHosts block instead of overwriting: unrelated
@@ -36,20 +35,20 @@ const (
 
 // corednsContainers is the ordered set of k3d containers whose IPs must resolve
 // in the mgmt CoreDNS. The value is the hostname CoreDNS will publish.
-// Aliases (e.g. `k3d-loopzero-workload-serverlb` for `-server-0`) are handled
+// Aliases (e.g. `k3d-loopzero-cell-0-serverlb` for `-server-0`) are handled
 // separately in Run.
 var corednsContainers = []string{
 	"k3d-loopzero-build-serverlb",
-	"k3d-loopzero-workload-server-0",
-	"k3d-loopzero-vault-server-0",
+	"k3d-loopzero-cell-0-server-0",
+	"k3d-loopzero-secrets-server-0",
 }
 
 // corednsAliases maps container name → (alias hostname, aliasApplies) so a
 // single docker inspect can publish both the canonical hostname AND a common
 // alias (matches the bash script's serverlb alias mapping).
 var corednsAliases = map[string]string{
-	"k3d-loopzero-workload-server-0": "k3d-loopzero-workload-serverlb",
-	"k3d-loopzero-vault-server-0":    "k3d-loopzero-vault-serverlb",
+	"k3d-loopzero-cell-0-server-0":  "k3d-loopzero-cell-0-serverlb",
+	"k3d-loopzero-secrets-server-0": "k3d-loopzero-secrets-serverlb",
 }
 
 func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
@@ -81,7 +80,7 @@ func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, corednsNamespace, corednsDeployment); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", corednsNamespace, corednsDeployment, err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, corednsNamespace, corednsDeployment, 60*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, corednsNamespace, corednsDeployment, d.settleTimeout(corednsSettle))
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("CoreDNS NodeHosts patched (%d canonical entries) + rolled out", len(hosts))}
 }
 

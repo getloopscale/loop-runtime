@@ -1,13 +1,13 @@
 {{/*
 T3.3 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — egress
 NetworkPolicy scoped to loopzero-api pods that allows TCP/8200 ONLY to the
-openbao pod(s) in the vault-system namespace.
+openbao pod(s) in the secrets-system namespace.
 
 NetworkPolicy operates at L3/L4; path-level enforcement (only
 /v1/transit/{encrypt,decrypt,keys}/loopzero-tenants/*) is delegated to the
 AppRole policy (per D4 ADR per-tenant key isolation). The L4 restriction
 caps blast-radius: a compromised loopzero-api can still TALK to OpenBao but
-cannot exfiltrate data via other vault-system services (debug ports,
+cannot exfiltrate data via other secrets-system services (debug ports,
 sidecars, etc.).
 
 Conditional via .Values.networkPolicy.vaultEgress.enabled (default false
@@ -42,14 +42,14 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # Allow loopzero-api → openbao pod(s) in vault-system on TCP/8200 ONLY.
+    # Allow loopzero-api → openbao pod(s) in secrets-system on TCP/8200 ONLY.
     # The combined namespaceSelector + podSelector means: a pod is the
-    # endpoint iff it lives in vault-system NS AND has
+    # endpoint iff it lives in secrets-system NS AND has
     # app.kubernetes.io/name: openbao label. Either alone is insufficient.
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.networkPolicy.vaultEgress.namespace | default "vault-system" }}
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.vaultEgress.namespace | default "secrets-system" }}
           podSelector:
             matchLabels:
               app.kubernetes.io/name: {{ .Values.networkPolicy.vaultEgress.podName | default "openbao" }}

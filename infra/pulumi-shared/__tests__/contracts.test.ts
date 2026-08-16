@@ -31,7 +31,7 @@ describe("ClusterRegistryEntry", () => {
   it("compiles with all required fields", () => {
     const entry: ClusterRegistryEntry = {
       clusterId: "cluster-1",
-      clusterName: "loopzero-mgmt",
+      clusterName: "loopzero-core",
       role: "mgmt",
       region: "sfo3",
       kubeconfig: "<secret>",
@@ -74,7 +74,7 @@ describe("ClusterRegistry", () => {
     const registry: ClusterRegistry = {
       "cluster-1": {
         clusterId: "cluster-1",
-        clusterName: "loopzero-mgmt",
+        clusterName: "loopzero-core",
         role: "mgmt",
         region: "sfo3",
         kubeconfig: "",
@@ -90,7 +90,7 @@ describe("InfraStackOutputs — public schema", () => {
   it("compiles with all 21 required fields", () => {
     const outputs: InfraStackOutputs = {
       clusterRegistry: {},
-      mgmtClusterName: "loopzero-mgmt",
+      mgmtClusterName: "loopzero-core",
       mgmtClusterEndpoint: "",
       mgmtKubeconfig: "",
       buildClusterName: "loopzero-build",
@@ -117,7 +117,7 @@ describe("InfraStackOutputs — public schema", () => {
     // Spot-check the multi-cluster primary contract
     expect(outputs.clusterRegistry).toEqual({});
     // Spot-check legacy singleton outputs (deprecated but preserved)
-    expect(outputs.mgmtClusterName).toBe("loopzero-mgmt");
+    expect(outputs.mgmtClusterName).toBe("loopzero-core");
   });
 });
 

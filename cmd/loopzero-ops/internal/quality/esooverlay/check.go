@@ -82,7 +82,7 @@ func Check(cfg Config) (Outcome, error) {
 	forbidRE("B2 NO line setting enabled: true (anti-foot-shooting)", `(?m)^  enabled: true`)
 
 	// C: canonical service DNS.
-	assertContains("C1 server is canonical mgmt-cluster in-cluster DNS", "openbao.vault-system.svc.cluster.local:8200")
+	assertContains("C1 server is canonical core-cluster in-cluster DNS", "openbao.secrets-system.svc.cluster.local:8200")
 	assertContains(`C2 server is https (NOT http)`, `server: "https://`)
 
 	// D: auth.kind=kubernetes + workload identity fields.
@@ -113,7 +113,7 @@ func Check(cfg Config) (Outcome, error) {
 	assertRE("H1 overlay uses 'openbaoTransit:' top-level key", `(?m)^openbaoTransit:`)
 
 	// I: cross-cluster contract awareness.
-	assertContains("I1 doc cites the separate loopzero-vault cluster topology", "loopzero-vault")
+	assertContains("I1 doc cites the separate loopzero-secrets cluster topology", "loopzero-secrets")
 
 	// silence unused for future when we add regex-only assertions again
 	_ = forbidContains

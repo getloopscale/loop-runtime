@@ -4,14 +4,14 @@
 // T1.1 of plan k3d-host-published-vault-reach (sponsor 2026-06-20).
 //
 // TestVaultHostPublishedReach locks the canonical host-publish topology
-// for the loopzero-vault k3d cluster + openbao helmfile release onto the
+// for the loopzero-secrets k3d cluster + openbao helmfile release onto the
 // mechanism the T0.1 LIVE spike proved end-to-end (2026-06-20):
 //
 //	mgmt pod
 //	   → docker bridge gateway (172.18.0.1) :8200
-//	   → docker DNAT (k3d-loopzero-vault-serverlb 8200:30200@loadbalancer)
+//	   → docker DNAT (k3d-loopzero-secrets-serverlb 8200:30200@loadbalancer)
 //	   → nginx stream{} L4 passthrough  (TLS bytes intact)
-//	   → k3d-loopzero-vault-server-0 :30200  (kube-proxy NodePort)
+//	   → k3d-loopzero-secrets-server-0 :30200  (kube-proxy NodePort)
 //	   → openbao-0 pod :8200
 //	   → OpenBao /v1/sys/health → 200 + JSON, no x509, no decode_error
 //
@@ -72,7 +72,7 @@ func renderVaultHelmfileOpenbao(t *testing.T) string {
 	root := repoRoot(t)
 	cmd := exec.Command(
 		"helmfile",
-		"-f", "infra/helmfile/vault.helmfile.yaml.gotmpl",
+		"-f", "infra/helmfile/secrets.helmfile.yaml.gotmpl",
 		"-e", "vault-local",
 		"--selector", "name=openbao",
 		"template",
@@ -125,9 +125,9 @@ func TestVaultHostPublishedReach(t *testing.T) {
 
 	// --- Source-level reads -------------------------------------------------
 
-	clusterYAML := mustRead(t, filepath.Join(root, "infra/k3d/vault-cluster.yaml"))
-	helmfileGotmpl := mustRead(t, filepath.Join(root, "infra/helmfile/vault.helmfile.yaml.gotmpl"))
-	cssYAML := mustRead(t, filepath.Join(root, "infra/manifests/cluster-secret-stores/loopzero-vault-secrets.yaml"))
+	clusterYAML := mustRead(t, filepath.Join(root, "infra/k3d/secrets-cluster.yaml"))
+	helmfileGotmpl := mustRead(t, filepath.Join(root, "infra/helmfile/secrets.helmfile.yaml.gotmpl"))
+	cssYAML := mustRead(t, filepath.Join(root, "infra/manifests/cluster-secret-stores/loopzero-secrets-secrets.yaml"))
 
 	// --- Render -------------------------------------------------------------
 
@@ -164,20 +164,20 @@ func TestVaultHostPublishedReach(t *testing.T) {
 		t.Errorf("(c) openbao Service https targetPort != 8200 (EC-5)")
 	}
 
-	// (d) vault-cluster.yaml maps 8200:30200@loadbalancer (NOT @server:0).
+	// (d) secrets-cluster.yaml maps 8200:30200@loadbalancer (NOT @server:0).
 	if !regexp.MustCompile(`(?m)^\s*-\s*port:\s*8200:30200\s*$`).MatchString(clusterYAML) {
-		t.Errorf("(d) vault-cluster.yaml does NOT map `port: 8200:30200` — the host-publish chain requires the serverlb to forward host:8200 → node:30200 (#112 root cause)")
+		t.Errorf("(d) secrets-cluster.yaml does NOT map `port: 8200:30200` — the host-publish chain requires the serverlb to forward host:8200 → node:30200 (#112 root cause)")
 	}
 	if regexp.MustCompile(`(?m)^\s*-\s*port:\s*8200:8200\s*$`).MatchString(clusterYAML) {
-		t.Errorf("(d) vault-cluster.yaml still uses `port: 8200:8200` (the #112 fix that #114 superseded) — must be `8200:30200@loadbalancer`")
+		t.Errorf("(d) secrets-cluster.yaml still uses `port: 8200:8200` (the #112 fix that #114 superseded) — must be `8200:30200@loadbalancer`")
 	}
 	if !strings.Contains(clusterYAML, "- loadbalancer") {
-		t.Errorf("(d) vault-cluster.yaml port mapping must have nodeFilters `- loadbalancer` (publish via serverlb), not `server:0`")
+		t.Errorf("(d) secrets-cluster.yaml port mapping must have nodeFilters `- loadbalancer` (publish via serverlb), not `server:0`")
 	}
 
 	// (e) --disable=servicelb present in k3s extraArgs (Klipper off).
 	if !strings.Contains(clusterYAML, "--disable=servicelb") {
-		t.Errorf("(e) vault-cluster.yaml missing `--disable=servicelb` (D3 — single LB mechanism)")
+		t.Errorf("(e) secrets-cluster.yaml missing `--disable=servicelb` (D3 — single LB mechanism)")
 	}
 
 	// (f) CSS server unchanged at host.k3d.internal:8200 (SAN-clean).
@@ -194,17 +194,17 @@ func TestVaultHostPublishedReach(t *testing.T) {
 	// blocks NodePort ingress (source IP from host network namespace is
 	// outside `namespaceSelector: {}`). We assert two layers:
 	//
-	//   1. Source-level: the `vault-local` block of vault.helmfile.yaml.gotmpl
+	//   1. Source-level: the `vault-local` block of secrets.helmfile.yaml.gotmpl
 	//      contains `networkPolicy:\n  enabled: false` (NOT enabled: true).
 	//   2. Render-level: the rendered output for env=vault-local has NO
 	//      `kind: NetworkPolicy` resource for the openbao release.
 	//
-	// (The prod env block at vault.helmfile.yaml.gotmpl:289 KEEPS
+	// (The prod env block at secrets.helmfile.yaml.gotmpl:289 KEEPS
 	// networkPolicy.enabled=true — prod is NOT host-published; this scope is
 	// strictly vault-local.)
 	vaultLocalBlock := extractEnvBlock(helmfileGotmpl, "vault-local")
 	if vaultLocalBlock == "" {
-		t.Fatalf("(g) could not locate `if eq .Environment.Name \"vault-local\"` block in vault.helmfile.yaml.gotmpl")
+		t.Fatalf("(g) could not locate `if eq .Environment.Name \"vault-local\"` block in secrets.helmfile.yaml.gotmpl")
 	}
 	// Match a YAML stanza `networkPolicy:` followed by `enabled: false` on
 	// the next non-comment line. `(?s)` makes `.` match newlines; we anchor

@@ -6,7 +6,7 @@
 //   - deploymentMode: SingleBinary (cleanroom compatibility)
 //   - loki.limits_config.retention_period: 168h (7 days for non-vault NS)
 //   - loki.limits_config.retention_stream: array with exactly 1 entry
-//   - retention_stream[0].selector matches '{namespace="vault-system"}'
+//   - retention_stream[0].selector matches '{namespace="secrets-system"}'
 //   - retention_stream[0].period: 2160h (90 days forensic)
 //   - retention_stream[0].priority: int (Loki schema requirement)
 //
@@ -93,9 +93,9 @@ func Check(cfg Config) (Outcome, error) {
 		failures = append(failures, fmt.Sprintf("Wrong retention_stream count: got %d, want 1", len(streams)))
 	} else {
 		s := streams[0]
-		// Assertion 3: selector matches vault-system NS.
-		if s.Selector != `{namespace="vault-system"}` {
-			failures = append(failures, fmt.Sprintf("Selector does NOT match vault-system NS: got %q", s.Selector))
+		// Assertion 3: selector matches secrets-system NS.
+		if s.Selector != `{namespace="secrets-system"}` {
+			failures = append(failures, fmt.Sprintf("Selector does NOT match secrets-system NS: got %q", s.Selector))
 		}
 		// Assertion 4: period: 2160h.
 		if s.Period != "2160h" {

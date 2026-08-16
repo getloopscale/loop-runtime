@@ -1,6 +1,6 @@
 # Promtail — log shipper for build + runtime clusters.
 # Chart: grafana/promtail
-# Purpose: DaemonSet that ships pod logs to the mgmt-cluster Loki.
+# Purpose: DaemonSet that ships pod logs to the core-cluster Loki.
 #
 # Audit gap M08 #18 / §6.C.4b — the push URL is now helmfile-injected per
 # environment instead of hardcoded. Falls back to the k3d-local default
@@ -168,7 +168,7 @@ config:
 
       # ────────────────────────────────────────────────────────────────
       # T8.1 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
-      # scrape. Targets vault-system NS specifically; tags namespace +
+      # scrape. Targets secrets-system NS specifically; tags namespace +
       # pod so VaultAuditLogStalled + VaultPolicyDenialRateHigh alerts
       # can correlate by labels.
       # ────────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ config:
           - role: pod
             namespaces:
               names:
-                - vault-system
+                - secrets-system
         pipeline_stages:
           - cri: {}
           - json:

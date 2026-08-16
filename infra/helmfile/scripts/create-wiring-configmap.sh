@@ -22,7 +22,7 @@ ENV="${1:?usage: $0 <env>}"
 # left over from an earlier bootstrap step) loopzero-api silently never sees its
 # topology. The kubectl() override makes every bare call downstream carry the
 # right --context. Override KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 log() { printf '[wiring-configmap] %s\n' "$*" >&2; }

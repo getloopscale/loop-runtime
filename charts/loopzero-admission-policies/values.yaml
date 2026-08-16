@@ -61,6 +61,20 @@ vaps:
   protectPlatformDeletes: false
   # Warn | Deny. Stays Warn until T2.3 proves no legitimate identity is caught.
   protectPlatformDeletesAction: Warn
+  # A cerca fail-closed sobre a FORMA dos CRs Tenant. Copiar o template para este
+  # chart sem definir este valor deixou-o INERTE: `helm template` renderizava zero
+  # ocorrencias enquanto o gate de drift — que compara conjuntos de NOMES DE
+  # ARQUIVO — ficava verde. Uma lacuna visivel virou invisivel, que e pior.
+  # Medido 2026-08-12: 3 ocorrencias no chart de bootstrap, 0 aqui, ate esta linha.
+  # Default OFF: this fence matches `loopzero.io/v1 tenants`, and the CRD that
+  # defines them is installed by `loopzero-crds` — which appears 6 times in
+  # core.helmfile.yaml.gotmpl and ZERO times in cell.helmfile.yaml.gotmpl. The
+  # base values are what the CELL clusters receive, and a policy matching a
+  # resource that does not exist there can never fire while reading as coverage.
+  # Turned ON in values-mgmt.yaml, where the Tenants live (B-077, ADR
+  # 2026-08-13-tenant-cr-fence-placement).
+  tenantCrShape: false
+
   disallowLatestTag: true
   restrictRegistries: true
   requireResourceLimits: true

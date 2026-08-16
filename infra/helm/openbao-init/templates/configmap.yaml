@@ -90,9 +90,9 @@ data:
 
     # ---- Helper: idempotent auth/<mount>/role write (D11 Phase 3.1 + T5.1-T5.9
     # of plan 2026-06-02-openbao-adoption v1.3). The mount argument enables
-    # per-cluster auth isolation: auth/k8s-mgmt, auth/k8s-build, auth/k8s-cell-X
+    # per-cluster auth isolation: auth/k8s-core, auth/k8s-build, auth/k8s-cell-X
     # each have their own role namespace + tokenReviewer JWT so a compromised
-    # cell-1 cluster cannot forge tokens valid against cell-2's auth/login. ----
+    # cell-0 cluster cannot forge tokens valid against cell-1's auth/login. ----
     #
     # R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
     # 2026-06-19): extended to accept a 7th positional arg `bound_audiences`.

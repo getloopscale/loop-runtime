@@ -32,7 +32,7 @@ import (
 	"strings"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/shellrun"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 )
 
 // Pair is a single added-or-modified line, keyed by file path.

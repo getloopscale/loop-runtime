@@ -102,7 +102,7 @@ const canonicalAuthDevBlock = `auth-dev.loopzero.example {
   }
 
   handle /self-service/registration/methods/password {
-    reverse_proxy localhost:13002 {
+    reverse_proxy localhost:3002 {
       header_up Host cloud-dev.loopzero.example
     }
   }
@@ -131,10 +131,10 @@ app-dev.loopzero.example {
     reverse_proxy localhost:14433
   }
   handle /v1/* {
-    reverse_proxy localhost:13002
+    reverse_proxy localhost:3002
   }
   handle /engine/* {
-    reverse_proxy localhost:13002
+    reverse_proxy localhost:3002
   }
 
   handle {
@@ -352,7 +352,7 @@ func TestCheck_RegressionDetected_TryFilesMissing(t *testing.T) {
 // API handle so a future canonical-paths refactor cannot silently drop one.
 func TestCheck_RegressionDetected_MissingEngineHandle_v14(t *testing.T) {
 	regressed := strings.Replace(canonicalAppDevBlock,
-		"  handle /engine/* {\n    reverse_proxy localhost:13002\n  }\n", "", 1)
+		"  handle /engine/* {\n    reverse_proxy localhost:3002\n  }\n", "", 1)
 	dir := makeCaddyfile(t, regressed)
 	out, err := Check(Config{RepoRoot: dir})
 	if err != nil {
@@ -449,10 +449,10 @@ app-dev.loopzero.example {
     reverse_proxy localhost:14433
   }
   handle /v1/* {
-    reverse_proxy localhost:13002
+    reverse_proxy localhost:3002
   }
   handle /engine/* {
-    reverse_proxy localhost:13002
+    reverse_proxy localhost:3002
     # NOTE: the SPA-fallback ` + "`try_files {path} /index.html`" + ` is deliberately
     # NOT declared inside this /engine/* handle — it lives in the catch-all
     # ` + "`handle {}`" + ` at the end of the block. This comment used to false-positive
@@ -480,7 +480,7 @@ app-dev.loopzero.example {
 func TestCheck_BlockNotFound(t *testing.T) {
 	dir := makeCaddyfile(t, `# no app-dev block here
 cloud-dev.loopzero.example {
-  reverse_proxy localhost:13002
+  reverse_proxy localhost:3002
 }
 `)
 	out, err := Check(Config{RepoRoot: dir})
@@ -539,8 +539,8 @@ app-dev.loopzero.example {
   }
   handle /sessions/* { reverse_proxy localhost:14433 }
   handle /self-service/* { reverse_proxy localhost:14433 }
-  handle /v1/* { reverse_proxy localhost:13002 }
-  handle /engine/* { reverse_proxy localhost:13002 }
+  handle /v1/* { reverse_proxy localhost:3002 }
+  handle /engine/* { reverse_proxy localhost:3002 }
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 
@@ -575,8 +575,8 @@ app-dev.loopzero.example {
   }
   handle /sessions/* { reverse_proxy localhost:14433 }
   handle /self-service/* { reverse_proxy localhost:14433 }
-  handle /v1/* { reverse_proxy localhost:13002 }
-  handle /engine/* { reverse_proxy localhost:13002 }
+  handle /v1/* { reverse_proxy localhost:3002 }
+  handle /engine/* { reverse_proxy localhost:3002 }
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 
@@ -619,8 +619,8 @@ app-dev.loopzero.example {
   }
   handle /sessions/* { reverse_proxy localhost:14433 }
   handle /self-service/* { reverse_proxy localhost:14433 }
-  handle /v1/* { reverse_proxy localhost:13002 }
-  handle /engine/* { reverse_proxy localhost:13002 }
+  handle /v1/* { reverse_proxy localhost:3002 }
+  handle /engine/* { reverse_proxy localhost:3002 }
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 
@@ -664,8 +664,8 @@ app-dev.loopzero.example {
   }
   handle /sessions/* { reverse_proxy localhost:14433 }
   handle /self-service/* { reverse_proxy localhost:14433 }
-  handle /v1/* { reverse_proxy localhost:13002 }
-  handle /engine/* { reverse_proxy localhost:13002 }
+  handle /v1/* { reverse_proxy localhost:3002 }
+  handle /engine/* { reverse_proxy localhost:3002 }
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 ` + canonicalAuthDevBlock

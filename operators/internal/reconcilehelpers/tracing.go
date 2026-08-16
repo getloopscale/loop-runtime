@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package shared provides cross-controller utilities shared by all operator
-// binaries. Extracted from internal/controller to enable multi-binary split
+// Package reconcilehelpers provides cross-controller utilities shared by all
+// operator binaries. Extracted from internal/controller to enable multi-binary split
 // (ADR D2 — operator-controller-extraction-plan.md).
 package reconcilehelpers
 

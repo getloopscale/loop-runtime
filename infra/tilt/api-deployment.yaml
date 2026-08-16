@@ -233,7 +233,7 @@ spec:
         secret:
           secretName: loopzero-cluster-kubeconfigs
           items:
-          - key: runtime.kubeconfig
+          - key: cell-0.kubeconfig
             path: kubeconfig
 ---
 apiVersion: v1

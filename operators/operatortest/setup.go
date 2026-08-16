@@ -368,7 +368,18 @@ func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
 func SetupExposureController(mgr ctrl.Manager) error {
 	return app.SetupExposureController(mgr, app.ExposureControllerConfig{
 		AllowProbeURLOverride: true,
+		// #277: em envtest há um cluster só, então a "cell do workload" é ele mesmo.
+		// Sem factory a checagem de certificado responde not-ready por não ter onde olhar,
+		// e todo teste de TLS falharia por um motivo que não é o que ele testa.
+		RuntimeFactory: sameClusterFactory{c: mgr.GetClient()},
 	})
+}
+
+// sameClusterFactory resolve qualquer cellID para o cluster local. Só para envtest.
+type sameClusterFactory struct{ c client.Client }
+
+func (f sameClusterFactory) For(context.Context, string) (client.Client, error) {
+	return f.c, nil
 }
 
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the given manager.

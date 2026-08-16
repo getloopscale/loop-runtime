@@ -65,7 +65,7 @@ var argoWorkflowGVR = schema.GroupVersionResource{
 func NewTenantK8sEvictor(
 	mgmtKubeconfig, mgmtContext string,
 	buildKubeconfig, buildContext string,
-	runtimeKubeconfig, runtimeContext string,
+	cell0Kubeconfig, runtimeContext string,
 	mgmtNamespace, buildNamespace string,
 ) (*TenantK8sEvictor, error) {
 	mgmtDyn, err := newDynamicClient(mgmtKubeconfig, mgmtContext)
@@ -76,7 +76,7 @@ func NewTenantK8sEvictor(
 	if err != nil {
 		return nil, fmt.Errorf("build client: %w", err)
 	}
-	runtimeTyped, runtimeDyn, err := newDualClient(runtimeKubeconfig, runtimeContext)
+	runtimeTyped, runtimeDyn, err := newDualClient(cell0Kubeconfig, runtimeContext)
 	if err != nil {
 		return nil, fmt.Errorf("runtime client: %w", err)
 	}

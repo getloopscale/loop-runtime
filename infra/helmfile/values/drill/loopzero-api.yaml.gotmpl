@@ -56,6 +56,6 @@ env:
 # vars from downloaded kubeconfig current-context line. Replaces the
 # kubectl set env workaround (lines 785-788) that was T2-deferred.
 kubeContexts:
-  mgmt: {{ requiredEnv "MGMT_KUBE_CONTEXT" | quote }}
+  core: {{ requiredEnv "CORE_KUBE_CONTEXT" | quote }}
   build: {{ requiredEnv "BUILD_KUBE_CONTEXT" | quote }}
-  runtime: {{ requiredEnv "RUNTIME_KUBE_CONTEXT" | quote }}
+  cell0: {{ requiredEnv "CELL_0_KUBE_CONTEXT" | quote }}

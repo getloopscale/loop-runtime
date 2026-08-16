@@ -6,6 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"os"
 	"strings"
@@ -15,9 +19,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/preview"
-
-	"github.com/getloopscale/loopzero/api/internal/services/billing"
+	previewsvc "github.com/getloopscale/loopzero/api/internal/services/preview"
 
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
@@ -34,7 +36,11 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/audit"
+	"github.com/getloopscale/loopzero/api/internal/routes/billing"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/health"
+	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -42,14 +48,14 @@ import (
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
-func setupHealthServices(cfg config.Config) []routes.ServiceHealthChecker {
-	var healthServices []routes.ServiceHealthChecker
+func setupHealthServices(cfg config.Config) []health.ServiceHealthChecker {
+	var healthServices []health.ServiceHealthChecker
 	if cfg.ArgocdURL != "" {
-		healthServices = append(healthServices, routes.NewHTTPServiceChecker(
+		healthServices = append(healthServices, health.NewHTTPServiceChecker(
 			"argocd", cfg.ArgocdURL+"/api/v1/applications", cfg.ArgocdToken, nil))
 	}
 	if cfg.GiteaURL != "" {
-		healthServices = append(healthServices, routes.NewHTTPServiceChecker(
+		healthServices = append(healthServices, health.NewHTTPServiceChecker(
 			"gitea", cfg.GiteaURL+"/api/v1/repos/search?limit=1", cfg.GiteaToken, nil))
 	}
 	return healthServices
@@ -66,9 +72,9 @@ func buildServerConfig(
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
 	cellStore *store.PostgresCellStore,
-	domainHandler *routes.DomainHandler,
-	buildHandler *routes.BuildHandler,
-	healthServices []routes.ServiceHealthChecker,
+	domainHandler *domains.DomainHandler,
+	buildHandler *builds.BuildHandler,
+	healthServices []health.ServiceHealthChecker,
 	tokenValidator middleware.TokenValidator,
 	rateLimiter *middleware.RateLimiter,
 	shutdownCtx context.Context,
@@ -101,14 +107,14 @@ func buildServerConfig(
 		// checker (EC-03 absorption — 404 byte-identical between cross-
 		// tenant attempts + nonexistent projects; CWE-204 defense). The
 		// PostgresProjectStore.GetByName signature already matches
-		// routes.SecretProjectChecker — no adapter needed.
+		// secrets.SecretProjectChecker — no adapter needed.
 		SecretProjectChecker: dbDeps.ProjectStore,
 		DomainHandler:        domainHandler,
 		BuildHandler:         buildHandler,
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
 		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
 		// returns real data (was always 404 because the store was nil).
-		BuildAttestationHandler: routes.NewBuildAttestationHandler(
+		BuildAttestationHandler: builds.NewBuildAttestationHandler(
 			store.NewPostgresAttestationStore(dbAdapter), logger,
 		),
 		// Sprint 6 / T1.2: per-app SBOM endpoint. The store is the
@@ -116,13 +122,13 @@ func buildServerConfig(
 		// the existing S3 uploader (loopzero-static-assets bucket / sbom/
 		// prefix). When stores.ObjUploader is nil (no S3 in dev), the
 		// handler still serves metadata but omits download_url.
-		BuildSBOMHandler: routes.NewBuildSBOMHandler(
+		BuildSBOMHandler: builds.NewBuildSBOMHandler(
 			newAppSBOMStoreAdapter(dbAdapter),
 			toSBOMURLGenerator(stores),
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler: routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr).
+		EnvironmentHandler: environments.NewEnvironmentHandler(k8sDeps.TenantCRMgr).
 			WithKPILookup(&envKPILookupPgx{pool: dbAdapter.Pool}).
 			WithPreviewSlotLookup(&previewSlotLookupAdapter{store: stores.PreviewSlotStore}).
 			// M2 v1.2 T4.1 (LIVE-caught wiring gap 2026-06-08): the
@@ -256,52 +262,31 @@ func buildServerConfig(
 		// docr_pulls, build_minutes) with their current values + caps.
 		// pre-migration-000017 the costSource returns no rows and
 		// usage map stays empty (graceful degradation).
-		billingHandler := routes.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
+		billingHandler := billing.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
 		if dbDeps != nil && dbDeps.StdDB != nil {
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
 			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
 		}
-		// T2.7 of maturity-3-62-to-4-0-roadmap: wire Stripe Customer
-		// Portal SDK if STRIPE_SECRET_KEY env is set. Production sets
-		// it via ESO from the prod Stripe secret. Local dev + tests
-		// without the env keep the legacy placeholder URL — no SDK
-		// call, no test pollution. Test-mode keys (sk_test_*) work
-		// fine and return real session URLs against Stripe's test
-		// dashboard, useful for staging environments.
+		// O ENGINE NAO EMITE SESSAO DE PORTAL. Por ADR 2026-08-11
+		// (docs/decisions/2026-08-11-stripe-portal-ownership-adr.md), o loopzero-cloud e o unico
+		// emissor: ele e quem CRIA o cliente Stripe quando falta (EnsureStripeCustomer), e o
+		// engine so exigia que ja existisse. Manter a capacidade aqui significava a chave do
+		// Stripe poder existir no processo que atende o CLI e o caminho critico de deploy —
+		// superficie sem contrapartida, ja que o passo anterior mora no outro lado.
 		//
-		// ADR-2026-05-27-T2.7-RAK conditional approval § "Engineering
-		// deliverables" #1 — startup assertion (6th test condition per
-		// CVP + GitOps): if LOOPZERO_ENV=production AND STRIPE_SECRET_KEY
-		// does not start with sk_live_ prefix, panic with clear message
-		// at boot. This is a defense-in-depth against silent test-mode
-		// drift in production (revenue leak invisible from cluster).
-		// Also rejects rk_live_/rk_test_ (Restricted Access Keys) at
-		// the assertion level — RAK uses the same sk_live_ prefix per
-		// Stripe docs, so the assertion correctly admits both full
-		// keys + RAKs.
-		if stripeKey := os.Getenv("STRIPE_SECRET_KEY"); stripeKey != "" {
-			if err := validateStripeKeyForEnv(cfg.Env, stripeKey); err != nil {
-				panic(err.Error())
-			}
-			returnURL := os.Getenv("BILLING_RETURN_URL")
-			if returnURL == "" {
-				returnURL = "https://app.loopzero.cloud/billing"
-			}
-			billingHandler.WithPortalSessionCreator(
-				billing.NewStripePortalSessionCreator(stripeKey),
-				returnURL,
-			)
-		}
+		// O `BillingHandler` mantem o injetor `WithPortalSessionCreator` de proposito: ele e a
+		// costura testavel do handler. O que saiu foi a IMPLEMENTACAO que fala com o Stripe.
+
 		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.
 		teamStore := &store.PostgresTeamStore{DB: dbAdapter}
-		sc.TeamHandler = routes.NewTeamHandler(teamStore)
+		sc.TeamHandler = teams.NewTeamHandler(teamStore)
 		sc.AuthUserLookup = teamStore
 		// Plan T2.5 D8 full — persistent active-team selection backed by
 		// users.active_tenant_id column (migration 000018).
 		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
-		sc.AuditHandler = routes.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
+		sc.AuditHandler = audit.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
 		// /api/v1/admin/tenants/pin endpoint registered in router.go can
@@ -352,9 +337,9 @@ func buildServerConfig(
 		// BuildOrchestrator is available (always, post-Sprint-2), the
 		// service can submit builds for previews (best-effort).
 		previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-		var previewService *preview.PreviewService
+		var previewService *previewsvc.PreviewService
 		if orchDeps != nil && orchDeps.Orchestrator != nil {
-			ps, perr := preview.NewPreviewService(preview.PreviewServiceDeps{
+			ps, perr := previewsvc.NewPreviewService(previewsvc.PreviewServiceDeps{
 				Store:               previewStore,
 				Builds:              orchDeps.Orchestrator,
 				BuildApps:           &previewAppsLookupAdapter{builds: stores.BuildStore},
@@ -381,15 +366,15 @@ func buildServerConfig(
 		// projects with 404 PROJECT_NOT_FOUND instead of 200 + empty
 		// list. Existing *store.PostgresProjectStore matches the narrow
 		// interface signature — no adapter needed.
-		sc.PreviewHandler = routes.
+		sc.PreviewHandler = previewroutes.
 			NewPreviewHandler(previewStore, previewService, logger).
 			WithPhaseLookup(k8sDeps.PreviewCRMgr).
 			WithProjectChecker(&store.PostgresProjectStore{DB: dbAdapter})
-		sc.CellPlacement = func() routes.CellPlacementEngine {
+		sc.CellPlacement = func() domain.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
 		}()
-		if checker, ok := cellRouter.(routes.CellDiscoveryChecker); ok {
+		if checker, ok := cellRouter.(health.CellDiscoveryChecker); ok {
 			sc.CellDiscovery = checker
 		}
 	}
@@ -417,14 +402,14 @@ func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
 
 func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
 	ctx context.Context, tenantID, buildID string,
-) ([]routes.AppSBOMInfo, error) {
+) ([]builds.AppSBOMInfo, error) {
 	infos, err := a.inner.GetBuildAppAttestations(ctx, tenantID, buildID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]routes.AppSBOMInfo, 0, len(infos))
+	out := make([]builds.AppSBOMInfo, 0, len(infos))
 	for _, in := range infos {
-		out = append(out, routes.AppSBOMInfo{
+		out = append(out, builds.AppSBOMInfo{
 			AppName:            in.AppName,
 			SBOMS3Key:          in.SBOMS3Key,
 			SBOMFormat:         in.SBOMFormat,
@@ -439,11 +424,11 @@ func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
 // toSBOMURLGenerator returns a SBOMURLGenerator if the configured
 // uploader supports presigning, else nil. When nil, the SBOM endpoint
 // returns metadata-only (no download_url).
-func toSBOMURLGenerator(stores *StoreDeps) routes.SBOMURLGenerator {
+func toSBOMURLGenerator(stores *StoreDeps) builds.SBOMURLGenerator {
 	if stores == nil {
 		return nil
 	}
-	if g, ok := stores.ObjUploader.(routes.SBOMURLGenerator); ok {
+	if g, ok := stores.ObjUploader.(builds.SBOMURLGenerator); ok {
 		return g
 	}
 	return nil
@@ -476,7 +461,7 @@ func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
 // billingPoolAdapter bridges *pgxpool.Pool to routes.BillingPool. The
 // routes package defines its own narrow Row/Pool interfaces to avoid
 // the routes ↔ db import cycle (find_arch_001). pgx.Row satisfies the
-// routes.BillingRow contract (single Scan method) — this adapter just
+// billing.BillingRow contract (single Scan method) — this adapter just
 // re-types the QueryRow signature.
 type billingPoolAdapter struct {
 	pool interface {
@@ -484,7 +469,7 @@ type billingPoolAdapter struct {
 	}
 }
 
-func (a billingPoolAdapter) QueryRow(ctx context.Context, sql string, args ...any) routes.BillingRow {
+func (a billingPoolAdapter) QueryRow(ctx context.Context, sql string, args ...any) billing.BillingRow {
 	return a.pool.QueryRow(ctx, sql, args...)
 }
 
@@ -648,7 +633,7 @@ type envKPILookupPgx struct {
 	}
 }
 
-func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]routes.EnvKPI, error) {
+func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]environments.EnvKPI, error) {
 	const q = `
 		SELECT DISTINCT ON (environment)
 			environment, git_commit, created_at
@@ -661,14 +646,14 @@ func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID strin
 		return nil, fmt.Errorf("envKPILookupPgx: %w", err)
 	}
 	defer rows.Close()
-	result := make(map[string]routes.EnvKPI)
+	result := make(map[string]environments.EnvKPI)
 	for rows.Next() {
 		var env, sha string
 		var createdAt time.Time
 		if scanErr := rows.Scan(&env, &sha, &createdAt); scanErr != nil {
 			return nil, fmt.Errorf("envKPILookupPgx scan: %w", scanErr)
 		}
-		result[env] = routes.EnvKPI{
+		result[env] = environments.EnvKPI{
 			LastDeploy:    createdAt.UTC().Format(time.RFC3339),
 			LastDeploySha: sha,
 		}
@@ -689,14 +674,14 @@ type previewSlotLookupAdapter struct {
 	store *store.PostgresPreviewSlotStore
 }
 
-func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]routes.PreviewSlotInfo, error) {
+func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]environments.PreviewSlotInfo, error) {
 	slots, err := a.store.ListByTenant(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]routes.PreviewSlotInfo, 0, len(slots))
+	out := make([]environments.PreviewSlotInfo, 0, len(slots))
 	for _, slot := range slots {
-		out = append(out, routes.PreviewSlotInfo{
+		out = append(out, environments.PreviewSlotInfo{
 			ProjectID:       slot.ProjectID,
 			ActivePRNumber:  slot.ActivePRNumber,
 			ActiveBranch:    slot.ActiveBranch,

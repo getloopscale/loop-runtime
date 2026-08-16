@@ -94,7 +94,7 @@ spec:
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
-            - name: RUNTIME_KUBECONFIG
+            - name: CELL_0_KUBECONFIG
               value: "/etc/loopzero/runtime-kubeconfig"
             - name: BASE_DOMAIN
               value: "loopzero.local"
@@ -145,7 +145,7 @@ spec:
           emptyDir: {}
         - name: runtime-kubeconfig
           configMap:
-            name: loopzero-runtime-kubeconfig
+            name: loopzero-cell-0-kubeconfig
             items:
               - key: config
                 path: runtime-kubeconfig

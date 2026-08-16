@@ -6,23 +6,23 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // fakeStatusProjectStore implements routes.StatusProjectStore for testing.
 type fakeStatusProjectStore struct {
-	project *routes.ProjectResult
+	project *domain.ProjectResult
 	err     error
 }
 
-func (f *fakeStatusProjectStore) GetByName(ctx context.Context, tenantID, name string) (*routes.ProjectResult, error) {
+func (f *fakeStatusProjectStore) GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -31,11 +31,11 @@ func (f *fakeStatusProjectStore) GetByName(ctx context.Context, tenantID, name s
 
 // fakeStatusBuildStore implements routes.StatusBuildStore for testing.
 type fakeStatusBuildStore struct {
-	builds []routes.StatusBuild
+	builds []status.StatusBuild
 	err    error
 }
 
-func (f *fakeStatusBuildStore) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]routes.StatusBuild, error) {
+func (f *fakeStatusBuildStore) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]status.StatusBuild, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -44,11 +44,11 @@ func (f *fakeStatusBuildStore) ListByProject(ctx context.Context, tenantID, proj
 
 // fakeStatusReleaseStore implements routes.StatusReleaseStore for testing.
 type fakeStatusReleaseStore struct {
-	release *routes.StatusRelease
+	release *status.StatusRelease
 	err     error
 }
 
-func (f *fakeStatusReleaseStore) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*routes.StatusRelease, error) {
+func (f *fakeStatusReleaseStore) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*status.StatusRelease, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -87,10 +87,10 @@ func TestStatusRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name}/status → 200 with valid project and env", func(t *testing.T) {
 		// Arrange
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{
-			builds: []routes.StatusBuild{
+			builds: []status.StatusBuild{
 				{
 					ID:              "build-abc123",
 					Environment:     "production",
@@ -104,7 +104,7 @@ func TestStatusRoute(t *testing.T) {
 			},
 		}
 		releases := &fakeStatusReleaseStore{
-			release: &routes.StatusRelease{
+			release: &status.StatusRelease{
 				ID:        "rel-def456",
 				Status:    "ACTIVE",
 				GitCommit: "abc123",
@@ -117,7 +117,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 
 		// publicDomain non-empty triggers canonical URL emission per ADR D3.
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -180,7 +180,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("nonexistent", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -212,10 +212,10 @@ func TestStatusRoute(t *testing.T) {
 		// Behavioral contract is now "fallback to production, never
 		// 400 on omitted env".
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{
-			builds: []routes.StatusBuild{
+			builds: []status.StatusBuild{
 				{
 					ID:          "build-1",
 					Environment: "production",
@@ -227,7 +227,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "", true)
 		rec := httptest.NewRecorder()
 
@@ -249,12 +249,12 @@ func TestStatusRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name}/status → 200 with null builds and releases when none exist", func(t *testing.T) {
 		// Arrange
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
-		builds := &fakeStatusBuildStore{builds: []routes.StatusBuild{}}
+		builds := &fakeStatusBuildStore{builds: []status.StatusBuild{}}
 		releases := &fakeStatusReleaseStore{release: nil}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -291,7 +291,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "production", false)
 		rec := httptest.NewRecorder()
 
@@ -307,10 +307,10 @@ func TestStatusRoute(t *testing.T) {
 	t.Run("GET /api/v1/projects/{name}/status → filters builds by environment", func(t *testing.T) {
 		// Arrange — builds for different environments
 		projects := &fakeStatusProjectStore{
-			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
+			project: &domain.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
 		builds := &fakeStatusBuildStore{
-			builds: []routes.StatusBuild{
+			builds: []status.StatusBuild{
 				{
 					ID:          "build-staging",
 					Environment: "staging",
@@ -329,7 +329,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "staging", true)
 		rec := httptest.NewRecorder()
 
@@ -365,17 +365,17 @@ func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	t.Parallel()
 
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{
+		project: &domain.ProjectResult{
 			ID:     "proj-123",
 			Name:   "teste",
 			TeamID: "tn-acme",
 		},
 	}
-	builds := &fakeStatusBuildStore{builds: []routes.StatusBuild{}}
+	builds := &fakeStatusBuildStore{builds: []status.StatusBuild{}}
 	releases := &fakeStatusReleaseStore{}
 
 	t.Run("metrics_range_url is templated when grafanaBaseURL set", func(t *testing.T) {
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
 		req := newStatusRequest("teste", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -397,7 +397,7 @@ func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	})
 
 	t.Run("metrics_range_url is empty (honest) when grafanaBaseURL empty", func(t *testing.T) {
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("teste", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -418,7 +418,7 @@ func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	})
 
 	t.Run("prom_query_keys is always present with 8 canonical names in order", func(t *testing.T) {
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("teste", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -464,7 +464,7 @@ func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 		// Defense: the prom_query_keys list is canonical and independent of
 		// grafanaBaseURL — dashboard consumers need the list to render
 		// signal pills regardless of whether Grafana link is available.
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
+		handler := status.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
 		req := newStatusRequest("teste", "production", true)
 		rec := httptest.NewRecorder()
 

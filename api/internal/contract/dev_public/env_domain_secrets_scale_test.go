@@ -41,7 +41,9 @@ func mockEnvHandler(t *testing.T) http.Handler {
 		}
 		switch {
 		case r.URL.Path == "/api/v1/environments" && r.Method == http.MethodPost:
-			var req struct{ Name string `json:"name"` }
+			var req struct {
+				Name string `json:"name"`
+			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			if req.Name == "" {
 				w.WriteHeader(http.StatusBadRequest)
@@ -137,7 +139,9 @@ func TestDevPublic_EnvDomainSecretsScale_Domains(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
-	var parsed struct{ Nameservers []string `json:"nameservers"` }
+	var parsed struct {
+		Nameservers []string `json:"nameservers"`
+	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&parsed))
 	require.NotEmpty(t, parsed.Nameservers, "domains POST MUST return nameservers array per J-11 canonical")
 }

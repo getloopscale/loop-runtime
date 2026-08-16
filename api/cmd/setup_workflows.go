@@ -156,7 +156,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 
 // buildArgoCDTokenProvider returns a self-healing KubeMintingTokenProvider
 // when the runtime has access to the mgmt cluster (in-cluster or via
-// MGMT_KUBECONFIG) AND the argocd-refresh-credentials Secret is present.
+// CORE_KUBECONFIG) AND the argocd-refresh-credentials Secret is present.
 // Otherwise returns nil so the caller falls back to the static token.
 //
 // Failure cases logged at WARN — they are non-fatal: a stale static token
@@ -189,8 +189,8 @@ func buildArgoCDTokenProvider(cfg config.Config, logger *slog.Logger) argocd.Tok
 // mgmtKubeClient constructs a typed kubernetes.Interface for the mgmt
 // cluster. Prefers in-cluster config (so the pod's own ServiceAccount
 // token + RBAC apply — required for loopzero-api's Secret read/write rules
-// granted via clusterrolebinding/loopzero-api). Falls back to MGMT_KUBECONFIG
-// / MGMT_KUBE_CONTEXT for out-of-cluster execution (CLI tests, etc).
+// granted via clusterrolebinding/loopzero-api). Falls back to CORE_KUBECONFIG
+// / CORE_KUBE_CONTEXT for out-of-cluster execution (CLI tests, etc).
 //
 // Why this order matters (NEW-15 follow-up): in local k3d the
 // loopzero-cluster-kubeconfigs Secret references kube-system:default SA which

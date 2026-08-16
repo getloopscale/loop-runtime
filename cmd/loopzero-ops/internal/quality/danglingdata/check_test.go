@@ -84,7 +84,7 @@ func run(t *testing.T, root string) *Outcome {
 // a script hardcodes a config path; the config is deleted; the script survives.
 func TestDanglingData_DeletedConfigReferencedByScript_Fails(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/governance/verify-independence.sh": "#!/usr/bin/env bash\nCONFIG_FILE=\"docs/governance/personas/independence-config.yaml\"\ntest -f \"$CONFIG_FILE\"\n",
+		"infra/scripts/governance/verify-independence.sh":   "#!/usr/bin/env bash\nCONFIG_FILE=\"docs/governance/personas/independence-config.yaml\"\ntest -f \"$CONFIG_FILE\"\n",
 		"docs/governance/personas/independence-config.yaml": "personas: {}\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
@@ -103,7 +103,7 @@ func TestDanglingData_DeletedConfigReferencedByScript_Fails(t *testing.T) {
 // a deleted data path as a CLI flag.
 func TestDanglingData_DeletedCatalogReferencedByWorkflow_Fails(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		".github/workflows/decay-scan.yml": "jobs:\n  scan:\n    steps:\n      - run: scan-decay --catalog docs/governance/claim-catalog.yaml\n",
+		".github/workflows/decay-scan.yml":   "jobs:\n  scan:\n    steps:\n      - run: scan-decay --catalog docs/governance/claim-catalog.yaml\n",
 		"docs/governance/claim-catalog.yaml": "claims: []\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
@@ -119,8 +119,8 @@ func TestDanglingData_DeletedCatalogReferencedByWorkflow_Fails(t *testing.T) {
 // script deleted in the same change → no live ref → Pass.
 func TestDanglingData_BothGone_Passes(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/governance/verify-independence.sh":   "#!/usr/bin/env bash\nCONFIG_FILE=docs/governance/x.yaml\n",
-		"docs/governance/x.yaml": "a: 1\n",
+		"infra/scripts/governance/verify-independence.sh": "#!/usr/bin/env bash\nCONFIG_FILE=docs/governance/x.yaml\n",
+		"docs/governance/x.yaml":                          "a: 1\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
 		"infra/scripts/governance/verify-independence.sh": "<DELETE>",
@@ -136,7 +136,7 @@ func TestDanglingData_BothGone_Passes(t *testing.T) {
 // in a comment → not a live reference.
 func TestDanglingData_CommentOnly_Passes(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"infra/scripts/foo.sh":   "#!/usr/bin/env bash\n# was: docs/governance/old.yaml (deleted)\necho hi\n",
+		"infra/scripts/foo.sh":     "#!/usr/bin/env bash\n# was: docs/governance/old.yaml (deleted)\necho hi\n",
 		"docs/governance/old.yaml": "a: 1\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
@@ -152,7 +152,7 @@ func TestDanglingData_CommentOnly_Passes(t *testing.T) {
 // prose is not a live caller break.
 func TestDanglingData_ProseOnly_Passes(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
-		"docs/operations/runbook.md": "See docs/governance/scoring.yaml for details.\n",
+		"docs/operations/runbook.md":   "See docs/governance/scoring.yaml for details.\n",
 		"docs/governance/scoring.yaml": "score: 4\n",
 	})
 	commitOn(t, root, "feat", map[string]string{

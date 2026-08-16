@@ -227,4 +227,3 @@ func ghHookMutateArgs(path, verb, targetURL, whsec string) []string {
 		"-f", "config[insecure_ssl]=0",
 	}
 }
-

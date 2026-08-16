@@ -321,9 +321,9 @@ func TestConstants(t *testing.T) {
 // it must not appear in the matrix — and above all must not be labelled a dead
 // code candidate.
 //
-// Measured 2026-08-06: pkg/pulumi/ contains no .go of its own, only
-// pkg/pulumi/archive/, which cmd/loopzero-ops/pulumi_subcmd.go imports. The
-// generator counted imports of the exact path "pkg/pulumi", found none, and
+// Measured 2026-08-06: internal/pulumi/ contains no .go of its own, only
+// internal/pulumi/archive/, which cmd/loopzero-ops/pulumi_subcmd.go imports. The
+// generator counted imports of the exact path "internal/pulumi", found none, and
 // published "0 ⚠️ dead code candidate" for live code. A generated document that
 // invites someone to delete a package in use is worse than no document.
 func TestListPkgDirsSkipsSubPackageOnlyDirs(t *testing.T) {

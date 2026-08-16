@@ -138,13 +138,13 @@ func TestValidateStripeKeyForEnv_OperatorActionableMessage(t *testing.T) {
 
 func TestIsProductionEnv_CaseInsensitive(t *testing.T) {
 	cases := map[string]bool{
-		"production": true,
-		"PRODUCTION": true,
-		"Production": true,
-		"prod":       false, // strict: only "production" matches (mirrors config.IsProduction)
-		"staging":    false,
+		"production":  true,
+		"PRODUCTION":  true,
+		"Production":  true,
+		"prod":        false, // strict: only "production" matches (mirrors config.IsProduction)
+		"staging":     false,
 		"development": false,
-		"":          false,
+		"":            false,
 	}
 	for env, want := range cases {
 		got := isProductionEnv(env)

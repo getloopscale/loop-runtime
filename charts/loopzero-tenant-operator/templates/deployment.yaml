@@ -74,15 +74,15 @@ spec:
                 {{- else }}
                 name: {{ include "loopzero-common.fullname" . }}
                 {{- end }}
-          {{- if or .Values.kubeconfig.build.existingConfigMap .Values.kubeconfig.runtime.existingConfigMap }}
+          {{- if or .Values.kubeconfig.build.existingConfigMap .Values.kubeconfig.cell0.existingConfigMap }}
           env:
             {{- if .Values.kubeconfig.build.existingConfigMap }}
             - name: BUILD_KUBECONFIG
               value: /etc/loopzero/build-kubeconfig
             {{- end }}
-            {{- if .Values.kubeconfig.runtime.existingConfigMap }}
-            - name: RUNTIME_KUBECONFIG
-              value: /etc/loopzero/runtime-kubeconfig
+            {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+            - name: CELL_0_KUBECONFIG
+              value: /etc/loopzero/cell-0-kubeconfig
             {{- end }}
           {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
@@ -105,9 +105,9 @@ spec:
               subPath: config
               readOnly: true
             {{- end }}
-            {{- if .Values.kubeconfig.runtime.existingConfigMap }}
-            - name: runtime-kubeconfig
-              mountPath: /etc/loopzero/runtime-kubeconfig
+            {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+            - name: cell-0-kubeconfig
+              mountPath: /etc/loopzero/cell-0-kubeconfig
               subPath: config
               readOnly: true
             {{- end }}
@@ -123,10 +123,10 @@ spec:
               - key: config
                 path: config
         {{- end }}
-        {{- if .Values.kubeconfig.runtime.existingConfigMap }}
-        - name: runtime-kubeconfig
+        {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+        - name: cell-0-kubeconfig
           configMap:
-            name: {{ .Values.kubeconfig.runtime.existingConfigMap }}
+            name: {{ .Values.kubeconfig.cell0.existingConfigMap }}
             items:
               - key: config
                 path: config

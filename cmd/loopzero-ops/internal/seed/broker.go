@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +24,7 @@ import (
 //     Secret with keys {token, LOOPZERO_BROKER_TOKEN}.
 //  2. Mirror to workload cluster's external-secrets ns with the
 //     `external-secrets.io/type=webhook` canonical label.
-//  3. Resolve k3d-loopzero-mgmt-server-0 container IP → install/upgrade
+//  3. Resolve k3d-loopzero-core-server-0 container IP → install/upgrade
 //     loopzero-external-secrets chart in workload cluster (broker.apiURL points
 //     at mgmt server-0:30001 for cross-cluster).
 //  4. Rollout restart mgmt loopzero-api so envFrom picks up LOOPZERO_BROKER_TOKEN.
@@ -36,11 +35,11 @@ import (
 //     the chart itself lives in-tree).
 type BrokerSeed struct{}
 
-func NewBrokerSeed() *BrokerSeed { return &BrokerSeed{} }
+func NewBrokerSeed() *BrokerSeed   { return &BrokerSeed{} }
 func (s *BrokerSeed) Name() string { return "broker" }
 
 const (
-	brokerContextWorkload   = "k3d-loopzero-workload"
+	brokerContextWorkload   = "k3d-loopzero-cell-0"
 	brokerESONamespace      = "external-secrets"
 	brokerSecretName        = "loopzero-broker-token"
 	brokerTokenKey          = "token"
@@ -48,9 +47,9 @@ const (
 	brokerChartRelativePath = "infra/helm/loopzero-external-secrets"
 	brokerHelmReleaseName   = "loopzero-broker"
 	brokerAPIPort           = 30001
-	brokerCellID            = "cell-default"
+	brokerCellID            = "cell-0"
 	brokerEnvName           = "dev-public"
-	brokerMgmtContainer     = "k3d-loopzero-mgmt-server-0"
+	brokerMgmtContainer     = "k3d-loopzero-core-server-0"
 	brokerNetworkName       = "k3d-loopzero"
 )
 
@@ -106,7 +105,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, "loopzero-system", "loopzero-api"); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 4 rollout loopzero-api: %v", err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", 120*time.Second)
+	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle))
 
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical broker chain seeded (%s token; apiURL=%s)", tokenAction(reused), apiURL)}
 }
@@ -178,8 +177,8 @@ func brokerMgmtSecret(token []byte) *corev1.Secret {
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			brokerTokenKey:         token,
-			brokerCanonicalEnvKey:  token,
+			brokerTokenKey:        token,
+			brokerCanonicalEnvKey: token,
 		},
 	}
 }
@@ -192,9 +191,9 @@ func brokerWorkloadSecret(token []byte) *corev1.Secret {
 			Namespace: brokerESONamespace,
 			Name:      brokerSecretName,
 			Labels: map[string]string{
-				"external-secrets.io/type":      "webhook",
-				"app.kubernetes.io/name":        brokerSecretName,
-				"app.kubernetes.io/managed-by":  "loopzero-ops-seed-broker",
+				"external-secrets.io/type":     "webhook",
+				"app.kubernetes.io/name":       brokerSecretName,
+				"app.kubernetes.io/managed-by": "loopzero-ops-seed-broker",
 			},
 		},
 		Type: corev1.SecretTypeOpaque,

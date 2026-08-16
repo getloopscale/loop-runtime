@@ -514,7 +514,7 @@ var (
 	// Plan J-17 T1.3 (2026-06-06). Counts every Argo Workflow node phase
 	// transition that the argo_step_watcher service observed and emitted
 	// as an SSE event. Labels:
-	//   - step: one of pkg/events.CanonicalStepNames OR "other" (EC-16
+	//   - step: one of events.CanonicalStepNames OR "other" (EC-16
 	//     cardinality guard — non-canonical step names like custom
 	//     Dockerfile steps land in "other" so the cardinality stays at
 	//     17 canonical + 1 "other" = 18 step values * 3 statuses = 54
@@ -655,7 +655,7 @@ var (
 	}, []string{"operation"})
 
 	// SecretExternalSecretTotal counts ExternalSecret CR create/update calls
-	// from SecretK8sManager (workload-cluster path).
+	// from SecretK8sManager (cell-0-cluster path).
 	//
 	// dogfood-2026-05-08-fixes T2.3 (F-2 instrumentation, ADR D3).
 	//
@@ -666,7 +666,7 @@ var (
 	// Use:
 	//   - "success" — ExternalSecret CR created or updated successfully
 	//   - "fail" — runtime client returned error (RBAC, network, etc.)
-	//   - "skip" — manager nil at boot (RUNTIME_KUBECONFIG missing) so the
+	//   - "skip" — manager nil at boot (CELL_0_KUBECONFIG missing) so the
 	//     entire path was bypassed. THIS IS THE INVISIBLE-FAILURE SIGNAL
 	//     that F-2 was originally caused by.
 	//

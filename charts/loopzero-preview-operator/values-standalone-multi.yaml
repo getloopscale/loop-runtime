@@ -16,11 +16,11 @@ image:
   pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
 
 # FB-#3 partial fix (MEET-070): preview-operator needs BASE_DOMAIN +
-# RUNTIME_KUBECONFIG. Kubeconfig path comes from a mounted ConfigMap
-# (loopzero-runtime-kubeconfig populated by bootstrap scripts).
+# CELL_0_KUBECONFIG. Kubeconfig path comes from a mounted ConfigMap
+# (loopzero-cell-0-kubeconfig populated by bootstrap scripts).
 config:
   baseDomain: loopzero.local
 
 kubeconfig:
-  runtime:
-    existingConfigMap: loopzero-runtime-kubeconfig
+  cell0:
+    existingConfigMap: loopzero-cell-0-kubeconfig

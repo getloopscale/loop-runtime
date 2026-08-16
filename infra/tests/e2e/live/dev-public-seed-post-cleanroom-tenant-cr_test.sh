@@ -3,7 +3,7 @@
 #
 # Plan: seed-post-cleanroom-tenant-cr-provisioning (v1.0)
 # Closes: Red Team loopzero-cloud#118 — QA Red Team identity loga em dev-public mas
-#         tenant CR ausente em k3d-loopzero-mgmt → deploys falham porque
+#         tenant CR ausente em k3d-loopzero-core → deploys falham porque
 #         tenant-operator não consegue reconciliar tenant inexistente.
 #
 # PER `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` INQUEBRÁVEL:
@@ -12,7 +12,7 @@
 #
 # OPERATOR HARD STOP — per .claude/rules/cleanroom-up-live-test-mandate.md.
 # Requires:
-#   - k3d-loopzero-mgmt cluster Ready (Cleanroom TOTAL → UP chain prior)
+#   - k3d-loopzero-core cluster Ready (Cleanroom TOTAL → UP chain prior)
 #   - seed-post-cleanroom-all.sh just succeeded (this test is the post-condition)
 #
 # Scenarios:
@@ -36,7 +36,7 @@ ISSUE_REF="loopzero-cloud#118"
 PLAN_SLUG="seed-post-cleanroom-tenant-cr-provisioning"
 SCRIPT_NAME="$(basename "$0")"
 
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-mgmt}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
 NAMESPACE="${NAMESPACE:-loopzero-system}"
 APIVERSION_GROUP="tenants.loopzero.io"
 

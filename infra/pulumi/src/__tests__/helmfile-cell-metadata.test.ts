@@ -3,18 +3,18 @@
 // Translates plan T5.2 acceptance into vitest. Original T5.2 was
 // [N/A]-superseded (iter 4) because the implementation went helmfile-
 // native instead of Pulumi.dev.yaml config keys. But the helmfile-
-// native artifacts (runtimeCellId + runtime2CellId in
+// native artifacts (cell0Id + cell1Id in
 // infra/helmfile/environments/{dev,prod}.yaml) had NO test pinning
-// them — if someone renames the keys or deletes cell-2 wiring, routing
+// them — if someone renames the keys or deletes cell-1 wiring, routing
 // breaks silently in the next install.
 //
 // This test pins the helmfile-native cell metadata invariants:
-//   - dev + prod environments declare runtimeCellId + runtime2CellId
+//   - dev + prod environments declare cell0Id + cell1Id
 //   - cell IDs match `^cell-[a-z0-9-]+$` regex (matches ClusterCredential
 //     CRD validation per migration 000006_cells)
 //   - dynamicRouter: true (Audit T0.1 Gap 4 fix)
 //
-// Catches drift like 'someone deleted runtime2CellId during cleanup'
+// Catches drift like 'someone deleted cell1Id during cleanup'
 // or 'cell-id format changed to underscore'. Cell metadata is now
 // canonical via helmfile (not Pulumi); test enforces this.
 
@@ -53,21 +53,21 @@ describe("helmfile cell metadata invariants (T5.2 helmfile-native)", () => {
         expect(text.length, `${env}.yaml must be non-empty`).toBeGreaterThan(0);
       });
 
-      it("declares runtimeCellId (canonical cell for runtime cluster)", () => {
-        const v = extract(text, "runtimeCellId");
-        expect(v, "runtimeCellId must be set").toBeTruthy();
+      it("declares cell0Id (canonical cell for runtime cluster)", () => {
+        const v = extract(text, "cell0Id");
+        expect(v, "cell0Id must be set").toBeTruthy();
         expect(v).toMatch(CELL_ID_RE);
       });
 
-      it("declares runtime2CellId (canonical cell for runtime-2 cluster)", () => {
-        const v = extract(text, "runtime2CellId");
-        expect(v, "runtime2CellId must be set").toBeTruthy();
+      it("declares cell1Id (canonical cell for runtime-2 cluster)", () => {
+        const v = extract(text, "cell1Id");
+        expect(v, "cell1Id must be set").toBeTruthy();
         expect(v).toMatch(CELL_ID_RE);
       });
 
-      it("runtimeCellId !== runtime2CellId (distinct cells)", () => {
-        const c1 = extract(text, "runtimeCellId");
-        const c2 = extract(text, "runtime2CellId");
+      it("cell0Id !== cell1Id (distinct cells)", () => {
+        const c1 = extract(text, "cell0Id");
+        const c2 = extract(text, "cell1Id");
         expect(c1).not.toBe(c2);
       });
 
@@ -85,13 +85,13 @@ describe("helmfile cell metadata invariants (T5.2 helmfile-native)", () => {
     });
   }
 
-  it("dev and prod use the SAME canonical cell IDs (cell-1, cell-2)", () => {
+  it("dev and prod use the SAME canonical cell IDs (cell-0, cell-1)", () => {
     // Plan invariant: cell IDs are stable across environments — only
-    // K8s context differs. Catches drift like 'someone renamed cell-1
+    // K8s context differs. Catches drift like 'someone renamed cell-0
     // to cell-prod-1 in prod.yaml only'.
     const dev = loadEnv("dev");
     const prod = loadEnv("prod");
-    expect(extract(dev, "runtimeCellId")).toBe(extract(prod, "runtimeCellId"));
-    expect(extract(dev, "runtime2CellId")).toBe(extract(prod, "runtime2CellId"));
+    expect(extract(dev, "cell0Id")).toBe(extract(prod, "cell0Id"));
+    expect(extract(dev, "cell1Id")).toBe(extract(prod, "cell1Id"));
   });
 });

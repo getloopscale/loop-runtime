@@ -10,16 +10,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 )
 
-// fakeSecretStore implements routes.SecretStore for testing.
+// fakeSecretStore implements secrets.SecretStore for testing.
 type fakeSecretStore struct {
-	secrets []routes.SecretMetadata
+	secrets []secrets.SecretMetadata
 	err     error
 }
 
-func (f *fakeSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]routes.SecretMetadata, error) {
+func (f *fakeSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]secrets.SecretMetadata, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -37,12 +37,12 @@ func (f *fakeSecretStore) Delete(_ context.Context, _, _, _, _, _ string) (bool,
 func TestSecretsRoute(t *testing.T) {
 	t.Run("GET /api/v1/secrets → 200 with secrets list", func(t *testing.T) {
 		store := &fakeSecretStore{
-			secrets: []routes.SecretMetadata{
+			secrets: []secrets.SecretMetadata{
 				{Name: "DATABASE_URL", Environment: "production", App: "api"},
 				{Name: "REDIS_URL", Environment: "production", App: "api"},
 			},
 		}
-		handler := routes.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -54,7 +54,7 @@ func TestSecretsRoute(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var result map[string][]routes.SecretMetadata
+		var result map[string][]secrets.SecretMetadata
 		if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -73,9 +73,9 @@ func TestSecretsRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/secrets → 200 with empty list when no secrets", func(t *testing.T) {
 		store := &fakeSecretStore{
-			secrets: []routes.SecretMetadata{},
+			secrets: []secrets.SecretMetadata{},
 		}
-		handler := routes.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -87,7 +87,7 @@ func TestSecretsRoute(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var result map[string][]routes.SecretMetadata
+		var result map[string][]secrets.SecretMetadata
 		if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
@@ -100,9 +100,9 @@ func TestSecretsRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/secrets → 401 without auth", func(t *testing.T) {
 		store := &fakeSecretStore{
-			secrets: []routes.SecretMetadata{},
+			secrets: []secrets.SecretMetadata{},
 		}
-		handler := routes.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil)
 		rec := httptest.NewRecorder()
@@ -116,11 +116,11 @@ func TestSecretsRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/secrets → response never contains value field", func(t *testing.T) {
 		store := &fakeSecretStore{
-			secrets: []routes.SecretMetadata{
+			secrets: []secrets.SecretMetadata{
 				{Name: "DATABASE_URL", Environment: "production", App: "api"},
 			},
 		}
-		handler := routes.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -158,12 +158,12 @@ func TestSecretsRoute(t *testing.T) {
 	t.Run("GET /api/v1/secrets → passes tenant ID to store for isolation", func(t *testing.T) {
 		var capturedTenantID string
 		store := &capturingSecretStore{
-			onListNames: func(ctx context.Context, tenantID, projectID, env string) ([]routes.SecretMetadata, error) {
+			onListNames: func(ctx context.Context, tenantID, projectID, env string) ([]secrets.SecretMetadata, error) {
 				capturedTenantID = tenantID
-				return []routes.SecretMetadata{}, nil
+				return []secrets.SecretMetadata{}, nil
 			},
 		}
-		handler := routes.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -182,10 +182,10 @@ func TestSecretsRoute(t *testing.T) {
 
 // capturingSecretStore captures call arguments for verification.
 type capturingSecretStore struct {
-	onListNames func(ctx context.Context, tenantID, projectID, env string) ([]routes.SecretMetadata, error)
+	onListNames func(ctx context.Context, tenantID, projectID, env string) ([]secrets.SecretMetadata, error)
 }
 
-func (c *capturingSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]routes.SecretMetadata, error) {
+func (c *capturingSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]secrets.SecretMetadata, error) {
 	return c.onListNames(ctx, tenantID, projectID, env)
 }
 

@@ -7,6 +7,8 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -27,7 +29,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes"
+	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/tracing"
 
@@ -141,6 +144,10 @@ func main() {
 	WireAuthFailureAuditor(dbAdapter, logger)
 
 	var stores *StoreDeps
+
+	var bgStores *StoreDeps
+
+	var bgAdapter *db.PgxAdapter
 	var workflows *WorkflowDeps
 	var orchDeps *OrchestratorDeps
 	var ghDeps *GitHubDeps
@@ -162,6 +169,32 @@ func main() {
 		if err != nil {
 			logger.Error("failed to setup stores", "error", err)
 			os.Exit(1)
+		}
+		// Os loops de background NÃO usam o pool das requisições. Ele é
+		// deliberadamente incapaz de ver outro tenant (AssertRequestPoolIsolated
+		// recusa subir se conseguir), e varredura entre tenants é exatamente o
+		// trabalho deles — sobre aquele pool, cada varredura leria e apagaria
+		// NADA, sem erro e sem log. Ver setup_background_database.go.
+		bgAdapter, err = setupBackgroundDatabase(cfg, logger)
+		if err != nil {
+			logger.Error("failed to connect the background database pool", "error", err)
+			os.Exit(1)
+		}
+		defer bgAdapter.Close()
+		bgStores, err = setupStores(bgAdapter, cfg, transit, logger)
+		if err != nil {
+			logger.Error("failed to setup background stores", "error", err)
+			os.Exit(1)
+		}
+		// O cap de projetos é POR CONTA e conta através dos tenants dela. O pool
+		// das requisições enxerga um tenant só desde a migration 000062, então
+		// sem isto o cap por conta vira cap por tenant — silenciosamente. Medido:
+		// conta com 2 tenants e 1 projeto cada devolvia 1 pelo pool de request e
+		// 2 pelo loopzero_worker. Ver internal/db/store/project_wrapper.go.
+		if dbDeps.ProjectStore != nil {
+			if ps, ok := dbDeps.ProjectStore.(*store.PostgresProjectStore); ok {
+				ps.SetCrossTenantCounter(bgAdapter)
+			}
 		}
 		workflows, err = setupWorkflows(cfg, httpTransport, logger)
 		if err != nil {
@@ -193,7 +226,7 @@ func main() {
 	var bgWg sync.WaitGroup
 	var cellRouter placement.Router
 	var cellStore *store.PostgresCellStore
-	var domainHandler *routes.DomainHandler
+	var domainHandler *domains.DomainHandler
 
 	if dbAdapter != nil && stores != nil && workflows != nil {
 		cellRouter = setupCellRouter(cfg, shutdownCtx, &bgWg, logger)
@@ -222,7 +255,7 @@ func main() {
 
 			if leaderResult.IsLeader {
 				startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
-					dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter,
+					bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
 					domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
 			}
 			// Non-leader: setupLeaderElection already started the
@@ -241,7 +274,7 @@ func main() {
 	// ~325. POST /api/v1/projects then auto-creates a `production` env
 	// without a second wire-up. nil when k8sDeps is unavailable (test or
 	// degraded boot) → server.Router falls back to pre-T4.1 behavior.
-	var projectEnvEnsurer routes.EnvironmentEnsurer
+	var projectEnvEnsurer promote.EnvironmentEnsurer
 
 	// Plan T2.2 D5 — wire EnvironmentEnsurer so loopzero deploy --env <novo>
 	// auto-creates the Environment CR + namespace + ArgoCD App on first
@@ -387,7 +420,7 @@ func main() {
 	// Layer 2 ESO sync chain (plan 2026-06-10-j22-openbao-transit-eso-sync
 	// v1.2 D3): wire SecretFetchHandler for the broker endpoint
 	// /internal/v1/secret-fetch/{tenant_id}/{secret_name}. ESO running in
-	// mgmt cluster (Wave -1 of mgmt.helmfile) calls this endpoint via the
+	// mgmt cluster (Wave -1 of core.helmfile) calls this endpoint via the
 	// webhook ClusterSecretStore to resolve user secrets — loopzero-api loads
 	// the vault:v1: ciphertext from PG + decrypts via OpenBao transit +
 	// returns plaintext_b64. Wires nil-safely: if any dep is missing the
@@ -403,7 +436,7 @@ func main() {
 		fetchDeps := setupSecretFetchDeps(dbAdapter.Pool, transit, cellStore, auditLogger)
 		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
 		if fetchDeps != nil && brokerToken != "" {
-			rawHandler := routes.NewSecretFetchHandler(*fetchDeps)
+			rawHandler := secrets.NewSecretFetchHandler(*fetchDeps)
 			srvCfg.SecretFetchHandler = brokerBearerMiddleware(brokerToken, rawHandler)
 		} else if fetchDeps != nil {
 			logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
@@ -440,11 +473,11 @@ func silenceKlog() {
 func setupBuildHandler(
 	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
 	cfg config.Config, shutdownCtx context.Context, logger *slog.Logger,
-) *routes.BuildHandler {
+) *builds.BuildHandler {
 	if orchDeps == nil {
 		return nil
 	}
-	buildHandler := routes.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
+	buildHandler := builds.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
 	if dbAdapter == nil {
 		return buildHandler
 	}

@@ -1,3 +1,18 @@
+# A borda (Caddy) roda no host e precisa alcancar o loopzero-cloud. Ate 2026-08-10 ela
+# fazia isso por `kubectl port-forward`, que e ferramenta de depuracao e nao
+# transporte: a unit systemd que o vigiava marcou NRestarts=126499 — ~1,8 reinicios
+# por minuto — e cada reinicio e uma janela de 502 em `/engine/*`, que carrega deploy,
+# whoami, listar projetos e status de build.
+#
+# NodePort e o padrao que o irmao `loopzero-api` ja usa e que nunca teve o problema, porque
+# o serverlb do k3d publica a porta por mapeamento docker comum. 30002 e escolhida
+# porque `docker port k3d-loopzero-mgmt-serverlb` ja a publica como host 3002 e ela nao
+# estava tomada; uma NodePort que o serverlb nao publique renderiza igual e continua
+# inalcancavel do host.
+service:
+  type: NodePort
+  nodePort: 30002
+
 # CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
 # `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images
 # are published EXCLUSIVELY to GHCR by the AM6 reusable workflow
@@ -12,7 +27,15 @@
 # sibling SoT of ~/.loopzero/gomod-token.txt per memory
 # reference_gomod_token_canonical_path).
 image:
-  repository: ghcr.io/getloopscale/loopzero-cloud
+# O prefixo do registro e sobrescrevivel por LOOPZERO_PLATFORM_IMAGE_PREFIX; o padrao continua
+# sendo o GHCR, entao quem tem token valido nao ve diferenca. Existe porque este ambiente
+# dependia SEM ALTERNATIVA de imagem publicada: medido no droplet app-dev em 2026-08-10,
+# com o token de pull expirado (HTTP 401), 13 pods ficaram em ImagePullBackOff e a
+# plataforma nao subia — embora todas estas imagens tenham Dockerfile neste repositorio e
+# sejam construiveis localmente. Um ambiente que so funciona com credencial valida para um
+# registro remoto nao tem como ser reconstruido do zero quando a credencial falha, que e
+# exatamente quando reconstruir importa (BACKLOG.md B-016).
+  repository: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopzero-cloud
   tag: develop
   pullPolicy: Always
 
@@ -128,7 +151,7 @@ env:
 # T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
 # ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
 # OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
-# the existing `loopzero-vault-secrets` ClusterSecretStore. Chart template gates
+# the existing `loopzero-secrets-secrets` ClusterSecretStore. Chart template gates
 # on `.Values.rag.externalSecretEnabled` (default false in
 # infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
 # loopzero-rag → `bao kv patch secret/loopzero/cloud rag_platform_admin_key=<new>`
@@ -140,7 +163,7 @@ rag:
 # 2026-07-20 — loopzero-lens equivalent of the rag block above. Enables the
 # ExternalSecret that materializes k8s Secret `loopzero-lens-admin-key` from OpenBao
 # path `secret/loopzero/cloud` property `lens_platform_admin_key` via the same
-# `loopzero-vault-secrets` ClusterSecretStore. Chart template gates on
+# `loopzero-secrets-secrets` ClusterSecretStore. Chart template gates on
 # `.Values.lens.externalSecretEnabled` (default false in
 # infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
 # loopzero-lens → `bao kv patch secret/loopzero/cloud lens_platform_admin_key=<new>`
@@ -148,3 +171,16 @@ rag:
 # → revoke old key via loopzero-lens DELETE /v1/admin/keys/{id}.
 lens:
   externalSecretEnabled: true
+
+# dev-public DECLARA que cobra de verdade.
+#
+# É o ambiente que serve app-dev.loopzero.example — o painel com plano, preço e botão de
+# upgrade na tela. Declarado aqui, a ausência dos Secrets de cobrança deixa de ser uma
+# configuração aceitável e passa a impedir o pod de subir.
+#
+# Medido em 2026-08-11: com `optional: true` fixo, o painel rodou 20h sem
+# `loopzero-stripe-webhook`, `Running`, sem um único evento. Todo evento de pagamento que o
+# Stripe enviou nesse período foi recusado por falta do segredo que os verifica — enquanto
+# o log do boot afirmava "billing enabled".
+billing:
+  required: true

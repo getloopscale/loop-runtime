@@ -68,22 +68,22 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "loopzero-common.fullname" . }}
-          {{- if .Values.runtimeKubeconfigMount.enabled }}
+          {{- if .Values.cell0KubeconfigMount.enabled }}
           # T1.4a of deep-review-remediation-plan (closes find_arch_002 / find_arch_007 partial):
-          # mount the cell-aware Secret + set RUNTIME_KUBECONFIG env so the
+          # mount the cell-aware Secret + set CELL_0_KUBECONFIG env so the
           # operator binary can resolve per-cell runtime clients via
           # CellAwareRuntimeClientFactory.
           #
-          # When .Values.runtimeKubeconfigMount.requireRunning is true (set
-          # post-rollout), the operator main flips LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
+          # When .Values.cell0KubeconfigMount.requireRunning is true (set
+          # post-rollout), the operator main flips LOOPZERO_REQUIRE_CELL_0_KUBECONFIG
           # which fail-fasts on missing/broken kubeconfig (per ADR D3).
           env:
-            - name: RUNTIME_KUBECONFIG
-              value: {{ .Values.runtimeKubeconfigMount.path | default "/etc/loopzero/runtime/kubeconfig" }}
-            - name: RUNTIME_KUBE_CONTEXT
-              value: {{ .Values.runtimeKubeconfigMount.context | default "in-cluster" }}
-            {{- if .Values.runtimeKubeconfigMount.requireRunning }}
-            - name: LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
+            - name: CELL_0_KUBECONFIG
+              value: {{ .Values.cell0KubeconfigMount.path | default "/etc/loopzero/runtime/kubeconfig" }}
+            - name: CELL_0_KUBE_CONTEXT
+              value: {{ .Values.cell0KubeconfigMount.context | default "in-cluster" }}
+            {{- if .Values.cell0KubeconfigMount.requireRunning }}
+            - name: LOOPZERO_REQUIRE_CELL_0_KUBECONFIG
               value: "true"
             {{- end }}
           {{- end }}
@@ -101,20 +101,20 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            {{- if .Values.runtimeKubeconfigMount.enabled }}
-            - name: runtime-kubeconfig
-              mountPath: {{ .Values.runtimeKubeconfigMount.dir | default "/etc/loopzero/runtime" }}
+            {{- if .Values.cell0KubeconfigMount.enabled }}
+            - name: cell-0-kubeconfig
+              mountPath: {{ .Values.cell0KubeconfigMount.dir | default "/etc/loopzero/runtime" }}
               readOnly: true
             {{- end }}
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
-        {{- if .Values.runtimeKubeconfigMount.enabled }}
-        - name: runtime-kubeconfig
+        {{- if .Values.cell0KubeconfigMount.enabled }}
+        - name: cell-0-kubeconfig
           secret:
-            secretName: {{ .Values.runtimeKubeconfigMount.secretName | default "loopzero-cluster-kubeconfigs" }}
+            secretName: {{ .Values.cell0KubeconfigMount.secretName | default "loopzero-cluster-kubeconfigs" }}
             items:
-              - key: {{ .Values.runtimeKubeconfigMount.secretKey | default "runtime.kubeconfig" }}
+              - key: {{ .Values.cell0KubeconfigMount.secretKey | default "cell-0.kubeconfig" }}
                 path: kubeconfig
         {{- end }}

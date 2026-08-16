@@ -14,7 +14,7 @@
 //
 // This stack mirrors `infra/pulumi/src/components/infra.ts:139-186` 4-cluster
 // topology (mgmt + build + runtime + runtime-2), enabling:
-//   - Multi-cell routing real (cell-default+cell-1 → runtime, cell-2 → runtime-2)
+//   - Multi-cell routing real (cell-0+cell-0 → runtime, cell-1 → runtime-2)
 //   - Build cluster isolation real
 //   - Cross-cluster ArgoCD sync exercised
 //   - Stage 2 cell2-soaks 24h soak feasible (via expiresInHours param)
@@ -23,7 +23,7 @@
 // ADRs (per plan v1.1):
 //   D1: 4-cluster topology mirror prod
 //   D2: Sizing prod tier specs (mgmt=medium s-4vcpu-8gb-amd, runtime/build=small)
-//   D3: Cell mapping cell-default+cell-1 → runtimeCluster, cell-2 → runtimeCluster2
+//   D3: Cell mapping cell-0+cell-0 → runtimeCluster, cell-1 → runtimeCluster2
 //   D4: Managed PG mgmt-tier (db-s-2vcpu-4gb) ephemeral per-run
 //   D5: Shared VPC loopzero-drill-vpc-sfo3 (10.40.0.0/16) — disjoint from prod 10.20/homolog 10.30
 //   D6: Auto-destroy watchdog parameterizable via expiresInHours (default 8h, max 48h)
@@ -142,12 +142,12 @@ const drillVpc = new LoopZeroVpc("drill-vpc", {
 //
 // Topology mirrors prod components/infra.ts:139-186.
 // Cell mapping per D3:
-//   cell-default + cell-1 → runtimeCluster
-//   cell-2              → runtimeCluster2
+//   cell-0 + cell-0 → runtimeCluster
+//   cell-1              → runtimeCluster2
 
 // Plan v1.2 T3.1 — LoopZeroDOKSCluster component (4 instances replace inline declarations).
 const mgmtCluster = new LoopZeroDOKSCluster("drill-mgmt", {
-  clusterName: `${doProject}-mgmt-cluster`,
+  clusterName: `${doProject}-core-cluster`,
   region,
   version: mgmtK8sVersion,
   vpcUuid: drillVpc.id,
@@ -180,7 +180,7 @@ const runtimeCluster = new LoopZeroDOKSCluster("drill-runtime", {
 });
 
 const runtimeCluster2 = new LoopZeroDOKSCluster("drill-runtime-2", {
-  clusterName: `${doProject}-runtime-2-cluster`,
+  clusterName: `${doProject}-cell-1-cluster`,
   region,
   version: runtimeK8sVersion,
   vpcUuid: drillVpc.id,
@@ -426,13 +426,13 @@ export const buildClusterName = buildCluster.name;
 export const buildClusterEndpoint = buildCluster.endpoint;
 export const buildClusterKubeconfig = buildCluster.kubeConfigs[0].rawConfig;
 
-// Per-cluster outputs (runtime — hosts cell-default + cell-1 per D3)
+// Per-cluster outputs (runtime — hosts cell-0 + cell-0 per D3)
 export const runtimeClusterId = runtimeCluster.id;
 export const runtimeClusterName = runtimeCluster.name;
 export const runtimeClusterEndpoint = runtimeCluster.endpoint;
 export const runtimeClusterKubeconfig = runtimeCluster.kubeConfigs[0].rawConfig;
 
-// Per-cluster outputs (runtime-2 — hosts cell-2 per D3)
+// Per-cluster outputs (runtime-2 — hosts cell-1 per D3)
 export const runtimeCluster2Id = runtimeCluster2.id;
 export const runtimeCluster2Name = runtimeCluster2.name;
 export const runtimeCluster2Endpoint = runtimeCluster2.endpoint;
@@ -512,9 +512,9 @@ export const meta = {
   purpose: "DR drill prod-identical — isolated from prod per MEET-ASYNC-AMENDMENT-2026-05-16-001",
   teardownPolicy: "MANDATORY — pulumi destroy + drill-teardown-validator.sh (T4.1.bis)",
   cellMapping: {
-    "cell-default": "runtimeCluster",
-    "cell-1": "runtimeCluster",
-    "cell-2": "runtimeCluster2",
+    "cell-0": "runtimeCluster",
+    "cell-0": "runtimeCluster",
+    "cell-1": "runtimeCluster2",
   },
 };
 

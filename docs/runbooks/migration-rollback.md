@@ -68,5 +68,5 @@ There is no reverse migration. To roll back a bad migration:
 
 ## Verification log
 
-- `000006_add_stripe_subscription_item_id`: applied LIVE on k3d-loopzero-mgmt PG
+- `000006_add_stripe_subscription_item_id`: applied LIVE on k3d-loopzero-core PG
   (full chain 000001-000006, exit 0) + idempotent re-apply confirmed (2026-05-22).

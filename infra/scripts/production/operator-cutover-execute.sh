@@ -138,7 +138,7 @@ log "  pre-flight: PASSED"
 # ─── Step 2: dry-run gate ───
 if [[ "$DRY_RUN" == "true" ]]; then
   log "step 2: DRY_RUN — showing helmfile diff"
-  helmfile -f "${REPO_ROOT}/infra/helmfile/mgmt.helmfile.yaml.gotmpl" \
+  helmfile -f "${REPO_ROOT}/infra/helmfile/core.helmfile.yaml.gotmpl" \
     -e "$ENV_NAME" --kube-context "$CTX" diff 2>&1 | tail -50
   log "DRY_RUN done — no changes applied"
   exit 0
@@ -200,7 +200,7 @@ trap 'cleanup_watcher; on_exit' EXIT
 # ─── Step 4: helmfile sync ───
 log "step 4: helmfile sync (env=$ENV_NAME, ctx=$CTX)"
 sync_start=$(date +%s)
-if ! helmfile -f "${REPO_ROOT}/infra/helmfile/mgmt.helmfile.yaml.gotmpl" \
+if ! helmfile -f "${REPO_ROOT}/infra/helmfile/core.helmfile.yaml.gotmpl" \
               -e "$ENV_NAME" --kube-context "$CTX" sync 2>&1 | tail -30; then
   fail "helmfile sync failed; trap will trigger rollback if AUTO_ROLLBACK=true" 2
 fi

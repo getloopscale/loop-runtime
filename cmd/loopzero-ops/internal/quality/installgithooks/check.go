@@ -94,4 +94,3 @@ func hashFile(path string) (string, error) {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:]), nil
 }
-

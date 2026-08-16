@@ -62,9 +62,9 @@ type ArgoCDBootstrapClient interface {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 type PlatformBootstrapReconciler struct {
 	client.Client
-	HTTPClient         *http.Client
-	GiteaClientFunc    func(baseURL string) gitea.BootstrapClient    // factory, set at init; nil uses default
-	ArgoCDClientFunc   func(baseURL string) ArgoCDBootstrapClient    // factory, set at init; nil uses default (inline HTTP)
+	HTTPClient       *http.Client
+	GiteaClientFunc  func(baseURL string) gitea.BootstrapClient // factory, set at init; nil uses default
+	ArgoCDClientFunc func(baseURL string) ArgoCDBootstrapClient // factory, set at init; nil uses default (inline HTTP)
 }
 
 // platformBootstrapDetailTypes per ADR-0025 D3.
@@ -142,6 +142,18 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
+	// The base snapshot for every status write below.
+	//
+	// AFTER the finalizer Update above, because that write bumps resourceVersion
+	// and a patch derived from an earlier snapshot carries the stale one —
+	// turning the patch into an optimistic lock frozen at snapshot time, which is
+	// a WIDER conflict window than the refetch this contract removes. Measured as
+	// a real 409 in slice-18.
+	//
+	// The deletion path does not reach here: it returns above, and writes no
+	// status at all — so unlike the preview controller it needs no base of its own.
+	base := pb.DeepCopy()
+
 	// Terminal phases: do not requeue.
 	if platformBootstrapSM.IsTerminal(statemachine.PlatformBootstrapPhase(pb.Status.Phase)) {
 		return ctrl.Result{}, nil
@@ -154,7 +166,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		)
 		now := metav1.Now()
 		pb.Status.LastTransitionTime = &now
-		if err := r.Status().Update(ctx, &pb); err != nil {
+		if err := r.Status().Patch(ctx, &pb, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -168,7 +180,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		pb.Status.RetryCount = 0
 		now := metav1.Now()
 		pb.Status.LastTransitionTime = &now
-		if err := r.Status().Update(ctx, &pb); err != nil {
+		if err := r.Status().Patch(ctx, &pb, client.MergeFrom(base)); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -183,22 +195,22 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Phase dispatch.
 	switch pb.Status.Phase {
 	case loopzerov1.PlatformBootstrapPhaseConfiguringGitea:
-		return r.reconcileGiteaPhase(ctx, &pb, maxRetries)
+		return r.reconcileGiteaPhase(ctx, &pb, base, maxRetries)
 
 	case loopzerov1.PlatformBootstrapPhaseConfiguringArgoCD:
-		return r.reconcileArgoCDPhase(ctx, &pb, maxRetries)
+		return r.reconcileArgoCDPhase(ctx, &pb, base, maxRetries)
 
 	case loopzerov1.PlatformBootstrapPhaseWaitingForAPI:
-		return r.reconcileAPIPhase(ctx, &pb, maxRetries)
+		return r.reconcileAPIPhase(ctx, &pb, base, maxRetries)
 
 	default:
-		return r.transitionToFailed(ctx, &pb, fmt.Sprintf("unknown phase %q -- cannot reconcile", pb.Status.Phase))
+		return r.transitionToFailed(ctx, &pb, base, fmt.Sprintf("unknown phase %q -- cannot reconcile", pb.Status.Phase))
 	}
 }
 
 // transitionToFailed transitions the CR to Failed phase via the state machine.
 // Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
-func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), statemachine.PBPEventRetryExhaust)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
@@ -206,7 +218,7 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
-	if err := r.Status().Update(ctx, pb); err != nil {
+	if err := r.Status().Patch(ctx, pb, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -214,7 +226,7 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 
 // transitionToNextPhase transitions the CR to the next phase via the state machine.
 // Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
-func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent, message string) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent, message string) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), event)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)
@@ -223,7 +235,7 @@ func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context,
 	pb.Status.RetryCount = 0
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
-	if err := r.Status().Update(ctx, pb); err != nil {
+	if err := r.Status().Patch(ctx, pb, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{Requeue: true}, nil
@@ -231,16 +243,16 @@ func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context,
 
 // requeueWithRetry increments the retry count and requeues. If max retries exceeded,
 // transitions to Failed.
-func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb *loopzerov1.PlatformBootstrap, maxRetries int, message string) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int, message string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	pb.Status.RetryCount++
 	logger.Info("phase retry", "phase", pb.Status.Phase, "retryCount", pb.Status.RetryCount, "maxRetries", maxRetries, "reason", message)
 
 	if pb.Status.RetryCount >= maxRetries {
-		return r.transitionToFailed(ctx, pb, fmt.Sprintf("max retries (%d) exhausted: %s", maxRetries, message))
+		return r.transitionToFailed(ctx, pb, base, fmt.Sprintf("max retries (%d) exhausted: %s", maxRetries, message))
 	}
 
-	if err := r.Status().Update(ctx, pb); err != nil {
+	if err := r.Status().Patch(ctx, pb, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: platformBootstrapRequeueDelay}, nil

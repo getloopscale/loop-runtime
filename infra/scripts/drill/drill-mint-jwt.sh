@@ -6,7 +6,7 @@
 #
 # Mints a JWT against the drill mgmt cluster via Hydra client_credentials grant.
 # Analog of infra/helmfile/scripts/seed-local-user.sh adapted for DOKS drill
-# (instead of k3d-loopzero-mgmt local context).
+# (instead of k3d-loopzero-core local context).
 #
 # JWT script taxonomy (T2.6 of plan 2026-05-21-deep-review-remediation):
 #   - infra/helmfile/scripts/lib/hydra-mint.sh  — SHARED LOW-LEVEL LIB

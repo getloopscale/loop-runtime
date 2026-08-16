@@ -25,7 +25,7 @@
 #   3  pods still not Ready after READY_TIMEOUT
 set -euo pipefail
 
-CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
+CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 NAMESPACE="${NAMESPACE:-loopzero-system}"
 DRY_RUN="${DRY_RUN:-0}"
 GRACE_SECONDS="${GRACE_SECONDS:-300}"
@@ -57,8 +57,8 @@ kc_retry() {
       log "kubectl ${args[*]} FAILED after 3 retries"
       log ""
       log "Apiserver unreachable. Try one of:"
-      log "  1. docker restart k3d-loopzero-mgmt-server-0   # restart k3s control-plane"
-      log "  2. k3d cluster start loopzero-mgmt              # restart all k3d nodes"
+      log "  1. docker restart k3d-loopzero-core-server-0   # restart k3s control-plane"
+      log "  2. k3d cluster start loopzero-core              # restart all k3d nodes"
       log "  3. Reboot the droplet                       # nuclear option"
       return 1
     fi

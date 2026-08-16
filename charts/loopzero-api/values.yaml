@@ -55,9 +55,9 @@ config:
   giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"
   giteaCrossClusterUrl: ""
   giteaOrg: "loopzero"
-  mgmtKubeContext: "k3d-loopzero-mgmt"
+  mgmtKubeContext: "k3d-loopzero-core"
   buildKubeContext: "k3d-loopzero-build"
-  runtimeKubeContext: "k3d-loopzero-workload"
+  runtimeKubeContext: "k3d-loopzero-cell-0"
   minioEndpoint: "minio.loopzero-system.svc.cluster.local:9000"
   minioCrossClusterEndpoint: ""
   sourceBucket: "loopzero-builds"
@@ -154,9 +154,9 @@ secrets:
   openbaoVaultRoleId: ""
   openbaoVaultSecretId: ""
   cfApiToken: ""
-  mgmtKubeconfig: ""
+  coreKubeconfig: ""
   buildKubeconfig: ""
-  runtimeKubeconfig: ""
+  cell0Kubeconfig: ""
   stripeSecretKey: ""
   githubAppPrivateKey: ""
   githubWebhookSecret: ""
@@ -172,7 +172,7 @@ secrets:
 kubeconfig:
   build:
     existingConfigMap: ""
-  runtime:
+  cell0:
     existingConfigMap: ""
 
 reloader:
@@ -198,9 +198,9 @@ serviceAccount:
 vault:
   enabled: false
   # Vault endpoint reachable from loopzero-api (mgmt cluster).
-  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  addr: "https://openbao.secrets-system.svc.cluster.local:8200"
   # K8s auth mount name (matches infra/helm/openbao-init T5.1).
-  authMount: "k8s-mgmt"
+  authMount: "k8s-core"
   # Role name on that mount (matches T5.5 role: loopzero-api).
   role: "loopzero-api"
   # Token audience — TokenReviewer on Vault side validates this claim

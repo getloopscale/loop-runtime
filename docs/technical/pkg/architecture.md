@@ -45,15 +45,13 @@ CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gat
 | `pkg/correlation` | 14 | 2 | 8 | 0 | 0 | 4 |
 | `pkg/domain` | 9 | 7 | 2 | 0 | 0 | 0 |
 | `pkg/enforcement` | 15 | 9 | 0 | 0 | 0 | 6 |
-| `pkg/errors` | 107 | 79 | 0 | 0 | 0 | 28 |
-| `pkg/events` | 5 | 5 | 0 | 0 | 0 | 0 |
+| `pkg/errors` | 109 | 81 | 0 | 0 | 0 | 28 |
 | `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
 | `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
 | `pkg/logging` | 11 | 3 | 0 | 0 | 0 | 8 |
-| `pkg/naming` | 34 | 20 | 11 | 0 | 0 | 3 |
-| `pkg/shellrun` | 4 | 0 | 0 | 0 | 0 | 4 |
+| `pkg/naming` | 35 | 21 | 11 | 0 | 0 | 3 |
 | `pkg/statemachine` | 57 | 31 | 10 | 0 | 0 | 16 |
-| `pkg/vault` | 4 | 1 | 0 | 0 | 0 | 3 |
+| `pkg/vault` | 6 | 3 | 0 | 0 | 0 | 3 |
 
 <!-- USAGE-MATRIX-END -->
 

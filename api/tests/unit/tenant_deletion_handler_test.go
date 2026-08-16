@@ -6,6 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,27 +16,26 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 )
 
 // fakeTenantDeletionStore is a test double for TenantDeletionStore.
 type fakeTenantDeletionStore struct {
-	records    map[string]*routes.DeletionRecord
-	tombstones map[string]*routes.TombstoneRecord
+	records    map[string]*tenants.DeletionRecord
+	tombstones map[string]*tenants.TombstoneRecord
 }
 
 func newFakeDeletionStore() *fakeTenantDeletionStore {
 	return &fakeTenantDeletionStore{
-		records:    make(map[string]*routes.DeletionRecord),
-		tombstones: make(map[string]*routes.TombstoneRecord),
+		records:    make(map[string]*tenants.DeletionRecord),
+		tombstones: make(map[string]*tenants.TombstoneRecord),
 	}
 }
 
-func (s *fakeTenantDeletionStore) RequestDeletion(_ context.Context, input routes.DeletionRequest) (*routes.DeletionRecord, error) {
+func (s *fakeTenantDeletionStore) RequestDeletion(_ context.Context, input tenants.DeletionRequest) (*tenants.DeletionRecord, error) {
 	if existing, ok := s.records[input.TenantID]; ok {
 		return existing, nil // idempotent
 	}
-	record := &routes.DeletionRecord{
+	record := &tenants.DeletionRecord{
 		TenantID:    input.TenantID,
 		RequestedAt: time.Now(),
 		RequestedBy: input.RequestedBy,
@@ -52,18 +52,18 @@ func (s *fakeTenantDeletionStore) CancelDeletion(_ context.Context, tenantID str
 	return nil
 }
 
-func (s *fakeTenantDeletionStore) GetPendingDeletion(_ context.Context, tenantID string) (*routes.DeletionRecord, error) {
+func (s *fakeTenantDeletionStore) GetPendingDeletion(_ context.Context, tenantID string) (*tenants.DeletionRecord, error) {
 	return s.records[tenantID], nil
 }
 
-func (s *fakeTenantDeletionStore) WriteTombstone(_ context.Context, tombstone routes.TombstoneRecord) error {
+func (s *fakeTenantDeletionStore) WriteTombstone(_ context.Context, tombstone tenants.TombstoneRecord) error {
 	s.tombstones[tombstone.TenantID] = &tombstone
 	delete(s.records, tombstone.TenantID)
 	return nil
 }
 
-func setupTenantRouter(store routes.TenantDeletionStore) *chi.Mux {
-	handler := routes.NewTenantHandler(store, slog.Default())
+func setupTenantRouter(store tenants.TenantDeletionStore) *chi.Mux {
+	handler := tenants.NewTenantHandler(store, slog.Default())
 	r := chi.NewRouter()
 	r.Delete("/api/v1/tenants/{id}", handler.Delete)
 	r.Post("/api/v1/tenants/{id}/restore", handler.Restore)
@@ -94,7 +94,7 @@ func TestTenantDelete_SoftDelete_Returns202(t *testing.T) {
 		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp routes.TenantDeletionResponse
+	var resp tenants.TenantDeletionResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestTenantDelete_ForceRequiresAdmin(t *testing.T) {
 func TestTenantRestore_CancelsPendingDeletion(t *testing.T) {
 	store := newFakeDeletionStore()
 	graceUntil := time.Now().Add(24 * time.Hour)
-	store.records["tn-test123"] = &routes.DeletionRecord{
+	store.records["tn-test123"] = &tenants.DeletionRecord{
 		TenantID:    "tn-test123",
 		RequestedAt: time.Now(),
 		RequestedBy: "test@example.com",
@@ -224,7 +224,7 @@ func TestTenantRestore_CancelsPendingDeletion(t *testing.T) {
 func TestTenantRestore_ExpiredGrace_Returns410(t *testing.T) {
 	store := newFakeDeletionStore()
 	expired := time.Now().Add(-1 * time.Hour) // expired 1h ago
-	store.records["tn-test123"] = &routes.DeletionRecord{
+	store.records["tn-test123"] = &tenants.DeletionRecord{
 		TenantID:    "tn-test123",
 		RequestedAt: time.Now(),
 		RequestedBy: "test@example.com",

@@ -53,7 +53,7 @@ func TestClientManager_ReturnsCachedClient(t *testing.T) {
 	// Arrange
 	router := &countingRouter{
 		inner: placement.NewPassthroughRouter(placement.CellConfig{
-			CellID:      "cell-default",
+			CellID:      "cell-0",
 			KubeConfig:  "/tmp/fake-kubeconfig",
 			KubeContext: "default",
 		}),
@@ -83,7 +83,7 @@ func TestClientManager_ReturnsCachedClient(t *testing.T) {
 func TestClientManager_DifferentCellsDifferentClients(t *testing.T) {
 	// Arrange
 	router := placement.NewPassthroughRouter(placement.CellConfig{
-		CellID:      "cell-default",
+		CellID:      "cell-0",
 		KubeConfig:  "/tmp/fake-kubeconfig",
 		KubeContext: "default",
 	})

@@ -32,8 +32,8 @@ var (
 	dropAllRe      = regexp.MustCompile(`drop:.*ALL|- ALL|-[[:space:]]*ALL`)
 	noPrivEscRe    = regexp.MustCompile(`allowPrivilegeEscalation:[[:space:]]*false`)
 
-	podKindRe       = regexp.MustCompile(`(?m)^kind:[[:space:]]*(Deployment|StatefulSet|DaemonSet|Job|CronJob|Pod)[[:space:]]*$`)
-	chartDepsRe     = regexp.MustCompile(`(?m)^dependencies:`)
+	podKindRe        = regexp.MustCompile(`(?m)^kind:[[:space:]]*(Deployment|StatefulSet|DaemonSet|Job|CronJob|Pod)[[:space:]]*$`)
+	chartDepsRe      = regexp.MustCompile(`(?m)^dependencies:`)
 	valuesPodFieldRe = regexp.MustCompile(`(?m)^(image|replicas|resources|securityContext|persistence|podSecurityContext|containerSecurityContext|deployment):`)
 )
 
@@ -57,7 +57,7 @@ type Config struct {
 
 // Outcome captures the result.
 type Outcome struct {
-	Pass       bool     // true if no NON-CONFORMANT chart lacks an ADR exception
+	Pass       bool // true if no NON-CONFORMANT chart lacks an ADR exception
 	Charts     []ChartResult
 	Violations []string // chart names NON-CONFORMANT without ADR
 }

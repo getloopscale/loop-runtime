@@ -34,26 +34,26 @@ import (
 // Endpoint), so the RE2-compatible forms below drop the lookaheads with no
 // behaviour change.
 var legacyPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`pulumi stack output cluster\b`),       // v0 bare singular
-	regexp.MustCompile(`pulumi stack output clusterKubeconfig`), // v0 singular kubeconfig
-	regexp.MustCompile(`\bstack[._]output\.cluster\b`),        // JSON .cluster (singular)
-	regexp.MustCompile(`\bDRILL_CLUSTER_KUBECONFIG\b`),        // legacy env var
+	regexp.MustCompile(`pulumi stack output cluster\b`),                               // v0 bare singular
+	regexp.MustCompile(`pulumi stack output clusterKubeconfig`),                       // v0 singular kubeconfig
+	regexp.MustCompile(`\bstack[._]output\.cluster\b`),                                // JSON .cluster (singular)
+	regexp.MustCompile(`\bDRILL_CLUSTER_KUBECONFIG\b`),                                // legacy env var
 	regexp.MustCompile(`\.outputs\.(mgmt|build|runtime|runtimeCluster2?)Cluster2?\.`), // v1 nested
-	regexp.MustCompile(`\.outputs\.cluster\b`),                // v0 .outputs.cluster
-	regexp.MustCompile(`\.outputs\.bucket\b`),                 // v0 .outputs.bucket
-	regexp.MustCompile(`\.outputs\.pg\.`),                     // v1 .outputs.pg.X
-	regexp.MustCompile(`\.outputs\.buckets\.`),                // v1 .outputs.buckets.X
-	regexp.MustCompile(`\.outputs\.zone\.`),                   // v1 .outputs.zone.X
-	regexp.MustCompile(`\.outputs\.vpc\.`),                    // v1 .outputs.vpc.X
-	regexp.MustCompile(`"\s*\+\s*\.(mgmt|build|runtime)Cluster2?\.`), // jq concat `" + .mgmtCluster.X`
-	regexp.MustCompile(`"\s*\+\s*\.pg\.(host|port|uri|database)`),    // jq concat `" + .pg.host`
-	regexp.MustCompile(`pulumi stack output apiUrl`),          // phantom output (no schema has it)
+	regexp.MustCompile(`\.outputs\.cluster\b`),                                        // v0 .outputs.cluster
+	regexp.MustCompile(`\.outputs\.bucket\b`),                                         // v0 .outputs.bucket
+	regexp.MustCompile(`\.outputs\.pg\.`),                                             // v1 .outputs.pg.X
+	regexp.MustCompile(`\.outputs\.buckets\.`),                                        // v1 .outputs.buckets.X
+	regexp.MustCompile(`\.outputs\.zone\.`),                                           // v1 .outputs.zone.X
+	regexp.MustCompile(`\.outputs\.vpc\.`),                                            // v1 .outputs.vpc.X
+	regexp.MustCompile(`"\s*\+\s*\.(mgmt|build|runtime)Cluster2?\.`),                  // jq concat `" + .mgmtCluster.X`
+	regexp.MustCompile(`"\s*\+\s*\.pg\.(host|port|uri|database)`),                     // jq concat `" + .pg.host`
+	regexp.MustCompile(`pulumi stack output apiUrl`),                                  // phantom output (no schema has it)
 }
 
 // DefaultExcludeDirs are pruned anywhere in the tree.
 var DefaultExcludeDirs = []string{
 	"node_modules", "dist", "build", ".git", ".terraform", "vendor",
-	".claude", // docs may quote legacy patterns deliberately
+	".claude",            // docs may quote legacy patterns deliberately
 	"infra/pulumi-drill", // the source itself — patterns are legitimate here
 }
 

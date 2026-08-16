@@ -710,13 +710,13 @@
         "cfApiToken": {
           "type": "string"
         },
-        "mgmtKubeconfig": {
+        "coreKubeconfig": {
           "type": "string"
         },
         "buildKubeconfig": {
           "type": "string"
         },
-        "runtimeKubeconfig": {
+        "cell0Kubeconfig": {
           "type": "string"
         },
         "stripeSecretKey": {

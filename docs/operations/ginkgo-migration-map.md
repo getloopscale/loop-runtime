@@ -34,7 +34,7 @@ operator, or are orphaned. caller_count from the CSV separates them.
 
 | Script | caller_count | Ginkgo target | LIVE infra needed |
 |---|---:|---|---|
-| `cell2-canary-stage1.sh` | 3 | NEW `Describe("cell2 canary stage1", Label("multicell"))` | multi-cell (cell-2 active) |
+| `cell2-canary-stage1.sh` | 3 | NEW `Describe("cell2 canary stage1", Label("multicell"))` | multi-cell (cell-1 active) |
 | `cell2-canary-stage2.sh` | 4 | NEW `Describe("cell2 canary stage2", Label("multicell"))` | multi-cell + 24h soak window |
 | `cell2-rollback-slo.sh` | 1 | NEW `It("rollback SLO P95 < 705ms")` under multicell Describe | multi-cell |
 | `cell2-activation-gates.sh` + 13 `lib/cell2-gate-c*.sh` | 2 (+1 each) | ONE table-driven `Describe("cell2 activation gates", func(){ DescribeTable(C1..C12+postflip) })` — **14 scripts collapse to 1 spec file** | multi-cell |
@@ -84,7 +84,7 @@ respective LIVE stack. NOT autonomous.
 
 The e2e suite has `Label("journey")` (17 Describe sites, ~106 specs) + `Label("edge-case")`
 (7 sites). It already covers deploy / rollback / scale / secrets / promote.
-It does **NOT** cover: cell-2 activation gates (C1-C12), canary SLO, rollback
+It does **NOT** cover: cell-1 activation gates (C1-C12), canary SLO, rollback
 SLO, multi-provider install parity — those are the genuine NEW Ginkgo work.
 
 ## Conclusions

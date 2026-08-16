@@ -29,9 +29,9 @@ LoopZero runs **multi-cell**: one mgmt cluster + N tenant cells. ArgoCD on mgmt 
                   │                                        │
                   │  ┌────────────────┐                    │
                   │  │ ClusterCred CR │ (per cell)         │
-                  │  │   cell-default │                    │
+                  │  │   cell-0 │                    │
+                  │  │   cell-0       │                    │
                   │  │   cell-1       │                    │
-                  │  │   cell-2       │                    │
                   │  │   runtime-2    │                    │
                   │  └───────┬────────┘                    │
                   │          │ reconcile materializes      │
@@ -47,7 +47,7 @@ LoopZero runs **multi-cell**: one mgmt cluster + N tenant cells. ArgoCD on mgmt 
             ┌────────────────┼────────────────┐
             v                v                v
        ┌────────┐       ┌────────┐       ┌────────┐
-       │ cell-  │       │ cell-1 │       │ cell-2 │  (k3d-loopzero-workload + others)
+       │ cell-  │       │ cell-0 │       │ cell-1 │  (k3d-loopzero-cell-0 + others)
        │ default│       │        │       │        │
        └────────┘       └────────┘       └────────┘
 ```

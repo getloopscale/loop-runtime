@@ -37,10 +37,10 @@ func NewVaultRoleIDSyncSeed() *VaultRoleIDSyncSeed { return &VaultRoleIDSyncSeed
 func (s *VaultRoleIDSyncSeed) Name() string        { return "vault-role-id-sync" }
 
 const (
-	vaultUnsealFileEnv        = "LOOPZERO_VAULT_UNSEAL_FILE"
-	vaultUnsealFileDefault    = ".loopzero/cleanroom-unseal.json"
-	vaultOpenBaoPortRemote    = 8200
-	openBaoVaultRoleIDEnvVar  = "OPENBAO_VAULT_ROLE_ID"
+	vaultUnsealFileEnv         = "LOOPZERO_VAULT_UNSEAL_FILE"
+	vaultUnsealFileDefault     = ".loopzero/cleanroom-unseal.json"
+	vaultOpenBaoPortRemote     = 8200
+	openBaoVaultRoleIDEnvVar   = "OPENBAO_VAULT_ROLE_ID"
 	vaultRoleIDReadPathLoopZeroAPI = "/v1/auth/approle/role/loopzero-api/role-id"
 )
 
@@ -74,11 +74,11 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 	}
 	// Idempotent env upsert on mgmt loopzero-api.
 	if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, openBaoVaultRoleIDEnvVar, roleID); err != nil {
+		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultRoleIDEnvVar, roleID); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("set env: %v", err)}
 	}
 	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, 120*time.Second); err != nil {
+		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout: %v", err)}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical role_id synced (first 8=%s…)", roleID[:8])}
@@ -89,7 +89,7 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 // check requires reading from vault which is a separate cost.
 func (s *VaultRoleIDSyncSeed) Verify(d Deps) Result {
 	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInMgmt, loopzeroAPIDeploymentInMgmt, openBaoVaultRoleIDEnvVar)
+		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultRoleIDEnvVar)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}

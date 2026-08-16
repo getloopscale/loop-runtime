@@ -84,7 +84,7 @@ run_category() {
   fi
 
   if [[ "$cat_kind" == "kubectl" ]]; then
-    if ! kubectl --context "${CHECK_CONTEXT:-k3d-loopzero-mgmt}" get nodes >/dev/null 2>&1; then
+    if ! kubectl --context "${CHECK_CONTEXT:-k3d-loopzero-core}" get nodes >/dev/null 2>&1; then
       log "[SKIP-WARN] $cat_id ($cat_name) — kubectl context unreachable"
       TOTAL_WARN=$((TOTAL_WARN + 1))
       RESULTS+=("$cat_id:WARN:kubectl context unreachable")

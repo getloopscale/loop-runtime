@@ -17,12 +17,12 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noenvvaultsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapinmgmt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
 )
 
@@ -362,27 +362,37 @@ func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
 	return 0
 }
 
-// runVaultBootstrapInMgmtTask enforces the `task k3d:vault:bootstrap-in-mgmt`
-// shortcut contract — canonical mirror of the upstream `k3d:vault:bootstrap`
+// runOpenBaoBootstrapInCoreTask enforces the `task k3d:secrets:bootstrap-in-core`
+// shortcut contract — canonical mirror of the upstream `k3d:secrets:bootstrap`
 // with exactly two well-known differences (context swap + pre-flight message).
-// Migrated from infra/tests/check-vault-bootstrap-in-mgmt-task_test.sh
+// Migrated from infra/tests/check-openbao-bootstrap-in-core-task_test.sh
 // (M-Migrate2 continuation 2026-07-07).
-func runVaultBootstrapInMgmtTask(args []string) int {
-	fs := flag.NewFlagSet("vault-bootstrap-in-mgmt-task", flag.ContinueOnError)
+func runOpenBaoBootstrapInCoreTask(args []string) int {
+	fs := flag.NewFlagSet("openbao-bootstrap-in-core-task", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	resolveDotRoot(root)
-	outcome, err := vaultbootstrapinmgmt.Check(vaultbootstrapinmgmt.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "vault-bootstrap-in-mgmt-task: FAIL — %d assertion(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
+	outcome, err := openbaobootstrapincore.Check(openbaobootstrapincore.Config{RepoRoot: *root})
+	switch {
+	case errors.Is(err, openbaobootstrapincore.ErrNothingScanned):
+		fmt.Fprintf(os.Stderr, "openbao-bootstrap-in-core-task: %v\n", err)
+		return 2
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "openbao-bootstrap-in-core-task: FAIL — %d violation(s) of the SECRETS/CORE boundary:\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "OpenBao runs in the SEPARATE loopzero-secrets cluster. Installing it into mgmt is")
+		fmt.Fprintln(os.Stderr, "forbidden in EVERY tier — a topology violation, not a shortcut. The canonical")
+		fmt.Fprintln(os.Stderr, "path is `task k3d:secrets:create` + `task k3d:secrets:bootstrap`.")
+		fmt.Fprintln(os.Stderr, "See .claude/rules/cleanroom-up-live-test-mandate.md and")
+		fmt.Fprintln(os.Stderr, "docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md (B-047).")
 		return 1
 	}
-	fmt.Println("vault-bootstrap-in-mgmt-task: PASS — shortcut mirrors upstream (helmfile+wait counts match, context swap total, pre-flight cites task setup)")
+	fmt.Printf("openbao-bootstrap-in-core-task: PASS — no mgmt-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)
 	return 0
 }
 

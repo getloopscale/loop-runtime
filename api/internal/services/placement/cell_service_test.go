@@ -22,11 +22,11 @@ func (f *fakeCellQuerier) CountByCell(_ context.Context) (map[string]int, error)
 
 func TestCellService_ListCells(t *testing.T) {
 	router, _ := placement.NewStaticRouter([]placement.CellConfig{
-		{CellID: "cell-default"},
+		{CellID: "cell-0"},
 		{CellID: "cell-sfo3-02"},
 	})
 	querier := &fakeCellQuerier{
-		counts: map[string]int{"cell-default": 45, "cell-sfo3-02": 12},
+		counts: map[string]int{"cell-0": 45, "cell-sfo3-02": 12},
 	}
 	svc := NewCellService(router, querier, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
@@ -43,8 +43,8 @@ func TestCellService_ListCells(t *testing.T) {
 	for _, c := range cells {
 		countMap[c.CellID] = c.TenantCount
 	}
-	if countMap["cell-default"] != 45 {
-		t.Errorf("expected 45 tenants in cell-default, got %d", countMap["cell-default"])
+	if countMap["cell-0"] != 45 {
+		t.Errorf("expected 45 tenants in cell-0, got %d", countMap["cell-0"])
 	}
 	if countMap["cell-sfo3-02"] != 12 {
 		t.Errorf("expected 12 tenants in cell-sfo3-02, got %d", countMap["cell-sfo3-02"])
@@ -52,8 +52,8 @@ func TestCellService_ListCells(t *testing.T) {
 }
 
 func TestCellService_ListCellsEmptyRouter(t *testing.T) {
-	router := placement.NewPassthroughRouter(placement.CellConfig{CellID: "cell-default"})
-	querier := &fakeCellQuerier{counts: map[string]int{"cell-default": 5}}
+	router := placement.NewPassthroughRouter(placement.CellConfig{CellID: "cell-0"})
+	querier := &fakeCellQuerier{counts: map[string]int{"cell-0": 5}}
 	svc := NewCellService(router, querier, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	cells, err := svc.ListCells(context.Background())
@@ -73,7 +73,7 @@ func TestExtractRegion(t *testing.T) {
 		cellID string
 		want   string
 	}{
-		{"cell-default", "default"},
+		{"cell-0", "default"},
 		{"cell-sfo3-02", "sfo3"},
 		{"cell-nyc3-01", "nyc3"},
 		{"cell-eu-west-1-03", "eu-west-1"},
@@ -92,7 +92,7 @@ func TestCellStatus_NoInternalTerms(t *testing.T) {
 	// Rule 3: No internal terms in user-facing output.
 	// CellStatus fields must not contain ArgoCD, Gitea, etc.
 	status := CellStatus{
-		CellID:        "cell-default",
+		CellID:        "cell-0",
 		ClusterHealth: "Ready",
 		DeployHealth:  "Healthy",
 	}

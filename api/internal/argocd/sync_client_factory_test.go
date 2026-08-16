@@ -24,8 +24,8 @@ func (n *noopSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duratio
 
 func TestSyncClientFactory_CachesSameCell(t *testing.T) {
 	router := placement.NewPassthroughRouter(placement.CellConfig{
-		CellID:    "cell-default",
-		ArgocdURL: "https://argocd.cell-default.svc",
+		CellID:    "cell-0",
+		ArgocdURL: "https://argocd.cell-0.svc",
 	})
 
 	callCount := 0
@@ -37,12 +37,12 @@ func TestSyncClientFactory_CachesSameCell(t *testing.T) {
 	factory := NewSyncClientFactory(router, builder)
 	ctx := context.Background()
 
-	c1, err := factory.ClientFor(ctx, "cell-default")
+	c1, err := factory.ClientFor(ctx, "cell-0")
 	if err != nil {
 		t.Fatalf("first ClientFor: %v", err)
 	}
 
-	c2, err := factory.ClientFor(ctx, "cell-default")
+	c2, err := factory.ClientFor(ctx, "cell-0")
 	if err != nil {
 		t.Fatalf("second ClientFor: %v", err)
 	}

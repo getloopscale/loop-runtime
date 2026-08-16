@@ -108,7 +108,23 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Step 1: Resolve kubeconfig from the referenced Secret.
-	kubeconfigData, result, err := r.resolveKubeconfig(ctx, &cr)
+	// The base snapshot for every status write below.
+	//
+	// AFTER EnsureFinalizer above, which writes metadata and bumps
+	// resourceVersion: a patch derived from an earlier snapshot carries the stale
+	// version and becomes an optimistic lock frozen at snapshot time — a WIDER
+	// conflict window than the refetch this contract removes. Measured as a real
+	// 409 in slice-18.
+	//
+	// And before the first .Status mutation below, because a snapshot taken after
+	// one diffs that field against itself: the patch would silently omit the very
+	// change it exists to persist.
+	//
+	// The deletion path returns above and writes no status, so unlike the preview
+	// controller it needs no base of its own.
+	base := cr.DeepCopy()
+
+	kubeconfigData, result, err := r.resolveKubeconfig(ctx, &cr, base)
 	if err != nil || kubeconfigData == nil {
 		return result, err
 	}
@@ -136,7 +152,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Step 3: Validate cluster connectivity.
-	connected, result, err := r.checkConnectivity(ctx, &cr, kubeconfigData)
+	connected, result, err := r.checkConnectivity(ctx, &cr, base, kubeconfigData)
 	if err != nil || !connected {
 		return result, err
 	}
@@ -144,7 +160,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// MEET-053 D-03: Record observed generation for change detection.
 	cr.Status.ObservedGeneration = cr.Generation
 
-	if statusErr := r.Status().Update(ctx, &cr); statusErr != nil {
+	if statusErr := r.Status().Patch(ctx, &cr, client.MergeFrom(base)); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
@@ -163,7 +179,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 // resolveKubeconfig reads and parses the kubeconfig from the referenced Secret.
 // Returns (nil, result, nil) if the kubeconfig is not yet available (status updated, requeue set).
-func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr *loopzerov1.ClusterCredential) ([]byte, ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr, base *loopzerov1.ClusterCredential) ([]byte, ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	secretKey := client.ObjectKey{
@@ -179,7 +195,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr 
 				metav1.ConditionTrue, "SecretMissing",
 				fmt.Sprintf("Secret %s/%s not found", secretKey.Namespace, secretKey.Name),
 				cr.Generation)
-			if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+			if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
 				return nil, ctrl.Result{}, statusErr
 			}
 			return nil, ctrl.Result{RequeueAfter: constants.RequeueSecretNotFound}, nil
@@ -199,7 +215,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr 
 			metav1.ConditionFalse, "KubeconfigKeyMissing",
 			"Secret does not contain 'kubeconfig' key",
 			cr.Generation)
-		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+		if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
 			return nil, ctrl.Result{}, statusErr
 		}
 		return nil, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -210,21 +226,21 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr 
 
 // checkConnectivity validates that the cluster is reachable via /healthz.
 // Returns (false, result, nil) if unreachable (status updated, requeue set).
-func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr, base *loopzerov1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
 	ctx, span := reconcilehelpers.StartChildSpan(ctx, "clustercredential.connectivity.check")
 	defer span.End()
 	logger := log.FromContext(ctx)
 
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigData)
 	if err != nil {
-		return r.markDisconnected(ctx, cr, "InvalidKubeconfig",
+		return r.markDisconnected(ctx, cr, base, "InvalidKubeconfig",
 			fmt.Sprintf("Failed to parse kubeconfig: %v", err))
 	}
 
 	restConfig.Timeout = constants.ConnectivityTimeout
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return r.markDisconnected(ctx, cr, "ClientCreationFailed",
+		return r.markDisconnected(ctx, cr, base, "ClientCreationFailed",
 			fmt.Sprintf("Failed to create Kubernetes client: %v", err))
 	}
 
@@ -244,7 +260,7 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr 
 			metav1.ConditionFalse, reason, msg, cr.Generation)
 		now := metav1.Now()
 		cr.Status.LastCheckedAt = &now
-		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+		if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
 			return false, ctrl.Result{}, statusErr
 		}
 		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -269,11 +285,11 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr 
 // 2 inline 11-line copies (kubeconfig-parse + client-create error paths).
 // The third "Unreachable / healthz fail" path is NOT consolidated here
 // because it additionally writes Status.LastCheckedAt.
-func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr *loopzerov1.ClusterCredential, reason, msg string) (bool, ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr, base *loopzerov1.ClusterCredential, reason, msg string) (bool, ctrl.Result, error) {
 	cr.Status.Connected = false
 	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 		metav1.ConditionFalse, reason, msg, cr.Generation)
-	if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+	if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
 		return false, ctrl.Result{}, statusErr
 	}
 	return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil

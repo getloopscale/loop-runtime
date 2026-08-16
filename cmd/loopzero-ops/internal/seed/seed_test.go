@@ -55,6 +55,6 @@ func TestRegistry_DuplicateNamePanics(t *testing.T) {
 
 type stubSeed struct{ name string }
 
-func (s stubSeed) Name() string                { return s.name }
-func (s stubSeed) Run(Deps) Result             { return Result{Verdict: PASS} }
-func (s stubSeed) Verify(Deps) Result          { return Result{Verdict: PASS} }
+func (s stubSeed) Name() string       { return s.name }
+func (s stubSeed) Run(Deps) Result    { return Result{Verdict: PASS} }
+func (s stubSeed) Verify(Deps) Result { return Result{Verdict: PASS} }

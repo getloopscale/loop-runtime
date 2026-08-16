@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Parity: Cell-2 Canary/Rollback — Ginkgo home for the cell-2 canary stage
+// Parity: Cell-2 Canary/Rollback — Ginkgo home for the cell-1 canary stage
 // procedures migrated from infra/tests/parity/cell2-canary-stage{1,2}.sh
 // (Track B, TB2.1 of plan
 // docs/plans/completed/2026-05-24-parity-to-ginkgo-migration-plan.md).
@@ -34,8 +34,8 @@ var _ = Describe("Parity: Cell-2 Canary/Rollback", Ordered, Label("parity"), fun
 	})
 
 	It("stage1: --dry-run validates preflight + mechanism (LIVE soak is operator-run)", func() {
-		// LIVE canary stage 1 pins a synthetic tenant to cell-2 and soaks
-		// 1h with HTTP probes + cell-1 EB monitoring. Mutating + long;
+		// LIVE canary stage 1 pins a synthetic tenant to cell-1 and soaks
+		// 1h with HTTP probes + cell-0 EB monitoring. Mutating + long;
 		// operator-run via `bash infra/tests/parity/cell2-canary-stage1.sh`.
 		// Ginkgo port invokes --dry-run: exercises preflight, flag parse,
 		// rollback-trap registration. No tenant mutation.
@@ -52,7 +52,7 @@ var _ = Describe("Parity: Cell-2 Canary/Rollback", Ordered, Label("parity"), fun
 	})
 
 	It("stage2: --dry-run validates preflight + mechanism (LIVE 24h soak is operator-run)", func() {
-		// LIVE canary stage 2 pins 10% of dev tenants to cell-2 and soaks
+		// LIVE canary stage 2 pins 10% of dev tenants to cell-1 and soaks
 		// 24h. Mutating + very long; operator-run via
 		// `bash infra/tests/parity/cell2-canary-stage2.sh`.
 		// Ginkgo port invokes --dry-run: exercises preflight, sample

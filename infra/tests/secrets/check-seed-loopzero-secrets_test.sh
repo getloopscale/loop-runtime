@@ -43,7 +43,7 @@ cat > "$WORKDIR/inventory.yaml" <<'EOF'
 envName: ""
 secretStoreRef:
   kind: ClusterSecretStore
-  name: loopzero-vault-secrets
+  name: loopzero-secrets-secrets
 defaultRefreshInterval: 1h
 externalSecrets:
   - targetSecret: gitea-admin

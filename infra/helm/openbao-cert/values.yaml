@@ -7,7 +7,7 @@ issuerRef:
   kind: ClusterIssuer
 
 # Resulting Secret name. Must match what server.extraVolumes[0].name
-# expects in vault.helmfile.yaml.gotmpl.
+# expects in secrets.helmfile.yaml.gotmpl.
 secretName: openbao-tls
 
 # Certificate validity (90d = pattern LoopZero)
@@ -19,17 +19,17 @@ renewBefore: 360h  # 15d before expiration
 # Default cluster.local suffix; chart oficial usa Service "openbao".
 dnsNames:
   - openbao
-  - openbao.vault-system
-  - openbao.vault-system.svc
-  - openbao.vault-system.svc.cluster.local
+  - openbao.secrets-system
+  - openbao.secrets-system.svc
+  - openbao.secrets-system.svc.cluster.local
   - openbao-0.openbao-internal
-  - openbao-0.openbao-internal.vault-system.svc.cluster.local
+  - openbao-0.openbao-internal.secrets-system.svc.cluster.local
   - openbao-1.openbao-internal
-  - openbao-1.openbao-internal.vault-system.svc.cluster.local
+  - openbao-1.openbao-internal.secrets-system.svc.cluster.local
   - openbao-2.openbao-internal
-  - openbao-2.openbao-internal.vault-system.svc.cluster.local
+  - openbao-2.openbao-internal.secrets-system.svc.cluster.local
   - localhost
-  # VK.5 LIVE 2026-06-02: cross-cluster access from loopzero-mgmt via
+  # VK.5 LIVE 2026-06-02: cross-cluster access from loopzero-core via
   # kubectl port-forward exposed on host.k3d.internal hostname (k3d
   # injects this as hostAlias for the host machine IP).
   - host.k3d.internal

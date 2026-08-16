@@ -408,7 +408,7 @@ spec:
     matchLabels:
       app: static-assets
   ingress:
-    # Traefik (workload-cluster) — IngressRoutes route here for static apps.
+    # Traefik (cell-0-cluster) — IngressRoutes route here for static apps.
     - from:
         - namespaceSelector:
             matchLabels:

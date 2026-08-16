@@ -53,7 +53,7 @@ type ApplicationReconciler struct {
 	Scheme     *runtime.Scheme
 	BaseDomain string
 
-	// RuntimeFactory resolves a workload-cluster client per tenant cell_id
+	// RuntimeFactory resolves a cell-0-cluster client per tenant cell_id
 	// (dogfood-2026-05-08-fixes T4.2 / ADR D6). nil = single-cell legacy mode:
 	// fast-path Healthy is disabled and Application.phase only converges via
 	// ExposedRoute Reachable. Wiring is in app-operator/main.go.
@@ -125,6 +125,22 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// The base snapshot for the status patch below.
+	//
+	// HERE, and not after a re-fetch. The previous shape composed the whole
+	// status, re-fetched, and took MergeFrom off the FRESH object while carrying
+	// the composite from before — so the diff reverted whatever another writer
+	// had changed in between. That is the damage the contract names, wearing a
+	// Patch instead of an Update (B-105).
+	//
+	// Safe here because every metadata/spec write ahead of this point re-reads
+	// the object itself: EnsureFinalizer (reconcilehelpers/finalizer.go) and
+	// reconcileHostname (its `return r.Get(...)`). Measured, not assumed — that
+	// is what made the third re-fetch removable.
+	//
+	// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor
+	base := app.DeepCopy()
+
 	app.Status.URL = "https://" + app.Spec.Hostname
 
 	conditions.SetCondition(&app.Status.Conditions, conditions.TypeServiceResolved,
@@ -132,7 +148,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		fmt.Sprintf("service %s resolved", app.Spec.ServiceName),
 		app.Generation)
 
-	if err := r.reconcileExposedRoute(ctx, &app); err != nil {
+	if err := r.reconcileExposedRoute(ctx, &app, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -146,21 +162,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	r.reconcileRouteStatus(ctx, &app)
 	r.reconcileHealthCondition(&app)
 
-	// Save computed status, then re-fetch to get latest ResourceVersion,
-	// then apply status via Patch (avoids UID precondition failures from Update).
-	computedStatus := app.Status.DeepCopy()
-	computedStatus.ObservedGeneration = app.Generation
-
-	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
-		return ctrl.Result{}, fmt.Errorf("re-fetching application: %w", err)
-	}
-	// MergeFrom captures the clean base; then we mutate status and patch.
-	patch := client.MergeFrom(app.DeepCopy())
-	app.Status = *computedStatus
-	// T5.1: fold kstatus readiness summary BEFORE the explicit Patch so
-	// the deferred Status().Update is no longer needed (single write per pass).
-	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
-	if err := r.Status().Patch(ctx, &app, patch); err != nil {
+	if err := r.patchStatus(ctx, &app, base); err != nil {
 		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}
 
@@ -171,6 +173,43 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		"url", app.Status.URL)
 
 	return ctrl.Result{}, nil
+}
+
+// patchStatus is the ONLY path in this reconcile that persists .status. It folds
+// the kstatus readiness summary in as the last mutation before the write, per
+// ADR-0025 D3.
+//
+// The ordering used to live at each call site, and that is how it was lost: the
+// happy path folded the summary in, the ExposedRoute failure branch patched
+// without it, and a failed pass persisted a fresh IngressReady=False next to a
+// Ready condition left over from the previous generation — stale, and read as
+// true precisely when something had just gone wrong.
+//
+// Routing every persist through here makes the invariant structural instead of
+// remembered: a new early-return path cannot reintroduce the defect, because
+// there is no way to persist status without summarizing it first.
+//
+// Deliberately NOT reconcilehelpers.DeferReadinessSummary, which the other
+// controllers use: that helper re-fetches and takes an optimistic lock because
+// it is a SECOND writer by design. This controller had a second writer removed
+// (T5.1, see the note in Reconcile) for flapping conditions and 409s; trading an
+// ordering defect for a concurrency one is not a fix.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation
+func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
+	// observedGeneration belongs to the write, not to the happy path. It used to be
+	// set only just before the final patch, so the failure branch persisted a Ready
+	// condition stamped with the CURRENT generation next to a
+	// .status.observedGeneration from the previous one — a status contradicting
+	// itself inside a single write, and kstatus reading the whole subresource as
+	// stale. The sibling Environment controller already sets it inside its error
+	// branches (environment_controller.go); this makes the two agree.
+	//
+	// It is honest on a failed pass: "I have seen generation N and it is not ready"
+	// is exactly what a false Ready at that generation says.
+	app.Status.ObservedGeneration = app.Generation
+	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
+	return r.Status().Patch(ctx, app, client.MergeFrom(base))
 }
 
 // reconcileHostname computes and persists the hostname if not yet assigned.
@@ -190,7 +229,7 @@ func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.
 }
 
 // reconcileExposedRoute ensures the ExposedRoute CR exists with correct spec.
-func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *loopzerov1.LoopZeroApplication) error {
+func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
 	ctx, span := reconcilehelpers.StartChildSpan(ctx, "application.exposed_route.ensure")
 	defer span.End()
 
@@ -232,8 +271,8 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *
 			metav1.ConditionFalse, conditions.ReasonFailed,
 			fmt.Sprintf("failed to ensure ExposedRoute: %v", err),
 			app.Generation)
-		if statusErr := r.Status().Update(ctx, app); statusErr != nil {
-			logger.Error(statusErr, "failed to update application status")
+		if statusErr := r.patchStatus(ctx, app, base); statusErr != nil {
+			logger.Error(statusErr, "failed to patch application status")
 		}
 		return fmt.Errorf("ensuring ExposedRoute %s: %w", routeName, err)
 	}
@@ -376,7 +415,7 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 // app.Spec.TenantRef → tenant.Spec.CellID → RuntimeFactory.For(cellID).
 //
 // dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5 multi-cell awareness +
-// EC-9 graceful degrade on workload-cluster unreachable).
+// EC-9 graceful degrade on cell-0-cluster unreachable).
 //
 // Behavior:
 //   - RuntimeFactory == nil: single-cell legacy mode → no-op (current path).

@@ -11,7 +11,7 @@
   "properties": {
     "existingSecret": {
       "type": "string",
-      "description": "Name of a pre-existing K8s Secret supplying the cloud-API secret env (Stripe, session, service-auth, themory). When set, the chart references it via envFrom and skips the inline admin Secret. The operator populates it however they choose (ESO, CSI, sops, kubectl) \u2014 see SECRETS.md (install-config-contract Slice 1, ADR D1 existingSecret floor)."
+      "description": "Name of a pre-existing K8s Secret supplying the cloud-API secret env (Stripe, session, service-auth, themory). When set, the chart references it via envFrom and skips the inline admin Secret. The operator populates it however they choose (ESO, CSI, sops, kubectl) — see SECRETS.md (install-config-contract Slice 1, ADR D1 existingSecret floor)."
     },
     "wiringConfigMap": {
       "type": "string",
@@ -313,7 +313,7 @@
       }
     },
     "env": {
-      "description": "Environment variables. Some charts use array (k8s native), others use object (key=value) \u2014 schema permits both.",
+      "description": "Environment variables. Some charts use array (k8s native), others use object (key=value) — schema permits both.",
       "oneOf": [
         {
           "type": "array",
@@ -355,6 +355,17 @@
         }
       },
       "description": "Opt-in Stakater Reloader (install-config-contract Slice 2): rolling restart on referenced-Secret change. Operator installs the controller."
+    },
+    "billing": {
+      "type": "object",
+      "description": "Declara que este ambiente cobra de verdade. Quando required=true os Secrets de cobranca deixam de ser opcionais e o pod nao sobe sem eles — medido em 2026-08-11, o painel rodou 20h sem o segredo que verifica pagamentos, Running, sem um evento.",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "Falso por padrao: preserva o boot sem Stripe no ambiente hermetico."
+        }
+      }
     }
   }
 }

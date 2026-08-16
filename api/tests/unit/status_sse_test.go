@@ -6,6 +6,8 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,7 +17,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -33,10 +34,10 @@ import (
 
 // fakeStatusSSEEventStore captures invocations + emits scripted events.
 type fakeStatusSSEEventStore struct {
-	events     []sse.SSEEvent
-	calls      atomic.Int32
-	err        error
-	emitOnce   atomic.Bool // emit events on first call only (avoid infinite loop in tests)
+	events   []sse.SSEEvent
+	calls    atomic.Int32
+	err      error
+	emitOnce atomic.Bool // emit events on first call only (avoid infinite loop in tests)
 }
 
 func (f *fakeStatusSSEEventStore) GetAfterForProject(_ context.Context, _ string, _ string, afterID int64) ([]sse.SSEEvent, error) {
@@ -101,7 +102,7 @@ func TestStatusSSE_Unauthorized(t *testing.T) {
 
 	projects := &fakeStatusProjectStore{}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -122,7 +123,7 @@ func TestStatusSSE_CrossTenantReturns404(t *testing.T) {
 	// (existence-leak-prevention per T1.2 EC-2). Exact status code assertion.
 	projects := &fakeStatusProjectStore{project: nil}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -146,10 +147,10 @@ func TestStatusSSE_MissingEnvReturns400(t *testing.T) {
 	// Per memory feedback_j19_runtime_logs_stream_missing_env_param: env
 	// query parameter is mandatory; missing → 400 invalid_field.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -168,10 +169,10 @@ func TestStatusSSE_500WhenFlusherUnavailable(t *testing.T) {
 
 	// EC-5 absorption: ResponseWriter without Flusher → 500 graceful, NOT panic.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 1 * time.Millisecond,
 		MaxDuration:  10 * time.Millisecond,
 	})
@@ -199,7 +200,7 @@ func TestStatusSSE_EmitsSignalChangedEvents(t *testing.T) {
 	// Happy path: 3 signal.changed events flow through handler with proper
 	// SSE wire format per memory feedback_eventsource_named_events_vs_onmessage.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{
 		events: []sse.SSEEvent{
@@ -208,7 +209,7 @@ func TestStatusSSE_EmitsSignalChangedEvents(t *testing.T) {
 			{ID: 3, BuildID: "rel-1", EventType: "signal.changed", Data: json.RawMessage(`{"rps":42}`)},
 		},
 	}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 100 * time.Hour, // effectively no further polls
 		MaxDuration:  50 * time.Millisecond,
 	})
@@ -245,7 +246,7 @@ func TestStatusSSE_FiltersNonSignalEvents(t *testing.T) {
 	// filter event_type=signal.changed before emit so consumers don't see
 	// foreign events.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{
 		events: []sse.SSEEvent{
@@ -254,7 +255,7 @@ func TestStatusSSE_FiltersNonSignalEvents(t *testing.T) {
 			{ID: 3, EventType: "build.failed", Data: json.RawMessage(`{"build":"failed"}`)},
 		},
 	}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 100 * time.Hour,
 		MaxDuration:  50 * time.Millisecond,
 	})
@@ -285,7 +286,7 @@ func TestStatusSSE_LastEventIDDedup(t *testing.T) {
 	// [10, 11, 12]; handler must skip id=10 (already delivered) + emit
 	// id=11, id=12 only.
 	projects := &fakeStatusProjectStore{
-		project: &routes.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
+		project: &domain.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
 	}
 	store := &fakeStatusSSEEventStore{
 		events: []sse.SSEEvent{
@@ -294,7 +295,7 @@ func TestStatusSSE_LastEventIDDedup(t *testing.T) {
 			{ID: 12, EventType: "signal.changed", Data: json.RawMessage(`{"new":2}`)},
 		},
 	}
-	handler := routes.NewStatusSSEHandler(projects, store, routes.StatusSSEHandlerOpts{
+	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
 		PollInterval: 100 * time.Hour,
 		MaxDuration:  50 * time.Millisecond,
 	})

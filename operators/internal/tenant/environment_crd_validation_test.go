@@ -33,10 +33,10 @@ import (
 // TestProjectFieldHasRFC1123PatternAndRequired (RED 2 / EC-2) — schema
 // contract test. Asserts the generated CRD YAML at
 // `../../config/crd/bases/loopzero.io_tenants.yaml` declares:
-//   1. The TenantEnvironmentEntry.project field has the canonical RFC 1123
-//      DNS-label Pattern (^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
-//   2. The field has minLength: 1.
-//   3. The TenantEnvironmentEntry required-list includes "project".
+//  1. The TenantEnvironmentEntry.project field has the canonical RFC 1123
+//     DNS-label Pattern (^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
+//  2. The field has minLength: 1.
+//  3. The TenantEnvironmentEntry required-list includes "project".
 //
 // This is a deterministic file-based test that bypasses envtest's API
 // server (Pattern enforcement varies by envtest binary version). The CRD
@@ -156,22 +156,3 @@ var _ = Describe("T1.1 — TenantEnvironmentEntry.Project CRD validation", func(
 		})
 	})
 })
-
-// safeName converts a test slug into a Tenant CR metadata.name suitable
-// for k8s validation (length-bounded, lowercase, no separators). It is
-// NOT used to validate Project — that's the CRD's job.
-func safeName(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s) && i < 30; i++ {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
-			out = append(out, c)
-		case c >= 'A' && c <= 'Z':
-			out = append(out, c+32) // to lower
-		default:
-			out = append(out, 'x')
-		}
-	}
-	return string(out)
-}

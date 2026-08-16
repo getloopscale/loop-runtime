@@ -10,8 +10,8 @@
 # drill mgmt cluster (DOKS, NOT k3d local).
 #
 # Cell-to-cluster mapping per D3:
-#   cell-default + cell-1 → runtimeCluster (pulumi output key)
-#   cell-2              → runtimeCluster2 (pulumi output key)
+#   cell-0 + cell-0 → runtimeCluster (pulumi output key)
+#   cell-1              → runtimeCluster2 (pulumi output key)
 #
 # Unlike the local k3d analog (bootstrap-cell-cc-common.sh), this drill
 # variant:
@@ -28,7 +28,7 @@ set -euo pipefail
 # bootstrap_cell_cc_drill CELL_ID PULUMI_OUTPUT_KEY [--dry-run]
 #
 # Args:
-#   CELL_ID          — cell-default | cell-1 | cell-2
+#   CELL_ID          — cell-0 | cell-0 | cell-1
 #   PULUMI_OUTPUT_KEY — runtimeCluster | runtimeCluster2
 #   --dry-run        — render manifests to stdout, do NOT apply
 #

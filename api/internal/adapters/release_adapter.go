@@ -6,9 +6,9 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/routes/status"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -17,7 +17,7 @@ type StatusReleaseStoreAdapter struct {
 	Store db.ReleaseStore
 }
 
-func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*routes.StatusRelease, error) {
+func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*status.StatusRelease, error) {
 	release, err := a.Store.GetActiveByEnv(ctx, tenantID, projectID, env)
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID
 	// IngressRoute, so the dashboard "Visit" link 404'd at Traefik. Worker-only
 	// releases (no server/frontend) leave EntryApp empty — StatusHandler then
 	// omits status.url and the dashboard renders "URL pending" badge (ADR D3).
-	return &routes.StatusRelease{
+	return &status.StatusRelease{
 		ID:        release.ID,
 		BuildID:   release.BuildID,
 		Status:    release.Status,

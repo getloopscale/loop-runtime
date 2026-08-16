@@ -8,6 +8,7 @@
 // It complements:
 //   - no-new-bash (blocks ADDING a .sh not in the allowlist), and
 //   - unhomed-logic (counts un-homed scripts by allowlist disposition),
+//
 // by enforcing the raw canonical .sh count never regresses above a baseline.
 // This catches the "half-migration leftover" failure (a Go gate is added but
 // the bash it replaced is never deleted) at the program level even when

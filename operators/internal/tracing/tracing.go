@@ -7,6 +7,8 @@
 package tracing
 
 import (
+	"fmt"
+	"net"
 	"context"
 	"log/slog"
 	"os"
@@ -52,6 +54,12 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
 	}
+	// Validated at the boundary — a typo here should fail the operator's startup,
+	// not degrade tracing silently after the value was already logged.
+	endpointHost, endpointPort, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is not a valid host:port: %w", err)
+	}
 
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(endpoint),
@@ -96,8 +104,12 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 		propagation.Baggage{},
 	))
 
+	//nolint:gosec // G706 false positive — same reasoning as the pprof server:
+	// these are the components net.SplitHostPort accepted, and gosec's taint
+	// analysis has no notion of validation.
 	slog.Info("tracing enabled",
-		"endpoint", endpoint,
+		"endpoint_host", endpointHost,
+		"endpoint_port", endpointPort,
 		"max_queue_size", maxQueueSize,
 		"export_timeout", exportTimeout.String(),
 	)

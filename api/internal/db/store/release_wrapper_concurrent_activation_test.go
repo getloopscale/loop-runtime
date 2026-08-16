@@ -170,6 +170,10 @@ func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 			"DELETE FROM builds WHERE tenant_id = $1", tenantID)
 	})
 
+	// O gatilho da migration 000061 resolve builds.cell_id a partir do tenant e
+	// falha alto se ele não existir; esta fixture é anterior ao gatilho.
+	seedTenantRowForStore(t, pool, tenantID)
+
 	// Seed two builds + R1 ACTIVE + R2 PENDING for same env.
 	for _, p := range []struct {
 		bid, rid, status string
@@ -210,5 +214,33 @@ func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 	var te *loopzeroerrors.LoopZeroError
 	if !errors.As(err, &te) || te.Code != "CONCURRENT_ACTIVATION" {
 		t.Errorf("real UpdateStatus must return typed CONCURRENT_ACTIVATION; got %v", err)
+	}
+}
+
+// seedTenantRowForStore creates the user/account/tenant a `builds` row needs.
+// See the note at the call site: migration 000061's trigger resolves
+// `builds.cell_id` from the tenant and refuses when it is absent.
+func seedTenantRowForStore(t *testing.T, pool *pgxpool.Pool, tenantID string) {
+	t.Helper()
+
+	ctx := context.Background()
+	owner := "u-" + tenantID
+	account := "acct-" + tenantID
+
+	for _, step := range []struct {
+		what string
+		sql  string
+		args []any
+	}{
+		{"user", `INSERT INTO users (id,email,display_name,username)
+		          VALUES ($1,$1||'@fixture.test','F',$1) ON CONFLICT (id) DO NOTHING`, []any{owner}},
+		{"account", `INSERT INTO accounts (id,display_name,plan,owner_id)
+		             VALUES ($1,'F','starter',$2) ON CONFLICT (id) DO NOTHING`, []any{account, owner}},
+		{"tenant", `INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id)
+		            VALUES ($1,$1,$1,$2,$3,'cell-0') ON CONFLICT (id) DO NOTHING`, []any{tenantID, owner, account}},
+	} {
+		if _, err := pool.Exec(ctx, step.sql, step.args...); err != nil {
+			t.Fatalf("seed %s for %s: %v", step.what, tenantID, err)
+		}
 	}
 }
