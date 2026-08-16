@@ -29,6 +29,10 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
+	// Apelidado porque `routes/metrics` (a familia de rotas do proxy, importada
+	// acima) ja ocupa o nome `metrics` neste arquivo. Mesma colisao que
+	// `routes/source` x `internal/source`, resolvida do mesmo jeito.
+	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
@@ -40,6 +44,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -190,7 +195,13 @@ type Config struct {
 	ActiveTeamStore      auth.ActiveTeamStore
 	DomainHandler        *domains.DomainHandler
 	GitHubWebhookHandler http.Handler
-	RepositoryHandler    *repositories.RepositoryHandler
+	// Surfaces collects the router's registration decisions so a surface that
+	// was skipped for a missing dependency can be SEEN — via
+	// `loopzero_api_surface_enabled` — instead of only being discovered by whoever
+	// hits the 404. Nil is legal and means "nobody is observing", which is what
+	// a focused unit test wants; the production path wires it. B-104.
+	Surfaces          *surfaces.Registry
+	RepositoryHandler *repositories.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
 	IntegrationsGitHubHandler *integrations.IntegrationsGitHubHandler
 	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
@@ -240,7 +251,24 @@ func Run(cfg Config) error {
 		cfg.ShutdownCancel = cancel
 	}
 
+	// B-104: the router decides, per surface, whether to register it. Those
+	// decisions used to vanish. A registry collects them, the gauge publishes
+	// them, and the summary below names every surface that is off — so a missing
+	// dependency is something operations can alert on rather than something a
+	// customer discovers when their `git push` builds nothing.
+	if cfg.Surfaces == nil {
+		cfg.Surfaces = surfaces.NewRegistry()
+	}
+
 	router := NewRouter(cfg)
+
+	appmetrics.PublishSurfaces(cfg.Surfaces.All())
+	if off := cfg.Surfaces.Disabled(); len(off) > 0 && cfg.Logger != nil {
+		for _, s := range off {
+			cfg.Logger.Warn("http surface disabled — a dependency it needs is absent",
+				"surface", s.Name, "reason", s.Reason)
+		}
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

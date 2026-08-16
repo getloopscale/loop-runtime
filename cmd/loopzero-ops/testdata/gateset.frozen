@@ -1,7 +1,3 @@
-# Frozen gate set — the oracle for TestOracle_MatchesFrozenBaseline.
-# LIVING file: re-freeze with `loopzero-ops quality --list` whenever a gate is
-# consciously added, wired or removed. It records the PRESENT, which is why it
-# does not live under docs/operations/baselines/ (B-006).
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
@@ -97,6 +93,7 @@ service-auth-rotation	-	Enforces the Ed25519 service-auth key rotation cadence.
 services-acyclic	gates	M9 Step 6: services bounded-context imports form the frozen acyclic DAG.
 shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
 shellcheck-advisory	gates	Advisory shell-lint gate — runs shellcheck across infra/scripts/local + infra/tests/check-*-syntax_test + infra/tests/e2e/live/dev-public-*. Tolerates SC1091/SC2155/SC2086/SC2046. Advisory-only fallthrough when shellcheck not installed (WARN + exit 0). M-Migrate2 2026-07-07 replaces infra/scripts/local/shellcheck-advisory.sh.
+silent-surface	gates	Ratchet: refuses a NEW router surface guarded by `if cfg.X != nil` that does not report whether it was registered (B-104). Baseline may fall, never rise.
 skill-paths	gates	T0.1 EC D5: every infra/scripts/ path AND every `task X` invocation cited in any .claude/skills/*/SKILL.md MUST resolve on disk. Ports the bash awk task-name extractor + flattened/namespaced include set walk into Go. Skips task-automation skill (generic third-party). Enforces dogfood no-GH_TOKEN/.env + to-plan no-`task teardown` anti-patterns. M-Migrate2 2026-07-07 replaces infra/tests/skills/skill-paths_test.sh.
 skip-link	gates	Every t.Skip/it.skip carries an issue URL (or lives in *_skip_test.go).
 spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.

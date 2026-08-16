@@ -28,6 +28,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -160,8 +161,19 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 
 	// GitHub webhook (no auth — GitHub validates via HMAC signature internally)
+	//
+	// B-104: this decision is RECORDED, not just taken. Without the HMAC secret
+	// `setup_github.go` leaves the handler nil, the route is never registered,
+	// and the only trace is one Info line at startup — measured on the droplet as
+	// a 404 here against a 405 on /health. In production that means a customer's
+	// `git push` builds nothing, silently. The record surfaces as
+	// `loopzero_api_surface_enabled{surface="github_webhook"}`.
 	if cfg.GitHubWebhookHandler != nil {
 		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
+		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, true, "")
+	} else {
+		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, false,
+			"GITHUB_WEBHOOK_SECRET ausente — o segredo HMAC que valida as entregas do GitHub")
 	}
 
 	// Admin endpoints — operator primitives, X-Service-Auth only (no user

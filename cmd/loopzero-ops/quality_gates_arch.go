@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routesacyclic"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/silentsurface"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/statuswritercontract"
 	"os"
 	"path/filepath"
@@ -402,6 +403,42 @@ func runStatusWriterContract(args []string) int {
 	}
 	if !o.Pass {
 		fmt.Fprintln(os.Stderr, statuswritercontract.ActionableFix)
+		return 1
+	}
+	return 0
+}
+
+// runSilentSurface refuses NEW HTTP surfaces that vanish without saying so.
+//
+// The router decides fifty times whether to register a surface and, until B-104,
+// threw every decision away — measured on the droplet as a 404 on the GitHub
+// webhook while /health answered 405, with nothing anywhere reporting it.
+//
+// Converting all fifty in one commit was refused: router.go is the single
+// surface where the route set is read (Unbreakable Rule 5), so an error in any
+// one edit would be indistinguishable from the other forty-nine. This gate does
+// what unhomed-logic does instead — counts the debt and forbids it from growing.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-16-observable-silent-surfaces
+func runSilentSurface(args []string) int {
+	fs := flag.NewFlagSet("silent-surface", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	v, err := silentsurface.Check(silentsurface.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "silent-surface: %v\n", err)
+		return 1
+	}
+	fmt.Println(v.Summary())
+	if !v.Pass {
+		for _, s := range v.Silent {
+			fmt.Printf("  %s:%d — cfg.%s registra rota e não reporta a decisão\n",
+				silentsurface.RouterPath, s.Line, s.Field)
+		}
+		fmt.Fprintln(os.Stderr, silentsurface.ActionableFix)
 		return 1
 	}
 	return 0

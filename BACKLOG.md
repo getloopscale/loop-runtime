@@ -3938,6 +3938,66 @@ dod:
 > Registrado 2026-08-14 pela medição do `B-021` no droplet. A credencial é do patrocinador; a
 > invisibilidade é nossa.
 
+---
+
+### Executado em 2026-08-16 — e a população era muito maior que a instância
+
+**As três balas estão cumpridas.** Plano: `.claude/knowledge-base/plans/b104-silent-surfaces-plan.md`.
+Decisão T2: `MEET-ASYNC-AMENDMENT-2026-08-16-observable-silent-surfaces`.
+
+**A varredura mudou o desenho do conserto.** O roteador tem **50** campos guardados por
+`if cfg.X != nil`, dos quais **35 registram rota** — cinquenta decisões que ele tomava e descartava. O
+webhook era uma delas. Consertar só a instância teria deixado a superfície 51 nascer muda do mesmo
+jeito, que é literalmente o `B-109`.
+
+**O que foi construído.** Um `surfaces.Registry` (domínio puro — não importa `prometheus`, `chi` nem
+`net/http`, verificado por `go list -deps`) grava a decisão; um adaptador publica
+`loopzero_api_surface_enabled{surface="…"}`; a razão **não** vira rótulo, porque texto livre em rótulo é
+cardinalidade ilimitada. O webhook foi ligado, e o teste pareia a métrica com a alcançabilidade da
+rota — uma métrica que discordasse do roteador seria pior que a ausência dela.
+
+**A catraca `silent-surface`.** Converter as 35 num commit foi recusado: `router.go` é a única
+superfície onde o conjunto de rotas é lido, e um erro em qualquer das 35 seria indistinguível dos
+outros 34. O gate conta as mudas, congela a base e recusa aumento — o padrão do `unhomed-logic`.
+**Base medida: 34.** O primeiro número que escrevi foi 49, derivado de "50 menos 1" — um palpite. A
+medição mostrou que 15 dos 50 montam middleware e não registram superfície, e **uma base 15 acima da
+verdade é uma catraca com folga**, que admitiria 15 superfícies mudas novas antes de dizer qualquer
+coisa. Provada contra mutante real: injetada uma superfície muda, o gate reprova nomeando-a.
+
+**A segunda bala tinha uma premissa forte demais, e a medição a corrigiu.** O item dizia *"nenhuma
+decisão registrada distingue os que podem faltar dos que não podem"*. Lendo o template:
+`loopzero-openbao-approle` carrega justificativa exemplar **com complemento de falha alta**, e os cinco do
+ESO carregavam razão de grupo. **Dois não tinham razão nenhuma** — a ConfigMap de topologia e as
+credenciais de banco —, e o segundo é o que, junto com a *"graceful degradation"* de
+`setup_database.go:43-49`, permite a API subir **sem banco**.
+
+**E o que o cluster mostrou é mais forte que o item.** Medido em dev-public em 2026-08-16: **seis das
+dez** fontes `envFrom` **não existem** — `loopzero-platform-topology`, `loopzero-broker-token`,
+`loopzero-api-minio`, `loopzero-api-internal`, `loopzero-api-stripe`, `loopzero-api-admin` — e a API está de pé
+servindo. O `optional: true` não é hipótese: está sendo exercido agora, em seis de dez, em silêncio.
+
+**A chave da verificação passou a ser por entrada, e a mutação foi quem decidiu.** A primeira versão
+creditava um comentário de grupo à corrida inteira. Mutando, o custo apareceu: uma entrada
+acrescentada ao fim do grupo **herda a razão por acidente** — o defeito exato que o `helm-drift`
+tinha ao aprovar por par de charts, e que esta sessão re-chaveou por arquivo pela mesma razão. As
+cinco razões do ESO que substituíram o comentário de grupo não são cópias: cada uma nomeia o próprio
+segredo e a própria consequência.
+
+**Crédito onde é devido.** `middleware/auth.go:120-128` **falha fechado** — segredo vazio recusa antes
+da comparação em tempo constante, com o comentário registrando que é para o atacante não sondar a
+ausência de chave. O carregamento Ed25519 vai além e derruba o arranque. Onde alguém decidiu, decidiu
+certo.
+
+**O que NÃO foi feito, e por quê:** a degradação sem banco continua. `setup_database.go` a documenta
+como deliberada, e eu medi o **comportamento**, não a **intenção** — trocar uma degradação declarada
+intencional por um crash, sem decisão registrada, seria substituir um defeito por outro. Virou
+`B-116`. A conversão das 34 mudas restantes virou `B-115`.
+
+**Ressalva honesta:** `task lint` segue vermelho por **um** achado
+(`operators/internal/preview/preview_status_writer_test.go:232`, `QF1008`), em arquivo commitado de
+outra fatia. Não é meu e não o toquei — mexer no arquivo de uma fatia ativa de outra sessão arrisca
+conflito por um nit de staticcheck.
+
 ## B-105 — O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado   [x]
 
 domain: engine-go
@@ -4242,4 +4302,38 @@ dod:
   - existe caso de teste que reprova a forma exata que o `B-092` expôs: módulo com `./sub/...` num alvo e um `./outra/` sem alvo nenhum
 
 > Registrado 2026-08-15. A decisão sobre a granularidade é a terceira bala do DoD do `B-092`, e foi tomada lá com o número acima; este item carrega a implementação.
+
+## B-115 — 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-16 ao executar o `B-104`. `api/internal/server/router.go` tem **50** campos guardados por `if cfg.X != nil`, dos quais **35 registram rota**. Apenas **1** — o webhook do GitHub — reporta a decisão; as outras **34** somem em silêncio quando a dependência falta. O gate `silent-surface` congela essa base e recusa aumento, mas não a reduz.
+why_now: a base é dívida **contada e monotônica**, que é estritamente melhor que invisível — foi assim que o `unhomed-logic` transformou 257 scripts numa migração. Mas contar não é pagar, e a evidência de que a dívida é real está medida: seis das dez fontes `envFrom` não existem em dev-public **agora**, então parte das 34 está desligada neste momento sem nada reportar.
+status: triaged
+severity: média — nenhuma delas é pior que o webhook era; o que muda é que agora dá para saber quantas são e ir descendo o número.
+dod:
+  - a base do `silent-surface` desce, e cada decremento é uma superfície que passou a reportar
+  - a conversão anda em fatias, não num commit só — `router.go` é a única superfície onde o conjunto de rotas é lido, e 34 edições juntas tornam um erro indistinguível dos outros 33
+  - as superfícies cuja dependência está medida como ausente em dev-public entram primeiro, porque são as que já estão desligadas
+
+> Registrado 2026-08-16 pela varredura de população do `B-104`. Decisão que separou este item daquele: `MEET-ASYNC-AMENDMENT-2026-08-16-observable-silent-surfaces`.
+
+## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-16 ao executar o `B-104`. `api/cmd/setup_database.go:43-49` trata `DATABASE_URL` ausente como *"graceful degradation"*: emite `logger.Warn("DATABASE_URL not set — running without database")` e devolve `nil, nil`. O `envFrom` do segredo de banco é `optional: true` no deployment, então o kubelet inicia o container sem ele. Como a maioria das 35 superfícies do roteador depende do banco, um segredo faltando derruba quase tudo de uma vez — e `/api/v1/health` continua respondendo.
+why_now: o `B-104` tornou a consequência observável (`loopzero_api_surface_enabled`), mas não mudou a causa. E a causa é a única entrada `optional: true` do deployment cujo alcance é o produto inteiro em vez de uma superfície.
+status: triaged
+severity: alta — pelo alcance, não pelo estado atual: em dev-public o segredo existe.
+blocked_by: decisão. Medi o **comportamento**, não a **intenção** — o comentário do código declara a degradação como deliberada, e trocá-la por um crash sem decisão registrada seria substituir um defeito por outro. Precisa de alguém dizendo se subir sem banco é caso de uso real (desenvolvimento? sonda de arranque?) ou resíduo.
+dod:
+  - está decidido e escrito se a API pode subir sem banco, e para quê
+  - se não puder, o arranque falha alto; se puder, a degradação é observável como as outras superfícies e a prontidão reflete que o serviço não pode servir
+
+> Registrado 2026-08-16 pela medição do `B-104`. É o `optional: true` de maior alcance do deployment, e o único cuja razão continua sendo uma pergunta aberta.
 
