@@ -423,6 +423,11 @@ func runStatusWriterContract(args []string) int {
 func runSilentSurface(args []string) int {
 	fs := flag.NewFlagSet("silent-surface", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
+	// --report lists the debt instead of gating it. Same affordance
+	// `unhomed-logic` carries, and for the same reason: a monotonic baseline is
+	// only actionable if somebody can see WHICH items compose it. Without it the
+	// only way to read the list is to make the gate fail.
+	report := fs.Bool("report", false, "list the mute surfaces (no gate)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -431,6 +436,14 @@ func runSilentSurface(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "silent-surface: %v\n", err)
 		return 1
+	}
+	if *report {
+		fmt.Printf("%d superfície(s) muda(s) em %d guarda(s) de rota (base %d):\n",
+			len(v.Silent), v.Guarded, v.Baseline)
+		for _, s := range v.Silent {
+			fmt.Printf("  %s:%d  cfg.%s\n", silentsurface.RouterPath, s.Line, s.Field)
+		}
+		return 0
 	}
 	fmt.Println(v.Summary())
 	if !v.Pass {

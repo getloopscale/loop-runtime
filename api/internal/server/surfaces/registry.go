@@ -50,6 +50,123 @@ const (
 	// GitHubWebhook is the inbound GitHub delivery endpoint. Off means a
 	// customer's `git push` triggers no build. B-104.
 	GitHubWebhook = "github_webhook"
+
+	// B-115 slice 1 — the platform's own control paths: the surfaces that
+	// platform controllers and operators call, never a customer. They are
+	// converted first because their absence is invisible from the product side:
+	// nobody files a ticket when the ESO broker stops answering, the fleet just
+	// stops converging.
+
+	// Bootstrap is /internal/bootstrap — how a tenant is admitted.
+	Bootstrap = "bootstrap"
+	// ArgoCallback is /internal/argocd-callback — how GitOps reports sync back.
+	ArgoCallback = "argocd_callback"
+	// SecretFetch is /internal/v1/secret-fetch — the broker the external-secrets
+	// operator calls to resolve a tenant secret. Off means every ExternalSecret
+	// reconcile in every workload namespace gets a 404.
+	SecretFetch = "secret_fetch"
+	// AdminEvict is the operator primitive that tears a tenant down.
+	AdminEvict = "admin_evict"
+	// AdminPin is the ONLY path that moves a tenant between cells.
+	AdminPin = "admin_pin"
+	// ReleaseInspect is the read-only on-call view of a release's signing and
+	// attestation chain.
+	ReleaseInspect = "release_inspect"
+	// AuthProtected is the whole authenticated route group. Off means every
+	// customer-facing route disappears at once.
+	AuthProtected = "auth_protected"
+	// ActiveTeam is persistent team selection (/auth/team/switch).
+	//
+	// NESTED under AuthProtected: its guard sits inside the authenticated group,
+	// so it is only evaluated — and therefore only recorded — when that group is
+	// on. With auth off this series is ABSENT rather than zero.
+	//
+	// That ambiguity is tolerated here because the parent's own zero dominates
+	// it: an operator seeing `auth_protected == 0` already knows every
+	// customer-facing route is gone, and the state of one route inside it is not
+	// the question they are asking. It would NOT be tolerable for a top-level
+	// surface, which is why every other constant in this block is one.
+	ActiveTeam = "active_team"
+
+	// B-115 slice 2 — the product data plane: what a customer actually uses.
+	//
+	// Measured 2026-08-16: every one of these is built inside a chain that begins
+	// at `if dbAdapter != nil` (main.go:167). The intermediate structures —
+	// `orchDeps`, `stores`, `dbDeps` — are rungs of that one ladder, so the whole
+	// group shares a single root cause: no database. Their reasons name the chain
+	// rather than the rung, because the rung is not what an operator can fix.
+
+	// SourceUpload is bundle upload — the first step of every deploy.
+	SourceUpload = "source_upload"
+	// Projects is the project CRUD surface.
+	Projects = "projects"
+	// EventsStream is the SSE event feed the CLI follows during a deploy.
+	EventsStream = "events_stream"
+	// Secrets is tenant secret management.
+	Secrets = "secrets"
+	// Builds is submit/get/cancel — off means no deploy can start.
+	Builds = "builds"
+	// BuildAttestation is the supply-chain attestation read.
+	BuildAttestation = "build_attestation"
+	// BuildSBOM is the per-app SBOM read.
+	BuildSBOM = "build_sbom"
+	// BuildLogs is the build log read.
+	BuildLogs = "build_logs"
+	// LogStream is live build and runtime log streaming.
+	LogStream = "log_stream"
+	// ProjectStatus is the project health read.
+	ProjectStatus = "project_status"
+	// MetricsProxy is the Prometheus range proxy behind the dashboard charts.
+	//
+	// Its absence and its degradation are DIFFERENT states, and the router used
+	// to conflate them: the handler is built unconditionally
+	// (`NewMetricsProxyHandler` never returns nil), so a nil here means the whole
+	// orchestration chain is down and the route answers 404. The documented 503
+	// `prometheus_not_configured` happens when the handler EXISTS and its
+	// Prometheus client does not.
+	MetricsProxy = "metrics_proxy"
+	// StatusStream is the SSE signal.changed stream.
+	StatusStream = "status_stream"
+	// Scale is manual scaling.
+	Scale = "scale"
+
+	// B-115 slice 3 — the remainder, and the one that was never wired at all.
+
+	// BuildList is the deploy history read.
+	BuildList = "build_list"
+	// BuildStats is the deploys aggregate behind the Overview sparkline.
+	BuildStats = "build_stats"
+	// Rollback is one-command revert.
+	Rollback = "rollback"
+	// Promote moves a release between environments.
+	Promote = "promote"
+	// Teams is team membership management.
+	Teams = "teams"
+	// TenantDeletion is soft-delete, restore and bulk-delete of a tenant.
+	//
+	// Measured 2026-08-16: `Config.TenantDeletionStore` is declared and NEVER
+	// ASSIGNED anywhere in production code. The interface exists, the Postgres
+	// implementation exists, the handler exists, the three routes are written —
+	// and the field stays nil in every deployment, so none of them has ever been
+	// reachable. This is the "implemented but not wired" pattern CLAUDE.md names
+	// by that title, and it is the single strongest argument for this whole item:
+	// a permanent zero on this series would have made it visible from the day it
+	// landed. Tracked as its own item.
+	TenantDeletion = "tenant_deletion"
+	// Billing is the plan + usage read.
+	Billing = "billing"
+	// Environments is environment CRUD.
+	Environments = "environments"
+	// Domains is custom-domain management.
+	Domains = "domains"
+	// Repositories is the connected-repository surface.
+	Repositories = "repositories"
+	// IntegrationsGitHub is the dashboard repo picker.
+	IntegrationsGitHub = "integrations_github"
+	// Previews is preview-environment management.
+	Previews = "previews"
+	// Audit is the audit-log read.
+	Audit = "audit"
 )
 
 // Surface is one registration decision the router made.
@@ -111,6 +228,31 @@ func (r *Registry) Record(name string, enabled bool, reason string) error {
 	}
 	r.byName[name] = Surface{Name: name, Enabled: enabled, Reason: reason}
 	return nil
+}
+
+// Recorded records a registration decision and returns it, so the guard that
+// decides IS the guard that reports:
+//
+//	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
+//	    "…") {
+//	    r.Post("/internal/bootstrap", …)
+//	}
+//
+// The alternative — an `if`, then a `Record(…, true, …)` in the body and another
+// in an `else` — is three places that have to agree, repeated once per surface.
+// Thirty-four repetitions of a three-way agreement is a defect waiting for the
+// first person in a hurry, and it is the same reason `patchStatus` exists in the
+// application controller: an invariant that survives by everyone remembering is
+// not an invariant.
+//
+// The error is swallowed on purpose. Record only fails on programmer error —
+// empty name, duplicate name, disabled with no reason — and every call site is a
+// literal in this repository, so a failure is caught by the package's own tests
+// and by the `silent-surface` gate rather than at runtime. Returning an error
+// here would force every guard into a two-statement form and defeat the point.
+func Recorded(r *Registry, name string, enabled bool, reason string) bool {
+	_ = r.Record(name, enabled, reason)
+	return enabled
 }
 
 // All returns every recorded surface, ordered by name.
