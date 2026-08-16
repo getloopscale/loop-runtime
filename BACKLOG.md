@@ -4469,7 +4469,7 @@ zero — **um zero medido é diferente de um zero suposto**. Deliberadamente nã
 `loopzero-ops`: o `silent-surface` responde outra pergunta (a guarda **relata** sua decisão?), e uma
 superfície pode relatar `false` para sempre sem que nada esteja errado com o relato.
 
-status: **triaged** — trabalho completo; fechamento aguarda ratificação do
+**Trabalho completo.** O fechamento aguarda a ratificação do
 `MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado +
-caminho destrutivo).
+caminho destrutivo de tenant), então o `status` acima permanece `triaged`.
 
