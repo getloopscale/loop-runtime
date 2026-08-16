@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **A verificação de evidência parou de acusar de invenção o que existe — e de aceitar o que aponta para outro lugar.** Ela perdia o ponto inicial dos caminhos: uma referência a um arquivo de configuração do projeto era lida sem o ponto, não encontrada, e reportada como inventada; pior, uma referência a um repositório vizinho era lida como se fosse deste, e podia ser confirmada contra um arquivo de mesmo nome — afirmando ter conferido outra coisa. Referências a repositórios vizinhos agora são declaradas como não verificáveis daqui, em vez de confirmadas por engano. (B-003, B-004)
+
 - **`task lint` voltou a passar limpo, e no caminho apareceram seis defeitos reais.** O maior: o servidor **entrava em pânico ao subir sem banco de dados** — o modo que o código documenta como degradação graciosa registrava o aviso e morria em seguida. Também corrigidos: quatro comentários de documentação grudados no símbolo errado (quem lia recebia o contrato de outra coisa), uma resposta de erro montada com um formatador que não é codificador JSON, uma escrita de stream cuja falha era ignorada, e treze trechos de código morto — entre eles quatro tipos que ninguém constrói e um comentário prometendo um travamento sobre uma implementação que usa outro. (B-009)
 
 ### Changed

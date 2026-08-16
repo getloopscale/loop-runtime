@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-122 items — **Open** 69 · **In flight** 10 · **Closed** 43
+124 items — **Open** 71 · **In flight** 7 · **Closed** 46
 
-### Open (69)
+### Open (71)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -143,14 +143,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam----) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `triaged` | alta |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
+| [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
+| [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (10)
+### In flight (7)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
-| [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto----) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `planned` | — |
-| [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado----) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `planned` | — |
-| [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas----) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `planned` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret----) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `planned` | alta |
 | [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator----) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `planned` | alta |
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
@@ -159,10 +158,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem----) | O `CLAUDE.md` aponta para cinco contratos que não existem | `planned` | média |
 
-### Closed (43)
+### Closed (46)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
+| [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto---x) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `shipped` | — |
+| [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado---x) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `shipped` | — |
 | [`B-006`](#b-006--o-oráculo-do-conjunto-de-gates-vive-num-arquivo-com-data-no-nome-e-é-mutado-a-cada-gate---x) | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate | `shipped` | — |
 | [`B-007`](#b-007--43-mb-de-snapshot-de-helmfile-que-ninguém-gera-nem-consome---x) | 4,3 MB de snapshot de helmfile que ninguém gera nem consome | `shipped` | — |
 | [`B-008`](#b-008--task-testunit-está-vermelho-por-drift-entre-repositórios---x) | `task test:unit` está vermelho por drift entre repositórios | `shipped` | — |
@@ -179,6 +180,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
+| [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
 | [`B-044`](#b-044--em-qual-cluster-um-chart-aterrissa-é-uma-flag-de-linha-de-comando-não-uma-declaração---x) | Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração | `shipped` | alta |
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
@@ -303,7 +305,7 @@ que ninguém tomou, e projetar HA para 55 releases antes dela é dimensionar sol
 
 > Registrado 2026-08-09 por `/backlog-item` (slug: `core-cluster-spof`).
 
-## B-003 — O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto   [ ]
+## B-003 — O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto   [x]
 
 domain: engine-go
 repo: loopzero
@@ -311,7 +313,7 @@ suggested_mode: bug
 source: discover-review
 evidence: `.claude/skills/discover-confidence/scripts/check_evidence_pointers.py:30-32`. O regex é `\b((?:[A-Za-z0-9_.\-]+/)+[A-Za-z0-9_.\-]+\.[A-Za-z0-9]{1,10}):(\d+)`; o `\b` inicial não casa antes de um ponto, então `.claude/rules/current-constraint.md:26` é extraído como `claude/rules/current-constraint.md:26` — sem o ponto — e não resolve. Reproduzido em 2026-08-09 durante `/discover-confidence` de `B-001`: a opportunity recebeu `hard_caps_triggered: ['fabricated_evidence']` e verdict `INVALID` (49) apontando esse único ponteiro, com o arquivo existindo em disco e a linha 26 dentro dele. Na mesma execução notei que o regex exige ao menos uma `/`, então `Taskfile.yml:403` não é extraído nem verificado. **Medido em 2026-08-09 e reclassificado: não é defeito.** Tornar a barra opcional faz `example.com:8080` e `app-dev.loopzero.example:443` — que aparecem por todo o corpus deste projeto — serem extraídos como ponteiro de código e acusados de fabricação. Exigir a barra troca um falso negativo barato (ponteiro de raiz não verificado) por evitar um falso positivo caro no único cap que o golden rule chama de irrecuperável. É escolha conservadora correta e fica registrada como limite deliberado, não como dívida.
 why_now: `fabricated_evidence` é o único cap que `discover-opportunity-golden-rule.md § 1` chama de irrecuperável, porque tudo a jusante trata ponteiro medido como fato. Um falso positivo nele ensina a contornar o gate mais importante do ciclo — e a saída natural (tirar o número de linha) **enfraquece a evidência** para satisfazer o checker. Encontrado ao medir `B-001`, não por auditoria do skill.
-status: planned
+status: shipped
 resolved_in: 6d790d16 — fix + 2 testes (o de regressao e o que tranca o limite deliberado da barra)
 dod:
   - um caminho iniciado por ponto (`.claude/rules/x.md:26`) é extraído **com** o ponto e verificado contra o disco
@@ -321,7 +323,12 @@ dod:
 
 > Registrado 2026-08-09 durante `/discover --mode review B-001` (slug: `evidence-pointer-dotpath`).
 
-## B-004 — A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado   [ ]
+> **Fechado 2026-08-16 — reproduzido, corrigido e coberto por teste.** O `\b` no início do padrão exigia fronteira de palavra, e antes de `.` (não-palavra) não há nenhuma — a busca começava **depois** do ponto. Medido: `.claude/rules/testing.md:12` virava `claude/rules/testing.md` (fabricação falsa), `./scripts/x.py:5` virava `scripts/x.py` (resolvia por acaso) e `../loopzero-cli/src/a.ts:7` virava `loopzero-cli/src/a.ts` — **o pior dos três**, porque não acusa nada e afirma ter verificado outro arquivo.
+>
+> Trocado por um lookbehind negativo, que diz o que o `\b` pretendia ("não estou no meio de um caminho") sem exigir que o primeiro caractere seja de palavra. E um ponteiro que **sai** do projeto (`../irmão/x.ts`) passou a ser reportado como `outside_project` em vez de resolvido contra a raiz daqui: sem o repositório irmão em mãos, a resposta honesta é que não foi verificado. Sete testes novos, três deles nomeando exatamente as três formas acima.
+
+
+## B-004 — A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -329,7 +336,7 @@ suggested_mode: bug
 source: discover-review
 evidence: `.claude/skills/discover-confidence/fixtures/good-opportunity.md` cita `rules/cycle-discover.md:20`, `rules/cycle-discover.md:150`, `skills/discover-confidence/scripts/check_corner_coverage.py:78` e `.../check_evidence_pointers.py:95` — caminhos do layout **standalone**. Neste repo (layout plugin) eles vivem sob `.claude/`, e `conftest.py::_find_project_root` resolve para a raiz do repositório, então nenhum dos quatro existe. Resultado: a fixture que representa uma opportunity **boa** pontua `INVALID` (49) com `hard_caps_triggered: ['fabricated_evidence']`, e `test_run_opportunity_score.py::test_good_opportunity_scores_shippable` falha. Verificado em 2026-08-09 com `git stash` do fix de `B-003` que **a falha é anterior** e independente dele.
 why_now: encontrado ao rodar a suíte completa para provar não-regressão do fix de `B-003`. Uma suíte permanentemente vermelha treina o time a ignorar o vermelho — `CLAUDE.md § 7` chama isso de bug de prioridade máxima — e este vermelho fica em **todo repo consumidor** do skill, não só neste.
-status: planned
+status: shipped
 resolved_in: ec0c5f74 — conftest passa a reescrever o prefixo conforme o layout; 36/36 verdes
 dod:
   - `pytest .claude/skills/discover-confidence/tests` passa inteira nos dois layouts (standalone e plugin), sem marcar teste como skip
@@ -337,6 +344,13 @@ dod:
   - existe teste que falha no layout plugin antes da correção
 
 > Registrado 2026-08-09 durante `/discover --mode review B-001` (slug: `good-fixture-layout-dependent`).
+
+> **Fechado 2026-08-16 — a fixture "boa" pontua 4/4 verificados, 0 fabricados.** A causa não era da fixture: os quatro ponteiros dela citam layout **standalone** (`rules/…`, `skills/…`) e o skill roda em layout **plugin**, onde o ecossistema vive em `.claude/`. O mesmo ponteiro é correto num layout e inexistente no outro.
+>
+> O resolvedor passou a traduzir entre os dois, por estratégias ordenadas — a primeira que resolve vence. Elas são **traduções de layout, nunca buscas**: nenhuma varre o disco atrás de nome parecido, porque isso transformaria a checagem de fabricação numa que sempre acha alguma coisa. Um teste guarda essa fronteira (`test_a_genuinely_absent_pointer_is_still_fabricated`), e outro guarda que a linha fora de faixa continua sendo fabricação depois da tradução.
+>
+> Mesma causa-raiz do **`B-120`** (23 invocações de script nas skills apontando para o layout errado) — três itens, uma família.
+
 
 ## B-005 — Unificar cell e cluster em 1:1, aposentando `cell-default`   [ ]
 
@@ -1509,7 +1523,7 @@ dod:
   - `git fetch && git switch workspace` funciona ali sem intervenção
   - os diretórios ad-hoc removidos ou promovidos, não ambos coexistindo
 
-## B-040 — O gate que garante autenticação em toda rota pública passa enumerando zero rotas   [ ]
+## B-040 — O gate que garante autenticação em toda rota pública passa enumerando zero rotas   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1517,7 +1531,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 (`9f4a4a62`) e **reproduzido**. `routeauthcoverage/check.go:27` fixa `routerPath = "api/internal/server/router.go"` e percorre o arquivo por linha; `check.go:151` reprova **apenas** quando `len(violations) > 0`, e `quality_gates_authz.go:315-329` só **imprime** `outcome.PassCount`, nunca o assere. Reproduzido reescrevendo `router.go` na forma pós-refatoração numa árvore temporária (marcadores `middleware.Auth` e `registerProtectedRoutes` presentes, registrações movidas para `Register()`): `route-auth-coverage: PASS — 0 routes`, exit 0. Hoje enumera 42 rotas e passa legitimamente. Duas das três guardas já existem — arquivo ausente reprova (`router.go not found`), arquivo stub reprova (`could not locate the middleware.Auth chi.Router`); falta só a contagem mínima. Issue #285.
 why_now: este é o **pré-requisito do B-041**. A separação de `routes` por domínio produz exatamente a única forma que passa vazia — ela desligaria a invariante de cobertura de auth sobre toda a superfície pública **no mesmo commit que a justifica**, e o gate ficaria verde.
-status: planned
+status: shipped
 resolved_in: cmd/loopzero-ops/internal/quality/routeauthcoverage/check.go — ErrNoRoutesEnumerated: enumerar zero rotas passou a ser erro tipado, nao PASS. Fatia slice-1.
 severity: alta — nada está quebrado hoje, mas o defeito arma exatamente na mudança que o repositório quer fazer, e o modo de falha é silencioso e verde.
 dod:
@@ -1526,6 +1540,9 @@ dod:
   - o upgrade para varredura AST (que sobrevive à movimentação) fica registrado como trabalho seguinte, não como pré-requisito — o piso fecha este buraco sozinho
 
 > Registrado 2026-08-11 pela auditoria de arquitetura (`/loop-codebase-architect`). Evidência reproduzida pela thread principal, não herdada de agente.
+
+> **Fechado 2026-08-16 — DoD 3/3.** (1) `route-auth-coverage` reprova enumeração vazia: `ErrNoRoutesEnumerated`, com o piso em `check.go:171` escrito sobre `PassCount+len(violations)` e não sobre `PassCount` sozinho — o comentário ali registra por quê, e ele está certo: `PassCount` conta só as APROVADAS, então seria zero também numa árvore inteiramente violada. (2) O teste que prova o piso existe nos dois sentidos (`check_test.go:196` e `:213`). (3) O upgrade para varredura AST fica registrado como trabalho seguinte no **`B-123`** — e a medição que o acompanha é mais estreita que a original: o piso fecha a enumeração vazia, mas **não** fecha uma queda de 42 para 21, que passa em silêncio.
+
 
 ## B-041 — `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?"   [ ]
 
@@ -5037,3 +5054,37 @@ dod:
   - a varredura por outras afirmações de gate inexistente no corpo de comentários foi feita, porque esta foi encontrada por acaso
 
 > Registrado 2026-08-16 ao fechar o `B-009`.
+
+## B-123 — O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — o gate protege a asserção de que toda rota pública está atrás de `Auth`, e ele é a única coisa que a protege. Uma queda silenciosa na enumeração não abre um buraco sozinha; ela apaga o aviso de que um buraco foi aberto.
+evidence: medido 2026-08-16. `routeauthcoverage/check.go` enumera por **regex sobre linhas** (`routeCallRE` em `check.go:84`, `routePathRE` em `:87`) de um caminho fixo (`routerPath = "api/internal/server/router.go"`, `:27`), e localiza os grupos por **faixa de linhas** (a saída diz `auth spans 237..327, protected 337..684`). O piso que o `B-040` acrescentou é `outcome.PassCount+len(violations) == 0` (`:171`) — ele recusa a enumeração **vazia** e só ela. Uma mudança que faça o regex perder metade das rotas cai de 42 para 21 e **passa**. Medido no estado atual: as 42 rotas são todas literais e não há `r.Mount(`/`r.Route(` delegando, então o regex acerta hoje — o que está em aberto é o que acontece quando não acertar.
+why_now: o `B-040` registrou este upgrade como trabalho seguinte na sua terceira bala, e nenhum item o carregava — a bala não podia fechar porque apontava para um item que não existia. E o `B-041`/`B-080` estão movendo famílias de `routes` agora, que é exatamente a mudança que reposiciona linhas e caminhos.
+status: triaged
+dod:
+  - a enumeração é AST e não regex, ou o piso passa a ser uma contagem mínima que uma queda derruba
+  - existe teste que prova a queda: uma árvore com N rotas onde a forma de registro mudou reprova, em vez de reportar N/2
+  - o caminho do roteador deixa de ser literal fixo, ou o gate reprova quando ele não existe em vez de enumerar zero e cair no piso
+
+> Registrado 2026-08-16 ao fechar o `B-040`, cuja terceira bala pede este registro.
+
+## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+severity: média — nenhuma delas guarda produto, mas as três guardam **gates**, e um gate cuja suíte está vermelha é um gate que ninguém sabe se ainda mede o que diz medir
+evidence: medido 2026-08-16 rodando `pytest` em cada `.claude/skills/*/tests/`. Quinze suítes, **três vermelhas com uma falha cada**: `code-quality::test_the_shipped_template_parses_when_you_follow_its_own_instructions` (o template que a skill distribui não passa nas próprias instruções), `discover-plan-confidence::test_good_plan_targets_all_resolve` (a fixture "boa" tem alvo que não resolve — **mesma forma do `B-004`**, que era a fixture boa do skill irmão) e `plan-confidence::test_real_plans_snapshot::test_snapshots_cover_active_plans_with_matrix`. **Confirmadas pré-existentes**: reproduzidas com as mudanças da fatia `B-003`/`B-004` guardadas em `git stash`, exatamente as mesmas três.
+why_now: encontradas ao rodar as suítes vizinhas para provar que a correção do resolvedor de ponteiros não havia afrouxado nada. Elas não aparecem no `task test:unit` (que roda Go) nem no `task quality:gates` — só rodam quando alguém invoca `pytest` à mão, e o número de vermelhas sugere que faz tempo.
+status: triaged
+dod:
+  - as três passam, ou a que não deve passar foi removida com a razão escrita
+  - `discover-plan-confidence` é diagnosticado contra o `B-004`: se for a mesma causa-raiz de layout, a correção é a mesma e o item diz isso
+  - existe um caminho que roda as suítes de `.claude/skills/*/tests/` num gate, senão a próxima vermelha também espera alguém tropeçar nela
+
+> Registrado 2026-08-16 ao fechar o `B-003`/`B-004`.
