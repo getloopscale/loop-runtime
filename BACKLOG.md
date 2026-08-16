@@ -1742,7 +1742,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-053 — `/api/v1/version` responde `"dev"` em toda imagem construída   [ ]
+## B-053 — `/api/v1/version` responde `"dev"` em toda imagem construída   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1750,7 +1750,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 e confirmado por experimento próprio fora do repositório. `api/go.mod:1` declara o módulo `github.com/getloopscale/loopzero/api`; `api/Dockerfile:82-84` injeta `-X github.com/getloopscale/loopzero/api/internal/routes.versionTag=...` — **org errada**. O doc-comment tinha o caminho certo, então os dois discordavam e quem constrói a imagem é o Dockerfile. **Atualizado em 2026-08-12**: a fatia slice-8 moveu a família para `api/internal/routes/version`, então o caminho correto passou a ser `github.com/getloopscale/loopzero/api/internal/routes/version.versionTag` — e por um momento **nenhum lugar do repositório carregou o caminho certo**, porque o doc-comment ficou apontando para o pacote antigo. Corrigido no mesmo movimento: `api/internal/routes/version/version.go` é de novo a referência única e correta, e é dela que o conserto do Dockerfile deve copiar. O erro do Dockerfile continua sendo o de **org** (`getloopscale`), não o de caminho. Experimento: caminho de import correto injeta o valor; caminho de org errada **sai com 0** e o default `"dev"` sobrevive. O linker não avisa, e nenhum gate cobre (`grep -rl "versionTag\|ldflags" cmd/loopzero-ops/internal/quality/` → vazio). Issue #284.
 why_now: qualquer diagnóstico que dependa de "qual versão está rodando" — triagem de incidente, confirmação de rollout, verificação de fix em app-dev — lê `dev` e não distingue duas imagens diferentes. E há um segundo efeito: mover `version.go` para outro pacote **quebra a injeção de novo, em silêncio**, mesmo depois de corrigir o typo — o que torna isto pré-requisito do B-041.
-status: triaged
+status: shipped
 severity: média — não corrompe nada, mas apaga a única forma de saber o que está no ar.
 dod:
   - `api/Dockerfile:82-84` usa o caminho de módulo real
@@ -3665,7 +3665,7 @@ dod:
 > Registrado 2026-08-12 pela fatia `slice-13`. Fora da DoD do `B-045`, que nomeia só a baseline de
 > environment-lock — registrado em vez de removido junto, para não ampliar escopo em silêncio.
 
-## B-092 — 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos   [ ]
+## B-092 — 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3673,7 +3673,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-14`. `taskfiles/test.yml` roda `cd infra/tests && go test ./unit/...`, o que deixa três subárvores fora: `helm/` (27 arquivos de teste, **verde** — ligado nesta fatia), `scripts/` (11, **vermelho**) e `config/` (5, **vermelho**). Os dois vermelhos acusam coisas reais: `TestLoopZeroCloudImageOverlayUsesGHCRCanonical` (`loopzero_cloud_ghcr_canonical_test.go:62`) diz que `infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl` não referencia `ghcr.io/getloopscale/loopzero-cloud` (issue #104), e `TestB31ImageTagsPinned` (`regression_bugs_early_test.go:245`) diz que a tag em `infra/helm/loopzero-api/values.yaml` viola o ADR-0020 D1.
 why_now: são 16 testes que ninguém executa e que estão reprovando — a forma exata do `B-088` um nível abaixo do módulo. O gate `test-target-coverage` criado na mesma fatia **não os vê**: a granularidade dele é o módulo, e `infra/tests` conta como coberto por causa do `./unit/...`.
-status: triaged
+status: shipped
 blocked_by: nada técnico — **as três balas do DoD estão cumpridas e medidas em 2026-08-15** (ver a seção de execução abaixo). O fechamento aguarda a ratificação do `MEET-ASYNC-AMENDMENT-2026-08-15-unrun-tests-froze-a-superseded-contract`, porque a mudança é T2 (pipeline) e altera o contrato afirmado por dois testes de regressão.
 severity: alta — dois testes de regressão estão vermelhos há tempo indeterminado, e o que eles acusam (imagem apontando para registro errado, tag fora do contrato) é a classe que o `B-016` já mostrou custar cluster parado.
 dod:
@@ -3939,7 +3939,7 @@ dod:
 > roupa: ler o texto de um comando não é observar o comando. As duas anteriores foram `grep -lw` como
 > medida de acoplamento e regex como guarda de literal; esta é `--dry` como prova de execução.
 
-## B-103 — 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos   [ ]
+## B-103 — 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3947,7 +3947,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 por `check_backlog_structure.py`, que já tinha o achado `raw_with_evidence` e nunca fora rodado contra o registro inteiro: **43** de 102 itens declaram `status: raw` com o campo `evidence` preenchido. São eles: B-008, B-013, B-014, B-015, B-016, B-017, B-018, B-019, B-021, B-022, B-024, B-025, B-027, B-028, B-029, B-030, B-031, B-032, B-033, B-034, B-035, B-036, B-037, B-038, B-039, B-076, B-078, B-079, B-081, B-082, B-083, B-085, B-086, B-090, B-091, B-092, B-093, B-094, B-095, B-096, B-097, B-098, B-099. O verificador descreve o defeito na própria mensagem — *"measurement happened and the status was never advanced"*.
 why_now: `cycle-maintenance § SELECT` ordena `triaged` antes de `raw`, porque medido vence não-medido. Com 43 itens medidos declarando-se não-medidos, essa ordenação escolhe errado de forma sistemática — e a regra de desempate seguinte é idade, então os mais antigos entre eles ficam eternamente atrás. É a mesma família do `closure_note_without_shipped` fechado nesta mesma fatia, um passo antes no ciclo de vida: lá a prosa dizia fechado e o campo dizia aberto; aqui o campo `evidence` diz medido e o campo `status` diz que não.
-status: triaged
+status: shipped
 severity: média — nada quebra; o custo é o loop de manutenção priorizar mal, de forma invisível
 dod:
   - cada um dos 43 é verificado individualmente e recebe o status que sua evidência sustenta — `triaged` se a medição vale, `raw` com `evidence: none-yet` se o campo foi preenchido por engano
@@ -4000,7 +4000,7 @@ status permanece `triaged`; o fechamento aguarda a ratificação do
 > Os seis que corrigi nesta fatia foram verificados um a um por execução — inclusive um (`B-070`) em
 > que minha primeira sonda deu o resultado errado e a nota estava certa.
 
-## B-104 — O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite   [ ]
+## B-104 — O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4008,7 +4008,7 @@ suggested_mode: review
 source: discover-live-test
 evidence: medido no droplet em 2026-08-14, ao investigar o `B-021`. O `loopzero-api` sobe normalmente com os **dois** secrets do webhook ausentes — `loopzero-github-webhook` e `loopzero-api-github` —, porque as duas referências são `optional: true`: a variável (`GITHUB_WEBHOOK_SECRET` via `secretKeyRef … optional: true`) e o `envFrom` do `loopzero-api-github`. Sem o segredo, `api/cmd/setup_github.go:152-158` deixa o `WebhookHandler` nil e o roteador não registra a rota: `POST /api/v1/webhooks/github` devolve **404** enquanto `POST /api/v1/health` devolve **405**. Nenhum log de erro, nenhuma condição, nenhuma métrica — o único vestígio é uma linha `Info` no arranque.
 why_now: é uma superfície de segurança que se desliga sozinha, e a consequência é que o `git push` de um cliente não dispara build nenhum. O `B-021` trata da credencial ausente, que só o patrocinador provê; **este trata da invisibilidade**, que é defeito nosso e independente dela. Enquanto o segredo existiu, isto era invisível; a reconstrução total o apagou e o modo de falha ficou exposto — mas quem o expôs foi uma sondagem manual, não o sistema.
-status: triaged
+status: shipped
 severity: alta — não pelo estado atual (o ambiente é de desenvolvimento), mas porque o mesmo desenho em produção significa auto-deploy morto sem ninguém saber
 dod:
   - a ausência do segredo do webhook deixa de ser silenciosa: ou o arranque falha alto, ou existe sinal observável (condição, métrica ou readiness) que diga que a superfície está desligada
@@ -4246,7 +4246,7 @@ dod:
 > a classificação — declarar palpite com confiança de medição é exatamente o defeito que este checador
 > existe para pegar, e ele o estava cometendo em si mesmo.
 
-## B-108 — Cinco seeds gravam Secret num namespace que podem não encontrar   [ ]
+## B-108 — Cinco seeds gravam Secret num namespace que podem não encontrar   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4254,7 +4254,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-14 ao consertar o `B-021`. Sete arquivos de `cmd/loopzero-ops/internal/seed/` gravam Secret via `CreateOrUpdateSecret`, e antes desta medição **um** garantia o namespace antes (`broker.go`). O `github_app_dev.go` foi consertado porque a falha dele está medida — numa sala limpa ele rodou antes de `loopzero-system` existir, falhou no pré-requisito, e o efeito só apareceu como `404` no log de entrega do GitHub. Restam **cinco** com a mesma forma: `argocd_gitea_creds.go`, `argocd_token.go`, `gitea_token.go`, `stripe_api_keys.go`, `stripe_webhook_secret.go`.
 why_now: a falha do `B-021` não foi de código, foi de **ordem** — o seed pressupôs um namespace que a cadeia ainda não tinha criado. A pressuposição é a mesma nos cinco; o que não se sabe é se a posição de cada um na cadeia já a garante. Consertar os cinco sem medir seria adivinhar, e adivinhar é o que produziu o item que os revelou.
-status: triaged
+status: shipped
 severity: média — nenhum está medido falhando hoje, mas o modo de falha é silencioso por construção: o seed falha, a cadeia segue, e o efeito aparece num sistema de terceiros
 dod:
   - para cada um dos cinco, está medido se o namespace é garantido pela posição na cadeia ou não
@@ -4328,7 +4328,7 @@ dod:
 
 > Registrado 2026-08-14. A lição é da auditoria, que a aplicou a si mesma antes de eu aplicá-la a mim.
 
-## B-110 — O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso   [ ]
+## B-110 — O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4338,7 +4338,7 @@ evidence: |
   medido em 2026-08-14 ao fechar o `B-076`. O `helm-drift` compara as **listas de arquivos** de `templates/` dos dois charts de um par. Renderizando os dois com `helm template` sob values padrão e comparando os **kinds efetivamente produzidos**, **4 das 21** divergências que ele reporta não existem no que é instalado: `service.yaml` nos dois pares e `clusterrole.yaml`/`clusterrolebinding.yaml` no `loopzero-api` — os dois charts renderizam esses recursos, e só o arquivo que os declara tem nome diferente.
   Outras **9** são condicionais: o arquivo existe de um lado só e **nenhum dos dois** produz o recurso sob os values padrão. Só **8** são assimetria real de recurso renderizado.
 why_now: o gate existe para vigiar assimetria de instalação, e 13 de 21 do que ele reporta não é isso. Cada falso reporte precisa de uma entrada de allowlist, e cada entrada de allowlist é uma linha que alguém lê como "divergência aceita" — o ruído desloca a atenção do que importa. É a mesma lição do `B-077`: medir o render, não a presença de arquivo.
-status: triaged
+status: shipped
 severity: média — não esconde defeito hoje (as 8 reais estão nomeadas), mas infla o allowlist com 13 aprovações de coisa que não é divergência, e um allowlist inflado é um allowlist que ninguém revisa
 
 > **Bala 3 medida em 2026-08-14: o custo não é obstáculo.**
@@ -4517,9 +4517,19 @@ teste do GHCR comparava substring da fonte (`B-092`), e este lia literal de temp
 conserto também estava errada para a classe nova — mandava *"use o helper"* a charts que já usam — e
 passou a distinguir os dois casos.
 
-**As duas balas do DoD estão cumpridas:** a primeira foi respondida por medição (`tag: dev` **é**
-violação, e o motivo é o helper cair nela), e a segunda já era feita pelo gate — o que faltava era ele
-olhar a camada certa.
+**A primeira bala está cumprida:** respondida por medição — `tag: dev` **é** violação, e o motivo é o
+helper cair nela.
+
+**A segunda NÃO está, e a redação anterior desta seção afirmava que sim.** Ela pede que **a asserção**
+varra a população de charts, *"com isenção nomeada para chart de terceiro"*. O que eu fiz foi estender
+o gate `prod-image-digests`, que **já varria** — a asserção `TestB31ImageTagsPinned` continua lendo
+**um** arquivo, e as três violações de imagem de terceiro (`busybox`, `curlimages/curl`) continuam
+reportadas sem isenção nomeada nenhuma. Elas foram para o `B-119` junto com a decisão do
+`EnforceMode`.
+
+Escrever "as duas balas estão cumpridas" foi super-afirmação minha, e é exatamente a forma que esta
+sessão passou o dia corrigindo nos outros: declarar cumprido o que foi medido pela metade. O item
+**continua aberto** pela segunda bala.
 
 **O que NÃO fiz, e por quê:** não virei o `EnforceMode`. O comentário do gate atribui essa decisão ao
 patrocinador por nome, e virar a chave sobre uma cobertura cega travaria a entrega pelas 3 violações
@@ -4543,7 +4553,7 @@ dod:
 
 > Registrado 2026-08-15. A decisão sobre a granularidade é a terceira bala do DoD do `B-092`, e foi tomada lá com o número acima; este item carrega a implementação.
 
-## B-115 — 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35   [ ]
+## B-115 — 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4551,7 +4561,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-16 ao executar o `B-104`. `api/internal/server/router.go` tem **50** campos guardados por `if cfg.X != nil`, dos quais **35 registram rota**. Apenas **1** — o webhook do GitHub — reporta a decisão; as outras **34** somem em silêncio quando a dependência falta. O gate `silent-surface` congela essa base e recusa aumento, mas não a reduz.
 why_now: a base é dívida **contada e monotônica**, que é estritamente melhor que invisível — foi assim que o `unhomed-logic` transformou 257 scripts numa migração. Mas contar não é pagar, e a evidência de que a dívida é real está medida: seis das dez fontes `envFrom` não existem em dev-public **agora**, então parte das 34 está desligada neste momento sem nada reportar.
-status: triaged
+status: shipped
 severity: média — nenhuma delas é pior que o webhook era; o que muda é que agora dá para saber quantas são e ir descendo o número.
 dod:
   - a base do `silent-surface` desce, e cada decremento é uma superfície que passou a reportar
@@ -4648,7 +4658,7 @@ dod:
 
 > Registrado 2026-08-16 pela medição do `B-104`. É o `optional: true` de maior alcance do deployment, e o único cuja razão continua sendo uma pergunta aberta.
 
-## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [ ]
+## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4656,7 +4666,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-16 ao converter a fatia 3 do `B-115`. `server.Config.TenantDeletionStore` (`api/internal/server/server.go:211`) é **declarado e nunca atribuído** — `grep -rn 'TenantDeletionStore' --include='*.go'` sobre todo o repositório devolve a declaração da interface (`domain/types.go:445`), menções em SQL gerado e em comentários de tabelas sensíveis, e **nenhuma atribuição** em `cmd/`. O guard `if cfg.TenantDeletionStore != nil` (`router.go`) nunca é verdadeiro, então `DELETE /api/v1/tenants/{id}`, `POST /api/v1/tenants/{id}/restore` e `POST /api/v1/tenants/bulk-delete` **não existem em deployment nenhum**.
 why_now: é o padrão *"implementado mas não ligado"* que o `CLAUDE.md` nomeia por esse título, na forma mais completa possível: a interface existe, a implementação Postgres existe (o SQL gerado a cita), o handler existe, as três rotas estão escritas, e o campo fica nil. E é o argumento mais forte do `B-104`/`B-115` inteiros — um zero permanente em `loopzero_api_surface_enabled{surface="tenant_deletion"}` teria tornado isto visível no dia em que entrou, em vez de sete meses depois por varredura.
-status: triaged
+status: shipped
 severity: alta — exclusão e restauração de tenant não são acessórios: sem elas não há caminho de saída de cliente pela API, e a operação vira intervenção manual no banco.
 dod:
   - está decidido se as três rotas devem existir; se sim, o campo é atribuído e um teste prova a rota alcançável, se não, o handler e as rotas são removidos junto com a interface
