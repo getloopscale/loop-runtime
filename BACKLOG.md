@@ -4270,6 +4270,40 @@ dod:
 
 > Registrado 2026-08-15, ao re-medir o `B-028`. É o inverso exato do que o autor do firewall quis evitar: ele manteve a porta aberta para preservar o gate, e o gate cegou pelo lado que ninguém vigiava.
 
+---
+
+### Corrigido em 2026-08-16 — a premissa deste item estava errada em três pontos
+
+Medi o gate em vez de inferir dele, e **o item que eu escrevi não se sustenta.**
+
+**1. O gate NÃO é silencioso.** `dev-version-drift.yml` tenta 8 vezes com 60 s de intervalo e então
+emite `::error::dev host inalcançável após 8 tentativas` seguido de `exit 1`. A primeira bala do DoD
+— *"o gate falha alto quando o alvo não responde"* — **já estava satisfeita** quando registrei o
+contrário. Eu inferi "silencioso" de "porta fechada", sem ler o gate.
+
+**2. A porta não é 8787 há tempo.** O `therag_api` publica `0.0.0.0:18082->8787/tcp` — a porta do
+contêiner é 8787, a **do host é 18082**, parte da faixa `1808x` padronizada para os produtos do plano
+de dados. O `THERAG_PORT: '8787'` do workflow e a entrada `8787` da `ALLOW_EXTERNAL` do firewall são
+**as duas obsoletas**. (Há um `.env.bak-pre-18082` no droplet, deixado por quem fez a migração.)
+
+**3. E a razão de tudo é outra: o loopzero-rag está fora do ar.** Medido em 2026-08-16 — `therag_pgvector`
+e `therag_api` em laço de reinício, **8.390** e **14.976** reinícios, contêiner criado em
+2026-08-10. Virou `B-118`.
+
+**O gate estava certo o tempo todo.** Das últimas 100 execuções: **99 falhas, 1 cancelada, ZERO
+sucessos**. Ele vem gritando de hora em hora há dias, corretamente, e ninguém agiu — que é exatamente
+o que o comentário do próprio workflow prevê como fatal: *"um gate que grita sem motivo é um gate que
+o time aprende a ignorar"*. Só que não era sem motivo.
+
+**O que resta deste item**, depois da correção:
+
+- a `ALLOW_EXTERNAL` do firewall e o `THERAG_PORT` do workflow passam a dizer **18082**
+- fica registrado que 100 execuções vermelhas seguidas não alcançaram ninguém — o defeito de
+  notificação é real e independente do alvo estar de pé
+
+status permanece `triaged`; o DoD anterior foi reescrito acima porque as duas balas originais
+descreviam um sistema que não é este.
+
 ## B-113 — A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável   [ ]
 
 domain: engine-go
@@ -4472,4 +4506,34 @@ superfície pode relatar `false` para sempre sem que nada esteja errado com o re
 **Trabalho completo.** O fechamento aguarda a ratificação do
 `MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado +
 caminho destrutivo de tenant), então o `status` acima permanece `triaged`.
+
+## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: bug
+source: discover-live-test
+evidence: medido em 2026-08-16 no droplet. `therag_pgvector` e `therag_api` em laço de reinício — **8.390** e **14.976** reinícios, contêiner criado em **2026-08-10**. Log do banco: *"This is usually the result of upgrading the Docker image without upgrading the underlying database using pg_upgrade"*. Log da API: `boot failed: getaddrinfo EAI_AGAIN pgvector` — ela não resolve o banco porque o banco também reinicia. O volume `therag_pgdata` tem **as duas convenções ao mesmo tempo**: um cluster **PostgreSQL 15** completo na raiz (41,9 MB, `PG_VERSION` = 15) e um `18/docker` **vazio** (8 KB, sem `PG_VERSION`) que a imagem criou e abortou. Confirmado subindo um `ankane/pgvector:v0.5.1` temporário sobre o mesmo volume: **o cluster sobe e os dados estão íntegros** — 58 coleções, 88 documentos, 233 trechos, 233 vetores, 84 chaves de API.
+why_now: seis dias fora do ar, e o gate `dev-version-drift` vem reportando corretamente de hora em hora — **99 falhas em 100 execuções, zero sucessos**. Não é falta de sinal; é falta de alguém alcançado pelo sinal.
+status: triaged
+severity: alta — um produto do plano de dados fora do ar, com dado real dentro.
+blocked_by: decisão de recuperação. O conserto move dado de banco num host compartilhado, e isso é decisão do dono do ambiente, não minha.
+dod:
+  - o `therag_api` responde `/v1/version` e o `dev-version-drift` volta a passar
+  - o dado das 58 coleções sobrevive à migração, ou a perda é decisão registrada
+  - está decidido por que 100 execuções vermelhas seguidas não alcançaram ninguém
+
+> **Diagnóstico completo, e ele absolve todo mundo menos a lacuna real.** Em 2026-08-09 o
+> `ankane/pgvector` foi trocado pelo **LoopZeroDB** — dogfooding do banco do próprio time, com verificação
+> cuidadosa registrada no compose: extensão, tipo vetor, índice HNSW, consulta por distância, tudo
+> testado contra a imagem. **A verificação testou a imagem nova contra um banco novo; o que quebrou
+> foi o volume antigo.** E o compose **já traz o conserto** do mount (`pgdata:/var/lib/postgresql`,
+> com comentário datado de 2026-08-10 descrevendo exatamente esta falha) — o checkout do droplet o
+> tem, e o contêiner em execução também. O bloqueio que sobrou é só o **conteúdo do volume**.
+>
+> **Dois backups independentes já foram tirados** (2026-08-16): `~/backups/therag_pgdata-*.tar.gz`
+> (cópia crua do volume, 15 MB) e `~/backups/therag-pg15-dumpall.sql` (dump lógico, 14 MB, 36 tabelas).
+> Todo caminho de recuperação continua aberto.
+>
+> Registrado 2026-08-16 ao medir o `B-112`, cuja premissa este achado corrigiu.
 
