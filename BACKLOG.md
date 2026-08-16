@@ -4424,3 +4424,52 @@ dod:
 
 > Registrado 2026-08-16 pela fatia 3 do `B-115`. Achado pela conversão, não por busca: escrever a razão de cada guarda obrigou a medir o que torna cada uma nil, e esta não tinha o que medir.
 
+---
+
+### Executado em 2026-08-16 — e a primeira bala foi respondida por medição
+
+**As três rotas devem existir.** O DoD pedia a decisão; a medição a deu:
+`loopzero-cloud/dashboard/src/pages/settings/profile.tsx` chama `DELETE /api/v1/tenants/{id}` **de
+verdade**, via `useDeleteTenant()`. E o histórico do arquivo registra **dois ciclos de correção** nessa
+mesma chamada — o `B-264` acrescentou o ramo de erro que faltava (*"uma falha resolvia `null`, ninguém
+olhava, e isto percorria o caminho de sucesso inteiro: diálogo fechado, sessão encerrada. O usuário lê
+isso como 'minha conta sumiu', sobre uma requisição que falhou"*) e o `B-265` corrigiu o
+identificador, tendo **lido o handler do motor** para descobrir a regra. Duas pessoas trabalharam na
+ponta cliente de uma chamada que não tinha como chegar.
+
+**A arqueologia, que é a lição:**
+
+| data | evento |
+|---|---|
+| 2026-05-26 | o painel troca um `setTimeout` falso por um `DELETE` real (SG-05) |
+| 2026-05-29 | `7b78a1702` — o piloto sqlc cria `TenantDeletionStoreSqlc` e **deleta o legado no mesmo commit**; o novo nunca é ligado ao `Config` |
+| 2026-06-16 | `2c3187948` — *"fix(code-quality): canonical PASS verdict via real wiring + surgical deletions"* **remove o tipo** |
+
+O detector de código morto estava **certo**: nada o referenciava, porque o campo nunca fora
+atribuído. Ele nasceu inalcançável no commit que o criou. **O detector mediu a alcançabilidade a
+partir do código, e o que precisava dele era uma rota que o código nunca registrou** — e o passe de
+qualidade deixou os comentários de documentação para trás, sobre nenhuma linha, de modo que todo
+leitor posterior acreditou que a implementação existia.
+
+**Tudo sobreviveu menos a ponte.** Interface, tipos de domínio, as **quatro** consultas sqlc (uma por
+método), as tabelas desde a migração `000001`, o handler, as rotas e os conversores. O que foi
+deletado era o Adapter entre `pgtype` e `time.Time`. Reescrito na forma exata do irmão
+`TenantStoreSqlc`, com o caso nil pinado: prazo ausente vira `nil`, **não** o instante zero — sem
+prazo e prazo no ano zero são fatos diferentes.
+
+**Por que os testes existentes não pegaram, e qual asserção faltava.** `router_wiring_test.go` já
+passava um `stubTenantDeletionStore` e afirmava que as três rotas registram. Aquele teste estava
+**certo e passou o tempo todo** — ele prova que o `if` funciona. **Ninguém provava que a condição é
+verdadeira em produção.** Um teste que injeta stub só pode provar a guarda; provar que ela é
+satisfeita exige olhar a montagem.
+
+**Varredura de população (`B-109`): 53 campos guardados no roteador, e exatamente UM nunca era
+atribuído.** A instância era a classe inteira. O teste foi generalizado para varrer os 53 e manter o
+zero — **um zero medido é diferente de um zero suposto**. Deliberadamente não virou gate do
+`loopzero-ops`: o `silent-surface` responde outra pergunta (a guarda **relata** sua decisão?), e uma
+superfície pode relatar `false` para sempre sem que nada esteja errado com o relato.
+
+status: **triaged** — trabalho completo; fechamento aguarda ratificação do
+`MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado +
+caminho destrutivo).
+
