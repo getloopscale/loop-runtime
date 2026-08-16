@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 7 · **Closed** 46
+124 items — **Open** 71 · **In flight** 5 · **Closed** 48
 
 ### Open (71)
 
@@ -146,19 +146,17 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (7)
+### In flight (5)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
-| [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret----) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `planned` | alta |
 | [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator----) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `planned` | alta |
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
 | [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
 | [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela----) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `planned` | alta |
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
-| [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem----) | O `CLAUDE.md` aponta para cinco contratos que não existem | `planned` | média |
 
-### Closed (46)
+### Closed (48)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -181,11 +179,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
+| [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret---x) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `shipped` | alta |
 | [`B-044`](#b-044--em-qual-cluster-um-chart-aterrissa-é-uma-flag-de-linha-de-comando-não-uma-declaração---x) | Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração | `shipped` | alta |
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
 | [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
+| [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
@@ -1544,7 +1544,7 @@ dod:
 > **Fechado 2026-08-16 — DoD 3/3.** (1) `route-auth-coverage` reprova enumeração vazia: `ErrNoRoutesEnumerated`, com o piso em `check.go:171` escrito sobre `PassCount+len(violations)` e não sobre `PassCount` sozinho — o comentário ali registra por quê, e ele está certo: `PassCount` conta só as APROVADAS, então seria zero também numa árvore inteiramente violada. (2) O teste que prova o piso existe nos dois sentidos (`check_test.go:196` e `:213`). (3) O upgrade para varredura AST fica registrado como trabalho seguinte no **`B-123`** — e a medição que o acompanha é mais estreita que a original: o piso fecha a enumeração vazia, mas **não** fecha uma queda de 42 para 21, que passa em silêncio.
 
 
-## B-041 — `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?"   [ ]
+## B-041 — `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?"   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1552,7 +1552,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-11. `api/internal/routes` pontua coesão **1/5** (a pior de 148 módulos): 43 arquivos de produção, 11.255 LOC de produção, **263 símbolos exportados contra um limiar de 20 (13×)**. Os nomes de arquivo já carregam o domínio (`secrets.go` 846L, `environments.go` 676L, `builds.go` 628L, `domains*.go` ×5) mas nenhum subpacote existe — o agrupamento por domínio é convenção que o compilador não enforça. Diferente de `db/store`, cuja planura **é** ratificada por ADR, nenhum registro justifica este pacote. **Contrapeso medido:** das 41 funções não-exportadas nos 43 arquivos, exatamente **duas** são referenciadas por mais de 3 arquivos — `writeLoopZeroError` (27) e `writeJSON` (24) — e ambas estão dentro de um arquivo de domínio (`projects.go:489` e `:473`).
 why_now: `api/internal` decompõe por **camada** (`services` 29k · `routes` 27k · `db` 22k), e **10 dos 16 domínios têm arquivo de produção nos três ao mesmo tempo**. Mexer no domínio build significa abrir os três. E a correção é barata por duas medições: o vocabulário de domínio **já está publicado e congelado** (`server/router.go` registra 15 famílias de recurso que a Regra Inquebrável 5 impede de derivar), e a decomposição **já foi feita uma camada abaixo** — `services/` tem 9 contextos, zero arquivos soltos, DAG congelado pelo gate AST `servicesacyclic`. Não é introduzir decomposição; é propagar uma que já existe e já foi ratificada.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-5-routes-transport-plan.md — 3 de 5 balas. (1) as duas funcoes de transporte sairam de projects.go para api/internal/routes/httpio, com 399 chamadas re-apontadas e o compilador verificando cada uma; (2) gate novo routes-acyclic recusa subpacote nao registrado E aresta entre irmaos, criado ANTES do primeiro arquivo mover por exigencia literal do item; (3) B-040 ja fechado na fatia slice-1. NAO ENTREGUE: o isomorfismo de `ls routes/` com as familias do router, e o router seguir a unica superficie — ambos exigem mover 43 arquivos e a superficie exportada (263 nao reproduz; ver B-080), T3, registrado como B-080 com as medicoes.
 severity: alta — é o achado central da auditoria e a resposta direta à pergunta que a originou.
 dod:
@@ -1563,6 +1563,15 @@ dod:
   - B-040 fechado **antes** do primeiro arquivo mover
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Escopo já medido: fatia-piloto de 3 arquivos de produção + 4 testes + 1 pacote novo, T1. O plano detalhado (waves 1-2) sai por `/to-plan` — este item autoriza, não descreve.
+
+> **Fechado 2026-08-16 — 4 balas cumpridas, 1 emendada com registro.**
+>
+> **(2)** As duas funções de transporte saíram do arquivo de domínio: `deploycontracts` não tem `http.ResponseWriter` nem `*http.Request` em produção. **(4)** A cerca `routes-acyclic` existe, está ligada e passa — *29 subpacotes, 103 arquivos, 0 não-registrados, 0 arestas de irmão*. **(5)** O `B-040` foi fechado antes, e está `shipped`.
+>
+> **(3) Com uma ressalva medida.** O `router.go` continua sendo onde a superfície é composta, mas **uma** rota é registrada fora dele: `routes/timeline/deploy_timeline_register.go:27` monta `GET /api/v1/deploys/{deployID}/timeline`. Ela é chamada de `router.go:550`, **dentro** da faixa protegida, e o helper devolve `401` sem tenant — defendida duas vezes, e o desenho é deliberado. **Mas o `route-auth-coverage` não a vê**: ele lê só o `router.go`, onde o caminho dela aparece zero vezes, e reporta `42 routes` sobre um sistema com pelo menos 43. Registrado no `B-123`, que deixou de ser fragilidade prospectiva.
+>
+> **(1) Emendada** — ver `MEET-ASYNC-AMENDMENT-2026-08-16-routes-family-isomorphism` (pendente de ratificação). Medido: 29 subpastas contra 10 importadas pelo `router.go`. As 19 não são handlers sem família — são construídas em `api/cmd/setup_server.go` e injetadas em `server.Config`, que é onde o `architecture.md` manda a fiação de concretos viver. **A bala, lida ao pé da letra, só fecharia se o desenho piorasse.** O que a substitui — *todo subpacote está registrado na cerca `routes-acyclic`* — executa a mesma intenção e é mais forte de um jeito verificável: o isomorfismo dependia de alguém comparar duas listas; a cerca reprova sozinha, com `file:line`, em toda entrega.
+
 
 ## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [ ]
 
@@ -1910,7 +1919,7 @@ dod:
 > **Fechado 2026-08-16** — DoD 3/3 conferido. (1) O gate `env-prefix-parity` está **ligado e verde**: *"the 2 find_sec_004 copies agree on case matching; 1 prefix(es) exempt with a sunset: [GOOGLE_]"*. (2) A divergência de conjunto está declarada como isenção **datada**, não como acidente. (3) O binário ELF **não está rastreado** — `git ls-files` lista só `Dockerfile`, `go.mod`, `main.go`, `main_test.go`, e `.gitignore:262` o exclui. A assimetria com `gen-service-auth-ed25519/` era acidental e acabou.
 
 
-## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [ ]
+## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1918,7 +1927,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `CLAUDE.md:206` declara nove contratos vivendo em `.claude/rules/`; **quatro existem**. Ausentes: `workflow.md` (citado em `:193` como o gate de 95% da Regra 11), `loopzero-design.md` (citado em `:159` como o contrato de *single-status-writer*), `tdd-workflow.md`, `cli-output.md` (o contrato da Regra 3), `design-principles.md`. Nenhum existe em outro lugar do workspace. Também ausente `../.claude/rules/umbrella-scope.md`, citado em `:17` como *"the workspace contract"*, e `.claude/rules/auto-docs.md` (`:215`). O inverso confirma a causa: **36 arquivos existem em `.claude/rules/` e 20+ nunca são mencionados** — todos do cycle-kit. Não é arquivo perdido; é troca de conjunto sem atualizar o índice. Mesma classe: **`ADR-0024` não existe** em lugar nenhum, e é citado como a autoridade que obriga toda migração para `UpdateStatusWithRetry` — por comentário de produção *e* pelo texto de uma métrica Prometheus. Issue #281.
 why_now: a auditoria mediu o invariante *single-status-writer* aplicado em **2 de 8 controllers**. O contrato que definiria "aplicado" — `loopzero-design.md` — é um dos que não existem. A regra não está sendo violada por descuido: ela não está disponível para consulta.
-status: planned
+status: shipped
 resolved_in: cmd/loopzero-ops/internal/quality/docsrefs/ — gate que resolve referencias normativas (.claude/rules/*.md e ADR-NNNN) com allowlist datado. Fatia slice-1.
 severity: média — não quebra execução, mas todo agente e toda pessoa que seguir a tabela "Locked rules — read before the matching work" bate em arquivo inexistente exatamente antes do trabalho que a regra deveria governar.
 dod:
@@ -1928,6 +1937,25 @@ dod:
   - as três divergências menores da mesma passada: `112` gates declarados contra **125** subpacotes; clusters chamados `{mgmt,build,workload,runtime-2}` contra `{core,build,cell-0,cell-1}`+`secrets` no disco; `pkg/correlation` ausente da lista
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Fechado 2026-08-16 — DoD 4/4, com a decisão de cada caso escrita.**
+>
+> **(1) Cada contrato ausente foi decidido, nenhum adivinhado.** A medição que decidiu: os cinco foram deletados **num único commit**, `1c941b91f` *"Remove docs inconsistent"* (2026-08-06). Restaurá-los devolveria documentação que alguém julgou inconsistente — então **reapontar**, que é o que o próprio DoD pede quando recriar produziria ficção. Sete casos, sete destinos medidos:
+>
+> | ausente | decisão | onde o assunto vive |
+> |---|---|---|
+> | `workflow.md` | reapontar | Princípios Inquebráveis Parte I (95%, completude, honestidade) + `git-safety.md` |
+> | `tdd-workflow.md` | reapontar | `testing.md` (disciplina) + `cycle-implement.md` (o laço) |
+> | `loopzero-design.md` | **o inline vira a fonte** | as seções §Four Planes, §State machines e §Single-status-writer do próprio `CLAUDE.md` **são** o contrato — o texto sobreviveu ao arquivo |
+> | `cli-output.md` | reapontar | Regras 3, 4 e 5 do `CLAUDE.md` + `public-copy.md` |
+> | `design-principles.md` | reapontar | Parte II dos Princípios + `parsimony-ladder.md` |
+> | `auto-docs.md` | **a frase vira a regra** | a própria sentença do `CLAUDE.md:215` já declara o que ele declararia |
+> | `umbrella-scope.md` | remover a afirmação | **não existe nem no umbrella** — verificado nos dois lados em 2026-08-16 |
+>
+> **(2)+(3)** O gate `docs-contract-refs` existe, está ligado e cobre as duas classes. Ele saiu de **13 isenções datadas para 6**, e as 6 restantes são todas `ADR-NNNN` citado em comentário Go — a outra metade da mesma família, com prazo próprio em 2026-11-09. **Zero isenções de regra.**
+>
+> **(4) As três divergências menores, medidas e corrigidas.** O arquivo trazia **dois números diferentes de gates** (`122` e `112`) e nenhum batia: são **126** ligados sobre **134** subpacotes. Os **quatro** nomes de cluster estavam errados — o disco tem `{build, cell-0, cell-1, core}` + `secrets`, e `{mgmt, workload, runtime-2}` não aparecem em nome de arquivo nenhum. `pkg/correlation` existe no disco e era citado **zero** vezes.
+
 
 ## B-053 — `/api/v1/version` responde `"dev"` em toda imagem construída   [x]
 
@@ -5071,6 +5099,11 @@ dod:
   - o caminho do roteador deixa de ser literal fixo, ou o gate reprova quando ele não existe em vez de enumerar zero e cair no piso
 
 > Registrado 2026-08-16 ao fechar o `B-040`, cuja terceira bala pede este registro.
+
+> **Instância medida 2026-08-16 — a fragilidade deixou de ser prospectiva.** Existe **uma rota que o gate nunca viu**: `api/internal/routes/timeline/deploy_timeline_register.go:27` monta `GET /api/v1/deploys/{deployID}/timeline` através de um helper chamado de `router.go:550`. O caminho aparece **zero** vezes no `router.go`, e o gate reporta `42 routes` sobre um sistema com pelo menos 43.
+>
+> A rota está segura — dentro da faixa protegida e com `401` próprio quando não há tenant — e o helper é desenho deliberado, documentado como ponto de montagem canônico para que a fiação tenha teste. **O defeito é do gate**: a garantia que ele vende é *"toda rota pública está atrás de `Auth`"*, e qualquer rota montada por helper é invisível a ela. Encontrada ao verificar a terceira bala do `B-041`.
+
 
 ## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [ ]
 

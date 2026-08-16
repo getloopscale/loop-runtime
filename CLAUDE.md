@@ -14,7 +14,7 @@ LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deplo
 | `cloud/` + dashboard (control plane, billing, Ory) | `../loopzero-cloud` | M4 |
 | `jwt` · `serviceauth` · `plan` contracts | `../loopzero-contracts` | M3 |
 
-**Consequence:** if you are looking for a CLI command, a dashboard screen, Stripe billing, or a shared contract type, it is **not in this repo**. Do not re-implement it here. The decomposition ADR is `../decisions/2026-06-16-monorepo-decomposition.md` (umbrella root — **not** this repo's own `.claude/knowledge-base/decisions/`); the workspace contract is `../CLAUDE.md` + `../.claude/rules/umbrella-scope.md`.
+**Consequence:** if you are looking for a CLI command, a dashboard screen, Stripe billing, or a shared contract type, it is **not in this repo**. Do not re-implement it here. The decomposition ADR is `../decisions/2026-06-16-monorepo-decomposition.md` (umbrella root — **not** this repo's own `.claude/knowledge-base/decisions/`); the workspace contract is `../CLAUDE.md` (this used to also name an umbrella-scope rule file; it does not exist in the umbrella either — verified 2026-08-16, B-052).
 
 **Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in the UMBRELLA** (`../.claude/knowledge-base/`, `../CHANGELOG.md`), never inside this repo. Product code lives here. One iteration commits to two repositories.
 
@@ -68,7 +68,7 @@ cd infra/tests && go test ./e2e/... -v -timeout 120m \
 
 ### Quality gates — the CI substitute
 
-GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **122 pure-logic Go checks** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
+GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **126 wired quality gates** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
 
 ```bash
 task quality:gates            # full-repo scan
@@ -104,7 +104,7 @@ WORKLOAD PLANE    — runtime cluster(s): user apps via ArgoCD · Traefik + cert
 SECRETS           — SEPARATE `loopzero-secrets` cluster: OpenBao (Transit) + ESO. See below.
 ```
 
-`task setup` creates **4** k3d clusters (`infra/k3d/{mgmt,build,workload,runtime-2}-cluster.yaml`). **OpenBao runs in a 5th, separate cluster** (`infra/k3d/secrets-cluster.yaml`, `task k3d:secrets:create` + `k3d:secrets:bootstrap`). Installing it into mgmt (`k3d:secrets:bootstrap-in-core`) is **FORBIDDEN in every tier** — it is a topology violation, not a shortcut (`.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5).
+`task setup` creates **4** k3d clusters (`infra/k3d/{core,build,cell-0,cell-1}-cluster.yaml` — the names on disk since the B-001 rename; the old `{mgmt,workload,runtime-2}` appear in no filename). **OpenBao runs in a 5th, separate cluster** (`infra/k3d/secrets-cluster.yaml`, `task k3d:secrets:create` + `k3d:secrets:bootstrap`). Installing it into core (`k3d:secrets:bootstrap-in-core`) is **FORBIDDEN in every tier** — it is a topology violation, not a shortcut (`.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5).
 
 ### Deploy flow (happy path)
 
@@ -127,8 +127,8 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | `api/internal/` | ~40 subpackages. Notable: `routes` (43 files), `services`, `lock`, `placement`, `cellmgr`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
-| `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi` |
-| `cmd/loopzero-ops/` | Ops + quality binary: 112 quality gates + `seed` / `drill` / `pulumi` / `chaos` subcommands |
+| `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |
+| `cmd/loopzero-ops/` | Ops + quality binary: **126** wired quality gates (134 subpackages — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` subcommands |
 | `infra/helm/` (44 dirs) | Bootstrap charts — installed by **Helmfile L2** |
 | `charts/` (13) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
 | `infra/tests/` | Ginkgo e2e, chaos, load (k6), unit (own module) |
@@ -156,7 +156,7 @@ base := obj.DeepCopy()          // right after r.Get, BEFORE mutating .Status
 r.Status().Patch(ctx, &obj, client.MergeFrom(base))
 ```
 
-A merge patch carries no `resourceVersion`, so it never 409s against a concurrent spec/metadata write by another controller. **Never** use the refetch-then-restore `Status().Update` dance (lost update), and **never** `return ctrl.Result{}, nil` on a status-write failure — return the error and requeue. Reference: `operators/internal/environment/environment_controller.go` + its `_conflict_test.go`. Full contract in `.claude/rules/loopzero-design.md`.
+A merge patch carries no `resourceVersion`, so it never 409s against a concurrent spec/metadata write by another controller. **Never** use the refetch-then-restore `Status().Update` dance (lost update), and **never** `return ctrl.Result{}, nil` on a status-write failure — return the error and requeue. Reference: `operators/internal/environment/environment_controller.go` + its `_conflict_test.go`. **The section above is the full contract** — `loopzero-design.md` was deleted in `1c941b91f` and this text is what survived it (B-052).
 
 ### Multi-cell routing — placement once, route many
 
@@ -190,7 +190,7 @@ Layering today: **L1** cloud primitives (Pulumi/DO legacy → Terraform/AWS targ
 8. **State machines are strict** — use the state machine functions, never direct status updates.
 9. **CLI is the primary interface** — every feature lands in `../loopzero-cli` before the dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts, no "dev mode" with different behavior.
-11. **Claims need evidence** — any claim affecting a maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Maturity-claim confidence cap **90-95%**. This is separate from — and looser than — the **95%+ implementation confidence** gate in `.claude/rules/workflow.md`, which applies to all code changes.
+11. **Claims need evidence** — any claim affecting a maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Maturity-claim confidence cap **90-95%**. This is separate from — and looser than — the **95%+ implementation confidence** gate (Unbreakable Principle 1, `~/.claude/CLAUDE.md` Part I § 1 — the `workflow.md` this used to cite was deleted in `1c941b91f`), which applies to all code changes.
 12. **Tool adoption claims need grep, not memory** — before classifying any tool as "adopted" or "gap", run `grep -ril "<tool>" infra/ charts/ taskfiles/`. The authoritative inventory is the filesystem: `infra/helm/`, `charts/`, `infra/helmfile/environments/*.yaml`, `taskfiles/*.yml`. **This file is a curated summary, NOT a tool inventory** — classifying from memory produces false positives (this rule exists because Velero/Trivy/Polaris/kubeconform/Renovate/TruffleHog were once all misclassified as gaps while already adopted).
 
 ## Locked rules — read before the matching work
@@ -203,7 +203,17 @@ Layering today: **L1** cloud primitives (Pulumi/DO legacy → Terraform/AWS targ
 | implement a T2/T3 change (schema, state machine, API contract, CLI output, reconcile logic, Helm, Pulumi, `pkg/`, credentials, multi-cluster) | `.claude/rules/pre-release-governance.md` — classify the tier first; T2+ requires a meeting **before** code. |
 | write public copy (`PITCH.md`, loopzero.example, launch material) | `.claude/rules/public-copy.md`. Cross-Project Rule 9: never expose `Kubernetes`, `cluster`, `ArgoCD`, `Cosign`, `KEDA`, `Gitea`, `MinIO`, `Pulumi`, `Traefik`, `Ory` in user-facing copy — internals belong in a DEEP DIVE / Self-host section only. `PITCH.md` states this contract in its own header. |
 
-Other contracts live in `.claude/rules/` — `workflow.md`, `tdd-workflow.md`, `loopzero-design.md`, `cli-output.md`, `design-principles.md`, `testing.md`, `error-handling.md`, `git-safety.md`, `shell-scripts-allowlist.md`.
+Other contracts live in `.claude/rules/` — `testing.md`, `error-handling.md`, `git-safety.md`, `shell-scripts-allowlist.md`, `architecture.md`, `parsimony-ladder.md`, `public-copy.md`, `pre-release-governance.md`.
+
+Five files this list used to name (`workflow.md`, `tdd-workflow.md`, `loopzero-design.md`, `cli-output.md`, `design-principles.md`) were **deleted together** in `1c941b91f` ("Remove docs inconsistent") and are **not coming back** — restoring them would restore documentation someone judged inconsistent. Their subjects did not disappear with them; each is repointed (B-052):
+
+| was | read instead |
+|---|---|
+| `workflow.md` (95% confidence, task completion, honesty, git) | the Unbreakable Principles in `~/.claude/CLAUDE.md` Part I, plus `git-safety.md` for the git half |
+| `tdd-workflow.md` (RED→GREEN→REFACTOR, pyramid, naming) | `testing.md` for the discipline, `cycle-implement.md` for the loop |
+| `loopzero-design.md` (four planes, state SoT, single-status-writer) | this file — § Four Planes, § State machines, and § Single-status-writer invariant below **are** the contract, not a summary of one |
+| `cli-output.md` (internal terms, exit codes, `--json`) | Rules 3, 4 and 5 of this file; `public-copy.md` for the copy side |
+| `design-principles.md` (Don't Reinvent, KISS, YAGNI, DRY, SOLID) | `~/.claude/CLAUDE.md` Part II, operationalised by `parsimony-ladder.md` |
 
 `docs/README.md` is the index for `docs/` — it also states which subtrees are **living reference**
 (fix them when they drift) and which are **audit trail** (`plans/completed/`, `operations/baselines/`,
@@ -212,7 +222,7 @@ present. Rewriting a dated record to look current destroys the only evidence of 
 
 ## Knowledge base (`.claude/knowledge-base/`)
 
-Stores **WHY** — decisions, trade-offs, rationale that cannot be derived from code. Read `index.md` first. Consult `concepts/` before implementing in multi-cell, progressive delivery, or state machines; consult `decisions/` for ADRs. Evidence is classified `[MEASURED]` / `[REPORTED]` / `[ESTIMATED]`. Max 3 pages updated per task; never auto-generate as a coding side effect (`.claude/rules/auto-docs.md`).
+Stores **WHY** — decisions, trade-offs, rationale that cannot be derived from code. Read `index.md` first. Consult `concepts/` before implementing in multi-cell, progressive delivery, or state machines; consult `decisions/` for ADRs. Evidence is classified `[MEASURED]` / `[REPORTED]` / `[ESTIMATED]`. Max 3 pages updated per task; never auto-generate as a coding side effect — **this sentence is the rule**; the `auto-docs.md` it used to cite does not exist (B-052).
 
 `.claude/knowledge-base/references/` holds **cloned third-party projects for study — read-only**. Never copy their bytes into this repo; read, understand, write your own, and cite the source in a blueprint.
 
