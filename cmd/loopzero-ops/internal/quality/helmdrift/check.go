@@ -28,98 +28,47 @@ var conceptualPairs = map[string]string{
 type approval struct {
 	ADR    string
 	Reason string
-	// Inherited marks an entry carried over from the old per-PAIR blanket
-	// approval, whose per-file reason was never measured. It is honest debt:
-	// the entry keeps the gate green without claiming an understanding nobody
-	// has. Tracked as B-076.
-	Inherited bool
 }
 
-// approvedDriftFiles registry, keyed "published:bootstrap:filename".
+// approvedDriftKinds registry, keyed "published:bootstrap:KIND".
 //
-// # Why the key carries the filename
+// # Por que a chave e o KIND, e nao o nome do arquivo
 //
-// It used to be keyed by PAIR alone. A pair in that map was intentional
-// forever — every file it would ever drift on, including files nobody had
-// seen. That is precisely how `vap-tenant-cr-shape.yaml` (a fail-closed
-// ValidatingAdmissionPolicy) and two `externalsecret-*-admin-key.yaml`
-// templates went missing from published charts without the gate noticing: the
-// pair was already blessed, so it stopped looking.
+// Ate o B-110 a chave era o nome do arquivo, e 13 das 21 entradas descreviam algo
+// que nao era divergencia: `service.yaml` de um lado contra `svc.yaml` do outro,
+// ou um arquivo condicional que NENHUM dos dois lados renderiza sob os values
+// padrao. Cada uma dessas entradas era uma linha que alguem lia como "divergencia
+// aceita", e um allowlist inflado e um allowlist que ninguem revisa — justamente
+// onde as reais moram.
 //
-// Per-file is the difference between "we know it differs and why" and "we
-// stopped looking". Deliberately no globs: a glob would re-introduce the same
-// approves-future-members defect at a smaller scale, which is the whole bug.
-var approvedDriftFiles = map[string]approval{}
+// Comparando o que os charts INSTALAM, sobram 11, e o par das politicas de
+// admissao cai a ZERO: os dois produzem os mesmos 19 recursos.
+//
+// Todas as razoes abaixo foram medidas em 2026-08-16 renderizando os tres pares.
+var approvedDriftKinds = map[string]approval{
+	// --- loopzero-api ---
+	"loopzero-api:loopzero-api:ConfigMap":     {ADR: "B-110", Reason: "o chart publicado monta configuracao por ConfigMap; o de bootstrap a entrega por env literal no values do helmfile"},
+	"loopzero-api:loopzero-api:NetworkPolicy": {ADR: "B-110", Reason: "politica de rede e do chart publicado; o bootstrap roda em cluster de dev onde a malha nao e segmentada"},
+	"loopzero-api:loopzero-api:Secret":        {ADR: "B-110", Reason: "o publicado declara o Secret; no bootstrap ele vem de fora (generate-secrets / ESO), o que e assimetria de PROVENIENCIA e nao de recurso"},
+	"loopzero-api:loopzero-api:Certificate":   {ADR: "B-110", Reason: "cert-manager so existe no caminho de bootstrap; o publicado espera TLS terminado na borda"},
+	"loopzero-api:loopzero-api:IngressRoute":  {ADR: "B-110", Reason: "IngressRoute e do Traefik do bootstrap; o publicado nao presume ingress"},
 
-// The 21 approvals inherited from ADR-0043's blanket pair approval, each now
-// carrying what was MEASURED about it rather than the one sentence they shared.
-//
-// Method: render both charts of the pair with `helm template` under default
-// values and compare the kinds actually produced. A filename is not a resource —
-// two charts can differ in every filename and install the same thing — and that
-// is what the classes below record. Same method B-077 established when it proved
-// its fence renders rather than checking for a file.
-//
-// Decision: MEET-ASYNC-AMENDMENT-2026-08-14-helm-drift-per-file-reasons
-func init() {
-	// CLASS A — both charts render the resource; only the file declaring it has a
-	// different name. This is NOT resource drift, and the gate reports it because
-	// it compares filenames. Approved as a workaround for how the gate measures,
-	// not because a divergence was accepted. The fix is B-110.
-	both := "ambos renderizam este recurso; a divergência é de nome de arquivo, não de recurso instalado"
-	for _, k := range []string{
-		"loopzero-api:loopzero-api:service.yaml",
-		"loopzero-api:loopzero-api:clusterrole.yaml",
-		"loopzero-api:loopzero-api:clusterrolebinding.yaml",
-		"loopzero-cloud:loopzero-cloud:service.yaml",
-	} {
-		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: both}
-	}
-
-	// CLASS B — the file exists on one side and NEITHER chart produces the
-	// resource under default values: it is behind a toggle, a CRD that may be
-	// absent, or an environment that opts in.
-	conditional := "não renderiza sob os values padrão em nenhum dos dois charts; é condicional"
-	for _, k := range []string{
-		"loopzero-api:loopzero-api:cronjob-day30-verify.yaml",
-		"loopzero-api:loopzero-api:cronjob-day60-aes-delete.yaml",
-		"loopzero-api:loopzero-api:configmap-runtime.yaml",
-		"loopzero-api:loopzero-api:secret-runtime.yaml",
-		"loopzero-cloud:loopzero-cloud:servicemonitor.yaml",
-		"loopzero-cloud:loopzero-cloud:externalsecret-lens-admin-key.yaml",
-		"loopzero-cloud:loopzero-cloud:externalsecret-rag-admin-key.yaml",
-		"loopzero-cloud:loopzero-cloud:configmap-runtime.yaml",
-		"loopzero-cloud:loopzero-cloud:secret-runtime.yaml",
-	} {
-		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: conditional}
-	}
-
-	// CLASS C — exactly one side produces the resource. This is the asymmetry the
-	// gate exists to watch, and it is the class where a future removal would be a
-	// real regression rather than a naming artefact.
-	onlyPublished := "só o publicado renderiza este recurso; o de bootstrap não produz nenhum do mesmo kind"
-	for _, k := range []string{
-		"loopzero-api:loopzero-api:configmap.yaml",
-		"loopzero-api:loopzero-api:secret.yaml",
-		"loopzero-cloud:loopzero-cloud:configmap.yaml",
-		"loopzero-cloud:loopzero-cloud:secret.yaml",
-		"loopzero-cloud:loopzero-cloud:networkpolicy.yaml",
-		"loopzero-cloud:loopzero-cloud:serviceaccount.yaml",
-	} {
-		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: onlyPublished}
-	}
-	onlyBootstrap := "só o bootstrap renderiza este recurso; o publicado não produz nenhum do mesmo kind"
-	for _, k := range []string{
-		"loopzero-api:loopzero-api:ingressroute.yaml",
-		"loopzero-cloud:loopzero-cloud:ingressroute.yaml",
-	} {
-		approvedDriftFiles[k] = approval{ADR: "ADR-0043", Reason: onlyBootstrap}
-	}
+	// --- loopzero-cloud ---
+	"loopzero-cloud:loopzero-cloud:ConfigMap":           {ADR: "B-110", Reason: "o chart publicado monta a configuracao do painel por ConfigMap; o de bootstrap a entrega como env literal no values do helmfile"},
+	"loopzero-cloud:loopzero-cloud:NetworkPolicy":       {ADR: "B-110", Reason: "politica de rede e do chart publicado; o caminho de bootstrap roda em cluster de dev onde a malha nao e segmentada"},
+	"loopzero-cloud:loopzero-cloud:Secret":              {ADR: "B-110", Reason: "o publicado declara o Secret do painel; no bootstrap ele e provisionado de fora (generate-secrets / ESO), o que e assimetria de PROVENIENCIA e nao de recurso"},
+	"loopzero-cloud:loopzero-cloud:PodDisruptionBudget": {ADR: "B-110", Reason: "PDB pressupoe mais de uma replica; o bootstrap roda replica unica em dev"},
+	"loopzero-cloud:loopzero-cloud:ServiceAccount":      {ADR: "B-110", Reason: "o publicado cria a SA; no bootstrap ela vem do helmfile, fora do chart"},
+	"loopzero-cloud:loopzero-cloud:IngressRoute":        {ADR: "B-110", Reason: "IngressRoute e do Traefik do caminho de bootstrap; o chart publicado nao presume que exista ingress no cluster de destino"},
 }
 
 // Config drives the gate.
 type Config struct {
 	RepoRoot string
+	// Renderer turns a chart into the manifests it installs. Nil means the real
+	// `helm template`; a test injects a double so the gate never needs the
+	// toolchain it audits in order to run its own suite.
+	Renderer Renderer
 }
 
 // Drift describes one chart-pair drift.
@@ -132,27 +81,27 @@ type Drift struct {
 	// Unapproved lists the drifted files no per-file approval covers. These are
 	// what fail the gate — the named files, not the pair.
 	Unapproved []string
-	// InheritedFiles lists approved files whose reason is inherited debt rather
-	// than a measured rationale, each carrying that reason verbatim (B-076).
-	InheritedFiles []string
 }
 
 // Outcome captures the result.
 type Outcome struct {
 	Pass   bool
 	Drifts []Drift
-	// InheritedApprovals counts drifted files whose approval was carried over
-	// from the old per-PAIR blanket, with no per-file reason ever measured.
+	// RenderErrors carries a failed `helm template`, verbatim.
 	//
-	// It is surfaced on every run on purpose. A debt that lives only in a source
-	// comment is a debt nobody is reminded of; printed next to the verdict, it
-	// stays countable until B-076 closes it.
-	InheritedApprovals int
+	// A render that failed and a chart that produces nothing are different facts:
+	// treating the first as an empty set would report total drift as though it
+	// had been measured. So it fails the gate and says why.
+	RenderErrors []string
 }
 
 // Check audits all loopzero-* published charts + conceptual pairs for drift.
 func Check(cfg Config) (*Outcome, error) {
 	outcome := &Outcome{Pass: true}
+	r := cfg.Renderer
+	if r == nil {
+		r = helmRenderer{}
+	}
 
 	// Same-name overlaps: charts/loopzero-*/ that also exist in infra/helm/.
 	chartsDir := filepath.Join(cfg.RepoRoot, "charts")
@@ -166,7 +115,7 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 		name := e.Name()
 		if dirExists(filepath.Join(cfg.RepoRoot, "infra/helm", name)) {
-			auditPair(cfg.RepoRoot, name, name, outcome)
+			auditPair(r, cfg.RepoRoot, name, name, outcome)
 		}
 	}
 
@@ -178,7 +127,7 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 	sort.Strings(pubNames)
 	for _, pub := range pubNames {
-		auditPair(cfg.RepoRoot, pub, conceptualPairs[pub], outcome)
+		auditPair(r, cfg.RepoRoot, pub, conceptualPairs[pub], outcome)
 	}
 
 	return outcome, nil
@@ -186,21 +135,35 @@ func Check(cfg Config) (*Outcome, error) {
 
 // auditPair compares template sets for one published↔bootstrap pair and, if
 // they drift, records a Drift (intentional if an ADR approves it; else fails).
-func auditPair(repoRoot, publishedName, bootstrapName string, outcome *Outcome) {
+func auditPair(r Renderer, repoRoot, publishedName, bootstrapName string, outcome *Outcome) {
 	pairKey := publishedName + ":" + bootstrapName
-	publishedDir := filepath.Join(repoRoot, "charts", publishedName, "templates")
-	bootstrapDir := filepath.Join(repoRoot, "infra/helm", bootstrapName, "templates")
+	publishedChart := filepath.Join(repoRoot, "charts", publishedName)
+	bootstrapChart := filepath.Join(repoRoot, "infra/helm", bootstrapName)
 
-	if !dirExists(publishedDir) && !dirExists(bootstrapDir) {
+	if !dirExists(publishedChart) && !dirExists(bootstrapChart) {
 		return
 	}
 
-	pubTemplates := listTemplates(publishedDir)
-	bootTemplates := listTemplates(bootstrapDir)
-	onlyPub, onlyBoot := setDiff(pubTemplates, bootTemplates)
+	// B-110: compara o que os charts INSTALAM, nao os nomes dos arquivos que os
+	// declaram. Um `service.yaml` chamado `svc.yaml` do outro lado era reportado
+	// como divergencia sem que nada divergisse — medido, 13 das 21 entradas do
+	// allowlist descreviam exatamente isso.
+	pubKinds, err := renderedKinds(r, publishedChart)
+	if err != nil {
+		outcome.RenderErrors = append(outcome.RenderErrors, err.Error())
+		outcome.Pass = false
+		return
+	}
+	bootKinds, err := renderedKinds(r, bootstrapChart)
+	if err != nil {
+		outcome.RenderErrors = append(outcome.RenderErrors, err.Error())
+		outcome.Pass = false
+		return
+	}
+	onlyPub, onlyBoot := diffKinds(pubKinds, bootKinds)
 
 	if len(onlyPub) == 0 && len(onlyBoot) == 0 {
-		return // no drift
+		return // os dois lados instalam os mesmos tipos de recurso
 	}
 
 	d := Drift{
@@ -209,68 +172,21 @@ func auditPair(repoRoot, publishedName, bootstrapName string, outcome *Outcome) 
 		OnlyInBootstrap: onlyBoot,
 	}
 
-	// Every drifted file must carry its own approval. One unapproved file fails
-	// the pair — the pair being "known to drift" is not a licence for the next
-	// file to drift silently.
-	for _, f := range append(append([]string{}, onlyPub...), onlyBoot...) {
-		if a, ok := approvedDriftFiles[pairKey+":"+f]; ok {
+	// Cada kind divergente carrega a propria aprovacao. Um kind sem aprovacao
+	// reprova o par — o par ser "conhecido por divergir" nao e licenca para o
+	// proximo recurso divergir em silencio.
+	for _, k := range append(append([]string{}, onlyPub...), onlyBoot...) {
+		if a, ok := approvedDriftKinds[pairKey+":"+k]; ok {
 			d.ADR = a.ADR
-			if a.Inherited {
-				outcome.InheritedApprovals++
-				d.InheritedFiles = append(d.InheritedFiles, f+" — "+a.Reason)
-			}
 			continue
 		}
-		d.Unapproved = append(d.Unapproved, f)
+		d.Unapproved = append(d.Unapproved, k)
 	}
 	d.Intentional = len(d.Unapproved) == 0
 	if !d.Intentional {
 		outcome.Pass = false
 	}
 	outcome.Drifts = append(outcome.Drifts, d)
-}
-
-// listTemplates returns sorted *.yaml/*.yml filenames in a templates dir.
-func listTemplates(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		n := e.Name()
-		if strings.HasSuffix(n, ".yaml") || strings.HasSuffix(n, ".yml") {
-			out = append(out, n)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// setDiff returns (onlyInA, onlyInB) for two sorted/unsorted string slices.
-func setDiff(a, b []string) (onlyA, onlyB []string) {
-	bset := map[string]bool{}
-	for _, x := range b {
-		bset[x] = true
-	}
-	aset := map[string]bool{}
-	for _, x := range a {
-		aset[x] = true
-		if !bset[x] {
-			onlyA = append(onlyA, x)
-		}
-	}
-	for _, x := range b {
-		if !aset[x] {
-			onlyB = append(onlyB, x)
-		}
-	}
-	sort.Strings(onlyA)
-	sort.Strings(onlyB)
-	return onlyA, onlyB
 }
 
 func dirExists(p string) bool {

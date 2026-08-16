@@ -166,14 +166,14 @@ func runHelmDrift(args []string) int {
 		if !o.Pass {
 			return 1
 		}
-		if o.InheritedApprovals > 0 {
-			fmt.Printf("ℹ %d approval(s) inherited from the old per-PAIR blanket, reason never measured — tracked as B-076\n", o.InheritedApprovals)
-		}
 		return 0
 	}
 
-	if len(o.Drifts) == 0 {
-		fmt.Println("✓ charts/ ↔ infra/helm/ drift audit: no drifts detected.")
+	for _, e := range o.RenderErrors {
+		fmt.Fprintf(os.Stderr, "✗ helm template falhou: %s\n", e)
+	}
+	if len(o.Drifts) == 0 && len(o.RenderErrors) == 0 {
+		fmt.Println("✓ charts/ ↔ infra/helm/: os dois lados instalam os mesmos tipos de recurso.")
 		return 0
 	}
 	for _, d := range o.Drifts {
@@ -200,9 +200,6 @@ func runHelmDrift(args []string) int {
 	}
 	// Printed on every run, green or red. A debt that lives only in a source
 	// comment is a debt nobody is reminded of.
-	if o.InheritedApprovals > 0 {
-		fmt.Printf("ℹ %d aprovação(ões) herdada(s) do allowlist antigo por PAR, cuja razão por arquivo nunca foi medida — B-076\n", o.InheritedApprovals)
-	}
 	if !o.Pass {
 		fmt.Fprintln(os.Stderr, "❌ Drifts without approving ADR detected.")
 		return 1

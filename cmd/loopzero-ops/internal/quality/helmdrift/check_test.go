@@ -6,7 +6,6 @@ package helmdrift
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -18,7 +17,16 @@ func mkTemplates(t *testing.T, root, chartPath string, files ...string) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f), []byte("kind: X\n"), 0o644); err != nil {
+		// O nome do arquivo E o kind na fixture: `ConfigMap.yaml` -> `kind: ConfigMap`.
+		//
+		// As fixtures escreviam `kind: X` em TODOS os arquivos, o que sob a
+		// comparacao por recurso (B-110) nao e deriva nenhuma — elas diferiam por
+		// NOME, que e exatamente o que o gate parou de medir. E derivar o kind
+		// capitalizando a primeira letra me deu `Configmap` contra o `ConfigMap`
+		// do registro: a mesma diferenca de grafia que este item existe para
+		// deixar de tratar como fato.
+		kind := strings.TrimSuffix(f, ".yaml")
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("kind: "+kind+"\n"), 0o644); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 	}
@@ -27,9 +35,9 @@ func mkTemplates(t *testing.T, root, chartPath string, files ...string) {
 // TestCheck_NoDrift_Pass — identical templates → no drift.
 func TestCheck_NoDrift_Pass(t *testing.T) {
 	root := t.TempDir()
-	mkTemplates(t, root, "charts/loopzero-foo", "a.yaml", "b.yaml")
-	mkTemplates(t, root, "infra/helm/loopzero-foo", "a.yaml", "b.yaml")
-	o, err := Check(Config{RepoRoot: root})
+	mkTemplates(t, root, "charts/loopzero-foo", "Deployment.yaml", "Service.yaml")
+	mkTemplates(t, root, "infra/helm/loopzero-foo", "Deployment.yaml", "Service.yaml")
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -41,9 +49,9 @@ func TestCheck_NoDrift_Pass(t *testing.T) {
 // TestCheck_UnapprovedDrift_Fail — differing templates without ADR → FAIL.
 func TestCheck_UnapprovedDrift_Fail(t *testing.T) {
 	root := t.TempDir()
-	mkTemplates(t, root, "charts/loopzero-foo", "a.yaml", "b.yaml", "extra.yaml")
-	mkTemplates(t, root, "infra/helm/loopzero-foo", "a.yaml")
-	o, err := Check(Config{RepoRoot: root})
+	mkTemplates(t, root, "charts/loopzero-foo", "Deployment.yaml", "Service.yaml", "Secret.yaml")
+	mkTemplates(t, root, "infra/helm/loopzero-foo", "Deployment.yaml")
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -64,26 +72,26 @@ func TestCheck_UnapprovedDrift_Fail(t *testing.T) {
 // defect the change removes, and a fixture asserting it had to change with it.
 func TestCheck_ApprovedDrift_Pass(t *testing.T) {
 	root := t.TempDir()
-	mkTemplates(t, root, "charts/loopzero-api", "a.yaml", "clusterrole.yaml", "service.yaml")
-	mkTemplates(t, root, "infra/helm/loopzero-api", "a.yaml")
-	o, err := Check(Config{RepoRoot: root})
+	mkTemplates(t, root, "charts/loopzero-api", "Deployment.yaml", "ConfigMap.yaml", "Secret.yaml")
+	mkTemplates(t, root, "infra/helm/loopzero-api", "Deployment.yaml")
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if !o.Pass {
-		t.Errorf("expected Pass (loopzero-api drift approved by ADR-0043), got drifts %v", o.Drifts)
+		t.Errorf("esperava Pass (a deriva do loopzero-api esta aprovada por kind), veio %v", o.Drifts)
 	}
-	if len(o.Drifts) != 1 || !o.Drifts[0].Intentional || o.Drifts[0].ADR != "ADR-0043" {
-		t.Errorf("expected intentional drift w/ ADR-0043, got %v", o.Drifts)
+	if len(o.Drifts) != 1 || !o.Drifts[0].Intentional || o.Drifts[0].ADR != "B-110" {
+		t.Errorf("esperava deriva intencional assinada por B-110, veio %v", o.Drifts)
 	}
 }
 
 // TestCheck_ConceptualPair — loopzero-admission-policies ↔ admission-policies.
 func TestCheck_ConceptualPair(t *testing.T) {
 	root := t.TempDir()
-	mkTemplates(t, root, "charts/loopzero-admission-policies", "p.yaml", "extra.yaml")
-	mkTemplates(t, root, "infra/helm/admission-policies", "p.yaml")
-	o, err := Check(Config{RepoRoot: root})
+	mkTemplates(t, root, "charts/loopzero-admission-policies", "ConfigMap.yaml", "Secret.yaml")
+	mkTemplates(t, root, "infra/helm/admission-policies", "ConfigMap.yaml")
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -104,33 +112,12 @@ func TestCheck_OnlyPublishedExists_NoCrash(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-orphan", "a.yaml")
 	// no infra/helm/loopzero-orphan
-	o, err := Check(Config{RepoRoot: root})
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if !o.Pass {
 		t.Errorf("expected Pass (no matching bootstrap → not a pair), got %v", o.Drifts)
-	}
-}
-
-// TestListTemplates — lists yaml/yml filenames sorted.
-func TestListTemplates(t *testing.T) {
-	root := t.TempDir()
-	mkTemplates(t, root, "charts/x", "b.yaml", "a.yml", "c.yaml")
-	got := listTemplates(filepath.Join(root, "charts/x/templates"))
-	if len(got) != 3 || got[0] != "a.yml" || got[1] != "b.yaml" || got[2] != "c.yaml" {
-		t.Errorf("expected sorted [a.yml b.yaml c.yaml], got %v", got)
-	}
-}
-
-// TestSetDiff — onlyA / onlyB computed correctly.
-func TestSetDiff(t *testing.T) {
-	onlyA, onlyB := setDiff([]string{"a", "b", "c"}, []string{"b", "c", "d"})
-	if len(onlyA) != 1 || onlyA[0] != "a" {
-		t.Errorf("onlyA: expected [a], got %v", onlyA)
-	}
-	if len(onlyB) != 1 || onlyB[0] != "d" {
-		t.Errorf("onlyB: expected [d], got %v", onlyB)
 	}
 }
 
@@ -147,18 +134,21 @@ func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	touch := func(rel string) {
-		if err := os.WriteFile(filepath.Join(root, rel), []byte("kind: X\n"), 0o644); err != nil {
+	touch := func(rel, kind string) {
+		if err := os.WriteFile(filepath.Join(root, rel), []byte("kind: "+kind+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	mk("charts/loopzero-api/templates")
 	mk("infra/helm/loopzero-api/templates")
-	touch("charts/loopzero-api/templates/service.yaml")
-	// A file that drifts and that NO per-file approval covers.
-	touch("infra/helm/loopzero-api/templates/brand-new-and-unreviewed.yaml")
+	// Um recurso APROVADO ao lado de um que NENHUMA aprovacao cobre. O par
+	// loopzero-api tem entradas no registro, e a pergunta e se ter entradas o
+	// absolve do recurso seguinte — foi assim que uma ValidatingAdmissionPolicy
+	// sumiu do chart publicado sem ninguem notar.
+	touch("charts/loopzero-api/templates/a.yaml", "ConfigMap")
+	touch("charts/loopzero-api/templates/b.yaml", "CronJob")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -167,60 +157,67 @@ func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
 	}
 }
 
-// TestNoApprovalCarriesAnInheritedReason is the B-076 close.
+// TestEveryApprovalIsMeasuredAssimetry replaces the pair of tests that guarded the
+// old filename-keyed registry.
 //
-// The allowlist was re-keyed from PAIR to PAIR:FILE by slice-3, but the 21
-// entries that already existed were carried over with one generic sentence and
-// `Inherited: true` — deliberately, so the debt would be countable instead of
-// invisible. The field exists to be driven to zero.
-//
-// A reason is "measured" here in a specific sense: it says what was OBSERVED
-// about the two charts, not what someone believes about them. Twenty-one
-// plausible rationales would have closed the item and would have hidden the
-// finding that produced this test — that four of the twenty-one are not resource
-// drift at all, because both charts render the resource and only the filename
-// differs.
-func TestNoApprovalCarriesAnInheritedReason(t *testing.T) {
-	var inherited []string
-	for key, a := range approvedDriftFiles {
-		if a.Inherited {
-			inherited = append(inherited, key)
-		}
+// Those asserted one of THREE measured classes — both charts render it (filename
+// drift), neither renders it under default values (conditional), exactly one
+// renders it (real asymmetry). Keying by KIND collapses the first two by
+// construction: a kind only appears here when exactly one side installs it. So
+// the contract that survives is narrower and stronger — every entry names an ADR
+// and says what the two charts actually do differently.
+func TestEveryApprovalIsMeasuredAssimetry(t *testing.T) {
+	if len(approvedDriftKinds) == 0 {
+		t.Fatal("nenhuma aprovação para checar — o teste passaria por vacuidade")
 	}
-	if len(inherited) != 0 {
-		sort.Strings(inherited)
-		t.Errorf("%d approval(s) still carry an inherited reason, so the gate approves a divergence "+
-			"nobody measured:\n  %s\nEach needs a reason stating what was observed about the two "+
-			"charts, or removal because the divergence should not exist (B-076).",
-			len(inherited), strings.Join(inherited, "\n  "))
+	for key, a := range approvedDriftKinds {
+		if a.ADR == "" {
+			t.Errorf("%s não carrega ADR — uma aprovação que ninguém assinou", key)
+		}
+		if len(strings.TrimSpace(a.Reason)) < 30 {
+			t.Errorf("%s: razão %q é curta demais para dizer o que foi observado sobre os dois charts",
+				key, a.Reason)
+		}
+		// A chave tem de ser `publicado:bootstrap:KIND`, e o kind e' um nome de
+		// recurso do Kubernetes — comeca em maiuscula. Uma chave com nome de
+		// arquivo (`.yaml`) seria uma entrada da era anterior sobrevivendo a
+		// migracao, e ela aprovaria algo que o gate nao mede mais.
+		parts := strings.Split(key, ":")
+		if len(parts) != 3 {
+			t.Errorf("%s não tem a forma `publicado:bootstrap:KIND`", key)
+			continue
+		}
+		kind := parts[2]
+		if strings.Contains(kind, ".") || kind == "" || kind[0] < 'A' || kind[0] > 'Z' {
+			t.Errorf("%s: %q não parece um kind do Kubernetes — uma entrada com nome de arquivo "+
+				"seria resíduo da chave anterior, aprovando algo que o gate não mede mais", key, kind)
+		}
 	}
 }
 
-// TestEveryApprovalNamesItsMeasurement keeps the reasons from decaying back into
-// assertions once the inherited flag is gone.
+// fixtureRenderer devolve o conteudo dos arquivos de `templates/` como se fossem
+// o manifesto renderizado.
 //
-// The three classes came from rendering both charts of each pair and comparing
-// the kinds actually produced — the same method B-077 established when it proved
-// its fence renders rather than checking for a file. A reason that does not name
-// its class is a reason nobody can re-derive.
-func TestEveryApprovalNamesItsMeasurement(t *testing.T) {
-	if len(approvedDriftFiles) == 0 {
-		t.Fatal("no approvals to check — the test would pass vacuously")
+// Os testes de Check montam fixtures em disco que NAO sao charts validos — nao
+// tem Chart.yaml, nem values. O helmRenderer real falharia em todos, e a falha
+// seria do fixture, nao do contrato sob teste. Injetar o duplo e o que permite a
+// esses testes continuarem afirmando o que sempre afirmaram (deriva aprovada,
+// deriva sem aprovacao, par conceitual) sobre uma base de comparacao nova.
+type fixtureRenderer struct{}
+
+func (fixtureRenderer) Render(chartDir string) (string, error) {
+	entries, err := os.ReadDir(filepath.Join(chartDir, "templates"))
+	if err != nil {
+		return "", err
 	}
-	for key, a := range approvedDriftFiles {
-		if a.ADR == "" {
-			t.Errorf("%s carries no ADR — an approval nobody signed", key)
+	var b strings.Builder
+	for _, e := range entries {
+		raw, rerr := os.ReadFile(filepath.Join(chartDir, "templates", e.Name()))
+		if rerr != nil {
+			return "", rerr
 		}
-		switch {
-		case strings.Contains(a.Reason, "ambos renderizam"),
-			strings.Contains(a.Reason, "não renderiza"),
-			strings.Contains(a.Reason, "só o publicado renderiza"),
-			strings.Contains(a.Reason, "só o bootstrap renderiza"):
-			// One of the three measured classes.
-		default:
-			t.Errorf("%s: reason %q does not name what was measured about the render. The classes are: "+
-				"both render it (filename-only drift), neither renders it under default values "+
-				"(conditional), or exactly one renders it (real asymmetry).", key, a.Reason)
-		}
+		b.WriteString("---\n")
+		b.Write(raw)
 	}
+	return b.String(), nil
 }
