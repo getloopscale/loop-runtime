@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.76.1] - 2026-08-16
+
 ### Fixed
 - **Excluir a própria conta nunca funcionou, e agora funciona.** A tela de exclusão no painel chamava o endereço certo; o endereço não existia. O contrato, o manipulador e as tabelas estavam todos escritos — faltava a peça que liga o banco a eles, apagada meses atrás por uma limpeza de código morto que estava tecnicamente certa: nada a referenciava, porque a fiação nunca fora feita. No caminho, dois consertos foram gastos no lado do cliente de uma chamada que não tinha como chegar. Restauração e exclusão em massa voltam junto. (B-117)
 
