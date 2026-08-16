@@ -287,6 +287,16 @@ func buildServerConfig(
 		// users.active_tenant_id column (migration 000018).
 		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
 		sc.AuditHandler = audit.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
+		// B-117 — o ciclo de exclusao suave (MEET-052). Sem esta atribuicao o
+		// guard `if cfg.TenantDeletionStore != nil` do roteador nunca e verdadeiro,
+		// e DELETE /tenants/{id}, POST /tenants/{id}/restore e
+		// POST /tenants/bulk-delete nao existem em deployment nenhum — enquanto a
+		// tela de exclusao de conta do painel chama a primeira delas de verdade.
+		//
+		// Foi assim por meses: o piloto sqlc criou o store e deletou o legado no
+		// mesmo commit sem ligar o novo, entao ele nasceu inalcancavel e um passe
+		// de qualidade o removeu como codigo morto tres semanas depois.
+		sc.TenantDeletionStore = store.NewTenantDeletionStoreSqlc(dbAdapter)
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
 		// /api/v1/admin/tenants/pin endpoint registered in router.go can
