@@ -4320,6 +4320,47 @@ dod:
 
 > Registrado 2026-08-14 ao medir as 21 herdadas do `B-076`. Decisão que o separou deste item: `MEET-ASYNC-AMENDMENT-2026-08-14-helm-drift-per-file-reasons`.
 
+---
+
+### Executado em 2026-08-16 — e a medição salvou o desenho
+
+**21 → 11**, e o par `loopzero-admission-policies` caiu a **zero**: os dois charts produzem os mesmos 19
+recursos, com os mesmos nomes. Decisão: `MEET-ASYNC-AMENDMENT-2026-08-16-helm-drift-renders`.
+
+**O achado que teria arruinado o desenho.** Comparar por `kind+nome` — o mais preciso em princípio —
+dá **zero recursos em comum** em dois dos três pares, porque os charts publicados prefixam com o nome
+do release (`t-loopzero-api`) e os de bootstrap usam nome fixo (`loopzero-api`). São convenções deliberadamente
+diferentes, não deriva. Um gate construído sobre a suposição de que os nomes casam reportaria **100%
+de deriva** em dois pares. Isso não apareceu por raciocínio — apareceu por rodar a comparação antes de
+escrevê-la.
+
+**A chave é o kind**, com os `helm.sh/hook: test` excluídos: um Pod de teste só roda em `helm test`, e
+contá-lo reportava assimetria sem efeito nenhum sobre o que fica no ar — medido, era exatamente a
+diferença que aparecia nos dois pares.
+
+**Limites declarados, não escondidos** — no doc do pacote, não só aqui. Granularidade de kind: dois
+`ConfigMap` diferentes contam ambos como "ConfigMap presente"; o gate responde *"os dois lados
+instalam os mesmos TIPOS de recurso?"*, não *"os mesmos recursos"*. E values padrão: um recurso
+condicional que nenhum lado produz é invisível. Ir mais fino exigiria normalizar nomes entre duas
+convenções intencionais — inventar um mapeamento —, e mapeamento inventado dentro de um gate é a
+classe de defeito que ele existe para pegar.
+
+**O renderizador entrou por trás de uma interface** (DIP): produção usa `helm template`, os testes
+injetam um duplo. Um gate que exigisse a ferramenta que audita para rodar a própria suíte ensinaria o
+leitor que uma suíte vermelha é ambiental.
+
+**Três correções que os próprios testes me impuseram:** as fixtures escreviam `kind: X` em todo
+arquivo — diferiam por **nome**, exatamente o que o gate parou de medir; derivar o kind capitalizando
+a primeira letra me deu `Configmap` contra o `ConfigMap` do registro, a mesma diferença de grafia que
+este item existe para deixar de tratar como fato; e eu escrevi *"mesma razão do loopzero-api"* em duas
+aprovações, que o teste de qualidade das razões reprovou por curta demais.
+
+**A dívida do `B-076` fechou junto.** O campo `Inherited` e o contador de aprovações herdadas
+desapareceram com a chave por arquivo — as 21 entradas opacas viraram 11 com razão medida uma a uma.
+
+**Provas:** 11/11 aprovadas contra o repositório real, mutante `CronJob` injetado reprovando com
+`SEM APROVAÇÃO`, e `task test:unit` verde com 264 pacotes.
+
 ## B-111 — O mesmo controle de firewall vive em três repositórios sem dono declarado   [ ]
 
 domain: engine-go
