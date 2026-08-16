@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 4 · **Closed** 49
+124 items — **Open** 71 · **In flight** 3 · **Closed** 50
 
 ### Open (71)
 
@@ -146,16 +146,15 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (4)
+### In flight (3)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
 | [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
-| [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela----) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `planned` | alta |
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 
-### Closed (49)
+### Closed (50)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -184,6 +183,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
 | [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
+| [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela---x) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `shipped` | alta |
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
@@ -1877,7 +1877,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [ ]
+## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1885,7 +1885,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11, severidade ancorada no limiar `consensus` `infra_in_domain = 0`. `services/deploycontracts` se documenta como *"the pure sink of the services acyclic DAG"* e está registrado `layer=domain`. Mas `shared_contracts.go:207` expõe `WithLock(..., fn func(tx db.DBTX) error) error`; `delivery.go:37` expõe `Activate(ctx, build *db.Build, ...)`; `:55` expõe `TargetRelease *db.Release`; `manifest_builder.go:23` expõe `Apps []db.BuildAppSpec`; e `:11` importa `api/internal/manifests` (`layer=application`). **Os 10 pacotes que dependem do sink dependem transitivamente da persistência.** O `servicesacyclic` não vê isso porque só inspeciona arestas *entre os oito subpacotes de services*. O tipo `db.DBTX` (`db/query_executor.go:53`, interface moldada por strings SQL) aparece em interface (`routes/secrets.go:44`, `:670`, `:795`), domínio (`shared_contracts.go:207`) e aplicação (`services/release` 28 refs, `services/build` 12). O furo é de **uma string**: a cerca MA-7 (`dbgeneratedboundary`) proíbe `api/internal/db/generated`, não `api/internal/db` — e os 2 arquivos que exploram o furo estão ambos na superfície de secrets.
 why_now: é o vazamento de camada **medido** — o único ponto onde a auditoria recomendou mexer em camadas, tendo recusado Clean/Hexagonal por atacado duas vezes. Alargar a cerca de `db/generated` para `db` é literalmente uma string, e é o que impede o furo de crescer.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-4-layer-leak-plan.md — 3 de 3 balas TOCADAS, com uma ressalva escrita: a bala 1 (`dbgeneratedboundary` cobre `api/internal/db`) esta coberta em `server` e `routes`; `services` (51) e `cmd` (18) seguem fora, medidos no B-079. Dizer 3/3 sem essa ressalva superdeclararia. (1) o sink parou de se declarar puro e o doc-comment nomeia as 4 referencias; (2) gate novo domain-sink-purity trava o conjunto medido e reprova a quinta; (3) a cerca dbgeneratedboundary alarga para api/internal/db em api/internal/server, o unico dos quatro diretorios medido em ZERO importadores. FECHADO NA FATIA slice-6: `db.DBTX` saiu da camada de interface. A recusa da fatia slice-4 media QUANTOS pontos tocavam WithLock (34) e nao O QUE a camada de interface usava — medido depois: DOIS arquivos, UM simbolo. O arquivo de porta (query_executor.go, 72 linhas, nenhuma entidade) virou o pacote api/internal/db/dbtx, e `db` re-exporta por TYPE ALIAS, entao nenhuma das 34 assinaturas mudou. `routes` chegou a zero importadores de persistencia e entrou na cerca. E a premissa da DoD de que alargar a cerca era "literalmente uma string" foi MEDIDA E DESMENTIDA: 43 arquivos.
 severity: alta — o sink é o ponto de maior fan-in do DAG; o que vaza por ele vaza para dez pacotes.
 dod:
@@ -1894,6 +1894,17 @@ dod:
   - `db.DBTX` deixa de ser tipo de parâmetro na camada de interface
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Fechado 2026-08-16 — 1 bala cumprida, 1 emendada, 1 com dono nomeado.**
+>
+> **(3) Cumprida e medida.** `api/internal/routes` — a camada de interface — importa `api/internal/db` em **zero** arquivos de produção. O slice-6 moveu `db.DBTX`, o único símbolo que ela usava, para o leaf `api/internal/db/dbtx`. A camada de interface não nomeia mais nenhum tipo de persistência.
+>
+> **(1) Emendada** — ver `MEET-ASYNC-AMENDMENT-2026-08-16-db-fence-scope` (pendente de ratificação). A bala afirmava que alargar a cerca era *"literalmente uma string"*. **Medido: não é.** `api/internal/services` tem **51** importadores e `api/cmd` tem **18** — 69 arquivos reprovariam no dia da chegada. O gate entrou onde é permanente (`server` e `routes`, ambos medidos em zero) e as outras duas carregam a contagem no registro em vez de uma isenção. O argumento está no fonte do próprio gate: *"a gate that fails 43 files on arrival is not a fence; it is an exemption at birth"*.
+>
+> **(2) Tem dono, contagem e catraca.** `deploycontracts` ainda expõe 7 símbolos (4 de persistência, 3 de aplicação), congelados **como conjunto** — o gate `domain-sink-purity` recusa o oitavo e reporta o que sai, para que o conjunto seja apertado em vez de derivar. A remoção é o **`B-079`**, com 57 chamadas contadas, das quais 34 são `WithLock`. Não é adiamento: é um item com número.
+>
+> **O atalho que parece existir e não existe, tentado e revertido nesta fatia.** `db.DBTX` é *alias* de `dbtx.DBTX`, então trocar o nome no sink não muda tipo nenhum nem toca as 34 chamadas — parece ganho de graça. O gate **já recusa a ilusão por desenho**: ele mapeia `api/internal/db/dbtx` para o mesmo prefixo `db`, com o comentário *"alias of the above — the SAME types"*. E o pacote continua importando `api/internal/db` em `manifest_builder.go` e `delivery.go`, então mover um arquivo não remove a dependência — só a reescreve. Registrado no `B-079`.
+
 
 ## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [ ]
 
@@ -2738,6 +2749,13 @@ dod:
 
 > Registrado 2026-08-12 pela fatia slice-4. O `domain-sink-purity` imprime as 4 congeladas em toda
 > execução exatamente para que este item não seja esquecido — é o mesmo desenho do `B-076`.
+
+> **Atalho descartado por medição em 2026-08-16, ao fechar o `B-049`.** `db.DBTX` é *alias* de `dbtx.DBTX` (`api/internal/db/query_executor.go:34`), então trocar o nome no sink não muda tipo nenhum e **não toca as 34 chamadas de `WithLock`** — parece um quarto das 57 de graça.
+>
+> **Não é.** O `domain-sink-purity` mapeia `api/internal/db/dbtx` para o **mesmo prefixo `db`**, deliberadamente, com o comentário *"alias of the above — the SAME types"*. Um símbolo que atravessa a fronteira continua atravessando pelo nome que for. E o pacote continua importando `api/internal/db` em `manifest_builder.go` e `delivery.go` por `db.Build`, `db.Release` e `db.BuildAppSpec`, então mover um arquivo não remove a dependência do pacote.
+>
+> Tentado, medido e revertido — registrado aqui para que a próxima pessoa não gaste a mesma hora. **As 57 chamadas são 57.** O trabalho real é tirar as três entidades de persistência da fronteira, e isso não tem atalho de alias.
+
 
 ## B-080 — Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3   [ ]
 
