@@ -88,6 +88,38 @@ func buildServerConfig(
 	// (operators/cmd pattern), it can be passed in.
 	contextLogger := pkglogging.NewContextLogger(logger, nil)
 
+	// The environment handler is a builder whose three collaborators each come
+	// from a dependency `main.go` can pass nil — so the chain has to be applied
+	// step by step, guarded. Written inline in the struct literal below, every
+	// `With*` argument is evaluated unconditionally, and `dbAdapter.Pool` on the
+	// no-database boot is a nil dereference before any guard in this function
+	// runs. See MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics.
+	//
+	// A missing collaborator is not silently equivalent to a present one: the
+	// project lookup below is the cross-tenant gate, and the handler falls open
+	// without it. It is absent here only when there is no database to look in,
+	// which is the same condition that makes the routes it guards unreachable.
+	environmentHandler := environments.NewEnvironmentHandler(k8sDeps.TenantCRMgr)
+	if dbAdapter != nil {
+		environmentHandler = environmentHandler.WithKPILookup(&envKPILookupPgx{pool: dbAdapter.Pool})
+	}
+	if stores != nil {
+		environmentHandler = environmentHandler.WithPreviewSlotLookup(
+			&previewSlotLookupAdapter{store: stores.PreviewSlotStore},
+		)
+	}
+	if dbDeps != nil {
+		// M2 v1.2 T4.1 (LIVE-caught wiring gap 2026-06-08): the EnvProjectLookup
+		// gate is REQUIRED in production so the EC-1 cross-tenant project check
+		// actually fires. Without this, the handler falls open (test-fixture
+		// mode) and a user from tenant A could create an env under a project
+		// owned by tenant B. The adapter scopes the lookup by tenant_id via the
+		// canonical GetByName query.
+		environmentHandler = environmentHandler.WithProjectLookup(
+			&envProjectLookupAdapter{store: dbDeps.ProjectStore},
+		)
+	}
+
 	sc := server.Config{
 		Port:           cfg.Port,
 		MetricsPort:    cfg.MetricsPort,
@@ -97,20 +129,12 @@ func buildServerConfig(
 		TokenValidator: tokenValidator,
 		TenantCRMgr:    k8sDeps.TenantCRMgr,
 		SecretK8sSync:  k8sDeps.SecretK8sSync,
-		// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
-		// running without advisory lock). Reuses the same locker injected
-		// into build orchestrators, so secret writes serialize with deploys
-		// on the same (tenant, project, env) key. Lock-domain parity EC-2.
-		SecretEnvLocker: stores.Locker,
-		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): inject
-		// the existing *store.PostgresProjectStore as the cross-tenant binding
-		// checker (EC-03 absorption — 404 byte-identical between cross-
-		// tenant attempts + nonexistent projects; CWE-204 defense). The
-		// PostgresProjectStore.GetByName signature already matches
-		// secrets.SecretProjectChecker — no adapter needed.
-		SecretProjectChecker: dbDeps.ProjectStore,
-		DomainHandler:        domainHandler,
-		BuildHandler:         buildHandler,
+		// SecretEnvLocker and SecretProjectChecker are read off `stores` and
+		// `dbDeps` inside the guards below — both are nil on the no-database
+		// boot (`setupDatabase` returns (nil, nil) when DATABASE_URL is empty),
+		// and reading them here panicked before the guards were ever reached.
+		DomainHandler: domainHandler,
+		BuildHandler:  buildHandler,
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
 		// PostgresAttestationStore so /api/v1/builds/{id}/attestation
 		// returns real data (was always 404 because the store was nil).
@@ -128,17 +152,7 @@ func buildServerConfig(
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler: environments.NewEnvironmentHandler(k8sDeps.TenantCRMgr).
-			WithKPILookup(&envKPILookupPgx{pool: dbAdapter.Pool}).
-			WithPreviewSlotLookup(&previewSlotLookupAdapter{store: stores.PreviewSlotStore}).
-			// M2 v1.2 T4.1 (LIVE-caught wiring gap 2026-06-08): the
-			// EnvProjectLookup gate is REQUIRED in production so the
-			// EC-1 cross-tenant project check actually fires. Without
-			// this, the handler falls open (test-fixture mode) and a
-			// user from tenant A could create an env under a project
-			// owned by tenant B. The adapter scopes the lookup by
-			// tenant_id via the canonical GetByName query.
-			WithProjectLookup(&envProjectLookupAdapter{store: dbDeps.ProjectStore}),
+		EnvironmentHandler:           environmentHandler,
 		ShutdownCtx:                  shutdownCtx,
 		ShutdownCancel:               shutdownCancel,
 		RateLimiter:                  rateLimiter,
@@ -161,6 +175,12 @@ func buildServerConfig(
 		sc.ProjectStore = dbDeps.ProjectStore
 		sc.DB = dbDeps.DBHealth
 		sc.PlanLimiter = dbDeps.PlanLimiter
+		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the existing
+		// *store.PostgresProjectStore doubles as the cross-tenant binding checker
+		// (EC-03 absorption — 404 byte-identical between cross-tenant attempts and
+		// nonexistent projects; CWE-204 defense). PostgresProjectStore.GetByName
+		// already matches secrets.SecretProjectChecker, so no adapter is needed.
+		sc.SecretProjectChecker = dbDeps.ProjectStore
 	}
 
 	// T1.9 production wiring: CostEnforcer for HTTP 402 on cost cap exceeded.
@@ -216,6 +236,11 @@ func buildServerConfig(
 		sc.ObjectUploader = stores.ObjUploader
 		sc.SourceBucket = cfg.SourceBucket
 		sc.EventStore = stores.EventStore
+		// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were running
+		// without advisory lock). Reuses the same locker injected into build
+		// orchestrators, so secret writes serialize with deploys on the same
+		// (tenant, project, env) key. Lock-domain parity EC-2.
+		sc.SecretEnvLocker = stores.Locker
 		sc.BuildStoreReader = stores.BuildStoreReader
 		// T5.1 — canonical Deploy Timeline read-store. Composes the
 		// build-store reader (BuildLookup → tenant_id) and an SSE event

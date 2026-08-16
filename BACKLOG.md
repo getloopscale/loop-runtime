@@ -4783,6 +4783,13 @@ dod:
 
 > Registrado 2026-08-16 pela medição do `B-104`. É o `optional: true` de maior alcance do deployment, e o único cuja razão continua sendo uma pergunta aberta.
 
+> **Medição de 2026-08-16 muda a pergunta deste item.** A premissa era *"a API sobe sem banco"*. **Ela não sobe.** `setupDatabase` devolve `(nil, nil)` com `DATABASE_URL` vazio (`api/cmd/setup_database.go:44-47`), e `buildServerConfig` lia campos de `dbDeps` e `stores` **acima** das próprias guardas `if != nil` — três testes reproduziram o `nil pointer dereference` antes de qualquer mudança (`api/cmd/setup_server_nil_deps_test.go`). O processo registrava o `Warn` de degradação e morria em seguida.
+>
+> O pânico foi corrigido, porque **os dois desfechos possíveis deste item o exigem**: se subir sem banco for caso de uso real, o processo precisa sobreviver; se for resíduo, o lugar de falhar alto é `setupDatabase`, com erro tipado, e não um `nil pointer dereference` três funções adiante. Ver `MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics`.
+>
+> **A decisão continua sendo sua, e ficou mais limpa:** não é mais *"mantemos esta degradação?"* — é *"queremos criar esta degradação, que nunca funcionou?"*.
+
+
 ## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [x]
 
 domain: engine-go
