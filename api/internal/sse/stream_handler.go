@@ -485,7 +485,6 @@ func NewProjectStreamHandler(eventStore EventStore, opts ...ProjectStreamOption)
 	return h
 }
 
-// ActiveStreams returns the current number of active connections.
 // ServeHTTP handles the SSE request for a project-level stream.
 func (h *ProjectStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	projectName := chi.URLParam(r, "name")

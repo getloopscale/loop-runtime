@@ -11,6 +11,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"strings"
 	"testing"
 )
@@ -181,14 +182,29 @@ func TestReservedEnv_SymbolNameDoesNotCollideWithFindSec004(t *testing.T) {
 	// The DECLARATION is what collides, not a mention: the doc-comment names the
 	// sibling rule on purpose, and forbidding that would remove the very sentence
 	// that keeps the next reader from confusing them.
+	// os.ReadDir + ParseFile em vez de parser.ParseDir (SA1019, depreciado desde Go
+	// 1.25 por nao considerar build tags). A alternativa que o aviso sugere,
+	// golang.org/x/tools/go/packages, seria uma dependencia nova para varrer um unico
+	// diretorio de arquivos deste pacote — a stdlib resolve, entao ela resolve.
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
+	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
+	files := map[string]*ast.File{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		f, perr := parser.ParseFile(fset, e.Name(), nil, 0)
+		if perr != nil {
+			t.Fatalf("parsing %s: %v", e.Name(), perr)
+		}
+		files[e.Name()] = f
+	}
 	var scanned int
-	for _, pkg := range pkgs {
-		for name, f := range pkg.Files {
+	{
+		for name, f := range files {
 			scanned++
 			for _, d := range f.Decls {
 				gd, ok := d.(*ast.GenDecl)

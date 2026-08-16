@@ -153,7 +153,7 @@ func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput
 	// Operator reconciles read this back into the ctx via correlation.WithID
 	// so the trace persists across the API→K8s→controller boundary.
 	if input.CorrelationID != "" {
-		app.ObjectMeta.Annotations = map[string]string{
+		app.Annotations = map[string]string{
 			"loopzero.io/correlation-id": input.CorrelationID,
 		}
 	}

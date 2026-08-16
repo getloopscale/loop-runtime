@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package domains serves the custom-domain surface: claiming a domain, verifying
+// ownership, and driving it to a state where traffic actually reaches the tenant.
+//
+// The whole family is a state machine (pkg/statemachine, not an ad-hoc map) because
+// a domain moves through steps owned by systems outside this process — DNS
+// propagation, the Cloudflare zone, certificate issuance — and each of them can fail
+// or stall independently. The types here are aliases over domain/; the canonical
+// definitions live there.
 package domains
 
 import (

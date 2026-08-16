@@ -25,13 +25,12 @@ import (
 // the same time, the second push gets one of the canonical race errors
 // the handler at source.go:285-292 maps to DEPLOY_IN_PROGRESS.
 //
-// One goroutine succeeds (the first to acquire the mutex); subsequent
-// callers receive the race error. The test then asserts:
+// One goroutine succeeds (the first to win the compare-and-swap on
+// firstUpload); subsequent callers receive the race error. The test then asserts:
 //   - No panic / no data race (-race detector)
 //   - Exactly 1 goroutine sees 200 OK
 //   - The other N-1 see 409 DEPLOY_IN_PROGRESS (NOT a generic 500)
 type fakeRaceySourceStore struct {
-	mu            sync.Mutex
 	firstUpload   atomic.Bool // CAS — first writer wins
 	pushCallCount atomic.Int32
 	raceErr       error
@@ -104,7 +103,6 @@ func TestSourceHandler_Upload_ConcurrentRaceResolvesAsDeployInProgress(t *testin
 	var wg sync.WaitGroup
 	wg.Add(N)
 	for i := 0; i < N; i++ {
-		i := i
 		go func() {
 			defer wg.Done()
 			body, contentType := buildMultipart()

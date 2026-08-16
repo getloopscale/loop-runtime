@@ -549,7 +549,7 @@ func validateStripeKeyForEnv(env, stripeKey string) error {
 			"got prefix %q. This is a defense-in-depth check against silent test-mode "+
 			"drift in production (revenue leak invisible from cluster). Per "+
 			"ADR-2026-05-27-T2.7-RAK. Rotate the ESO Secret to a sk_live_* key OR "+
-			"unset STRIPE_SECRET_KEY to fall back to the legacy placeholder URL.",
+			"unset STRIPE_SECRET_KEY to fall back to the legacy placeholder URL",
 		env, prefix,
 	)
 }

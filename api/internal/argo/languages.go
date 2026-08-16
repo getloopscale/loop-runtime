@@ -56,14 +56,6 @@ type LanguageStrategy interface {
 // dispatches on `framework`. The fixed LoopZeroKit stack is keyed on `runtime`
 // (python|node) via ResolveStrategy; anything else fails closed (D1/D4).
 
-// ResolveStrategy returns the LanguageStrategy for a `services.json` runtime
-// (`python` | `node`). This is the single build-strategy key (simplify-deploy-
-// loopzerokit-runtime-wiring D1, closing review F-dom-2).
-//
-// D4: there is NO empty-default-to-Node branch. `runtime` is required by the
-// services.json schema, so an empty/unknown runtime at build time is a contract
-// violation, not a "default to node" situation — it fails closed. Silent
-// defaulting is precisely how a python app could be built as node.
 // RuntimeDescriptor models a supported runtime as DATA rather than a hardcoded
 // switch arm (M14 gap #1, blueprint Q1 — kserve's ServingRuntime treats a
 // runtime as a declarative descriptor). Adding a runtime is a registry entry,
@@ -268,6 +260,3 @@ func buildContainer(name, image string, resources *forge.ResourceRequirements, s
 	}
 }
 
-func noopScript(msg string) string {
-	return fmt.Sprintf("echo %q", msg)
-}

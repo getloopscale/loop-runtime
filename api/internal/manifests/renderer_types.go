@@ -309,30 +309,6 @@ type k8sMetricTargetSpec struct {
 	AverageUtilization int    `json:"averageUtilization"`
 }
 
-// --- Traefik Middleware types (for static frontend) ---
-
-type traefikMiddleware struct {
-	APIVersion string                `json:"apiVersion"`
-	Kind       string                `json:"kind"`
-	Metadata   k8sMetadata           `json:"metadata"`
-	Spec       traefikMiddlewareSpec `json:"spec"`
-}
-
-type traefikMiddlewareSpec struct {
-	AddPrefix     *traefikAddPrefix     `json:"addPrefix,omitempty"`
-	RedirectRegex *traefikRedirectRegex `json:"redirectRegex,omitempty"`
-}
-
-type traefikRedirectRegex struct {
-	Regex       string `json:"regex"`
-	Replacement string `json:"replacement"`
-	Permanent   bool   `json:"permanent"`
-}
-
-type traefikAddPrefix struct {
-	Prefix string `json:"prefix"`
-}
-
 type traefikRouteMiddleware struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"` // cross-namespace reference

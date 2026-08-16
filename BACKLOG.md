@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-120 items — **Open** 67 · **In flight** 11 · **Closed** 42
+122 items — **Open** 69 · **In flight** 10 · **Closed** 43
 
-### Open (67)
+### Open (69)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -141,14 +141,15 @@ consequência do escopo per-repo declarado acima.
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18----) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `triaged` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam----) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `triaged` | alta |
+| [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
+| [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 
-### In flight (11)
+### In flight (10)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto----) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `planned` | — |
 | [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado----) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `planned` | — |
-| [`B-009`](#b-009--task-lint-está-vermelho-em-11-achados-nenhum-deles-novo----) | `task lint` está vermelho em 11 achados, nenhum deles novo | `planned` | — |
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas----) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `planned` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret----) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `planned` | alta |
 | [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator----) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `planned` | alta |
@@ -158,13 +159,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem----) | O `CLAUDE.md` aponta para cinco contratos que não existem | `planned` | média |
 
-### Closed (42)
+### Closed (43)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-006`](#b-006--o-oráculo-do-conjunto-de-gates-vive-num-arquivo-com-data-no-nome-e-é-mutado-a-cada-gate---x) | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate | `shipped` | — |
 | [`B-007`](#b-007--43-mb-de-snapshot-de-helmfile-que-ninguém-gera-nem-consome---x) | 4,3 MB de snapshot de helmfile que ninguém gera nem consome | `shipped` | — |
 | [`B-008`](#b-008--task-testunit-está-vermelho-por-drift-entre-repositórios---x) | `task test:unit` está vermelho por drift entre repositórios | `shipped` | — |
+| [`B-009`](#b-009--task-lint-está-vermelho-em-11-achados-nenhum-deles-novo---x) | `task lint` está vermelho em 11 achados, nenhum deles novo | `shipped` | — |
 | [`B-010`](#b-010--a-borda-do-app-dev-alcançava-o-loopzero-cloud-por-um-port-forward-que-reiniciava-18min---x) | A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min | `shipped` | — |
 | [`B-011`](#b-011--o-reconciliador-do-loopzero-cloud-reiniciava-o-deployment-a-cada-5-minutos-sempre---x) | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre | `shipped` | — |
 | [`B-012`](#b-012--a-imagem-do-mcp-do-loopzero-promptly-nunca-constrói-os-pacotes-que-ela-executa---x) | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa | `shipped` | baixa |
@@ -464,7 +466,7 @@ dod:
 
 Corrigido com `stripComments` aplicado antes do regex, e teste de mesa cobrindo os cinco casos (chamada real, comentário de linha, bloco, bloco multilinha, código depois de bloco). **Adicionar a rota à lista teria sido pior que o falso positivo**: afirmaria um consumo que não existe, e o contrato passaria a mentir na direção que ninguém verifica. O comentário que descreve um bug não é o bug.
 
-## B-009 — `task lint` está vermelho em 11 achados, nenhum deles novo   [ ]
+## B-009 — `task lint` está vermelho em 11 achados, nenhum deles novo   [x]
 
 domain: engine-go
 repo: loopzero
@@ -472,7 +474,7 @@ suggested_mode: review
 source: discover-review
 evidence: `task lint` sai **201** com 11 achados, todos em `operators/`: 2 de `gosec G706` (log injection via taint analysis, em `operators/internal/reconcilehelpers/pprof.go:34` e `operators/internal/tracing/tracing.go:99`) e o restante de `staticcheck ST1000` (pacote sem comentário de pacote, em `operators/internal/environment/*.go` e vizinhos). **Nenhum dos 11 arquivos foi tocado nesta sessão** — `comm -12` entre a lista de arquivos acusados e `git diff --name-only 26ba1340..HEAD` sai vazia. Medido em 2026-08-09.
 why_now: encontrado no mesmo checklist que revelou o `B-008`. Vale registrar junto porque os dois contam a mesma história: dois comandos do `CLAUDE.md § Pre-completion checklist` — `task test:unit` e `task lint` — estão vermelhos há tempo indeterminado, e nenhum dos dois vermelhos é recente. Uma checklist que ninguém roda inteira deixa de ser checklist.
-status: planned
+status: shipped
 resolved_in: os 11 achados de `operators/` estao em ZERO. Os 2 `gosec G706` viraram VALIDACAO NA FRONTEIRA — `LOOPZERO_PPROF_ADDR` e `OTEL_EXPORTER_OTLP_ENDPOINT` passam por `net.SplitHostPort` e uma variavel malformada agora falha alto em vez de ser logada e usada; a taint analysis do gosec nao enxerga validacao (tentei logar a string crua e depois os componentes validados — acusa identico), entao ficou `//nolint:gosec` com a razao escrita, que e a convencao local (`operators/internal/constants/labels.go` ja a usa). Os `ST1000` viraram comentarios de pacote reais: `reconcilehelpers` dizia `Package shared` (nome anterior ao split de binarios), `platform` tinha comentario de TIPO colado na clausula, e `environment` nao tinha nenhum. Mais QF1008 (campo embutido redundante) e a funcao morta `safeName`. `golangci-lint run ./...` em `operators` sai **0 issues**.
 dod:
   - os 2 achados de `gosec G706` estão corrigidos ou allowlistados com sunset, conforme `code-quality-allowlist.txt`
@@ -483,6 +485,13 @@ dod:
 **Nota sobre severidade.** `G706` é o único dos dois que merece leitura, não correção mecânica: log injection depende de a entrada ser realmente controlável por terceiro. Allowlistar sem ler é o mesmo erro que o `B-008` descreve — fazer o gate calar em vez de acertar.
 
 > Registrado 2026-08-09 ao rodar o checklist pós-rename (slug: `lint-red-preexisting`).
+
+> **Fechado 2026-08-16 — `task lint` sai 0.** O item media 11 achados, "todos em `operators/`". A contagem havia envelhecido nas duas direções, e a razão estava na task: ela roda `pkg`, `operators` e `api` em sequência e **para no primeiro que falha**. Parava em `operators` com 1 achado e **nunca chegava em `api`**, que tinha **63**.
+>
+> Medido e fechado por classe: **6 `SA5011`** eram um pânico real no arranque sem banco (ver `MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics` e a nota no `B-116`); **4 comentários de doc estavam grudados no símbolo errado** (`ResolveStrategy` sobre `RuntimeDescriptor`, `BranchExists` sobre `BranchNotFoundError`, `PreviewDeployer` sobre `SourceBundlePreparer`, `ActiveStreams` sobre `ServeHTTP`) — dois eram duplicata obsoleta, dois eram o doc do símbolo que ficara sem nenhum; **23 `ST1000`** eram 4 pacotes sem doc, e ganharam um que diz a fronteira que cada um guarda; **1 `errorlint`** fazia asserção direta sobre erro, que falha em erro embrulhado e degrada a lista de erros por campo para uma mensagem genérica; **1 `errcheck`** ignorava falha de escrita em SSE, e o laço seguia escrevendo num socket morto; **1 `G705`** usava `%q` como se fosse codificador JSON (um caractere de controle vira `\x00`, que nenhum parser aceita) — passou a `json.Encoder`; **13 `unused`** eram código morto de verdade, incluindo 4 tipos Traefik que nenhum renderizador monta e um `sync.Mutex` cujo comentário prometia mutex sobre uma implementação que usa CAS.
+>
+> **Prova:** `task lint` exit 0 · `pkg`=0 `operators`=0 `api`=0 · suíte `api` verde.
+
 
 ## B-010 — A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min   [x]
 
@@ -4994,3 +5003,37 @@ dod:
   - existe um gate que reprova uma invocação nova na forma quebrada, senão a divisão volta pelo mesmo caminho por que chegou
 
 > Registrado 2026-08-16 ao instrumentar as skills de backlog para renderizar o índice de itens abertos.
+
+## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — não é defeito de produto, mas é um gate que reporta verde sobre o que não olhou, e foi ele que manteve 63 achados invisíveis enquanto o `B-009` dizia 11
+evidence: medido 2026-08-16. `taskfiles/test.yml § lint` roda três comandos em sequência — `cd pkg && golangci-lint run ./...`, depois `operators`, depois `api`. O Task aborta no primeiro comando que sai != 0, então `api` **nunca era linted** enquanto `operators` tivesse um achado. Reproduzido: antes da correção do `B-009`, `task lint` reportava `1 issues` (operators); com `operators` limpo, a mesma task reportou `63` (api). Os dois números vieram da mesma árvore, com um commit de diferença que tocou uma linha de teste.
+why_now: descoberto ao fechar o `B-009`, cujo enunciado ("11 achados, todos em `operators/`") era consequência direta deste comportamento e não da árvore.
+status: triaged
+dod:
+  - `task lint` roda os três módulos mesmo quando um falha, e o código de saída reflete o agregado
+  - a saída diz quantos achados por módulo, para que uma contagem citada num item nomeie o que foi medido
+  - existe teste que prova que um achado em `pkg` não impede `api` de ser linted
+
+> Registrado 2026-08-16 ao fechar o `B-009`.
+
+## B-122 — Comentário afirma um gate de credenciais que não existe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: baixa — a proteção real existe e funciona; o defeito é o comentário afirmar uma segunda que não, e um leitor decidir com base nela
+evidence: medido 2026-08-16. `api/internal/config/config.go:20-22` afirmava que *"the no-hardcoded-credentials gate exempts this file by name"*. `grep -rn "config.go\|devDefault" cmd/loopzero-ops/internal/quality/` não encontra nem o caminho nem o identificador, e `loopzero-ops quality --list` (126 gates) não tem gate dessa família sobre fonte Go. A outra metade da afirmação é verdadeira e foi verificada: `validateProductionCredentials` (`config.go:658-674`) recusa o arranque quando `LOOPZERO_ENV` é produção e qualquer sentinela sobreviveu. A afirmação falsa foi removida na fatia do `B-009`; o que fica em aberto é se o gate deveria existir.
+why_now: encontrado ao justificar as três isenções `//nolint:gosec // G101` do mesmo bloco — escrever a razão exigiu verificar se ela era verdade, e metade não era. Mesma classe do `B-052` (`CLAUDE.md` apontando para contratos ausentes): documentação que promete uma proteção inexistente é pior que silêncio, porque quem lê para de procurar.
+status: triaged
+dod:
+  - está decidido se um gate de credenciais literais em fonte Go deve existir — e, se não, nenhum comentário do repositório afirma que existe
+  - se existir, ele isenta `internal/config/config.go` por nome e o comentário volta a citá-lo
+  - a varredura por outras afirmações de gate inexistente no corpo de comentários foi feita, porque esta foi encontrada por acaso
+
+> Registrado 2026-08-16 ao fechar o `B-009`.

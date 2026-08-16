@@ -16,15 +16,29 @@ import (
 )
 
 // T1.3 (plan 2026-05-21-deep-review-remediation): dev-default sentinels are
-// declared as constants so the production-startup guard checks against a
-// single source of truth AND the no-hardcoded-credentials gate exempts this
-// file by name (the literals are used semantically, not as defaults that
-// could leak to production).
+// declared as constants so both users of each literal — the fallback in Load()
+// and the production guard in validateProductionCredentials — read the same
+// value. A literal repeated in the two places is a literal that can diverge, and
+// the half that diverges is the guard: it would stop recognising the default it
+// exists to refuse.
+//
+// These ARE credential values, not names, so gosec G101 is not a false positive.
+// What makes them safe is not their content: it is that
+// validateProductionCredentials REFUSES TO START when LOOPZERO_ENV is production and
+// any of them survived. Dev is the only environment where they are reachable.
+//
+// (A previous version of this comment also claimed a "no-hardcoded-credentials
+// gate exempts this file by name". No such gate exists — grep over
+// cmd/loopzero-ops/internal/quality/ finds neither this path nor `devDefault`. The
+// claim was removed rather than left to be trusted.)
 const (
-	devDefaultMinIOAccessKey       = "loopzero-admin"
-	devDefaultMinIOSecretKey       = "loopzero-dev-password"
-	devDefaultArgoCallbackSecret   = "loopzero-dev-callback-secret"
-	devDefaultBootstrapSecret      = "loopzero-dev-bootstrap-secret"
+	devDefaultMinIOAccessKey = "loopzero-admin"
+	//nolint:gosec // G101: dev default, refused in production by validateProductionCredentials
+	devDefaultMinIOSecretKey = "loopzero-dev-password"
+	//nolint:gosec // G101: dev default, refused in production by validateProductionCredentials
+	devDefaultArgoCallbackSecret = "loopzero-dev-callback-secret"
+	//nolint:gosec // G101: dev default, refused in production by validateProductionCredentials
+	devDefaultBootstrapSecret = "loopzero-dev-bootstrap-secret"
 )
 
 // Config holds all API server configuration, read from environment variables at startup.
@@ -64,15 +78,15 @@ type Config struct {
 	DBStatementTimeout string // milliseconds as string for PostgreSQL runtime param
 
 	// HTTP Clients
-	HTTPClientTimeout  time.Duration
+	HTTPClientTimeout   time.Duration
 	ArgocdClientTimeout time.Duration
 
 	// Kubernetes Contexts
-	MgmtKubeconfig  string
-	MgmtKubeContext string
-	BuildKubeconfig   string
-	BuildKubeContext  string
-	RuntimeKubeconfig string
+	MgmtKubeconfig     string
+	MgmtKubeContext    string
+	BuildKubeconfig    string
+	BuildKubeContext   string
+	RuntimeKubeconfig  string
 	RuntimeKubeContext string
 
 	// Service URLs
@@ -81,15 +95,15 @@ type Config struct {
 	// B77 (end-to-end-deploy-validation-plan iter 11) — Gitea organization
 	// where tenant gitops repos live. Default "loopzero" preserves prior behavior;
 	// configurable via GITEA_ORG env var.
-	GiteaOrg             string
-	APICrossClusterURL   string
-	ArgocdURL            string
+	GiteaOrg                  string
+	APICrossClusterURL        string
+	ArgocdURL                 string
 	MinIOEndpoint             string
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
-	RegistryURL          string
-	RegistryInsecure     bool   // true for local dev registries without TLS
-	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
+	RegistryURL               string
+	RegistryInsecure          bool   // true for local dev registries without TLS
+	HarborRegistryURL         string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
 
 	// Cosign keyless signing config (M2 T8.0 of plan 2026-05-27-M07-to-3-85 — v1.1 EC-3 wire env var).
 	// CosignKeyless=false (default): keyed mode via cosign-signing-key Secret.
@@ -119,8 +133,8 @@ type Config struct {
 	CosignInsecureSkipSCT bool
 	CosignTUFRootPinned   bool
 
-	WorkloadIngressURL   string
-	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
+	WorkloadIngressURL string
+	BaseDomain         string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
 	// PreviewPublicDomain is the wildcard domain used to compose public
 	// preview URLs surfaced to users. When empty, falls back to BaseDomain
 	// (legacy behavior). Set to the Caddy/CF wildcard root in environments
@@ -132,7 +146,7 @@ type Config struct {
 	// where <entryApp> is the first server/frontend app in loopzero.yaml — this
 	// matches the IngressRoute Host emitted by appHostname() so the Caddy
 	// wildcard block reverse-proxies cleanly to Traefik.
-	PreviewPublicDomain  string
+	PreviewPublicDomain string
 	// PublicDomain is the wildcard domain used to compose public app URLs
 	// surfaced to users for PERMANENT environments (production, staging,
 	// etc. — non-preview). When empty, status.url emit is suppressed and
@@ -150,7 +164,7 @@ type Config struct {
 	// reverse-proxies cleanly to Traefik. Mirror of PreviewPublicDomain
 	// for permanent envs (FAANG canonical J-25 sponsor walkthrough catch
 	// 2026-06-12 — closes catches #21+#22).
-	PublicDomain         string
+	PublicDomain string
 	// GrafanaBaseURL is the deep-link root for Grafana dashboards surfaced from
 	// the J-18 Status / Runtime Health page. Templated by StatusHandler into
 	// statusResponse.MetricsRangeURL as
@@ -159,11 +173,11 @@ type Config struct {
 	// disabled (honest, per ADR D2 of plan 2026-06-06-dashboard-journey-j18-
 	// status-runtime-health v1.1).
 	// Set via LOOPZERO_GRAFANA_BASE_URL env var.
-	GrafanaBaseURL       string
+	GrafanaBaseURL string
 	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
 	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loopzero-ca-issuer).
 	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
-	ClusterIssuer        string
+	ClusterIssuer string
 
 	// argo-rollouts-progressive-delivery-plan T1.2 (D6) — Prometheus URL for
 	// canary AnalysisTemplate queries. Must be reachable from workload
@@ -175,13 +189,13 @@ type Config struct {
 	PrometheusAddress string
 
 	// Credentials (read from env vars or K8s secrets)
-	GiteaToken         string
-	ArgocdToken        string
-	MinIOAccessKey     string
-	MinIOSecretKey     string
-	ArgoCallbackSecret    string
-	BootstrapSecret       string // SEC-003: shared secret for POST /internal/bootstrap
-	SecretEncryptionKey   string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
+	GiteaToken          string
+	ArgocdToken         string
+	MinIOAccessKey      string
+	MinIOSecretKey      string
+	ArgoCallbackSecret  string
+	BootstrapSecret     string // SEC-003: shared secret for POST /internal/bootstrap
+	SecretEncryptionKey string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
 
 	// T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
 	// OpenBao transit encryption credentials. When OpenBaoTransitEnabled is
@@ -218,8 +232,8 @@ type Config struct {
 	AuthCacheTTL time.Duration
 
 	// Source Upload
-	MaxBundleSize        int64
-	MultipartMaxMemory   int64
+	MaxBundleSize      int64
+	MultipartMaxMemory int64
 
 	// Build Reaper
 	BuildQueueTimeout     time.Duration
@@ -241,10 +255,10 @@ type Config struct {
 	LokiURL string
 
 	// Cloudflare (static frontend delivery via CF Worker + KV + Zone Management)
-	CFAPIToken        string // Cloudflare API token
-	CFAccountID       string // Cloudflare account ID
-	CFKVNamespaceID   string // KV namespace ID for routing table
-	CFZoneManagement  bool   // Enable CF Zone Management for custom domains (v2)
+	CFAPIToken       string // Cloudflare API token
+	CFAccountID      string // Cloudflare account ID
+	CFKVNamespaceID  string // KV namespace ID for routing table
+	CFZoneManagement bool   // Enable CF Zone Management for custom domains (v2)
 
 	// CORS
 	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — required in production, open in dev
@@ -366,11 +380,11 @@ func Load() Config {
 		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
 
 		// Kubernetes Contexts
-		MgmtKubeconfig:  envOr("CORE_KUBECONFIG", defaultKubeconfig),
-		MgmtKubeContext: envOr("CORE_KUBE_CONTEXT", "k3d-loopzero-core"),
-		BuildKubeconfig:   envOr("BUILD_KUBECONFIG", defaultKubeconfig),
-		BuildKubeContext:  envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
-		RuntimeKubeconfig: envOr("CELL_0_KUBECONFIG", defaultKubeconfig),
+		MgmtKubeconfig:     envOr("CORE_KUBECONFIG", defaultKubeconfig),
+		MgmtKubeContext:    envOr("CORE_KUBE_CONTEXT", "k3d-loopzero-core"),
+		BuildKubeconfig:    envOr("BUILD_KUBECONFIG", defaultKubeconfig),
+		BuildKubeContext:   envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
+		RuntimeKubeconfig:  envOr("CELL_0_KUBECONFIG", defaultKubeconfig),
 		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loopzero-cell-0"),
 
 		// Service URLs
@@ -389,33 +403,33 @@ func Load() Config {
 		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "http://minio.loopzero-system.svc.cluster.local:9000"),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
-		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
-		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
-		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
+		RegistryURL:               envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
+		RegistryInsecure:          os.Getenv("REGISTRY_INSECURE") == "true",
+		HarborRegistryURL:         os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 
 		// Cosign keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85)
 		// Defaults preserve keyed mode (safe regression). Operator sets LOOPZERO_COSIGN_KEYLESS=true
 		// AFTER Sigstore stack provisioned em build cluster.
-		CosignKeyless:        envBool("LOOPZERO_COSIGN_KEYLESS", false),
-		CosignAttestEnabled:  envBool("LOOPZERO_COSIGN_ATTEST_ENABLED", false),
+		CosignKeyless:       envBool("LOOPZERO_COSIGN_KEYLESS", false),
+		CosignAttestEnabled: envBool("LOOPZERO_COSIGN_ATTEST_ENABLED", false),
 		// T1.2 CR-1 fix: explicit env opt-in for SCT-skip flag (LOCAL only)
 		CosignInsecureSkipSCT: envBool("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", false),
 		CosignTUFRootPinned:   envBool("LOOPZERO_COSIGN_TUF_ROOT_PINNED", false),
-		CosignFulcioURL:      os.Getenv("LOOPZERO_FULCIO_URL"),
-		CosignRekorURL:       os.Getenv("LOOPZERO_REKOR_URL"),
-		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
-		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
-		PreviewPublicDomain:  os.Getenv("LOOPZERO_PREVIEW_PUBLIC_DOMAIN"),
-		PublicDomain:         os.Getenv("LOOPZERO_PUBLIC_DOMAIN"),
-		GrafanaBaseURL:       os.Getenv("LOOPZERO_GRAFANA_BASE_URL"),
-		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
-		PrometheusAddress:    os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
+		CosignFulcioURL:       os.Getenv("LOOPZERO_FULCIO_URL"),
+		CosignRekorURL:        os.Getenv("LOOPZERO_REKOR_URL"),
+		WorkloadIngressURL:    os.Getenv("WORKLOAD_INGRESS_URL"),
+		BaseDomain:            envOr("BASE_DOMAIN", "loopzero.local"),
+		PreviewPublicDomain:   os.Getenv("LOOPZERO_PREVIEW_PUBLIC_DOMAIN"),
+		PublicDomain:          os.Getenv("LOOPZERO_PUBLIC_DOMAIN"),
+		GrafanaBaseURL:        os.Getenv("LOOPZERO_GRAFANA_BASE_URL"),
+		ClusterIssuer:         os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
+		PrometheusAddress:     os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
 
 		// Credentials
-		GiteaToken:         os.Getenv("GITEA_TOKEN"),
-		ArgocdToken:        os.Getenv("ARGOCD_TOKEN"),
-		MinIOAccessKey:     envOr("MINIO_ACCESS_KEY", devDefaultMinIOAccessKey),
-		MinIOSecretKey:     envOr("MINIO_SECRET_KEY", devDefaultMinIOSecretKey),
+		GiteaToken:          os.Getenv("GITEA_TOKEN"),
+		ArgocdToken:         os.Getenv("ARGOCD_TOKEN"),
+		MinIOAccessKey:      envOr("MINIO_ACCESS_KEY", devDefaultMinIOAccessKey),
+		MinIOSecretKey:      envOr("MINIO_SECRET_KEY", devDefaultMinIOSecretKey),
 		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", devDefaultArgoCallbackSecret),
 		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", devDefaultBootstrapSecret),
 		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
@@ -439,7 +453,7 @@ func Load() Config {
 
 		// ArgoCD Sync
 		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
-		ArgocdSyncTimeout: envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
+		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE
@@ -475,10 +489,10 @@ func Load() Config {
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
 
 		// Cloudflare (static frontend delivery)
-		CFAPIToken:        os.Getenv("CF_API_TOKEN"),
-		CFAccountID:       os.Getenv("CF_ACCOUNT_ID"),
-		CFKVNamespaceID:   os.Getenv("CF_KV_NAMESPACE_ID"),
-		CFZoneManagement:  os.Getenv("CF_ZONE_MANAGEMENT") == "true",
+		CFAPIToken:       os.Getenv("CF_API_TOKEN"),
+		CFAccountID:      os.Getenv("CF_ACCOUNT_ID"),
+		CFKVNamespaceID:  os.Getenv("CF_KV_NAMESPACE_ID"),
+		CFZoneManagement: os.Getenv("CF_ZONE_MANAGEMENT") == "true",
 
 		// CORS
 		CORSAllowedOrigin: os.Getenv("CORS_ALLOWED_ORIGIN"),

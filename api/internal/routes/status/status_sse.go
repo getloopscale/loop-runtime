@@ -219,7 +219,13 @@ func (h *StatusSSEHandler) emitPending(
 		// SSE wire format per memory
 		// feedback_eventsource_named_events_vs_onmessage_2026_06_13: emit as
 		// named `event: signal.changed` so frontend addEventListener works.
-		fmt.Fprintf(w, "event: signal.changed\ndata: %s\nid: %d\n\n", string(ev.Data), ev.ID)
+		if _, err := fmt.Fprintf(
+			w, "event: signal.changed\ndata: %s\nid: %d\n\n", string(ev.Data), ev.ID,
+		); err != nil {
+			// O cliente foi embora. Seguir o laco escreve num socket morto ate a
+			// lista acabar, e ainda avanca lastID por eventos que ninguem recebeu.
+			return fmt.Errorf("writing SSE frame for event %d: %w", ev.ID, err)
+		}
 		flusher.Flush()
 		if ev.ID > *lastID {
 			*lastID = ev.ID

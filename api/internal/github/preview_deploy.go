@@ -28,6 +28,19 @@ type RepoLookup interface {
 	GetByRepo(ctx context.Context, repoFullName string) (*store.ProjectRepository, error)
 }
 
+// SourceBundlePreparer prepares the source bundle on S3 for a commit
+// before the preview build runs AND returns the parsed loopzero.yaml so
+// the preview deployer can pass apps with framework/path/build to the
+// build orchestrator (resolves LanguageStrategy to language-aware
+// step names; LIVE catch 2026-06-07 J-23 bug #3).
+//
+// nil LoopZeroYamlMinimal returned = no loopzero.yaml in repo (preview build
+// will fail noisily — log + warn upstream).
+// Subset of AutoDeployer; kept narrow for testability.
+type SourceBundlePreparer interface {
+	PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error)
+}
+
 // PreviewDeployer handles GitHub `pull_request` webhook events.
 //
 // Mapping (per plan §T3.1):
@@ -44,19 +57,6 @@ type RepoLookup interface {
 // Rule: only repos where `auto_deploy = true` are processed. This is the
 // same gate auto-deploy on push uses, ensuring connect → disconnect
 // transitions are observed by both flows uniformly.
-// SourceBundlePreparer prepares the source bundle on S3 for a commit
-// before the preview build runs AND returns the parsed loopzero.yaml so
-// the preview deployer can pass apps with framework/path/build to the
-// build orchestrator (resolves LanguageStrategy to language-aware
-// step names; LIVE catch 2026-06-07 J-23 bug #3).
-//
-// nil LoopZeroYamlMinimal returned = no loopzero.yaml in repo (preview build
-// will fail noisily — log + warn upstream).
-// Subset of AutoDeployer; kept narrow for testability.
-type SourceBundlePreparer interface {
-	PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error)
-}
-
 type PreviewDeployer struct {
 	previewService PreviewLifecycleService
 	repoStore      RepoLookup

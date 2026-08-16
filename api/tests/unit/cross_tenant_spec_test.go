@@ -13,14 +13,25 @@
 //   - Idempotency-Key from tenant A is replayed under tenant B
 //   - Admin endpoints (X-Admin-Key) explicitly bypass tenant scope (positive case)
 //
-// SCOPE
+// SCOPE — o que este arquivo E, hoje
 //
-// Handler-level tests with injected UserContext + fakes. Verifies that every
-// route handler:
-//   1. Reads tenant from UserContext, NEVER from request path/body/query.
-//   2. Passes tenant from UserContext into every downstream store call.
-//   3. Returns 404 (not 403) when a tenant tries to access another's resource
-//      — 403 would leak existence; 404 is the canonical "doesn't exist".
+// Um arquivo de PONTEIROS. Os cinco testes aqui sao meta-referencias (t.Log) e um
+// t.Skip: eles nao afirmam nada sobre o sistema, e nao devem ser lidos como prova.
+//
+// A prova substantiva vive em dois lugares, e e la que ela deve ser mantida:
+//
+//   handler     `api/internal/routes/secrets/cross_tenant_test.go` — injeta
+//               tenantBContext() numa requisicao real e afirma que o store recebeu
+//               xtTenantB, nunca o tenant do recurso alvo
+//   middleware  `api/internal/middleware/auth_extended_test.go`
+//               ::TestAuth_MultipleTenants_* — EC-NEW-7 contra o caminho Auth canonico
+//
+// As fixtures adversariais (xtTenantA/B, tenantAContext, tenantBContext) viviam aqui
+// e foram para junto dos testes que as usam, quando `routes` foi dividido em
+// familias. A copia deste arquivo ficou para tras sem chamador e foi removida em
+// 2026-08-16 — junto de quatro faixas de secao (BUILDS, SECRETS, UNAUTHENTICATED,
+// HANDLER CONTRACT) que anunciavam cobertura adversarial e nao tinham nenhum teste
+// embaixo. Uma faixa vazia le-se como cobertura, que e pior que a ausencia dela.
 //
 // Middleware-level adversarial tests (cross-tenant via JWT-vs-membership and
 // service-auth header tampering) live in
@@ -38,47 +49,7 @@ package unit
 
 import (
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
-
-// Adversarial constants — kept in sync with infra/tests/seed/cross_tenant_fixture.go
-// constants by structure. Tests do NOT import the seed package because the seed
-// package's constants live in the same logical adversarial fixture; reproducing
-// them inline keeps the tests deterministic without an integration dependency.
-const (
-	xtTenantA = "tn-xt-tenant-a"
-	xtTenantB = "tn-xt-tenant-b"
-	xtUserB   = "github-xt-user-b"
-	xtBuildA  = "bld-xt-a"
-)
-
-// tenantBContext returns a UserContext for the attacker (tenant B).
-func tenantBContext() *middleware.UserContext {
-	return &middleware.UserContext{
-		UserID:   xtUserB,
-		Email:    "xt-user-b@example.com",
-		TenantID: xtTenantB,
-		Role:     "owner",
-	}
-}
-
-// =============================================================================
-// BUILDS — adversarial: tenant B tries to access tenant A's build
-// =============================================================================
-
-// =============================================================================
-// SECRETS — adversarial: tenant B operates on tenant A's project namespace
-// =============================================================================
-
-// =============================================================================
-// UNAUTHENTICATED — sanity floor: no UserContext means every adversarial
-// path is rejected before any tenant logic runs.
-// =============================================================================
-
-// =============================================================================
-// HANDLER CONTRACT — tenant_id from UserContext, never from request
-// =============================================================================
 
 // =============================================================================
 // EC-NEW-7 (JWT claim vs membership table precedence) — meta-reference
@@ -205,17 +176,3 @@ func TestCrossTenant_Admin_PassThrough_Allowed(t *testing.T) {
 // TestCrossTenant_Scale_RLS_* tests it referred to moved to the scale package
 // when that family was extracted (B-080); the removal stays valid, and the
 // comment is kept pointing at where they went rather than at nothing.
-
-// =============================================================================
-// SCALE — adversarial: tenant B scales tenant A's project (audit M10 F2 §6.E.4)
-// =============================================================================
-
-// tenantAContext mirrors tenantBContext but for tenant A — used by sanity tests
-// that verify the legitimate (same-tenant) flow works after the negative
-// adversarial tests reject the cross-tenant attempt.
-func tenantAContext() *middleware.UserContext {
-	return &middleware.UserContext{
-		TenantID: xtTenantA,
-		UserID:   "user-a",
-	}
-}

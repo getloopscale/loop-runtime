@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package db holds the persistence primitives every store is built on: the pgx
+// pool and its lifecycle, the DBTX abstraction that lets a store take either a
+// pool or a transaction, and the bridge to the pgx-native handle that
+// sqlc-generated queries require.
+//
+// It deliberately holds no query and no business rule. A store that knows what a
+// build is belongs in internal/db/store; what lives here is what would be true of
+// any Postgres-backed system.
 package db
 
 import (
