@@ -635,7 +635,12 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 		metav1.ConditionTrue, "Deleted", "Preview namespace removed", preview.Generation)
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewApplicationDeleted,
 		metav1.ConditionTrue, "Deleted",
-		"Application CR deletion is owned by the API (best-effort). Namespace cascade removed in-cluster workload.",
+		// Antes desta linha dizia "Application CR deletion is owned by the API
+		// (best-effort)" — e o api nunca fez isso. Quem remove a Application órfã é o
+		// reaper do tenant-operator (pruneOrphanPreviewApps), que deriva o conjunto
+		// esperado e apaga o que sobra. ADR 2026-08-12-argocd-application-ownership
+		// (B-050): o operator é o dono do spec.
+		"Namespace cascade removed the in-cluster workload; the orphan Application is reaped by the tenant operator.",
 		preview.Generation)
 
 	// Status update is best-effort here — even if it fails, dropping the

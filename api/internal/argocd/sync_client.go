@@ -348,8 +348,17 @@ func (c *SyncClient) ForceReconcile(ctx context.Context, appName string) error {
 	reconcileCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	// PATCH /api/v1/applications/{name}?refresh=normal is the documented
-	// ArgoCD REST endpoint. Per ArgoCD docs:
+	// Ownership, declared: everything this client does is an OPERATION on an
+	// Application (`/sync`, `/operation`, this refresh) — never a write to `.spec`,
+	// which the operator owns. ADR
+	// docs/wiki/decisions/2026-08-12-argocd-application-ownership.md (B-050).
+	//
+	// GET /api/v1/applications/{name}?refresh=normal — the request below is
+	// http.MethodGet, and this comment said PATCH until 2026-08-16 (B-050
+	// collateral finding). Reading `refresh` as a query parameter on the GET is
+	// what makes ArgoCD recompute; nothing here mutates the resource.
+	//
+	// Per ArgoCD docs:
 	//   "If refresh parameter is provided, it can take values:
 	//    - normal: compare desired vs live, update status
 	//    - hard:   re-fetch repo + compare + update status (cache invalidation)"

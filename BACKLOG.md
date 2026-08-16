@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 2 · **Closed** 51
+124 items — **Open** 71 · **In flight** 1 · **Closed** 52
 
 ### Open (71)
 
@@ -146,14 +146,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (2)
+### In flight (1)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
-| [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 
-### Closed (51)
+### Closed (52)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -184,6 +183,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
 | [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm---x) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `shipped` | média |
 | [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela---x) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `shipped` | alta |
+| [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes---x) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `shipped` | média |
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
@@ -1917,7 +1917,7 @@ dod:
 > **O atalho que parece existir e não existe, tentado e revertido nesta fatia.** `db.DBTX` é *alias* de `dbtx.DBTX`, então trocar o nome no sink não muda tipo nenhum nem toca as 34 chamadas — parece ganho de graça. O gate **já recusa a ilusão por desenho**: ele mapeia `api/internal/db/dbtx` para o mesmo prefixo `db`, com o comentário *"alias of the above — the SAME types"*. E o pacote continua importando `api/internal/db` em `manifest_builder.go` e `delivery.go`, então mover um arquivo não remove a dependência — só a reescreve. Registrado no `B-079`.
 
 
-## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [ ]
+## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1925,7 +1925,7 @@ suggested_mode: review
 source: discover-review
 evidence: ciclo conceitual traçado ponta a ponta em 2026-08-11 e confirmado pelo gate de qualidade da fase 2. `api/internal/k8s/tenant_cr_manager.go:147` escreve `Tenant.Spec.Environments` → o operator lê a slice em `operators/internal/tenant/tenant_gitops.go:87` e cria o `Application` em `:333` → `api/internal/argocd/sync_client.go:190` faz sync e `:351` refresh → `api/internal/k8s/tenant_evictor.go:49` deleta `argoproj.io/applications` → o próximo reconcile recria. **Nenhum dos dois módulos Go importa o outro** (medido: 0 arquivos) — o laço fecha pelo API server do Kubernetes, invisível ao compilador. O `CLAUDE.md` já cataloga o sintoma como padrão sistêmico conhecido: *"Orphan ArgoCD Application … status Unknown forever"*.
 why_now: Go proíbe ciclo de import entre pacotes em tempo de compilação, então a ausência de ciclos **não é mérito da arquitetura** — é garantia do toolchain. Este é o único lugar onde um ciclo real conseguiu existir, e ele existe porque atravessa um runtime que o compilador não vê. O sintoma já é conhecido e tratado como operacional; a causa não está registrada em lugar nenhum.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-argocd-application-ownership.md — o dono do spec e o operator; o api opera (/sync) e despeja. O caminho que continua descoberto e o B-074
 severity: média — o efeito observado (Application órfã em `Unknown`) já tem contorno manual documentado; o custo é recorrente e o diagnóstico é caro por não haver dono declarado do recurso.
 dod:
@@ -1934,6 +1934,17 @@ dod:
   - se a propriedade não puder ser unificada, a razão está escrita junto ao código dos três escritores
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Fechado 2026-08-16 — DoD 3/3, executando o ADR `docs/wiki/decisions/2026-08-12-argocd-application-ownership.md` (ACCEPTED, T2).**
+>
+> **(1) O dono está declarado: o operator é dono do `.spec`.** O `api` escreve o *input* (`Tenant.Spec.Environments`), dispara *operações* (`/sync`, `/operation`, refresh) e deleta **apenas** no caminho de despejo administrativo. A fronteira — *spec × operation* — é a que o código já pratica; o ADR a tornou declarada. Propriedade compartilhada foi considerada e **rejeitada**: declará-la autorizaria escrita de spec pelo `api`, que hoje não existe e não deve passar a existir.
+>
+> **(2) A deleção órfã tem dono, e o `CLAUDE.md` parou de mentir sobre ela.** A entrada dos padrões conhecidos descrevia contorno manual entre execuções de teste; **as duas citações `file:line` dela já não resolviam**, e o parágrafo entrou em `c6fc9671` (2026-06-10) — **dois dias antes** de `ecbabf34` (2026-06-12) fechar o caminho com `pruneOrphanPreviewApps`. Reescrita para dizer o que é coberto (env removido do spec é ceifado), o que **não** é (`EnvironmentReconciler.reconcileDelete` deleta o Namespace e o finalizer, mas não toca na Application nem no spec — a entrada fica, a App segue "esperada", o reaper nunca a remove) e de quem é: **`B-074`**.
+>
+> **(3) A razão está escrita junto ao código dos três escritores**, um por caminho: `tenant_gitops.go` (operator, dono do spec), `sync_client.go` (api, só operação) e `tenant_evictor.go` (api, deleção do recurso inteiro no despejo, não autoria de spec).
+>
+> **Os dois achados colaterais do ADR também foram fechados.** `sync_client.go:351` dizia *"PATCH … is the documented ArgoCD REST endpoint"* sobre uma requisição `http.MethodGet`. E `preview_controller.go:638` — que **não é comentário, é a mensagem de uma Condition visível em `kubectl describe`** — afirmava *"Application CR deletion is owned by the API (best-effort)"*, algo que o `api` nunca fez. Ela agora diz quem de fato remove a Application órfã. O comentário em `tenant_gitops.go` que existia só para registrar que **outro** comentário estava errado saiu junto: ele era o sintoma da propriedade não declarada, e a declaração ocupou o lugar dele.
+
 
 ## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [x]
 
