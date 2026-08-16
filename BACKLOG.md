@@ -11,7 +11,7 @@ provar ou matar é trabalho do `/discover`.
 
 ## Itens abertos
 
-**86 abertos** — 67 `triaged` · 19 `planned`. Derivado deste arquivo em 2026-08-16; refresque com
+**78 abertos** — 67 `triaged` · 11 `planned`. Derivado deste arquivo em 2026-08-16; refresque com
 `python3 .claude/skills/backlog-review/scripts/render_open_index.py` após qualquer mudança de
 `status`. A ordem é a que o loop usa para escolher trabalho (`cycle-maintenance § SELECT`):
 `triaged` antes de `planned`, e do mais antigo para o mais novo dentro de cada faixa. **🔒**
@@ -90,18 +90,13 @@ marca severidade condicional, cujo termo-cabeça subdeclara o item.
 | **B-119** 🔒 | média | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado |
 | **B-120** | **alta** | 23 invocações de script nas skills não resolvem no layout em que elas rodam |
 
-### PLANNED (19) — Com plano escrito — aguardam `/implement`
+### PLANNED (11) — Com plano escrito — aguardam `/implement`
 
 | # | sev | item |
 |---|---|---|
 | **B-003** | — | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto |
 | **B-004** | — | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado |
-| **B-006** | — | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate |
-| **B-007** | — | 4,3 MB de snapshot de helmfile que ninguém gera nem consome |
 | **B-009** | — | `task lint` está vermelho em 11 achados, nenhum deles novo |
-| **B-010** | — | A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min |
-| **B-011** | — | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre |
-| **B-012** | baixa | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa *(loopzero-promptly)* |
 | **B-040** | **alta** | O gate que garante autenticação em toda rota pública passa enumerando zero rotas |
 | **B-041** | **alta** | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" |
 | **B-042** | **alta** | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator |
@@ -109,10 +104,7 @@ marca severidade condicional, cujo termo-cabeça subdeclara o item.
 | **B-048** | média | O chart guarda-chuva colapsa os quatro planos num único release Helm |
 | **B-049** | **alta** | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela |
 | **B-050** | média | O CR `Application` do ArgoCD tem três escritores em dois runtimes |
-| **B-051** | média | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram |
 | **B-052** | média | O `CLAUDE.md` aponta para cinco contratos que não existem |
-| **B-071** | **alta** | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou |
-| **B-084** | **alta** | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família |
 
 <!-- OPEN-INDEX:END -->
 
@@ -368,7 +360,7 @@ conjunto de `UPDATE`s e não exige janela de indisponibilidade. Ambas as mediç�
 
 > Registrado 2026-08-09 a partir da decisão do CTO sobre D2 da opportunity de `B-001` (slug: `cell-cluster-unification`).
 
-## B-006 — O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate   [ ]
+## B-006 — O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate   [x]
 
 domain: engine-go
 repo: loopzero
@@ -376,7 +368,7 @@ suggested_mode: review
 source: discover-review
 evidence: `cmd/loopzero-ops/quality_registry_test.go:700` fixa o oráculo do `TestOracle_MatchesFrozenBaseline` em `docs/operations/baselines/2026-07-02-m9-gateset.before`, e o doc-comment em `:697-698` instrui *"Re-freeze the baseline via `loopzero-ops quality --list` when gates are consciously added/wired"*. Mas `docs/README.md:16` classifica `operations/baselines/` como **audit trail — "History. Preserved indefinitely. Never edited to match present state"**. Encontrado em 2026-08-09 ao adicionar o gate `cluster-rename-guard` (B-001 T0.1): o teste falhou com `got 116 lines, baseline 115`, e a correção que ele mesmo instrui exige editar um registro que a regra manda preservar.
 why_now: as duas regras se contradizem hoje, e a contradição foi exercida — não é teórica. O nome do arquivo (`2026-07-02-...before`) afirma ser o retrato do conjunto de gates naquela data; ele já não é, porque cada gate novo o reescreve. Quem ler `.before` esperando o estado de julho encontra o de agosto, e a data no nome torna isso especialmente enganoso.
-status: planned
+status: shipped
 resolved_in: o oráculo passou para `cmd/loopzero-ops/testdata/gateset.frozen`, que declara ser vivo; o registro datado voltou ao conteúdo do commit 46c0a72d (70 gates); e a ausência do oráculo deixou de ser skip — virou falha, porque mover o caminho fez o teste passar por não rodar
 dod:
   - o oráculo do conjunto de gates vive num caminho que declara ser vivo, não num com data no nome
@@ -385,7 +377,10 @@ dod:
 
 > Registrado 2026-08-09 durante a implementação de `B-001` T1.1 (slug: `gateset-oracle-in-dated-baseline`).
 
-## B-007 — 4,3 MB de snapshot de helmfile que ninguém gera nem consome   [ ]
+> **Fechado 2026-08-16** — DoD conferido bala a bala na re-medição do loop Squad. (1) O oráculo vive em `cmd/loopzero-ops/testdata/gateset.frozen`, caminho que declara ser vivo. (2) `docs/operations/baselines/2026-07-02-m9-gateset.before` tem 75 linhas e o cabeçalho original (`frozen 2026-07-02`, `MEET-2026-07-02-001`) — o registro datado voltou a ser registro. (3) `TestOracle_MatchesFrozenBaseline` e `TestOracle_PathIsNotAuditTrail` existem em `cmd/loopzero-ops/quality_registry_test.go`, e o segundo nomeia o `B-006` no comentário: a proteção não se perdeu na mudança, ganhou uma segunda.
+
+
+## B-007 — 4,3 MB de snapshot de helmfile que ninguém gera nem consome   [x]
 
 domain: engine-go
 repo: loopzero
@@ -393,7 +388,7 @@ suggested_mode: review
 source: discover-review
 evidence: `infra/tests/snapshots/helmfile-drill-phase1.yaml` (2,1 MB) e `helmfile-standalone-multi-phase1.yaml` (2,2 MB). Medido em 2026-08-09: `git grep -l "infra/tests/snapshots"` retorna **apenas documentos históricos** (`docs/plans/completed/2026-05-20-*`, `docs/scripts-audit/2026-05-2*`, `docs/wiki/*`) — nenhum teste, gate, task ou script os lê, e nenhum os regenera. As duas menções em `cmd/loopzero-ops/internal/quality/{anonymousauth,danglingdata}/check.go` são padrões genéricos de exclusão de diretório (`"/snapshots/"`), não consumo destes arquivos.
 why_now: encontrado ao executar o T4.1 do plano de rename, cujo DoD manda "regenerar os snapshots, com diff só de renomeação". Não há por onde regenerar, e não há quem consuma — então o critério, como escrito, não é executável. Eles foram corretamente deixados intocados pelo rename (são artefato gerado, e editá-los à mão faria o arquivo passar no teste mentindo sobre o sistema), mas isso deixa neles nomes de cluster que já não existem.
-status: planned
+status: shipped
 resolved_in: removidos. A medição fechou a decisão do DoD: o plano que os criou (`docs/plans/completed/2026-05-20-infra-standardization-and-secrets-plan.md:686-700`) previa **cinco** snapshots `-template.yaml` mais um teste comparador; o que existe são **dois** arquivos `-phase1` e nenhum teste. Eram artefato de uma comparação pontual da Fase 1 em maio de 2026, nunca ligada a nada — 4 commits os tocaram, o último uma varredura de deleção em massa. `git log` preserva o conteúdo.
 dod:
   - está decidido se os dois arquivos têm consumidor: ou o comando que os regenera é encontrado e documentado, ou eles são removidos
@@ -401,6 +396,9 @@ dod:
   - o DoD-5 do plano de rename é corrigido para refletir a decisão
 
 > Registrado 2026-08-09 durante a execução de `B-001` T4.1 (slug: `orphaned-helmfile-snapshots`).
+
+> **Fechado 2026-08-16** — DoD conferido bala a bala. (1) Decidido: `infra/tests/snapshots/` não existe mais, e a varredura por consumidor em `.go`/`.yml`/`.sh` não retorna nada. (2) O commit `7748dedd1` preserva o conteúdo no `git log` e **cita a medição no corpo** — inclusive o plano que os criou (`2026-05-20-infra-standardization-and-secrets-plan.md:686-700`), que previa cinco `-template.yaml` mais um teste, contra os dois `-phase1` sem teste que existiam. (3) A decisão está escrita no próprio commit, que é onde a próxima pessoa a encontra.
+
 
 ## B-008 — `task test:unit` está vermelho por drift entre repositórios   [x]
 
@@ -444,7 +442,7 @@ dod:
 
 > Registrado 2026-08-09 ao rodar o checklist pós-rename (slug: `lint-red-preexisting`).
 
-## B-010 — A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min   [ ]
+## B-010 — A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min   [x]
 
 domain: engine-go
 repo: loopzero
@@ -452,7 +450,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet `loopzero-e2e-runner` (165.227.121.20) em 2026-08-10. `https://app-dev.loopzero.example/engine/api/v1/health` devolveu **502** na primeira sonda e **401 AUTH_REQUIRED** (correto) minutos depois — intermitência, não quebra. Causa: `kubectl --context k3d-loopzero-mgmt -n loopzero-system get svc loopzero-cloud` era `ClusterIP`, então a borda Caddy só o alcançava por `kubectl port-forward`. A unit `loopzero-cloud-edge-13002.service` marcava **`NRestarts=126499`** com 43.476 eventos de journal em 24h — ~1,8 reinícios por minuto, e cada um é uma janela de 502 em `/engine/*`, que carrega deploy, whoami, listar projetos e status de build. O irmão `loopzero-api` nunca teve o problema: é `NodePort` publicado pelo serverlb do k3d (`docker port k3d-loopzero-mgmt-serverlb` → `30001 → 13001`), mapeamento docker comum. A unit irmã `loopzero-cloud-dataplane-authz.service` marcava `NRestarts=3`, o que isola o defeito a esta.
 why_now: encontrado ao diagnosticar o app-dev sob o mandato de deixá-lo 100% funcional. Não aparecia como "quebrado" em nenhuma verificação de pod — os 5 clusters estavam saudáveis e o dashboard devolvia 200. A intermitência só aparece sondando a superfície que os usuários usam, repetidamente.
-status: planned
+status: shipped
 resolved_in: 05b3ae08 — chart passa a suportar `service.nodePort` (condicional) e dev-public fixa 30002, escolhida porque o serverlb já a publica como host 3002 e estava livre. Aplicado no vivo por `kubectl patch`, Caddy repontado de `localhost:13002` para `localhost:3002` (9 referências), unit parada e desabilitada.
 dod:
   - `loopzero-cloud` renderiza como NodePort 30002 em dev-public — travado por `infra/tests/charts/loopzero_cloud_edge_nodeport_test.go`
@@ -464,7 +462,10 @@ dod:
 
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `app-dev-edge-portforward`).
 
-## B-011 — O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre   [ ]
+> **Fechado 2026-08-16** — DoD 4/4 conferido. (1)+(2) `infra/tests/charts/loopzero_cloud_edge_nodeport_test.go` existe com **2 testes** — o NodePort 30002 em dev-public e o ClusterIP sem `nodePort` no template. (3)+(4) verificadas no vivo em 2026-08-10 e registradas no próprio bloco. O que fechou o item não foi o `kubectl patch`: foi o chart, porque o patch sozinho seria revertido no próximo `helm upgrade` — e aí pior que antes, sem o port-forward de rede de proteção.
+
+
+## B-011 — O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre   [x]
 
 domain: engine-go
 repo: loopzero
@@ -472,14 +473,17 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet `loopzero-e2e-runner` em 2026-08-10. `kubectl get rs -l app=loopzero-cloud` mostrava **4 ReplicaSets em 19 minutos** (19m, 14m, 8m59s, 3m48s), e o diff entre dois consecutivos tinha **uma única diferença**: a anotação `kubectl.kubernetes.io/restartedAt` — a assinatura de `kubectl rollout restart`. A origem é `loopzero-cloud-reconcile.timer` (a cada 5 min) → `~/.local/bin/loopzero-cloud-reconcile.sh`, que chamava `rollout restart deploy/loopzero-cloud` **incondicionalmente**. O efeito não ficava no loopzero-cloud: `kubectl port-forward` se prende a um POD, então cada rollout matava os forwards da borda — `loopzero-cloud-edge-13002.service` com `NRestarts=126499` e `loopzero-pf-loopzero-cloud-bff.service` com `72163`. Cada morte é uma janela de 502 em `/engine/*`. Este é o **causador** do `B-010`.
 why_now: encontrado ao perseguir a intermitência do `B-010` até a origem, em vez de parar no sintoma. Nenhuma verificação de pod acusaria: os pods estavam todos `Running`, só que sempre recém-nascidos.
-status: planned
+status: shipped
 resolved_in: `loopzero-workspace@526f608` — o script passa a comparar o digest da imagem local com o do pod **antes** de reiniciar, e dispensa o rollout quando são iguais. Ele já calculava `before`/`after` para decidir `changed`; só comparava depois de reiniciar, quando a informação já não servia. Digest ausente de qualquer lado reinicia, deliberadamente o comportamento antigo. Aplicado também no fonte real do droplet (`/home/paulo/loopzero-ops/dev/loopzero-cloud/reconcile.sh`).
 dod:
   - o log diz `BFF: imagem em dia (sha256:...)` quando nada mudou — **verificado 2026-08-10**
   - o pod não troca de nome entre duas execuções do reconcile — **verificado: mesmo pod, 11 ReplicaSets antes e depois**
   - as duas units de port-forward do loopzero-cloud estão paradas e desabilitadas — **verificado**
 
-## B-012 — A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa   [ ]
+> **Fechado 2026-08-16** — DoD 3/3, todas verificadas no vivo em 2026-08-10 e registradas no bloco: o log diz `BFF: imagem em dia`, o pod não troca de nome entre dois reconciles, e as duas units de port-forward estão paradas e desabilitadas. Este item era o **causador** do `B-010`; fechar o sintoma sem a origem teria deixado os 502 voltarem.
+
+
+## B-012 — A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa   [x]
 
 domain: data-plane-ts
 repo: loopzero-promptly
@@ -488,7 +492,7 @@ source: discover-live-test
 evidence: `docker ps` no droplet mostra `loopzeropromptly_mcp` em `Restarting` — crash loop. `docker logs` dá `ERR_MODULE_NOT_FOUND` para `file:///app/node_modules/@loopzero/promptly-template/dist/index.js`. Causa: `loopzero-promptly/Dockerfile.mcp` faz `COPY . .` e vai direto a `pnpm deploy --filter ./packages/mcp --prod /app`, **sem nenhum passo de build**. `packages/template` e `packages/sdk` declaram `exports: {".": {"default": "./dist/index.js"}}`, então resolvem para um `dist/` que nada produz; os outros três exportam de `./src/*.ts` e são resolvidos pelo tsx em runtime, que é por que a falha atinge só esses dois. **O Dockerfile irmão já estava certo:** `loopzero-promptly/Dockerfile:61` tem `RUN pnpm run build` com o comentário explicando *"O build roda ANTES do `pnpm deploy` porque este stage ainda tem as devDependencies"* — a segunda imagem copiou o padrão e perdeu o passo.
 why_now: encontrado na varredura de containers do droplet sob o mandato de deixá-lo funcional.
 severity: **baixa — o container é órfão, e isso está medido.** Eu havia afirmado que ele era "a única superfície ainda degradada"; **estava errado, e a medição corrige**. Ele (a) não publica porta nenhuma (`docker port loopzeropromptly_mcp` vazio), (b) não é destino de rota no Traefik da borda MCP — os 10 `url:` do `dynamic.yml` apontam para `host.docker.internal:180XX`, `loopzero-mcp-gateway`, `loopzero-cloud`, `kratos` e `dashboard`, nenhum para ele — e (c) **não está no mapa de upstreams do gateway MCP**, que declara só `{"memory": ..., "rag": ...}`. A superfície pública `/v1/promptly/*` é servida pelo `loopzeropromptly_app` em `host.docker.internal:18083`, que está `Up (healthy)` e responde 401 como as demais. O crash-loop não degrada nada que alguém consuma.
-status: planned
+status: shipped
 resolved_in: `loopzero-promptly@aa681dc` — `Dockerfile.mcp` ganha `RUN pnpm -r build` antes do `pnpm deploy`, espelhando o que `Dockerfile:61` já fazia na imagem irmã.
 verification: **provado por execução no droplet em 2026-08-10.** A construção local falhou duas vezes por `ECONNRESET` no registry (rede desta máquina, não a mudança), então clonei o repo no droplet, apliquei o mesmo `Dockerfile.mcp` e construí lá: `EXIT=0`, e `docker run` confirmou que `/app/node_modules/@loopzero/promptly-template/dist/index.js` **existe** na imagem — o arquivo exato que faltava. Recriando o container com ela, `loopzeropromptly_mcp` ficou **`Up (healthy)`**.
 resolution_live: **resolvido no droplet em 2026-08-10.** `docker-compose.deploy.yml` ganhou `pull_policy: never` **apenas** para `promptly_mcp`, com comentário datado, a razão e o gatilho de remoção no próprio arquivo. Verificado: o container fica `Up (healthy)` **e sobrevive a uma execução do reconciliador** — antes voltava a `Restarting` em menos de 45s. Rodando a imagem construída de `loopzero-promptly@aa681dc`, ou seja, o código corrigido.
@@ -500,6 +504,9 @@ dod:
   - `loopzeropromptly_mcp` fica `Up (healthy)` no droplet, não `Restarting`
 
 > B-011 e B-012 registrados 2026-08-10 durante o diagnóstico do app-dev.
+
+> **Fechado 2026-08-16** — verificado nos dois lados. No fonte: `loopzero-promptly/Dockerfile.mcp` tem `RUN pnpm -r build` antes do `pnpm deploy`, com o comentário registrando por que a linha faltava e por que é `-r` sem filtro (um sexto pacote que passe a exportar `dist` quebraria exatamente ali). No vivo: `docker ps` no droplet mostra `loopzeropromptly_mcp` **`Up 6 days (healthy)`** — o crash-loop acabou.
+
 
 ## B-013 — O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado   [x]
 
@@ -1807,7 +1814,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [ ]
+## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1815,7 +1822,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11. A lista de prefixos de env reservados para injeção da plataforma existe duas vezes: `api/internal/services/deploycontracts/build_plan.go:23` tem `LOOPZERO_`, `KUBERNETES_`, `AWS_`, `DO_`, **`GOOGLE_`**; `tools/loopzero-dockerfile-lint/main.go:84` tem as mesmas menos `GOOGLE_`. O comentário do primeiro diz literalmente *"mirrors tools/loopzero-dockerfile-lint/main.go"*, e o atribui a *"T2.5 … closes find_sec_004 MEDIUM"* — é correção de segurança aplicada num caminho e não no outro. Nenhum dos 117 gates menciona o par (`grep -rl reservedEnvKeyPrefixes cmd/loopzero-ops/internal/quality/` → vazio). **Exploitabilidade verificada e declarada: latente.** Não existe injeção de `GOOGLE_*` em env de workload; as únicas ocorrências são `LOOPZERO_GOOGLE_CLIENT_ID/SECRET` no Kratos, que já caem sob `LOOPZERO_`. Issue #283.
 why_now: `tools/loopzero-dockerfile-lint` é módulo Go próprio e **não está no `go.work`** — não há caminho de import possível entre ele e `api/`, então manter a regra única exigiria dependência declarada ou gate. Não existe nenhuma das duas: sobrou um comentário, que é convenção que ninguém executa. Uma das duas listas já está errada e nada declara qual é a fonte de verdade.
-status: planned
+status: shipped
 resolved_in: cmd/loopzero-ops/internal/quality/envprefixparity/ — gate AST que compara reservedEnvKeyPrefixes entre os dois sitios como CONJUNTOS. Entra reprovando, por decisao do dono sobre a direcao (B-069/B-070). Fatia slice-1.
 severity: média — hoje não explorável, mas o defeito arma sozinho: no dia em que um prefixo novo passar a ser injetado, a segunda lista não acompanha e a descoberta é por incidente.
 dod:
@@ -1831,6 +1838,9 @@ dod:
 > `task quality:gates`. A decisão de direção continua **aberta e sua** — o dado A2 segue invisível
 > daqui. O que mudou é que a lacuna agora tem prazo e aparece impressa em toda execução verde, em
 > vez de invisível por o gate inteiro estar desligado.
+
+> **Fechado 2026-08-16** — DoD 3/3 conferido. (1) O gate `env-prefix-parity` está **ligado e verde**: *"the 2 find_sec_004 copies agree on case matching; 1 prefix(es) exempt with a sunset: [GOOGLE_]"*. (2) A divergência de conjunto está declarada como isenção **datada**, não como acidente. (3) O binário ELF **não está rastreado** — `git ls-files` lista só `Dockerfile`, `go.mod`, `main.go`, `main_test.go`, e `.gitignore:262` o exclui. A assimetria com `gen-service-auth-ed25519/` era acidental e acabou.
+
 
 ## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [ ]
 
@@ -2253,7 +2263,7 @@ dod:
 > Efeito colateral no `B-051`: o gate que ele criou saiu do estado desligado. A divergência
 > `GOOGLE_` virou isenção datada (2026-11-09) em vez de manter os três eixos sem guarda.
 
-## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [ ]
+## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2261,7 +2271,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 ao rodar a validação de integração da fatia `slice-1-tripwires`. `task test:unit` sai 1 com **4 reprovações**, todas em `api/tests/unit`: `TestMigration006CellsSeedRows`, `TestMigration007ActivatesOnlyCell2`, `TestMigration007AppendsAuditNote`, `TestMigration007ReferencesADRAndPlan`. A mensagem é `seed row missing "'cell-0'"`. Bissecção: em `fbb24643` (2026-08-10, *"funde as três identidades de célula"*) o teste e a migration **concordavam** — os dois falavam `cell-0`/`cell-1`. Depois disso, `75af13c7` (*"migracoes historicas voltam ao original; so a 000061 transforma"*) reescreveu `000006_cells.up.sql` de volta para `cell-1`/`cell-2`/`cell-default` (12 inserções, 12 remoções) e **não tocou o teste**, que continua exigindo a forma nova (`git diff fbb24643 HEAD -- api/tests/unit/migration_006_cells_test.go` é vazio).
 why_now: apareceu porque a fatia `slice-1-tripwires` tem `task test:unit` verde na Global DoD e **não pôde marcá-la** — o vermelho é anterior e alheio. Enquanto ele durar, toda fatia seguinte herda um sinal que não distingue "eu quebrei" de "já estava assim", que é exatamente o que a baseline pré-migração do plano existe para evitar. E o vermelho é de **teste de migration**, num repositório com migrations forward-only: o par teste↔migration é o único lugar que documenta qual forma é a correta.
-status: planned
+status: shipped
 severity: alta — não pelo defeito em si (nenhuma das duas formas está em produção por causa deste teste), mas porque uma suíte vermelha por motivo alheio é como uma suíte deixa de ser lida.
 resolved_in: os 4 testes de migracao estao verdes, e a causa era UMA. As migracoes `000006` e `000007` sao historia imutavel e falam de `cell-default`/`cell-1`/`cell-2`; a `000061` (cell_identity_unification) depois fundiu tudo em `cell-0`/`cell-1`. Os testes foram reescritos com a identidade NOVA e continuaram lendo os arquivos ANTIGOS. A correcao NAO foi editar a migracao — `docs/README.md` e explicito que reescrever um registro datado para parecer atual destroi a unica prova do que era verdade entao. Foram os testes que voltaram a ler historia, com o porque escrito no arquivo. Bonus: o `TestMigration006CellsSeedRows` listava `'cell-0'` DUAS vezes, o que duplicava a falha e escondia que a terceira entrada nunca fora verificada. `go test ./...` em `api` sai **0 FAILs**.
 dod:
@@ -2271,6 +2281,9 @@ dod:
   - se as duas formas devem coexistir por um período, isso está declarado — hoje o par apenas discorda
 
 > Registrado 2026-08-11 durante a validação de integração da fatia `slice-1-tripwires`. Bissectado até o commit; **não** causado por esta fatia, que não toca `api/`.
+
+> **Fechado 2026-08-16** — DoD 4/4. (3) `task test:unit` sai **0** na `workspace`, medido nesta sessão. (1)+(2)+(4) A decisão está escrita onde a próxima pessoa a encontra: `api/internal/db/migrations/000006_cells.up.sql:22-98` documenta por que `cell-default` + `cell-1` + `cell-2` são a forma da migration, e que `cell-default` preserva o DEFAULT das linhas existentes. As migrations são história imutável; o teste é que precisava concordar com elas, e concorda.
+
 
 ## B-072 — A policy versionada nega ao `api` a criação de chave que o `api` faz   [x]
 
@@ -3150,7 +3163,7 @@ dod:
 > "a checklist que ninguém roda inteira" eram na verdade três: os 11 de `operators`, os 4 testes de
 > migração, e estes 88 — que só ficaram visíveis quando os outros dois saíram da frente.
 
-## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [ ]
+## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3158,7 +3171,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido por experimento em 2026-08-12, na revisão da fatia slice-8. `routesacyclic.Check` (`cmd/loopzero-ops/internal/quality/routesacyclic/check.go:120-140`) itera apenas subdiretórios de `api/internal/routes`; arquivos do **pacote pai** nunca são parseados. Um `routes/zz_probe.go` importando `routes/tenants` sai `4 subpackage(s), 0 unregistered, 0 sibling edge(s)` — **PASS, exit 0**. O sentido inverso (filho → pai) **é** pego, e foi verificado: reporta `ARESTA IRMÃ version → <routes-parent>`.
 why_now: hoje é benigno — a única aresta pai → filho é `routes → routestest`, para um leaf. Mas restam **14 famílias** para sair, e nada impede que `routes/billing.go` passe a importar `routes/tenants` na próxima fatia em vez de mandar o helper compartilhado para o leaf. O gate diria verde sobre exatamente o acoplamento que o fatiamento existe para remover. O commit `8d4d0ac1` reconhece o buraco em prosa; a cerca não o fecha.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-9-parent-fence-plan.md v1.1 — os quatro sentidos da cerca estao fechados, cada um sondado na arvore real com file:line. O gate le 97 arquivos (89 do pai + 8 dos subpacotes), contra 8 antes.
   A regra e "folha sim, familia nao": o pai pode alcancar uma folha — medido, suas 29 arestas vao todas para `httpio` (28) e `routestest` (1), nenhuma para familia —, e alcancar uma familia reprova.
   DUAS CORRECOES QUE A REVISAO FORCOU: (1) o ADR D2 rejeitava declarar as folhas e mandava DERIVAR do conjunto vazio — errado, porque `version: {}` e familia e `httpio: {}` e folha, indistinguiveis; revertido, e a razao da rejeicao virou `ErrIncoherentRegistry`, que recusa um nome declarado das duas formas ANTES de varrer. (2) o piso prometido nao existia — `routes/` vazio saia PASS —, e a primeira correcao era fraca: `parsed > len(subpacotes)` deixava passar uma mutacao que derrubava a leitura de 97 para 49. Agora reconcilia contra contagem independente.
@@ -3171,6 +3184,9 @@ dod:
 
 > Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em
 > `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3.
+
+> **Fechado 2026-08-16** — DoD 4/4. (1) A cerca parseia o pacote pai. (2)+(3) Os dois sentidos têm teste nomeado: `TestCheck_ParentImportingAFamilyIsAnEdge` (o pai alcançando uma família reprova, com a aresta nomeando `<routes-parent>`) e `TestCheck_ImportingTheParentPackageIsAnEdge` (a família alcançando o pai também é aresta). `TestCheck_ImportingTheLeafIsAllowed` guarda a aresta legítima. (4) Fechada antes da terceira família sair — o gate roda verde hoje sobre 29 subpacotes e 103 arquivos.
+
 
 ## B-085 — Dez arquivos escrevem `.status` fora do contrato, em 28 pontos   [x]
 
