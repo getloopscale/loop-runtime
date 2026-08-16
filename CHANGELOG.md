@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.76.2] - 2026-08-16
+
 ### Fixed
 - **A verificação que exige imagens imutáveis passou a olhar a camada onde o problema estava.** Ela lia apenas os modelos de instalação e dava tudo certo; os sete pacotes que a plataforma publica escreviam o modelo corretamente e deixavam o **valor** apontando para uma etiqueta que pode mudar de conteúdo a qualquer momento. Na prática, dois clientes instalando o mesmo pacote no mesmo dia podiam receber software diferente. A verificação agora enxerga os dois lados — de 3 achados para 10 — e a orientação de conserto distingue os dois casos, em vez de mandar fazer o que já estava feito. (B-113)
 
