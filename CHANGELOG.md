@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.76.5] - 2026-08-16
+
 ### Fixed
 - **A verificação que compara os dois formatos de instalação parou de reclamar do que não é diferença.** Ela comparava os **nomes dos arquivos** de cada pacote: um mesmo recurso declarado em arquivos de nomes diferentes aparecia como divergência, e um recurso condicional que nenhum dos dois lados instala também. De 21 reclamações, **13 não eram diferença nenhuma** — e cada uma exigia uma linha de exceção que se lia como "diferença aceita", enterrando as reais. Agora ela compara **o que os pacotes realmente instalam**: sobram 11, e um dos três pares deixou de ter qualquer divergência. (B-110)
-
 
 ## [0.76.4] - 2026-08-16
 
