@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 7 · **Closed** 46
+124 items — **Open** 71 · **In flight** 6 · **Closed** 47
 
 ### Open (71)
 
@@ -146,7 +146,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (7)
+### In flight (6)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -156,9 +156,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
 | [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela----) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `planned` | alta |
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
-| [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem----) | O `CLAUDE.md` aponta para cinco contratos que não existem | `planned` | média |
 
-### Closed (46)
+### Closed (47)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -186,6 +185,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
 | [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
+| [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
@@ -1910,7 +1910,7 @@ dod:
 > **Fechado 2026-08-16** — DoD 3/3 conferido. (1) O gate `env-prefix-parity` está **ligado e verde**: *"the 2 find_sec_004 copies agree on case matching; 1 prefix(es) exempt with a sunset: [GOOGLE_]"*. (2) A divergência de conjunto está declarada como isenção **datada**, não como acidente. (3) O binário ELF **não está rastreado** — `git ls-files` lista só `Dockerfile`, `go.mod`, `main.go`, `main_test.go`, e `.gitignore:262` o exclui. A assimetria com `gen-service-auth-ed25519/` era acidental e acabou.
 
 
-## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [ ]
+## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1918,7 +1918,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `CLAUDE.md:206` declara nove contratos vivendo em `.claude/rules/`; **quatro existem**. Ausentes: `workflow.md` (citado em `:193` como o gate de 95% da Regra 11), `loopzero-design.md` (citado em `:159` como o contrato de *single-status-writer*), `tdd-workflow.md`, `cli-output.md` (o contrato da Regra 3), `design-principles.md`. Nenhum existe em outro lugar do workspace. Também ausente `../.claude/rules/umbrella-scope.md`, citado em `:17` como *"the workspace contract"*, e `.claude/rules/auto-docs.md` (`:215`). O inverso confirma a causa: **36 arquivos existem em `.claude/rules/` e 20+ nunca são mencionados** — todos do cycle-kit. Não é arquivo perdido; é troca de conjunto sem atualizar o índice. Mesma classe: **`ADR-0024` não existe** em lugar nenhum, e é citado como a autoridade que obriga toda migração para `UpdateStatusWithRetry` — por comentário de produção *e* pelo texto de uma métrica Prometheus. Issue #281.
 why_now: a auditoria mediu o invariante *single-status-writer* aplicado em **2 de 8 controllers**. O contrato que definiria "aplicado" — `loopzero-design.md` — é um dos que não existem. A regra não está sendo violada por descuido: ela não está disponível para consulta.
-status: planned
+status: shipped
 resolved_in: cmd/loopzero-ops/internal/quality/docsrefs/ — gate que resolve referencias normativas (.claude/rules/*.md e ADR-NNNN) com allowlist datado. Fatia slice-1.
 severity: média — não quebra execução, mas todo agente e toda pessoa que seguir a tabela "Locked rules — read before the matching work" bate em arquivo inexistente exatamente antes do trabalho que a regra deveria governar.
 dod:
@@ -1928,6 +1928,25 @@ dod:
   - as três divergências menores da mesma passada: `112` gates declarados contra **125** subpacotes; clusters chamados `{mgmt,build,workload,runtime-2}` contra `{core,build,cell-0,cell-1}`+`secrets` no disco; `pkg/correlation` ausente da lista
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Fechado 2026-08-16 — DoD 4/4, com a decisão de cada caso escrita.**
+>
+> **(1) Cada contrato ausente foi decidido, nenhum adivinhado.** A medição que decidiu: os cinco foram deletados **num único commit**, `1c941b91f` *"Remove docs inconsistent"* (2026-08-06). Restaurá-los devolveria documentação que alguém julgou inconsistente — então **reapontar**, que é o que o próprio DoD pede quando recriar produziria ficção. Sete casos, sete destinos medidos:
+>
+> | ausente | decisão | onde o assunto vive |
+> |---|---|---|
+> | `workflow.md` | reapontar | Princípios Inquebráveis Parte I (95%, completude, honestidade) + `git-safety.md` |
+> | `tdd-workflow.md` | reapontar | `testing.md` (disciplina) + `cycle-implement.md` (o laço) |
+> | `loopzero-design.md` | **o inline vira a fonte** | as seções §Four Planes, §State machines e §Single-status-writer do próprio `CLAUDE.md` **são** o contrato — o texto sobreviveu ao arquivo |
+> | `cli-output.md` | reapontar | Regras 3, 4 e 5 do `CLAUDE.md` + `public-copy.md` |
+> | `design-principles.md` | reapontar | Parte II dos Princípios + `parsimony-ladder.md` |
+> | `auto-docs.md` | **a frase vira a regra** | a própria sentença do `CLAUDE.md:215` já declara o que ele declararia |
+> | `umbrella-scope.md` | remover a afirmação | **não existe nem no umbrella** — verificado nos dois lados em 2026-08-16 |
+>
+> **(2)+(3)** O gate `docs-contract-refs` existe, está ligado e cobre as duas classes. Ele saiu de **13 isenções datadas para 6**, e as 6 restantes são todas `ADR-NNNN` citado em comentário Go — a outra metade da mesma família, com prazo próprio em 2026-11-09. **Zero isenções de regra.**
+>
+> **(4) As três divergências menores, medidas e corrigidas.** O arquivo trazia **dois números diferentes de gates** (`122` e `112`) e nenhum batia: são **126** ligados sobre **134** subpacotes. Os **quatro** nomes de cluster estavam errados — o disco tem `{build, cell-0, cell-1, core}` + `secrets`, e `{mgmt, workload, runtime-2}` não aparecem em nome de arquivo nenhum. `pkg/correlation` existe no disco e era citado **zero** vezes.
+
 
 ## B-053 — `/api/v1/version` responde `"dev"` em toda imagem construída   [x]
 
