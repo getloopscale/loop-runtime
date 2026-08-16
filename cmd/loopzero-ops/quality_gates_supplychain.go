@@ -111,13 +111,21 @@ func runProdImageDigests(args []string) int {
 		if *enforce {
 			mode = "FAIL"
 		}
-		fmt.Fprintf(os.Stderr, "prod-image-digests: %s — %d mutable :tag reference(s) in platform charts:\n", mode, len(outcome.Violations))
+		fmt.Fprintf(os.Stderr, "prod-image-digests: %s — %d referência(s) de imagem mutável em charts de plataforma:\n", mode, len(outcome.Violations))
 		for _, v := range outcome.Violations {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Fix: replace `image: foo/bar:v1.2.3` with `image: foo/bar@sha256:<digest>`")
-		fmt.Fprintln(os.Stderr, "     OR use `{{ include \"loopzero-common.image\" . }}` helper which prefers digest.")
+		// Duas classes, dois consertos. Antes do B-113 só a primeira existia, e a
+		// mensagem mandava "use o helper" — conselho inútil para um chart que JÁ
+		// usa o helper e não declara digest, que é a segunda classe inteira.
+		fmt.Fprintln(os.Stderr, "Conserto — literal no template (`image: foo/bar:v1.2.3`):")
+		fmt.Fprintln(os.Stderr, "     use `image: foo/bar@sha256:<digest>`, ou delegue a")
+		fmt.Fprintln(os.Stderr, "     `{{ include \"loopzero-common.image\" . }}`, que prefere digest.")
+		fmt.Fprintln(os.Stderr, "Conserto — `image.digest ausente` no values.yaml:")
+		fmt.Fprintln(os.Stderr, "     o template já está certo; falta o VALOR. Declare `image.digest`")
+		fmt.Fprintln(os.Stderr, "     (o publicador de imagens é quem o produz — um digest fixado à mão")
+		fmt.Fprintln(os.Stderr, "     vira mentira na próxima publicação).")
 		fmt.Fprintln(os.Stderr, "See docs/architecture/infra/diff/cosign-digest-enforcement.md for context.")
 		if !outcome.Pass {
 			return 1

@@ -4270,6 +4270,40 @@ dod:
 
 > Registrado 2026-08-15, ao re-medir o `B-028`. É o inverso exato do que o autor do firewall quis evitar: ele manteve a porta aberta para preservar o gate, e o gate cegou pelo lado que ninguém vigiava.
 
+---
+
+### Corrigido em 2026-08-16 — a premissa deste item estava errada em três pontos
+
+Medi o gate em vez de inferir dele, e **o item que eu escrevi não se sustenta.**
+
+**1. O gate NÃO é silencioso.** `dev-version-drift.yml` tenta 8 vezes com 60 s de intervalo e então
+emite `::error::dev host inalcançável após 8 tentativas` seguido de `exit 1`. A primeira bala do DoD
+— *"o gate falha alto quando o alvo não responde"* — **já estava satisfeita** quando registrei o
+contrário. Eu inferi "silencioso" de "porta fechada", sem ler o gate.
+
+**2. A porta não é 8787 há tempo.** O `therag_api` publica `0.0.0.0:18082->8787/tcp` — a porta do
+contêiner é 8787, a **do host é 18082**, parte da faixa `1808x` padronizada para os produtos do plano
+de dados. O `THERAG_PORT: '8787'` do workflow e a entrada `8787` da `ALLOW_EXTERNAL` do firewall são
+**as duas obsoletas**. (Há um `.env.bak-pre-18082` no droplet, deixado por quem fez a migração.)
+
+**3. E a razão de tudo é outra: o loopzero-rag está fora do ar.** Medido em 2026-08-16 — `therag_pgvector`
+e `therag_api` em laço de reinício, **8.390** e **14.976** reinícios, contêiner criado em
+2026-08-10. Virou `B-118`.
+
+**O gate estava certo o tempo todo.** Das últimas 100 execuções: **99 falhas, 1 cancelada, ZERO
+sucessos**. Ele vem gritando de hora em hora há dias, corretamente, e ninguém agiu — que é exatamente
+o que o comentário do próprio workflow prevê como fatal: *"um gate que grita sem motivo é um gate que
+o time aprende a ignorar"*. Só que não era sem motivo.
+
+**O que resta deste item**, depois da correção:
+
+- a `ALLOW_EXTERNAL` do firewall e o `THERAG_PORT` do workflow passam a dizer **18082**
+- fica registrado que 100 execuções vermelhas seguidas não alcançaram ninguém — o defeito de
+  notificação é real e independente do alvo estar de pé
+
+status permanece `triaged`; o DoD anterior foi reescrito acima porque as duas balas originais
+descreviam um sistema que não é este.
+
 ## B-113 — A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável   [ ]
 
 domain: engine-go
@@ -4285,6 +4319,48 @@ dod:
   - a asserção passa a varrer a população de charts em vez de um caminho fixo, com isenção **nomeada** para chart de terceiro (cuja tag é a versão upstream e não nossa para policiar)
 
 > Registrado 2026-08-15 pela varredura de população do `B-092`. É a terceira vez nesta sessão que uma guarda verificada contra uma instância cobria uma fração da população — a classe está no `B-109`.
+
+---
+
+### Executado em 2026-08-16 — e o gate que o item pedia já existia
+
+**Medindo antes de escrever:** `prod-image-digests` já tem escopo nos `charts/loopzero-*` e é **mais forte
+que o item pedia** — exige **digest**, não apenas uma forma de tag aceitável. O item foi registrado
+sem saber disso.
+
+**E ele não via o defeito.** Varria 66 arquivos e reportava **3** violações, todas em pods de teste do
+Helm. Os sete charts publicados não apareciam.
+
+A razão é a forma da medição: ele procura `image: foo/bar:tag` **literal** no texto dos templates. Os
+sete fazem a coisa certa — chamam `loopzero-common.image`, que prefere `.Values.image.digest`. Medido:
+**os sete usam o helper, nenhum declara digest, todos declaram `tag: dev`.** O helper cai na tag, e a
+referência efetiva do install padrão é mutável.
+
+**O gate passava precisamente porque os charts acertam na camada de template e erram na de valores, e
+ele só olhava uma das duas.**
+
+**E o autor sabia.** O comentário do próprio gate diz, sobre a forma com helper: *"a violação aparece
+no nível do `values.yaml` quando o digest falta"*. Essa frase nomeia uma checagem que nunca foi
+escrita — mesma família da bala 4 do `B-085`. A frase seguinte, *"em tempo de render o helper produz
+saída correta"*, é otimista: correta **dado um digest**; sem ele o helper produz tag, corretamente, e
+a saída é mutável. As duas foram corrigidas no código.
+
+**Terceira vez que esta classe aparece nesta sessão**, sempre com a mesma assinatura — comparar a
+grafia do que está escrito em vez do valor que sai: `helm-drift` compara nome de arquivo (`B-110`), o
+teste do GHCR comparava substring da fonte (`B-092`), e este lia literal de template.
+
+**Resultado: 3 → 10 violações**, as sete novas sendo exatamente os charts publicados. A mensagem de
+conserto também estava errada para a classe nova — mandava *"use o helper"* a charts que já usam — e
+passou a distinguir os dois casos.
+
+**As duas balas do DoD estão cumpridas:** a primeira foi respondida por medição (`tag: dev` **é**
+violação, e o motivo é o helper cair nela), e a segunda já era feita pelo gate — o que faltava era ele
+olhar a camada certa.
+
+**O que NÃO fiz, e por quê:** não virei o `EnforceMode`. O comentário do gate atribui essa decisão ao
+patrocinador por nome, e virar a chave sobre uma cobertura cega travaria a entrega pelas 3 violações
+de pods de teste **enquanto continuava sem ver as 7 que importam**. Virou `B-119`.
+
 
 ## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [ ]
 
@@ -4473,3 +4549,50 @@ superfície pode relatar `false` para sempre sem que nada esteja errado com o re
 `MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado +
 caminho destrutivo de tenant), então o `status` acima permanece `triaged`.
 
+## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: bug
+source: discover-live-test
+evidence: medido em 2026-08-16 no droplet. `therag_pgvector` e `therag_api` em laço de reinício — **8.390** e **14.976** reinícios, contêiner criado em **2026-08-10**. Log do banco: *"This is usually the result of upgrading the Docker image without upgrading the underlying database using pg_upgrade"*. Log da API: `boot failed: getaddrinfo EAI_AGAIN pgvector` — ela não resolve o banco porque o banco também reinicia. O volume `therag_pgdata` tem **as duas convenções ao mesmo tempo**: um cluster **PostgreSQL 15** completo na raiz (41,9 MB, `PG_VERSION` = 15) e um `18/docker` **vazio** (8 KB, sem `PG_VERSION`) que a imagem criou e abortou. Confirmado subindo um `ankane/pgvector:v0.5.1` temporário sobre o mesmo volume: **o cluster sobe e os dados estão íntegros** — 58 coleções, 88 documentos, 233 trechos, 233 vetores, 84 chaves de API.
+why_now: seis dias fora do ar, e o gate `dev-version-drift` vem reportando corretamente de hora em hora — **99 falhas em 100 execuções, zero sucessos**. Não é falta de sinal; é falta de alguém alcançado pelo sinal.
+status: triaged
+severity: alta — um produto do plano de dados fora do ar, com dado real dentro.
+blocked_by: decisão de recuperação. O conserto move dado de banco num host compartilhado, e isso é decisão do dono do ambiente, não minha.
+dod:
+  - o `therag_api` responde `/v1/version` e o `dev-version-drift` volta a passar
+  - o dado das 58 coleções sobrevive à migração, ou a perda é decisão registrada
+  - está decidido por que 100 execuções vermelhas seguidas não alcançaram ninguém
+
+> **Diagnóstico completo, e ele absolve todo mundo menos a lacuna real.** Em 2026-08-09 o
+> `ankane/pgvector` foi trocado pelo **LoopZeroDB** — dogfooding do banco do próprio time, com verificação
+> cuidadosa registrada no compose: extensão, tipo vetor, índice HNSW, consulta por distância, tudo
+> testado contra a imagem. **A verificação testou a imagem nova contra um banco novo; o que quebrou
+> foi o volume antigo.** E o compose **já traz o conserto** do mount (`pgdata:/var/lib/postgresql`,
+> com comentário datado de 2026-08-10 descrevendo exatamente esta falha) — o checkout do droplet o
+> tem, e o contêiner em execução também. O bloqueio que sobrou é só o **conteúdo do volume**.
+>
+> **Dois backups independentes já foram tirados** (2026-08-16): `~/backups/therag_pgdata-*.tar.gz`
+> (cópia crua do volume, 15 MB) e `~/backups/therag-pg15-dumpall.sql` (dump lógico, 14 MB, 36 tabelas).
+> Todo caminho de recuperação continua aberto.
+>
+> Registrado 2026-08-16 ao medir o `B-112`, cuja premissa este achado corrigiu.
+
+## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-16. `cmd/loopzero-ops/internal/quality/prodimagedigests/check.go:17` declara *"Mode: WARN — this gate reports violations but Outcome.Pass is true... Sponsor flips EnforceMode=true post-7d-soak"*. O plano que o criou é `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`, de **2026-05-26**. Três meses depois `EnforceMode` segue `false` por padrão, e o gate reporta **10** violações passando com `EXIT=0`.
+why_now: o soak declarado era de **7 dias**. Um gate que reporta e nunca reprova é exatamente o que o `B-085` mediu noutro contexto — *"um gate cuja única falha é uma isenção conhecida não é ligado, e então não vigia nada"*. A cobertura acabou de ser corrigida (`B-113`), então endurecer o modo agora significa o que diz; antes, não significava.
+status: triaged
+severity: média — nenhuma das 10 violações é exploração ativa; o que está em jogo é o gate voltar a ter consequência.
+blocked_by: decisão do patrocinador, nomeada no próprio código. Não é minha para virar.
+dod:
+  - está decidido se o `EnforceMode` liga, e em que data
+  - se ligar, as 3 violações de pods de teste do Helm entram por isenção nomeada ou são convertidas para digest — elas são imagens de terceiro (`busybox`, `curlimages/curl`) com versão fixada, que é risco diferente do `tag: dev` dos sete
+  - as 7 dos charts publicados têm caminho declarado: quem preenche `image.digest` e quando (um digest fixado à mão vira mentira na próxima publicação)
+
+> Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
