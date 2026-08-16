@@ -4579,6 +4579,39 @@ dod:
 >
 > Registrado 2026-08-16 ao medir o `B-112`, cuja premissa este achado corrigiu.
 
+---
+
+### Resolvido em 2026-08-16 — pelo caminho mais simples, por decisão do patrocinador
+
+Perguntei entre restaurar o dump, `pg_upgrade` ou descartar. **Resposta: descartar.** Os dois backups
+ficam onde estão, então a decisão continua reversível.
+
+Executado: `compose down` → `docker volume rm therag_pgdata` → `compose up -d`. O PG18 inicializou
+limpo, e os três contêineres subiram — mas **o esquema ficou vazio**: a aplicação não o cria no
+arranque. Aplicado com o comando dela mesma (`db:push` — `CREATE EXTENSION vector` seguido de
+`drizzle-kit push`), rodado do checkout do droplet porque a imagem de produção não traz a ferramenta.
+**24 tabelas.**
+
+**Dois defeitos vizinhos que a verificação encontrou** — e nenhum dos dois era o incidente:
+
+**O worker reportava `unhealthy` desde sempre.** A imagem é **uma** e os papéis são **dois**: o
+`HEALTHCHECK` do Dockerfile sonda `127.0.0.1:8787/v1/healthz`, certo para a API e **impossível** para
+o worker, que é consumidor de fila e não abre porta. Medido com o worker rodando normalmente
+(*"worker started; awaiting ingest_document jobs"*, embedder ligado) e todo probe devolvendo
+`ECONNREFUSED`. Desligado em vez de substituído por um probe inventado — sinal falso é pior que sinal
+nenhum, e um `depends_on: service_healthy` apontando para ele travaria para sempre
+(`loopzero-rag` PR #218).
+
+**E o gate sondava a porta do contêiner, não a do host.** `18082->8787`: a 8787 é onde o processo
+escuta **dentro**, a 18082 é onde o host expõe. Ficou 8787 depois da migração de porta. Medido da
+internet: 8787 devolve `ConnectionRefused`, 18082 devolve o JSON de versão (`loopzero-rag` PR #223).
+
+**Verificado:** `dev-version-drift` passou às 16:08 — **o primeiro sucesso em mais de cem execuções**.
+
+**O que fica:** a `ALLOW_EXTERNAL` do firewall ainda declara `8787`, que não existe, e **não declara
+`18082`, que está aberta** (não há regra de `DROP` para ela). É a mesma lista do `B-028` e o mesmo
+arquivo triplicado do `B-111`; anotado ali, não consertado aqui.
+
 ## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [ ]
 
 domain: engine-go
