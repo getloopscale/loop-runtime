@@ -4320,6 +4320,48 @@ dod:
 
 > Registrado 2026-08-15 pela varredura de população do `B-092`. É a terceira vez nesta sessão que uma guarda verificada contra uma instância cobria uma fração da população — a classe está no `B-109`.
 
+---
+
+### Executado em 2026-08-16 — e o gate que o item pedia já existia
+
+**Medindo antes de escrever:** `prod-image-digests` já tem escopo nos `charts/loopzero-*` e é **mais forte
+que o item pedia** — exige **digest**, não apenas uma forma de tag aceitável. O item foi registrado
+sem saber disso.
+
+**E ele não via o defeito.** Varria 66 arquivos e reportava **3** violações, todas em pods de teste do
+Helm. Os sete charts publicados não apareciam.
+
+A razão é a forma da medição: ele procura `image: foo/bar:tag` **literal** no texto dos templates. Os
+sete fazem a coisa certa — chamam `loopzero-common.image`, que prefere `.Values.image.digest`. Medido:
+**os sete usam o helper, nenhum declara digest, todos declaram `tag: dev`.** O helper cai na tag, e a
+referência efetiva do install padrão é mutável.
+
+**O gate passava precisamente porque os charts acertam na camada de template e erram na de valores, e
+ele só olhava uma das duas.**
+
+**E o autor sabia.** O comentário do próprio gate diz, sobre a forma com helper: *"a violação aparece
+no nível do `values.yaml` quando o digest falta"*. Essa frase nomeia uma checagem que nunca foi
+escrita — mesma família da bala 4 do `B-085`. A frase seguinte, *"em tempo de render o helper produz
+saída correta"*, é otimista: correta **dado um digest**; sem ele o helper produz tag, corretamente, e
+a saída é mutável. As duas foram corrigidas no código.
+
+**Terceira vez que esta classe aparece nesta sessão**, sempre com a mesma assinatura — comparar a
+grafia do que está escrito em vez do valor que sai: `helm-drift` compara nome de arquivo (`B-110`), o
+teste do GHCR comparava substring da fonte (`B-092`), e este lia literal de template.
+
+**Resultado: 3 → 10 violações**, as sete novas sendo exatamente os charts publicados. A mensagem de
+conserto também estava errada para a classe nova — mandava *"use o helper"* a charts que já usam — e
+passou a distinguir os dois casos.
+
+**As duas balas do DoD estão cumpridas:** a primeira foi respondida por medição (`tag: dev` **é**
+violação, e o motivo é o helper cair nela), e a segunda já era feita pelo gate — o que faltava era ele
+olhar a camada certa.
+
+**O que NÃO fiz, e por quê:** não virei o `EnforceMode`. O comentário do gate atribui essa decisão ao
+patrocinador por nome, e virar a chave sobre uma cobertura cega travaria a entrega pelas 3 violações
+de pods de teste **enquanto continuava sem ver as 7 que importam**. Virou `B-119`.
+
+
 ## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [ ]
 
 domain: engine-go
@@ -4537,3 +4579,20 @@ dod:
 >
 > Registrado 2026-08-16 ao medir o `B-112`, cuja premissa este achado corrigiu.
 
+## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-16. `cmd/loopzero-ops/internal/quality/prodimagedigests/check.go:17` declara *"Mode: WARN — this gate reports violations but Outcome.Pass is true... Sponsor flips EnforceMode=true post-7d-soak"*. O plano que o criou é `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`, de **2026-05-26**. Três meses depois `EnforceMode` segue `false` por padrão, e o gate reporta **10** violações passando com `EXIT=0`.
+why_now: o soak declarado era de **7 dias**. Um gate que reporta e nunca reprova é exatamente o que o `B-085` mediu noutro contexto — *"um gate cuja única falha é uma isenção conhecida não é ligado, e então não vigia nada"*. A cobertura acabou de ser corrigida (`B-113`), então endurecer o modo agora significa o que diz; antes, não significava.
+status: triaged
+severity: média — nenhuma das 10 violações é exploração ativa; o que está em jogo é o gate voltar a ter consequência.
+blocked_by: decisão do patrocinador, nomeada no próprio código. Não é minha para virar.
+dod:
+  - está decidido se o `EnforceMode` liga, e em que data
+  - se ligar, as 3 violações de pods de teste do Helm entram por isenção nomeada ou são convertidas para digest — elas são imagens de terceiro (`busybox`, `curlimages/curl`) com versão fixada, que é risco diferente do `tag: dev` dos sete
+  - as 7 dos charts publicados têm caminho declarado: quem preenche `image.digest` e quando (um digest fixado à mão vira mentira na próxima publicação)
+
+> Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
