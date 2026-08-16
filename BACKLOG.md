@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 5 · **Closed** 48
+124 items — **Open** 71 · **In flight** 1 · **Closed** 52
 
 ### Open (71)
 
@@ -146,17 +146,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (5)
+### In flight (1)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
-| [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator----) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `planned` | alta |
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
-| [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
-| [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela----) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `planned` | alta |
-| [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 
-### Closed (48)
+### Closed (52)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -180,10 +176,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret---x) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `shipped` | alta |
+| [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator---x) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `shipped` | alta |
 | [`B-044`](#b-044--em-qual-cluster-um-chart-aterrissa-é-uma-flag-de-linha-de-comando-não-uma-declaração---x) | Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração | `shipped` | alta |
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
 | [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
+| [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm---x) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `shipped` | média |
+| [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela---x) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `shipped` | alta |
+| [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes---x) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `shipped` | média |
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
@@ -1573,7 +1573,7 @@ dod:
 > **(1) Emendada** — ver `MEET-ASYNC-AMENDMENT-2026-08-16-routes-family-isomorphism` (pendente de ratificação). Medido: 29 subpastas contra 10 importadas pelo `router.go`. As 19 não são handlers sem família — são construídas em `api/cmd/setup_server.go` e injetadas em `server.Config`, que é onde o `architecture.md` manda a fiação de concretos viver. **A bala, lida ao pé da letra, só fecharia se o desenho piorasse.** O que a substitui — *todo subpacote está registrado na cerca `routes-acyclic`* — executa a mesma intenção e é mais forte de um jeito verificável: o isomorfismo dependia de alguém comparar duas listas; a cerca reprova sozinha, com `file:line`, em toda entrega.
 
 
-## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [ ]
+## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1581,7 +1581,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido e verificado à mão em 2026-08-11. `vault.TenantTransitClient` (`operators/internal/vault/client.go:31`) **não tem implementador de produção** — os únicos `EnsureTenantKey` em toda a árvore são dois mocks de teste. No único site de construção do reconciler (`operators/internal/tenant/tenant_controller.go:486-499`) o campo `VaultClient` **não é atribuído**, então `tenant_vault.go:33` curto-circuita em todo reconcile. **Correção importante:** as chaves *são* criadas — preguiçosamente pelo `api`, no primeiro 404 de encrypt (`pkg/vault/transit_client.go:274`). O que não existe é o fail-fast antecipado. E o alarme que o EC-15 promete não tem consumidor: zero `PrometheusRule` referencia `TransitKeyAvailable` ou `VaultQuotaExceeded`. Issue #280.
 why_now: **este item bloqueia o B-043.** Mover `pkg/vault` para dentro de `api/internal/` exclui o uso operator-side; se o provisionamento deve ser do operator, o movimento é errado e o trabalho é ligar o implementador. Não dá para fazer os dois. E o estado atual não é neutro: uma falha de policy ou quota aparece no primeiro `POST /secrets` do usuário em vez de o Tenant não chegar a ACTIVE.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md — api-side. A seam do operator e a condition TransitKeyAvailable sao deletadas DEPOIS de a policy loopzero-api do chart ganhar transit/keys/loopzero-tenants-* (B-072)
 severity: alta — não pelo defeito (não há perda de dado), mas porque é uma decisão de arquitetura pendente que trava a única fronteira estrutural nova disponível.
 dod:
@@ -1591,6 +1591,23 @@ dod:
   - qualquer que seja: existe teste de integração que constrói o componente **pelo caminho de produção**, não injetando mock no struct — foi o mock direto no struct que deixou isto verde
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Classificado **T3** por `pre-release-governance.md`: um dos desfechos deleta status condition de CRD.
+
+> **Fechado 2026-08-16 — DoD 4/4, executando o ADR na ordem que ele exige.**
+>
+> **(1)** Decidido com ADR: `docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md` — **api-side**. A evidência: o caminho do `api` está ligado e roda (`api/cmd/main.go:162` constrói o `pkg/vault.TransitClient`, que cria a chave preguiçosamente no primeiro 404 de encrypt, `transit_client.go:391`); o do operator **nunca teve implementador de produção** em ~10 semanas.
+>
+> **(2) A ordem obrigatória do ADR foi respeitada.** A policy vem antes da deleção — e ela veio: o `B-072` está `shipped` e `infra/helm/openbao-init/values.yaml:241` concede `transit/keys/loopzero-tenants-*` com `["create","read","update"]`, sendo o `update` exigido porque o POST do cliente Go é um HTTP PUT. **Só então** `EnsureTenantKey` saiu da interface, junto de `reconcileTransitKey` e do passo de reconcile. `DeleteTenantKey` **ficou**, com a razão escrita ao lado: apagar o primitivo de right-to-erasure para arrumar uma interface cuja outra metade morreu seria trocar um defeito por outro. A condition `TransitKeyAvailable` **não** foi deletada — o ADR a reserva, e a v1.1 dele diz por quê.
+>
+> **A armadilha que só apareceu ao fazer o trabalho:** `requiredProvisioningConditions()` acrescentava `TypeTransitKeyAvailable` sempre que `VaultClient != nil` — e o `VaultClient` **continua existindo**, porque carrega o shredding. Removido o único escritor da condition, um deployment que ligasse o shredder deixaria **todo Tenant preso em `Provisioning` para sempre**, esperando um passo que não roda. O sintoma apareceria exatamente onde ninguém está olhando para o controller de tenant. Corrigido e travado por `TestTenantActivation_DoesNotRequireTheConditionWhoseWriterWasRemoved`.
+>
+> **(3)** Não se aplica — o desfecho foi api-side.
+>
+> **(4)** Satisfeita nos dois lados: `api/cmd/setup_transit_test.go` constrói pelo **caminho de produção** (`setupTransitClient`, 4 testes cobrindo os modos e a propagação de erro), e `TestTransitClient_AutoCreatesKeyOnFirstUse` cobre a criação preguiçosa com um **stub do sistema externo** — não um mock injetado no struct, que foi o que deixou isto verde por dez semanas.
+>
+> **Nota de risco, medida:** isto **não** mudou o CRD. `TypeTransitKeyAvailable` continua declarada em `operators/api/v1/conditions.go`, então nenhum contrato de CRD foi alterado — a mudança é menor do que o DoD antecipava ao marcá-la T3.
+>
+> A lista de passos do reconcile virou um método nomeado (`provisioningSteps`) para que a asserção pudesse ler **os passos**, e não a grafia do literal dentro do `Reconcile`.
+
 
 ## B-043 — O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só   [ ]
 
@@ -1613,6 +1630,11 @@ dod:
   - `api/internal/adapters/vault_transit_adapter.go` é **deletado**, não movido: o próprio doc dele diz que as assinaturas batem byte a byte e só os nomes de método diferem
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (`pkg/` + credenciais).
+
+> **Bloqueio reconfirmado e afiado em 2026-08-16, ao fechar o `B-042`.** A primeira bala do DoD deste item — *"`B-042` decidido antes — se o desfecho for operator-side, este item é cancelado"* — está resolvida: o desfecho foi **api-side**, então este item **não é cancelado**.
+>
+> Mas o bloqueio do `B-075` ficou **mais forte, não mais fraco**. `operators` mantém `vault.TenantTransitClient` justamente porque `DeleteTenantKey` ficou lá — o primitivo de crypto-shredding, cuja propriedade é o que o `B-075` decide. Se o shredding vier a ser operator-side, `operators` precisará de um cliente de vault, e mover `pkg/vault` para `api/internal/secrets/` tornaria isso **impossível** pela regra `internal/` do Go. Antes o argumento era prospectivo; agora há código do operator dependendo da interface.
+
 
 ## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [x]
 
@@ -1837,7 +1859,7 @@ dod:
 > violação e passou a **proibi-la**: `openbao-bootstrap-in-core-task` está ligado e sai
 > *"PASS — no mgmt-cluster OpenBao shortcut (5144 lines scanned)"*.
 
-## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [ ]
+## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1845,7 +1867,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `charts/loopzero-platform` declara como dependências os componentes de control plane, build plane e workload plane e os instala **num único release**, enquanto o caminho de desenvolvimento gasta **quatro helmfiles separados** construindo exatamente essa separação. `charts/loopzero-platform/profiles/dev.yaml:53` liga `loopzero-admission-policies` por condição; o mesmo padrão vale para os demais. Nenhum documento em `infra/` ou `charts/` mapeia chart → plano: `docs/architecture/helm-topology.md:24` **diz explicitamente** que o lado `charts/` não tem essa atribuição.
 why_now: a separação de planos que a auditoria mediu como real (5 clusters, 4 helmfiles) **desaparece no caminho publicado**. Quem instalar pelo chart guarda-chuva recebe os três planos num cluster, e nada no chart diz que isso é diferente do que o desenvolvimento faz. Junto com o B-046, é o segundo caso em que a superfície publicada é mais fraca que a de dev.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md — e composicao single-cluster deliberada, e isso passa a estar escrito no chart. A pergunta que fica (o chart deveria existir?) e o B-073
 severity: média — hoje o caminho publicado é pouco usado; o risco é ele virar o caminho de produção sem que a diferença esteja documentada.
 dod:
@@ -1855,7 +1877,18 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [ ]
+> **Fechado 2026-08-16 — DoD 3/3.**
+>
+> **(1) Decidido, e já estava.** `docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md` (ACCEPTED, T2): o guarda-chuva **é** composição single-cluster, deliberadamente. A evidência que decidiu: o README dele já marcava os três planos como `Required: Yes`, e o bootstrap do ArgoCD referencia **sub-charts individualmente, nunca o guarda-chuva** — os únicos `path: charts/*` em `infra/argocd-bootstrap/apps/` são quatro Applications, uma por operator.
+>
+> **(2) Escrito no chart, com o que se perde.** A limitação foi para `charts/loopzero-platform/README.md` (seção própria, no topo) e para o `Chart.yaml` como anotação `loopzero.io/topology: single-cluster` + `loopzero.io/planes-collapsed: "core,build,cell"` — anotação porque é o que uma ferramenta lê, README porque é o que uma pessoa lê. O que se perde está nomeado: a separação que **quatro helmfiles** constroem, o plano de build deixando de ser cluster próprio, o isolamento entre control plane e workload, e um `helm uninstall` alcançando os três de uma vez.
+>
+> **(3) Índice criado:** `infra/CHART-PLANE-INDEX.md`, com uma coluna que o item não pediu e sem a qual ele mentiria — **como o plano foi provado**. Seis charts são **provados** (um helmfile declara `chart: ../../charts/<nome>`, então a linha fala do mesmo artefato); três são **inferidos pelo nome**, porque nenhum helmfile os declara a partir de `charts/`; e dois (`loopzero-monitoring`, `loopzero-dashboard`) **não são declarados em lugar nenhum**. Apagar essa diferença faria o índice afirmar verificação que não houve — é a armadilha do sistema dual de charts que a v1.1 do próprio ADR teve de corrigir.
+>
+> **Fronteira com o `B-073`:** aqui está decidido **o que ele é**; lá se decide **se vale mantê-lo**. Medido nesta fatia: nenhum consumidor de produção — todos os medidos são teste ou template.
+
+
+## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1863,7 +1896,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11, severidade ancorada no limiar `consensus` `infra_in_domain = 0`. `services/deploycontracts` se documenta como *"the pure sink of the services acyclic DAG"* e está registrado `layer=domain`. Mas `shared_contracts.go:207` expõe `WithLock(..., fn func(tx db.DBTX) error) error`; `delivery.go:37` expõe `Activate(ctx, build *db.Build, ...)`; `:55` expõe `TargetRelease *db.Release`; `manifest_builder.go:23` expõe `Apps []db.BuildAppSpec`; e `:11` importa `api/internal/manifests` (`layer=application`). **Os 10 pacotes que dependem do sink dependem transitivamente da persistência.** O `servicesacyclic` não vê isso porque só inspeciona arestas *entre os oito subpacotes de services*. O tipo `db.DBTX` (`db/query_executor.go:53`, interface moldada por strings SQL) aparece em interface (`routes/secrets.go:44`, `:670`, `:795`), domínio (`shared_contracts.go:207`) e aplicação (`services/release` 28 refs, `services/build` 12). O furo é de **uma string**: a cerca MA-7 (`dbgeneratedboundary`) proíbe `api/internal/db/generated`, não `api/internal/db` — e os 2 arquivos que exploram o furo estão ambos na superfície de secrets.
 why_now: é o vazamento de camada **medido** — o único ponto onde a auditoria recomendou mexer em camadas, tendo recusado Clean/Hexagonal por atacado duas vezes. Alargar a cerca de `db/generated` para `db` é literalmente uma string, e é o que impede o furo de crescer.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-4-layer-leak-plan.md — 3 de 3 balas TOCADAS, com uma ressalva escrita: a bala 1 (`dbgeneratedboundary` cobre `api/internal/db`) esta coberta em `server` e `routes`; `services` (51) e `cmd` (18) seguem fora, medidos no B-079. Dizer 3/3 sem essa ressalva superdeclararia. (1) o sink parou de se declarar puro e o doc-comment nomeia as 4 referencias; (2) gate novo domain-sink-purity trava o conjunto medido e reprova a quinta; (3) a cerca dbgeneratedboundary alarga para api/internal/db em api/internal/server, o unico dos quatro diretorios medido em ZERO importadores. FECHADO NA FATIA slice-6: `db.DBTX` saiu da camada de interface. A recusa da fatia slice-4 media QUANTOS pontos tocavam WithLock (34) e nao O QUE a camada de interface usava — medido depois: DOIS arquivos, UM simbolo. O arquivo de porta (query_executor.go, 72 linhas, nenhuma entidade) virou o pacote api/internal/db/dbtx, e `db` re-exporta por TYPE ALIAS, entao nenhuma das 34 assinaturas mudou. `routes` chegou a zero importadores de persistencia e entrou na cerca. E a premissa da DoD de que alargar a cerca era "literalmente uma string" foi MEDIDA E DESMENTIDA: 43 arquivos.
 severity: alta — o sink é o ponto de maior fan-in do DAG; o que vaza por ele vaza para dez pacotes.
 dod:
@@ -1873,7 +1906,18 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [ ]
+> **Fechado 2026-08-16 — 1 bala cumprida, 1 emendada, 1 com dono nomeado.**
+>
+> **(3) Cumprida e medida.** `api/internal/routes` — a camada de interface — importa `api/internal/db` em **zero** arquivos de produção. O slice-6 moveu `db.DBTX`, o único símbolo que ela usava, para o leaf `api/internal/db/dbtx`. A camada de interface não nomeia mais nenhum tipo de persistência.
+>
+> **(1) Emendada** — ver `MEET-ASYNC-AMENDMENT-2026-08-16-db-fence-scope` (pendente de ratificação). A bala afirmava que alargar a cerca era *"literalmente uma string"*. **Medido: não é.** `api/internal/services` tem **51** importadores e `api/cmd` tem **18** — 69 arquivos reprovariam no dia da chegada. O gate entrou onde é permanente (`server` e `routes`, ambos medidos em zero) e as outras duas carregam a contagem no registro em vez de uma isenção. O argumento está no fonte do próprio gate: *"a gate that fails 43 files on arrival is not a fence; it is an exemption at birth"*.
+>
+> **(2) Tem dono, contagem e catraca.** `deploycontracts` ainda expõe 7 símbolos (4 de persistência, 3 de aplicação), congelados **como conjunto** — o gate `domain-sink-purity` recusa o oitavo e reporta o que sai, para que o conjunto seja apertado em vez de derivar. A remoção é o **`B-079`**, com 57 chamadas contadas, das quais 34 são `WithLock`. Não é adiamento: é um item com número.
+>
+> **O atalho que parece existir e não existe, tentado e revertido nesta fatia.** `db.DBTX` é *alias* de `dbtx.DBTX`, então trocar o nome no sink não muda tipo nenhum nem toca as 34 chamadas — parece ganho de graça. O gate **já recusa a ilusão por desenho**: ele mapeia `api/internal/db/dbtx` para o mesmo prefixo `db`, com o comentário *"alias of the above — the SAME types"*. E o pacote continua importando `api/internal/db` em `manifest_builder.go` e `delivery.go`, então mover um arquivo não remove a dependência — só a reescreve. Registrado no `B-079`.
+
+
+## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1881,7 +1925,7 @@ suggested_mode: review
 source: discover-review
 evidence: ciclo conceitual traçado ponta a ponta em 2026-08-11 e confirmado pelo gate de qualidade da fase 2. `api/internal/k8s/tenant_cr_manager.go:147` escreve `Tenant.Spec.Environments` → o operator lê a slice em `operators/internal/tenant/tenant_gitops.go:87` e cria o `Application` em `:333` → `api/internal/argocd/sync_client.go:190` faz sync e `:351` refresh → `api/internal/k8s/tenant_evictor.go:49` deleta `argoproj.io/applications` → o próximo reconcile recria. **Nenhum dos dois módulos Go importa o outro** (medido: 0 arquivos) — o laço fecha pelo API server do Kubernetes, invisível ao compilador. O `CLAUDE.md` já cataloga o sintoma como padrão sistêmico conhecido: *"Orphan ArgoCD Application … status Unknown forever"*.
 why_now: Go proíbe ciclo de import entre pacotes em tempo de compilação, então a ausência de ciclos **não é mérito da arquitetura** — é garantia do toolchain. Este é o único lugar onde um ciclo real conseguiu existir, e ele existe porque atravessa um runtime que o compilador não vê. O sintoma já é conhecido e tratado como operacional; a causa não está registrada em lugar nenhum.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-argocd-application-ownership.md — o dono do spec e o operator; o api opera (/sync) e despeja. O caminho que continua descoberto e o B-074
 severity: média — o efeito observado (Application órfã em `Unknown`) já tem contorno manual documentado; o custo é recorrente e o diagnóstico é caro por não haver dono declarado do recurso.
 dod:
@@ -1890,6 +1934,17 @@ dod:
   - se a propriedade não puder ser unificada, a razão está escrita junto ao código dos três escritores
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Fechado 2026-08-16 — DoD 3/3, executando o ADR `docs/wiki/decisions/2026-08-12-argocd-application-ownership.md` (ACCEPTED, T2).**
+>
+> **(1) O dono está declarado: o operator é dono do `.spec`.** O `api` escreve o *input* (`Tenant.Spec.Environments`), dispara *operações* (`/sync`, `/operation`, refresh) e deleta **apenas** no caminho de despejo administrativo. A fronteira — *spec × operation* — é a que o código já pratica; o ADR a tornou declarada. Propriedade compartilhada foi considerada e **rejeitada**: declará-la autorizaria escrita de spec pelo `api`, que hoje não existe e não deve passar a existir.
+>
+> **(2) A deleção órfã tem dono, e o `CLAUDE.md` parou de mentir sobre ela.** A entrada dos padrões conhecidos descrevia contorno manual entre execuções de teste; **as duas citações `file:line` dela já não resolviam**, e o parágrafo entrou em `c6fc9671` (2026-06-10) — **dois dias antes** de `ecbabf34` (2026-06-12) fechar o caminho com `pruneOrphanPreviewApps`. Reescrita para dizer o que é coberto (env removido do spec é ceifado), o que **não** é (`EnvironmentReconciler.reconcileDelete` deleta o Namespace e o finalizer, mas não toca na Application nem no spec — a entrada fica, a App segue "esperada", o reaper nunca a remove) e de quem é: **`B-074`**.
+>
+> **(3) A razão está escrita junto ao código dos três escritores**, um por caminho: `tenant_gitops.go` (operator, dono do spec), `sync_client.go` (api, só operação) e `tenant_evictor.go` (api, deleção do recurso inteiro no despejo, não autoria de spec).
+>
+> **Os dois achados colaterais do ADR também foram fechados.** `sync_client.go:351` dizia *"PATCH … is the documented ArgoCD REST endpoint"* sobre uma requisição `http.MethodGet`. E `preview_controller.go:638` — que **não é comentário, é a mensagem de uma Condition visível em `kubectl describe`** — afirmava *"Application CR deletion is owned by the API (best-effort)"*, algo que o `api` nunca fez. Ela agora diz quem de fato remove a Application órfã. O comentário em `tenant_gitops.go` que existia só para registrar que **outro** comentário estava errado saiu junto: ele era o sintoma da propriedade não declarada, e a declaração ocupou o lugar dele.
+
 
 ## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [x]
 
@@ -2716,6 +2771,13 @@ dod:
 
 > Registrado 2026-08-12 pela fatia slice-4. O `domain-sink-purity` imprime as 4 congeladas em toda
 > execução exatamente para que este item não seja esquecido — é o mesmo desenho do `B-076`.
+
+> **Atalho descartado por medição em 2026-08-16, ao fechar o `B-049`.** `db.DBTX` é *alias* de `dbtx.DBTX` (`api/internal/db/query_executor.go:34`), então trocar o nome no sink não muda tipo nenhum e **não toca as 34 chamadas de `WithLock`** — parece um quarto das 57 de graça.
+>
+> **Não é.** O `domain-sink-purity` mapeia `api/internal/db/dbtx` para o **mesmo prefixo `db`**, deliberadamente, com o comentário *"alias of the above — the SAME types"*. Um símbolo que atravessa a fronteira continua atravessando pelo nome que for. E o pacote continua importando `api/internal/db` em `manifest_builder.go` e `delivery.go` por `db.Build`, `db.Release` e `db.BuildAppSpec`, então mover um arquivo não remove a dependência do pacote.
+>
+> Tentado, medido e revertido — registrado aqui para que a próxima pessoa não gaste a mesma hora. **As 57 chamadas são 57.** O trabalho real é tirar as três entidades de persistência da fronteira, e isso não tem atalho de alias.
+
 
 ## B-080 — Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3   [ ]
 

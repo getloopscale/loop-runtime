@@ -229,20 +229,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// All reconcile steps run unconditionally (idempotent via EnsureX/CreateOrUpdate).
 	// No condition-gated skipping — this ensures drift is corrected even when conditions
 	// were set True by a previous controller version that no longer applies.
-	steps := []reconcileStep{
-		{conditions.TypeGitRepoReady, func() error { return r.reconcileGitRepo(ctx, &tenant) }},
-		{conditions.TypeArgoCDAppReady, func() error { return r.reconcileArgoCDApp(ctx, &tenant) }},
-		{conditions.TypeBuildNamespaceReady, func() error { return r.reconcileBuildNamespace(ctx, &tenant) }},
-		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, &tenant) }},
-		{conditions.TypeHarborProjectReady, func() error { return r.ensureHarborProject(ctx, &tenant) }},
-		{"", func() error { return r.ensureHarborRobotAccounts(ctx, &tenant) }},
-		// T3.3 of openbao-adoption v1.3 — per-tenant Vault Transit key.
-		// No-op when VaultClient == nil (vault disabled). EC-15 wires
-		// distinct condition reasons for quota vs unreachable errors.
-		{conditions.TypeTransitKeyAvailable, func() error { return r.reconcileTransitKey(ctx, &tenant) }},
-		{"", func() error { return r.reconcileEnvironmentCRs(ctx, &tenant) }},
-	}
-	if err := r.runSteps(ctx, &tenant, base, steps); err != nil {
+	if err := r.runSteps(ctx, &tenant, base, r.provisioningSteps(ctx, &tenant)); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -267,6 +254,27 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	logger.Info("reconciled tenant", "tenant", tenant.Name, "phase", tenant.Status.Phase)
 	return ctrl.Result{}, nil
+}
+
+// provisioningSteps is the ordered set of reconcile steps a Tenant goes through, and
+// the single place that declares it. It is a named method rather than a literal inside
+// Reconcile so that a test can assert over the STEPS THEMSELVES — reading the source
+// file for step names would compare the spelling of the list instead of the list.
+//
+// Deliberately absent: the per-tenant Vault Transit key. Provisioning is api-side (ADR
+// 2026-08-12-tenant-transit-key-ownership, B-042) — the api creates the key lazily on
+// the first encrypt 404, and this step never had a production implementation to run.
+// TestTransitKeyProvisioning_IsNotAnOperatorReconcileStep guards the absence.
+func (r *TenantReconciler) provisioningSteps(ctx context.Context, tenant *loopzerov1.Tenant) []reconcileStep {
+	return []reconcileStep{
+		{conditions.TypeGitRepoReady, func() error { return r.reconcileGitRepo(ctx, tenant) }},
+		{conditions.TypeArgoCDAppReady, func() error { return r.reconcileArgoCDApp(ctx, tenant) }},
+		{conditions.TypeBuildNamespaceReady, func() error { return r.reconcileBuildNamespace(ctx, tenant) }},
+		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, tenant) }},
+		{conditions.TypeHarborProjectReady, func() error { return r.ensureHarborProject(ctx, tenant) }},
+		{"", func() error { return r.ensureHarborRobotAccounts(ctx, tenant) }},
+		{"", func() error { return r.reconcileEnvironmentCRs(ctx, tenant) }},
+	}
 }
 
 // reconcileStep pairs a condition type with its reconcile function.
@@ -320,11 +328,15 @@ func (r *TenantReconciler) requiredProvisioningConditions() []string {
 	if r.HarborClient != nil {
 		required = append(required, conditions.TypeHarborProjectReady)
 	}
-	// T3.3 of openbao-adoption v1.3: when VaultClient configured, transit
-	// key must be available before Tenant transitions to ACTIVE.
-	if r.VaultClient != nil {
-		required = append(required, conditions.TypeTransitKeyAvailable)
-	}
+	// TypeTransitKeyAvailable is deliberately NOT required, and the reason is a trap
+	// worth naming: it used to be appended whenever VaultClient != nil, and VaultClient
+	// still exists — it carries the shredding half of the interface (B-075). But the
+	// step that SET the condition was removed in 2026-08-16 when provisioning moved to
+	// the api (ADR 2026-08-12-tenant-transit-key-ownership, B-042).
+	//
+	// Requiring a condition nobody writes means every Tenant on a deployment that wires
+	// the shredder would sit in Provisioning forever, waiting for a step that no longer
+	// runs. Guarded by TestTenantActivation_DoesNotWaitForAConditionNobodyWrites.
 	return required
 }
 

@@ -346,10 +346,17 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 	//
 	// Without a prune step, every PR ever opened against the tenant leaves
 	// behind an ArgoCD App stuck in OutOfSync/Missing forever after close.
-	// preview_controller.go:609 has a comment claiming "Application CR
-	// deletion is owned by the API (best-effort)" — but the API never wired
-	// it: PreviewService.DeletePreviewByPR only removes the PG row + the
-	// PreviewEnvironment CR. The canonical place to prune is here at the
+	// Ownership, declared: the OPERATOR owns the Application's `.spec`. The api
+	// writes the input (Tenant.Spec.Environments), triggers operations (/sync,
+	// /operation) and deletes only on the administrative-eviction path — it never
+	// writes spec, and must not start. ADR
+	// docs/wiki/decisions/2026-08-12-argocd-application-ownership.md (B-050).
+	//
+	// This paragraph used to say instead that preview_controller.go:609 carried a
+	// comment claiming "Application CR deletion is owned by the API (best-effort)"
+	// while the api never wired it. A comment documenting that ANOTHER comment is
+	// wrong is the symptom of ownership nobody declared; the line above is the
+	// declaration, so the symptom is no longer needed. The canonical place to prune is here at the
 	// tenant operator because (a) this loop already knows the desired set,
 	// (b) the watcher (#70) fires reconcile on PreviewEnv delete events, so
 	// the prune naturally cascades from PR close → CR delete → tenant

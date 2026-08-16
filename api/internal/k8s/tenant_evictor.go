@@ -237,6 +237,14 @@ func (e *TenantK8sEvictor) deleteMatchingResources(
 		}
 		return 0, fmt.Errorf("list %s: %w", gvr.Resource, err)
 	}
+	// Ownership, declared: this is the ONE path where the api removes an ArgoCD
+	// Application, and it is not spec authorship — it deletes the whole resource on
+	// administrative eviction, for tenants whose operator may not be reconciling at
+	// all. The operator owns `.spec` and never sees this path. ADR
+	// docs/wiki/decisions/2026-08-12-argocd-application-ownership.md (B-050).
+	//
+	// Shared ownership was considered and rejected there: declaring it would authorise
+	// spec writes from the api, which do not exist today and must not start.
 	zero := int64(0)
 	policy := metav1.DeletePropagationBackground
 	deleted := 0

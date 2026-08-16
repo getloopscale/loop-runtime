@@ -1,7 +1,14 @@
 apiVersion: v2
 name: loopzero-platform
-description: LoopZeroCloud platform umbrella chart — installs all components
+description: "LoopZeroCloud platform umbrella chart — installs all components. SINGLE-CLUSTER: collapses the core, build and cell planes into one release."
 type: application
+annotations:
+  # Deliberate, decided in ADR 2026-08-12-umbrella-chart-plane-separation (B-048).
+  # The 12 dependencies span three planes; this chart installs them in one cluster.
+  # What that costs is spelled out in README.md; which chart belongs to which plane
+  # is in infra/CHART-PLANE-INDEX.md.
+  loopzero.io/topology: single-cluster
+  loopzero.io/planes-collapsed: "core,build,cell"
 version: 0.2.0
 appVersion: "dev"
 home: https://github.com/getloopscale/loopzero
