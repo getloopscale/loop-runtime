@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.76.0] - 2026-08-16
+
 ### Added
 - **Toda parte da interface do motor passou a dizer se está no ar.** São 35 pontos em que o sistema decide, no arranque, se publica ou não um endereço — e até agora ele tomava essa decisão e a jogava fora. Hoje cada uma reporta o estado e, quando desligada, qual dependência falta. Uma trava impede que uma parte nova nasça muda. (B-115)
 - **Os caminhos internos da plataforma passaram a dizer quando estão desligados.** São as partes que só os controladores e os operadores usam — admissão de um cliente novo, retorno do entregador, o serviço que resolve segredos para as aplicações, remoção e realocação de um cliente, e a inspeção de uma versão publicada. A ausência delas é invisível do lado do produto: ninguém abre chamado quando o resolvedor de segredos para de responder; a frota simplesmente deixa de convergir. Oito partes agora reportam se estão no ar e, quando não estão, qual dependência falta. (B-115)
