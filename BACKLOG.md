@@ -1757,6 +1757,45 @@ dod:
   - existe gate hermético que extrai todo `-X <path>.<símbolo>` dos Dockerfiles e valida que o path bate com o `module` do `go.mod` correspondente **e** que o símbolo existe naquele pacote via AST
   - está verificado que nenhum consumidor faz string-match em `"dev"` — a correção muda o valor retornado
 
+---
+
+### Executado em 2026-08-16 — e o sistema já reportava isto
+
+**As três balas estão cumpridas.** Decisão: `MEET-ASYNC-AMENDMENT-2026-08-16-ldflag-symbol-resolution`.
+
+**Dois erros compostos, não um typo.** `api/Dockerfile:82-84` apontava para
+`github.com/loopzero**dev**/loopzero/api/internal/routes` — a org errada por uma letra **e** o pacote plano
+que a decomposição do `B-080` esvaziou. `-X` sobre símbolo inexistente é **no-op que sai 0**: o linker
+não avisa, o build passa, o default sobrevive.
+
+**Confirmado ao vivo em 2026-08-16**, no droplet: `{"version":"dev","built_at":"unknown"}`.
+
+**E o sistema já reportava o defeito.** O contrato de status da frota
+(`loopzero-cloud/internal/serviceversions/status.go:133-139`) declara `"dev"` como **sentinela**, num
+conjunto fechado, com o comentário dizendo: *"o alvo está de pé; o que falta é a proveniência que a
+camada de deploy deveria ter injetado"*. O motor vinha declarando, no vocabulário do próprio
+contrato, que a injeção falhou — e o painel o mostra sem proveniência. **Mesmo padrão do
+`dev-version-drift` do loopzero-rag consertado hoje:** o sinal existia, estava correto, e não alcançou
+ninguém.
+
+**O gate `ldflag-symbols` resolve em vez de casar grafia.** Ele extrai todo `-X <path>.<símbolo>` dos
+Dockerfiles e valida o caminho contra os `go.mod` do disco e o símbolo contra o AST do pacote — e
+**exige que seja `var` de topo**, porque `const` e `func` não recebem `-X` e deixariam o gate verde
+sobre uma injeção que continua sendo no-op. Um gate que procurasse `getloopscale` pegaria este typo e
+nada mais; o que custa caro é o **movimento de pacote**, que uma refatoração legítima introduz e que
+só a resolução pega. 26 Dockerfiles lidos, 3 injeções, todas resolvendo.
+
+**Terceira bala verificada:** o único consumidor que trata o valor é o coletor de frota, e ele o trata
+como sentinela de **ausência** — a correção faz o motor **sair** do estado "sem proveniência". Nenhum
+teste do pacote depende do literal `"dev"`.
+
+**Limite declarado, em vez de prova alegada.** Verifiquei que o caminho e o símbolo **resolvem** (por
+AST), que o doc-comment do pacote concorda de forma independente, e que o binário construído com o
+caminho certo carrega o valor onde o errado não carrega. A prova ponta-a-ponta — subir a imagem e
+perguntar a ela — não completei: o binário recusa iniciar sem configuração de cluster, por falha
+rápida, e o `strings` do binário conta também o texto da própria flag no build info, então aquele
+número não decide sozinho. Essa prova pertence a um build de imagem real, na publicação.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-054 — O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres   [ ]
