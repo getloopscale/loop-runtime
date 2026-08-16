@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 1 · **Closed** 52
+125 items — **Open** 72 · **In flight** 1 · **Closed** 52
 
-### Open (71)
+### Open (72)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -145,6 +145,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
+| [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem----) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `triaged` | alta |
 
 ### In flight (1)
 
@@ -1635,6 +1636,12 @@ dod:
 >
 > Mas o bloqueio do `B-075` ficou **mais forte, não mais fraco**. `operators` mantém `vault.TenantTransitClient` justamente porque `DeleteTenantKey` ficou lá — o primitivo de crypto-shredding, cuja propriedade é o que o `B-075` decide. Se o shredding vier a ser operator-side, `operators` precisará de um cliente de vault, e mover `pkg/vault` para `api/internal/secrets/` tornaria isso **impossível** pela regra `internal/` do Go. Antes o argumento era prospectivo; agora há código do operator dependendo da interface.
 
+> **Consequência da medição do `B-075` em 2026-08-16 — o bloqueio pode virar refutação.**
+>
+> Se a decisão proposta no `MEET-ASYNC-AMENDMENT-2026-08-16-crypto-shredding-ownership` for ratificada, o shredding será **operator-side**, então `operators` **precisará** de um cliente de vault — e mover `pkg/vault` para `api/internal/secrets/` é exatamente o que o impediria, pela regra `internal/` do Go. Este item não seria adiado: seria **morto com a razão**, que é o desfecho que a primeira bala do DoD dele prevê para este caso.
+>
+> **Não foi morto**, porque matá-lo depende da metade não ratificada daquela decisão. Um item morto por uma decisão que ninguém leu é pior que um item bloqueado.
+
 
 ## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [x]
 
@@ -2603,6 +2610,19 @@ dod:
 > transit) e que a medição estreitou: o `delete` do operator é decisão deliberada e documentada, e
 > proibi-lo seria um teste anulando uma decisão em vez de guardá-la. O que ficou guardado é o que
 > importa: `delete` no prefixo que o `api` cria reprova, porque o `api` não tem caminho de shredding.
+
+> **Medição de 2026-08-16 — o ciclo em volta da seam também não existe, e duas peças já o supõem pronto.** Ver `MEET-ASYNC-AMENDMENT-2026-08-16-crypto-shredding-ownership` (**pending ratification**).
+>
+> Medido ponta a ponta: o `DELETE /api/v1/tenants/{id}` grava `tenants_pending_deletion` (a ponte foi religada nesta sessão pelo `B-117`, depois de 7 meses sem implementação) e o restore o lê — **`GetPendingDeletion` tem um único chamador, e é o restore**. Não há loop de fundo, CronJob ou reconcile que acorde em T+90. O apagamento não tem ator.
+>
+> **E duas peças já construídas supõem que ele funciona.** (a) O CronJob de Day-30 (`cronjob-day30-verify.yaml:16-19`) exclui linhas de tenants soft-deleted porque *"crypto-shredded tenants intentionally have un-decryptable ciphertexts"* — filtra por uma consequência que nunca acontece; os ciphertexts continuam decifráveis. (b) A policy concede `delete` em `transit/keys/tenant-+` a duas roles, e o `api` cria `loopzero-tenants-<id>` — **quem está autorizado a apagar está autorizado sobre um espaço de nomes que ninguém preenche**.
+>
+> **A pergunta do item estava mal posta**, e não por culpa de quem a escreveu: não é *"de quem é o DELETE"*, é *"o apagamento não existe; construímos, quando, e onde"*.
+>
+> **Decisão proposta, três partes:** (1) não é construído agora — a obrigação se prende a dado de titular real e a plataforma está em pre-release; o gatilho declarado é **o primeiro cliente externo**, um evento e não uma data, porque data passa sozinha. (2) Quando for, é **operator-side** — o gatilho é temporal e não uma requisição, a autoridade do ciclo de vida é o Tenant CR, a policy já concede `delete` ao operator, e é irreversível. (3) A divergência de nome é reconciliada **na construção**: apontar a policy para `loopzero-tenants-*` agora concederia poder destrutivo real sobre as chaves que guardam dado, em troca de nada.
+>
+> **O item continua aberto de propósito.** Fechá-lo exige construir o shredder; o que este registro entrega é parar de supor que ele existe.
+
 
 ## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [x]
 
@@ -5183,3 +5203,20 @@ dod:
   - existe um caminho que roda as suítes de `.claude/skills/*/tests/` num gate, senão a próxima vermelha também espera alguém tropeçar nela
 
 > Registrado 2026-08-16 ao fechar o `B-003`/`B-004`.
+
+## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: alta — os dois jobs são o caminho de verificação e de migração das chaves de criptografia. Habilitá-los não faz o trabalho **e não falha de forma legível**: sobe um segundo servidor HTTP que roda até o `activeDeadlineSeconds` de 2h matá-lo, e o Job aparece como falha de timeout em vez de "comando não existe".
+evidence: medido 2026-08-16. `infra/helm/loopzero-api/templates/cronjob-day30-verify.yaml:54-59` invoca `/loopzero-api secret verify --batch-size=100 --filter-deleted-tenants`, e `cronjob-day60-aes-delete.yaml:58-63` invoca `/loopzero-api secret migrate-to-transit --dry-run=... --shred-aes-key=...`. **O binário não despacha subcomando nenhum:** `grep -rn "os.Args" api/cmd/*.go` (fora de teste) não retorna nada, e `func main()` (`api/cmd/main.go:40-48`) vai direto de `silenceKlog()` para `config.Load()` e o servidor. `migrate-to-transit` não é implementado em lugar nenhum de `api/` — zero ocorrências fora do gate que confere o template.
+why_now: encontrado ao medir o ciclo de vida de exclusão de tenant para o `B-075`. O gate `day30-day60-cronjobs` **passa** sobre os dois: ele casa regex no YAML renderizado — nome do CronJob, `schedule`, `concurrencyPolicy: Forbid`, `--dry-run=true`, `--shred-aes-key=false`, e a presença literal da string `migrate-to-transit`. Ele confere **a grafia do comando**, nunca que o binário sabe executá-lo. É a classe de defeito que esta sessão encontrou cinco vezes, na forma mais completa: um gate verde sobre um comando inexistente.
+status: triaged
+dod:
+  - está decidido se os dois jobs devem existir — se sim, o subcomando existe e um teste o executa; se não, os templates e o gate saem juntos
+  - o gate deixa de afirmar a presença de uma string e passa a afirmar que o comando roda (por exemplo, `--help` do subcomando sai 0), ou declara explicitamente que só confere a forma do manifesto
+  - os defaults de segurança do Day 60 (`--dry-run=true`, `--shred-aes-key=false`) continuam guardados por asserção depois da mudança — eles são a única coisa entre um engano e uma destruição irreversível
+
+> Registrado 2026-08-16 ao medir o ciclo de exclusão de tenant para o `B-075`.
