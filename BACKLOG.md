@@ -11,14 +11,14 @@ provar ou matar é trabalho do `/discover`.
 
 ## Itens abertos
 
-**85 abertos** — 66 `triaged` · 19 `planned`. Derivado deste arquivo em 2026-08-16; refresque com
+**86 abertos** — 67 `triaged` · 19 `planned`. Derivado deste arquivo em 2026-08-16; refresque com
 `python3 .claude/skills/backlog-review/scripts/render_open_index.py` após qualquer mudança de
 `status`. A ordem é a que o loop usa para escolher trabalho (`cycle-maintenance § SELECT`):
 `triaged` antes de `planned`, e do mais antigo para o mais novo dentro de cada faixa. **🔒**
 marca item com `blocked_by` declarado — o bloqueio está no corpo do item, não aqui; **↑**
 marca severidade condicional, cujo termo-cabeça subdeclara o item.
 
-### TRIAGED (66) — Medidos — prontos para `/to-plan`
+### TRIAGED (67) — Medidos — prontos para `/to-plan`
 
 | # | sev | item |
 |---|---|---|
@@ -88,6 +88,7 @@ marca severidade condicional, cujo termo-cabeça subdeclara o item.
 | **B-116** 🔒 | **alta** | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez |
 | **B-118** 🔒 | **alta** | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 *(loopzero-rag)* |
 | **B-119** 🔒 | média | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado |
+| **B-120** | **alta** | 23 invocações de script nas skills não resolvem no layout em que elas rodam |
 
 ### PLANNED (19) — Com plano escrito — aguardam `/implement`
 
@@ -4911,3 +4912,20 @@ dod:
   - as 7 dos charts publicados têm caminho declarado: quem preenche `image.digest` e quando (um digest fixado à mão vira mentira na próxima publicação)
 
 > Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
+
+## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: alta — as skills afetadas são o caminho crítico do pipeline (`release`, `implement`, `acceptance`, `cycle-goal`), e o modo de falha é o agente improvisar um caminho em vez de reprovar
+evidence: medido 2026-08-16. `grep -rnP '(?<![\w./"$])skills/[a-z-]+/scripts/[\w.]+\.(py|sh)' .claude/skills/*/SKILL.md` devolve **23** invocações em 6 skills — `auto-plan` (6), `release` (5), `implement` (5), `cycle-goal` (3), `acceptance` (3), `arch-check` (1). Prova de que não resolvem: `skills/auto-plan/scripts/select_next_milestone.py` não existe, e `.claude/skills/auto-plan/scripts/select_next_milestone.py` existe. Outras **10** invocações no mesmo corpo já usam `.claude/skills/…` — alguém corrigiu essas dez e a divisão ficou.
+why_now: descoberto ao escrever a instrução de re-render do índice de itens abertos nas skills de backlog. Copiei a forma `skills/…` da linha que já estava em `backlog-review/SKILL.md` e ela falhou na primeira execução. Quatro arquivos (`backlog-init`, `backlog-item`, `backlog-review`, `discover-execute`) foram corrigidos naquela fatia com a mesma regra do `hooks/lib/detect-layout.sh`; as 23 restantes ficaram, e ficam registradas em vez de consertadas junto — mexer em `release` e `implement` de carona numa fatia de backlog é o tipo de escopo que esconde um erro dentro do outro.
+status: triaged
+dod:
+  - zero invocações de script em `.claude/skills/*/SKILL.md` que não resolvam no layout plugin, medido pelo mesmo grep da evidência
+  - a forma escolhida funciona nos **dois** layouts (plugin e standalone), provada por execução em cada um — o kit é distribuído para consumidores que usam a raiz
+  - existe um gate que reprova uma invocação nova na forma quebrada, senão a divisão volta pelo mesmo caminho por que chegou
+
+> Registrado 2026-08-16 ao instrumentar as skills de backlog para renderizar o índice de itens abertos.

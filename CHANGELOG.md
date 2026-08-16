@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **O registro de manutenção passou a mostrar, no topo, quais itens estão abertos.** Eram 86 itens abertos entre 120 blocos, e a única forma de saber quais era ler o arquivo inteiro. O índice sai na ordem em que o trabalho é escolhido — medido antes de não-medido, e antigo antes de recente — e marca os que estão travados esperando decisão. (B-103)
+- **As ferramentas que criam ou alteram o registro passaram a atualizar esse índice sozinhas.** Ele é derivado dos itens, nunca digitado: um índice escrito à mão fica errado no primeiro item que muda de estado, e quem lê o resumo confia nele e nunca chega à divergência. A revisão do registro ganhou uma verificação que acusa o índice desatualizado — é ela que pega a edição feita à mão, que nenhuma ferramenta cobre. (B-103)
+
+### Fixed
+- **Quatro ferramentas passaram a encontrar os próprios scripts nos dois formatos de instalação.** Elas apontavam para um caminho que só existe quando o ecossistema está na raiz do projeto; onde ele está instalado como plugin — o caso deste repositório — a instrução falhava ao ser seguida. Outras 23 invocações têm o mesmo defeito e ficaram registradas para correção própria, porque estão em ferramentas do caminho crítico e consertá-las de carona esconderia um erro dentro do outro. (B-120)
+
 ## [0.76.5] - 2026-08-16
 
 ### Fixed
