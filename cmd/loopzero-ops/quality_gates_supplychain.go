@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterimagepolicymode"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dockerfilemirror"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ldflagsymbols"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nopulumiinlinesecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagedigests"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagetags"
@@ -82,6 +83,44 @@ func runNoPulumiInlineSecrets(args []string) int {
 	}
 	fmt.Fprint(os.Stderr, nopulumiinlinesecrets.FormatOutcome(outcome))
 	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runLdflagSymbols refuses a `-X` injection that points at a symbol which does
+// not exist.
+//
+// `-X` over a missing path or symbol is a no-op that exits 0 — the linker does
+// not warn — so the build succeeds and the binary keeps its default. Measured
+// (B-053): the api Dockerfile injected into the wrong org AND a package the
+// decomposition had moved, and the engine answered `{"version":"dev"}` live.
+//
+// It RESOLVES rather than matching spelling: the import path against the go.mod
+// files on disk, the symbol against the package AST. A grep for the wrong org
+// would catch one typo; resolving catches the package move that a legitimate
+// refactor introduces.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-16-ldflag-symbol-resolution
+func runLdflagSymbols(args []string) int {
+	fs := flag.NewFlagSet("ldflag-symbols", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := ldflagsymbols.Check(ldflagsymbols.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ldflag-symbols: %v\n", err)
+		return 1
+	}
+	fmt.Println(out.Summary())
+	if !out.Pass {
+		for _, v := range out.Violations {
+			fmt.Printf("  %s:%d — `-X %s.%s`: %s\n", v.File, v.Line, v.ImportPath, v.Symbol, v.Reason)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, ldflagsymbols.ActionableFix)
 		return 1
 	}
 	return 0

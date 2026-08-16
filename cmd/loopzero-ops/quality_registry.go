@@ -89,6 +89,7 @@ var gateRegistry = []gateSpec{
 	{"helmfile-context-parity", "A task que invoca um helmfile aponta para o cluster que o helmfile declara (B-044).", runHelmfileContextParity},
 	{"domain-sink-purity", "Ratchet: the services DAG sink must not grow its persistence surface (B-049).", runDomainSinkPurity},
 	{"routes-acyclic", "Deny-by-default fence over api/internal/routes subpackages: registered families only, no sibling edges (B-041).", runRoutesAcyclic},
+	{"ldflag-symbols", "Refuses a `-X` ldflag injection whose import path or symbol does not resolve on disk — the linker accepts it silently and the binary keeps its default (B-053).", runLdflagSymbols},
 	{"silent-surface", "Ratchet: refuses a NEW router surface guarded by `if cfg.X != nil` that does not report whether it was registered (B-104). Baseline may fall, never rise.", runSilentSurface},
 	{"status-writer-contract", "Refuses a bare Status().Update anywhere in operators production code, including the local-alias and SubResource spellings (ADR 2026-08-12-status-writer-contract, B-085).", runStatusWriterContract},
 	{"helm-drift", "Detects drift between rendered Helm charts and the deployed state.", runHelmDrift},

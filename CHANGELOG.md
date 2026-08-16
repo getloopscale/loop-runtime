@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.76.4] - 2026-08-16
+
+### Fixed
+- **O motor voltou a saber dizer qual versão está no ar.** O endereço que responde "que versão é esta?" respondia `dev` em **toda** imagem construída, porque a instrução que grava a versão no binário apontava para um lugar que não existe — o nome da organização estava errado por uma letra, e o trecho de código havia mudado de lugar numa reorganização. A ferramenta que grava aceita um destino inexistente **em silêncio**: o build passa e o valor padrão fica. Na prática, duas imagens diferentes eram indistinguíveis em qualquer triagem de incidente. Uma verificação nova resolve esses destinos contra o código real, então a próxima reorganização reprova em vez de quebrar calada. (B-053)
+
 ## [0.76.3] - 2026-08-16
 
 ### Fixed
