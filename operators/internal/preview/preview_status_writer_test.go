@@ -229,7 +229,7 @@ func TestPreviewStatusPatch_ASnapshotTakenBeforeTheFinalizerLeaksTheVersion(t *t
 		ObjectMeta: metav1.ObjectMeta{Name: "pr-42", Namespace: "loopzero-system", ResourceVersion: "12345"},
 	}
 	obj := stale.DeepCopy()
-	obj.ObjectMeta.ResourceVersion = "12346" // the finalizer Update bumped it
+	obj.ResourceVersion = "12346" // the finalizer Update bumped it
 	obj.Status.Phase = loopzerov1.PreviewPhaseActive
 
 	data, err := client.MergeFrom(stale).Data(obj)

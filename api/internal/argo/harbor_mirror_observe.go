@@ -129,8 +129,8 @@ exit 0
 			forge.Env{Name: "ERROR_MSG", Value: "{{inputs.parameters.error-msg}}"},
 			// Loki + Pushgateway URLs — operator overrides via ConfigMap
 			// at activation. Defaults assume in-cluster service names.
-			forge.Env{Name: "LOKI_PUSH_URL", Value: fmt.Sprintf("http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push")},
-			forge.Env{Name: "PUSHGATEWAY_URL", Value: fmt.Sprintf("http://prometheus-pushgateway.monitoring.svc.cluster.local:9091")},
+			forge.Env{Name: "LOKI_PUSH_URL", Value: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"},
+			forge.Env{Name: "PUSHGATEWAY_URL", Value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091"},
 		},
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "10m", Memory: "32Mi"},

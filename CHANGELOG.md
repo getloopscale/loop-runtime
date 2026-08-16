@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`task lint` voltou a passar limpo, e no caminho apareceram seis defeitos reais.** O maior: o servidor **entrava em pânico ao subir sem banco de dados** — o modo que o código documenta como degradação graciosa registrava o aviso e morria em seguida. Também corrigidos: quatro comentários de documentação grudados no símbolo errado (quem lia recebia o contrato de outra coisa), uma resposta de erro montada com um formatador que não é codificador JSON, uma escrita de stream cuja falha era ignorada, e treze trechos de código morto — entre eles quatro tipos que ninguém constrói e um comentário prometendo um travamento sobre uma implementação que usa outro. (B-009)
+
+### Changed
+- **Oito itens de manutenção que já estavam entregues passaram a dizer isso.** A re-medição dos 19 itens da faixa `planned` mostrou que oito tinham o trabalho feito e verificado, e nenhum tinha sido fechado — o registro apontava trabalho disponível que não existia. Cada um foi fechado com a prova de cada critério escrita no bloco, não com um "verificado" genérico. (B-006, B-007, B-010, B-011, B-012, B-051, B-071, B-084)
+
 ### Added
 - **O registro de manutenção passou a mostrar, no topo, quais itens estão abertos.** Eram 86 itens abertos entre 120 blocos, e a única forma de saber quais era ler o arquivo inteiro. O índice sai na ordem em que o trabalho é escolhido — medido antes de não-medido, e antigo antes de recente — e marca os que estão travados esperando decisão. (B-103)
 - **As ferramentas que criam ou alteram o registro passaram a atualizar esse índice sozinhas.** Ele é derivado dos itens, nunca digitado: um índice escrito à mão fica errado no primeiro item que muda de estado, e quem lê o resumo confia nele e nunca chega à divergência. A revisão do registro ganhou uma verificação que acusa o índice desatualizado — é ela que pega a edição feita à mão, que nenhuma ferramenta cobre. (B-103)

@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package repositories serves the project↔repository link: connecting a GitHub
+// installation to a project and answering what a project is connected to.
+//
+// Every collaborator it needs is declared here as an interface it owns
+// (RepositoryStore, and the narrow structs beside it) rather than imported from the
+// persistence layer — the DIP boundary that keeps a route family from depending on
+// how the link happens to be stored.
 package repositories
 
 import (
@@ -451,6 +458,7 @@ func (h *RepositoryHandler) triggerConnectThenDeploy(ctx context.Context, tenant
 	repoFull := req.Repo
 	instID := req.InstallationID
 	deployer := h.autoDeployer
+	//nolint:gosec // G118: o contexto destacado e o proposito, nao descuido — ver abaixo
 	go func() {
 		// Detached background context (HTTP request ctx may be
 		// cancelled the moment Connect returns 200 to client).

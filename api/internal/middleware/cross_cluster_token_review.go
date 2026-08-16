@@ -24,8 +24,8 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -35,10 +35,10 @@ import (
 // TokenReviewResult is the validated identity returned by a successful review.
 type TokenReviewResult struct {
 	Authenticated bool
-	Username      string   // e.g. "system:serviceaccount:external-secrets:eso"
+	Username      string // e.g. "system:serviceaccount:external-secrets:eso"
 	UID           string
 	Groups        []string
-	CellID        string   // cell that authenticated this token
+	CellID        string // cell that authenticated this token
 }
 
 // CrossClusterTokenReviewer is the interface T4.2 middleware needs to
@@ -214,5 +214,15 @@ func extractBearerToken(r *http.Request) (string, error) {
 func defaultCrossClusterFailureWriter(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_, _ = fmt.Fprintf(w, `{"error":"auth_failed","code":"AUTH_TOKEN_INVALID","detail":%q}`, err.Error())
+	// json.Encoder e nao `%q`: o verbo do fmt produz uma string entre aspas no estilo
+	// Go, que NAO e JSON. Um caractere de controle em err.Error() vira `\x00`, que
+	// nenhum parser JSON aceita — o cliente receberia 401 com corpo ilegivel, e o
+	// motivo real da recusa se perderia exatamente quando ele importa. E o detalhe vem
+	// de entrada de rede (formato do token), entao a codificacao precisa ser a de
+	// verdade, nao uma que se parece com ela (gosec G705).
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":  "auth_failed",
+		"code":   "AUTH_TOKEN_INVALID",
+		"detail": err.Error(),
+	})
 }

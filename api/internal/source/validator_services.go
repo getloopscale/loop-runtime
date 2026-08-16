@@ -7,6 +7,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -125,7 +126,11 @@ func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 		// uploading user). Legacy Field/Message scalars are set from the first
 		// leaf for backward-compat with consumers that haven't migrated to the
 		// Errors slice.
-		if asValidErr, ok := err.(*jsonschema.ValidationError); ok {
+		// errors.As e nao assercao direta: um erro embrulhado em qualquer ponto da
+		// cadeia derrubaria a assercao, e o usuario receberia uma mensagem generica
+		// no lugar da lista de erros por campo que esta funcao existe para produzir.
+		var asValidErr *jsonschema.ValidationError
+		if errors.As(err, &asValidErr) {
 			fieldErrors := flattenJSONSchemaCauses(asValidErr)
 			if len(fieldErrors) == 0 {
 				// Defensive: top-level error with no Causes (rare — e.g.,
@@ -192,4 +197,3 @@ func flattenJSONSchemaCauses(ve *jsonschema.ValidationError) []FieldError {
 	walk(ve)
 	return out
 }
-

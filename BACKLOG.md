@@ -7,115 +7,6 @@ número dele para sempre, porque o número é o rastro.
 Um item aqui é **hipótese, não compromisso**. Ele nasce com evidência fraca ou nenhuma por desenho;
 provar ou matar é trabalho do `/discover`.
 
-<!-- OPEN-INDEX:BEGIN — derivado; não editar à mão -->
-
-## Itens abertos
-
-**86 abertos** — 67 `triaged` · 19 `planned`. Derivado deste arquivo em 2026-08-16; refresque com
-`python3 .claude/skills/backlog-review/scripts/render_open_index.py` após qualquer mudança de
-`status`. A ordem é a que o loop usa para escolher trabalho (`cycle-maintenance § SELECT`):
-`triaged` antes de `planned`, e do mais antigo para o mais novo dentro de cada faixa. **🔒**
-marca item com `blocked_by` declarado — o bloqueio está no corpo do item, não aqui; **↑**
-marca severidade condicional, cujo termo-cabeça subdeclara o item.
-
-### TRIAGED (67) — Medidos — prontos para `/to-plan`
-
-| # | sev | item |
-|---|---|---|
-| **B-001** 🔒 | — | Os quatro clusters da plataforma têm nomes que mentem sobre o que são |
-| **B-002** | — | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso |
-| **B-005** | — | Unificar cell e cluster em 1:1, aposentando `cell-default` |
-| **B-014** | média | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento |
-| **B-015** | baixa | Dois charts apontam para versões que não existem mais no upstream |
-| **B-016** | **alta** | O token que puxa as imagens de plataforma do GHCR está inválido |
-| **B-019** | média | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado |
-| **B-021** | **alta** | O webhook do GitHub está desligado: falta o segredo HMAC |
-| **B-022** | baixa ↑ | O caminho do motor depende do painel estar de pé |
-| **B-024** | média | Os seeds herdam o contexto do kubectl e culpam o recurso errado |
-| **B-025** | média | Três hosts públicos apontam para o vazio |
-| **B-027** | baixa ↑ | O diagnóstico do CLI manda verificar um endereço que não existe *(loopzero-cli)* |
-| **B-028** 🔒 | **p0** | 17 portas alcançáveis da internet fora de qualquer lista |
-| **B-029** | média | Dois caminhos para o mesmo endpoint do Stripe |
-| **B-033** | — | O teto de custo está desligado, e o portão passa direto quando isso acontece *(loopzero-cloud)* |
-| **B-034** | — | A cobrança por uso não tem para onde reportar *(loopzero-cloud)* |
-| **B-035** | — | O segredo que verifica pagamentos não existia no ambiente |
-| **B-036** | — | Os seeds de cobrança pulam sem credencial e a corrente reporta verde |
-| **B-037** | — | O painel monta os dois segredos de cobrança como opcionais |
-| **B-038** | — | Nenhuma camada de cobrança pode degradar em silêncio |
-| **B-039** | — | O painel não tem checkout canônico no droplet |
-| **B-054** | média | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres |
-| **B-056** | média | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos |
-| **B-057** | média | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio |
-| **B-058** | média | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade |
-| **B-059** | média | O transporte carrega o schema de payload de cada domínio e faz body-snooping |
-| **B-060** | média | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos |
-| **B-061** | baixa | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` |
-| **B-062** | média | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio |
-| **B-063** | baixa | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace |
-| **B-064** | média | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução |
-| **B-065** | baixa | Um contexto delimitado vazio está pré-aprovado no DAG congelado |
-| **B-066** | baixa | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates |
-| **B-067** | média | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa |
-| **B-068** | baixa | Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto |
-| **B-069** | média | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro |
-| **B-073** | baixa | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa |
-| **B-074** | média | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança |
-| **B-075** | **alta** | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou |
-| **B-078** | média | O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado |
-| **B-079** | média | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites |
-| **B-080** | **alta** | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 |
-| **B-081** | média | As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário |
-| **B-082** | média | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` |
-| **B-083** | média | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu |
-| **B-086** | média | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver |
-| **B-090** | média | A asserção de caixa do gate é evadível por um refactor comum |
-| **B-091** | baixa | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor |
-| **B-093** | média | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta |
-| **B-094** | média | A metade API do `find_sec_004` guarda um campo que ninguém popula |
-| **B-095** | média | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum |
-| **B-096** | média | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam |
-| **B-097** | baixa | O CLI documenta um `kubectl patch` que a nova cerca nega |
-| **B-098** | média | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum |
-| **B-100** | média | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor |
-| **B-101** | média | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push |
-| **B-102** | média | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia |
-| **B-106** | média | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica |
-| **B-109** | média | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe |
-| **B-111** | média | O mesmo controle de firewall vive em três repositórios sem dono declarado |
-| **B-112** | **alta** | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica *(loopzero-rag)* |
-| **B-113** | média | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável |
-| **B-114** | média | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis |
-| **B-116** 🔒 | **alta** | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez |
-| **B-118** 🔒 | **alta** | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 *(loopzero-rag)* |
-| **B-119** 🔒 | média | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado |
-| **B-120** | **alta** | 23 invocações de script nas skills não resolvem no layout em que elas rodam |
-
-### PLANNED (19) — Com plano escrito — aguardam `/implement`
-
-| # | sev | item |
-|---|---|---|
-| **B-003** | — | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto |
-| **B-004** | — | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado |
-| **B-006** | — | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate |
-| **B-007** | — | 4,3 MB de snapshot de helmfile que ninguém gera nem consome |
-| **B-009** | — | `task lint` está vermelho em 11 achados, nenhum deles novo |
-| **B-010** | — | A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min |
-| **B-011** | — | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre |
-| **B-012** | baixa | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa *(loopzero-promptly)* |
-| **B-040** | **alta** | O gate que garante autenticação em toda rota pública passa enumerando zero rotas |
-| **B-041** | **alta** | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" |
-| **B-042** | **alta** | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator |
-| **B-043** 🔒 | média | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só |
-| **B-048** | média | O chart guarda-chuva colapsa os quatro planos num único release Helm |
-| **B-049** | **alta** | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela |
-| **B-050** | média | O CR `Application` do ArgoCD tem três escritores em dois runtimes |
-| **B-051** | média | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram |
-| **B-052** | média | O `CLAUDE.md` aponta para cinco contratos que não existem |
-| **B-071** | **alta** | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou |
-| **B-084** | **alta** | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família |
-
-<!-- OPEN-INDEX:END -->
-
 ## Divergência declarada do `cycle-backlog.md`
 
 A regra desenha **um registro único no umbrella**, cobrindo os repositórios do ecossistema, e o
@@ -172,6 +63,151 @@ Um item que abranja dois domínios **é dois itens** (gate G3). Itens dos outros
 ecossistema (`control-plane`, `data-plane-ts`, `loopzero-db`, `infra-terraform`, `contracts-auth`,
 `frontend-dashboard`, `platform-cli`) vivem nos repos irmãos e **não são registrados aqui**, por
 consequência do escopo per-repo declarado acima.
+
+<!-- BACKLOG-INDEX:START — generated by backlog_index.py; edits here are overwritten -->
+
+## Index
+
+122 items — **Open** 69 · **In flight** 10 · **Closed** 43
+
+### Open (69)
+
+| Item | Title | Status | Severity |
+|---|---|---|---|
+| [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
+| [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso----) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `triaged` | — |
+| [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
+| [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
+| [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream----) | Dois charts apontam para versões que não existem mais no upstream | `triaged` | baixa |
+| [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido----) | O token que puxa as imagens de plataforma do GHCR está inválido | `triaged` | alta |
+| [`B-019`](#b-019--os-quatro-cronworkflows-executam-uma-imagem-cujo-registro-foi-deletado----) | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado | `triaged` | média |
+| [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac----) | O webhook do GitHub está desligado: falta o segredo HMAC | `triaged` | alta |
+| [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
+| [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
+| [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
+| [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe----) | O diagnóstico do CLI manda verificar um endereço que não existe | `triaged` | baixa ↑ |
+| [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista----) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `triaged` | P0 |
+| [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
+| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
+| [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar----) | A cobrança por uso não tem para onde reportar | `triaged` | — |
+| [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
+| [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde----) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `triaged` | — |
+| [`B-037`](#b-037--o-painel-monta-os-dois-segredos-de-cobrança-como-opcionais----) | O painel monta os dois segredos de cobrança como opcionais | `triaged` | — |
+| [`B-038`](#b-038--nenhuma-camada-de-cobrança-pode-degradar-em-silêncio----) | Nenhuma camada de cobrança pode degradar em silêncio | `triaged` | — |
+| [`B-039`](#b-039--o-painel-não-tem-checkout-canônico-no-droplet----) | O painel não tem checkout canônico no droplet | `triaged` | — |
+| [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
+| [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos----) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `triaged` | média |
+| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
+| [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
+| [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
+| [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
+| [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared----) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `triaged` | baixa |
+| [`B-062`](#b-062--o-vocabulário-do-plano-de-build-está-espalhado-por-quinze-pacotes-incluindo-o-sink-de-domínio----) | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio | `triaged` | média |
+| [`B-063`](#b-063--um-módulo-de-infraestrutura-depende-de-uma-suíte-de-testes-e-tools-está-fora-do-workspace----) | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace | `triaged` | baixa |
+| [`B-064`](#b-064--o-control-plane-alcança-o-plano-de-secrets-por-um-nome-dns-reescrito-em-tempo-de-resolução----) | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução | `triaged` | média |
+| [`B-065`](#b-065--um-contexto-delimitado-vazio-está-pré-aprovado-no-dag-congelado----) | Um contexto delimitado vazio está pré-aprovado no DAG congelado | `triaged` | baixa |
+| [`B-066`](#b-066--três-suítes-de-invariante-são-testes-go-comuns-invisíveis-ao-oráculo-de-gates----) | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates | `triaged` | baixa |
+| [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
+| [`B-068`](#b-068--um-ponto-de-variação-de-strategy-que-não-varia-mais-mantido-por-construir-e-descartar-um-objeto----) | Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto | `triaged` | baixa |
+| [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
+| [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa----) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `triaged` | baixa |
+| [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
+| [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou----) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `triaged` | alta |
+| [`B-078`](#b-078--o-gate-de-paridade-de-contexto-não-enxerga-scripts-e-não-pode-comparar-quando-um-lado-é-parametrizado----) | O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado | `triaged` | média |
+| [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
+| [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
+| [`B-081`](#b-081--as-277-mensagens-de-erro-autoradas-nos-handlers-não-têm-gate-de-vocabulário----) | As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário | `triaged` | média |
+| [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
+| [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu----) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `triaged` | média |
+| [`B-086`](#b-086--um-documento-de-decisão-que-registra-a-ausência-de-um-adr-faz-esse-adr-resolver----) | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver | `triaged` | média |
+| [`B-090`](#b-090--a-asserção-de-caixa-do-gate-é-evadível-por-um-refactor-comum----) | A asserção de caixa do gate é evadível por um refactor comum | `triaged` | média |
+| [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor----) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `triaged` | baixa |
+| [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta----) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `triaged` | média |
+| [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
+| [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
+| [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam----) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `triaged` | média |
+| [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega----) | O CLI documenta um `kubectl patch` que a nova cerca nega | `triaged` | baixa |
+| [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
+| [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
+| [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push----) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `triaged` | média |
+| [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
+| [`B-106`](#b-106--215-dos-582-caminhos-do-inventário-de-testes-não-existem-e-o-gate-que-o-lê-nunca-verifica----) | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica | `triaged` | média |
+| [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe----) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `triaged` | média |
+| [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
+| [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
+| [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
+| [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
+| [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
+| [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18----) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `triaged` | alta |
+| [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
+| [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam----) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `triaged` | alta |
+| [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
+| [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
+
+### In flight (10)
+
+| Item | Title | Status | Severity |
+|---|---|---|---|
+| [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto----) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `planned` | — |
+| [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado----) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `planned` | — |
+| [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas----) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `planned` | alta |
+| [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret----) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `planned` | alta |
+| [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator----) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `planned` | alta |
+| [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
+| [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
+| [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela----) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `planned` | alta |
+| [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
+| [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem----) | O `CLAUDE.md` aponta para cinco contratos que não existem | `planned` | média |
+
+### Closed (43)
+
+| Item | Title | Status | Severity |
+|---|---|---|---|
+| [`B-006`](#b-006--o-oráculo-do-conjunto-de-gates-vive-num-arquivo-com-data-no-nome-e-é-mutado-a-cada-gate---x) | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate | `shipped` | — |
+| [`B-007`](#b-007--43-mb-de-snapshot-de-helmfile-que-ninguém-gera-nem-consome---x) | 4,3 MB de snapshot de helmfile que ninguém gera nem consome | `shipped` | — |
+| [`B-008`](#b-008--task-testunit-está-vermelho-por-drift-entre-repositórios---x) | `task test:unit` está vermelho por drift entre repositórios | `shipped` | — |
+| [`B-009`](#b-009--task-lint-está-vermelho-em-11-achados-nenhum-deles-novo---x) | `task lint` está vermelho em 11 achados, nenhum deles novo | `shipped` | — |
+| [`B-010`](#b-010--a-borda-do-app-dev-alcançava-o-loopzero-cloud-por-um-port-forward-que-reiniciava-18min---x) | A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min | `shipped` | — |
+| [`B-011`](#b-011--o-reconciliador-do-loopzero-cloud-reiniciava-o-deployment-a-cada-5-minutos-sempre---x) | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre | `shipped` | — |
+| [`B-012`](#b-012--a-imagem-do-mcp-do-loopzero-promptly-nunca-constrói-os-pacotes-que-ela-executa---x) | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa | `shipped` | baixa |
+| [`B-013`](#b-013--o-nó-agente-da-cell-2-está-notready-desde-2026-07-23-por-token-não-autorizado---x) | O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado | `shipped` | baixa |
+| [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
+| [`B-018`](#b-018--a-borda-alcança-kratos-e-hydra-por-encaminhamento-de-porta-que-não-sobrevive-a-um-rebuild---x) | A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild | `shipped` | média |
+| [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
+| [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
+| [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
+| [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
+| [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
+| [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
+| [`B-044`](#b-044--em-qual-cluster-um-chart-aterrissa-é-uma-flag-de-linha-de-comando-não-uma-declaração---x) | Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração | `shipped` | alta |
+| [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
+| [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
+| [`B-047`](#b-047--a-task-que-viola-a-fronteira-secretscore-está-shipada-e-o-gate-que-a-nomeia-valida-o-violador---x) | A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador | `shipped` | alta |
+| [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
+| [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
+| [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
+| [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
+| [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
+| [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
+| [`B-076`](#b-076--21-divergências-entre-chart-publicado-e-de-bootstrap-estão-aprovadas-sem-que-ninguém-tenha-medido-por-quê---x) | 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê | `shipped` | média |
+| [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
+| [`B-084`](#b-084--a-cerca-routes-acyclic-não-vigia-o-pacote-pai-e-o-risco-cresce-a-cada-família---x) | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família | `shipped` | alta |
+| [`B-085`](#b-085--dez-arquivos-escrevem-status-fora-do-contrato-em-28-pontos---x) | Dez arquivos escrevem `.status` fora do contrato, em 28 pontos | `shipped` | alta |
+| [`B-087`](#b-087--task-qualityall-aborta-no-primeiro-passo-contra-um-diretório-que-não-existe-desde-o-m9---x) | `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9 | `shipped` | alta |
+| [`B-088`](#b-088--os-testes-de-cmdloopzero-ops-e-de-tools-não-são-rodados-por-nenhuma-task---x) | Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task | `shipped` | alta |
+| [`B-089`](#b-089--a-mesma-regra-de-env-reservada-tem-uma-terceira-implementação-com-um-terceiro-conjunto---x) | A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto | `shipped` | alta |
+| [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
+| [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
+| [`B-103`](#b-103--43-itens-estão-raw-carregando-evidência-medida-e-o-loop-os-trata-como-não-medidos---x) | 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos | `shipped` | média |
+| [`B-104`](#b-104--o-webhook-do-github-se-desliga-sozinho-em-silêncio-e-optional-true-é-o-que-permite---x) | O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite | `shipped` | alta |
+| [`B-105`](#b-105--o-application_controller-ancora-a-base-depois-de-um-re-fetch-e-pula-o-sumário-em-retorno-antecipado---x) | O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado | `shipped` | média |
+| [`B-107`](#b-107--o-checkbox-do-título-e-o-campo-status-são-o-mesmo-fato-e-discordavam-em-23-itens---x) | O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens | `shipped` | média |
+| [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
+| [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
+| [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
+| [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
+
+<!-- BACKLOG-INDEX:END -->
 
 ## Items
 
@@ -368,7 +404,7 @@ conjunto de `UPDATE`s e não exige janela de indisponibilidade. Ambas as mediç�
 
 > Registrado 2026-08-09 a partir da decisão do CTO sobre D2 da opportunity de `B-001` (slug: `cell-cluster-unification`).
 
-## B-006 — O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate   [ ]
+## B-006 — O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate   [x]
 
 domain: engine-go
 repo: loopzero
@@ -376,7 +412,7 @@ suggested_mode: review
 source: discover-review
 evidence: `cmd/loopzero-ops/quality_registry_test.go:700` fixa o oráculo do `TestOracle_MatchesFrozenBaseline` em `docs/operations/baselines/2026-07-02-m9-gateset.before`, e o doc-comment em `:697-698` instrui *"Re-freeze the baseline via `loopzero-ops quality --list` when gates are consciously added/wired"*. Mas `docs/README.md:16` classifica `operations/baselines/` como **audit trail — "History. Preserved indefinitely. Never edited to match present state"**. Encontrado em 2026-08-09 ao adicionar o gate `cluster-rename-guard` (B-001 T0.1): o teste falhou com `got 116 lines, baseline 115`, e a correção que ele mesmo instrui exige editar um registro que a regra manda preservar.
 why_now: as duas regras se contradizem hoje, e a contradição foi exercida — não é teórica. O nome do arquivo (`2026-07-02-...before`) afirma ser o retrato do conjunto de gates naquela data; ele já não é, porque cada gate novo o reescreve. Quem ler `.before` esperando o estado de julho encontra o de agosto, e a data no nome torna isso especialmente enganoso.
-status: planned
+status: shipped
 resolved_in: o oráculo passou para `cmd/loopzero-ops/testdata/gateset.frozen`, que declara ser vivo; o registro datado voltou ao conteúdo do commit 46c0a72d (70 gates); e a ausência do oráculo deixou de ser skip — virou falha, porque mover o caminho fez o teste passar por não rodar
 dod:
   - o oráculo do conjunto de gates vive num caminho que declara ser vivo, não num com data no nome
@@ -385,7 +421,10 @@ dod:
 
 > Registrado 2026-08-09 durante a implementação de `B-001` T1.1 (slug: `gateset-oracle-in-dated-baseline`).
 
-## B-007 — 4,3 MB de snapshot de helmfile que ninguém gera nem consome   [ ]
+> **Fechado 2026-08-16** — DoD conferido bala a bala na re-medição do loop Squad. (1) O oráculo vive em `cmd/loopzero-ops/testdata/gateset.frozen`, caminho que declara ser vivo. (2) `docs/operations/baselines/2026-07-02-m9-gateset.before` tem 75 linhas e o cabeçalho original (`frozen 2026-07-02`, `MEET-2026-07-02-001`) — o registro datado voltou a ser registro. (3) `TestOracle_MatchesFrozenBaseline` e `TestOracle_PathIsNotAuditTrail` existem em `cmd/loopzero-ops/quality_registry_test.go`, e o segundo nomeia o `B-006` no comentário: a proteção não se perdeu na mudança, ganhou uma segunda.
+
+
+## B-007 — 4,3 MB de snapshot de helmfile que ninguém gera nem consome   [x]
 
 domain: engine-go
 repo: loopzero
@@ -393,7 +432,7 @@ suggested_mode: review
 source: discover-review
 evidence: `infra/tests/snapshots/helmfile-drill-phase1.yaml` (2,1 MB) e `helmfile-standalone-multi-phase1.yaml` (2,2 MB). Medido em 2026-08-09: `git grep -l "infra/tests/snapshots"` retorna **apenas documentos históricos** (`docs/plans/completed/2026-05-20-*`, `docs/scripts-audit/2026-05-2*`, `docs/wiki/*`) — nenhum teste, gate, task ou script os lê, e nenhum os regenera. As duas menções em `cmd/loopzero-ops/internal/quality/{anonymousauth,danglingdata}/check.go` são padrões genéricos de exclusão de diretório (`"/snapshots/"`), não consumo destes arquivos.
 why_now: encontrado ao executar o T4.1 do plano de rename, cujo DoD manda "regenerar os snapshots, com diff só de renomeação". Não há por onde regenerar, e não há quem consuma — então o critério, como escrito, não é executável. Eles foram corretamente deixados intocados pelo rename (são artefato gerado, e editá-los à mão faria o arquivo passar no teste mentindo sobre o sistema), mas isso deixa neles nomes de cluster que já não existem.
-status: planned
+status: shipped
 resolved_in: removidos. A medição fechou a decisão do DoD: o plano que os criou (`docs/plans/completed/2026-05-20-infra-standardization-and-secrets-plan.md:686-700`) previa **cinco** snapshots `-template.yaml` mais um teste comparador; o que existe são **dois** arquivos `-phase1` e nenhum teste. Eram artefato de uma comparação pontual da Fase 1 em maio de 2026, nunca ligada a nada — 4 commits os tocaram, o último uma varredura de deleção em massa. `git log` preserva o conteúdo.
 dod:
   - está decidido se os dois arquivos têm consumidor: ou o comando que os regenera é encontrado e documentado, ou eles são removidos
@@ -401,6 +440,9 @@ dod:
   - o DoD-5 do plano de rename é corrigido para refletir a decisão
 
 > Registrado 2026-08-09 durante a execução de `B-001` T4.1 (slug: `orphaned-helmfile-snapshots`).
+
+> **Fechado 2026-08-16** — DoD conferido bala a bala. (1) Decidido: `infra/tests/snapshots/` não existe mais, e a varredura por consumidor em `.go`/`.yml`/`.sh` não retorna nada. (2) O commit `7748dedd1` preserva o conteúdo no `git log` e **cita a medição no corpo** — inclusive o plano que os criou (`2026-05-20-infra-standardization-and-secrets-plan.md:686-700`), que previa cinco `-template.yaml` mais um teste, contra os dois `-phase1` sem teste que existiam. (3) A decisão está escrita no próprio commit, que é onde a próxima pessoa a encontra.
+
 
 ## B-008 — `task test:unit` está vermelho por drift entre repositórios   [x]
 
@@ -424,7 +466,7 @@ dod:
 
 Corrigido com `stripComments` aplicado antes do regex, e teste de mesa cobrindo os cinco casos (chamada real, comentário de linha, bloco, bloco multilinha, código depois de bloco). **Adicionar a rota à lista teria sido pior que o falso positivo**: afirmaria um consumo que não existe, e o contrato passaria a mentir na direção que ninguém verifica. O comentário que descreve um bug não é o bug.
 
-## B-009 — `task lint` está vermelho em 11 achados, nenhum deles novo   [ ]
+## B-009 — `task lint` está vermelho em 11 achados, nenhum deles novo   [x]
 
 domain: engine-go
 repo: loopzero
@@ -432,7 +474,7 @@ suggested_mode: review
 source: discover-review
 evidence: `task lint` sai **201** com 11 achados, todos em `operators/`: 2 de `gosec G706` (log injection via taint analysis, em `operators/internal/reconcilehelpers/pprof.go:34` e `operators/internal/tracing/tracing.go:99`) e o restante de `staticcheck ST1000` (pacote sem comentário de pacote, em `operators/internal/environment/*.go` e vizinhos). **Nenhum dos 11 arquivos foi tocado nesta sessão** — `comm -12` entre a lista de arquivos acusados e `git diff --name-only 26ba1340..HEAD` sai vazia. Medido em 2026-08-09.
 why_now: encontrado no mesmo checklist que revelou o `B-008`. Vale registrar junto porque os dois contam a mesma história: dois comandos do `CLAUDE.md § Pre-completion checklist` — `task test:unit` e `task lint` — estão vermelhos há tempo indeterminado, e nenhum dos dois vermelhos é recente. Uma checklist que ninguém roda inteira deixa de ser checklist.
-status: planned
+status: shipped
 resolved_in: os 11 achados de `operators/` estao em ZERO. Os 2 `gosec G706` viraram VALIDACAO NA FRONTEIRA — `LOOPZERO_PPROF_ADDR` e `OTEL_EXPORTER_OTLP_ENDPOINT` passam por `net.SplitHostPort` e uma variavel malformada agora falha alto em vez de ser logada e usada; a taint analysis do gosec nao enxerga validacao (tentei logar a string crua e depois os componentes validados — acusa identico), entao ficou `//nolint:gosec` com a razao escrita, que e a convencao local (`operators/internal/constants/labels.go` ja a usa). Os `ST1000` viraram comentarios de pacote reais: `reconcilehelpers` dizia `Package shared` (nome anterior ao split de binarios), `platform` tinha comentario de TIPO colado na clausula, e `environment` nao tinha nenhum. Mais QF1008 (campo embutido redundante) e a funcao morta `safeName`. `golangci-lint run ./...` em `operators` sai **0 issues**.
 dod:
   - os 2 achados de `gosec G706` estão corrigidos ou allowlistados com sunset, conforme `code-quality-allowlist.txt`
@@ -444,7 +486,14 @@ dod:
 
 > Registrado 2026-08-09 ao rodar o checklist pós-rename (slug: `lint-red-preexisting`).
 
-## B-010 — A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min   [ ]
+> **Fechado 2026-08-16 — `task lint` sai 0.** O item media 11 achados, "todos em `operators/`". A contagem havia envelhecido nas duas direções, e a razão estava na task: ela roda `pkg`, `operators` e `api` em sequência e **para no primeiro que falha**. Parava em `operators` com 1 achado e **nunca chegava em `api`**, que tinha **63**.
+>
+> Medido e fechado por classe: **6 `SA5011`** eram um pânico real no arranque sem banco (ver `MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics` e a nota no `B-116`); **4 comentários de doc estavam grudados no símbolo errado** (`ResolveStrategy` sobre `RuntimeDescriptor`, `BranchExists` sobre `BranchNotFoundError`, `PreviewDeployer` sobre `SourceBundlePreparer`, `ActiveStreams` sobre `ServeHTTP`) — dois eram duplicata obsoleta, dois eram o doc do símbolo que ficara sem nenhum; **23 `ST1000`** eram 4 pacotes sem doc, e ganharam um que diz a fronteira que cada um guarda; **1 `errorlint`** fazia asserção direta sobre erro, que falha em erro embrulhado e degrada a lista de erros por campo para uma mensagem genérica; **1 `errcheck`** ignorava falha de escrita em SSE, e o laço seguia escrevendo num socket morto; **1 `G705`** usava `%q` como se fosse codificador JSON (um caractere de controle vira `\x00`, que nenhum parser aceita) — passou a `json.Encoder`; **13 `unused`** eram código morto de verdade, incluindo 4 tipos Traefik que nenhum renderizador monta e um `sync.Mutex` cujo comentário prometia mutex sobre uma implementação que usa CAS.
+>
+> **Prova:** `task lint` exit 0 · `pkg`=0 `operators`=0 `api`=0 · suíte `api` verde.
+
+
+## B-010 — A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min   [x]
 
 domain: engine-go
 repo: loopzero
@@ -452,7 +501,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet `loopzero-e2e-runner` (165.227.121.20) em 2026-08-10. `https://app-dev.loopzero.example/engine/api/v1/health` devolveu **502** na primeira sonda e **401 AUTH_REQUIRED** (correto) minutos depois — intermitência, não quebra. Causa: `kubectl --context k3d-loopzero-mgmt -n loopzero-system get svc loopzero-cloud` era `ClusterIP`, então a borda Caddy só o alcançava por `kubectl port-forward`. A unit `loopzero-cloud-edge-13002.service` marcava **`NRestarts=126499`** com 43.476 eventos de journal em 24h — ~1,8 reinícios por minuto, e cada um é uma janela de 502 em `/engine/*`, que carrega deploy, whoami, listar projetos e status de build. O irmão `loopzero-api` nunca teve o problema: é `NodePort` publicado pelo serverlb do k3d (`docker port k3d-loopzero-mgmt-serverlb` → `30001 → 13001`), mapeamento docker comum. A unit irmã `loopzero-cloud-dataplane-authz.service` marcava `NRestarts=3`, o que isola o defeito a esta.
 why_now: encontrado ao diagnosticar o app-dev sob o mandato de deixá-lo 100% funcional. Não aparecia como "quebrado" em nenhuma verificação de pod — os 5 clusters estavam saudáveis e o dashboard devolvia 200. A intermitência só aparece sondando a superfície que os usuários usam, repetidamente.
-status: planned
+status: shipped
 resolved_in: 05b3ae08 — chart passa a suportar `service.nodePort` (condicional) e dev-public fixa 30002, escolhida porque o serverlb já a publica como host 3002 e estava livre. Aplicado no vivo por `kubectl patch`, Caddy repontado de `localhost:13002` para `localhost:3002` (9 referências), unit parada e desabilitada.
 dod:
   - `loopzero-cloud` renderiza como NodePort 30002 em dev-public — travado por `infra/tests/charts/loopzero_cloud_edge_nodeport_test.go`
@@ -464,7 +513,10 @@ dod:
 
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `app-dev-edge-portforward`).
 
-## B-011 — O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre   [ ]
+> **Fechado 2026-08-16** — DoD 4/4 conferido. (1)+(2) `infra/tests/charts/loopzero_cloud_edge_nodeport_test.go` existe com **2 testes** — o NodePort 30002 em dev-public e o ClusterIP sem `nodePort` no template. (3)+(4) verificadas no vivo em 2026-08-10 e registradas no próprio bloco. O que fechou o item não foi o `kubectl patch`: foi o chart, porque o patch sozinho seria revertido no próximo `helm upgrade` — e aí pior que antes, sem o port-forward de rede de proteção.
+
+
+## B-011 — O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre   [x]
 
 domain: engine-go
 repo: loopzero
@@ -472,14 +524,17 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet `loopzero-e2e-runner` em 2026-08-10. `kubectl get rs -l app=loopzero-cloud` mostrava **4 ReplicaSets em 19 minutos** (19m, 14m, 8m59s, 3m48s), e o diff entre dois consecutivos tinha **uma única diferença**: a anotação `kubectl.kubernetes.io/restartedAt` — a assinatura de `kubectl rollout restart`. A origem é `loopzero-cloud-reconcile.timer` (a cada 5 min) → `~/.local/bin/loopzero-cloud-reconcile.sh`, que chamava `rollout restart deploy/loopzero-cloud` **incondicionalmente**. O efeito não ficava no loopzero-cloud: `kubectl port-forward` se prende a um POD, então cada rollout matava os forwards da borda — `loopzero-cloud-edge-13002.service` com `NRestarts=126499` e `loopzero-pf-loopzero-cloud-bff.service` com `72163`. Cada morte é uma janela de 502 em `/engine/*`. Este é o **causador** do `B-010`.
 why_now: encontrado ao perseguir a intermitência do `B-010` até a origem, em vez de parar no sintoma. Nenhuma verificação de pod acusaria: os pods estavam todos `Running`, só que sempre recém-nascidos.
-status: planned
+status: shipped
 resolved_in: `loopzero-workspace@526f608` — o script passa a comparar o digest da imagem local com o do pod **antes** de reiniciar, e dispensa o rollout quando são iguais. Ele já calculava `before`/`after` para decidir `changed`; só comparava depois de reiniciar, quando a informação já não servia. Digest ausente de qualquer lado reinicia, deliberadamente o comportamento antigo. Aplicado também no fonte real do droplet (`/home/paulo/loopzero-ops/dev/loopzero-cloud/reconcile.sh`).
 dod:
   - o log diz `BFF: imagem em dia (sha256:...)` quando nada mudou — **verificado 2026-08-10**
   - o pod não troca de nome entre duas execuções do reconcile — **verificado: mesmo pod, 11 ReplicaSets antes e depois**
   - as duas units de port-forward do loopzero-cloud estão paradas e desabilitadas — **verificado**
 
-## B-012 — A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa   [ ]
+> **Fechado 2026-08-16** — DoD 3/3, todas verificadas no vivo em 2026-08-10 e registradas no bloco: o log diz `BFF: imagem em dia`, o pod não troca de nome entre dois reconciles, e as duas units de port-forward estão paradas e desabilitadas. Este item era o **causador** do `B-010`; fechar o sintoma sem a origem teria deixado os 502 voltarem.
+
+
+## B-012 — A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa   [x]
 
 domain: data-plane-ts
 repo: loopzero-promptly
@@ -488,7 +543,7 @@ source: discover-live-test
 evidence: `docker ps` no droplet mostra `loopzeropromptly_mcp` em `Restarting` — crash loop. `docker logs` dá `ERR_MODULE_NOT_FOUND` para `file:///app/node_modules/@loopzero/promptly-template/dist/index.js`. Causa: `loopzero-promptly/Dockerfile.mcp` faz `COPY . .` e vai direto a `pnpm deploy --filter ./packages/mcp --prod /app`, **sem nenhum passo de build**. `packages/template` e `packages/sdk` declaram `exports: {".": {"default": "./dist/index.js"}}`, então resolvem para um `dist/` que nada produz; os outros três exportam de `./src/*.ts` e são resolvidos pelo tsx em runtime, que é por que a falha atinge só esses dois. **O Dockerfile irmão já estava certo:** `loopzero-promptly/Dockerfile:61` tem `RUN pnpm run build` com o comentário explicando *"O build roda ANTES do `pnpm deploy` porque este stage ainda tem as devDependencies"* — a segunda imagem copiou o padrão e perdeu o passo.
 why_now: encontrado na varredura de containers do droplet sob o mandato de deixá-lo funcional.
 severity: **baixa — o container é órfão, e isso está medido.** Eu havia afirmado que ele era "a única superfície ainda degradada"; **estava errado, e a medição corrige**. Ele (a) não publica porta nenhuma (`docker port loopzeropromptly_mcp` vazio), (b) não é destino de rota no Traefik da borda MCP — os 10 `url:` do `dynamic.yml` apontam para `host.docker.internal:180XX`, `loopzero-mcp-gateway`, `loopzero-cloud`, `kratos` e `dashboard`, nenhum para ele — e (c) **não está no mapa de upstreams do gateway MCP**, que declara só `{"memory": ..., "rag": ...}`. A superfície pública `/v1/promptly/*` é servida pelo `loopzeropromptly_app` em `host.docker.internal:18083`, que está `Up (healthy)` e responde 401 como as demais. O crash-loop não degrada nada que alguém consuma.
-status: planned
+status: shipped
 resolved_in: `loopzero-promptly@aa681dc` — `Dockerfile.mcp` ganha `RUN pnpm -r build` antes do `pnpm deploy`, espelhando o que `Dockerfile:61` já fazia na imagem irmã.
 verification: **provado por execução no droplet em 2026-08-10.** A construção local falhou duas vezes por `ECONNRESET` no registry (rede desta máquina, não a mudança), então clonei o repo no droplet, apliquei o mesmo `Dockerfile.mcp` e construí lá: `EXIT=0`, e `docker run` confirmou que `/app/node_modules/@loopzero/promptly-template/dist/index.js` **existe** na imagem — o arquivo exato que faltava. Recriando o container com ela, `loopzeropromptly_mcp` ficou **`Up (healthy)`**.
 resolution_live: **resolvido no droplet em 2026-08-10.** `docker-compose.deploy.yml` ganhou `pull_policy: never` **apenas** para `promptly_mcp`, com comentário datado, a razão e o gatilho de remoção no próprio arquivo. Verificado: o container fica `Up (healthy)` **e sobrevive a uma execução do reconciliador** — antes voltava a `Restarting` em menos de 45s. Rodando a imagem construída de `loopzero-promptly@aa681dc`, ou seja, o código corrigido.
@@ -500,6 +555,9 @@ dod:
   - `loopzeropromptly_mcp` fica `Up (healthy)` no droplet, não `Restarting`
 
 > B-011 e B-012 registrados 2026-08-10 durante o diagnóstico do app-dev.
+
+> **Fechado 2026-08-16** — verificado nos dois lados. No fonte: `loopzero-promptly/Dockerfile.mcp` tem `RUN pnpm -r build` antes do `pnpm deploy`, com o comentário registrando por que a linha faltava e por que é `-r` sem filtro (um sexto pacote que passe a exportar `dist` quebraria exatamente ali). No vivo: `docker ps` no droplet mostra `loopzeropromptly_mcp` **`Up 6 days (healthy)`** — o crash-loop acabou.
+
 
 ## B-013 — O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado   [x]
 
@@ -1807,7 +1865,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [ ]
+## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1815,7 +1873,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11. A lista de prefixos de env reservados para injeção da plataforma existe duas vezes: `api/internal/services/deploycontracts/build_plan.go:23` tem `LOOPZERO_`, `KUBERNETES_`, `AWS_`, `DO_`, **`GOOGLE_`**; `tools/loopzero-dockerfile-lint/main.go:84` tem as mesmas menos `GOOGLE_`. O comentário do primeiro diz literalmente *"mirrors tools/loopzero-dockerfile-lint/main.go"*, e o atribui a *"T2.5 … closes find_sec_004 MEDIUM"* — é correção de segurança aplicada num caminho e não no outro. Nenhum dos 117 gates menciona o par (`grep -rl reservedEnvKeyPrefixes cmd/loopzero-ops/internal/quality/` → vazio). **Exploitabilidade verificada e declarada: latente.** Não existe injeção de `GOOGLE_*` em env de workload; as únicas ocorrências são `LOOPZERO_GOOGLE_CLIENT_ID/SECRET` no Kratos, que já caem sob `LOOPZERO_`. Issue #283.
 why_now: `tools/loopzero-dockerfile-lint` é módulo Go próprio e **não está no `go.work`** — não há caminho de import possível entre ele e `api/`, então manter a regra única exigiria dependência declarada ou gate. Não existe nenhuma das duas: sobrou um comentário, que é convenção que ninguém executa. Uma das duas listas já está errada e nada declara qual é a fonte de verdade.
-status: planned
+status: shipped
 resolved_in: cmd/loopzero-ops/internal/quality/envprefixparity/ — gate AST que compara reservedEnvKeyPrefixes entre os dois sitios como CONJUNTOS. Entra reprovando, por decisao do dono sobre a direcao (B-069/B-070). Fatia slice-1.
 severity: média — hoje não explorável, mas o defeito arma sozinho: no dia em que um prefixo novo passar a ser injetado, a segunda lista não acompanha e a descoberta é por incidente.
 dod:
@@ -1831,6 +1889,9 @@ dod:
 > `task quality:gates`. A decisão de direção continua **aberta e sua** — o dado A2 segue invisível
 > daqui. O que mudou é que a lacuna agora tem prazo e aparece impressa em toda execução verde, em
 > vez de invisível por o gate inteiro estar desligado.
+
+> **Fechado 2026-08-16** — DoD 3/3 conferido. (1) O gate `env-prefix-parity` está **ligado e verde**: *"the 2 find_sec_004 copies agree on case matching; 1 prefix(es) exempt with a sunset: [GOOGLE_]"*. (2) A divergência de conjunto está declarada como isenção **datada**, não como acidente. (3) O binário ELF **não está rastreado** — `git ls-files` lista só `Dockerfile`, `go.mod`, `main.go`, `main_test.go`, e `.gitignore:262` o exclui. A assimetria com `gen-service-auth-ed25519/` era acidental e acabou.
+
 
 ## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [ ]
 
@@ -2253,7 +2314,7 @@ dod:
 > Efeito colateral no `B-051`: o gate que ele criou saiu do estado desligado. A divergência
 > `GOOGLE_` virou isenção datada (2026-11-09) em vez de manter os três eixos sem guarda.
 
-## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [ ]
+## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2261,7 +2322,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 ao rodar a validação de integração da fatia `slice-1-tripwires`. `task test:unit` sai 1 com **4 reprovações**, todas em `api/tests/unit`: `TestMigration006CellsSeedRows`, `TestMigration007ActivatesOnlyCell2`, `TestMigration007AppendsAuditNote`, `TestMigration007ReferencesADRAndPlan`. A mensagem é `seed row missing "'cell-0'"`. Bissecção: em `fbb24643` (2026-08-10, *"funde as três identidades de célula"*) o teste e a migration **concordavam** — os dois falavam `cell-0`/`cell-1`. Depois disso, `75af13c7` (*"migracoes historicas voltam ao original; so a 000061 transforma"*) reescreveu `000006_cells.up.sql` de volta para `cell-1`/`cell-2`/`cell-default` (12 inserções, 12 remoções) e **não tocou o teste**, que continua exigindo a forma nova (`git diff fbb24643 HEAD -- api/tests/unit/migration_006_cells_test.go` é vazio).
 why_now: apareceu porque a fatia `slice-1-tripwires` tem `task test:unit` verde na Global DoD e **não pôde marcá-la** — o vermelho é anterior e alheio. Enquanto ele durar, toda fatia seguinte herda um sinal que não distingue "eu quebrei" de "já estava assim", que é exatamente o que a baseline pré-migração do plano existe para evitar. E o vermelho é de **teste de migration**, num repositório com migrations forward-only: o par teste↔migration é o único lugar que documenta qual forma é a correta.
-status: planned
+status: shipped
 severity: alta — não pelo defeito em si (nenhuma das duas formas está em produção por causa deste teste), mas porque uma suíte vermelha por motivo alheio é como uma suíte deixa de ser lida.
 resolved_in: os 4 testes de migracao estao verdes, e a causa era UMA. As migracoes `000006` e `000007` sao historia imutavel e falam de `cell-default`/`cell-1`/`cell-2`; a `000061` (cell_identity_unification) depois fundiu tudo em `cell-0`/`cell-1`. Os testes foram reescritos com a identidade NOVA e continuaram lendo os arquivos ANTIGOS. A correcao NAO foi editar a migracao — `docs/README.md` e explicito que reescrever um registro datado para parecer atual destroi a unica prova do que era verdade entao. Foram os testes que voltaram a ler historia, com o porque escrito no arquivo. Bonus: o `TestMigration006CellsSeedRows` listava `'cell-0'` DUAS vezes, o que duplicava a falha e escondia que a terceira entrada nunca fora verificada. `go test ./...` em `api` sai **0 FAILs**.
 dod:
@@ -2271,6 +2332,9 @@ dod:
   - se as duas formas devem coexistir por um período, isso está declarado — hoje o par apenas discorda
 
 > Registrado 2026-08-11 durante a validação de integração da fatia `slice-1-tripwires`. Bissectado até o commit; **não** causado por esta fatia, que não toca `api/`.
+
+> **Fechado 2026-08-16** — DoD 4/4. (3) `task test:unit` sai **0** na `workspace`, medido nesta sessão. (1)+(2)+(4) A decisão está escrita onde a próxima pessoa a encontra: `api/internal/db/migrations/000006_cells.up.sql:22-98` documenta por que `cell-default` + `cell-1` + `cell-2` são a forma da migration, e que `cell-default` preserva o DEFAULT das linhas existentes. As migrations são história imutável; o teste é que precisava concordar com elas, e concorda.
+
 
 ## B-072 — A policy versionada nega ao `api` a criação de chave que o `api` faz   [x]
 
@@ -3150,7 +3214,7 @@ dod:
 > "a checklist que ninguém roda inteira" eram na verdade três: os 11 de `operators`, os 4 testes de
 > migração, e estes 88 — que só ficaram visíveis quando os outros dois saíram da frente.
 
-## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [ ]
+## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3158,7 +3222,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido por experimento em 2026-08-12, na revisão da fatia slice-8. `routesacyclic.Check` (`cmd/loopzero-ops/internal/quality/routesacyclic/check.go:120-140`) itera apenas subdiretórios de `api/internal/routes`; arquivos do **pacote pai** nunca são parseados. Um `routes/zz_probe.go` importando `routes/tenants` sai `4 subpackage(s), 0 unregistered, 0 sibling edge(s)` — **PASS, exit 0**. O sentido inverso (filho → pai) **é** pego, e foi verificado: reporta `ARESTA IRMÃ version → <routes-parent>`.
 why_now: hoje é benigno — a única aresta pai → filho é `routes → routestest`, para um leaf. Mas restam **14 famílias** para sair, e nada impede que `routes/billing.go` passe a importar `routes/tenants` na próxima fatia em vez de mandar o helper compartilhado para o leaf. O gate diria verde sobre exatamente o acoplamento que o fatiamento existe para remover. O commit `8d4d0ac1` reconhece o buraco em prosa; a cerca não o fecha.
-status: planned
+status: shipped
 resolved_in: .claude/knowledge-base/plans/slice-9-parent-fence-plan.md v1.1 — os quatro sentidos da cerca estao fechados, cada um sondado na arvore real com file:line. O gate le 97 arquivos (89 do pai + 8 dos subpacotes), contra 8 antes.
   A regra e "folha sim, familia nao": o pai pode alcancar uma folha — medido, suas 29 arestas vao todas para `httpio` (28) e `routestest` (1), nenhuma para familia —, e alcancar uma familia reprova.
   DUAS CORRECOES QUE A REVISAO FORCOU: (1) o ADR D2 rejeitava declarar as folhas e mandava DERIVAR do conjunto vazio — errado, porque `version: {}` e familia e `httpio: {}` e folha, indistinguiveis; revertido, e a razao da rejeicao virou `ErrIncoherentRegistry`, que recusa um nome declarado das duas formas ANTES de varrer. (2) o piso prometido nao existia — `routes/` vazio saia PASS —, e a primeira correcao era fraca: `parsed > len(subpacotes)` deixava passar uma mutacao que derrubava a leitura de 97 para 49. Agora reconcilia contra contagem independente.
@@ -3171,6 +3235,9 @@ dod:
 
 > Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em
 > `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3.
+
+> **Fechado 2026-08-16** — DoD 4/4. (1) A cerca parseia o pacote pai. (2)+(3) Os dois sentidos têm teste nomeado: `TestCheck_ParentImportingAFamilyIsAnEdge` (o pai alcançando uma família reprova, com a aresta nomeando `<routes-parent>`) e `TestCheck_ImportingTheParentPackageIsAnEdge` (a família alcançando o pai também é aresta). `TestCheck_ImportingTheLeafIsAllowed` guarda a aresta legítima. (4) Fechada antes da terceira família sair — o gate roda verde hoje sobre 29 subpacotes e 103 arquivos.
+
 
 ## B-085 — Dez arquivos escrevem `.status` fora do contrato, em 28 pontos   [x]
 
@@ -4767,6 +4834,13 @@ dod:
 
 > Registrado 2026-08-16 pela medição do `B-104`. É o `optional: true` de maior alcance do deployment, e o único cuja razão continua sendo uma pergunta aberta.
 
+> **Medição de 2026-08-16 muda a pergunta deste item.** A premissa era *"a API sobe sem banco"*. **Ela não sobe.** `setupDatabase` devolve `(nil, nil)` com `DATABASE_URL` vazio (`api/cmd/setup_database.go:44-47`), e `buildServerConfig` lia campos de `dbDeps` e `stores` **acima** das próprias guardas `if != nil` — três testes reproduziram o `nil pointer dereference` antes de qualquer mudança (`api/cmd/setup_server_nil_deps_test.go`). O processo registrava o `Warn` de degradação e morria em seguida.
+>
+> O pânico foi corrigido, porque **os dois desfechos possíveis deste item o exigem**: se subir sem banco for caso de uso real, o processo precisa sobreviver; se for resíduo, o lugar de falhar alto é `setupDatabase`, com erro tipado, e não um `nil pointer dereference` três funções adiante. Ver `MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics`.
+>
+> **A decisão continua sendo sua, e ficou mais limpa:** não é mais *"mantemos esta degradação?"* — é *"queremos criar esta degradação, que nunca funcionou?"*.
+
+
 ## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [x]
 
 domain: engine-go
@@ -4929,3 +5003,37 @@ dod:
   - existe um gate que reprova uma invocação nova na forma quebrada, senão a divisão volta pelo mesmo caminho por que chegou
 
 > Registrado 2026-08-16 ao instrumentar as skills de backlog para renderizar o índice de itens abertos.
+
+## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — não é defeito de produto, mas é um gate que reporta verde sobre o que não olhou, e foi ele que manteve 63 achados invisíveis enquanto o `B-009` dizia 11
+evidence: medido 2026-08-16. `taskfiles/test.yml § lint` roda três comandos em sequência — `cd pkg && golangci-lint run ./...`, depois `operators`, depois `api`. O Task aborta no primeiro comando que sai != 0, então `api` **nunca era linted** enquanto `operators` tivesse um achado. Reproduzido: antes da correção do `B-009`, `task lint` reportava `1 issues` (operators); com `operators` limpo, a mesma task reportou `63` (api). Os dois números vieram da mesma árvore, com um commit de diferença que tocou uma linha de teste.
+why_now: descoberto ao fechar o `B-009`, cujo enunciado ("11 achados, todos em `operators/`") era consequência direta deste comportamento e não da árvore.
+status: triaged
+dod:
+  - `task lint` roda os três módulos mesmo quando um falha, e o código de saída reflete o agregado
+  - a saída diz quantos achados por módulo, para que uma contagem citada num item nomeie o que foi medido
+  - existe teste que prova que um achado em `pkg` não impede `api` de ser linted
+
+> Registrado 2026-08-16 ao fechar o `B-009`.
+
+## B-122 — Comentário afirma um gate de credenciais que não existe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: baixa — a proteção real existe e funciona; o defeito é o comentário afirmar uma segunda que não, e um leitor decidir com base nela
+evidence: medido 2026-08-16. `api/internal/config/config.go:20-22` afirmava que *"the no-hardcoded-credentials gate exempts this file by name"*. `grep -rn "config.go\|devDefault" cmd/loopzero-ops/internal/quality/` não encontra nem o caminho nem o identificador, e `loopzero-ops quality --list` (126 gates) não tem gate dessa família sobre fonte Go. A outra metade da afirmação é verdadeira e foi verificada: `validateProductionCredentials` (`config.go:658-674`) recusa o arranque quando `LOOPZERO_ENV` é produção e qualquer sentinela sobreviveu. A afirmação falsa foi removida na fatia do `B-009`; o que fica em aberto é se o gate deveria existir.
+why_now: encontrado ao justificar as três isenções `//nolint:gosec // G101` do mesmo bloco — escrever a razão exigiu verificar se ela era verdade, e metade não era. Mesma classe do `B-052` (`CLAUDE.md` apontando para contratos ausentes): documentação que promete uma proteção inexistente é pior que silêncio, porque quem lê para de procurar.
+status: triaged
+dod:
+  - está decidido se um gate de credenciais literais em fonte Go deve existir — e, se não, nenhum comentário do repositório afirma que existe
+  - se existir, ele isenta `internal/config/config.go` por nome e o comentário volta a citá-lo
+  - a varredura por outras afirmações de gate inexistente no corpo de comentários foi feita, porque esta foi encontrada por acaso
+
+> Registrado 2026-08-16 ao fechar o `B-009`.

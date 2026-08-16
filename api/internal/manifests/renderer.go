@@ -251,13 +251,6 @@ func (ri RenderInput) clusterIssuerName() string {
 	return ri.ClusterIssuerName
 }
 
-func (ri RenderInput) gatewayNamespace() string {
-	if ri.GatewayNamespace != "" {
-		return ri.GatewayNamespace
-	}
-	return "loopzero-system"
-}
-
 // leanResourcesEnabled reports whether the LOOPZERO_LEAN_RESOURCES env var
 // is set (case-insensitive "true" or "1"). When lean mode is on, the
 // fallback defaults are halved to fit 100 apps in the current DO dev

@@ -270,11 +270,8 @@ func stringReader(s string) io.Reader {
 // Plan J-09 T5.1 + T2.1 (2026-06-05) — repo introspection helpers used by
 // the Connect handler (loopzero.yaml validation) and the dashboard repo picker.
 
-// BranchExists returns nil if the given ref exists on the repository, OR a
-// typed error indicating "branch not found" so the caller can distinguish
-// it from "file not found" (EC-10). Other HTTP errors propagate as-is.
-//
-// Calls GET /repos/{owner}/{repo}/branches/{ref} per the GitHub REST API.
+// BranchNotFoundError is the typed error BranchExists returns when the ref is
+// absent, so a caller can tell "branch not found" from "file not found" (EC-10).
 type BranchNotFoundError struct {
 	Owner, Repo, Ref string
 }
@@ -283,6 +280,11 @@ func (e *BranchNotFoundError) Error() string {
 	return fmt.Sprintf("branch %q not found in %s/%s", e.Ref, e.Owner, e.Repo)
 }
 
+// BranchExists returns nil if the given ref exists on the repository, OR a
+// *BranchNotFoundError so the caller can distinguish it from "file not found"
+// (EC-10). Other HTTP errors propagate as-is.
+//
+// Calls GET /repos/{owner}/{repo}/branches/{ref} per the GitHub REST API.
 func (c *AppClient) BranchExists(ctx context.Context, installationID int64, owner, repo, ref string) error {
 	url := fmt.Sprintf("%s/repos/%s/%s/branches/%s", c.apiBase(), owner, repo, ref)
 	resp, err := c.doAuthenticated(ctx, installationID, http.MethodGet, url, nil)

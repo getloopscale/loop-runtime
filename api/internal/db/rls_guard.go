@@ -110,7 +110,7 @@ func AssertRequestPoolIsolated(ctx context.Context, pool *pgxpool.Pool) error {
 			"  cause: %s\n"+
 			"  fix:   %s\n"+
 			"Background loops that legitimately span tenants use loopzero_worker, which reaches "+
-			"them through the named *_worker_cross_tenant policies (migration 000062).",
+			"them through the named *_worker_cross_tenant policies (migration 000062)",
 		posture, reason, fix)
 }
 

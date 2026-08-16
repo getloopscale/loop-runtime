@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package metering measures tenant resource usage and turns it into the counters
+// billing reads.
+//
+// Its defining constraint is that it runs beside the control plane without being
+// able to disturb it: the loop is leader-gated, single-flighted so two passes never
+// overlap, wrapped in a panic-recovery boundary (ADR-1 — a metering panic must
+// never crash the controller), and gated by a kill-switch. Everything here is
+// written so that failing to measure is always preferable to interrupting what is
+// being measured.
 package metering
 
 // metering_loop.go — the leader-gated driver of worker.RunOnce (plan

@@ -122,7 +122,7 @@ func renderDockerfile(base, install, build string, app deploycontracts.AppSpec, 
 		b.WriteString(line + "\n")
 	}
 	if app.Type != "worker" { // EC-7: workers receive no traffic — no EXPOSE.
-		b.WriteString(fmt.Sprintf("EXPOSE %d\n", app.Port))
+		fmt.Fprintf(&b, "EXPOSE %d\n", app.Port)
 	}
 	// Shell-form CMD handles arbitrary declared start strings (e.g. "pnpm start").
 	b.WriteString("CMD " + app.Start + "\n")
@@ -187,7 +187,7 @@ func canonicalDockerfileStep(runtime string, apps []deploycontracts.AppSpec, tot
 		out := dockerfilePathForApp(app.Name, totalApps)
 		// %q shell-quotes the path (CODE-001 defense). The quoted heredoc
 		// delimiter 'LOOPZERO_DF' disables expansion of the Dockerfile body.
-		script.WriteString(fmt.Sprintf("cat > %q <<'LOOPZERO_DF'\n%s\nLOOPZERO_DF\n", out, df))
+		fmt.Fprintf(&script, "cat > %q <<'LOOPZERO_DF'\n%s\nLOOPZERO_DF\n", out, df)
 	}
 	return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(), script.String()), nil
 }
