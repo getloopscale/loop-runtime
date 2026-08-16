@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-124 items — **Open** 71 · **In flight** 5 · **Closed** 48
+124 items — **Open** 71 · **In flight** 4 · **Closed** 49
 
 ### Open (71)
 
@@ -146,17 +146,16 @@ consequência do escopo per-repo declarado acima.
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 
-### In flight (5)
+### In flight (4)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
-| [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator----) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `planned` | alta |
 | [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
 | [`B-048`](#b-048--o-chart-guarda-chuva-colapsa-os-quatro-planos-num-único-release-helm----) | O chart guarda-chuva colapsa os quatro planos num único release Helm | `planned` | média |
 | [`B-049`](#b-049--o-sink-do-dag-de-domínio-importa-a-camada-de-persistência-e-re-exporta-os-tipos-dela----) | O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela | `planned` | alta |
 | [`B-050`](#b-050--o-cr-application-do-argocd-tem-três-escritores-em-dois-runtimes----) | O CR `Application` do ArgoCD tem três escritores em dois runtimes | `planned` | média |
 
-### Closed (48)
+### Closed (49)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -180,6 +179,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret---x) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `shipped` | alta |
+| [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator---x) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `shipped` | alta |
 | [`B-044`](#b-044--em-qual-cluster-um-chart-aterrissa-é-uma-flag-de-linha-de-comando-não-uma-declaração---x) | Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração | `shipped` | alta |
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
@@ -1573,7 +1573,7 @@ dod:
 > **(1) Emendada** — ver `MEET-ASYNC-AMENDMENT-2026-08-16-routes-family-isomorphism` (pendente de ratificação). Medido: 29 subpastas contra 10 importadas pelo `router.go`. As 19 não são handlers sem família — são construídas em `api/cmd/setup_server.go` e injetadas em `server.Config`, que é onde o `architecture.md` manda a fiação de concretos viver. **A bala, lida ao pé da letra, só fecharia se o desenho piorasse.** O que a substitui — *todo subpacote está registrado na cerca `routes-acyclic`* — executa a mesma intenção e é mais forte de um jeito verificável: o isomorfismo dependia de alguém comparar duas listas; a cerca reprova sozinha, com `file:line`, em toda entrega.
 
 
-## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [ ]
+## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1581,7 +1581,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido e verificado à mão em 2026-08-11. `vault.TenantTransitClient` (`operators/internal/vault/client.go:31`) **não tem implementador de produção** — os únicos `EnsureTenantKey` em toda a árvore são dois mocks de teste. No único site de construção do reconciler (`operators/internal/tenant/tenant_controller.go:486-499`) o campo `VaultClient` **não é atribuído**, então `tenant_vault.go:33` curto-circuita em todo reconcile. **Correção importante:** as chaves *são* criadas — preguiçosamente pelo `api`, no primeiro 404 de encrypt (`pkg/vault/transit_client.go:274`). O que não existe é o fail-fast antecipado. E o alarme que o EC-15 promete não tem consumidor: zero `PrometheusRule` referencia `TransitKeyAvailable` ou `VaultQuotaExceeded`. Issue #280.
 why_now: **este item bloqueia o B-043.** Mover `pkg/vault` para dentro de `api/internal/` exclui o uso operator-side; se o provisionamento deve ser do operator, o movimento é errado e o trabalho é ligar o implementador. Não dá para fazer os dois. E o estado atual não é neutro: uma falha de policy ou quota aparece no primeiro `POST /secrets` do usuário em vez de o Tenant não chegar a ACTIVE.
-status: planned
+status: shipped
 resolved_in: docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md — api-side. A seam do operator e a condition TransitKeyAvailable sao deletadas DEPOIS de a policy loopzero-api do chart ganhar transit/keys/loopzero-tenants-* (B-072)
 severity: alta — não pelo defeito (não há perda de dado), mas porque é uma decisão de arquitetura pendente que trava a única fronteira estrutural nova disponível.
 dod:
@@ -1591,6 +1591,23 @@ dod:
   - qualquer que seja: existe teste de integração que constrói o componente **pelo caminho de produção**, não injetando mock no struct — foi o mock direto no struct que deixou isto verde
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Classificado **T3** por `pre-release-governance.md`: um dos desfechos deleta status condition de CRD.
+
+> **Fechado 2026-08-16 — DoD 4/4, executando o ADR na ordem que ele exige.**
+>
+> **(1)** Decidido com ADR: `docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md` — **api-side**. A evidência: o caminho do `api` está ligado e roda (`api/cmd/main.go:162` constrói o `pkg/vault.TransitClient`, que cria a chave preguiçosamente no primeiro 404 de encrypt, `transit_client.go:391`); o do operator **nunca teve implementador de produção** em ~10 semanas.
+>
+> **(2) A ordem obrigatória do ADR foi respeitada.** A policy vem antes da deleção — e ela veio: o `B-072` está `shipped` e `infra/helm/openbao-init/values.yaml:241` concede `transit/keys/loopzero-tenants-*` com `["create","read","update"]`, sendo o `update` exigido porque o POST do cliente Go é um HTTP PUT. **Só então** `EnsureTenantKey` saiu da interface, junto de `reconcileTransitKey` e do passo de reconcile. `DeleteTenantKey` **ficou**, com a razão escrita ao lado: apagar o primitivo de right-to-erasure para arrumar uma interface cuja outra metade morreu seria trocar um defeito por outro. A condition `TransitKeyAvailable` **não** foi deletada — o ADR a reserva, e a v1.1 dele diz por quê.
+>
+> **A armadilha que só apareceu ao fazer o trabalho:** `requiredProvisioningConditions()` acrescentava `TypeTransitKeyAvailable` sempre que `VaultClient != nil` — e o `VaultClient` **continua existindo**, porque carrega o shredding. Removido o único escritor da condition, um deployment que ligasse o shredder deixaria **todo Tenant preso em `Provisioning` para sempre**, esperando um passo que não roda. O sintoma apareceria exatamente onde ninguém está olhando para o controller de tenant. Corrigido e travado por `TestTenantActivation_DoesNotRequireTheConditionWhoseWriterWasRemoved`.
+>
+> **(3)** Não se aplica — o desfecho foi api-side.
+>
+> **(4)** Satisfeita nos dois lados: `api/cmd/setup_transit_test.go` constrói pelo **caminho de produção** (`setupTransitClient`, 4 testes cobrindo os modos e a propagação de erro), e `TestTransitClient_AutoCreatesKeyOnFirstUse` cobre a criação preguiçosa com um **stub do sistema externo** — não um mock injetado no struct, que foi o que deixou isto verde por dez semanas.
+>
+> **Nota de risco, medida:** isto **não** mudou o CRD. `TypeTransitKeyAvailable` continua declarada em `operators/api/v1/conditions.go`, então nenhum contrato de CRD foi alterado — a mudança é menor do que o DoD antecipava ao marcá-la T3.
+>
+> A lista de passos do reconcile virou um método nomeado (`provisioningSteps`) para que a asserção pudesse ler **os passos**, e não a grafia do literal dentro do `Reconcile`.
+
 
 ## B-043 — O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só   [ ]
 
@@ -1613,6 +1630,11 @@ dod:
   - `api/internal/adapters/vault_transit_adapter.go` é **deletado**, não movido: o próprio doc dele diz que as assinaturas batem byte a byte e só os nomes de método diferem
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. **T2 automático** (`pkg/` + credenciais).
+
+> **Bloqueio reconfirmado e afiado em 2026-08-16, ao fechar o `B-042`.** A primeira bala do DoD deste item — *"`B-042` decidido antes — se o desfecho for operator-side, este item é cancelado"* — está resolvida: o desfecho foi **api-side**, então este item **não é cancelado**.
+>
+> Mas o bloqueio do `B-075` ficou **mais forte, não mais fraco**. `operators` mantém `vault.TenantTransitClient` justamente porque `DeleteTenantKey` ficou lá — o primitivo de crypto-shredding, cuja propriedade é o que o `B-075` decide. Se o shredding vier a ser operator-side, `operators` precisará de um cliente de vault, e mover `pkg/vault` para `api/internal/secrets/` tornaria isso **impossível** pela regra `internal/` do Go. Antes o argumento era prospectivo; agora há código do operator dependendo da interface.
+
 
 ## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [x]
 

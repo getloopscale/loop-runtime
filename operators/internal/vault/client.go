@@ -15,21 +15,27 @@ import (
 	"fmt"
 )
 
-// TenantTransitClient is the minimal Vault Transit interface used by
-// tenant_controller's TransitKey reconcile step.
+// TenantTransitClient is what the operator side still owns of the per-tenant Vault
+// Transit key: **only the shredding**.
 //
-// EnsureTenantKey is idempotent: re-creating an existing key returns nil
-// (success). Quota errors return ErrVaultQuotaExceeded (mapped from Vault's
-// "rate limit quota exceeded" 429 response). Other failures return
-// ErrVaultUnreachable (network/timeout/5xx).
+// DeleteTenantKey is the crypto-shredding primitive (T3.6 LIVE test + T10.1 Day-30
+// verify + T10.2 Day-60 AES delete). When the per-tenant key is deleted, every
+// ciphertext encrypted by it becomes permanently unrecoverable. EC-10 MUST FIX P0:
+// the cleanup job must enforce the 2-person rule + 90-day window before calling this.
 //
-// DeleteTenantKey is the crypto-shredding primitive (T3.6 LIVE test +
-// T10.1 Day-30 verify + T10.2 Day-60 AES delete). When the per-tenant key
-// is deleted, all ciphertexts encrypted by that key become permanently
-// unrecoverable. EC-10 MUST FIX P0: cleanup job must enforce 2-person
-// rule + 90-day window before calling this.
+// EnsureTenantKey was removed in 2026-08-16 per ADR
+// `docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md` (B-042):
+// provisioning is api-side. The api creates the key lazily on the first encrypt 404
+// (`pkg/vault/transit_client.go:391`), and this side never had a production
+// implementation — the only EnsureTenantKey in the tree were two test mocks, and
+// TenantReconciler.VaultClient was never assigned. Ten weeks of silent no-op.
+//
+// **This interface still has no production implementer**, and that is now a smaller
+// claim than it was: what is missing is the shredder, whose ownership depends on the
+// tenant-deletion lifecycle nobody has looked at yet (B-075). Deleting the primitive
+// because half of it died would remove the right-to-erasure surface to tidy up an
+// interface.
 type TenantTransitClient interface {
-	EnsureTenantKey(ctx context.Context, tenantID string) error
 	DeleteTenantKey(ctx context.Context, tenantID string) error
 }
 
