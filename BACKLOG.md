@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-128 items — **Open** 71 · **In flight** 0 · **Closed** 57
+129 items — **Open** 71 · **In flight** 0 · **Closed** 58
 
 ### Open (71)
 
@@ -143,14 +143,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
-| [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada----) | O `/code-quality` devolve nota máxima quando não auditou nada | `triaged` | alta |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
+| [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum----) | Dois validadores do ecossistema não são rodados por gate nenhum | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (57)
+### Closed (58)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -211,6 +211,7 @@ _None._
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
+| [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5311,7 +5312,7 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-125`. O risco não é novo; o que é novo é ele estar num lugar onde alguém o vê.
 
-## B-127 — O `/code-quality` devolve nota máxima quando não auditou nada   [ ]
+## B-127 — O `/code-quality` devolve nota máxima quando não auditou nada   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5320,13 +5321,32 @@ source: discover-review
 severity: **alta** — o `cycle-implement.md` trata `/code-quality` como **hard gate** do `IMPLEMENTATION_COMPLETE` (`run_validation.py` reprova em `FAIL_HARD`/`INVALID`). Um gate que devolve `PASS`/100 sem ter olhado nada não bloqueia nada, e ninguém percebe porque a saída é a melhor possível.
 evidence: medido 2026-08-16 ao fechar o `B-124`. Com a configuração de linguagens vazia — o estado real deste repositório até hoje — `python3 .claude/skills/code-quality/scripts/run_code_quality.py` devolve literalmente `"verdict": "PASS"`, `"score_cap": 100`, `"languages_audited": []`, `"findings_by_detector": {}`. **E com a configuração CORRIGIDA, mas com toda linguagem em `DEFER`/`DISABLED`, devolve exatamente o mesmo** — sem sequer popular `skip_reasons`, que fica `{}`. A `SKILL.md` do próprio skill declara outro comportamento: *"exits with INFO 'no auditable languages'"*. O comportamento projetado e o campo que importa divergem.
 why_now: a instância foi corrigida ao pôr a configuração no formato que o parser lê, mas a **classe** não: qualquer projeto cuja configuração esteja vazia, mal formada ou inteiramente adiada recebe nota máxima de um gate que não olhou nada. É a forma mais completa do defeito que esta sessão encontrou seis vezes — comparar o que está escrito em vez do que sai —, e aqui ela está no gate que audita os outros.
-status: triaged
+status: shipped
 dod:
   - `languages_audited` vazio **não** produz `PASS` com `score_cap: 100` — o veredito diz que nada foi auditado, e `run_validation.py` o trata como não-verde
   - `skip_reasons` é populado quando uma linguagem é `DEFER`/`DISABLED`/sem manifesto, para que a saída diga **por que** não auditou
   - existe teste que prova o novo comportamento com configuração vazia, e ele roda no gate `skill-suites`
 
 > Registrado 2026-08-16 ao fechar o `B-124`.
+
+> **Fechado 2026-08-17 — DoD 3/3.** Ver `ADR-2026-08-17-no-language-audited-is-not-a-pass` (pendente de ratificação).
+>
+> **(1) Auditar nada deixou de ser `PASS`.** Os dois estados medidos agora devolvem `FAIL_SOFT` com `score_cap: 70` e `no_language_audited` em `soft_caps_triggered`: a configuração **real** deste repo (4 linguagens declaradas, todas `DEFER`/`DISABLED`) e a configuração **vazia**. `FAIL_SOFT` no `run_validation.py` é `WARN`, mas `cq_invoke.py:68` derruba o plan-confidence de `SHIPPABLE` para `NON_SHIPPABLE` — o item deixa de ser entregável sem alguém escrever por quê, que era o que faltava.
+>
+> **O desenho: um Finding, não um segundo caminho de veredito.** `compute_verdict` continua função pura dos findings — toda a rubrica, a precedência de caps e os identificadores estáveis derivam disso, e um ramo *"a menos que nada tenha sido auditado"* daria duas fontes de verdade à próxima pessoa. *"Não auditei nada"* **é um achado sobre a auditoria**, e o tipo `Finding` já o expressa. Emitido **depois** do allowlist, de propósito: uma isenção rebaixa a severidade de um achado que existe, e "nada foi auditado" não é algo que alguém deva poder isentar até o silêncio.
+>
+> **`SOFT_CAP` e não `HARD`**, com precedente na própria rubrica: `auditor_unavailable_{tool}` — o caso *particular* do mesmo problema — já era `FAIL_SOFT`. E `HARD` travaria a primeira execução num repositório que ainda não configurou linguagens: um gate que impede a adoção do próprio gate.
+>
+> **(2) `skip_reasons` nomeia toda linguagem declarada que não foi auditada**, com o status ecoado em vez de traduzido — `DEFER` e `DISABLED` significam coisas diferentes para quem escreveu a configuração, e colapsar os dois em "skipped" apagaria a única diferença entre escopo deliberado e dívida adiada. O laço de dispatch filtrava por `status == "ENABLED"`, então as outras nunca chegavam à saída.
+>
+> **A fronteira que o item não pedia e sem a qual isto estaria errado:** configuração vazia **num repositório que tem código** é `FAIL_SOFT`; num repositório **pré-código** continua `PASS`. `cycle-code-quality.md` declara o segundo um no-op legítimo, e o discriminador é **o disco**, não a configuração — manifesto presente significa que existe código que o gate foi mandado ignorar.
+>
+> **(3) Seis testes novos**, RED antes de GREEN, rodando no gate `skill-suites`. Um deles (`test_auditing_something_clean_still_passes`) guarda a fronteira oposta: o cap mira **nada auditado**, não ausência de achados — sem ele, endurecer o veredito viraria uma regra que nenhum repositório limpo satisfaz, e um gate que nunca fica verde é um gate que se aprende a ignorar.
+>
+> **Um teste existente foi atualizado, não removido.** `test_cli_standalone_mode_pass_when_no_manifests` afirmava `PASS` justamente quando nada era auditado — ele **codificava o contrato que o ADR substituiu**, e descrevia o defeito com precisão. Renomeado e reescrito com a razão.
+>
+> **Protocolo de mudança de regra LOCKED cumprido:** ADR, entrada no CHANGELOG sob `[Unreleased]`, e `check_xrefs.py` + `test_e2e_smoke.py` verdes. Os dois estavam **vermelhos** ao serem rodados pela primeira vez, e nenhum gate os roda — registrado como **`B-129`**.
+
 
 ## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [ ]
 
@@ -5344,3 +5364,20 @@ dod:
   - com o conserto, `go` volta a `ENABLED` em `code-quality-languages.txt` — e os 36 achados de `deadcode` (D1), que podem ser reais, passam a ter de ser tratados ou isentados
 
 > Registrado 2026-08-16 ao fechar o `B-124`. O `go` está `DEFER` **por causa deste item**, e o comentário na configuração diz isso.
+
+## B-129 — Dois validadores do ecossistema não são rodados por gate nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — eles não guardam produto, guardam **contratos**: referências normativas que resolvem e a cadeia ponta a ponta do `/review`. Um validador que ninguém roda acumula falhas em silêncio, e foi exatamente o que aconteceu.
+evidence: medido 2026-08-17 ao cumprir o `Golden Rule Change Protocol` do `B-127`, que exige `check_xrefs.py` e `test_e2e_smoke.py` verdes. **`grep -rn "check_xrefs" taskfiles/ cmd/loopzero-ops/ .claude/hooks/` não retorna nada** — nenhuma task, nenhum gate, nenhum hook os invoca. E ao rodá-los pela primeira vez, `check_xrefs.py` saiu **`FAIL` com 4 achados**, todos introduzidos no mesmo dia sem que nada acusasse. É a mesma forma do `B-124` (três suítes vermelhas que nenhuma task rodava), noutro par de validadores.
+why_now: o protocolo de mudança de golden rule os nomeia como requisito — *"`check_xrefs.py` and `test_e2e_smoke.py` both PASS"* — mas nada verifica que alguém os rodou. Um requisito de processo sem execução é uma promessa, e o `B-124` acabou de mostrar quanto tempo uma promessa dessas sobrevive vermelha.
+status: triaged
+dod:
+  - `check_xrefs.py` e `test_e2e_smoke.py` rodam num gate, como as suítes pytest passaram a rodar no `skill-suites`
+  - os **6 WARN** que o `check_xrefs` reporta hoje foram lidos e ou corrigidos ou declarados aceitáveis — um validador que sempre reporta avisos ensina a ignorá-lo
+  - o gate distingue `FAIL` de `WARN`, para que o segundo não vire ruído que apaga o primeiro
+
+> Registrado 2026-08-17 ao fechar o `B-127`.
