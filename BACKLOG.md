@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-135 items — **Open** 74 · **In flight** 0 · **Closed** 61
+135 items — **Open** 73 · **In flight** 0 · **Closed** 62
 
-### Open (74)
+### Open (73)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -86,7 +86,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe----) | O diagnóstico do CLI manda verificar um endereço que não existe | `triaged` | baixa ↑ |
-| [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista----) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `triaged` | P0 |
 | [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar----) | A cobrança por uso não tem para onde reportar | `triaged` | — |
@@ -153,7 +152,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (61)
+### Closed (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -172,6 +171,7 @@ _None._
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
+| [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
@@ -1040,7 +1040,7 @@ dod:
 
 > Registrado 2026-08-10 ao medir se o CLI passa pelo painel (`B-022`).
 
-## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [ ]
+## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1050,7 +1050,7 @@ sponsor: diretriz de 2026-08-10 — *"SEGURANÇA SEMPRE É CRÍTICO E PRIORIDADE
 severity: **P0** — por diretriz do sponsor, e sustentada por medição.
 evidence: medido em 2026-08-10, **da internet** (não do droplet). 39 portas escutam em `0.0.0.0`; o firewall `loopzero-host-firewall` bloqueia 20; sobram **19**, das quais 2 estão na `ALLOW_EXTERNAL` com justificativa medida. As outras **17 não estão em lista nenhuma**. Testado de fora com conexão TCP: `14433`, `14444`, `30082`, `18084`, `30090` e `30094` responderam **ABERTA**. Identificado o que serve cada uma via `docker ps`: `30082` é o **ArgoCD** (entregador GitOps), `30095` é o **cluster de segredos**, `18083`–`18090` são cinco produtos do plano de dados servindo direto, contornando a borda, e `14433`/`14444` são Kratos e Hydra **sem TLS** — o mesmo serviço que a borda já publica em HTTPS.
 why_now: a lista `PROTECT` do firewall foi escrita quando os clusters se chamavam `mgmt`, `workload`, `runtime-2` e `vault` — os comentários dela ainda citam esses nomes. Ela cobre as portas que existiam então; tudo que subiu depois (as pontes NodePort de Kratos e Hydra que criei hoje, os produtos do plano de dados, o cluster de segredos) nasceu fora da lista. **Uma lista escrita à mão degrada sozinha**, e esta degradou em silêncio: nada reprova quando uma porta nova aparece sem entrada.
-status: triaged
+status: shipped
 blocked_by: nada técnico. O que exige decisão é a política — quais portas ficam abertas e com que justificativa —, e a diretriz do sponsor já a define: **uma superfície exposta**.
 dod:
   - o firewall passa a fechar **por padrão** e abrir por exceção nomeada, em vez do inverso: hoje uma porta ausente da lista fica ABERTA, que é a polaridade errada para uma regra de segurança
@@ -1118,6 +1118,77 @@ acima em vez de 17 não medidas. As balas 1 e 4 seguem abertas e são o trabalho
 ganhou o requisito de **reconciliar nos dois sentidos**, que a evidência de 10/08 não pedia.
 
 status anterior: `raw` · **agora `triaged`** — a medição acima é a saída do `/discover --mode live-test`.
+
+---
+
+### Fechado 2026-08-17 — DoD 4/4, aplicado e verificado LIVE
+
+**A terceira medição é a que fecha o argumento da bala 1.** Sondadas de fora as 42 portas em escuta:
+**15 abertas**, três delas a borda pretendida — pior que os 10 de 15/08. E **quatro das novas**
+(`30120`, `30191`, `30193`, `30194`) nasceram nos dois dias entre as medições, sem ninguém decidir
+nada.
+
+**A causa raiz é estrutural, e nenhuma lista escrita à mão a alcança:** as portas novas são
+publicadas pelos contêineres `k3d-*-serverlb`. **Todo NodePort criado em qualquer cluster k3d vira
+porta pública automaticamente.** A lista envelheceu duas vezes em uma semana, sempre para o lado
+inseguro — que é exatamente o que o item previa em prosa e agora está medido em números.
+
+**Bala 1 — polaridade invertida.** `-j DROP` no fim da cadeia `DOCKER-USER`; só `ALLOW_EXTERNAL`
+escapa. Porta nova nasce **fechada**.
+
+**Duas propriedades tornam a inversão segura, e as duas foram verificadas antes de cancelar a rede
+de segurança:**
+
+1. **SSH e Caddy escutam via `INPUT`**, cadeia que este script não toca — ele age só no `FORWARD`,
+   sobre o que o Docker publica. Um erro aqui derruba serviço de contêiner, não o acesso ao host.
+   Isso é o que fazia a inversão parecer mais perigosa do que é.
+2. **`ESTABLISHED,RELATED -j RETURN` vem primeiro.** Sem ela o `DROP` genérico mataria a **volta**
+   das conexões que os contêineres abrem para a internet — `docker pull`, chamada de API. Esses
+   pacotes entram pela placa pública e casariam a regra. Verificado: `curl` de dentro de um contêiner
+   para `api.github.com` devolveu **HTTP 200**, e o próprio `docker pull` da imagem de teste
+   atravessou o firewall.
+
+**Bala 2 — as portas classificadas, e a lista reconciliada nos DOIS sentidos.** Cruzando
+`grep -rln DEV_HOST */.github/workflows/` com a sondagem externa: existem **exatamente dois**
+consumidores externos em todo o ecossistema, e ambos estavam verdes.
+
+| porta | decisão |
+|---|---|
+| `18082` `therag_api` | **ABERTA** — `loopzero-rag/dev-version-drift.yml`, medido verde em `main` às 03:50Z |
+| `18084` `loopzerolens_api` | **ABERTA** — `loopzero-lens/dev-version-drift.yml`, verde em toda execução medida |
+| `8787` | **REMOVIDA da lista** — declarada, e ninguém escutava. É a metade *"declarado mas ausente"* da divergência, e foi ela que manteve o gate do loopzero-rag quebrado por seis dias (`B-118`) |
+| `18083` `18085` `18087` `18090` | **fechadas** — produto do plano de dados servindo direto, contornando a borda |
+| `30090` `30091` `30094` | **fechadas** — telemetria interna (métricas do Argo, do Traefik, agregação de log) |
+| `30081` `30093` `30120` `30191` `30193` `30194` | **fechadas** — publicações de `serverlb` sem Service correspondente ou sem consumidor externo |
+
+**Bala 4 — o `--audit` confere os dois sentidos.** Um sentido só reportaria verde numa das metades: a
+divergência era bidirecional, e uma verificação que só perguntasse *"toda porta aberta está na
+lista?"* passaria limpo pela `8787`. Ele checa (a) exceção sem quem escute e (b) que o `DROP` genérico
+está **depois** de todos os `RETURN` — um `DROP` acima de um `ALLOW` é uma política silenciosamente
+diferente da escrita, e invisível numa leitura casual da cadeia.
+
+**Medido LIVE depois de aplicar** (`loopzero-workspace` PR #84):
+
+```
+superfície externa   = 22, 80, 443 + 18082 + 18084 · todo o resto fechado
+egresso de contêiner → api.github.com   HTTP 200
+https://app-dev.loopzero.example             HTTP 200
+loopzero-rag/dev-version-drift   em main    success
+loopzero-lens/dev-version-drift  em main    success
+--audit                                 OK
+```
+
+**Aplicado com revert agendado como rede de segurança**, cancelado só depois de todas as verificações
+acima. As três cópias no droplet foram sincronizadas (`md5 718cb736`) e a unit systemd reinstalada —
+as regras não sobrevivem a reboot, e "estava protegido na semana passada" é a pior forma de falso
+conforto.
+
+**O que fica:** a triplicata sem dono declarado continua sendo o **`B-111`**, e a dívida herdada
+também — um gate que depende de porta de contêiner exposta na internet é o mesmo cheiro do painel
+apontando para processo solto. O conserto durável é uma rota no edge com `/v1/version`. Não fechei as
+duas: já foi feito uma vez e trocou uma exposição por uma **cegueira**, porque o gate é o controle
+que detecta deploy.
+
 
 ## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
 
