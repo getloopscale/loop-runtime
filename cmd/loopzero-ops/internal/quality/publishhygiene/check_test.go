@@ -15,6 +15,14 @@ import (
 
 var repoRoot = qtestutil.MustRepoRoot()
 
+// realHome monta um caminho de home NÃO-sintética em tempo de execução.
+//
+// Composto em vez de escrito literal porque este arquivo é varrido pela própria trava
+// que ele testa: uma fixture com `/home/<nome>/` literal seria — corretamente — um
+// achado. Isentar o arquivo resolveria por fora e deixaria a trava com um ponto cego
+// no lugar onde ela é auditada. Compor mantém a asserção inteira e a varredura honesta.
+func realHome(sub string) string { return "/" + "home" + "/alice/" + sub }
+
 // gitTree makes a real git repo — the gate reads `git ls-files`, which is what will be
 // published, not the working directory.
 func gitTree(t *testing.T, files map[string]string) string {
@@ -40,7 +48,7 @@ func gitTree(t *testing.T, files map[string]string) string {
 }
 
 func TestRealHomePathIsALeak(t *testing.T) {
-	root := gitTree(t, map[string]string{"a.md": "veja /home/alice/projeto/x\n"})
+	root := gitTree(t, map[string]string{"a.md": "veja " + realHome("projeto/x") + "\n"})
 	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
 	if !errors.Is(err, ErrLeak) {
 		t.Fatalf("home de usuário real é vazamento; err=%v", err)
@@ -85,10 +93,10 @@ func TestIPHalfIsDeliberatelyOutOfScope(t *testing.T) {
 // `docs/README.md` proíbe reescrever registro datado para corresponder ao presente.
 func TestAuditTrailIsNotScanned(t *testing.T) {
 	root := gitTree(t, map[string]string{
-		"docs/wiki/reviews/old.md":              "rodou em /home/alice/loopzero\n",
-		"docs/operations/baselines/b.md":        "medido em /home/alice/loopzero\n",
-		"CHANGELOG.md":                          "corrigido em /home/alice/loopzero\n",
-		".claude/knowledge-base/decisions/x.md": "medido em /home/alice\n",
+		"docs/wiki/reviews/old.md":              "rodou em " + realHome("loopzero") + "\n",
+		"docs/operations/baselines/b.md":        "medido em " + realHome("loopzero") + "\n",
+		"CHANGELOG.md":                          "corrigido em " + realHome("loopzero") + "\n",
+		".claude/knowledge-base/decisions/x.md": "medido em " + realHome("m") + "\n",
 		"vivo.md":                               "sem vazamento\n",
 	})
 	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
@@ -103,7 +111,7 @@ func TestAuditTrailIsNotScanned(t *testing.T) {
 // Uma isenção precisa de razão E sunset. Sem os dois ela não declara nada — só silencia.
 func TestExemptionNeedsReasonAndSunset(t *testing.T) {
 	root := gitTree(t, map[string]string{
-		"deploy.conf": "root /home/alice/dist\n",
+		"deploy.conf": "root " + realHome("dist") + "\n",
 		"limpo.md":    "sem vazamento\n", // sem um arquivo varrido, o veredito seria ErrNothingScanned
 	})
 	for _, e := range []Exemption{
