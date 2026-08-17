@@ -21,7 +21,7 @@ import (
 // operates entirely on bytes + the two wired backends; the DBTX field is
 // unused on this path.
 
-// fakeTransitT22 records every DecryptForTenant call and supports
+// fakeTransitT22 records every Decrypt call and supports
 // per-tenant failure injection so the dispatcher's error-wrap behavior
 // can be locked.
 type fakeTransitT22 struct {
@@ -32,14 +32,14 @@ type fakeTransitT22 struct {
 	plaintext    []byte
 }
 
-func (f *fakeTransitT22) EncryptForTenant(_ context.Context, tenantID string, plaintext []byte) (string, error) {
+func (f *fakeTransitT22) Encrypt(_ context.Context, tenantID string, plaintext []byte) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.encryptCalls = append(f.encryptCalls, tenantID+":"+string(plaintext))
 	return "vault:v1:fake-cipher-" + tenantID, nil
 }
 
-func (f *fakeTransitT22) DecryptForTenant(_ context.Context, tenantID string, ciphertext string) ([]byte, error) {
+func (f *fakeTransitT22) Decrypt(_ context.Context, tenantID string, ciphertext string) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.decryptCalls = append(f.decryptCalls, tenantID+":"+ciphertext)
@@ -85,7 +85,7 @@ func TestSecretWrapper_RoutesByPrefix(t *testing.T) {
 		t.Errorf("plaintext: got %q want %q", string(plain), "postgres://x")
 	}
 	if len(vault.decryptCalls) != 1 {
-		t.Errorf("vault.DecryptForTenant calls: got %d want 1", len(vault.decryptCalls))
+		t.Errorf("vault.Decrypt calls: got %d want 1", len(vault.decryptCalls))
 	}
 	if vault.decryptCalls[0] != "tn-A:vault:v1:abc123" {
 		t.Errorf("vault call: got %q want %q", vault.decryptCalls[0], "tn-A:vault:v1:abc123")

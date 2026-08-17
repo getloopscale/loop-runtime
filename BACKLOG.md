@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-125 items — **Open** 72 · **In flight** 1 · **Closed** 52
+125 items — **Open** 71 · **In flight** 0 · **Closed** 54
 
-### Open (72)
+### Open (71)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -112,7 +112,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
 | [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa----) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `triaged` | baixa |
 | [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
-| [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou----) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `triaged` | alta |
 | [`B-078`](#b-078--o-gate-de-paridade-de-contexto-não-enxerga-scripts-e-não-pode-comparar-quando-um-lado-é-parametrizado----) | O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
@@ -147,13 +146,11 @@ consequência do escopo per-repo declarado acima.
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem----) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `triaged` | alta |
 
-### In flight (1)
+### In flight (0)
 
-| Item | Title | Status | Severity |
-|---|---|---|---|
-| [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só----) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `planned` | média |
+_None._
 
-### Closed (52)
+### Closed (54)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -178,6 +175,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret---x) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `shipped` | alta |
 | [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator---x) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `shipped` | alta |
+| [`B-043`](#b-043--o-domínio-de-secrets-mora-dentro-do-kernel-que-todo-mundo-compartilha-com-um-consumidor-só---x) 🔒 | O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só | `shipped` | média |
 | [`B-044`](#b-044--em-qual-cluster-um-chart-aterrissa-é-uma-flag-de-linha-de-comando-não-uma-declaração---x) | Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração | `shipped` | alta |
 | [`B-045`](#b-045--quatro-gates-reprovam-hoje-em-conteúdo-real-do-repositório-e-nenhum-deles-é-executado---x) | Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado | `shipped` | alta |
 | [`B-046`](#b-046--a-cerca-fail-closed-do-tenant-cr-existe-no-chart-de-dev-e-não-no-publicado---x) | A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado | `shipped` | alta |
@@ -192,6 +190,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
 | [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
+| [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou---x) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `shipped` | alta |
 | [`B-076`](#b-076--21-divergências-entre-chart-publicado-e-de-bootstrap-estão-aprovadas-sem-que-ninguém-tenha-medido-por-quê---x) | 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê | `shipped` | média |
 | [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
 | [`B-084`](#b-084--a-cerca-routes-acyclic-não-vigia-o-pacote-pai-e-o-risco-cresce-a-cada-família---x) | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família | `shipped` | alta |
@@ -1610,7 +1609,7 @@ dod:
 > A lista de passos do reconcile virou um método nomeado (`provisioningSteps`) para que a asserção pudesse ler **os passos**, e não a grafia do literal dentro do `Reconcile`.
 
 
-## B-043 — O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só   [ ]
+## B-043 — O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1618,7 +1617,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-11 lendo os importadores reais de cada pacote de `pkg/`. O kernel tem 24.300 LOC e **6.226 (25,6%) têm exatamente um módulo consumidor**: `pkg/vault` 3.663 LOC → só `api`; `pkg/shellrun` 1.241 → só `cmd/loopzero-ops`; `pkg/pulumi` 993 → só `cmd/loopzero-ops`; `pkg/events` 329 → só `api`. `pkg/vault` **é** o domínio de secrets, e é o maior pacote de consumidor único do kernel. Some-se `pkg/` não usar `internal/` — as três únicas árvores `internal/` de primeira ordem são `api`, `operators` e `cmd/loopzero-ops` — então todo o kernel, inclusive o cliente de secrets, é API pública.
 why_now: é a **única fronteira nova que o compilador consegue recusar**. Movido para `api/internal/secrets/vault`, a regra `internal/` do Go torna impossível `operators` e `cmd/loopzero-ops` importarem o cliente de secrets — sem gate, sem convenção. Dos cinco planos, só DEVELOPER tem fronteira estrutural hoje; esta adiciona exatamente uma. Custo medido: 4 arquivos consumidores, todos em `api`.
-status: planned
+status: shipped
 blocked_by: B-075 — e o bloqueio foi CONFIRMADO por medição em 2026-08-12, não assumido. Se o shredding vier a ser operator-side, `operators` precisará do cliente de vault, e mover `pkg/vault` para `api/internal/secrets/` tornaria isso impossível pela regra `internal/` do Go — que é exatamente o ganho que este item busca. A DoD deste item manda decidir antes e CANCELAR, não adiar, se o desfecho for operator-side. Medido: `pkg/vault` e importado por 4 arquivos, todos em `api` (3 em `api/cmd`, 1 em `api/internal/adapters`), e ZERO arquivos de `operators` o importam — o custo do movimento nao mudou, so a permissao para faze-lo.
 resolved_in: PARCIAL — .claude/knowledge-base/plans/slice-7-kernel-single-consumer-plan.md entregou a bala 3: `pkg/events` (329 LOC) foi para `api/internal/events` e `pkg/shellrun` + `pkg/pulumi` (2.234) para `cmd/loopzero-ops/internal/`, com 17 imports re-apontados e o kernel encolhendo 2.563 linhas. A fronteira e ESTRUTURAL — um teste compila a violacao a partir de um modulo estrangeiro e exige `use of internal package ... not allowed`.
   A premissa do item foi CORRIGIDA por medicao: `shellrun` tem DOIS consumidores (`cmd/loopzero-ops` e `pkg/pulumi/archive`), nao um — por isso os dois viajaram juntos, senao o acoplamento renasceria publico no destino.
@@ -1641,6 +1640,18 @@ dod:
 > Se a decisão proposta no `MEET-ASYNC-AMENDMENT-2026-08-16-crypto-shredding-ownership` for ratificada, o shredding será **operator-side**, então `operators` **precisará** de um cliente de vault — e mover `pkg/vault` para `api/internal/secrets/` é exatamente o que o impediria, pela regra `internal/` do Go. Este item não seria adiado: seria **morto com a razão**, que é o desfecho que a primeira bala do DoD dele prevê para este caso.
 >
 > **Não foi morto**, porque matá-lo depende da metade não ratificada daquela decisão. Um item morto por uma decisão que ninguém leu é pior que um item bloqueado.
+
+> **Fechado 2026-08-16 — 3 balas cumpridas, 1 refutada com registro.** Ver `MEET-ASYNC-AMENDMENT-2026-08-16-vault-stays-in-the-kernel` (pendente de ratificação).
+>
+> **(1) Cumprida.** O `B-042` foi decidido **antes**, e o desfecho foi **api-side** — então a cláusula de cancelamento deste item (*"se o desfecho for operator-side, este item é cancelado"*) **não dispara**.
+>
+> **(3) Cumprida** pelo `slice-7`: `pkg/events` → `api/internal/events` e `pkg/shellrun` + `pkg/pulumi` → `cmd/loopzero-ops/internal/`, 17 imports reapontados, kernel 2.563 linhas menor, com fronteira **estrutural** — um teste compila a violação a partir de um módulo estrangeiro e exige `use of internal package ... not allowed`.
+>
+> **(4) Cumprida nesta fatia.** `api/internal/adapters/vault_transit_adapter.go` foi **deletado**, não movido. Ele existia só para renomear `Encrypt`/`Decrypt` em `EncryptForTenant`/`DecryptForTenant` — o próprio doc dele dizia que as assinaturas batiam *"byte-for-byte; only the method names differ"*. Em Go isso não precisa de ponte: a interface do consumidor passou a nomear os métodos como o provedor já os nomeia, a raiz de composição entrega o valor direto, e **nenhum dos dois pacotes importa o outro** — que era a razão declarada do adapter, e continua valendo sem ele. O escopo por tenant vive no **parâmetro**, não precisava estar no nome. Travado por `TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter`, na raiz de composição, que é o único lugar que legitimamente conhece os dois lados.
+>
+> **(2) REFUTADA, não adiada.** O `B-075` foi ratificado hoje: o apagamento criptográfico é **operator-side quando construído**. Isso dá a `pkg/vault` um **segundo consumidor conhecido**, e movê-lo para `api/internal/secrets/` é exatamente o que o tornaria impossível — pela mesma regra `internal/` que o item queria explorar. O `blocked_by` deste item já previa isso e dizia ter **confirmado por medição**; o bloqueio não foi removido, foi **respondido**, e a resposta refuta a bala.
+>
+> **A consequência desconfortável fica escrita:** `pkg/vault` continua no kernel e continua sendo o maior pacote de consumidor único dele (3.663 LOC). O item estava certo ao chamar isso de fronteira frouxa — o que mudou é que agora há uma **razão nomeada** para ela ficar frouxa, em vez de ninguém ter decidido. Se o `B-075` for revisto e o shredding acabar api-side, esta emenda cai e a bala 2 volta a valer; os dois itens se citam para que esse fio exista.
 
 
 ## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [x]
@@ -2555,7 +2566,7 @@ dod:
 > Registrado 2026-08-12 ao escrever o ADR do `B-050`.
 
 
-## B-075 — O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou   [ ]
+## B-075 — O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2589,7 +2600,7 @@ Consequência para a decisão: ela deixa de ser uma escolha entre duas implement
 uma decisão sobre **construir** a que falta, e onde. O que não muda é o tier: continua T3, e continua
 exigindo reunião — agora com peso maior, porque o que estava em jogo era supor que existisse.
 
-status: triaged
+status: shipped
 severity: alta — não pelo estado atual (nada chama, então nada quebra), mas porque a decisão anterior quase apagou o primitivo de conformidade por ele estar na mesma interface que um método morto.
 dod:
   - está decidido de quem é o `DeleteTenantKey`, olhando o ciclo de vida de deleção de tenant e não só quem chama o método
@@ -2622,6 +2633,20 @@ dod:
 > **Decisão proposta, três partes:** (1) não é construído agora — a obrigação se prende a dado de titular real e a plataforma está em pre-release; o gatilho declarado é **o primeiro cliente externo**, um evento e não uma data, porque data passa sozinha. (2) Quando for, é **operator-side** — o gatilho é temporal e não uma requisição, a autoridade do ciclo de vida é o Tenant CR, a policy já concede `delete` ao operator, e é irreversível. (3) A divergência de nome é reconciliada **na construção**: apontar a policy para `loopzero-tenants-*` agora concederia poder destrutivo real sobre as chaves que guardam dado, em troca de nada.
 >
 > **O item continua aberto de propósito.** Fechá-lo exige construir o shredder; o que este registro entrega é parar de supor que ele existe.
+
+> **Fechado 2026-08-16 — DoD 3/3, decisão ratificada ponto a ponto.** Ver `MEET-ASYNC-AMENDMENT-2026-08-16-crypto-shredding-ownership` (**ratified**).
+>
+> **(1) Decidido: o `DeleteTenantKey` é operator-side, quando construído.** Quatro razões medidas, não preferência — o gatilho é temporal (*"T+90 passou"* é condição de reconcile, não requisição), a autoridade do ciclo de vida é o Tenant CR, a policy já concedia `delete` ao operator, e é irreversível. Não contradiz o `B-042` (provisionamento api-side): criar e destruir têm gatilhos diferentes, e nada obriga o mesmo dono.
+>
+> **(2) Escrito que não são exigidas ainda** — a bala autoriza literalmente esta saída. Pre-release **confirmado pelo patrocinador**, sem titular real; a ausência do shredder é funcionalidade não construída, não descumprimento. **Gatilho declarado: o primeiro cliente externo com dado pessoal real** — um evento, e não uma data, porque data passa sozinha e ninguém percebe.
+>
+> **(3) A divergência foi resolvida por subtração.** A proposta original era reconciliar na construção; a leitura mudou para **remover** a concessão, e a mudança é melhor: `delete` sobre `transit/keys/tenant-+` era destruição irreversível com **função zero**, num espaço de nomes que ninguém preenche. Removida das **duas** policies (`values.yaml:165` e `:260`); volta apontando para o prefixo certo, junto do shredder.
+>
+> **E a proibição virou asserção.** `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` guardava só o prefixo do `api`, e dizia por quê na própria mensagem: *"who owns shredding is B-075, still undecided; a permission is not the place to answer it"*. Respondida a pergunta, ela cobre **qualquer** chave transit — e a mensagem instrui quem estiver reintroduzindo o verbo por estar construindo o shredder. Dois comentários que anunciavam o `DELETING` removido foram corrigidos junto.
+>
+> **Correção ao que eu mesmo escrevi:** a v1.0 do MEET afirmava que *"fechar o `B-075` exige construir o shredder"*. **Errado** — nenhuma das três balas pede construção; elas pedem uma decisão, uma declaração e uma reconciliação. Mantido, o erro teria deixado o item aberto para sempre por uma exigência que ele nunca fez.
+>
+> **O que continua não existindo, e agora está escrito em vez de suposto:** o shredder, o ator que acorda em T+90, e o runbook. O CronJob de Day-30 continua filtrando tenants soft-deleted por uma consequência que não acontece — registrado, e é trabalho de quem construir.
 
 
 ## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [x]

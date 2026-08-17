@@ -128,7 +128,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 //
 // T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): when
 // transit is non-nil, the store boots via NewPostgresSecretStoreWithVault
-// so writes dispatch through vault.EncryptForTenant (storing vault:v1:...
+// so writes dispatch through the transit client's Encrypt (storing vault:v1:...
 // prefixed bytes in encrypted_value) and reads dispatch via prefix
 // detection in decryptFromStore (vault:v1: → transit decrypt; else →
 // AES legacy). The legacy AES key is still passed through so existing
@@ -150,8 +150,10 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 		}
 	}
 	if transit != nil {
-		adapter := adapters.NewVaultTransitAdapter(transit)
-		store, err := store.NewPostgresSecretStoreWithVault(dbAdapter, adapter, encKey)
+		// `transit` entra direto: `vault.Transit` satisfaz `store.VaultTransitClient`
+		// estruturalmente, e nenhum dos dois pacotes conhece o outro. A ponte que ficava
+		// aqui só renomeava métodos (B-043, bala 4).
+		store, err := store.NewPostgresSecretStoreWithVault(dbAdapter, transit, encKey)
 		if err != nil {
 			return nil, err
 		}
