@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-137 items — **Open** 72 · **In flight** 0 · **Closed** 65
+137 items — **Open** 71 · **In flight** 0 · **Closed** 66
 
-### Open (72)
+### Open (71)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -137,7 +137,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
-| [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum----) | Dois validadores do ecossistema não são rodados por gate nenhum | `triaged` | média |
 | [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega----) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `triaged` | média |
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
@@ -151,7 +150,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (65)
+### Closed (66)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -220,6 +219,7 @@ _None._
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
+| [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5812,7 +5812,7 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-124`. O `go` está `DEFER` **por causa deste item**, e o comentário na configuração diz isso.
 
-## B-129 — Dois validadores do ecossistema não são rodados por gate nenhum   [ ]
+## B-129 — Dois validadores do ecossistema não são rodados por gate nenhum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5821,13 +5821,48 @@ source: discover-review
 severity: média — eles não guardam produto, guardam **contratos**: referências normativas que resolvem e a cadeia ponta a ponta do `/review`. Um validador que ninguém roda acumula falhas em silêncio, e foi exatamente o que aconteceu.
 evidence: medido 2026-08-17 ao cumprir o `Golden Rule Change Protocol` do `B-127`, que exige `check_xrefs.py` e `test_e2e_smoke.py` verdes. **`grep -rn "check_xrefs" taskfiles/ cmd/loopzero-ops/ .claude/hooks/` não retorna nada** — nenhuma task, nenhum gate, nenhum hook os invoca. E ao rodá-los pela primeira vez, `check_xrefs.py` saiu **`FAIL` com 4 achados**, todos introduzidos no mesmo dia sem que nada acusasse. É a mesma forma do `B-124` (três suítes vermelhas que nenhuma task rodava), noutro par de validadores.
 why_now: o protocolo de mudança de golden rule os nomeia como requisito — *"`check_xrefs.py` and `test_e2e_smoke.py` both PASS"* — mas nada verifica que alguém os rodou. Um requisito de processo sem execução é uma promessa, e o `B-124` acabou de mostrar quanto tempo uma promessa dessas sobrevive vermelha.
-status: triaged
+status: shipped
 dod:
   - `check_xrefs.py` e `test_e2e_smoke.py` rodam num gate, como as suítes pytest passaram a rodar no `skill-suites`
   - os **6 WARN** que o `check_xrefs` reporta hoje foram lidos e ou corrigidos ou declarados aceitáveis — um validador que sempre reporta avisos ensina a ignorá-lo
   - o gate distingue `FAIL` de `WARN`, para que o segundo não vire ruído que apaga o primeiro
 
 > Registrado 2026-08-17 ao fechar o `B-127`.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3
+
+**Bala 1 — os dois rodam num gate.** `ecosystem-validators`, ligado em
+`taskfiles/quality.yml` ao lado do `skill-suites` que o `B-124` criou pela mesma razão.
+Ausência dos scripts é **FALHA**, nunca skip: o gate existe porque ninguém os rodava, e reportar
+verde por não os encontrar reproduziria o defeito com aparência de cobertura. Resolve os **dois
+layouts** (`.claude/` no plugin, raiz no standalone) — fixar um faria o gate reportar ausência no
+outro, que é o defeito do `B-120` noutro lugar.
+
+**E o próprio repositório pegou a versão inicial.** Registrei o gate e ele reprovou em
+`TestEveryGateIsWiredOrExempted`: *"registered but neither wired into taskfiles/quality.yml nor
+declared"*. É a mesma classe do item — **implementado e não ligado lê como cobertura** — apanhada pela
+guarda que existe exatamente para isso.
+
+**Bala 2 — os 6 WARN foram lidos, e eram uma coisa só.** Todos vinham de **três** skills
+(`cnpg-audit`, `cnpg-design`, `multi-cluster-fleet-specialist`), duas linhas cada: sem `Cycle
+contract` e órfãs de ciclo. As três são **especialistas de domínio invocados sob demanda**, não fases
+de ciclo — exatamente a forma dos `cap-loopzerorem-specialist`, `backpressure-specialist` e
+`resilience-specialist` que a `AUXILIARY_SKILLS` já declara. Declaradas, com a razão escrita ao lado.
+
+`check_xrefs.py` agora sai com **zero achados**. Aqueles 6 eram **100% do ruído do checker**, e o
+motivo de fechá-los não é estético: era exatamente entre eles que os **4 FAIL** de hoje iam passar
+despercebidos.
+
+**Bala 3 — FAIL e WARN reportados separados.** O gate reprova em saída não-zero e **conta** os avisos
+sem reprovar. Somar os dois faria o aviso apagar a falha — e um validador que sempre avisa ensina a
+ignorá-lo, que é a forma pela qual este item nasceu.
+
+**Sete testes**, incluindo os dois layouts, o WARN-que-não-reprova, a ausência-que-reprova, e o teste
+contra a **população real** (`B-109`) — este último é o que impede o gate de ficar verde sobre scripts
+sintéticos enquanto os reais estão vermelhos, que é literalmente o estado que o `B-129` mediu.
+
 
 ## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [ ]
 

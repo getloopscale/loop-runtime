@@ -57,6 +57,7 @@ var gateRegistry = []gateSpec{
 	{"helm-topology-index", "Index of which chart runs on which cluster, derived from the helmfiles (never a hand-written second copy).", runHelmTopologyIndex},
 	{"worker-csp", "Cloudflare static worker CSP must not permit inline/eval script (#235).", runWorkerCSP},
 	{"tenant-csp-passthrough", "Static-CSP Traefik middleware must not be attached to tenant routes (#59).", runTenantCSPPassthrough},
+	{"ecosystem-validators", "Roda `check_xrefs.py` e `test_e2e_smoke.py`, que o protocolo de mudanca de golden rule exige verdes e que nenhum gate rodava (B-129). Reporta FAIL e WARN SEPARADOS: somar faria o aviso apagar a falha.", runEcosystemValidators},
 	{"test-target-coverage", "Todo PACOTE com teste e rodado por um alvo do Taskfile, ou tem isencao NOMEADA com razao e sunset. Granularidade de pacote, nao de modulo: um `./unit/...` marcava o modulo inteiro coberto enquanto 41 arquivos em tres subarvores nao rodavam (B-114). `go build` nao conta (B-087/B-088).", runTestTargetCoverage},
 	{"env-prefix-parity", "As duas declaracoes de reservedEnvKeyPrefixes (API e dockerfile-lint) casam prefixo do MESMO jeito (exato, sensivel a caixa) e so divergem de conjunto no que tem isencao datada.", runEnvPrefixParity},
 	{"skill-suites", "Roda as suites pytest de .claude/skills/*/tests/, que nenhuma task rodava. Advisory quando pytest ausente; FALHA quando a descoberta nao acha suite nenhuma, porque nao achar nada nao e o mesmo que nao achar nada errado (B-124).", runSkillSuites},
