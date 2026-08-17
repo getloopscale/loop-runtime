@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-125 items — **Open** 71 · **In flight** 0 · **Closed** 54
+126 items — **Open** 71 · **In flight** 0 · **Closed** 55
 
 ### Open (71)
 
@@ -144,13 +144,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
-| [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem----) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `triaged` | alta |
+| [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (54)
+### Closed (55)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -208,6 +208,7 @@ _None._
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
+| [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5229,7 +5230,7 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-003`/`B-004`.
 
-## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [ ]
+## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5238,10 +5239,40 @@ source: discover-review
 severity: alta — os dois jobs são o caminho de verificação e de migração das chaves de criptografia. Habilitá-los não faz o trabalho **e não falha de forma legível**: sobe um segundo servidor HTTP que roda até o `activeDeadlineSeconds` de 2h matá-lo, e o Job aparece como falha de timeout em vez de "comando não existe".
 evidence: medido 2026-08-16. `infra/helm/loopzero-api/templates/cronjob-day30-verify.yaml:54-59` invoca `/loopzero-api secret verify --batch-size=100 --filter-deleted-tenants`, e `cronjob-day60-aes-delete.yaml:58-63` invoca `/loopzero-api secret migrate-to-transit --dry-run=... --shred-aes-key=...`. **O binário não despacha subcomando nenhum:** `grep -rn "os.Args" api/cmd/*.go` (fora de teste) não retorna nada, e `func main()` (`api/cmd/main.go:40-48`) vai direto de `silenceKlog()` para `config.Load()` e o servidor. `migrate-to-transit` não é implementado em lugar nenhum de `api/` — zero ocorrências fora do gate que confere o template.
 why_now: encontrado ao medir o ciclo de vida de exclusão de tenant para o `B-075`. O gate `day30-day60-cronjobs` **passa** sobre os dois: ele casa regex no YAML renderizado — nome do CronJob, `schedule`, `concurrencyPolicy: Forbid`, `--dry-run=true`, `--shred-aes-key=false`, e a presença literal da string `migrate-to-transit`. Ele confere **a grafia do comando**, nunca que o binário sabe executá-lo. É a classe de defeito que esta sessão encontrou cinco vezes, na forma mais completa: um gate verde sobre um comando inexistente.
-status: triaged
+status: shipped
 dod:
   - está decidido se os dois jobs devem existir — se sim, o subcomando existe e um teste o executa; se não, os templates e o gate saem juntos
   - o gate deixa de afirmar a presença de uma string e passa a afirmar que o comando roda (por exemplo, `--help` do subcomando sai 0), ou declara explicitamente que só confere a forma do manifesto
   - os defaults de segurança do Day 60 (`--dry-run=true`, `--shred-aes-key=false`) continuam guardados por asserção depois da mudança — eles são a única coisa entre um engano e uma destruição irreversível
 
 > Registrado 2026-08-16 ao medir o ciclo de exclusão de tenant para o `B-075`.
+
+> **Fechado 2026-08-16 — DoD 3/3.** Ver `MEET-ASYNC-AMENDMENT-2026-08-16-aes-migration-crons` (pendente de ratificação).
+>
+> **(1) Decidido: os dois jobs NÃO devem existir, e saíram — templates e gate juntos.** A medição que decidiu foi além da premissa do item. Além de o binário não despachar subcomando nenhum: **nenhum ambiente habilita os crons** (`enabled: false` no chart e zero overrides em helmfile ou ArgoCD); **a chave AES legada não está configurada** em lugar nenhum — nem nos values, nem no deployment vivo, onde `kubectl get deploy loopzero-api` traz `OPENBAO_TRANSIT_ENABLED` e nenhuma variável de chave; e **a tabela `secrets` tem zero linhas**, das quais zero em AES. Os dois jobs migravam nada, verificavam nada e apagavam nada.
+>
+> **(2) O gate saiu com eles.** Um gate que afirma a forma de um manifesto que não existe mais não tem o que guardar — mantê-lo apontando para nada seria a mesma classe de defeito que ele ilustrava. Removidos: os dois templates, os blocos `day30VerifyCron`/`day60AesDeleteCron` de `values.yaml`, o pacote `day30day60cronjobs/`, a fiação em `quality_gates_observability.go` + `quality_registry.go`, e a invocação em `taskfiles/quality.yml`.
+>
+> **(3) Não se aplica** — os defaults de segurança do Day 60 saíram junto com o job que os carregava. A bala pedia que eles continuassem guardados *"depois da mudança"*, e a mudança foi remover o que os continha.
+>
+> **O oráculo de gates foi quem confirmou o desmonte.** `TestOracle_MatchesFrozenBaseline` reprovou com *"got 125 lines, baseline 126"* — exatamente um gate a menos — e a baseline foi re-congelada conscientemente, que é para isso que o `B-006` a moveu para `testdata/`. Sem ele, um gate des-ligado em silêncio passaria despercebido.
+>
+> **O risco que sobrevive à deleção virou item: `B-126`.** O Day-30 declarava três propósitos; o primeiro morreu com a migração, mas *(b) revogação de chave transit que orfaniza ciphertext* e *(c) corrupção de banco* continuam de pé. O job nunca os cobriu — nunca rodou — mas era o **único artefato do repositório que os nomeava**. Apagar o nome de um risco sem registrá-lo é como um risco desaparece de vista.
+
+
+## B-126 — Uma chave transit revogada orfaniza ciphertext e nada percebe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+severity: média — nada quebra hoje (a tabela `secrets` tem zero linhas), e sobe para **alta** no dia em que houver segredo de cliente guardado. O modo de falha é o pior tipo: silencioso, e só aparece quando alguém tenta ler o segredo.
+evidence: medido 2026-08-16 ao remover os dois CronJobs de migração AES→Transit (`B-125`). O `cronjob-day30-verify.yaml` declarava **três** propósitos: *(a) pre-migration AES rows not yet re-encrypted*, *(b) Transit key revocation that orphans ciphertext* e *(c) DB corruption*. O (a) morreu com a migração — zero linhas AES, zero linhas no total, nenhuma chave AES configurada em values ou no deployment vivo. **Os (b) e (c) não são da migração e continuam de pé.** O job nunca os cobriu, porque invocava `/loopzero-api secret verify` e o binário não despacha subcomando nenhum; mas ele era o **único artefato do repositório que os nomeava**. Hoje, se uma chave transit for revogada ou rotacionada em `transit/keys/loopzero-tenants-<id>`, todo ciphertext daquele tenant torna-se indecifrável e **não há sonda, alerta ou varredura** que perceba: `grep -rn "vault:v1:" --include="*.go" api/` mostra que a detecção de prefixo existe só no caminho de leitura (`secret_wrapper.go` `decryptFromStore`), que falha por requisição e não agrega.
+why_now: o artefato que nomeava o risco foi deletado, e apagar o nome de um risco sem registrá-lo é como um risco desaparece de vista. O `MEET-ASYNC-AMENDMENT-2026-08-16-aes-migration-crons` registra esta separação: o que vai para o histórico é o **desenho** do job; o que fica no registro é o **risco**.
+status: triaged
+dod:
+  - existe uma forma de detectar ciphertext indecifrável que **não** dependa de um usuário tentar lê-lo — varredura periódica, sonda de saúde ou métrica, decidido caso a caso
+  - a detecção distingue *chave revogada* de *dado corrompido*, porque a resposta a cada uma é diferente (uma é restaurar chave, a outra é restaurar backup)
+  - se a decisão for **não** construir enquanto não houver segredo de cliente, isso está escrito com gatilho nomeado — como o `B-075` fez com o apagamento
+
+> Registrado 2026-08-16 ao fechar o `B-125`. O risco não é novo; o que é novo é ele estar num lugar onde alguém o vê.

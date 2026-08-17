@@ -30,7 +30,6 @@ credentials-sot	gates	T1.1 SoT drift audit — every Secret created by canonical
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
 dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
-day30-day60-cronjobs	gates	T10.1-T10.4 hermetic contract for Day 30 verify + Day 60 AES delete CronJobs. Renders infra/helm/loopzero-api with 3 --set overrides (off/day30/day60). Asserts: disabled-by-default + Day 30 (schedule + EC-12 filter + Forbid + hardening) + Day 60 (safety defaults --dry-run=true + --shred-aes-key=false + migrate-to-transit subcmd + hardening). Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.4 Wave 2 replaces infra/tests/check-day30-day60-cronjobs_test.sh.
 db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
 decisions-deletion	gates	Guards deletion of decision/ADR records.
 dev-public-billing-portal-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.
