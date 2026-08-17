@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-136 items — **Open** 74 · **In flight** 0 · **Closed** 62
+136 items — **Open** 73 · **In flight** 0 · **Closed** 63
 
-### Open (74)
+### Open (73)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -137,7 +137,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
-| [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum----) | Dois validadores do ecossistema não são rodados por gate nenhum | `triaged` | média |
@@ -153,7 +152,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (62)
+### Closed (63)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -216,6 +215,7 @@ _None._
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
+| [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda---x) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `shipped` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
@@ -5481,7 +5481,7 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-009`.
 
-## B-123 — O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda   [ ]
+## B-123 — O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5490,7 +5490,7 @@ source: discover-review
 severity: média — o gate protege a asserção de que toda rota pública está atrás de `Auth`, e ele é a única coisa que a protege. Uma queda silenciosa na enumeração não abre um buraco sozinha; ela apaga o aviso de que um buraco foi aberto.
 evidence: medido 2026-08-16. `routeauthcoverage/check.go` enumera por **regex sobre linhas** (`routeCallRE` em `check.go:84`, `routePathRE` em `:87`) de um caminho fixo (`routerPath = "api/internal/server/router.go"`, `:27`), e localiza os grupos por **faixa de linhas** (a saída diz `auth spans 237..327, protected 337..684`). O piso que o `B-040` acrescentou é `outcome.PassCount+len(violations) == 0` (`:171`) — ele recusa a enumeração **vazia** e só ela. Uma mudança que faça o regex perder metade das rotas cai de 42 para 21 e **passa**. Medido no estado atual: as 42 rotas são todas literais e não há `r.Mount(`/`r.Route(` delegando, então o regex acerta hoje — o que está em aberto é o que acontece quando não acertar.
 why_now: o `B-040` registrou este upgrade como trabalho seguinte na sua terceira bala, e nenhum item o carregava — a bala não podia fechar porque apontava para um item que não existia. E o `B-041`/`B-080` estão movendo famílias de `routes` agora, que é exatamente a mudança que reposiciona linhas e caminhos.
-status: triaged
+status: shipped
 dod:
   - a enumeração é AST e não regex, ou o piso passa a ser uma contagem mínima que uma queda derruba
   - existe teste que prova a queda: uma árvore com N rotas onde a forma de registro mudou reprova, em vez de reportar N/2
@@ -5501,6 +5501,70 @@ dod:
 > **Instância medida 2026-08-16 — a fragilidade deixou de ser prospectiva.** Existe **uma rota que o gate nunca viu**: `api/internal/routes/timeline/deploy_timeline_register.go:27` monta `GET /api/v1/deploys/{deployID}/timeline` através de um helper chamado de `router.go:550`. O caminho aparece **zero** vezes no `router.go`, e o gate reporta `42 routes` sobre um sistema com pelo menos 43.
 >
 > A rota está segura — dentro da faixa protegida e com `401` próprio quando não há tenant — e o helper é desenho deliberado, documentado como ponto de montagem canônico para que a fiação tenha teste. **O defeito é do gate**: a garantia que ele vende é *"toda rota pública está atrás de `Auth`"*, e qualquer rota montada por helper é invisível a ela. Encontrada ao verificar a terceira bala do `B-041`.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3. E a preocupação era prospectiva; a realidade era pior
+
+**O registro dizia que o regex acerta hoje. Não acerta.**
+`routeCallRE` exige que `r.` seja seguido **imediatamente** pelo verbo, e a forma mais numerosa do
+roteador real é `r.With(rateLimitMiddlewares...).Post(…)`, em que vem `With`.
+
+| forma | ocorrências | o regex casava? |
+|---|---:|---|
+| `r.Get("/x", h)` | 42 | sim |
+| `r.With(mw...).Post("/x", h)` | **28** | **não** |
+| montada por helper, noutro arquivo | 1 | **não** |
+
+**O gate reportava `42 routes` sobre um sistema com ~71** — vendia *"toda rota pública está atrás de
+`Auth`"* verificando **59%** delas. Nenhuma das 29 invisíveis estava insegura, mas **por posição, não
+por verificação**: 27 caem dentro de `registerProtectedRoutes` e uma está no allowlist. E a linha 202
+(`r.With(middleware.RequireAdminService).Post(`) prova que a forma cega **é usada fora das faixas
+protegidas** — a próxima nessa forma poderia nascer aberta com o gate dizendo `PASS`.
+
+**Bala 1 — AST, e o escopo deixou de ser um arquivo.** A AST enxerga a **chamada**, não a grafia:
+`r.With(a,b).Post(x)` e `r.Post(x)` são o mesmo `*ast.CallExpr` com `Sel.Name == "Post"`, e o receptor
+é irrelevante. As faixas `Auth`/`registerProtectedRoutes` passaram a vir de posições da AST em vez de
+contagem de chaves — uma chave dentro de string ou comentário deslocava o contador e movia a faixa em
+silêncio, que é a classe inteira que esta mudança remove. Medido: a faixa protegida era reportada como
+`337..684` e é `344..684`.
+
+**A varredura da árvore, e por que ela é semântica e não uma lista de caminhos.** A primeira versão
+contava qualquer registro HTTP sob `api/` e achou **10** sítios — nove sem relação com este roteador
+(`/debug/pprof/*` num `ServeMux` dedicado em porta própria, `/healthz`+`/readyz`+`/metrics` no mux do
+binário **controller**, `/metrics` noutro mux). Excluí-los por caminho produziria uma lista de nove
+entradas que cresceria a cada mux novo — exatamente o mecanismo que o contraditor do MEET apontou.
+
+A propriedade que os separa não envelhece: **rota registrada num `chi.Router` recebido como parâmetro
+é ponto de montagem do roteador público; rota num `ServeMux` local é outro servidor.** Com isso a
+lista caiu de 10 para **1** — a instância que o item mediu. E o gate **não decide** se ela está
+protegida: seguir a cadeia de chamadas e errar seria pior que não analisar. Ele recusa a
+invisibilidade.
+
+**Bala 2 — o piso virou contagem mínima**, e há teste dos dois lados: uma árvore de 1 rota sob piso 10
+reprova; exatamente no piso passa. `== 0` recusava só o colapso total, e uma queda de 71 para 35 —
+que é o que uma mudança de forma de registro produz — passava.
+
+**Bala 3 — o caminho do roteador.** `ErrRouterNotFound` já existia; acrescentou-se
+`ErrRouterUnparseable`, porque *"não achei"* e *"achei e não entendi"* são erros de instrumentação
+diferentes, e colapsá-los faz o gate enumerar zero e reportar o erro errado. E o escopo deixou de ser
+o literal: a árvore inteira é varrida.
+
+**Onze testes novos**, RED antes de GREEN, incluindo a fronteira oposta do piso e o teste contra a
+**população real** (`B-109`) — este último é o que fixa a correção, porque a contagem tinha de
+**subir**.
+
+**Um teste existente foi atualizado com a razão escrita**: `TestCheck_RealTreeStillPasses` fixava 42 e
+pedia, no próprio texto, que o número fosse atualizado com a justificativa se mudasse de propósito.
+42 + 28 = **70**.
+
+**Alternativa rejeitada por medição:** perguntar ao roteador em tempo de execução (`chi.Walk`) é a
+verdade absoluta, mas `NewRouter` registra a maioria das rotas **condicionalmente** (36 chamadas a
+`surfaces.Recorded`, 27 dependentes de banco). Com `Config` zerada o walk enumeraria **menos** que o
+regex — o mesmo defeito com aparência de rigor. Fica registrado como o alvo certo para quando a
+construção do roteador for separável das dependências.
+
+**Medido depois:** `route-auth-coverage: PASS — 70 routes` (antes: 42).
 
 
 ## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [x]

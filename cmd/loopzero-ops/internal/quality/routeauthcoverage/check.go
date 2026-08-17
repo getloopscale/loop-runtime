@@ -18,9 +18,10 @@ package routeauthcoverage
 import (
 	"errors"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -51,7 +52,34 @@ var allowlist = []string{
 // Config controls the check.
 type Config struct {
 	RepoRoot string
+	// OffRouterMounts declara arquivos de produção que registram rota fora do
+	// router.go, mapeando caminho → RAZÃO. Nil usa DefaultOffRouterMounts.
+	//
+	// O gate não decide se essas rotas estão protegidas — ele recusa não vê-las.
+	// Um mapa vazio (não-nil) significa "nenhuma declaração", que é o que os
+	// testes de recusa exercitam.
+	OffRouterMounts map[string]string
+	// MinRoutes é a contagem MÍNIMA de rotas enumeradas. Zero usa DefaultMinRoutes.
+	//
+	// Mínima e não exata de propósito: um número exato viraria manutenção a cada
+	// rota nova, e a primeira pessoa a tropeçar nele o desligaria.
+	MinRoutes int
 }
+
+// DefaultOffRouterMounts é a lista real, e hoje tem exatamente um item.
+//
+// Medida em 2026-08-17 varrendo `api/**/*.go` de produção: um único arquivo registra
+// rota fora do router.go.
+var DefaultOffRouterMounts = map[string]string{
+	"api/internal/routes/timeline/deploy_timeline_register.go": "ponto de montagem canônico do timeline, chamado de router.go:550 — de DENTRO da faixa protegida. " +
+		"O helper existe para que a fiação tenha teste (`deploy_timeline_register_test.go`), e a rota tem 401 próprio quando não há tenant. " +
+		"Medido no B-123: o gate reportava 42 rotas sobre um sistema com pelo menos 43, e esta era a que faltava.",
+}
+
+// DefaultMinRoutes é o piso. O roteador real enumera ~71; 55 dá folga para remoção
+// legítima de família (o B-080 está movendo rotas) e ainda derruba uma queda pela
+// metade, que é o modo de falha realista.
+const DefaultMinRoutes = 55
 
 // Outcome is the summary.
 type Outcome struct {
@@ -59,6 +87,8 @@ type Outcome struct {
 	ProtStart, ProtEnd int
 	PassCount          int
 	Violations         []string
+	// OffRouterUndeclared lista registros fora do router.go sem declaração.
+	OffRouterUndeclared []string
 }
 
 // ErrViolations means at least one route is unprotected and un-allowlisted.
@@ -78,22 +108,6 @@ var ErrNoRoutesEnumerated = errors.New("router.go parsed and the Auth group loca
 // located — that itself is a systemic regression the gate refuses to gloss over.
 var ErrAuthGroupMissing = errors.New("could not locate the middleware.Auth chi.Router group in router.go")
 
-var (
-	// routeCallRE matches lines like `\tr.Get("/foo", handler)`. Captures both
-	// chi Method / MethodFunc callers.
-	routeCallRE = regexp.MustCompile(`^\s*r\.(?:Get|Post|Put|Patch|Delete|Method|MethodFunc)\(`)
-	// routePathRE captures the first quoted string in the line, which for
-	// chi calls is the route path.
-	routePathRE = regexp.MustCompile(`"(/[^"]+)"`)
-	// authGroupOpenRE marks the start line of a `r.Group(func(r chi.Router) {`.
-	authGroupOpenRE = regexp.MustCompile(`r\.Group\(func\(r chi\.Router\) \{`)
-	// protectedFuncOpenRE marks the start line of registerProtectedRoutes body.
-	protectedFuncOpenRE = regexp.MustCompile(`^func registerProtectedRoutes\(`)
-	// middlewareAuthRE marks any line that references middleware.Auth (used to
-	// prove the Group is the Auth group, not some other Group).
-	middlewareAuthRE = regexp.MustCompile(`middleware\.Auth`)
-)
-
 // Check runs the router.go coverage audit.
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
@@ -104,30 +118,28 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 	full := filepath.Join(root, routerPath)
-	body, err := os.ReadFile(full)
-	if err != nil {
+	if _, statErr := os.Stat(full); statErr != nil {
 		return Outcome{}, ErrRouterNotFound
 	}
-	lines := strings.Split(string(body), "\n")
+	fset := token.NewFileSet()
+	file, perr := parser.ParseFile(fset, full, nil, parser.SkipObjectResolution)
+	if perr != nil {
+		// Os DOIS erros são embrulhados: `errors.Is` continua reconhecendo o
+		// sentinela, e quem lê o log recebe a posição exata do parse — que é o
+		// diagnóstico inteiro quando um gate diz "não entendi o arquivo".
+		return Outcome{}, fmt.Errorf("%w: %w", ErrRouterUnparseable, perr)
+	}
 
-	authStart, authEnd := findAuthGroupRange(lines)
+	authStart, authEnd, protStart, protEnd := authRanges(fset, file)
 	if authStart == 0 {
 		return Outcome{}, ErrAuthGroupMissing
 	}
-	protStart, protEnd := findProtectedFuncRange(lines)
 
 	pass := 0
 	var violations []string
-	for i, line := range lines {
-		if !routeCallRE.MatchString(line) {
-			continue
-		}
-		m := routePathRE.FindStringSubmatch(line)
-		if len(m) < 2 {
-			continue
-		}
-		route := m[1]
-		lineNo := i + 1
+	for _, site := range enumerateFile(fset, file, routerPath) {
+		route := site.Pattern
+		lineNo := site.Line
 
 		// Inside Auth group
 		if lineNo >= authStart && lineNo <= authEnd {
@@ -168,77 +180,39 @@ func Check(cfg Config) (Outcome, error) {
 	// instrumentation error — for the most serious finding this repository can
 	// produce, a public surface with no authentication. See EC-1 of
 	// .claude/knowledge-base/reviews/slice-1-tripwires-edge-cases-2026-08-11.md.
-	if outcome.PassCount+len(violations) == 0 {
+	enumerated := outcome.PassCount + len(violations)
+	if enumerated == 0 {
 		return outcome, ErrNoRoutesEnumerated
 	}
+
+	// O piso por CONTAGEM MÍNIMA. `== 0` recusava só o colapso total; uma queda de
+	// 71 para 35 passava, e é essa a queda que uma mudança de forma de registro
+	// produz. Roda depois de ErrViolations pela mesma razão que o zero rodava:
+	// enumerar pouco é erro de instrumentação, e um achado de segurança real tem
+	// precedência sobre ele.
+	floor := cfg.MinRoutes
+	if floor == 0 {
+		floor = DefaultMinRoutes
+	}
+	if enumerated < floor {
+		return outcome, fmt.Errorf("%w: %d enumeradas, piso %d", ErrEnumerationBelowFloor, enumerated, floor)
+	}
+
+	// A varredura da árvore. Roda por último: uma rota desprotegida no router.go é
+	// um achado maior que um ponto de montagem não declarado.
+	declared := cfg.OffRouterMounts
+	if declared == nil {
+		declared = DefaultOffRouterMounts
+	}
+	undeclared, serr := scanOffRouter(root, declared)
+	if serr != nil {
+		return outcome, fmt.Errorf("varredura da árvore: %w", serr)
+	}
+	if len(undeclared) > 0 {
+		outcome.OffRouterUndeclared = undeclared
+		return outcome, ErrUndeclaredOffRouterMount
+	}
 	return outcome, nil
-}
-
-// findAuthGroupRange locates the r.Group(func(r chi.Router) { ... }) block
-// whose body references middleware.Auth. Ports the bash awk brace-counter.
-// Returns 1-based [start, end] line numbers; both zero if not found.
-func findAuthGroupRange(lines []string) (int, int) {
-	inBlock := false
-	startLine := 0
-	depth := 0
-	hasAuth := false
-	for i, line := range lines {
-		if !inBlock {
-			if authGroupOpenRE.MatchString(line) {
-				inBlock = true
-				startLine = i + 1
-				depth = 1
-				hasAuth = false
-			}
-			continue
-		}
-		opens := strings.Count(line, "{")
-		closes := strings.Count(line, "}")
-		depth += opens - closes
-		if middlewareAuthRE.MatchString(line) {
-			hasAuth = true
-		}
-		if depth == 0 {
-			if hasAuth {
-				return startLine, i + 1
-			}
-			inBlock = false
-			startLine = 0
-		}
-	}
-	return 0, 0
-}
-
-// findProtectedFuncRange locates the registerProtectedRoutes function body.
-// Ports the bash awk brace-counter that tracks first `{` as body opener.
-func findProtectedFuncRange(lines []string) (int, int) {
-	startLine := 0
-	depth := 0
-	inBody := false
-	for i, line := range lines {
-		if startLine == 0 {
-			if protectedFuncOpenRE.MatchString(line) {
-				startLine = i + 1
-				depth = 0
-				inBody = false
-			}
-			// even if the opener has `{` on the same line, fall through to
-			// depth accounting below so we don't miss single-line function defs.
-		}
-		if startLine == 0 {
-			continue
-		}
-		opens := strings.Count(line, "{")
-		closes := strings.Count(line, "}")
-		if !inBody && opens > 0 {
-			inBody = true
-		}
-		depth += opens - closes
-		if inBody && depth == 0 {
-			return startLine, i + 1
-		}
-	}
-	return 0, 0
 }
 
 // inAllowlist returns true when the route is exactly an allowed prefix or a
