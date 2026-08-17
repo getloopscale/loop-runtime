@@ -59,7 +59,13 @@ import (
 
 const taskfileGlob = "taskfiles/*.yml"
 
-// mgmtContextVars are Taskfile variables that resolve to a mgmt context.
+// mgmtContextVars are Taskfile variables that resolve to the core context.
+//
+// O nome do identificador guarda `mgmt` DE PROPOSITO: `MGMT_CONTEXT` segue sendo um
+// nome de variavel aceito na lista abaixo, e renomear o identificador sem renomear o
+// que ele casa faria o codigo dizer uma coisa e verificar outra. As MENSAGENS, que o
+// operador le, foram atualizadas para `core` — elas nomeavam um cluster que nao existe
+// mais desde o rename do B-001.
 // Measured: Taskfile.yml defines CORE_CONTEXT: k3d-loopzero-core, and
 // taskfiles/infra.yml writes `--kube-context {{.CORE_CONTEXT}}` — the repo's
 // dominant style. A literal-only scan would miss the way the repo actually
@@ -89,9 +95,9 @@ type Outcome struct {
 	LinesScanned int
 }
 
-// ErrForbiddenShortcut means the mgmt-cluster OpenBao shortcut is present.
+// ErrForbiddenShortcut means the core-cluster OpenBao shortcut is present.
 var ErrForbiddenShortcut = errors.New(
-	"installing OpenBao into the mgmt cluster is forbidden in EVERY tier " +
+	"installing OpenBao into the core cluster is forbidden in EVERY tier " +
 		"(.claude/rules/cleanroom-up-live-test-mandate.md; " +
 		"ADR docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md)")
 
@@ -194,7 +200,7 @@ func scan(rel string, lines []logicalLine) []string {
 	for _, l := range lines {
 		if m := targetRe.FindStringSubmatch(l.Text); m != nil {
 			vs = append(vs, fmt.Sprintf(
-				"%s:%d — task target %q installs the secrets plane into the mgmt cluster", rel, l.Line, m[1]))
+				"%s:%d — task target %q installs the secrets plane into the core cluster", rel, l.Line, m[1]))
 			continue
 		}
 		if !strings.Contains(l.Text, secretsHelmfile) {
@@ -205,7 +211,7 @@ func scan(rel string, lines []logicalLine) []string {
 				continue
 			}
 			vs = append(vs, fmt.Sprintf(
-				"%s:%d — a secrets helmfile is pointed at the mgmt context %q", rel, l.Line, m[1]))
+				"%s:%d — a secrets helmfile is pointed at the core context %q", rel, l.Line, m[1]))
 			break
 		}
 	}

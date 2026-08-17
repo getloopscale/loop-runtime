@@ -64,12 +64,15 @@ spec:
 	if len(out.Violations) != 1 {
 		t.Fatalf("want 1 violation, got %d: %v", len(out.Violations), out.Violations)
 	}
-	if !strings.Contains(out.Violations[0], "hashicorp/vault:1.18.0") {
-		t.Errorf("violation missing tag context: %q", out.Violations[0])
+	if !strings.Contains(out.Violations[0].String(), "hashicorp/vault:1.18.0") {
+		t.Errorf("violation missing tag context: %q", out.Violations[0].String())
 	}
-	// Warn-mode: violations reported, Pass stays true.
-	if !out.Pass {
-		t.Error("warn-mode should Pass even when violations present")
+	// `literal_tag` is enforced by default since
+	// MEET-ASYNC-AMENDMENT-2026-08-17-digest-enforcement-has-two-populations: it
+	// is the population the chart author can fix today, in one line, with a fix
+	// that does not age.
+	if out.Pass {
+		t.Error("a literal :tag must fail the gate by default")
 	}
 }
 
@@ -82,7 +85,7 @@ spec:
       image: hashicorp/vault:1.18.0
 `,
 	})
-	out, err := Check(Config{Root: root, EnforceMode: true})
+	out, err := Check(Config{Root: root, Enforce: EnforceAll()})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -143,15 +146,24 @@ func TestCheck_MissingPath_SkippedSilently(t *testing.T) {
 	}
 }
 
-func TestCheck_LiveChartsRepo_PassesInWarnMode(t *testing.T) {
-	// Smoke test against the actual repo — warn-mode must pass
-	// regardless of how many violations exist today. Catches the
-	// case where someone accidentally flips EnforceMode default.
-	out, err := Check(Config{Root: repoRoot, EnforceMode: false})
+// TestCheck_LiveChartsRepo_MissingDigestStillOnlyWarns replaces a test that
+// asserted "warn-mode should always Pass, regardless of how many violations exist
+// today".
+//
+// That assertion encoded the contract this gate had for three months and which
+// MEET-ASYNC-AMENDMENT-2026-08-17-digest-enforcement-has-two-populations
+// supersedes: a single global mode. It is kept — narrowed — because the half it
+// still protects is real and now easy to break by accident: promoting
+// `missing_digest` to enforced before the image publisher emits the value would
+// make the gate refuse seven findings whose fix does not exist.
+func TestCheck_LiveChartsRepo_MissingDigestStillOnlyWarns(t *testing.T) {
+	out, err := Check(Config{Root: repoRoot})
 	if err != nil {
 		t.Fatalf("Check on real repo: %v", err)
 	}
-	if !out.Pass {
-		t.Fatalf("warn-mode should always Pass, got fail with violations: %d", len(out.Violations))
+	for _, v := range out.Enforced() {
+		if v.Kind == KindMissingDigest {
+			t.Fatalf("missing_digest must not block until the publisher emits image.digest: %s", v)
+		}
 	}
 }

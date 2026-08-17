@@ -12,10 +12,12 @@
 // the image is signed (Fulcio mints cert for ANY identity), digest
 // immutability is a separate, layered defense.
 //
-// Mode: WARN — this gate reports violations but Outcome.Pass is true
-// when zero violations OR in warn-mode (default). Sponsor flips
-// EnforceMode=true post-7d-soak via the EnforceMode field to make
-// violations fail the gate.
+// Mode: PER KIND, not global. `KindLiteralTag` is enforced by default;
+// `KindMissingDigest` warns until the image publisher emits the value. See
+// kind.go and MEET-ASYNC-AMENDMENT-2026-08-17-digest-enforcement-has-two-populations
+// for why one boolean over both populations was the defect: it left three
+// fixable findings invisible inside a number dominated by seven that were not,
+// for three months against a declared 7-day soak.
 //
 // Scope: prod-published Helm charts (charts/loopzero-*/) that ship to
 // platform namespaces. Tenant chart templates are out of scope
@@ -53,25 +55,40 @@ type Config struct {
 	Root string
 	// ScanPaths overrides DefaultScanPaths when non-empty.
 	ScanPaths []string
-	// EnforceMode flips warn-mode (default) to enforce. When false,
-	// violations are reported but Pass stays true (warn-mode soak).
-	// Sponsor flips to true post-7d-soak per EC-5 of plan.
-	EnforceMode bool
+	// Enforce names the kinds whose violations make Pass false. A nil map
+	// means DefaultEnforce() — nil is the common case (every caller that does
+	// not care about the split), so it must mean the decided policy rather
+	// than "enforce nothing", which is what the old zero value meant.
+	Enforce map[Kind]bool
 }
 
 // Outcome captures the result.
 type Outcome struct {
-	// Pass is true when zero violations OR in warn-mode (regardless
-	// of violation count).
+	// Pass is false when at least one violation of an ENFORCED kind exists.
 	Pass         bool
 	ScannedFiles int
-	// Violations are file:lineno: <stripped line> entries for each
-	// occurrence of an image reference that uses :tag without an
-	// adjacent digest (or via the helper that prefers digest).
-	Violations []string
-	// EnforceMode reflects the config — useful for callers to render
-	// the appropriate message ("warn" vs "violation").
-	EnforceMode bool
+	// Violations are every finding, of every kind. Use Enforced/Warned to
+	// separate what blocks from what is being reported.
+	Violations []Violation
+	// Enforce is the policy this run applied — callers render "FAIL" vs
+	// "WARN" per finding from it, instead of from one global mode.
+	Enforce map[Kind]bool
+}
+
+// Enforced lists the findings that made (or would make) the gate fail.
+func (o *Outcome) Enforced() []Violation { return o.byEnforcement(true) }
+
+// Warned lists the findings reported without blocking.
+func (o *Outcome) Warned() []Violation { return o.byEnforcement(false) }
+
+func (o *Outcome) byEnforcement(enforced bool) []Violation {
+	var out []Violation
+	for _, v := range o.Violations {
+		if o.Enforce[v.Kind] == enforced {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 var (
@@ -103,7 +120,11 @@ func Check(cfg Config) (*Outcome, error) {
 	if len(paths) == 0 {
 		paths = DefaultScanPaths
 	}
-	out := &Outcome{Pass: true, EnforceMode: cfg.EnforceMode}
+	enforce := cfg.Enforce
+	if enforce == nil {
+		enforce = DefaultEnforce()
+	}
+	out := &Outcome{Pass: true, Enforce: enforce}
 
 	for _, p := range paths {
 		full := p
@@ -142,9 +163,9 @@ func Check(cfg Config) (*Outcome, error) {
 		return nil, err
 	}
 
-	// Warn-mode: report violations but stay Pass=true. Sponsor flips
-	// EnforceMode=true to turn violations into fail.
-	if cfg.EnforceMode && len(out.Violations) > 0 {
+	// The verdict reads the policy per kind. A warned finding is still
+	// reported — it just does not decide the verdict.
+	if len(out.Enforced()) > 0 {
 		out.Pass = false
 	}
 	return out, nil
@@ -183,7 +204,9 @@ func scanFile(path string, out *Outcome) error {
 
 		// Hardcoded `image: foo/bar:v1.2.3` = violation.
 		if hardcodedTagRe.MatchString(line) {
-			out.Violations = append(out.Violations, fmt.Sprintf("%s:%d: %s", path, lineNum, stripped))
+			out.Violations = append(out.Violations, Violation{
+				Kind: KindLiteralTag, File: path, Line: lineNum, Text: stripped,
+			})
 		}
 	}
 	if err := scanner.Err(); err != nil {

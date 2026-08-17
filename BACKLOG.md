@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-129 items — **Open** 71 · **In flight** 0 · **Closed** 58
+136 items — **Open** 74 · **In flight** 0 · **Closed** 62
 
-### Open (71)
+### Open (74)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -86,7 +86,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe----) | O diagnóstico do CLI manda verificar um endereço que não existe | `triaged` | baixa ↑ |
-| [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista----) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `triaged` | P0 |
 | [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar----) | A cobrança por uso não tem para onde reportar | `triaged` | — |
@@ -136,21 +135,25 @@ consequência do escopo per-repo declarado acima.
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
-| [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
-| [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18----) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `triaged` | alta |
-| [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum----) | Dois validadores do ecossistema não são rodados por gate nenhum | `triaged` | média |
+| [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega----) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `triaged` | média |
+| [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
+| [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
+| [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
+| [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
+| [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
+| [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (58)
+### Closed (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -169,6 +172,7 @@ _None._
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
+| [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
@@ -207,7 +211,10 @@ _None._
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
+| [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez---x) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `shipped` | alta |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
+| [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
+| [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
@@ -278,6 +285,58 @@ histórico-imutável que o próprio DoD manda preservar.
 > Origem: análise de topologia feita no `loopzero-capsim` em 2026-08-08/09 durante o desenho da solução de
 > CAPI — `../loopzero-capsim/docs/capi-cell-lifecycle-solution-design.md`.
 > Registrado 2026-08-09 por `/backlog-item` (slug: `cluster-topology-naming`).
+
+---
+
+### Medição de 2026-08-17 — o bloqueio caiu por execução, e o que sobrou é outra coisa
+
+**O bloqueio deste item não existe mais, e não porque alguém o decidiu: porque foi executado.**
+`infra/k3d/` hoje tem `core-cluster.yaml`, `secrets-cluster.yaml`, `cell-0-cluster.yaml`,
+`cell-1-cluster.yaml` e `build-cluster.yaml`. As três metades aterrissaram — inclusive a `cell`, que
+dependia do `B-005`, e o `B-005` também foi executado (`fbb246430`, *"funde as três identidades de
+célula nas duas máquinas que existem"*). `DefaultCellID` vale **`cell-0`**
+(`api/internal/placement/cells.go:30`), o `case "$CELL"` aceita `0` e `1`, e a relação é **1:1**.
+
+**A colisão que a medição de 09/08 previu materializou-se — no cabeçalho, não no código.** Uma
+substituição de `cell-default` → `cell-0` produziu, em `bootstrap-cell-cc.sh`, duas linhas da tabela
+com o mesmo id, a frase *"cell-0 reuses cell-0's cluster"* e um Usage mandando passar
+`<default|1|2>`, valores que o script rejeita. É a armadilha que este item escreveu em prosa
+(*"substituição global cega destrói o repositório"*), acontecendo dentro dele. **Corrigido hoje**, com
+o registro do que a substituição fez.
+
+**E eu caí na mesma armadilha ao corrigir**: troquei `mgmt.yaml` por `core.yaml` num exemplo, e o
+arquivo do drill **ainda se chama `mgmt.yaml`** (`drill-helmfile-bootstrap.sh:143`). Revertido, com a
+razão escrita ao lado — a metade drill não foi renomeada.
+
+**DoD-1 re-medido, agora separando execução de histórico.** Sobre `cmd/ api/ operators/ pkg/ infra/
+charts/ taskfiles/ tools/` — isto é, só o que executa — restavam **12** arquivos; hoje restam **8**:
+
+| arquivo | natureza | por que não fechei |
+|---|---|---|
+| `infra/argocd-bootstrap/apps/cell-cluster-issuer.yaml` + `validate-sync-waves.py` | `name: runtime-cluster-issuer` — **nome de Application viva do ArgoCD** | renomear é deletar e recriar recurso vivo; os dois têm de mover juntos |
+| `infra/pulumi-drill/src/index.ts` + `pulumi-shared/__tests__/contracts.test.ts` | `${doProject}-runtime-cluster` — **nome de cluster DOKS real** | Pulumi é legado AS-IS até o AM8 (`CLAUDE.md`); renomear cluster DO é destrutivo |
+| `operators/internal/{argocd,preview,tenant}` | *"single-runtime-cluster"*, *"cell→runtime-cluster mapping"* — o **conceito**, não o identificador | é exatamente o caso que este item manda **parar e levar ao sponsor**: `runtime` como nome de cluster e como termo do domínio no mesmo arquivo |
+| `taskfiles/k3d.yml:136` | comentário que **descreve o bug histórico** (`loopzero-mgmt` inexistente) | o próprio DoD manda preservar o que descreve o passado |
+
+**Fechados hoje** (sem decisão pendente, porque nomeavam coisas que não existem mais): as duas
+mensagens de gate que diziam *"mgmt cluster"* a um operador cujo cluster se chama `core`, e os dois
+comentários citando o contêiner `k3d-loopzero-mgmt-serverlb`. O identificador Go `mgmtContextVars` **ficou**
+— `MGMT_CONTEXT` segue sendo um nome de variável aceito, e renomear o identificador sem renomear o
+que ele casa faria o código dizer uma coisa e verificar outra.
+
+**Por que este item continua ABERTO**, e não é falta de vontade:
+
+1. **A bala do cleanroom não pode ser executada.** O DoD exige *"o ambiente sobe do zero com os nomes
+   novos"*, pelo caminho de `cleanroom-up-live-test-mandate.md`. **Não há cluster k3d local**
+   (`k3d cluster list` vazio), e o droplet compartilhado serve `app-dev.loopzero.example` com dado real —
+   `task clean:all` lá destruiria o ambiente cuja superfície acabou de ser fechada no `B-028`.
+2. **Os quatro arquivos restantes de infra tocam recurso vivo** (Application do ArgoCD, cluster DOKS),
+   e os três de `operators/` são a decisão de desenho que este item manda levar ao sponsor.
+
+**Registrado como `B-136`:** a metade `cell` executou antes da reunião T3 que a bloqueava, e nenhum
+registro dessa reunião foi localizado. O código resultante é o desenho certo — o achado é que a
+decisão certa chegou por um caminho que a governança não viu.
+
 
 ## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [ ]
 
@@ -1034,7 +1093,7 @@ dod:
 
 > Registrado 2026-08-10 ao medir se o CLI passa pelo painel (`B-022`).
 
-## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [ ]
+## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1044,7 +1103,7 @@ sponsor: diretriz de 2026-08-10 — *"SEGURANÇA SEMPRE É CRÍTICO E PRIORIDADE
 severity: **P0** — por diretriz do sponsor, e sustentada por medição.
 evidence: medido em 2026-08-10, **da internet** (não do droplet). 39 portas escutam em `0.0.0.0`; o firewall `loopzero-host-firewall` bloqueia 20; sobram **19**, das quais 2 estão na `ALLOW_EXTERNAL` com justificativa medida. As outras **17 não estão em lista nenhuma**. Testado de fora com conexão TCP: `14433`, `14444`, `30082`, `18084`, `30090` e `30094` responderam **ABERTA**. Identificado o que serve cada uma via `docker ps`: `30082` é o **ArgoCD** (entregador GitOps), `30095` é o **cluster de segredos**, `18083`–`18090` são cinco produtos do plano de dados servindo direto, contornando a borda, e `14433`/`14444` são Kratos e Hydra **sem TLS** — o mesmo serviço que a borda já publica em HTTPS.
 why_now: a lista `PROTECT` do firewall foi escrita quando os clusters se chamavam `mgmt`, `workload`, `runtime-2` e `vault` — os comentários dela ainda citam esses nomes. Ela cobre as portas que existiam então; tudo que subiu depois (as pontes NodePort de Kratos e Hydra que criei hoje, os produtos do plano de dados, o cluster de segredos) nasceu fora da lista. **Uma lista escrita à mão degrada sozinha**, e esta degradou em silêncio: nada reprova quando uma porta nova aparece sem entrada.
-status: triaged
+status: shipped
 blocked_by: nada técnico. O que exige decisão é a política — quais portas ficam abertas e com que justificativa —, e a diretriz do sponsor já a define: **uma superfície exposta**.
 dod:
   - o firewall passa a fechar **por padrão** e abrir por exceção nomeada, em vez do inverso: hoje uma porta ausente da lista fica ABERTA, que é a polaridade errada para uma regra de segurança
@@ -1112,6 +1171,77 @@ acima em vez de 17 não medidas. As balas 1 e 4 seguem abertas e são o trabalho
 ganhou o requisito de **reconciliar nos dois sentidos**, que a evidência de 10/08 não pedia.
 
 status anterior: `raw` · **agora `triaged`** — a medição acima é a saída do `/discover --mode live-test`.
+
+---
+
+### Fechado 2026-08-17 — DoD 4/4, aplicado e verificado LIVE
+
+**A terceira medição é a que fecha o argumento da bala 1.** Sondadas de fora as 42 portas em escuta:
+**15 abertas**, três delas a borda pretendida — pior que os 10 de 15/08. E **quatro das novas**
+(`30120`, `30191`, `30193`, `30194`) nasceram nos dois dias entre as medições, sem ninguém decidir
+nada.
+
+**A causa raiz é estrutural, e nenhuma lista escrita à mão a alcança:** as portas novas são
+publicadas pelos contêineres `k3d-*-serverlb`. **Todo NodePort criado em qualquer cluster k3d vira
+porta pública automaticamente.** A lista envelheceu duas vezes em uma semana, sempre para o lado
+inseguro — que é exatamente o que o item previa em prosa e agora está medido em números.
+
+**Bala 1 — polaridade invertida.** `-j DROP` no fim da cadeia `DOCKER-USER`; só `ALLOW_EXTERNAL`
+escapa. Porta nova nasce **fechada**.
+
+**Duas propriedades tornam a inversão segura, e as duas foram verificadas antes de cancelar a rede
+de segurança:**
+
+1. **SSH e Caddy escutam via `INPUT`**, cadeia que este script não toca — ele age só no `FORWARD`,
+   sobre o que o Docker publica. Um erro aqui derruba serviço de contêiner, não o acesso ao host.
+   Isso é o que fazia a inversão parecer mais perigosa do que é.
+2. **`ESTABLISHED,RELATED -j RETURN` vem primeiro.** Sem ela o `DROP` genérico mataria a **volta**
+   das conexões que os contêineres abrem para a internet — `docker pull`, chamada de API. Esses
+   pacotes entram pela placa pública e casariam a regra. Verificado: `curl` de dentro de um contêiner
+   para `api.github.com` devolveu **HTTP 200**, e o próprio `docker pull` da imagem de teste
+   atravessou o firewall.
+
+**Bala 2 — as portas classificadas, e a lista reconciliada nos DOIS sentidos.** Cruzando
+`grep -rln DEV_HOST */.github/workflows/` com a sondagem externa: existem **exatamente dois**
+consumidores externos em todo o ecossistema, e ambos estavam verdes.
+
+| porta | decisão |
+|---|---|
+| `18082` `therag_api` | **ABERTA** — `loopzero-rag/dev-version-drift.yml`, medido verde em `main` às 03:50Z |
+| `18084` `loopzerolens_api` | **ABERTA** — `loopzero-lens/dev-version-drift.yml`, verde em toda execução medida |
+| `8787` | **REMOVIDA da lista** — declarada, e ninguém escutava. É a metade *"declarado mas ausente"* da divergência, e foi ela que manteve o gate do loopzero-rag quebrado por seis dias (`B-118`) |
+| `18083` `18085` `18087` `18090` | **fechadas** — produto do plano de dados servindo direto, contornando a borda |
+| `30090` `30091` `30094` | **fechadas** — telemetria interna (métricas do Argo, do Traefik, agregação de log) |
+| `30081` `30093` `30120` `30191` `30193` `30194` | **fechadas** — publicações de `serverlb` sem Service correspondente ou sem consumidor externo |
+
+**Bala 4 — o `--audit` confere os dois sentidos.** Um sentido só reportaria verde numa das metades: a
+divergência era bidirecional, e uma verificação que só perguntasse *"toda porta aberta está na
+lista?"* passaria limpo pela `8787`. Ele checa (a) exceção sem quem escute e (b) que o `DROP` genérico
+está **depois** de todos os `RETURN` — um `DROP` acima de um `ALLOW` é uma política silenciosamente
+diferente da escrita, e invisível numa leitura casual da cadeia.
+
+**Medido LIVE depois de aplicar** (`loopzero-workspace` PR #84):
+
+```
+superfície externa   = 22, 80, 443 + 18082 + 18084 · todo o resto fechado
+egresso de contêiner → api.github.com   HTTP 200
+https://app-dev.loopzero.example             HTTP 200
+loopzero-rag/dev-version-drift   em main    success
+loopzero-lens/dev-version-drift  em main    success
+--audit                                 OK
+```
+
+**Aplicado com revert agendado como rede de segurança**, cancelado só depois de todas as verificações
+acima. As três cópias no droplet foram sincronizadas (`md5 718cb736`) e a unit systemd reinstalada —
+as regras não sobrevivem a reboot, e "estava protegido na semana passada" é a pior forma de falso
+conforto.
+
+**O que fica:** a triplicata sem dono declarado continua sendo o **`B-111`**, e a dívida herdada
+também — um gate que depende de porta de contêiner exposta na internet é o mesmo cheiro do painel
+apontando para processo solto. O conserto durável é uma rota no edge com `/v1/version`. Não fechei as
+duas: já foi feito uma vez e trocou uma exposição por uma **cegueira**, porque o gate é o controle
+que detecta deploy.
+
 
 ## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
 
@@ -4973,7 +5103,7 @@ exclusão em massa de tenant — existem no código e **nunca existiram em deplo
 invariante absoluta — superfície nova que registre rota sem reportar reprova de imediato, sem nada
 com que comparar. Provado contra mutante: um só já reprova.
 
-## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [ ]
+## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4981,7 +5111,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-16 ao executar o `B-104`. `api/cmd/setup_database.go:43-49` trata `DATABASE_URL` ausente como *"graceful degradation"*: emite `logger.Warn("DATABASE_URL not set — running without database")` e devolve `nil, nil`. O `envFrom` do segredo de banco é `optional: true` no deployment, então o kubelet inicia o container sem ele. Como a maioria das 35 superfícies do roteador depende do banco, um segredo faltando derruba quase tudo de uma vez — e `/api/v1/health` continua respondendo.
 why_now: o `B-104` tornou a consequência observável (`loopzero_api_surface_enabled`), mas não mudou a causa. E a causa é a única entrada `optional: true` do deployment cujo alcance é o produto inteiro em vez de uma superfície.
-status: triaged
+status: shipped
 severity: alta — pelo alcance, não pelo estado atual: em dev-public o segredo existe.
 blocked_by: decisão. Medi o **comportamento**, não a **intenção** — o comentário do código declara a degradação como deliberada, e trocá-la por um crash sem decisão registrada seria substituir um defeito por outro. Precisa de alguém dizendo se subir sem banco é caso de uso real (desenvolvimento? sonda de arranque?) ou resíduo.
 dod:
@@ -4995,6 +5125,54 @@ dod:
 > O pânico foi corrigido, porque **os dois desfechos possíveis deste item o exigem**: se subir sem banco for caso de uso real, o processo precisa sobreviver; se for resíduo, o lugar de falhar alto é `setupDatabase`, com erro tipado, e não um `nil pointer dereference` três funções adiante. Ver `MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics`.
 >
 > **A decisão continua sendo sua, e ficou mais limpa:** não é mais *"mantemos esta degradação?"* — é *"queremos criar esta degradação, que nunca funcionou?"*.
+
+---
+
+### Fechado 2026-08-17 — a resposta é **não**, e a terceira medição é a que decide
+
+**Decisão:** `DATABASE_URL` ausente é **erro de configuração**, não degradação. O arranque falha alto
+com erro tipado (`ErrDatabaseURLNotSet`), e o Secret do banco deixou de ser `optional` no deployment —
+o kubelet recusa iniciar o contêiner em vez de iniciá-lo já quebrado.
+(`MEET-ASYNC-AMENDMENT-2026-08-17-no-database-is-a-config-error`, pendente de ratificação.)
+
+**As três medições:**
+
+1. **A degradação nunca executou.** Já registrado acima: ela entrava em pânico três funções adiante,
+   e o processo registrava o `Warn` de degradação e morria. Corrigir o pânico mudou a pergunta de
+   *"mantemos isto?"* para *"queremos criar isto, que nunca existiu?"*.
+2. **O alcance é 27 de 36.** Contadas as razões de desligamento em `api/internal/server/router.go`:
+   **27** superfícies registram *"sem banco"*. Um Secret faltando não degrada o produto — apaga três
+   quartos dele, com `/api/v1/health` respondendo 200 porque aquela sonda é a rasa.
+3. **Já aconteceu, e o repositório registra o estrago.** `infra/helm/loopzero-api/templates/deployment.yaml:146-150`
+   carrega o comentário do **B35, 2026-04-28**: o Secret guardava a chave como `uri`, o mapeamento
+   faltava, e *"loopzero-api warns 'DATABASE_URL not set' and runs without DB. Detected on standalone
+   bootstrap"*. **A única ocorrência documentada desta degradação em quatro meses foi um bootstrap
+   quebrado em silêncio**, achado por quem investigava outra coisa. Uma degradação cujo único caso
+   registrado é um defeito não é caso de uso.
+
+**A distinção que o código conflatava** — e que é o desenho: precondição de arranque **vs**
+dependência de runtime. Banco *inalcançável* é transitório e **já falhava certo** (`db.NewPool`
+devolve erro, `main` sai). Variável *ausente* é configuração: nenhuma espera futura a produz.
+Devolver `nil, nil` para *"não deu, mas siga"* é exatamente o valor mágico que
+`rules/error-handling.md` proíbe.
+
+**Duas camadas, uma mensagem.** O `main.go` passou a distinguir os dois erros no log: *"database not
+configured"* vs *"failed to connect to database"*. A mensagem antiga mandava quem esqueceu a variável
+olhar a rede — e ela é o diagnóstico inteiro que o operador recebe no primeiro `kubectl logs`. Foi
+por causa dela que o contraditor aceitou o `CrashLoopBackOff`.
+
+**A bala de prontidão do DoD era condicional** ao desfecho *"pode subir sem banco"*, e o desfecho foi
+o outro — então ela não se aplica. Mas medi o assunto e ele tem defeito próprio: **prontidão e
+vivacidade apontam para a mesma sonda incondicional**. Registrado como **`B-135`**, com a armadilha
+escrita junto: apontar a prontidão para o `DeepHealth` faria uma instabilidade do Gitea remover todos
+os pods da API do Service de uma vez.
+
+**Três testes**, RED antes de GREEN, incluindo a fronteira oposta (uma URL presente nunca é lida como
+ausente) — sem ela, endurecer o arranque viraria uma regra que nenhum ambiente satisfaz.
+
+**Os testes do `B-104` continuam válidos e não foram tocados.** `setup_server_nil_deps_test.go`
+protege as guardas `if != nil` de `buildServerConfig`, que seguem corretas como defesa: elas agora
+guardam um estado que o arranque não alcança, mas que os testes alcançam.
 
 
 ## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [x]
@@ -5062,7 +5240,7 @@ superfície pode relatar `false` para sempre sem que nada esteja errado com o re
 `MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado +
 caminho destrutivo de tenant), então o `status` acima permanece `triaged`.
 
-## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [ ]
+## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [x]
 
 domain: data-plane-ts
 repo: loopzero-rag
@@ -5070,7 +5248,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-16 no droplet. `therag_pgvector` e `therag_api` em laço de reinício — **8.390** e **14.976** reinícios, contêiner criado em **2026-08-10**. Log do banco: *"This is usually the result of upgrading the Docker image without upgrading the underlying database using pg_upgrade"*. Log da API: `boot failed: getaddrinfo EAI_AGAIN pgvector` — ela não resolve o banco porque o banco também reinicia. O volume `therag_pgdata` tem **as duas convenções ao mesmo tempo**: um cluster **PostgreSQL 15** completo na raiz (41,9 MB, `PG_VERSION` = 15) e um `18/docker` **vazio** (8 KB, sem `PG_VERSION`) que a imagem criou e abortou. Confirmado subindo um `ankane/pgvector:v0.5.1` temporário sobre o mesmo volume: **o cluster sobe e os dados estão íntegros** — 58 coleções, 88 documentos, 233 trechos, 233 vetores, 84 chaves de API.
 why_now: seis dias fora do ar, e o gate `dev-version-drift` vem reportando corretamente de hora em hora — **99 falhas em 100 execuções, zero sucessos**. Não é falta de sinal; é falta de alguém alcançado pelo sinal.
-status: triaged
+status: shipped
 severity: alta — um produto do plano de dados fora do ar, com dado real dentro.
 blocked_by: decisão de recuperação. O conserto move dado de banco num host compartilhado, e isso é decisão do dono do ambiente, não minha.
 dod:
@@ -5125,7 +5303,49 @@ internet: 8787 devolve `ConnectionRefused`, 18082 devolve o JSON de versão (`lo
 `18082`, que está aberta** (não há regra de `DROP` para ela). É a mesma lista do `B-028` e o mesmo
 arquivo triplicado do `B-111`; anotado ali, não consertado aqui.
 
-## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [ ]
+---
+
+### Fechado 2026-08-17 — e a bala 1 não estava satisfeita como o registro dizia
+
+**O "primeiro sucesso em mais de cem execuções" foi medido em `develop`.** O `schedule` avalia
+**apenas** a definição que existe na branch padrão, e em `main` o gate seguiu reprovando: **dez
+falhas depois** daquele verde, até `2026-08-17T03:29`. A correção da porta (`THERAG_PORT: 18082`,
+`6bd6da9b`) estava em `develop` e nunca chegou a `main`.
+
+É o mesmo defeito que o próprio gate tinha antes de ontem, uma camada acima: **medir num lugar que
+não é o lugar que vale.**
+
+**A cadeia que travava a promoção, medida ponta a ponta:** a sincronização do kit levou um caminho de
+workstation para `.claude/scripts/install.sh` → `publish-hygiene` reprovou `develop` desde 16/08 → a
+promoção `develop → main` nunca foi cortada → a correção da porta ficou fora da branch do
+agendamento → o gate seguiu sondando `8787`, que não existe. **Cinco elos, e o primeiro é uma linha
+de comentário.**
+
+**Executado:** correção na origem (`squad`) e nos dois consumidores que a exigiam
+(`loopzero-rag` PR #224, e este repositório), promoção `develop → main` (`loopzero-rag` PR #225, 18 commits).
+**Verificado:** `dev version drift` em `main` → `completed/success`, `workflow_dispatch`,
+`2026-08-17T03:50:45Z` — **o primeiro verde em `main`**.
+
+**A promoção saiu sem tag, deliberadamente.** `publish.yml` e `publish-npm.yml` disparam em
+`tags: ["v*"]`, e o `publish` está em `startup_failure` em toda execução — cortar `rc.92` produziria
+mais vermelho sem publicar nada. O que a promoção precisava entregar é a **definição do workflow na
+branch do agendamento**: correção de CI, não release de produto. O `startup_failure` virou **`B-132`**.
+
+**Bala 2 — o dado.** Satisfeita antes desta sessão: descarte foi decisão registrada do patrocinador,
+com dois backups independentes preservados. Reversível.
+
+**Bala 3 — por que cem execuções vermelhas não alcançaram ninguém.** A premissa da pergunta estava
+errada, e a resposta medida é mais desconfortável: **elas alcançaram.** `notify-failure.yml` existe,
+está em `main`, tem `issues: write`, e a issue **#205** está aberta desde **2026-08-03 com 221
+comentários** — um por falha. O dedup por título, escrito de propósito e pela razão certa, converteu
+221 eventos num fio permanentemente aberto que não distingue *quebrou agora* de *quebrado há duas
+semanas*. Não faltou canal; faltou o fio **fechar**. Registrado como **`B-133`**.
+
+**Colaterais registrados:** **`B-130`** (o mesmo vazamento em sete repositórios sem trava),
+**`B-131`** (o gate varre a árvore inteira e o gatilho exclui parte dela), **`B-132`**, **`B-133`**.
+
+
+## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5133,7 +5353,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-16. `cmd/loopzero-ops/internal/quality/prodimagedigests/check.go:17` declara *"Mode: WARN — this gate reports violations but Outcome.Pass is true... Sponsor flips EnforceMode=true post-7d-soak"*. O plano que o criou é `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`, de **2026-05-26**. Três meses depois `EnforceMode` segue `false` por padrão, e o gate reporta **10** violações passando com `EXIT=0`.
 why_now: o soak declarado era de **7 dias**. Um gate que reporta e nunca reprova é exatamente o que o `B-085` mediu noutro contexto — *"um gate cuja única falha é uma isenção conhecida não é ligado, e então não vigia nada"*. A cobertura acabou de ser corrigida (`B-113`), então endurecer o modo agora significa o que diz; antes, não significava.
-status: triaged
+status: shipped
 severity: média — nenhuma das 10 violações é exploração ativa; o que está em jogo é o gate voltar a ter consequência.
 blocked_by: decisão do patrocinador, nomeada no próprio código. Não é minha para virar.
 dod:
@@ -5142,6 +5362,58 @@ dod:
   - as 7 dos charts publicados têm caminho declarado: quem preenche `image.digest` e quando (um digest fixado à mão vira mentira na próxima publicação)
 
 > Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3. A chave não era um booleano
+
+**A re-medição mudou a pergunta.** As 10 violações não são uma população: são **duas**, com donos e
+viabilidade diferentes. Três são `image: <terceiro>:<versão>` literal em pods de `helm test` — quem
+escreve o chart conserta, em uma linha. Sete são `image.digest` ausente no `values.yaml`, e a
+mensagem do próprio gate nomeia o dono: *"o publicador de imagens é quem o produz"*.
+
+**Um booleano sobre as duas dava só dois ajustes possíveis**: reprovar sete coisas que ninguém
+consegue consertar hoje, ou avisar sobre tudo. O segundo é o que rodou por três meses contra um soak
+declarado de sete dias — e o custo não foi o aviso: foi que **as três consertáveis ficaram invisíveis
+dentro de um número dominado pelas sete que não eram**.
+
+**Bala 1 — está decidido, e em que data.** A enforcement passou a ser **por espécie**
+(`MEET-ASYNC-AMENDMENT-2026-08-17-digest-enforcement-has-two-populations`, pendente de ratificação):
+`literal_tag` **liga hoje**; `missing_digest` segue em aviso até o publicador emitir o valor.
+Nomear as espécies não acrescenta política ao gate — a política já estava dentro do booleano, e era
+justamente por isso que ninguém conseguia dizer qual metade o mantinha desligado.
+
+**Bala 2 — as três de pods de teste foram convertidas para digest, não isentadas.**
+`busybox@sha256:73aaf09…`, `curlimages/curl@sha256:25d29da…` (×2), resolvidos com
+`docker buildx imagetools inspect`. É o caso em que fixar por digest **não envelhece**: a versão de
+terceiro já estava presa, então o digest também não se move — o oposto exato do caso dos sete, onde
+o digest muda a cada publicação nossa. Gastar uma isenção (com sunset, revisão e memória) para
+evitar três substituições de uma linha seria mais caro que fazer, e deixaria a dívida viva.
+
+**Bala 3 — os sete têm caminho declarado, e ele é mais estreito do que parecia.** O publicador
+**já tem o digest**: `build-publish.yml` usa `steps.build.outputs.digest` para montar a referência
+que o cosign assina. O que falta é o `workflow_call:` **declarar `outputs:`** — o valor existe dentro
+do workflow e morre nele. Registrado como **`B-134`**, que também destrava o VAP
+`requireImageDigestEnforce`, parado pela mesma ausência.
+
+**Desenho.** `Kind` (`literal_tag` \| `missing_digest`), `Violation` como struct com `String()` que
+preserva a renderização, `Config.Enforce map[Kind]bool` com `nil` significando a política decidida —
+não *"não enforça nada"*, que era o antigo valor-zero. `Outcome.Enforced()`/`Warned()` separam o que
+bloqueia do que é reportado, e o relatório passou a imprimir os dois grupos com cabeçalhos próprios.
+
+**Sete testes**, RED antes de GREEN, incluindo o teste contra a **população real** (`B-109`): um
+mutante sintético prova que o detector dispara; só a árvore real prova que ela está limpa da espécie
+que agora bloqueia — é o que torna a virada segura em vez de esperançosa. Um deles guarda a fronteira
+oposta, recusando a promoção de `missing_digest` antes do valor existir.
+
+**Dois testes existentes foram atualizados, não removidos** — `TestCheck_HardcodedTag_ReportedAsViolation`
+e `TestCheck_LiveChartsRepo_PassesInWarnMode` afirmavam *"warn-mode should always Pass"*: eles
+**codificavam o contrato que o MEET substitui**. O segundo foi estreitado e mantido, porque a metade
+que ele ainda protege é real e fácil de quebrar por engano.
+
+**Medido depois:** `prod-image-digests` → `PASS`, 0 bloqueantes, 7 avisos. Antes: 10 avisos,
+`EXIT=0`, três deles consertáveis e invisíveis.
+
 
 ## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [x]
 
@@ -5381,3 +5653,131 @@ dod:
   - o gate distingue `FAIL` de `WARN`, para que o segundo não vire ruído que apaga o primeiro
 
 > Registrado 2026-08-17 ao fechar o `B-127`.
+
+## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-live-test
+severity: média — não é segredo, é identidade de máquina; o custo é que histórico publicado é público **retroativamente**, e três desses repositórios já carregam `LICENSE`/`NOTICE`/`SECURITY.md`.
+evidence: medido 2026-08-17. `scripts/install.sh` do kit cita `/home/paulo/Projetos/squad` numa linha de comentário que transcreve a saída medida. O arquivo está em **nove** árvores: o kit canônico, `loopzero`, e sete irmãos (`loopzero-rag`, `loopzero-lens`, `loopzero-memory`, `loopzero-cloud`, `loopzero-promptly`, `loopzero-skills`, `loopzero-trust`, `loopzero-cli`). Corrigidos hoje: o kit, o `loopzero` e o `loopzero-rag` — os outros sete seguem. **Só o `loopzero-rag` tem `scripts/check-publish-hygiene.sh`**, e foi por isso que apareceu: ela reprovou `develop` desde 2026-08-16 e travou a promoção que o `B-118` precisava.
+why_now: a correção é de uma linha por repositório, e o que a torna urgente não é o vazamento em si — é que a trava que o pega existe em **um** dos nove. Nos outros oito ele envelhece em silêncio, e cada sincronização do kit pode reintroduzi-lo.
+status: triaged
+dod:
+  - os sete repositórios restantes não citam mais caminho de workstation em arquivo versionado
+  - a trava de higiene (ou equivalente) existe onde a publicação é real, e não só no `loopzero-rag`
+  - a sincronização do kit não reintroduz o caminho — a origem (`squad`) é a única que precisa estar limpa, e está
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-131 — A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: review
+source: discover-live-test
+severity: média — o defeito chega, só chega tarde: pela próxima mudança de código, num commit que não o introduziu.
+evidence: medido 2026-08-17. `scripts/check-publish-hygiene.sh` varre `git ls-files` — a árvore versionada inteira, por desenho declarado no cabeçalho. Mas ele roda dentro do `ci.yml`, cujo `paths-ignore` lista `.claude/**`, `.github/**`, `**/*.md`, `docs/**` e `knowledge-base/**`. O vazamento do `B-{n-1:03d}` entrou por `.claude/scripts/install.sh` e **não disparou a trava no commit que o introduziu**; ela só reprovou dias depois, no primeiro commit de código (`5a5564f3`). E a correção, também em `.claude/`, **não re-disparou a esteira** — o último veredito registrado em `develop` continua sendo o vermelho.
+why_now: o `paths-ignore` foi medido e é justificado (42% dos commits são só-documentação, e o runner é compartilhado por cinco repositórios). O que não foi decidido é o que fazer com um gate cujo objeto é a árvore inteira: ou ele sai do `ci.yml` para um workflow sem exclusão — como o `actionlint.yml` já faz —, ou o `paths-ignore` deixa de valer para ele.
+status: triaged
+dod:
+  - um vazamento introduzido por commit em `.claude/**` reprova no próprio commit
+  - a correção de um vazamento produz um veredito verde registrado, não só uma execução local
+  - a decisão fica escrita junto do `paths-ignore`, que hoje documenta a economia mas não esta consequência
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-132 — O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: bug
+source: discover-live-test
+severity: alta — nenhuma imagem nova é publicada, e é justamente a publicação que o `dev-version-drift` compara contra o host. Um gate de drift verde sobre uma esteira de publicação morta compara duas coisas paradas.
+evidence: medido 2026-08-17. `publish.yml` sai `startup_failure` em **toda** execução desde pelo menos 2026-08-16 (três medidas: 16/08 15:05, 16/08 16:08, 17/08 03:46), com **zero jobs criados** — falha antes de existir job, que é a assinatura de referência não resolvida. Ele chama `getloopscale/loopzero/.github/workflows/build-publish.yml@d1f3c94` (linha 113). O SHA **existe** no `loopzero` (`git cat-file -t` → commit, 2026-07-31) e o arquivo existe nele. A causa mais provável é política de acesso do repositório `loopzero` a workflows reutilizáveis, não o pin — mas isso **não foi medido**, e não vou afirmar o que não medi.
+why_now: seis dias de loopzero-rag fora do ar acabaram de ser resolvidos, e a esteira que publica a correção não inicia. O `B-118` mostrou que um gate pode reportar corretamente por cem execuções sem alcançar ninguém; este é o degrau anterior — a esteira nem chega a reportar.
+status: triaged
+dod:
+  - está medido por que o `startup_failure` acontece, e não suposto
+  - o `publish` cria job e conclui, ou a chamada cross-repo é substituída por um caminho que este repositório controla
+  - existe verificação que reprova `startup_failure` recorrente — hoje ele não abre issue, porque `notify-failure.yml` só reage a `conclusion == 'failure'`
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-133 — A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: evolve
+source: discover-live-test
+severity: média — o mecanismo está certo e o efeito é o oposto do pretendido: ele existe para evitar que N falhas virem ruído, e produziu um alarme que toca desde 3 de agosto.
+evidence: medido 2026-08-17, respondendo à terceira bala do `B-118` (*por que 100 execuções vermelhas não alcançaram ninguém*). A resposta é que **elas alcançaram**: `notify-failure.yml` existe, está em `main`, tem `issues: write`, e a issue #205 (*ci: dev version drift falhou em main*) está **aberta desde 2026-08-03 com 221 comentários**. Cada falha virou um comentário no mesmo fio. O dedup por título — escrito de propósito, com a razão certa (*"issue duplicada é como um alarme vira ruído que se aprende a ignorar"*) — converteu 221 eventos distintos num fio permanentemente aberto, que não distingue *quebrou agora* de *quebrado há duas semanas*.
+why_now: a lacuna do `B-118` não era ausência de sinal, e tratá-la como se fosse levaria a construir um segundo canal que sofreria do mesmo mal. O que falta é o fio **fechar** quando o workflow volta a passar: um fio que só abre carrega informação sobre o passado, nunca sobre o presente.
+status: triaged
+dod:
+  - o fio fecha sozinho quando o workflow correspondente conclui com sucesso — reabrir passa a ser sinal
+  - ou existe escalada por falhas consecutivas, para que a centésima não pareça a primeira
+  - a issue #205 é fechada ou anotada: ela hoje afirma uma falha que já não existe em `main`
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-134 — O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor.
+evidence: medido 2026-08-17 ao executar o `B-119`. `.github/workflows/build-publish.yml` **calcula** o digest e o usa: `steps.build.outputs.digest` aparece nas linhas 255 e 264, montando a referência que o cosign assina. Mas o bloco `workflow_call:` **não declara `outputs:`** — verificado por parse do próprio YAML. O valor existe dentro do workflow e morre nele. Consequência medida nos dois consumidores: os **sete** `charts/loopzero-*/values.yaml` não declaram `image.digest` (o `loopzero-common.image` cai para `tag: dev`), e `charts/loopzero-admission-policies/values.yaml:95` mantém `requireImageDigestEnforce: false` com o mesmo comentário de *"post-7d-soak"* que o gate carregava.
+why_now: o `B-119` acabou de separar as duas populações do gate e ligou a que o autor do chart conserta. A outra — os sete — só sai do aviso quando alguém emitir o valor, e a mensagem do próprio gate diz por que preenchê-lo à mão é pior que não preencher: *"um digest fixado à mão vira mentira na próxima publicação"*. Este item é o caminho declarado que a terceira bala do `B-119` exigia.
+status: triaged
+dod:
+  - `build-publish.yml` declara `outputs.digest` no `workflow_call`, e um consumidor o recebe
+  - os sete `image.digest` são preenchidos **pela publicação**, não à mão — e a origem do valor está escrita junto
+  - com o valor presente, `prod-image-digests` passa a enforçar também `missing_digest` (`EnforceAll()` vira o padrão), e o VAP sai de `requireImageDigestEnforce: false`
+
+> Registrado 2026-08-17 ao fechar o `B-119`.
+
+## B-135 — Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — nada quebra hoje; o que não existe é a capacidade de tirar do Service uma instância que não consegue servir. Sobe para **alta** se alguma dependência do processo puder degradar em runtime sem derrubá-lo.
+evidence: medido 2026-08-17 ao executar o `B-116`. `charts/loopzero-api/values.yaml:235-249`: `livenessProbe` **e** `readinessProbe` apontam ambas para `/api/v1/health`. Esse handler (`api/internal/routes/health/health.go`, `func Health`) responde **200 incondicionalmente** — é a sonda rasa, documentada como *"lightweight liveness probe"*. Prontidão e vivacidade significam, portanto, exatamente a mesma coisa: *"o processo está vivo"*. Não existe estado em que o pod esteja `Running` e fora do Service.
+why_now: o `B-116` acabou de decidir que a API **não sobe** sem banco, o que fecha o caso do arranque. O que fica descoberto é a degradação **depois** do arranque: um banco que cai em runtime deixa o pod `Ready`, recebendo tráfego e devolvendo erro em 27 das 36 superfícies.
+status: triaged
+dod:
+  - a prontidão reflete a capacidade **desta instância** de servir, e existe estado observável em que o pod está vivo e fora do Service
+  - a decisão de qual dependência entra na prontidão está escrita, com a razão de cada uma
+  - existe teste que reprova a forma que este item registra: prontidão e vivacidade apontando para o mesmo handler incondicional
+
+> **A armadilha, escrita antes que alguém caia nela.** A correção óbvia é apontar a prontidão para
+> `/api/v1/health/ready`, que já existe. **Não faça isso sem ler o handler.** `DeepHealth`
+> (`health.go`) devolve **503 quando QUALQUER dependência está degradada** — banco, ArgoCD, Gitea,
+> Argo Workflows e a descoberta de cells. Uma instabilidade do Gitea removeria **todos** os pods da
+> API do Service ao mesmo tempo: um amplificador de incidente, não uma proteção. Prontidão precisa
+> refletir o que **esta instância** consegue servir, não a saúde do grafo inteiro de dependências.
+>
+> Registrado 2026-08-17 ao fechar o `B-116`, que deliberadamente deixou este assunto de fora — a
+> bala de prontidão do DoD dele era condicional ao desfecho *"pode subir sem banco"*, e o desfecho
+> foi o outro.
+
+## B-136 — A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia.
+evidence: medido 2026-08-17. O `B-005` declara `blocks: a metade cell do B-001` e é **T3 com reunião obrigatória antes de código**. Os três commits `0d9567745` (rename dos clusters), `fbb246430` (fusão das identidades de cell) e `7a4740dc3` (tabela 1:1) executaram as duas coisas. **Não localizei registro de reunião T3 para nenhum dos dois** — nem ADR em `.claude/knowledge-base/decisions/` nem em `docs/wiki/meetings/`. O produto colateral está em `infra/helmfile/scripts/bootstrap-cell-cc.sh`: uma substituição de `cell-default` → `cell-0` sobre o texto anterior deixou **duas linhas da tabela com o mesmo id**, dois nomes de arquivo repetidos, a frase *"cell-0 reuses cell-0's cluster"*, citações a `Cell-2` e `runtime-2` (que não existem) e — o pior — `--cell <default|1|2>` no Usage, mandando o operador passar valores que o `case` do próprio script **rejeita**.
+why_now: o cabeçalho foi corrigido hoje ao medir o `B-001`, então o dano visível acabou. O que não foi tratado é o processo: uma mudança T3 sobre schema, placement e identidade de cluster aconteceu sem o registro que a governança exige, e a única razão de isso ter sido descoberto é alguém ter ido medir outra coisa.
+status: triaged
+dod:
+  - existe registro T3 (retroativo, se for o caso) cobrindo a fusão das identidades de cell e o rename dos clusters, ou está escrito por que ele não é necessário
+  - está medido se mais alguma coisa foi renomeada por substituição cega nos três commits — o cabeçalho foi o que apareceu, não necessariamente o que existe
+  - `pre-release-governance.md` ganha o que faltou: hoje a classificação T2/T3 é honor-system e o `governance-gate.py` cobre arquivos de produção; um `refactor` sobre schema e identidade de cluster passou entre os dois
+
+> Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.

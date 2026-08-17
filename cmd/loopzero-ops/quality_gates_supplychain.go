@@ -140,19 +140,33 @@ func runProdImageDigests(args []string) int {
 	}
 	resolveDotRoot(root)
 
-	outcome, err := prodimagedigests.Check(prodimagedigests.Config{Root: *root, EnforceMode: *enforce})
+	// `--enforce` upgrades the policy to every kind. Without it the decided
+	// default applies: literal `:tag` blocks, missing `image.digest` warns until
+	// the image publisher emits the value. See kind.go.
+	policy := prodimagedigests.DefaultEnforce()
+	if *enforce {
+		policy = prodimagedigests.EnforceAll()
+	}
+	outcome, err := prodimagedigests.Check(prodimagedigests.Config{Root: *root, Enforce: policy})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "prod-image-digests: %v\n", err)
 		return 5
 	}
 	if len(outcome.Violations) > 0 {
-		mode := "WARN"
-		if *enforce {
-			mode = "FAIL"
+		// Reported per kind, not under one banner. One number over both
+		// populations is what kept three fixable findings invisible inside seven
+		// that nobody could fix — the reader could not tell which half was which.
+		if blocking := outcome.Enforced(); len(blocking) > 0 {
+			fmt.Fprintf(os.Stderr, "prod-image-digests: FAIL — %d referência(s) de imagem mutável que bloqueiam:\n", len(blocking))
+			for _, v := range blocking {
+				fmt.Fprintf(os.Stderr, "  %s\n", v)
+			}
 		}
-		fmt.Fprintf(os.Stderr, "prod-image-digests: %s — %d referência(s) de imagem mutável em charts de plataforma:\n", mode, len(outcome.Violations))
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		if warned := outcome.Warned(); len(warned) > 0 {
+			fmt.Fprintf(os.Stderr, "prod-image-digests: WARN — %d referência(s) reportada(s) sem bloquear (aguardam o publicador de imagens):\n", len(warned))
+			for _, v := range warned {
+				fmt.Fprintf(os.Stderr, "  %s\n", v)
+			}
 		}
 		fmt.Fprintln(os.Stderr, "")
 		// Duas classes, dois consertos. Antes do B-113 só a primeira existia, e a

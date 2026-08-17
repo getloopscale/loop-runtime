@@ -87,10 +87,14 @@ func scanChartValues(chartsRoot string, out *Outcome) error {
 			continue
 		}
 
-		out.Violations = append(out.Violations, fmt.Sprintf(
-			"%s: image.digest ausente — o chart usa `loopzero-common.image`, que prefere digest e "+
-				"cai para `tag: %s`; a referência efetiva do install padrão é mutável",
-			valuesPath, orPlaceholder(doc.Image.Tag)))
+		out.Violations = append(out.Violations, Violation{
+			Kind: KindMissingDigest,
+			File: valuesPath,
+			Text: fmt.Sprintf(
+				"image.digest ausente — o chart usa `loopzero-common.image`, que prefere digest e "+
+					"cai para `tag: %s`; a referência efetiva do install padrão é mutável",
+				orPlaceholder(doc.Image.Tag)),
+		})
 	}
 	return nil
 }

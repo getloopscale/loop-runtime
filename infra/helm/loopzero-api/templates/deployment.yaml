@@ -304,23 +304,28 @@ spec:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}
                 optional: true
-            # ATENCAO — este e' o `optional` de maior alcance, e a razao dele e' uma
-            # PERGUNTA ABERTA, nao uma decisao registrada.
+            # NAO e' opcional, e a pergunta que este comentario carregava esta'
+            # FECHADA: MEET-ASYNC-AMENDMENT-2026-08-17-no-database-is-a-config-error
+            # (B-116).
             #
-            # Medido: `api/cmd/setup_database.go:43-49` trata `DATABASE_URL` ausente
-            # como *"graceful degradation"* — emite Warn e devolve `nil, nil`. Com
-            # este `optional: true`, a combinacao faz a API SUBIR SEM BANCO, e como
-            # a maioria das superficies do roteador depende do banco, um segredo
-            # faltando apaga a maior parte do produto de uma vez. O `/health` continua
-            # respondendo.
+            # Era `optional: true`, e a combinacao com a "graceful degradation" do
+            # `setup_database.go` fazia a API SUBIR SEM BANCO — 27 das 36 superficies
+            # do roteador desligadas de uma vez, com `/api/v1/health` respondendo 200
+            # porque aquela sonda e' a rasa.
             #
-            # Nao mudo isso aqui: o comportamento esta' documentado no codigo como
-            # deliberado, e eu medi o COMPORTAMENTO, nao a INTENCAO. Trocar uma
-            # degradacao declarada intencional por um crash, sem decisao registrada,
-            # seria substituir um defeito por outro. Registrado como item proprio.
+            # Tres medicoes fecharam a pergunta: (a) a degradacao nunca executou — ela
+            # entrava em panico tres funcoes adiante (B-104); (b) o alcance e' 27/36,
+            # nao uma superficie; (c) ela ja aconteceu, e o estrago esta' registrado
+            # LOGO ACIMA neste arquivo — B35, 2026-04-28, "loopzero-api warns 'DATABASE_URL
+            # not set' and runs without DB", descoberto por alguem investigando outra
+            # coisa.
+            #
+            # Agora sao duas camadas dizendo a mesma coisa: o kubelet recusa iniciar o
+            # conteiner sem o Secret, e o binario falha com erro tipado
+            # (`ErrDatabaseURLNotSet`) se a variavel faltar por outro caminho.
             - secretRef:
                 name: {{ .Values.dbCredentialsSecret | quote }}
-                optional: true
+                optional: false
             # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
             # Shared with loopzero-cloud — single source of truth for X-Service-Auth.
             # Eliminates the inline-literal drift that caused 401 on /engine/* in

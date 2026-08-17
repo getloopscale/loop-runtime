@@ -10,7 +10,12 @@ metadata:
 spec:
   containers:
     - name: curl
-      image: curlimages/curl:8.7.1
+      # Fixado por digest, nao por tag: uma tag e mutavel no registro, e o proximo
+      # `helm test` puxaria conteudo diferente sob o mesmo nome. Aqui fixar nao
+      # envelhece — a versao de terceiro ja estava presa (8.7.1), entao o digest
+      # tambem nao se move. Resolvido com `docker buildx imagetools inspect` em
+      # 2026-08-17 (B-119).
+      image: curlimages/curl@sha256:25d29daeb9b14b89e2fa8cc17c70e4b188bca1466086907c2d9a4b56b59d8e21
       command:
         - sh
         - -c
