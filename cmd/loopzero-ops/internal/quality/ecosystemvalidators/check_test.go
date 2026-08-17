@@ -139,8 +139,18 @@ func TestBothLayoutsResolve(t *testing.T) {
 // reais estão vermelhos — que é literalmente o estado que o B-129 mediu.
 func TestRealValidatorsAreGreen(t *testing.T) {
 	out, err := Check(Config{RepoRoot: repoRoot, Timeout: 3 * time.Minute})
+
+	// Sem interpretador o caminho que roda é o ADVISORY, e ele também é contrato:
+	// pular aqui deixaria sem prova justamente o único caminho que executa naquele
+	// ambiente. Ramificar custa três linhas e não cria dívida invisível.
 	if out.Advisory {
-		t.Skip("python3 ausente — a asserção de população precisa do interpretador")
+		if err != nil {
+			t.Fatalf("sem python3 o gate é advisory, não erro: %v", err)
+		}
+		if len(out.Results) != 0 {
+			t.Fatalf("sem python3 nenhum validador pode ter rodado; got %+v", out.Results)
+		}
+		return
 	}
 	if err != nil {
 		for _, r := range out.Failed() {
