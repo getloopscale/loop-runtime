@@ -15,12 +15,46 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/envprefixparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillscriptpaths"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillsuites"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testtargetcoverage"
 )
 
 // runSkillScriptPaths refuses a SKILL.md that tells an agent to run a script by a path
 // which resolves in only one of the two ecosystem layouts (`<project>/.claude/` for a
 // plugin install, `<repo>/` for the standalone kit). B-120.
+// runSkillSuites runs the ecosystem's own pytest suites, which no task ran before B-124 —
+// three of fifteen were red, and the defect two of them caught had already shipped.
+func runSkillSuites(args []string) int {
+	fs := flag.NewFlagSet("skill-suites", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	skills := fs.String("skills", "", "skills dir relative to root (default: .claude/skills)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := skillsuites.Check(skillsuites.Config{RepoRoot: *root, SkillsRel: *skills})
+	switch {
+	case out.Advisory:
+		fmt.Println("skill-suites: ADVISORY — python3/pytest absent; nothing was concluded")
+		return 0
+	case errors.Is(err, skillsuites.ErrNoSuitesFound):
+		fmt.Fprintf(os.Stderr, "skill-suites: FAIL — %v\n", err)
+		return 1
+	case errors.Is(err, skillsuites.ErrSuitesFailed):
+		failed := out.Failed()
+		fmt.Fprintf(os.Stderr, "skill-suites: FAIL — %d of %d suite(s) red:\n", len(failed), len(out.Results))
+		for _, r := range failed {
+			fmt.Fprintf(os.Stderr, "  %s\n      %s\n", r.Skill, r.Tail)
+		}
+		return 1
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "skill-suites: FAIL — %v\n", err)
+		return 1
+	}
+	fmt.Printf("skill-suites: PASS — %d skill suite(s) green\n", len(out.Results))
+	return 0
+}
+
 func runSkillScriptPaths(args []string) int {
 	fs := flag.NewFlagSet("skill-script-paths", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")

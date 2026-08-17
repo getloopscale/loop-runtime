@@ -59,6 +59,7 @@ var gateRegistry = []gateSpec{
 	{"tenant-csp-passthrough", "Static-CSP Traefik middleware must not be attached to tenant routes (#59).", runTenantCSPPassthrough},
 	{"test-target-coverage", "Todo modulo Go do disco tem seus testes rodados por um alvo do Taskfile, ou uma isencao NOMEADA com razao. `go build` nao conta (B-087/B-088).", runTestTargetCoverage},
 	{"env-prefix-parity", "As duas declaracoes de reservedEnvKeyPrefixes (API e dockerfile-lint) casam prefixo do MESMO jeito (exato, sensivel a caixa) e so divergem de conjunto no que tem isencao datada.", runEnvPrefixParity},
+	{"skill-suites", "Roda as suites pytest de .claude/skills/*/tests/, que nenhuma task rodava. Advisory quando pytest ausente; FALHA quando a descoberta nao acha suite nenhuma, porque nao achar nada nao e o mesmo que nao achar nada errado (B-124).", runSkillSuites},
 	{"skill-script-paths", "Toda invocacao de script num SKILL.md resolve nos DOIS layouts do ecossistema (.claude/ no plugin, raiz no standalone). Caminho nu quebra em um dos dois, e em qual depende de como o ecossistema foi instalado (B-120).", runSkillScriptPaths},
 	{"docs-contract-refs", "Toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve (ou tem excecao com prazo).", runDocsContractRefs},
 	{"chart-default-tags", "loopzero-owned charts must not default their image tag to a mutable ref (#232).", runChartDefaultTags},

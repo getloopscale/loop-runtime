@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **As quinze suítes de teste do próprio ferramental voltaram a ser executadas — três estavam quebradas e nada as rodava.** Cada uma por um motivo diferente, e uma delas escondia o pior: a verificação de qualidade de código deste repositório **não estava olhando arquivo nenhum e reportava nota máxima** — sendo ela um bloqueio obrigatório de toda entrega. A configuração estava num formato que o leitor rejeita, e o resultado vazio era indistinguível de "está tudo certo". Uma verificação nova passou a rodar as quinze, e falha quando não encontra nenhuma — porque não achar nada não é o mesmo que não achar nada errado. (B-124)
+
 - **As instruções internas pararam de mandar rodar scripts por um caminho que não existe.** Dezenove instruções apontavam para um lugar que só é válido em uma das duas formas de instalação do ferramental — e em qual delas quebrava dependia de como cada projeto o instalou. A forma corrigida foi provada executando nas duas, e uma verificação automática nova recusa a forma quebrada, inclusive se ela voltar pela próxima sincronização do ferramental. (B-120)
 
 ### Removed

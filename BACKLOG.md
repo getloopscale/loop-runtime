@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-126 items — **Open** 70 · **In flight** 0 · **Closed** 56
+128 items — **Open** 71 · **In flight** 0 · **Closed** 57
 
-### Open (70)
+### Open (71)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -142,14 +142,15 @@ consequência do escopo per-repo declarado acima.
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
-| [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
+| [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada----) | O `/code-quality` devolve nota máxima quando não auditou nada | `triaged` | alta |
+| [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (56)
+### Closed (57)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -208,6 +209,7 @@ _None._
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
+| [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 
 <!-- BACKLOG-INDEX:END -->
@@ -5228,7 +5230,7 @@ dod:
 > A rota está segura — dentro da faixa protegida e com `401` próprio quando não há tenant — e o helper é desenho deliberado, documentado como ponto de montagem canônico para que a fiação tenha teste. **O defeito é do gate**: a garantia que ele vende é *"toda rota pública está atrás de `Auth`"*, e qualquer rota montada por helper é invisível a ela. Encontrada ao verificar a terceira bala do `B-041`.
 
 
-## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [ ]
+## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5237,13 +5239,30 @@ source: discover-review
 severity: média — nenhuma delas guarda produto, mas as três guardam **gates**, e um gate cuja suíte está vermelha é um gate que ninguém sabe se ainda mede o que diz medir
 evidence: medido 2026-08-16 rodando `pytest` em cada `.claude/skills/*/tests/`. Quinze suítes, **três vermelhas com uma falha cada**: `code-quality::test_the_shipped_template_parses_when_you_follow_its_own_instructions` (o template que a skill distribui não passa nas próprias instruções), `discover-plan-confidence::test_good_plan_targets_all_resolve` (a fixture "boa" tem alvo que não resolve — **mesma forma do `B-004`**, que era a fixture boa do skill irmão) e `plan-confidence::test_real_plans_snapshot::test_snapshots_cover_active_plans_with_matrix`. **Confirmadas pré-existentes**: reproduzidas com as mudanças da fatia `B-003`/`B-004` guardadas em `git stash`, exatamente as mesmas três.
 why_now: encontradas ao rodar as suítes vizinhas para provar que a correção do resolvedor de ponteiros não havia afrouxado nada. Elas não aparecem no `task test:unit` (que roda Go) nem no `task quality:gates` — só rodam quando alguém invoca `pytest` à mão, e o número de vermelhas sugere que faz tempo.
-status: triaged
+status: shipped
 dod:
   - as três passam, ou a que não deve passar foi removida com a razão escrita
   - `discover-plan-confidence` é diagnosticado contra o `B-004`: se for a mesma causa-raiz de layout, a correção é a mesma e o item diz isso
   - existe um caminho que roda as suítes de `.claude/skills/*/tests/` num gate, senão a próxima vermelha também espera alguém tropeçar nela
 
 > Registrado 2026-08-16 ao fechar o `B-003`/`B-004`.
+
+> **Fechado 2026-08-16 — DoD 3/3, e cada uma das três vermelhas tinha causa diferente.**
+>
+> **(1) As três passam** — e o modo de falha de cada uma era outro:
+>
+> | suíte | causa | correção |
+> |---|---|---|
+> | `discover-plan-confidence` | a fixture "boa" citava `hooks/`, `hooks/validate-command.sh` e `rules/git-safety.md` — caminhos do layout standalone — e pontuava **3 de 3 fabricados** | tradução de layout no resolvedor, idêntica à do `B-004` |
+> | `code-quality` | a configuração de linguagens deste projeto estava no **formato antigo** (*"one language identifier per line"*), que o parser rejeita | reescrita no formato de pipes que o parser lê |
+> | `plan-confidence` | um teste **interno do kit** afirmando que todo plano ativo tem snapshot — sobre os **26 planos deste projeto**, que não são do kit | pula quando não há sobreposição nenhuma com o corpus do kit, e continua reprovando um plano novo **dentro** dele |
+>
+> **(2) Diagnosticada contra o `B-004`, e era a mesma causa-raiz.** O DoD mandava verificar antes de tratar como bug separado, e a verificação confirmou: mesmo defeito de layout, mesma correção, skill irmão.
+>
+> **(3) O gate existe:** `skill-suites`, em `cmd/loopzero-ops/internal/quality/skillsuites/`, ligado em `task quality:gates`. Roda **15 suítes**, todas verdes. `ADVISORY` quando `pytest` está ausente — bloquear entrega por ferramenta que o operador pode legitimamente não ter é como um gate vira bypass — mas **FALHA** quando a descoberta não acha suíte nenhuma, porque *não achar nada não é o mesmo que não achar nada errado*. Oito testes, um deles sobre a árvore real.
+>
+> **O que a correção do `code-quality` revelou, e que é maior que o item:** com a configuração vazia — o estado real deste repositório — `/code-quality` devolvia `verdict: PASS`, `score_cap: 100`, `languages_audited: []`. **Um hard gate do `IMPLEMENTATION_COMPLETE` auditando zero arquivos e reportando nota máxima.** Corrigido o formato, ele passou a auditar Go e devolveu `FAIL_HARD` com **4258** `symbol_fabrication_go` — número impossível num repositório que compila. Os dois viraram itens próprios: **`B-127`** (nota máxima sobre nada) e **`B-128`** (o detector não serve a workspace multi-módulo com irmãos não publicados). O `go` ficou `DEFER` **com a medição escrita na configuração**, em vez de `ENABLED` travando `run_validation.py` em falsos positivos.
+
 
 ## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [x]
 
@@ -5291,3 +5310,37 @@ dod:
   - se a decisão for **não** construir enquanto não houver segredo de cliente, isso está escrito com gatilho nomeado — como o `B-075` fez com o apagamento
 
 > Registrado 2026-08-16 ao fechar o `B-125`. O risco não é novo; o que é novo é ele estar num lugar onde alguém o vê.
+
+## B-127 — O `/code-quality` devolve nota máxima quando não auditou nada   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: **alta** — o `cycle-implement.md` trata `/code-quality` como **hard gate** do `IMPLEMENTATION_COMPLETE` (`run_validation.py` reprova em `FAIL_HARD`/`INVALID`). Um gate que devolve `PASS`/100 sem ter olhado nada não bloqueia nada, e ninguém percebe porque a saída é a melhor possível.
+evidence: medido 2026-08-16 ao fechar o `B-124`. Com a configuração de linguagens vazia — o estado real deste repositório até hoje — `python3 .claude/skills/code-quality/scripts/run_code_quality.py` devolve literalmente `"verdict": "PASS"`, `"score_cap": 100`, `"languages_audited": []`, `"findings_by_detector": {}`. **E com a configuração CORRIGIDA, mas com toda linguagem em `DEFER`/`DISABLED`, devolve exatamente o mesmo** — sem sequer popular `skip_reasons`, que fica `{}`. A `SKILL.md` do próprio skill declara outro comportamento: *"exits with INFO 'no auditable languages'"*. O comportamento projetado e o campo que importa divergem.
+why_now: a instância foi corrigida ao pôr a configuração no formato que o parser lê, mas a **classe** não: qualquer projeto cuja configuração esteja vazia, mal formada ou inteiramente adiada recebe nota máxima de um gate que não olhou nada. É a forma mais completa do defeito que esta sessão encontrou seis vezes — comparar o que está escrito em vez do que sai —, e aqui ela está no gate que audita os outros.
+status: triaged
+dod:
+  - `languages_audited` vazio **não** produz `PASS` com `score_cap: 100` — o veredito diz que nada foi auditado, e `run_validation.py` o trata como não-verde
+  - `skip_reasons` é populado quando uma linguagem é `DEFER`/`DISABLED`/sem manifesto, para que a saída diga **por que** não auditou
+  - existe teste que prova o novo comportamento com configuração vazia, e ele roda no gate `skill-suites`
+
+> Registrado 2026-08-16 ao fechar o `B-124`.
+
+## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+severity: média — hoje não bloqueia nada, porque `go` está `DEFER`. Vira **alta** no instante em que alguém tentar ligá-lo: o gate reprova a entrega inteira com 4258 achados falsos, e quem investigar vai gastar o dia antes de descobrir que o repositório sempre compilou.
+evidence: medido 2026-08-16. Com `go | api/go.mod | ENABLED` em `.claude/rules/code-quality-languages.txt`, o runner devolve `FAIL_HARD` com `symbol_fabrication_go: 4258`. **Não pode ser verdade** — o repositório compila, e 4258 símbolos inexistentes não compilariam. O mecanismo é estrutural: `detect_symbol_fabrication` (`.claude/skills/code-quality/scripts/detectors/go.py:75-99`) pula imports do **próprio módulo** e consulta o resto no **proxy do Go**. Este repositório é um workspace de **9 módulos** com paths distintos e **não publicados** (`go.work`, sem `go.mod` na raiz), então todo import entre irmãos — `api` → `pkg/vault`, e são centenas — sai do prefixo do self-module, vai ao proxy, não é encontrado, e conta como fabricação.
+why_now: descoberto ao corrigir o formato da configuração de linguagens (`B-124`). Antes disso o detector nunca havia rodado aqui, porque a configuração parseava para vazio. O `go` ficou `DEFER` com esta medição escrita ao lado, em vez de `ENABLED` travando `run_validation.py` em falsos positivos.
+status: triaged
+dod:
+  - o detector reconhece um workspace `go.work` e trata **todo módulo do workspace** como self-module, não só o do `go.mod` mais próximo
+  - existe teste sobre uma árvore multi-módulo com import entre irmãos, provando que ela **não** produz achado
+  - com o conserto, `go` volta a `ENABLED` em `code-quality-languages.txt` — e os 36 achados de `deadcode` (D1), que podem ser reais, passam a ter de ser tratados ou isentados
+
+> Registrado 2026-08-16 ao fechar o `B-124`. O `go` está `DEFER` **por causa deste item**, e o comentário na configuração diz isso.
