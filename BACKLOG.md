@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-129 items — **Open** 71 · **In flight** 0 · **Closed** 58
+133 items — **Open** 74 · **In flight** 0 · **Closed** 59
 
-### Open (71)
+### Open (74)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -137,7 +137,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
-| [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18----) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `triaged` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
@@ -145,12 +144,16 @@ consequência do escopo per-repo declarado acima.
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum----) | Dois validadores do ecossistema não são rodados por gate nenhum | `triaged` | média |
+| [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega----) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `triaged` | média |
+| [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
+| [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
+| [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (58)
+### Closed (59)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -208,6 +211,7 @@ _None._
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
+| [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
@@ -5062,7 +5066,7 @@ superfície pode relatar `false` para sempre sem que nada esteja errado com o re
 `MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado +
 caminho destrutivo de tenant), então o `status` acima permanece `triaged`.
 
-## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [ ]
+## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [x]
 
 domain: data-plane-ts
 repo: loopzero-rag
@@ -5070,7 +5074,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-16 no droplet. `therag_pgvector` e `therag_api` em laço de reinício — **8.390** e **14.976** reinícios, contêiner criado em **2026-08-10**. Log do banco: *"This is usually the result of upgrading the Docker image without upgrading the underlying database using pg_upgrade"*. Log da API: `boot failed: getaddrinfo EAI_AGAIN pgvector` — ela não resolve o banco porque o banco também reinicia. O volume `therag_pgdata` tem **as duas convenções ao mesmo tempo**: um cluster **PostgreSQL 15** completo na raiz (41,9 MB, `PG_VERSION` = 15) e um `18/docker` **vazio** (8 KB, sem `PG_VERSION`) que a imagem criou e abortou. Confirmado subindo um `ankane/pgvector:v0.5.1` temporário sobre o mesmo volume: **o cluster sobe e os dados estão íntegros** — 58 coleções, 88 documentos, 233 trechos, 233 vetores, 84 chaves de API.
 why_now: seis dias fora do ar, e o gate `dev-version-drift` vem reportando corretamente de hora em hora — **99 falhas em 100 execuções, zero sucessos**. Não é falta de sinal; é falta de alguém alcançado pelo sinal.
-status: triaged
+status: shipped
 severity: alta — um produto do plano de dados fora do ar, com dado real dentro.
 blocked_by: decisão de recuperação. O conserto move dado de banco num host compartilhado, e isso é decisão do dono do ambiente, não minha.
 dod:
@@ -5124,6 +5128,48 @@ internet: 8787 devolve `ConnectionRefused`, 18082 devolve o JSON de versão (`lo
 **O que fica:** a `ALLOW_EXTERNAL` do firewall ainda declara `8787`, que não existe, e **não declara
 `18082`, que está aberta** (não há regra de `DROP` para ela). É a mesma lista do `B-028` e o mesmo
 arquivo triplicado do `B-111`; anotado ali, não consertado aqui.
+
+---
+
+### Fechado 2026-08-17 — e a bala 1 não estava satisfeita como o registro dizia
+
+**O "primeiro sucesso em mais de cem execuções" foi medido em `develop`.** O `schedule` avalia
+**apenas** a definição que existe na branch padrão, e em `main` o gate seguiu reprovando: **dez
+falhas depois** daquele verde, até `2026-08-17T03:29`. A correção da porta (`THERAG_PORT: 18082`,
+`6bd6da9b`) estava em `develop` e nunca chegou a `main`.
+
+É o mesmo defeito que o próprio gate tinha antes de ontem, uma camada acima: **medir num lugar que
+não é o lugar que vale.**
+
+**A cadeia que travava a promoção, medida ponta a ponta:** a sincronização do kit levou um caminho de
+workstation para `.claude/scripts/install.sh` → `publish-hygiene` reprovou `develop` desde 16/08 → a
+promoção `develop → main` nunca foi cortada → a correção da porta ficou fora da branch do
+agendamento → o gate seguiu sondando `8787`, que não existe. **Cinco elos, e o primeiro é uma linha
+de comentário.**
+
+**Executado:** correção na origem (`squad`) e nos dois consumidores que a exigiam
+(`loopzero-rag` PR #224, e este repositório), promoção `develop → main` (`loopzero-rag` PR #225, 18 commits).
+**Verificado:** `dev version drift` em `main` → `completed/success`, `workflow_dispatch`,
+`2026-08-17T03:50:45Z` — **o primeiro verde em `main`**.
+
+**A promoção saiu sem tag, deliberadamente.** `publish.yml` e `publish-npm.yml` disparam em
+`tags: ["v*"]`, e o `publish` está em `startup_failure` em toda execução — cortar `rc.92` produziria
+mais vermelho sem publicar nada. O que a promoção precisava entregar é a **definição do workflow na
+branch do agendamento**: correção de CI, não release de produto. O `startup_failure` virou **`B-132`**.
+
+**Bala 2 — o dado.** Satisfeita antes desta sessão: descarte foi decisão registrada do patrocinador,
+com dois backups independentes preservados. Reversível.
+
+**Bala 3 — por que cem execuções vermelhas não alcançaram ninguém.** A premissa da pergunta estava
+errada, e a resposta medida é mais desconfortável: **elas alcançaram.** `notify-failure.yml` existe,
+está em `main`, tem `issues: write`, e a issue **#205** está aberta desde **2026-08-03 com 221
+comentários** — um por falha. O dedup por título, escrito de propósito e pela razão certa, converteu
+221 eventos num fio permanentemente aberto que não distingue *quebrou agora* de *quebrado há duas
+semanas*. Não faltou canal; faltou o fio **fechar**. Registrado como **`B-133`**.
+
+**Colaterais registrados:** **`B-130`** (o mesmo vazamento em sete repositórios sem trava),
+**`B-131`** (o gate varre a árvore inteira e o gatilho exclui parte dela), **`B-132`**, **`B-133`**.
+
 
 ## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [ ]
 
@@ -5381,3 +5427,71 @@ dod:
   - o gate distingue `FAIL` de `WARN`, para que o segundo não vire ruído que apaga o primeiro
 
 > Registrado 2026-08-17 ao fechar o `B-127`.
+
+## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-live-test
+severity: média — não é segredo, é identidade de máquina; o custo é que histórico publicado é público **retroativamente**, e três desses repositórios já carregam `LICENSE`/`NOTICE`/`SECURITY.md`.
+evidence: medido 2026-08-17. `scripts/install.sh` do kit cita `/home/paulo/Projetos/squad` numa linha de comentário que transcreve a saída medida. O arquivo está em **nove** árvores: o kit canônico, `loopzero`, e sete irmãos (`loopzero-rag`, `loopzero-lens`, `loopzero-memory`, `loopzero-cloud`, `loopzero-promptly`, `loopzero-skills`, `loopzero-trust`, `loopzero-cli`). Corrigidos hoje: o kit, o `loopzero` e o `loopzero-rag` — os outros sete seguem. **Só o `loopzero-rag` tem `scripts/check-publish-hygiene.sh`**, e foi por isso que apareceu: ela reprovou `develop` desde 2026-08-16 e travou a promoção que o `B-118` precisava.
+why_now: a correção é de uma linha por repositório, e o que a torna urgente não é o vazamento em si — é que a trava que o pega existe em **um** dos nove. Nos outros oito ele envelhece em silêncio, e cada sincronização do kit pode reintroduzi-lo.
+status: triaged
+dod:
+  - os sete repositórios restantes não citam mais caminho de workstation em arquivo versionado
+  - a trava de higiene (ou equivalente) existe onde a publicação é real, e não só no `loopzero-rag`
+  - a sincronização do kit não reintroduz o caminho — a origem (`squad`) é a única que precisa estar limpa, e está
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-131 — A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: review
+source: discover-live-test
+severity: média — o defeito chega, só chega tarde: pela próxima mudança de código, num commit que não o introduziu.
+evidence: medido 2026-08-17. `scripts/check-publish-hygiene.sh` varre `git ls-files` — a árvore versionada inteira, por desenho declarado no cabeçalho. Mas ele roda dentro do `ci.yml`, cujo `paths-ignore` lista `.claude/**`, `.github/**`, `**/*.md`, `docs/**` e `knowledge-base/**`. O vazamento do `B-{n-1:03d}` entrou por `.claude/scripts/install.sh` e **não disparou a trava no commit que o introduziu**; ela só reprovou dias depois, no primeiro commit de código (`5a5564f3`). E a correção, também em `.claude/`, **não re-disparou a esteira** — o último veredito registrado em `develop` continua sendo o vermelho.
+why_now: o `paths-ignore` foi medido e é justificado (42% dos commits são só-documentação, e o runner é compartilhado por cinco repositórios). O que não foi decidido é o que fazer com um gate cujo objeto é a árvore inteira: ou ele sai do `ci.yml` para um workflow sem exclusão — como o `actionlint.yml` já faz —, ou o `paths-ignore` deixa de valer para ele.
+status: triaged
+dod:
+  - um vazamento introduzido por commit em `.claude/**` reprova no próprio commit
+  - a correção de um vazamento produz um veredito verde registrado, não só uma execução local
+  - a decisão fica escrita junto do `paths-ignore`, que hoje documenta a economia mas não esta consequência
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-132 — O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: bug
+source: discover-live-test
+severity: alta — nenhuma imagem nova é publicada, e é justamente a publicação que o `dev-version-drift` compara contra o host. Um gate de drift verde sobre uma esteira de publicação morta compara duas coisas paradas.
+evidence: medido 2026-08-17. `publish.yml` sai `startup_failure` em **toda** execução desde pelo menos 2026-08-16 (três medidas: 16/08 15:05, 16/08 16:08, 17/08 03:46), com **zero jobs criados** — falha antes de existir job, que é a assinatura de referência não resolvida. Ele chama `getloopscale/loopzero/.github/workflows/build-publish.yml@d1f3c94` (linha 113). O SHA **existe** no `loopzero` (`git cat-file -t` → commit, 2026-07-31) e o arquivo existe nele. A causa mais provável é política de acesso do repositório `loopzero` a workflows reutilizáveis, não o pin — mas isso **não foi medido**, e não vou afirmar o que não medi.
+why_now: seis dias de loopzero-rag fora do ar acabaram de ser resolvidos, e a esteira que publica a correção não inicia. O `B-118` mostrou que um gate pode reportar corretamente por cem execuções sem alcançar ninguém; este é o degrau anterior — a esteira nem chega a reportar.
+status: triaged
+dod:
+  - está medido por que o `startup_failure` acontece, e não suposto
+  - o `publish` cria job e conclui, ou a chamada cross-repo é substituída por um caminho que este repositório controla
+  - existe verificação que reprova `startup_failure` recorrente — hoje ele não abre issue, porque `notify-failure.yml` só reage a `conclusion == 'failure'`
+
+> Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-133 — A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha   [ ]
+
+domain: data-plane-ts
+repo: loopzero-rag
+suggested_mode: evolve
+source: discover-live-test
+severity: média — o mecanismo está certo e o efeito é o oposto do pretendido: ele existe para evitar que N falhas virem ruído, e produziu um alarme que toca desde 3 de agosto.
+evidence: medido 2026-08-17, respondendo à terceira bala do `B-118` (*por que 100 execuções vermelhas não alcançaram ninguém*). A resposta é que **elas alcançaram**: `notify-failure.yml` existe, está em `main`, tem `issues: write`, e a issue #205 (*ci: dev version drift falhou em main*) está **aberta desde 2026-08-03 com 221 comentários**. Cada falha virou um comentário no mesmo fio. O dedup por título — escrito de propósito, com a razão certa (*"issue duplicada é como um alarme vira ruído que se aprende a ignorar"*) — converteu 221 eventos distintos num fio permanentemente aberto, que não distingue *quebrou agora* de *quebrado há duas semanas*.
+why_now: a lacuna do `B-118` não era ausência de sinal, e tratá-la como se fosse levaria a construir um segundo canal que sofreria do mesmo mal. O que falta é o fio **fechar** quando o workflow volta a passar: um fio que só abre carrega informação sobre o passado, nunca sobre o presente.
+status: triaged
+dod:
+  - o fio fecha sozinho quando o workflow correspondente conclui com sucesso — reabrir passa a ser sinal
+  - ou existe escalada por falhas consecutivas, para que a centésima não pareça a primeira
+  - a issue #205 é fechada ou anotada: ela hoje afirma uma falha que já não existe em `main`
+
+> Registrado 2026-08-17 ao executar o `B-118`.
