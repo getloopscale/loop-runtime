@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-126 items — **Open** 71 · **In flight** 0 · **Closed** 55
+126 items — **Open** 70 · **In flight** 0 · **Closed** 56
 
-### Open (71)
+### Open (70)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -139,7 +139,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18----) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `triaged` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
-| [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam----) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `triaged` | alta |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
@@ -150,7 +149,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (55)
+### Closed (56)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -208,6 +207,7 @@ _None._
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
+| [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 
 <!-- BACKLOG-INDEX:END -->
@@ -5140,7 +5140,7 @@ dod:
 
 > Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
 
-## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [ ]
+## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5149,13 +5149,28 @@ source: discover-review
 severity: alta — as skills afetadas são o caminho crítico do pipeline (`release`, `implement`, `acceptance`, `cycle-goal`), e o modo de falha é o agente improvisar um caminho em vez de reprovar
 evidence: medido 2026-08-16. `grep -rnP '(?<![\w./"$])skills/[a-z-]+/scripts/[\w.]+\.(py|sh)' .claude/skills/*/SKILL.md` devolve **23** invocações em 6 skills — `auto-plan` (6), `release` (5), `implement` (5), `cycle-goal` (3), `acceptance` (3), `arch-check` (1). Prova de que não resolvem: `skills/auto-plan/scripts/select_next_milestone.py` não existe, e `.claude/skills/auto-plan/scripts/select_next_milestone.py` existe. Outras **10** invocações no mesmo corpo já usam `.claude/skills/…` — alguém corrigiu essas dez e a divisão ficou.
 why_now: descoberto ao escrever a instrução de re-render do índice de itens abertos nas skills de backlog. Copiei a forma `skills/…` da linha que já estava em `backlog-review/SKILL.md` e ela falhou na primeira execução. Quatro arquivos (`backlog-init`, `backlog-item`, `backlog-review`, `discover-execute`) foram corrigidos naquela fatia com a mesma regra do `hooks/lib/detect-layout.sh`; as 23 restantes ficaram, e ficam registradas em vez de consertadas junto — mexer em `release` e `implement` de carona numa fatia de backlog é o tipo de escopo que esconde um erro dentro do outro.
-status: triaged
+status: shipped
 dod:
   - zero invocações de script em `.claude/skills/*/SKILL.md` que não resolvam no layout plugin, medido pelo mesmo grep da evidência
   - a forma escolhida funciona nos **dois** layouts (plugin e standalone), provada por execução em cada um — o kit é distribuído para consumidores que usam a raiz
   - existe um gate que reprova uma invocação nova na forma quebrada, senão a divisão volta pelo mesmo caminho por que chegou
 
 > Registrado 2026-08-16 ao instrumentar as skills de backlog para renderizar o índice de itens abertos.
+
+> **Fechado 2026-08-16 — DoD 3/3.**
+>
+> **(1) Zero invocações quebradas**, medido pelo gate novo: `skill-script-paths: PASS — 39 SKILL.md across 39 skill(s)`. Corrigidas **19** — 17 em bloco de código e 2 em prosa.
+>
+> **A medição refinou o item: eram 19 invocações, não 23.** As outras **4** são **referências**, não invocações: `- \`skills/auto-plan/scripts/select_next_milestone.py\` — Step 0 milestone selector` está numa lista ao lado de `rules/cycle-review.md` e `commands/plan-goal.md`, que usam a mesma convenção relativa à raiz do ecossistema. Um leitor as resolve; ninguém as executa. O gate mira **caminho precedido de interpretador** (`python3`, `bash`, `sh`), porque é essa a forma que um agente roda e que falha. Alargá-lo às referências obrigaria `$ECO` dentro de prosa que não é shell — uma regra que piora o documento para satisfazer um verificador.
+>
+> **(2) A forma funciona nos dois layouts, provada por execução** e não por argumento: `ECO=.claude` no layout plugin (este repo) e `ECO=.` num standalone simulado em `tmp`, com o mesmo script rodando OK nos dois. Em bloco, o prefixo entra uma vez por bloco; em prosa, a forma é auto-contida, porque ali `$ECO` não existiria.
+>
+> **(3) O gate existe e está ligado:** `skill-script-paths`, em `cmd/loopzero-ops/internal/quality/skillscriptpaths/`, registrado e invocado por `task quality:gates`. Ele aceita **duas** formas — `$ECO/…` (resolve nos dois) e `.claude/skills/…` explícito (correto onde o layout plugin é o que embarca, e o que **10** invocações já usavam). Recusa a nua. Oito testes, incluindo `TestRealTreeIsClean`, que roda sobre a árvore de verdade — a lição do `B-109`: mutante sintético prova que o detector dispara, só a população prova que ele dispara no que embarcou.
+>
+> **A ameaça que o gate cobre, e que o item não previa:** `install.sh` faz `rm -rf <target>/.claude/skills/ ; cp -r`, e `patch_install.sh` lista os `SKILL.md` por nome. Uma correção só nas cópias seria **desfeita na próxima sincronização do kit**. Como `SRC_DIR` do `patch_install.sh` é o próprio `.claude/` deste repositório, corrigir aqui corrige a fonte que propaga — e o gate acusa alto se a forma nua voltar por esse caminho.
+>
+> **O oráculo de gates confirmou a adição:** `TestOracle_MatchesFrozenBaseline` reprovou com *"got 126 lines, baseline 125"* — exatamente um gate a mais — e a baseline foi re-congelada conscientemente.
+
 
 ## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [ ]
 

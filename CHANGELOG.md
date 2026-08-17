@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **As instruções internas pararam de mandar rodar scripts por um caminho que não existe.** Dezenove instruções apontavam para um lugar que só é válido em uma das duas formas de instalação do ferramental — e em qual delas quebrava dependia de como cada projeto o instalou. A forma corrigida foi provada executando nas duas, e uma verificação automática nova recusa a forma quebrada, inclusive se ela voltar pela próxima sincronização do ferramental. (B-120)
+
 ### Removed
 - **Duas tarefas agendadas de migração de criptografia foram removidas: elas não tinham o que migrar e chamavam um comando inexistente.** Não havia nenhum dado no formato antigo — a tabela de segredos está vazia, a chave antiga não está configurada em lugar nenhum, e as tarefas estavam desligadas em todos os ambientes. A verificação automática que as protegia saiu junto, porque conferia a grafia de um comando em vez de sua existência. O risco que elas *nomeavam* mas nunca cobriram — uma chave revogada tornar dados ilegíveis sem ninguém perceber — ficou registrado para tratamento próprio. (B-125)
 

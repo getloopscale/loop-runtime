@@ -14,8 +14,43 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/envprefixparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillscriptpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testtargetcoverage"
 )
+
+// runSkillScriptPaths refuses a SKILL.md that tells an agent to run a script by a path
+// which resolves in only one of the two ecosystem layouts (`<project>/.claude/` for a
+// plugin install, `<repo>/` for the standalone kit). B-120.
+func runSkillScriptPaths(args []string) int {
+	fs := flag.NewFlagSet("skill-script-paths", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	skills := fs.String("skills", "", "skills dir relative to root (default: .claude/skills)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := skillscriptpaths.Check(skillscriptpaths.Config{RepoRoot: *root, SkillsRel: *skills})
+	switch {
+	case errors.Is(err, skillscriptpaths.ErrSkillsRootMissing):
+		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %v\n", err)
+		return 1
+	case errors.Is(err, skillscriptpaths.ErrUnreachableInvocation):
+		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %d invocation(s) resolve in only one layout:\n", len(out.Findings))
+		for _, f := range out.Findings {
+			fmt.Fprintf(os.Stderr, "  %s:%d  %s\n      %s\n", f.File, f.Line, f.Path, f.Text)
+		}
+		fmt.Fprintln(os.Stderr, "\nUse a prefix that resolves in both:\n"+
+			"  ECO=$([ -d .claude/skills ] && echo .claude || echo .)\n"+
+			"  python3 \"$ECO/skills/<skill>/scripts/<script>.py\"")
+		return 1
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %v\n", err)
+		return 1
+	}
+	fmt.Printf("skill-script-paths: PASS — %d SKILL.md across %d skill(s); every script invocation resolves in both layouts\n",
+		out.FilesScanned, out.SkillsScanned)
+	return 0
+}
 
 func runDocsContractRefs(args []string) int {
 	fs := flag.NewFlagSet("docs-contract-refs", flag.ContinueOnError)
