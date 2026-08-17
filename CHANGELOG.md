@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **As quinze suítes de teste do próprio ferramental voltaram a ser executadas — três estavam quebradas e nada as rodava.** Cada uma por um motivo diferente, e uma delas escondia o pior: a verificação de qualidade de código deste repositório **não estava olhando arquivo nenhum e reportava nota máxima** — sendo ela um bloqueio obrigatório de toda entrega. A configuração estava num formato que o leitor rejeita, e o resultado vazio era indistinguível de "está tudo certo". Uma verificação nova passou a rodar as quinze, e falha quando não encontra nenhuma — porque não achar nada não é o mesmo que não achar nada errado. (B-124)
+
+- **As instruções internas pararam de mandar rodar scripts por um caminho que não existe.** Dezenove instruções apontavam para um lugar que só é válido em uma das duas formas de instalação do ferramental — e em qual delas quebrava dependia de como cada projeto o instalou. A forma corrigida foi provada executando nas duas, e uma verificação automática nova recusa a forma quebrada, inclusive se ela voltar pela próxima sincronização do ferramental. (B-120)
+
+### Removed
+- **Duas tarefas agendadas de migração de criptografia foram removidas: elas não tinham o que migrar e chamavam um comando inexistente.** Não havia nenhum dado no formato antigo — a tabela de segredos está vazia, a chave antiga não está configurada em lugar nenhum, e as tarefas estavam desligadas em todos os ambientes. A verificação automática que as protegia saiu junto, porque conferia a grafia de um comando em vez de sua existência. O risco que elas *nomeavam* mas nunca cobriram — uma chave revogada tornar dados ilegíveis sem ninguém perceber — ficou registrado para tratamento próprio. (B-125)
+
+### Fixed
 - **Uma permissão que autorizava apagar chaves de criptografia sem que nada as apagasse foi removida.** Ela concedia destruição irreversível sobre um conjunto de chaves que o sistema nunca cria — o nome que ela protegia e o nome que o sistema usa nunca coincidiram. Enquanto o apagamento por cliente não existir, nenhuma permissão carrega esse verbo, e uma verificação automática passou a garantir isso. (B-075)
 - **Uma peça de código que só traduzia nomes de método entre dois componentes foi eliminada.** As duas assinaturas eram idênticas; só os nomes diferiam. O componente que consome passou a pedir o que já existe, e os dois continuam sem se conhecer — que era a razão pela qual a tradução tinha sido criada. (B-043)
 

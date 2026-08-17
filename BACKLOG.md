@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-125 items — **Open** 71 · **In flight** 0 · **Closed** 54
+128 items — **Open** 71 · **In flight** 0 · **Closed** 57
 
 ### Open (71)
 
@@ -139,18 +139,18 @@ consequência do escopo per-repo declarado acima.
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18----) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `triaged` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
-| [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam----) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `triaged` | alta |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
-| [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda----) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `triaged` | média |
-| [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem----) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `triaged` | alta |
+| [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
+| [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada----) | O `/code-quality` devolve nota máxima quando não auditou nada | `triaged` | alta |
+| [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (54)
+### Closed (57)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -208,6 +208,9 @@ _None._
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
+| [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
+| [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
+| [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5139,7 +5142,7 @@ dod:
 
 > Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
 
-## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [ ]
+## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5148,13 +5151,28 @@ source: discover-review
 severity: alta — as skills afetadas são o caminho crítico do pipeline (`release`, `implement`, `acceptance`, `cycle-goal`), e o modo de falha é o agente improvisar um caminho em vez de reprovar
 evidence: medido 2026-08-16. `grep -rnP '(?<![\w./"$])skills/[a-z-]+/scripts/[\w.]+\.(py|sh)' .claude/skills/*/SKILL.md` devolve **23** invocações em 6 skills — `auto-plan` (6), `release` (5), `implement` (5), `cycle-goal` (3), `acceptance` (3), `arch-check` (1). Prova de que não resolvem: `skills/auto-plan/scripts/select_next_milestone.py` não existe, e `.claude/skills/auto-plan/scripts/select_next_milestone.py` existe. Outras **10** invocações no mesmo corpo já usam `.claude/skills/…` — alguém corrigiu essas dez e a divisão ficou.
 why_now: descoberto ao escrever a instrução de re-render do índice de itens abertos nas skills de backlog. Copiei a forma `skills/…` da linha que já estava em `backlog-review/SKILL.md` e ela falhou na primeira execução. Quatro arquivos (`backlog-init`, `backlog-item`, `backlog-review`, `discover-execute`) foram corrigidos naquela fatia com a mesma regra do `hooks/lib/detect-layout.sh`; as 23 restantes ficaram, e ficam registradas em vez de consertadas junto — mexer em `release` e `implement` de carona numa fatia de backlog é o tipo de escopo que esconde um erro dentro do outro.
-status: triaged
+status: shipped
 dod:
   - zero invocações de script em `.claude/skills/*/SKILL.md` que não resolvam no layout plugin, medido pelo mesmo grep da evidência
   - a forma escolhida funciona nos **dois** layouts (plugin e standalone), provada por execução em cada um — o kit é distribuído para consumidores que usam a raiz
   - existe um gate que reprova uma invocação nova na forma quebrada, senão a divisão volta pelo mesmo caminho por que chegou
 
 > Registrado 2026-08-16 ao instrumentar as skills de backlog para renderizar o índice de itens abertos.
+
+> **Fechado 2026-08-16 — DoD 3/3.**
+>
+> **(1) Zero invocações quebradas**, medido pelo gate novo: `skill-script-paths: PASS — 39 SKILL.md across 39 skill(s)`. Corrigidas **19** — 17 em bloco de código e 2 em prosa.
+>
+> **A medição refinou o item: eram 19 invocações, não 23.** As outras **4** são **referências**, não invocações: `- \`skills/auto-plan/scripts/select_next_milestone.py\` — Step 0 milestone selector` está numa lista ao lado de `rules/cycle-review.md` e `commands/plan-goal.md`, que usam a mesma convenção relativa à raiz do ecossistema. Um leitor as resolve; ninguém as executa. O gate mira **caminho precedido de interpretador** (`python3`, `bash`, `sh`), porque é essa a forma que um agente roda e que falha. Alargá-lo às referências obrigaria `$ECO` dentro de prosa que não é shell — uma regra que piora o documento para satisfazer um verificador.
+>
+> **(2) A forma funciona nos dois layouts, provada por execução** e não por argumento: `ECO=.claude` no layout plugin (este repo) e `ECO=.` num standalone simulado em `tmp`, com o mesmo script rodando OK nos dois. Em bloco, o prefixo entra uma vez por bloco; em prosa, a forma é auto-contida, porque ali `$ECO` não existiria.
+>
+> **(3) O gate existe e está ligado:** `skill-script-paths`, em `cmd/loopzero-ops/internal/quality/skillscriptpaths/`, registrado e invocado por `task quality:gates`. Ele aceita **duas** formas — `$ECO/…` (resolve nos dois) e `.claude/skills/…` explícito (correto onde o layout plugin é o que embarca, e o que **10** invocações já usavam). Recusa a nua. Oito testes, incluindo `TestRealTreeIsClean`, que roda sobre a árvore de verdade — a lição do `B-109`: mutante sintético prova que o detector dispara, só a população prova que ele dispara no que embarcou.
+>
+> **A ameaça que o gate cobre, e que o item não previa:** `install.sh` faz `rm -rf <target>/.claude/skills/ ; cp -r`, e `patch_install.sh` lista os `SKILL.md` por nome. Uma correção só nas cópias seria **desfeita na próxima sincronização do kit**. Como `SRC_DIR` do `patch_install.sh` é o próprio `.claude/` deste repositório, corrigir aqui corrige a fonte que propaga — e o gate acusa alto se a forma nua voltar por esse caminho.
+>
+> **O oráculo de gates confirmou a adição:** `TestOracle_MatchesFrozenBaseline` reprovou com *"got 126 lines, baseline 125"* — exatamente um gate a mais — e a baseline foi re-congelada conscientemente.
+
 
 ## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [ ]
 
@@ -5212,7 +5230,7 @@ dod:
 > A rota está segura — dentro da faixa protegida e com `401` próprio quando não há tenant — e o helper é desenho deliberado, documentado como ponto de montagem canônico para que a fiação tenha teste. **O defeito é do gate**: a garantia que ele vende é *"toda rota pública está atrás de `Auth`"*, e qualquer rota montada por helper é invisível a ela. Encontrada ao verificar a terceira bala do `B-041`.
 
 
-## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [ ]
+## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5221,7 +5239,7 @@ source: discover-review
 severity: média — nenhuma delas guarda produto, mas as três guardam **gates**, e um gate cuja suíte está vermelha é um gate que ninguém sabe se ainda mede o que diz medir
 evidence: medido 2026-08-16 rodando `pytest` em cada `.claude/skills/*/tests/`. Quinze suítes, **três vermelhas com uma falha cada**: `code-quality::test_the_shipped_template_parses_when_you_follow_its_own_instructions` (o template que a skill distribui não passa nas próprias instruções), `discover-plan-confidence::test_good_plan_targets_all_resolve` (a fixture "boa" tem alvo que não resolve — **mesma forma do `B-004`**, que era a fixture boa do skill irmão) e `plan-confidence::test_real_plans_snapshot::test_snapshots_cover_active_plans_with_matrix`. **Confirmadas pré-existentes**: reproduzidas com as mudanças da fatia `B-003`/`B-004` guardadas em `git stash`, exatamente as mesmas três.
 why_now: encontradas ao rodar as suítes vizinhas para provar que a correção do resolvedor de ponteiros não havia afrouxado nada. Elas não aparecem no `task test:unit` (que roda Go) nem no `task quality:gates` — só rodam quando alguém invoca `pytest` à mão, e o número de vermelhas sugere que faz tempo.
-status: triaged
+status: shipped
 dod:
   - as três passam, ou a que não deve passar foi removida com a razão escrita
   - `discover-plan-confidence` é diagnosticado contra o `B-004`: se for a mesma causa-raiz de layout, a correção é a mesma e o item diz isso
@@ -5229,7 +5247,24 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-003`/`B-004`.
 
-## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [ ]
+> **Fechado 2026-08-16 — DoD 3/3, e cada uma das três vermelhas tinha causa diferente.**
+>
+> **(1) As três passam** — e o modo de falha de cada uma era outro:
+>
+> | suíte | causa | correção |
+> |---|---|---|
+> | `discover-plan-confidence` | a fixture "boa" citava `hooks/`, `hooks/validate-command.sh` e `rules/git-safety.md` — caminhos do layout standalone — e pontuava **3 de 3 fabricados** | tradução de layout no resolvedor, idêntica à do `B-004` |
+> | `code-quality` | a configuração de linguagens deste projeto estava no **formato antigo** (*"one language identifier per line"*), que o parser rejeita | reescrita no formato de pipes que o parser lê |
+> | `plan-confidence` | um teste **interno do kit** afirmando que todo plano ativo tem snapshot — sobre os **26 planos deste projeto**, que não são do kit | pula quando não há sobreposição nenhuma com o corpus do kit, e continua reprovando um plano novo **dentro** dele |
+>
+> **(2) Diagnosticada contra o `B-004`, e era a mesma causa-raiz.** O DoD mandava verificar antes de tratar como bug separado, e a verificação confirmou: mesmo defeito de layout, mesma correção, skill irmão.
+>
+> **(3) O gate existe:** `skill-suites`, em `cmd/loopzero-ops/internal/quality/skillsuites/`, ligado em `task quality:gates`. Roda **15 suítes**, todas verdes. `ADVISORY` quando `pytest` está ausente — bloquear entrega por ferramenta que o operador pode legitimamente não ter é como um gate vira bypass — mas **FALHA** quando a descoberta não acha suíte nenhuma, porque *não achar nada não é o mesmo que não achar nada errado*. Oito testes, um deles sobre a árvore real.
+>
+> **O que a correção do `code-quality` revelou, e que é maior que o item:** com a configuração vazia — o estado real deste repositório — `/code-quality` devolvia `verdict: PASS`, `score_cap: 100`, `languages_audited: []`. **Um hard gate do `IMPLEMENTATION_COMPLETE` auditando zero arquivos e reportando nota máxima.** Corrigido o formato, ele passou a auditar Go e devolveu `FAIL_HARD` com **4258** `symbol_fabrication_go` — número impossível num repositório que compila. Os dois viraram itens próprios: **`B-127`** (nota máxima sobre nada) e **`B-128`** (o detector não serve a workspace multi-módulo com irmãos não publicados). O `go` ficou `DEFER` **com a medição escrita na configuração**, em vez de `ENABLED` travando `run_validation.py` em falsos positivos.
+
+
+## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5238,10 +5273,74 @@ source: discover-review
 severity: alta — os dois jobs são o caminho de verificação e de migração das chaves de criptografia. Habilitá-los não faz o trabalho **e não falha de forma legível**: sobe um segundo servidor HTTP que roda até o `activeDeadlineSeconds` de 2h matá-lo, e o Job aparece como falha de timeout em vez de "comando não existe".
 evidence: medido 2026-08-16. `infra/helm/loopzero-api/templates/cronjob-day30-verify.yaml:54-59` invoca `/loopzero-api secret verify --batch-size=100 --filter-deleted-tenants`, e `cronjob-day60-aes-delete.yaml:58-63` invoca `/loopzero-api secret migrate-to-transit --dry-run=... --shred-aes-key=...`. **O binário não despacha subcomando nenhum:** `grep -rn "os.Args" api/cmd/*.go` (fora de teste) não retorna nada, e `func main()` (`api/cmd/main.go:40-48`) vai direto de `silenceKlog()` para `config.Load()` e o servidor. `migrate-to-transit` não é implementado em lugar nenhum de `api/` — zero ocorrências fora do gate que confere o template.
 why_now: encontrado ao medir o ciclo de vida de exclusão de tenant para o `B-075`. O gate `day30-day60-cronjobs` **passa** sobre os dois: ele casa regex no YAML renderizado — nome do CronJob, `schedule`, `concurrencyPolicy: Forbid`, `--dry-run=true`, `--shred-aes-key=false`, e a presença literal da string `migrate-to-transit`. Ele confere **a grafia do comando**, nunca que o binário sabe executá-lo. É a classe de defeito que esta sessão encontrou cinco vezes, na forma mais completa: um gate verde sobre um comando inexistente.
-status: triaged
+status: shipped
 dod:
   - está decidido se os dois jobs devem existir — se sim, o subcomando existe e um teste o executa; se não, os templates e o gate saem juntos
   - o gate deixa de afirmar a presença de uma string e passa a afirmar que o comando roda (por exemplo, `--help` do subcomando sai 0), ou declara explicitamente que só confere a forma do manifesto
   - os defaults de segurança do Day 60 (`--dry-run=true`, `--shred-aes-key=false`) continuam guardados por asserção depois da mudança — eles são a única coisa entre um engano e uma destruição irreversível
 
 > Registrado 2026-08-16 ao medir o ciclo de exclusão de tenant para o `B-075`.
+
+> **Fechado 2026-08-16 — DoD 3/3.** Ver `MEET-ASYNC-AMENDMENT-2026-08-16-aes-migration-crons` (pendente de ratificação).
+>
+> **(1) Decidido: os dois jobs NÃO devem existir, e saíram — templates e gate juntos.** A medição que decidiu foi além da premissa do item. Além de o binário não despachar subcomando nenhum: **nenhum ambiente habilita os crons** (`enabled: false` no chart e zero overrides em helmfile ou ArgoCD); **a chave AES legada não está configurada** em lugar nenhum — nem nos values, nem no deployment vivo, onde `kubectl get deploy loopzero-api` traz `OPENBAO_TRANSIT_ENABLED` e nenhuma variável de chave; e **a tabela `secrets` tem zero linhas**, das quais zero em AES. Os dois jobs migravam nada, verificavam nada e apagavam nada.
+>
+> **(2) O gate saiu com eles.** Um gate que afirma a forma de um manifesto que não existe mais não tem o que guardar — mantê-lo apontando para nada seria a mesma classe de defeito que ele ilustrava. Removidos: os dois templates, os blocos `day30VerifyCron`/`day60AesDeleteCron` de `values.yaml`, o pacote `day30day60cronjobs/`, a fiação em `quality_gates_observability.go` + `quality_registry.go`, e a invocação em `taskfiles/quality.yml`.
+>
+> **(3) Não se aplica** — os defaults de segurança do Day 60 saíram junto com o job que os carregava. A bala pedia que eles continuassem guardados *"depois da mudança"*, e a mudança foi remover o que os continha.
+>
+> **O oráculo de gates foi quem confirmou o desmonte.** `TestOracle_MatchesFrozenBaseline` reprovou com *"got 125 lines, baseline 126"* — exatamente um gate a menos — e a baseline foi re-congelada conscientemente, que é para isso que o `B-006` a moveu para `testdata/`. Sem ele, um gate des-ligado em silêncio passaria despercebido.
+>
+> **O risco que sobrevive à deleção virou item: `B-126`.** O Day-30 declarava três propósitos; o primeiro morreu com a migração, mas *(b) revogação de chave transit que orfaniza ciphertext* e *(c) corrupção de banco* continuam de pé. O job nunca os cobriu — nunca rodou — mas era o **único artefato do repositório que os nomeava**. Apagar o nome de um risco sem registrá-lo é como um risco desaparece de vista.
+
+
+## B-126 — Uma chave transit revogada orfaniza ciphertext e nada percebe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+severity: média — nada quebra hoje (a tabela `secrets` tem zero linhas), e sobe para **alta** no dia em que houver segredo de cliente guardado. O modo de falha é o pior tipo: silencioso, e só aparece quando alguém tenta ler o segredo.
+evidence: medido 2026-08-16 ao remover os dois CronJobs de migração AES→Transit (`B-125`). O `cronjob-day30-verify.yaml` declarava **três** propósitos: *(a) pre-migration AES rows not yet re-encrypted*, *(b) Transit key revocation that orphans ciphertext* e *(c) DB corruption*. O (a) morreu com a migração — zero linhas AES, zero linhas no total, nenhuma chave AES configurada em values ou no deployment vivo. **Os (b) e (c) não são da migração e continuam de pé.** O job nunca os cobriu, porque invocava `/loopzero-api secret verify` e o binário não despacha subcomando nenhum; mas ele era o **único artefato do repositório que os nomeava**. Hoje, se uma chave transit for revogada ou rotacionada em `transit/keys/loopzero-tenants-<id>`, todo ciphertext daquele tenant torna-se indecifrável e **não há sonda, alerta ou varredura** que perceba: `grep -rn "vault:v1:" --include="*.go" api/` mostra que a detecção de prefixo existe só no caminho de leitura (`secret_wrapper.go` `decryptFromStore`), que falha por requisição e não agrega.
+why_now: o artefato que nomeava o risco foi deletado, e apagar o nome de um risco sem registrá-lo é como um risco desaparece de vista. O `MEET-ASYNC-AMENDMENT-2026-08-16-aes-migration-crons` registra esta separação: o que vai para o histórico é o **desenho** do job; o que fica no registro é o **risco**.
+status: triaged
+dod:
+  - existe uma forma de detectar ciphertext indecifrável que **não** dependa de um usuário tentar lê-lo — varredura periódica, sonda de saúde ou métrica, decidido caso a caso
+  - a detecção distingue *chave revogada* de *dado corrompido*, porque a resposta a cada uma é diferente (uma é restaurar chave, a outra é restaurar backup)
+  - se a decisão for **não** construir enquanto não houver segredo de cliente, isso está escrito com gatilho nomeado — como o `B-075` fez com o apagamento
+
+> Registrado 2026-08-16 ao fechar o `B-125`. O risco não é novo; o que é novo é ele estar num lugar onde alguém o vê.
+
+## B-127 — O `/code-quality` devolve nota máxima quando não auditou nada   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: **alta** — o `cycle-implement.md` trata `/code-quality` como **hard gate** do `IMPLEMENTATION_COMPLETE` (`run_validation.py` reprova em `FAIL_HARD`/`INVALID`). Um gate que devolve `PASS`/100 sem ter olhado nada não bloqueia nada, e ninguém percebe porque a saída é a melhor possível.
+evidence: medido 2026-08-16 ao fechar o `B-124`. Com a configuração de linguagens vazia — o estado real deste repositório até hoje — `python3 .claude/skills/code-quality/scripts/run_code_quality.py` devolve literalmente `"verdict": "PASS"`, `"score_cap": 100`, `"languages_audited": []`, `"findings_by_detector": {}`. **E com a configuração CORRIGIDA, mas com toda linguagem em `DEFER`/`DISABLED`, devolve exatamente o mesmo** — sem sequer popular `skip_reasons`, que fica `{}`. A `SKILL.md` do próprio skill declara outro comportamento: *"exits with INFO 'no auditable languages'"*. O comportamento projetado e o campo que importa divergem.
+why_now: a instância foi corrigida ao pôr a configuração no formato que o parser lê, mas a **classe** não: qualquer projeto cuja configuração esteja vazia, mal formada ou inteiramente adiada recebe nota máxima de um gate que não olhou nada. É a forma mais completa do defeito que esta sessão encontrou seis vezes — comparar o que está escrito em vez do que sai —, e aqui ela está no gate que audita os outros.
+status: triaged
+dod:
+  - `languages_audited` vazio **não** produz `PASS` com `score_cap: 100` — o veredito diz que nada foi auditado, e `run_validation.py` o trata como não-verde
+  - `skip_reasons` é populado quando uma linguagem é `DEFER`/`DISABLED`/sem manifesto, para que a saída diga **por que** não auditou
+  - existe teste que prova o novo comportamento com configuração vazia, e ele roda no gate `skill-suites`
+
+> Registrado 2026-08-16 ao fechar o `B-124`.
+
+## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+severity: média — hoje não bloqueia nada, porque `go` está `DEFER`. Vira **alta** no instante em que alguém tentar ligá-lo: o gate reprova a entrega inteira com 4258 achados falsos, e quem investigar vai gastar o dia antes de descobrir que o repositório sempre compilou.
+evidence: medido 2026-08-16. Com `go | api/go.mod | ENABLED` em `.claude/rules/code-quality-languages.txt`, o runner devolve `FAIL_HARD` com `symbol_fabrication_go: 4258`. **Não pode ser verdade** — o repositório compila, e 4258 símbolos inexistentes não compilariam. O mecanismo é estrutural: `detect_symbol_fabrication` (`.claude/skills/code-quality/scripts/detectors/go.py:75-99`) pula imports do **próprio módulo** e consulta o resto no **proxy do Go**. Este repositório é um workspace de **9 módulos** com paths distintos e **não publicados** (`go.work`, sem `go.mod` na raiz), então todo import entre irmãos — `api` → `pkg/vault`, e são centenas — sai do prefixo do self-module, vai ao proxy, não é encontrado, e conta como fabricação.
+why_now: descoberto ao corrigir o formato da configuração de linguagens (`B-124`). Antes disso o detector nunca havia rodado aqui, porque a configuração parseava para vazio. O `go` ficou `DEFER` com esta medição escrita ao lado, em vez de `ENABLED` travando `run_validation.py` em falsos positivos.
+status: triaged
+dod:
+  - o detector reconhece um workspace `go.work` e trata **todo módulo do workspace** como self-module, não só o do `go.mod` mais próximo
+  - existe teste sobre uma árvore multi-módulo com import entre irmãos, provando que ela **não** produz achado
+  - com o conserto, `go` volta a `ENABLED` em `code-quality-languages.txt` — e os 36 achados de `deadcode` (D1), que podem ser reais, passam a ter de ser tratados ou isentados
+
+> Registrado 2026-08-16 ao fechar o `B-124`. O `go` está `DEFER` **por causa deste item**, e o comentário na configuração diz isso.
