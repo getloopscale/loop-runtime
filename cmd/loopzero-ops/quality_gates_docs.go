@@ -15,6 +15,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ecosystemvalidators"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/envprefixparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/publishhygiene"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillscriptpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillsuites"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testtargetcoverage"
@@ -254,5 +255,37 @@ func runEcosystemValidators(args []string) int {
 	// validador que sempre avisa ensina a ignorá-lo.
 	fmt.Printf("ecosystem-validators: PASS — %d validador(es) verdes, %d aviso(s)\n",
 		len(out.Results), out.Warnings())
+	return 0
+}
+
+// runPublishHygiene recusa arquivo versionado VIVO que carregue caminho de workstation.
+//
+// Dos 20 repositórios irmãos medidos em 2026-08-17, UM tinha esta trava (o loopzero-rag) —
+// e foi por isso que o vazamento do kit apareceu lá. Nos outros 19 ele envelhecia em
+// silêncio. Este repositório publica charts OCI e imagens, e história publicada é
+// pública RETROATIVAMENTE.
+func runPublishHygiene(args []string) int {
+	fs := flag.NewFlagSet("publish-hygiene", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+
+	out, err := publishhygiene.Check(publishhygiene.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "publish-hygiene: FAIL — %v\n", err)
+		for _, f := range out.Findings {
+			fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", f.File, f.Line, f.Text)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Troque o caminho absoluto por `~`, `<repo>` ou `<workspace>`, ou declare uma")
+		fmt.Fprintln(os.Stderr, "isenção com razão E sunset em internal/quality/publishhygiene. Registro datado")
+		fmt.Fprintln(os.Stderr, "(docs/wiki, plans/completed, baselines, CHANGELOG) já é isento por desenho:")
+		fmt.Fprintln(os.Stderr, "reescrevê-lo destruiria a evidência do que era verdade então.")
+		return 1
+	}
+	fmt.Printf("publish-hygiene: PASS — %d arquivo(s) vivo(s) sem caminho de workstation, %d isento(s) com razão datada\n",
+		out.Scanned, out.Exempt)
 	return 0
 }

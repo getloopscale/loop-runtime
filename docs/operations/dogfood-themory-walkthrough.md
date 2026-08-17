@@ -174,7 +174,7 @@ Edite `~/.claude/mcp.json` OU project-local `.mcp.json`:
     "themory": {
       "command": "node",
       "args": [
-        "/home/paulo/Projetos/loopzero/loopzero-memory/dist/agent-tools/cli.js",
+        "<workspace>/loopzero-memory/dist/agent-tools/cli.js",
         "mcp",
         "--transport=stdio"
       ],

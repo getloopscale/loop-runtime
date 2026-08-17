@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-138 items — **Open** 70 · **In flight** 0 · **Closed** 68
+139 items — **Open** 70 · **In flight** 0 · **Closed** 69
 
 ### Open (70)
 
@@ -135,7 +135,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
-| [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega----) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `triaged` | média |
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
@@ -144,12 +143,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
+| [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (68)
+### Closed (69)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -221,6 +221,7 @@ _None._
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
+| [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega---x) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `shipped` | média |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5944,7 +5945,7 @@ contra a **população real** (`B-109`) — este último é o que impede o gate 
 sintéticos enquanto os reais estão vermelhos, que é literalmente o estado que o `B-129` mediu.
 
 
-## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [ ]
+## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5953,13 +5954,73 @@ source: discover-live-test
 severity: média — não é segredo, é identidade de máquina; o custo é que histórico publicado é público **retroativamente**, e três desses repositórios já carregam `LICENSE`/`NOTICE`/`SECURITY.md`.
 evidence: medido 2026-08-17. `scripts/install.sh` do kit cita `/home/paulo/Projetos/squad` numa linha de comentário que transcreve a saída medida. O arquivo está em **nove** árvores: o kit canônico, `loopzero`, e sete irmãos (`loopzero-rag`, `loopzero-lens`, `loopzero-memory`, `loopzero-cloud`, `loopzero-promptly`, `loopzero-skills`, `loopzero-trust`, `loopzero-cli`). Corrigidos hoje: o kit, o `loopzero` e o `loopzero-rag` — os outros sete seguem. **Só o `loopzero-rag` tem `scripts/check-publish-hygiene.sh`**, e foi por isso que apareceu: ela reprovou `develop` desde 2026-08-16 e travou a promoção que o `B-118` precisava.
 why_now: a correção é de uma linha por repositório, e o que a torna urgente não é o vazamento em si — é que a trava que o pega existe em **um** dos nove. Nos outros oito ele envelhece em silêncio, e cada sincronização do kit pode reintroduzi-lo.
-status: triaged
+status: shipped
 dod:
   - os sete repositórios restantes não citam mais caminho de workstation em arquivo versionado
   - a trava de higiene (ou equivalente) existe onde a publicação é real, e não só no `loopzero-rag`
   - a sincronização do kit não reintroduz o caminho — a origem (`squad`) é a única que precisa estar limpa, e está
 
 > Registrado 2026-08-17 ao executar o `B-118`.
+
+---
+
+### Fechado 2026-08-17 — e a premissa do item estava errada em três direções
+
+**Não eram nove repositórios: são vinte.** Rodado o critério do `loopzero-rag` contra todo irmão com
+checkout, **um** estava limpo — ele mesmo. Os outros 19 carregavam o vazamento sem trava que o
+pegasse.
+
+**Não era uma linha: eram doze arquivos.** E o padrão não é o comentário do `install.sh` que o item
+registrou — é os **skills citarem o `CLAUDE.md` global por caminho absoluto**
+(`/home/paulo/.claude/CLAUDE.md`). Isso não é higiene: é **portabilidade**. Quem instala o kit noutro
+lugar é mandado ler um arquivo que não existe para ele, e a forma certa (`~/.claude/CLAUDE.md`) já era
+usada noutros pontos do próprio kit.
+
+**E não era dos repositórios: é do kit.** Medido: **13 de 13** arquivos com caminho de workstation no
+`loopzero-lens` são do kit. Consertar 8 repositórios à mão seria consertar o sintoma oito vezes.
+
+**Bala 3 primeiro, porque ela ordena o resto.** Corrigido na **origem** (`squad`, `2e28b91`) e
+propagado. As duas fixtures de `test_validate_command.sh` passaram a usar `/home/dev`: o
+`DANGEROUS_PATH_RE` casa `/home/<qualquer>`, então elas provam a **mesma** regra sem versionar a casa
+de uma pessoa — que é exatamente o critério da trava (home sintética passa, real não). 76/76 verdes.
+
+**Bala 1 — oito repositórios, oito PRs, mergeados.** `loopzero-cli` #10, `loopzero-cloud` #485, `loopzero-lens`
+#145, `loopzero-memory` #194, `loopzero-promptly` #95, `loopzero-skills` #156, `loopzero-trust` #71, `loopzero-workspace`
+#85. Em cada um, **apenas os 12 arquivos do kit** — o `loopzero-cli` tinha 175 arquivos alterados de outra
+sessão, e o staging foi por conteúdo do diff, não por diretório.
+
+**Bala 2 — a trava existe aqui**, em Go (`no-new-bash` proíbe `.sh` novo), ligada no `quality:gates`.
+**4541 arquivos vivos limpos, 1 isento com razão datada.**
+
+---
+
+### Duas decisões de escopo, e as duas são recusas
+
+**A metade de IP do gate irmão NÃO foi transportada.** Rodada contra esta árvore ela deu **104
+achados, quase todos falsos**: strings de versão (`13.3.2.1-1`) casando com o formato de quatro
+octetos, o placeholder `1.2.3.4`, as **faixas CIDR da Cloudflare** que o código carrega de propósito
+para reconhecer proxy confiável, e `paulo@165.227.121.20` — que não é vazamento, é o **alvo vivo
+declarado** em `rules/live-target.txt`, exigido por `cycle-discover.md`. Fechá-los um a um seria uma
+corrida armamentista em que cada exceção enfraquece o sinal. Prometer cobertura de IP aqui seria a
+superestimação que esta sessão mede em três itens.
+
+**A trilha de auditoria é isenta por desenho, e o número explica por quê.** Das **796** ocorrências de
+caminho de home neste repositório, **738 estão em registro datado** — e **495 num par de artefatos
+JUnit**. `docs/README.md` proíbe reescrever registro datado para corresponder ao presente. Varrer tudo
+produziria uma trava que só pode ficar verde violando outra regra — e uma trava que não pode ficar
+verde é desligada. A consequência honesta: **este gate protege o que se escreve daqui para a frente**,
+não o que já foi registrado.
+
+**Corrigido além do kit, neste repositório:** seis comentários citando caminho de máquina, e duas
+falhas de **portabilidade real** — `dr-drill.sh` fixava `REPO_ROOT=/home/paulo/loopzero` como default (agora
+deriva do checkout) e um alvo do Taskfile fazia `cd /home/paulo/loopzero`, que falhava em qualquer outro
+clone. Dezessete documentos tiveram o caminho generalizado; **nenhuma medição foi tocada**.
+
+**O que sobrou é migração, não texto — `B-139`.** Os três `root *` do `Caddyfile` servem o
+`app-dev` **agora**, e as units systemd do `loopzero-workspace` idem. Parametrizar com default mantém o
+literal; sem default quebra a borda que o `B-028` verificou funcionando hoje. Isentos com sunset
+**2026-11-17**.
+
 
 ## B-131 — A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore   [ ]
 
@@ -6105,3 +6166,20 @@ dod:
   - o `preview` (0 de 6) tem atenção própria: é o único pacote em que a heurística não achou nenhuma cobertura
 
 > Registrado 2026-08-17 ao fechar o `B-109`. **Ampliar a guarda para seis pacotes é uma fatia, não uma nota de rodapé** — e afirmar que os 19 são defeitos sem classificá-los seria cometer, aqui, o erro que o `B-109` nomeia.
+
+## B-139 — O dashboard e os serviços do droplet servem da casa de uma pessoa   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+severity: média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida.
+evidence: medido 2026-08-17 ao fechar o `B-130`, ao construir a trava `publish-hygiene`. Três `root *` em `infra/local/Caddyfile` (linhas 366, 382, 409) apontam para `/home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist` — é o que serve `app-dev.loopzero.example` **agora**. E no `loopzero-workspace`, seis arquivos: as units systemd de `loopzero-lens`, `loopzero-memory` e vizinhos, mais scripts de `dev/`, com o mesmo formato.
+why_now: o `B-130` limpou 4541 arquivos vivos deste repositório de caminho de workstation. Estes ficaram, e ficaram **por decisão registrada**: parametrizar com `{$VAR:default}` mantém o literal e não fecha nada; parametrizar sem default quebra a borda se a variável não estiver posta onde o Caddy sobe; e a borda foi verificada funcionando hoje (`B-028`). O conserto durável é tirar o serviço da casa de alguém.
+status: triaged
+dod:
+  - o dashboard e as units servem de um caminho que não é a home de uma conta pessoal (`/opt/loopzero`, `/srv/loopzero` ou equivalente)
+  - a migração é verificada LIVE: a borda segue devolvendo 200 depois dela
+  - a isenção de `infra/local/Caddyfile` sai do `publishhygiene.DefaultExemptions` — hoje ela tem sunset **2026-11-17**
+
+> Registrado 2026-08-17 ao fechar o `B-130`. **Não é texto a corrigir: é migração de ambiente**, e fazê-la dentro de um item de higiene teria acoplado risco de indisponibilidade a uma limpeza de comentários.

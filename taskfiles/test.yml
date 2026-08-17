@@ -1140,7 +1140,9 @@ tasks:
         set -e
         cd infra/helm/chaos-mesh
         helm dependency update
-        cd /home/paulo/loopzero
+        # Volta pela raiz do PROPRIO checkout. Era um caminho absoluto de uma
+        # maquina so — o alvo falhava em qualquer outro clone.
+        cd "{{.ROOT_DIR}}"
         for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
                     ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
                     ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \

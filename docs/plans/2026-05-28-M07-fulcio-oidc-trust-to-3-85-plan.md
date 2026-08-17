@@ -695,7 +695,7 @@ N/A
 #### Deep Dives
 
 **Sequence:**
-1. Operator: `cd /tmp/m07-keyless-app && LOOPZERO=$(realpath /home/paulo/loopzero/cli/bin/loopzero) && LOOPZERO_API_URL=http://localhost:13001 $LOOPZERO deploy --env production --json | tee /tmp/m07-v12-deploy.log`
+1. Operator: `cd /tmp/m07-keyless-app && LOOPZERO=$(realpath <repo>/cli/bin/loopzero) && LOOPZERO_API_URL=http://localhost:13001 $LOOPZERO deploy --env production --json | tee /tmp/m07-v12-deploy.log`
 2. Claude (via kubectl): poll workflow nodes status (`kubectl get wf -n argo -l workflows.argoproj.io/workflow=loopzero-build-<id>-* -o jsonpath='{range .status.nodes.*}{.displayName}|{.phase}{"\n"}{end}'`)
 3. Claude: aguarda terminal state (Succeeded OR Failed) — timeout 5min
 4. Claude: se Succeeded, query DB (EC-1 corrigido — schema real `releases.image_attestation_rekor_url`, NÃO `builds.attestation_url` que não existe):

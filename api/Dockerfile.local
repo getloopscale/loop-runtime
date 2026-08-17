@@ -10,13 +10,13 @@
 # #92 missing-parent-guard fix LIVE. This file mirrors loopzero-cloud/Dockerfile.local
 # (same pattern, same workspace layout, same outcome).
 #
-# Build context: /home/paulo/loopzero-cloud (META-DIR), so both `loopzero/` and
+# Build context: <meta-dir> (o diretório que contém os dois checkouts), so both `loopzero/` and
 # `loopzero-contracts/` are in the BuildKit context. The local replace points
 # loopzero-contracts at the workspace sibling repo, bypassing the public-module
 # fetch that requires the token.
 #
 # Usage (operator):
-#   cd /home/paulo/loopzero-cloud
+#   cd <meta-dir>
 #   docker buildx build --platform linux/amd64 \
 #     -f loopzero/api/Dockerfile.local \
 #     -t ghcr.io/getloopscale/loopzero-api:develop \

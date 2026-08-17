@@ -703,7 +703,7 @@ N/A (LIVE deploy via CLI)
 
 ```bash
 cd /tmp/m07-keyless-app
-LOOPZERO="/home/paulo/loopzero/cli/bin/loopzero"
+LOOPZERO="<repo>/cli/bin/loopzero"
 export LOOPZERO_URL="http://localhost:13001"
 JWT=$(cat ~/.loopzero/local-dogfood-token.txt)
 $LOOPZERO login --token "$JWT" --json >/dev/null
