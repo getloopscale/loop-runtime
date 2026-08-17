@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-137 items — **Open** 71 · **In flight** 0 · **Closed** 66
+137 items — **Open** 70 · **In flight** 0 · **Closed** 67
 
-### Open (71)
+### Open (70)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -118,7 +118,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
 | [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu----) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `triaged` | média |
 | [`B-086`](#b-086--um-documento-de-decisão-que-registra-a-ausência-de-um-adr-faz-esse-adr-resolver----) | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver | `triaged` | média |
-| [`B-090`](#b-090--a-asserção-de-caixa-do-gate-é-evadível-por-um-refactor-comum----) | A asserção de caixa do gate é evadível por um refactor comum | `triaged` | média |
 | [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor----) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `triaged` | baixa |
 | [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta----) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `triaged` | média |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
@@ -150,7 +149,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (66)
+### Closed (67)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -199,6 +198,7 @@ _None._
 | [`B-087`](#b-087--task-qualityall-aborta-no-primeiro-passo-contra-um-diretório-que-não-existe-desde-o-m9---x) | `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9 | `shipped` | alta |
 | [`B-088`](#b-088--os-testes-de-cmdloopzero-ops-e-de-tools-não-são-rodados-por-nenhuma-task---x) | Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task | `shipped` | alta |
 | [`B-089`](#b-089--a-mesma-regra-de-env-reservada-tem-uma-terceira-implementação-com-um-terceiro-conjunto---x) | A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto | `shipped` | alta |
+| [`B-090`](#b-090--a-asserção-de-caixa-do-gate-é-evadível-por-um-refactor-comum---x) | A asserção de caixa do gate é evadível por um refactor comum | `shipped` | média |
 | [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
 | [`B-103`](#b-103--43-itens-estão-raw-carregando-evidência-medida-e-o-loop-os-trata-como-não-medidos---x) | 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos | `shipped` | média |
@@ -4093,7 +4093,7 @@ dod:
 >
 > Nenhum prefixo entrou ou saiu de nenhuma lista. A lacuna que fica aberta é o **B-093**.
 
-## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [ ]
+## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4101,7 +4101,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`, rodando seis variantes contra `Check` numa árvore temporária — **todas as seis** devolveram `err=nil`: `ToUpper` içado para ACIMA do range e usado dentro dele (a que um refactor normal produz); laço por índice em vez de `range`; `range` sobre uma variável que aliasa o slice; `slices.ContainsFunc`; `import str "strings"`; `bytes.ToUpper`. `casematch.go` só inspeciona `*ast.RangeStmt` cujo `X` é o identificador do símbolo.
 why_now: o eixo da caixa acabou de ser decidido (`B-070`) e a asserção que o protege tem uma porta larga. A variante içada restaura exatamente o comportamento que o ADR proíbe, e o gate segue verde.
-status: triaged
+status: shipped
 severity: média — o passo vazio (site sem loop) já foi fechado, e o teste comportamental do linter pega todas as seis; mas esse teste não roda (`B-088`), e a cópia vigiada é código morto (`B-070`).
 dod:
   - a variante içada é detectada, ou está escrito por que não é
@@ -4110,6 +4110,48 @@ dod:
 
 > Registrado 2026-08-12 pela revisão da fatia `slice-11`. As seis variantes estão enumeradas no
 > doc-comment de `casematch.go` — foram documentadas em vez de implicadas inexistentes.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3, e a árvore real usava uma sétima forma
+
+**Bala 2 é a que resolve as outras duas.** O escopo era *"dentro de um `range` sobre o símbolo"* —
+isto é, **a forma do laço**. Por isso bastava mudar a forma, ou tirar o laço, para escapar. Agora o
+escopo é a **função que compara**, e o que se procura é uma comparação contra um prefixo cujo outro
+lado passou por um fold: direto (`HasPrefix(ToUpper(k), p)`) ou por **uma atribuição**
+(`uk := ToUpper(k)` … `HasPrefix(uk, p)`), que é a variante içada.
+
+Duas restrições caíram junto, e cada uma valia uma variante: casar o **pacote** (`strings`) virou
+casar o **nome do seletor**, porque `str.ToUpper` e `bytes.ToUpper` dobram a caixa exatamente igual; e
+o prefixo passou a ser reconhecido como variável de laço, índice no slice, alias do slice **ou
+parâmetro de closure** — que é a forma `slices.ContainsFunc`.
+
+**Bala 1 — a variante içada é detectada**, e ela é a que o item destaca como *"a que um refactor
+normal produz"*.
+
+**Bala 3 — as seis viraram fixtures.** Estavam enumeradas em prosa no doc-comment; agora são um
+teste de tabela que reprova se qualquer uma voltar a passar.
+
+**A fronteira que impede a mudança de virar ruído:** o fold **legítimo**, sobre a palavra da instrução
+do Dockerfile, que a especificação torna insensível a caixa. Ele vive uma linha acima da comparação da
+chave, e um scan de texto não os separa. O discriminador é o **outro argumento**: literal é instrução,
+variável do laço é chave. Tem teste próprio.
+
+---
+
+**E a árvore real usava uma sétima forma que eu não tinha previsto.** Com a nova detecção, o gate
+reprovou o próprio repositório com *"no comparison against the reserved prefixes was found"* — porque
+`build_plan.go:36` não chama `HasPrefix` coisa nenhuma: ele compara por **fatiamento e `==`**
+(`k[:len(p)] == p`). A primeira versão só conhecia a forma de chamada, e a árvore real não tem
+nenhuma.
+
+É a mesma lição do resto da fatia, virada contra mim: **eu escrevi seis fixtures sintéticas e a
+população real usava a sétima.** Foi o teste contra a árvore real (`B-109`) que pegou — nenhuma das
+seis teria.
+
+**O que continua fora, dito em vez de implicado inexistente:** um fold escondido atrás de uma função
+própria (`normalize(key)`), que exigiria seguir a chamada.
+
 
 ## B-091 — `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor   [ ]
 
