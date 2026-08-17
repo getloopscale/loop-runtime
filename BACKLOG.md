@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-141 items — **Open** 70 · **In flight** 0 · **Closed** 71
+143 items — **Open** 72 · **In flight** 0 · **Closed** 71
 
-### Open (70)
+### Open (72)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -144,6 +144,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
+| [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
+| [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses----) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `triaged` | alta |
 
 ### In flight (0)
 
@@ -6324,3 +6326,38 @@ dod:
   - nenhum teste de chart quebra — a mudança é de nome, e o compilador verifica cada call site
 
 > Registrado 2026-08-17 ao fechar o `B-061`. **A afirmação "é o único" era falsificável e foi falsificada** — exatamente o que uma varredura de população faz (`rules/testing.md § 4.2`). Não foi renomeado junto porque o defeito do `B-061` (nome que não recusa nada, num pacote com alcance de quatro binários) não se aplica a este: ele é coeso e vive num módulo de teste.
+
+## B-142 — Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+severity: **P0** — credencial de conta inteira, válida agora, exposta desde 2026-03-22. Atenuantes que não resolvem: repositório privado, e o valor ausente do `HEAD`.
+evidence: reportado pelo `trufflehog` do delivery gate em 2026-08-17 como `✅ Found verified result` — ele consultou a API do DigitalOcean e a credencial respondeu **ativa**. `DigitalOceanV2`, commit `64fef3336` (*"fix: use DO API token for Kaniko registry auth"*, 2026-03-22), `infra/pulumi/src/components/bootstrap.ts:1040`. Presente em **2** commits do histórico, ausente do `HEAD`. **O valor não está registrado aqui nem no issue, por política.**
+why_now: o token está vivo. Remover o arquivo não resolve — histórico não se desfaz sem reescrita, e o conserto é **revogar**. À época o repositório não tinha gate de segredos no caminho de push: o `trufflehog` foi ligado em `T4.7` dois meses depois.
+status: triaged
+blocked_by: revogação no painel do DigitalOcean — é ação na conta do dono, e nada no repositório a substitui.
+dod:
+  - o token está revogado, e o `trufflehog --only-verified` deixa de reportá-lo
+  - a atividade da API no período foi auditada, ou está escrito por que não foi
+  - se ainda for necessário, o novo token entra por Secret e nunca pelo fonte
+
+> Filado como issue **#323**. Registrado 2026-08-17, ao ser barrado empurrando trabalho alheio (`B-061`).
+
+## B-143 — O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: alta — é um gate de **segurança** cujo resultado depende de rede e de cache. Ele falhou para o lado inseguro por cinco meses, e o modo de falha é silencioso: um `PASS` não distingue *"não há segredo"* de *"não consegui verificar"*.
+evidence: medido 2026-08-17. O mesmo `trufflehog` passou em **vários pushes no mesmo dia**, sobre o **mesmo histórico**, e reprovou na última execução com um achado de 2026-03-22. A saída registra `verification_caching: {Hits:108, Misses:80}`, e o doc do gate (`trufflehogscan/check.go`) já declara a causa: *"--only-verified requires outbound network to verify discovered secrets… In offline CI, may produce false negatives."*
+why_now: a lacuna deixou de ser teórica — ela custou cinco meses de exposição de uma credencial viva (`B-142`). E a assimetria é a pior possível: o gate reprova quando a rede coopera, e **passa** quando não.
+status: triaged
+dod:
+  - o gate distingue *"verifiquei e não há"* de *"não consegui verificar"*, e o segundo não é `PASS`
+  - existe execução sem `--only-verified` em algum ponto do fluxo, ou está escrito por que o falso positivo dela custa mais que o falso negativo de hoje
+  - a decisão fica registrada junto do gate, que hoje declara a limitação e a trata como aceitável sem dizer quem aceitou
+
+> Registrado 2026-08-17. É a mesma forma dos `B-124`/`B-127`/`B-129` desta sessão — **um veredito verde que não distingue ausência de defeito de ausência de verificação** —, agora num gate de segurança.
