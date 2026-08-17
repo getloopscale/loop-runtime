@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-137 items — **Open** 70 · **In flight** 0 · **Closed** 67
+138 items — **Open** 70 · **In flight** 0 · **Closed** 68
 
 ### Open (70)
 
@@ -128,7 +128,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push----) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `triaged` | média |
 | [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
-| [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe----) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
@@ -144,12 +143,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
+| [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (67)
+### Closed (68)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -207,6 +207,7 @@ _None._
 | [`B-106`](#b-106--215-dos-582-caminhos-do-inventário-de-testes-não-existem-e-o-gate-que-o-lê-nunca-verifica---x) | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica | `shipped` | média |
 | [`B-107`](#b-107--o-checkbox-do-título-e-o-campo-status-são-o-mesmo-fato-e-discordavam-em-23-itens---x) | O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens | `shipped` | média |
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
+| [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe---x) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis---x) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
@@ -4875,7 +4876,7 @@ garantir, e a razão de cada um ficou escrita para ninguém re-perguntar.
 status permanece `raw` no campo acima; o fechamento aguarda a ratificação do
 `MEET-ASYNC-AMENDMENT-2026-08-16-seeds-ensure-their-namespace`.
 
-## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [ ]
+## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4888,7 +4889,7 @@ evidence: |
 
   Das seis guardas criadas nesta sessão, **cinco** tiveram varredura de população (checkbox 23 achados, marcador de fechamento 6, seeds 7→1, padrão de pacote 1 real, `Status().Update` 83 arquivos) e **uma** não. A que não teve é a que só existia como teste de pacote.
 why_now: mutante sintético prova que a guarda **enxerga** a forma; varredura prova quantas vezes a forma **já aconteceu**. As duas perguntas são diferentes, e a segunda é a que encontra defeito hoje em vez de prevenir defeito amanhã. Esta sessão gastou três correções em cima de itens que mediram o mecanismo e não a população.
-status: triaged
+status: shipped
 severity: média — nenhuma guarda está errada; o que falta é o passo que transforma cada uma de prevenção em achado
 dod:
   - a regra "toda guarda nova roda contra a população real antes de ser declarada pronta" está escrita onde as guardas são escritas
@@ -4896,6 +4897,43 @@ dod:
   - o resultado da varredura fica registrado junto da guarda, mesmo quando é zero — zero medido e zero suposto são fatos diferentes
 
 > Registrado 2026-08-14. A lição é da auditoria, que a aplicou a si mesma antes de eu aplicá-la a mim.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3. E a regra provou-se ao vivo enquanto era escrita
+
+**Bala 1 — a regra está escrita onde as guardas são escritas:** `rules/testing.md § 4.2`. Ela separa
+as duas perguntas que estavam colapsadas — *"a guarda enxerga a forma?"* (mutante sintético) e
+*"quantas vezes a forma já aconteceu?"* (varredura de população) — e torna as duas obrigatórias,
+com o resultado registrado junto da guarda **mesmo quando é zero**.
+
+**A regra encontrou um defeito enquanto era escrita, no mesmo lote.** No `B-090` escrevi **seis**
+variantes de evasão como fixtures sintéticas, todas passaram a ser detectadas — e a **árvore real
+usava uma sétima** que nenhuma previa: comparação por fatiamento (`k[:len(p)] == p`) em vez de
+chamada. O gate reprovou o próprio repositório, e foi o teste contra a população que pegou. Nenhuma
+das seis teria.
+
+Não é anedota: é a regra sendo aplicada a si mesma no dia em que foi escrita, do mesmo jeito que a
+auditoria que a nomeou fez em 2026-08-14.
+
+**Bala 2 — os seis pacotes de operators foram varridos**, e o resultado está registrado. `16 com
+sumário, 19 sem`, distribuídos por pacote, com `preview` em **0 de 6**.
+
+**Bala 3 — o resultado ficou junto da guarda**, no doc-comment de
+`TestApp_EveryStatusPersistFoldsTheReadinessSummary`, **com a limitação da medição escrita**: a
+varredura divide o arquivo por `func ` e procura o sumário por nome, sem seguir chamada, então uma
+função que delega o fold a um helper conta como "sem". Os 19 são **sítios a olhar**, não 19 defeitos.
+
+Dizer isso não é modéstia: afirmar 19 defeitos a partir de uma heurística seria cometer, dentro do
+item que nomeia esse erro, exatamente esse erro. O que o número **estabelece** é o que importa — o
+invariante **não é obviamente universal**, e esta guarda cobre um sexto da população. Ampliar é uma
+fatia própria: **`B-138`**.
+
+**Toda guarda criada neste lote nasceu com o teste de população**, e ele pegou coisa em três delas:
+o `B-123` (a contagem tinha de subir de 42 para 70), o `B-114` (cinco subárvores que eu ia isentar
+sem serem descobertas) e o `B-090` (a sétima forma). É a diferença entre prevenir defeito amanhã e
+encontrar defeito hoje.
+
 
 ## B-110 — O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso   [x]
 
@@ -6050,3 +6088,20 @@ dod:
   - a distância deixa de ser reportada-e-não-bloqueante: ou ela some, ou ela vira catraca com prazo
 
 > Registrado 2026-08-17 ao fechar o `B-106`. **107 arquivos e2e num produto cujo objeto É implantar não é obviamente um defeito** — pode ser que o alvo é que esteja errado. É decisão do sponsor, não minha.
+
+## B-138 — O invariante do sumário de prontidão é afirmado num pacote e existe em seis   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — o invariante é de ORDEM (o sumário é a última mutação antes de persistir), e ordem é o que uma tabela de contagem não vê. Foi assim que o `B-105` ficou escondido: a tabela do `B-085` pontuou o pacote como conforme porque contava `Patch` vs `Update`.
+evidence: varrido 2026-08-17 ao fechar o `B-109`. `TestApp_EveryStatusPersistFoldsTheReadinessSummary` afirma o invariante e roda em **um** pacote; a população são **seis**. Heurística sobre os seis (persistência de `.Status().Patch|Update(` cruzada com menção ao sumário na função que a envolve): **16 com sumário, 19 sem** — `app` 2/2, `environment` 5/1, `platform` 6/7, `preview` **0/6**, `reconcilehelpers` 1/0, `tenant` 2/3. **A limitação é parte do resultado:** a varredura divide por `func ` e procura o sumário por nome, sem seguir chamada — os 19 são **sítios a olhar**, não 19 defeitos.
+why_now: o `B-109` acabou de escrever a regra de que toda guarda roda contra a população real, e esta é a guarda que a motivou. O número acima é o que a regra produz quando aplicada a ela: o invariante **não é obviamente universal**, e a guarda cobre um sexto.
+status: triaged
+dod:
+  - cada um dos 19 sítios está classificado — dobra por helper que a heurística não seguiu, ou realmente não dobra
+  - a guarda cobre os seis pacotes, ou está escrito por que cada pacote de fora não precisa dela
+  - o `preview` (0 de 6) tem atenção própria: é o único pacote em que a heurística não achou nenhuma cobertura
+
+> Registrado 2026-08-17 ao fechar o `B-109`. **Ampliar a guarda para seis pacotes é uma fatia, não uma nota de rodapé** — e afirmar que os 19 são defeitos sem classificá-los seria cometer, aqui, o erro que o `B-109` nomeia.

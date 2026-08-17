@@ -669,6 +669,34 @@ func findStatusPersistSites(t *testing.T) []statusPersistSite {
 // conformant because it counted `Patch` vs `Update`, while a failure branch
 // persisted without ever summarising.
 //
+// # Varredura de população, 2026-08-17 (B-109) — e o que ela NÃO estabelece
+//
+// `rules/testing.md § 4.2` exige que toda guarda estrutural seja medida contra a
+// população real, e que o resultado fique registrado junto dela mesmo quando é zero.
+// Esta guarda é de PACOTE; a população são seis pacotes de operators.
+//
+// Varredos os seis por heurística (persistências de `.Status().Patch|Update(`, e se a
+// função que as envolve menciona o sumário de prontidão):
+//
+//	operators/internal/app                 2 com sumário,  2 sem
+//	operators/internal/environment         5              1
+//	operators/internal/platform            6              7
+//	operators/internal/preview             0              6
+//	operators/internal/reconcilehelpers    1              0
+//	operators/internal/tenant              2              3
+//	                                      ──             ──
+//	                                      16             19
+//
+// **A LIMITAÇÃO É PARTE DO RESULTADO, e sem ela o número seria pior que nenhum.** A
+// varredura divide o arquivo por `func ` no começo da linha e procura o sumário por
+// nome; ela não segue chamada, então uma função que delega o fold a um helper conta
+// como "sem". Os 19 são **sítios a olhar**, não 19 defeitos — afirmar o segundo seria
+// cometer aqui o mesmo erro que o B-109 nomeia.
+//
+// O que o número **estabelece** é o que importa: o invariante **não é obviamente
+// universal**, e esta guarda cobre um sexto da população. Registrado como item próprio;
+// ampliar a guarda para os seis pacotes é uma fatia, não uma nota de rodapé.
+//
 // So the assertion is on the ENCLOSING FUNCTION of each persist, not on how many
 // persists there are. A function may satisfy it two ways, and both are used here:
 // fold the summary in-line before the write (patchStatus), or cover every exit
