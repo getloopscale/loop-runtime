@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-133 items — **Open** 74 · **In flight** 0 · **Closed** 59
+134 items — **Open** 74 · **In flight** 0 · **Closed** 60
 
 ### Open (74)
 
@@ -137,7 +137,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
-| [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado----) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
@@ -148,12 +147,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
+| [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (59)
+### Closed (60)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -212,6 +212,7 @@ _None._
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
+| [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
@@ -5171,7 +5172,7 @@ semanas*. Não faltou canal; faltou o fio **fechar**. Registrado como **`B-133`*
 **`B-131`** (o gate varre a árvore inteira e o gatilho exclui parte dela), **`B-132`**, **`B-133`**.
 
 
-## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [ ]
+## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5179,7 +5180,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-16. `cmd/loopzero-ops/internal/quality/prodimagedigests/check.go:17` declara *"Mode: WARN — this gate reports violations but Outcome.Pass is true... Sponsor flips EnforceMode=true post-7d-soak"*. O plano que o criou é `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`, de **2026-05-26**. Três meses depois `EnforceMode` segue `false` por padrão, e o gate reporta **10** violações passando com `EXIT=0`.
 why_now: o soak declarado era de **7 dias**. Um gate que reporta e nunca reprova é exatamente o que o `B-085` mediu noutro contexto — *"um gate cuja única falha é uma isenção conhecida não é ligado, e então não vigia nada"*. A cobertura acabou de ser corrigida (`B-113`), então endurecer o modo agora significa o que diz; antes, não significava.
-status: triaged
+status: shipped
 severity: média — nenhuma das 10 violações é exploração ativa; o que está em jogo é o gate voltar a ter consequência.
 blocked_by: decisão do patrocinador, nomeada no próprio código. Não é minha para virar.
 dod:
@@ -5188,6 +5189,58 @@ dod:
   - as 7 dos charts publicados têm caminho declarado: quem preenche `image.digest` e quando (um digest fixado à mão vira mentira na próxima publicação)
 
 > Registrado 2026-08-16 ao executar o `B-113`. A cobertura foi corrigida naquela fatia; o modo é decisão de política e ficou de fora de propósito, para uma decisão não esconder a outra.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3. A chave não era um booleano
+
+**A re-medição mudou a pergunta.** As 10 violações não são uma população: são **duas**, com donos e
+viabilidade diferentes. Três são `image: <terceiro>:<versão>` literal em pods de `helm test` — quem
+escreve o chart conserta, em uma linha. Sete são `image.digest` ausente no `values.yaml`, e a
+mensagem do próprio gate nomeia o dono: *"o publicador de imagens é quem o produz"*.
+
+**Um booleano sobre as duas dava só dois ajustes possíveis**: reprovar sete coisas que ninguém
+consegue consertar hoje, ou avisar sobre tudo. O segundo é o que rodou por três meses contra um soak
+declarado de sete dias — e o custo não foi o aviso: foi que **as três consertáveis ficaram invisíveis
+dentro de um número dominado pelas sete que não eram**.
+
+**Bala 1 — está decidido, e em que data.** A enforcement passou a ser **por espécie**
+(`MEET-ASYNC-AMENDMENT-2026-08-17-digest-enforcement-has-two-populations`, pendente de ratificação):
+`literal_tag` **liga hoje**; `missing_digest` segue em aviso até o publicador emitir o valor.
+Nomear as espécies não acrescenta política ao gate — a política já estava dentro do booleano, e era
+justamente por isso que ninguém conseguia dizer qual metade o mantinha desligado.
+
+**Bala 2 — as três de pods de teste foram convertidas para digest, não isentadas.**
+`busybox@sha256:73aaf09…`, `curlimages/curl@sha256:25d29da…` (×2), resolvidos com
+`docker buildx imagetools inspect`. É o caso em que fixar por digest **não envelhece**: a versão de
+terceiro já estava presa, então o digest também não se move — o oposto exato do caso dos sete, onde
+o digest muda a cada publicação nossa. Gastar uma isenção (com sunset, revisão e memória) para
+evitar três substituições de uma linha seria mais caro que fazer, e deixaria a dívida viva.
+
+**Bala 3 — os sete têm caminho declarado, e ele é mais estreito do que parecia.** O publicador
+**já tem o digest**: `build-publish.yml` usa `steps.build.outputs.digest` para montar a referência
+que o cosign assina. O que falta é o `workflow_call:` **declarar `outputs:`** — o valor existe dentro
+do workflow e morre nele. Registrado como **`B-134`**, que também destrava o VAP
+`requireImageDigestEnforce`, parado pela mesma ausência.
+
+**Desenho.** `Kind` (`literal_tag` \| `missing_digest`), `Violation` como struct com `String()` que
+preserva a renderização, `Config.Enforce map[Kind]bool` com `nil` significando a política decidida —
+não *"não enforça nada"*, que era o antigo valor-zero. `Outcome.Enforced()`/`Warned()` separam o que
+bloqueia do que é reportado, e o relatório passou a imprimir os dois grupos com cabeçalhos próprios.
+
+**Sete testes**, RED antes de GREEN, incluindo o teste contra a **população real** (`B-109`): um
+mutante sintético prova que o detector dispara; só a árvore real prova que ela está limpa da espécie
+que agora bloqueia — é o que torna a virada segura em vez de esperançosa. Um deles guarda a fronteira
+oposta, recusando a promoção de `missing_digest` antes do valor existir.
+
+**Dois testes existentes foram atualizados, não removidos** — `TestCheck_HardcodedTag_ReportedAsViolation`
+e `TestCheck_LiveChartsRepo_PassesInWarnMode` afirmavam *"warn-mode should always Pass"*: eles
+**codificavam o contrato que o MEET substitui**. O segundo foi estreitado e mantido, porque a metade
+que ele ainda protege é real e fácil de quebrar por engano.
+
+**Medido depois:** `prod-image-digests` → `PASS`, 0 bloqueantes, 7 avisos. Antes: 10 avisos,
+`EXIT=0`, três deles consertáveis e invisíveis.
+
 
 ## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [x]
 
@@ -5495,3 +5548,20 @@ dod:
   - a issue #205 é fechada ou anotada: ela hoje afirma uma falha que já não existe em `main`
 
 > Registrado 2026-08-17 ao executar o `B-118`.
+
+## B-134 — O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor.
+evidence: medido 2026-08-17 ao executar o `B-119`. `.github/workflows/build-publish.yml` **calcula** o digest e o usa: `steps.build.outputs.digest` aparece nas linhas 255 e 264, montando a referência que o cosign assina. Mas o bloco `workflow_call:` **não declara `outputs:`** — verificado por parse do próprio YAML. O valor existe dentro do workflow e morre nele. Consequência medida nos dois consumidores: os **sete** `charts/loopzero-*/values.yaml` não declaram `image.digest` (o `loopzero-common.image` cai para `tag: dev`), e `charts/loopzero-admission-policies/values.yaml:95` mantém `requireImageDigestEnforce: false` com o mesmo comentário de *"post-7d-soak"* que o gate carregava.
+why_now: o `B-119` acabou de separar as duas populações do gate e ligou a que o autor do chart conserta. A outra — os sete — só sai do aviso quando alguém emitir o valor, e a mensagem do próprio gate diz por que preenchê-lo à mão é pior que não preencher: *"um digest fixado à mão vira mentira na próxima publicação"*. Este item é o caminho declarado que a terceira bala do `B-119` exigia.
+status: triaged
+dod:
+  - `build-publish.yml` declara `outputs.digest` no `workflow_call`, e um consumidor o recebe
+  - os sete `image.digest` são preenchidos **pela publicação**, não à mão — e a origem do valor está escrita junto
+  - com o valor presente, `prod-image-digests` passa a enforçar também `missing_digest` (`EnforceAll()` vira o padrão), e o VAP sai de `requireImageDigestEnforce: false`
+
+> Registrado 2026-08-17 ao fechar o `B-119`.

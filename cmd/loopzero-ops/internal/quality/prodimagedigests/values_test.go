@@ -95,7 +95,7 @@ func TestScanChartValues(t *testing.T) {
 			if !tc.wantHit && len(out.Violations) > 0 {
 				t.Fatalf("não esperava violação, vieram %d: %v", len(out.Violations), out.Violations)
 			}
-			if tc.wantHit && tc.wantIn != "" && !strings.Contains(strings.Join(out.Violations, " "), tc.wantIn) {
+			if tc.wantHit && tc.wantIn != "" && !strings.Contains(joinViolations(out.Violations), tc.wantIn) {
 				t.Errorf("a violação não nomeia a causa (%q): %v", tc.wantIn, out.Violations)
 			}
 		})
@@ -112,4 +112,14 @@ func TestScanChartValues_DiretorioAusenteNaoEhErro(t *testing.T) {
 	if len(out.Violations) != 0 {
 		t.Errorf("diretório ausente produziu violações: %v", out.Violations)
 	}
+}
+
+// joinViolations renders every finding for substring assertions. The rendering is
+// the operator-facing form, so asserting against it also guards the report.
+func joinViolations(vs []Violation) string {
+	parts := make([]string, 0, len(vs))
+	for _, v := range vs {
+		parts = append(parts, v.String())
+	}
+	return strings.Join(parts, " ")
 }
