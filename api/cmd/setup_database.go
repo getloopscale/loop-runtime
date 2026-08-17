@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 	"os"
@@ -38,14 +39,43 @@ type DatabaseDeps struct {
 	PoolCollector *metrics.PoolStatsCollector
 }
 
+// ErrDatabaseURLNotSet reports a missing DATABASE_URL at boot.
+//
+// # Why this is an error and not a degradation
+//
+// It used to return `(nil, nil)` under the name "graceful degradation". Three
+// measurements retired that name
+// (MEET-ASYNC-AMENDMENT-2026-08-17-no-database-is-a-config-error):
+//
+//   - The degradation never once executed. `buildServerConfig` read `dbDeps` and
+//     `stores` fields ABOVE its own `if != nil` guards, so the process logged the
+//     warning and died three functions later on a nil dereference (B-104,
+//     reproduced by `setup_server_nil_deps_test.go` before any change).
+//   - Its blast radius is not one surface: 27 of the router's 36 register "sem
+//     banco" as their disable reason. A missing secret does not degrade the
+//     product, it erases three quarters of it — while `/api/v1/health` keeps
+//     answering 200, because that probe is the shallow one.
+//   - It has happened, and this repository records the damage: B35, 2026-04-28
+//     (`infra/helm/loopzero-api/templates/deployment.yaml`) — the secret stored the
+//     key as `uri`, the mapping was missing, and loopzero-api "runs without DB",
+//     found by someone investigating something else.
+//
+// The distinction the old code collapsed is boot PRECONDITION vs runtime
+// DEPENDENCY. An unreachable database is transient and already fails correctly
+// (`db.NewPool` returns an error, `main` exits). An absent variable is a
+// configuration error: no amount of waiting produces it.
+//
+// Returning `nil, nil` for "it did not work, but carry on" is the magic value
+// `rules/error-handling.md` exists to forbid.
+var ErrDatabaseURLNotSet = errors.New("DATABASE_URL não está definida — a API não pode servir sem banco (27 das 36 superfícies dependem dele)")
+
 // setupDatabase creates the pgx connection pool, pool metrics collector,
 // stdlib DB for plan enforcement, and Sprint 1 stores.
-// Returns nil DatabaseDeps if DATABASE_URL is empty (graceful degradation).
+// Fails with ErrDatabaseURLNotSet when DATABASE_URL is absent.
 func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		logger.Warn("DATABASE_URL not set — running without database")
-		return nil, nil
+		return nil, ErrDatabaseURLNotSet
 	}
 
 	poolCfg, err := db.NewPool(context.Background(), dbURL, db.PoolConfig{

@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-134 items — **Open** 74 · **In flight** 0 · **Closed** 60
+135 items — **Open** 74 · **In flight** 0 · **Closed** 61
 
 ### Open (74)
 
@@ -136,7 +136,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
-| [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez----) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `triaged` | alta |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
@@ -148,12 +147,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
+| [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (60)
+### Closed (61)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -210,6 +210,7 @@ _None._
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
+| [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez---x) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `shipped` | alta |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
@@ -4978,7 +4979,7 @@ exclusão em massa de tenant — existem no código e **nunca existiram em deplo
 invariante absoluta — superfície nova que registre rota sem reportar reprova de imediato, sem nada
 com que comparar. Provado contra mutante: um só já reprova.
 
-## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [ ]
+## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4986,7 +4987,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-16 ao executar o `B-104`. `api/cmd/setup_database.go:43-49` trata `DATABASE_URL` ausente como *"graceful degradation"*: emite `logger.Warn("DATABASE_URL not set — running without database")` e devolve `nil, nil`. O `envFrom` do segredo de banco é `optional: true` no deployment, então o kubelet inicia o container sem ele. Como a maioria das 35 superfícies do roteador depende do banco, um segredo faltando derruba quase tudo de uma vez — e `/api/v1/health` continua respondendo.
 why_now: o `B-104` tornou a consequência observável (`loopzero_api_surface_enabled`), mas não mudou a causa. E a causa é a única entrada `optional: true` do deployment cujo alcance é o produto inteiro em vez de uma superfície.
-status: triaged
+status: shipped
 severity: alta — pelo alcance, não pelo estado atual: em dev-public o segredo existe.
 blocked_by: decisão. Medi o **comportamento**, não a **intenção** — o comentário do código declara a degradação como deliberada, e trocá-la por um crash sem decisão registrada seria substituir um defeito por outro. Precisa de alguém dizendo se subir sem banco é caso de uso real (desenvolvimento? sonda de arranque?) ou resíduo.
 dod:
@@ -5000,6 +5001,54 @@ dod:
 > O pânico foi corrigido, porque **os dois desfechos possíveis deste item o exigem**: se subir sem banco for caso de uso real, o processo precisa sobreviver; se for resíduo, o lugar de falhar alto é `setupDatabase`, com erro tipado, e não um `nil pointer dereference` três funções adiante. Ver `MEET-ASYNC-AMENDMENT-2026-08-16-no-database-boot-panics`.
 >
 > **A decisão continua sendo sua, e ficou mais limpa:** não é mais *"mantemos esta degradação?"* — é *"queremos criar esta degradação, que nunca funcionou?"*.
+
+---
+
+### Fechado 2026-08-17 — a resposta é **não**, e a terceira medição é a que decide
+
+**Decisão:** `DATABASE_URL` ausente é **erro de configuração**, não degradação. O arranque falha alto
+com erro tipado (`ErrDatabaseURLNotSet`), e o Secret do banco deixou de ser `optional` no deployment —
+o kubelet recusa iniciar o contêiner em vez de iniciá-lo já quebrado.
+(`MEET-ASYNC-AMENDMENT-2026-08-17-no-database-is-a-config-error`, pendente de ratificação.)
+
+**As três medições:**
+
+1. **A degradação nunca executou.** Já registrado acima: ela entrava em pânico três funções adiante,
+   e o processo registrava o `Warn` de degradação e morria. Corrigir o pânico mudou a pergunta de
+   *"mantemos isto?"* para *"queremos criar isto, que nunca existiu?"*.
+2. **O alcance é 27 de 36.** Contadas as razões de desligamento em `api/internal/server/router.go`:
+   **27** superfícies registram *"sem banco"*. Um Secret faltando não degrada o produto — apaga três
+   quartos dele, com `/api/v1/health` respondendo 200 porque aquela sonda é a rasa.
+3. **Já aconteceu, e o repositório registra o estrago.** `infra/helm/loopzero-api/templates/deployment.yaml:146-150`
+   carrega o comentário do **B35, 2026-04-28**: o Secret guardava a chave como `uri`, o mapeamento
+   faltava, e *"loopzero-api warns 'DATABASE_URL not set' and runs without DB. Detected on standalone
+   bootstrap"*. **A única ocorrência documentada desta degradação em quatro meses foi um bootstrap
+   quebrado em silêncio**, achado por quem investigava outra coisa. Uma degradação cujo único caso
+   registrado é um defeito não é caso de uso.
+
+**A distinção que o código conflatava** — e que é o desenho: precondição de arranque **vs**
+dependência de runtime. Banco *inalcançável* é transitório e **já falhava certo** (`db.NewPool`
+devolve erro, `main` sai). Variável *ausente* é configuração: nenhuma espera futura a produz.
+Devolver `nil, nil` para *"não deu, mas siga"* é exatamente o valor mágico que
+`rules/error-handling.md` proíbe.
+
+**Duas camadas, uma mensagem.** O `main.go` passou a distinguir os dois erros no log: *"database not
+configured"* vs *"failed to connect to database"*. A mensagem antiga mandava quem esqueceu a variável
+olhar a rede — e ela é o diagnóstico inteiro que o operador recebe no primeiro `kubectl logs`. Foi
+por causa dela que o contraditor aceitou o `CrashLoopBackOff`.
+
+**A bala de prontidão do DoD era condicional** ao desfecho *"pode subir sem banco"*, e o desfecho foi
+o outro — então ela não se aplica. Mas medi o assunto e ele tem defeito próprio: **prontidão e
+vivacidade apontam para a mesma sonda incondicional**. Registrado como **`B-135`**, com a armadilha
+escrita junto: apontar a prontidão para o `DeepHealth` faria uma instabilidade do Gitea remover todos
+os pods da API do Service de uma vez.
+
+**Três testes**, RED antes de GREEN, incluindo a fronteira oposta (uma URL presente nunca é lida como
+ausente) — sem ela, endurecer o arranque viraria uma regra que nenhum ambiente satisfaz.
+
+**Os testes do `B-104` continuam válidos e não foram tocados.** `setup_server_nil_deps_test.go`
+protege as guardas `if != nil` de `buildServerConfig`, que seguem corretas como defesa: elas agora
+guardam um estado que o arranque não alcança, mas que os testes alcançam.
 
 
 ## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [x]
@@ -5565,3 +5614,29 @@ dod:
   - com o valor presente, `prod-image-digests` passa a enforçar também `missing_digest` (`EnforceAll()` vira o padrão), e o VAP sai de `requireImageDigestEnforce: false`
 
 > Registrado 2026-08-17 ao fechar o `B-119`.
+
+## B-135 — Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — nada quebra hoje; o que não existe é a capacidade de tirar do Service uma instância que não consegue servir. Sobe para **alta** se alguma dependência do processo puder degradar em runtime sem derrubá-lo.
+evidence: medido 2026-08-17 ao executar o `B-116`. `charts/loopzero-api/values.yaml:235-249`: `livenessProbe` **e** `readinessProbe` apontam ambas para `/api/v1/health`. Esse handler (`api/internal/routes/health/health.go`, `func Health`) responde **200 incondicionalmente** — é a sonda rasa, documentada como *"lightweight liveness probe"*. Prontidão e vivacidade significam, portanto, exatamente a mesma coisa: *"o processo está vivo"*. Não existe estado em que o pod esteja `Running` e fora do Service.
+why_now: o `B-116` acabou de decidir que a API **não sobe** sem banco, o que fecha o caso do arranque. O que fica descoberto é a degradação **depois** do arranque: um banco que cai em runtime deixa o pod `Ready`, recebendo tráfego e devolvendo erro em 27 das 36 superfícies.
+status: triaged
+dod:
+  - a prontidão reflete a capacidade **desta instância** de servir, e existe estado observável em que o pod está vivo e fora do Service
+  - a decisão de qual dependência entra na prontidão está escrita, com a razão de cada uma
+  - existe teste que reprova a forma que este item registra: prontidão e vivacidade apontando para o mesmo handler incondicional
+
+> **A armadilha, escrita antes que alguém caia nela.** A correção óbvia é apontar a prontidão para
+> `/api/v1/health/ready`, que já existe. **Não faça isso sem ler o handler.** `DeepHealth`
+> (`health.go`) devolve **503 quando QUALQUER dependência está degradada** — banco, ArgoCD, Gitea,
+> Argo Workflows e a descoberta de cells. Uma instabilidade do Gitea removeria **todos** os pods da
+> API do Service ao mesmo tempo: um amplificador de incidente, não uma proteção. Prontidão precisa
+> refletir o que **esta instância** consegue servir, não a saúde do grafo inteiro de dependências.
+>
+> Registrado 2026-08-17 ao fechar o `B-116`, que deliberadamente deixou este assunto de fora — a
+> bala de prontidão do DoD dele era condicional ao desfecho *"pode subir sem banco"*, e o desfecho
+> foi o outro.

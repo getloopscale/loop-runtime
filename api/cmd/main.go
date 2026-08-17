@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
@@ -120,7 +121,14 @@ func main() {
 
 	dbDeps, err := setupDatabase(cfg, logger)
 	if err != nil {
-		logger.Error("failed to connect to database", "error", err)
+		// Two different failures reach here, and naming them apart is the whole
+		// diagnostic the operator gets on the first `kubectl logs`. "failed to
+		// connect" sent whoever forgot the variable to look at the network.
+		if errors.Is(err, ErrDatabaseURLNotSet) {
+			logger.Error("database not configured", "error", err)
+		} else {
+			logger.Error("failed to connect to database", "error", err)
+		}
 		os.Exit(1)
 	}
 	var dbAdapter *db.PgxAdapter
