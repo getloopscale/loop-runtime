@@ -226,36 +226,45 @@ func TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey(t *testing.T) {
 		t.Fatalf("reading the chart values: %v", err)
 	}
 
-	// The prefix the client actually creates, read from the executing source.
-	goSrc, err := os.ReadFile(filepath.Join(root, "pkg", "vault", "transit_client.go"))
-	if err != nil {
-		t.Fatalf("reading the transit client: %v", err)
-	}
-	m := regexp.MustCompile(`tenantKeyPrefix\s*=\s*"([^"]+)"`).FindSubmatch(goSrc)
-	if m == nil {
-		t.Fatal("tenantKeyPrefix not found — the assertion cannot tell which prefix to guard")
-	}
-	apiPrefix := string(m[1])
-
+	// A asserção cobre QUALQUER caminho `transit/keys/`, e não só o prefixo que o api
+	// cria. A versão anterior era estreita porque a pergunta estava em aberto: ela
+	// dizia, na própria mensagem, *"who owns shredding is B-075, still undecided; a
+	// permission is not the place to answer it"* — e recusar o `delete` em `tenant-+`
+	// naquele momento teria sido este teste ANULANDO uma decisão em vez de guardá-la.
+	//
+	// A pergunta foi respondida em 2026-08-16 (`B-075`, ratificado): o shredding é
+	// **operator-side quando construído**, e enquanto não existir **nenhuma policy
+	// concede `delete`** em chave transit. As duas concessões sobre `tenant-+` foram
+	// removidas na mesma fatia. A partir daqui a proibição guarda a decisão, que é
+	// exatamente o que a versão anterior dizia não poder fazer ainda.
+	//
+	// Quando o shredder for construído, a concessão volta — apontando para o prefixo
+	// que o api de fato cria, de propósito, e esta asserção é emendada junto, na mesma
+	// mudança que a torna necessária.
 	lines := strings.Split(string(values), "\n")
 	inTransitKeys := false
+	var keyPath string
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if strings.Contains(line, `path "transit/keys/`) {
-			inTransitKeys = strings.Contains(line, `path "transit/keys/`+apiPrefix)
+		if m := regexp.MustCompile(`path "(transit/keys/[^"]*)"`).FindStringSubmatch(line); m != nil {
+			inTransitKeys, keyPath = true, m[1]
 			continue
 		}
 		if inTransitKeys {
 			if strings.Contains(line, "capabilities") {
 				if strings.Contains(line, `"delete"`) {
-					t.Errorf("infra/helm/openbao-init/values.yaml:%d grants delete on %s*, the prefix the "+
-						"API creates:\n  %s\nThat is the crypto-shredding verb — it makes every ciphertext "+
-						"under the key permanently unrecoverable, and the API has no shredding path at all. "+
-						"Who owns shredding is B-075, still undecided; a permission is not the place to "+
-						"answer it.", i+1, apiPrefix, trimmed)
+					t.Errorf("infra/helm/openbao-init/values.yaml:%d grants delete on %q:\n  %s\n\n"+
+						"That is the crypto-shredding verb — it makes every ciphertext under the key "+
+						"permanently unrecoverable. B-075 (ratified 2026-08-16) decided that shredding "+
+						"is operator-side WHEN BUILT, and that until it exists no policy carries the "+
+						"verb: a grant nothing calls is destructive power with zero function.\n\n"+
+						"If you are adding this back because you are building the shredder, amend this "+
+						"assertion in the same change — and point the grant at the prefix the api "+
+						"actually creates (pkg/vault/transit_client.go tenantKeyPrefix), not at "+
+						"`tenant-`, which nothing has ever created.", i+1, keyPath, trimmed)
 				}
 				inTransitKeys = false
 			}

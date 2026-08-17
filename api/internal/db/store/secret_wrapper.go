@@ -32,16 +32,26 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domain"
 )
 
-// VaultTransitClient is the minimal interface PostgresSecretStore requires
-// from the Vault transit engine integration (T3.4/T3.5 of openbao-adoption v1.3).
-// pkg/vault.CachedClient satisfies it via an adapter; tests can mock cleanly.
+// VaultTransitClient is the minimal interface PostgresSecretStore requires from the
+// Vault transit engine integration (T3.4/T3.5 of openbao-adoption v1.3). It is a
+// CONSUMER-DEFINED interface: this package declares what it needs, and does not import
+// whoever provides it.
 //
-// EncryptForTenant calls transit/encrypt/tenant-<id> and returns the
-// canonical "vault:v1:..." ciphertext (Vault returns string form on the wire).
-// DecryptForTenant calls transit/decrypt/tenant-<id> and returns plaintext bytes.
+// Encrypt returns the canonical "vault:v1:..." ciphertext (Vault returns string form on
+// the wire); Decrypt takes one back and returns plaintext bytes. The per-tenant scope
+// lives in the tenantID PARAMETER — it does not need to be in the method name too.
+//
+// The names used to be EncryptForTenant/DecryptForTenant, and an adapter in
+// internal/adapters existed for the sole purpose of renaming them onto pkg/vault's
+// Encrypt/Decrypt. Its own doc said the signatures matched "byte-for-byte; only the
+// method names differ". Go interfaces are structural, so a difference that is only a
+// name needs no bridge — the composition root passes the provider straight in, and
+// **neither package imports the other**, which was the adapter's stated reason to exist.
+// Deleted in 2026-08-16 (B-043, bullet 4). Asserted by
+// api/cmd/setup_stores_test.go::TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter.
 type VaultTransitClient interface {
-	EncryptForTenant(ctx context.Context, tenantID string, plaintext []byte) (string, error)
-	DecryptForTenant(ctx context.Context, tenantID string, ciphertext string) ([]byte, error)
+	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (string, error)
+	Decrypt(ctx context.Context, tenantID string, ciphertext string) ([]byte, error)
 }
 
 // vaultPrefix is the canonical OpenBao/Vault Transit ciphertext prefix.
@@ -231,7 +241,7 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 		return plaintext, nil
 	}
 	if s.vault != nil {
-		ct, err := s.vault.EncryptForTenant(ctx, tenantID, plaintext)
+		ct, err := s.vault.Encrypt(ctx, tenantID, plaintext)
 		if err != nil {
 			// #138 — tag the failure so the HTTP boundary can answer
 			// SECRETS_BACKEND_UNAVAILABLE (503) instead of a generic 500.
@@ -257,7 +267,7 @@ func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID str
 		return nil, fmt.Errorf("secret_store: empty ciphertext for tenant %s (EC-06 NULL row guard)", tenantID)
 	}
 	if s.vault != nil && bytesHasPrefix(ciphertext, vaultPrefix) {
-		plain, err := s.vault.DecryptForTenant(ctx, tenantID, string(ciphertext))
+		plain, err := s.vault.Decrypt(ctx, tenantID, string(ciphertext))
 		if err != nil {
 			return nil, fmt.Errorf("secret_store: vault transit decrypt: %w", err)
 		}

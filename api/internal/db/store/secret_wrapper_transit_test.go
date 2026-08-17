@@ -28,7 +28,7 @@ type mockVault struct {
 	encryptedPrefix string // override "vault:v1:" with custom prefix for negative tests
 }
 
-func (m *mockVault) EncryptForTenant(_ context.Context, tenantID string, plaintext []byte) (string, error) {
+func (m *mockVault) Encrypt(_ context.Context, tenantID string, plaintext []byte) (string, error) {
 	m.encryptCalls++
 	m.lastTenantID = tenantID
 	m.lastPlaintext = plaintext
@@ -42,13 +42,13 @@ func (m *mockVault) EncryptForTenant(_ context.Context, tenantID string, plainte
 	return prefix + "ct(" + string(plaintext) + ")", nil
 }
 
-func (m *mockVault) DecryptForTenant(_ context.Context, tenantID string, ciphertext string) ([]byte, error) {
+func (m *mockVault) Decrypt(_ context.Context, tenantID string, ciphertext string) ([]byte, error) {
 	m.decryptCalls++
 	m.lastTenantID = tenantID
 	if m.decryptError != nil {
 		return nil, m.decryptError
 	}
-	// Reverse the prefix encoding from EncryptForTenant
+	// Reverse the prefix encoding from Encrypt
 	prefix := m.encryptedPrefix
 	if prefix == "" {
 		prefix = "vault:v1:"

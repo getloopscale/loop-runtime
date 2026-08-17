@@ -64,7 +64,10 @@ secretsEngines:
       version: "2"
   - path: transit
     type: transit
-    description: "Per-tenant encryption keys (crypto-shredding pattern)"
+    # Per-tenant on purpose: one key per tenant is what makes erasure possible at all
+    # (destroy the key, the tenant's ciphertexts die with it). The mechanism that would
+    # destroy it does not exist yet — see `B-075`. This names the shape, not a feature.
+    description: "Per-tenant encryption keys (one key per tenant — the shape erasure needs)"
     options: {}
   # T6.1 of openbao-adoption v1.3 — Vault database secrets engine for
   # dynamic PG credentials with TTL 1h max 24h. Replaces static
@@ -156,13 +159,32 @@ policies:
         capabilities = ["read"]
       }
   # T3.3 of openbao-adoption v1.3 — tenant-controller transit key management policy.
-  # Allows creating, reading, rotating, and DELETING per-tenant transit keys
-  # (crypto-shredding pattern: deleting key permanently un-decryptable per-tenant
-  # ciphertexts). Scope intentionally tenant-prefix to prevent cross-tenant key ops.
+  # Allows creating, reading and rotating per-tenant transit keys. Scope intentionally
+  # tenant-prefix to prevent cross-tenant key ops.
+  #
+  # It said "and DELETING … (crypto-shredding pattern)" until 2026-08-16. The verb went
+  # away with `B-075`; the sentence describing it had to go with it, or the next reader
+  # would look for a capability the policy no longer carries. Why, in full, at the
+  # `delete` line below.
   - name: tenant-controller-transit
     ruleHcl: |
+      # `delete` foi REMOVIDO em 2026-08-16 (`B-075`, ratificado). O apagamento
+      # criptográfico por tenant é operator-side QUANDO CONSTRUÍDO, e ele não existe:
+      # `DeleteTenantKey` é só declaração de interface, sem implementação, sem
+      # atribuição e sem chamador em toda a árvore.
+      #
+      # Enquanto isso, a concessão era destruição irreversível com função zero — e
+      # sobre um espaço de nomes que ninguém preenche: aqui se lia `tenant-<id>` e o
+      # `api` cria `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix).
+      # Ligar esse caminho teria apagado nada e reportado sucesso.
+      #
+      # Ela volta junto do shredder, apontando para o prefixo certo, e a asserção
+      # `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` é emendada na mesma
+      # mudança. Os verbos que ficam também são inertes hoje pela mesma divergência de
+      # prefixo; sair só o `delete` é o que a decisão autorizou, e é o único com
+      # consequência irreversível.
       path "transit/keys/tenant-+" {
-        capabilities = ["create", "read", "update", "delete"]
+        capabilities = ["create", "read", "update"]
       }
       path "transit/keys/tenant-+/rotate" {
         capabilities = ["update"]
@@ -256,8 +278,23 @@ policies:
       path "secret/data/loopzero/+/api/secrets/minio/*" {
         capabilities = ["read"]
       }
+      # `delete` foi REMOVIDO em 2026-08-16 (`B-075`, ratificado). O apagamento
+      # criptográfico por tenant é operator-side QUANDO CONSTRUÍDO, e ele não existe:
+      # `DeleteTenantKey` é só declaração de interface, sem implementação, sem
+      # atribuição e sem chamador em toda a árvore.
+      #
+      # Enquanto isso, a concessão era destruição irreversível com função zero — e
+      # sobre um espaço de nomes que ninguém preenche: aqui se lia `tenant-<id>` e o
+      # `api` cria `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix).
+      # Ligar esse caminho teria apagado nada e reportado sucesso.
+      #
+      # Ela volta junto do shredder, apontando para o prefixo certo, e a asserção
+      # `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` é emendada na mesma
+      # mudança. Os verbos que ficam também são inertes hoje pela mesma divergência de
+      # prefixo; sair só o `delete` é o que a decisão autorizou, e é o único com
+      # consequência irreversível.
       path "transit/keys/tenant-+" {
-        capabilities = ["create", "read", "update", "delete"]
+        capabilities = ["create", "read", "update"]
       }
       path "transit/keys/tenant-+/rotate" {
         capabilities = ["update"]

@@ -4,7 +4,7 @@
 // setup_stores_test.go — T2.5 unit tests of plan
 // 2026-06-10-j22-openbao-transit-eso-sync v1.2. Validates that
 // setupSecretStore correctly threads the OpenBao transit client into
-// the PostgresSecretStore so reads dispatch through vault.DecryptForTenant
+// the PostgresSecretStore so reads dispatch through the transit client's Decrypt
 // when the encrypted_value carries the canonical vault:v1: prefix.
 //
 // Acceptance criteria covered:
@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/vault"
 )
 
 // compile-time guarantee: fakeTransit satisfies the same vault.Transit
@@ -77,7 +78,7 @@ func TestSetupSecretStore_NilTransitFallsBackToLegacyAES(t *testing.T) {
 // path: when transit is non-nil, NewPostgresSecretStoreWithVault is
 // reached. Verified by exercising Set against the returned got; the
 // fake transit's encryptCalls counter MUST increment, proving the wire
-// path goes Set → encryptForStore → s.vault.EncryptForTenant → fake.
+// path goes Set → encryptForStore → s.vault.Encrypt → fake.
 func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
 	// Empty AES key — vault is the canonical path; legacy AES stays
 	// unwired but readable (decryptFromStore prefix detection still
@@ -118,4 +119,20 @@ func TestSetupSecretStore_BadAESKeyReturnsError(t *testing.T) {
 	if got != nil {
 		t.Fatalf("setupSecretStore: want nil got on error, got %T", got)
 	}
+}
+
+// O adapter que ligava os dois lados era cerimônia, não tradução. `pkg/vault.Transit` e
+// `store.VaultTransitClient` declaravam a MESMA forma — o doc do próprio adapter dizia
+// que *"signatures match byte-for-byte; only the method names differ"* — e a ponte
+// existia só para reconciliar `Encrypt` com `EncryptForTenant`.
+//
+// Em Go isso não precisa de ponte: a interface é estrutural, e a raiz de composição
+// entrega um valor que satisfaz o que o consumidor pede. **Nenhum dos dois pacotes passa
+// a importar o outro** — que era a razão declarada para o adapter existir, e continua
+// verdadeira sem ele. Esta asserção mora aqui, na raiz de composição, que é o único lugar
+// que legitimamente conhece os dois lados.
+//
+// `B-043`, bala 4: o adapter é **deletado**, não movido.
+func TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter(t *testing.T) {
+	var _ store.VaultTransitClient = (vault.Transit)(nil)
 }

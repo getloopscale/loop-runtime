@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **Uma permissão que autorizava apagar chaves de criptografia sem que nada as apagasse foi removida.** Ela concedia destruição irreversível sobre um conjunto de chaves que o sistema nunca cria — o nome que ela protegia e o nome que o sistema usa nunca coincidiram. Enquanto o apagamento por cliente não existir, nenhuma permissão carrega esse verbo, e uma verificação automática passou a garantir isso. (B-075)
+- **Uma peça de código que só traduzia nomes de método entre dois componentes foi eliminada.** As duas assinaturas eram idênticas; só os nomes diferiam. O componente que consome passou a pedir o que já existe, e os dois continuam sem se conhecer — que era a razão pela qual a tradução tinha sido criada. (B-043)
+
 - **Duas tarefas agendadas de manutenção de criptografia chamam um comando que o programa não tem.** Se alguém as ligasse, elas subiriam uma segunda cópia do servidor em vez de fazer o trabalho, e apareceriam como falha de tempo esgotado duas horas depois — não como "comando não existe". A verificação automática que as protege conferia a grafia do comando no arquivo de configuração, nunca que ele existe. (B-125)
 
 - **Quem é dono do registro de implantação de cada cliente deixou de ser adivinhação, e uma mensagem que aparecia para operadores parou de culpar o componente errado.** Três lugares do sistema mexem nesse registro; agora cada um diz, no próprio código, o que pode e o que não pode fazer com ele. A mensagem de estado dizia que a limpeza era responsabilidade da API — que nunca a fez; ela agora nomeia quem realmente limpa. O guia do repositório descrevia esse problema como algo a resolver à mão entre testes, com duas referências que já não existiam e uma descrição corrigida dois dias depois de ela ser escrita. (B-050)
