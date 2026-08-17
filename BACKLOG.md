@@ -6360,4 +6360,11 @@ dod:
   - existe execução sem `--only-verified` em algum ponto do fluxo, ou está escrito por que o falso positivo dela custa mais que o falso negativo de hoje
   - a decisão fica registrada junto do gate, que hoje declara a limitação e a trata como aceitável sem dizer quem aceitou
 
+> **Segunda medição, minutos depois:** o gate reprovou **de novo**, com o mesmo achado, sem nada ter
+> mudado. Então ele **não é instável agora** — o que está medido é que ele **passou antes**, hoje,
+> sobre este mesmo histórico. Qual dos dois mecanismos declarados no doc produziu aquele verde (rede
+> indisponível, limite de taxa do provedor, ou o gate não ter rodado) **não foi medido**, e não vou
+> afirmar qual foi. O que a evidência sustenta é mais estreito e suficiente: **houve `PASS` sobre um
+> histórico que contém credencial viva**, e o desenho do gate admite exatamente esse desfecho.
+
 > Registrado 2026-08-17. É a mesma forma dos `B-124`/`B-127`/`B-129` desta sessão — **um veredito verde que não distingue ausência de defeito de ausência de verificação** —, agora num gate de segurança.
