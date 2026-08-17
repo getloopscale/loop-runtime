@@ -167,35 +167,31 @@ func TestHangingSuiteIsBoundedAndReportedAsFailure(t *testing.T) {
 	}
 }
 
-// The real tree is the population the gate exists for (B-109): a synthetic mutant proves
-// the detector fires; only this proves it fires on what shipped.
-func TestRealTreeIsGreen(t *testing.T) {
+// The real tree is the population the gate exists for (B-109), and DISCOVERY is the half a
+// unit test can uniquely assert about it. Running the fifteen suites is what the gate does
+// in `task quality:gates`; doing it here too would put ~40s and the health of fifteen
+// unrelated suites into every `go test ./...` of this module — which is how a package's
+// result starts depending on who else is red.
+func TestRealTreeDiscoveryReachesTheSuites(t *testing.T) {
 	root, err := filepath.Abs("../../../../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, checkErr := Check(Config{RepoRoot: root})
 
-	// No ecosystem installed: the contract is a LOUD refusal, and asserting it here is
-	// worth more than vanishing — it proves the gate cannot report green over a tree it
-	// never found, which is the property the whole gate defends.
+	found, discErr := Discover(Config{RepoRoot: root})
+
+	// No ecosystem installed: the contract is a LOUD refusal, and asserting it beats
+	// vanishing — it proves the gate cannot report green over a tree it never found.
 	if _, statErr := os.Stat(filepath.Join(root, ".claude", "skills")); statErr != nil {
-		if !errors.Is(checkErr, ErrNoSuitesFound) {
-			t.Fatalf("without a skills tree the gate must fail loudly: %v", checkErr)
+		if !errors.Is(discErr, ErrNoSuitesFound) {
+			t.Fatalf("without a skills tree discovery must fail loudly: %v", discErr)
 		}
 		return
 	}
-	if !pytestAvailable() {
-		assertAdvisory(t, out, checkErr)
-		return
+	if discErr != nil {
+		t.Fatalf("discovery failed on the real tree: %v", discErr)
 	}
-	if checkErr != nil {
-		for _, r := range out.Failed() {
-			t.Errorf("%s: %s", r.Skill, r.Tail)
-		}
-		t.Fatalf("%d of %d skill suite(s) red", len(out.Failed()), len(out.Results))
-	}
-	if len(out.Results) < 10 {
-		t.Fatalf("only %d suite(s) discovered — the tree has ~15, so discovery is under-reaching", len(out.Results))
+	if len(found) < 10 {
+		t.Fatalf("only %d suite(s) discovered — the tree carries ~15, so discovery is under-reaching", len(found))
 	}
 }

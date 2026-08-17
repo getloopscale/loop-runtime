@@ -90,6 +90,51 @@ type Config struct {
 
 const defaultPerSuiteTimeout = 3 * time.Minute
 
+// SuiteDir is one discovered suite.
+type SuiteDir struct {
+	Skill string
+	Dir   string
+}
+
+// Discover finds the suites without running them.
+//
+// Split from Check on purpose. Running the suites is what the GATE does in
+// `task quality:gates`; a unit test that also ran all fifteen would duplicate ~40s of
+// work into every `go test ./...` and make this package's result depend on the health of
+// fifteen unrelated suites. What a unit test can uniquely assert about the real tree is
+// that DISCOVERY reaches it — and that is cheap, deterministic, and exactly the half that
+// silently under-reaches when a tree moves.
+func Discover(cfg Config) ([]SuiteDir, error) {
+	if cfg.RepoRoot == "" {
+		cfg.RepoRoot = "."
+	}
+	if cfg.SkillsRel == "" {
+		cfg.SkillsRel = filepath.Join(".claude", "skills")
+	}
+	root := filepath.Join(cfg.RepoRoot, cfg.SkillsRel)
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrNoSuitesFound, root)
+	}
+
+	var found []SuiteDir
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(root, e.Name())
+		if fi, statErr := os.Stat(filepath.Join(dir, "tests")); statErr != nil || !fi.IsDir() {
+			continue
+		}
+		found = append(found, SuiteDir{Skill: e.Name(), Dir: dir})
+	}
+	if len(found) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNoSuitesFound, root)
+	}
+	return found, nil
+}
+
 // Check is the gate entry point.
 func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
@@ -108,26 +153,14 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	root := filepath.Join(cfg.RepoRoot, cfg.SkillsRel)
-	entries, err := os.ReadDir(root)
+	suites, err := Discover(cfg)
 	if err != nil {
-		return Outcome{}, fmt.Errorf("%w: %s", ErrNoSuitesFound, root)
+		return Outcome{}, err
 	}
 
 	var out Outcome
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		skillDir := filepath.Join(root, e.Name())
-		if fi, statErr := os.Stat(filepath.Join(skillDir, "tests")); statErr != nil || !fi.IsDir() {
-			continue
-		}
-		out.Results = append(out.Results, runSuite(skillDir, e.Name(), cfg.PerSuiteTimeout))
-	}
-
-	if len(out.Results) == 0 {
-		return out, fmt.Errorf("%w: %s", ErrNoSuitesFound, root)
+	for _, sd := range suites {
+		out.Results = append(out.Results, runSuite(sd.Dir, sd.Skill, cfg.PerSuiteTimeout))
 	}
 
 	sort.Slice(out.Results, func(i, j int) bool { return out.Results[i].Skill < out.Results[j].Skill })
