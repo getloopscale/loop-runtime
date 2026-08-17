@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coveragediff"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coveragemerge"
@@ -15,6 +17,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/regressionmatrix"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/regressiontest"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testdeletion"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testinventory"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testpyramid"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testtargets"
 )
@@ -155,32 +158,58 @@ func runTestDeletion(args []string) int {
 
 func runTestPyramid(args []string) int {
 	fs := flag.NewFlagSet("test-pyramid", flag.ContinueOnError)
-	inv := fs.String("inventory", "infra/quality/test-inventory.json", "test inventory JSON")
+	root := fs.String("root", ".", "repo root directory")
+	base := fs.String("baseline", "infra/quality/test-pyramid-baseline.json", "frozen measured pyramid")
+	write := fs.Bool("write", false, "re-freeze the baseline from the current tree")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	o, err := testpyramid.Check(testpyramid.Config{
-		InventoryFile: *inv,
-		PRLabels:      os.Getenv("PR_LABELS"),
-		Thresholds:    testpyramid.DefaultThresholds(),
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[pyramid] %v\n", err)
-		return 1
+	resolveDotRoot(root)
+	basePath := filepath.Join(*root, *base)
+
+	// A etiqueta de PR continua sendo a saída de uma PR só. Ela vem antes de tudo
+	// porque é o único caso em que NÃO medir é a resposta certa.
+	for _, lbl := range strings.Split(os.Getenv("PR_LABELS"), ",") {
+		if strings.TrimSpace(lbl) == "pyramid-defer" {
+			fmt.Println("[pyramid] etiqueta 'pyramid-defer' — PASS (abra o issue automático)")
+			return 0
+		}
 	}
-	if o.Deferred {
-		fmt.Println("[pyramid] EC-12: 'pyramid-defer' label — PASS (auto-issue should be opened)")
+
+	if *write {
+		inv, err := testinventory.Derive(*root)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[pyramid] %v\n", err)
+			return 1
+		}
+		note := "Derivada da arvore por testinventory.Derive, nao declarada (B-106)."
+		if err := testpyramid.WriteBaseline(basePath, inv, time.Now().UTC().Format("2006-01-02"), note); err != nil {
+			fmt.Fprintf(os.Stderr, "[pyramid] %v\n", err)
+			return 1
+		}
+		u, i, e := inv.Ratios()
+		fmt.Printf("[pyramid] linha de base congelada: %d arquivos — unit %.1f%% / integração %.1f%% / e2e %.1f%%\n",
+			inv.Total(), u, i, e)
 		return 0
 	}
-	if !o.Pass {
-		fmt.Fprintln(os.Stderr, "[pyramid] FAIL: pyramid out of bounds:")
-		for _, v := range o.Violations {
+
+	o, err := testpyramid.CheckDerived(*root, basePath, testpyramid.DefaultThresholds())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[pyramid] FAIL — %v\n", err)
+		for _, v := range o.Regressions {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
-		fmt.Fprintln(os.Stderr, "[pyramid] use 'pyramid-defer' label for one-PR override")
+		fmt.Fprintln(os.Stderr, "[pyramid] a catraca só permite melhora; use a etiqueta 'pyramid-defer' para uma PR")
 		return 1
 	}
-	fmt.Println("[pyramid] PASS: ratios within bounds")
+	fmt.Printf("[pyramid] PASS — %d arquivos derivados da árvore: unit %.1f%% / integração %.1f%% / e2e %.1f%%\n",
+		o.Total, o.UnitPct, o.IntegPct, o.E2EPct)
+	// A distância até o alvo do ADR é reportada e NÃO bloqueia: aquele alvo foi
+	// calibrado contra um arquivo que declarava 0,1% de e2e. Silenciá-la esconderia
+	// a decisão pendente; bloquear nela criaria uma trava que o repo não satisfaz.
+	for _, g := range o.AspirationGaps {
+		fmt.Printf("[pyramid] distância até o alvo do ADR D7 (reportada, não bloqueia): %s\n", g)
+	}
 	return 0
 }
 

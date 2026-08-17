@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-136 items — **Open** 73 · **In flight** 0 · **Closed** 63
+137 items — **Open** 73 · **In flight** 0 · **Closed** 64
 
 ### Open (73)
 
@@ -129,7 +129,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push----) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `triaged` | média |
 | [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
-| [`B-106`](#b-106--215-dos-582-caminhos-do-inventário-de-testes-não-existem-e-o-gate-que-o-lê-nunca-verifica----) | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica | `triaged` | média |
 | [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe----) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
@@ -147,12 +146,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
+| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (63)
+### Closed (64)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -206,6 +206,7 @@ _None._
 | [`B-103`](#b-103--43-itens-estão-raw-carregando-evidência-medida-e-o-loop-os-trata-como-não-medidos---x) | 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos | `shipped` | média |
 | [`B-104`](#b-104--o-webhook-do-github-se-desliga-sozinho-em-silêncio-e-optional-true-é-o-que-permite---x) | O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite | `shipped` | alta |
 | [`B-105`](#b-105--o-application_controller-ancora-a-base-depois-de-um-re-fetch-e-pula-o-sumário-em-retorno-antecipado---x) | O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado | `shipped` | média |
+| [`B-106`](#b-106--215-dos-582-caminhos-do-inventário-de-testes-não-existem-e-o-gate-que-o-lê-nunca-verifica---x) | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica | `shipped` | média |
 | [`B-107`](#b-107--o-checkbox-do-título-e-o-campo-status-são-o-mesmo-fato-e-discordavam-em-23-itens---x) | O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens | `shipped` | média |
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
@@ -4616,7 +4617,7 @@ dod:
 > por mutante — incluindo os três que a revisão usou para matar a versão anterior.
 status: shipped
 
-## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [ ]
+## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4624,7 +4625,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-14 pelo review da fatia `slice-27`. `infra/quality/test-inventory.json` declara **582** caminhos de arquivo de teste; **215** deles (**37%**) não existem no disco. A causa não é única: repositórios extraídos (`cloud/…` foi para `loopzero-cloud` no M4), testes movidos por fatias de decomposição, e arquivos simplesmente apagados (`operators/internal/conditions/retry_test.go` saiu com o helper proibido na fatia 10). O inventário é **config viva**, lida por `cmd/loopzero-ops/quality_gates_testgov.go:158` — não é trilha de auditoria —, e o gate passa porque **nunca valida existência de caminho**.
 why_now: o review achou isto porque a fatia 19 moveu `repositories_test.go` e não atualizou o inventário; a 27 repetiu com `domains_test.go`. Os dois foram corrigidos nessa fatia, e a medição do resto revelou que eles eram 2 de 217. Um inventário em que 37% dos caminhos são fantasmas não descreve mais a suíte — ele descreve o que a suíte era em algum momento, e nenhum gate percebe a diferença.
-status: triaged
+status: shipped
 severity: média — nada quebra hoje; o custo é um gate de governança de testes que mede uma lista que não corresponde à realidade, e que por isso não pode acusar cobertura perdida
 
 > **Medido em 2026-08-14, e a premissa do item estava errada — o defeito é maior.**
@@ -4663,6 +4664,70 @@ dod:
 
 > Registrado 2026-08-14 pelo review da fatia 27. Os 2 caminhos de `routes/` foram corrigidos naquela
 > fatia; os outros 215 são anteriores a ela e não são dela.
+
+---
+
+### Fechado 2026-08-17 — e a re-medição de 14/08 ainda subestimava
+
+O bloco acima já corrigia o item: os caminhos são dados mortos, e o gate lê três percentuais que o
+próprio arquivo afirma. **A medição de hoje mostra que a cegueira é maior do que qualquer das duas
+contagens anteriores:**
+
+| | |
+|---|---:|
+| arquivos declarados | 710 |
+| desses, **inexistentes no disco** | **335** (47%) |
+| arquivos `_test.go` **no disco** | **988** |
+| no disco e **ausentes do inventário** | **649** |
+
+O inventário descrevia **375 de 988 — 62% cego**. E a pirâmide de 99,4% unit que ele declarava era
+calculada sobre essa amostra, que exclui a suíte `infra/tests/e2e` inteira. Entre os 649 ausentes
+estavam arquivos criados **hoje**.
+
+**Bala 1 — derivado, não declarado.** Consertar 649 entradas à mão consertaria a aparência e não o
+mecanismo: a lista voltaria a divergir na primeira fatia que movesse um teste. O novo pacote
+`testinventory` varre a árvore e classifica cada arquivo por uma regra declarada, nesta ordem:
+**build tag** (o autor declarou: `live` → e2e, `helm_render` → integração), depois **caminho** (as
+subárvores cujo propósito é o próprio nome), depois **unit**. Tag antes de caminho porque a tag é
+declaração de quem escreveu o teste e o caminho é inferência de quem escreveu o classificador. Cada
+entrada carrega a **razão** — um número derivado sem procedência teria o mesmo defeito do declarado.
+
+**A pirâmide real, medida pela primeira vez:**
+
+| | declarado | derivado |
+|---|---:|---:|
+| arquivos | 710 | **989** |
+| unit | 99,4% | **73,5%** |
+| integração | 0,4% | **15,7%** |
+| e2e | 0,1% | **10,8%** |
+
+**Bala 2 — os fantasmas.** Com a derivação eles deixam de existir: não há lista onde um caminho morto
+possa ficar. A triagem por causa que o DoD pedia continua verdadeira como diagnóstico (repositórios
+extraídos no M4, testes movidos por fatias, arquivos apagados), mas deixou de ter função — não há
+destino a decidir para uma entrada que não existe mais.
+
+**Bala 3 — a deriva ficou estruturalmente impossível.** Mover um arquivo de teste sem atualizar o
+inventário não pode mais acontecer, porque não há inventário para atualizar. É mais forte que a
+verificação que o DoD pedia.
+
+**A decisão que a medição forçou, e por que ela não é "ajustar até passar".** O alvo do ADR D7 é
+`e2e ≤ 5%`, e o real é 10,8% — o gate reprovaria a árvore inteira. Mas aquele alvo foi escolhido
+quando o arquivo afirmava **0,1%**: foi calibrado contra ficção. Então o veredito virou **catraca** —
+a linha de base congela o que foi **medido**, e o gate reprova quando um índice **piora**; a distância
+até o alvo do ADR é **reportada** e registrada como **`B-137`**, porque 107 arquivos e2e num produto
+cujo objeto é implantar não é obviamente um defeito, e essa é decisão do sponsor.
+
+Separar *não regredir* (verificável hoje) de *alcançar o alvo* (decisão que ninguém tomou contra dados
+reais) é o que evita as duas saídas ruins: uma trava que o repo não satisfaz, e um número mexido até
+ficar verde.
+
+**Removido:** `infra/quality/test-inventory.json` e o caminho que o lia. Nada mais o lê.
+
+**Onze testes**, RED antes de GREEN, incluindo as duas fronteiras que impedem a catraca de virar
+armadilha (a árvore congelada passa contra si mesma; melhorar não é regredir) e o teste contra a
+**população real** (`B-109`), que é o que impede a linha de base de virar o próximo arquivo que
+descreve o passado.
+
 
 ## B-107 — O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens   [x]
 
@@ -5845,3 +5910,20 @@ dod:
   - `pre-release-governance.md` ganha o que faltou: hoje a classificação T2/T3 é honor-system e o `governance-gate.py` cobre arquivos de produção; um `refactor` sobre schema e identidade de cluster passou entre os dois
 
 > Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.
+
+## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+severity: média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número.
+evidence: medido 2026-08-17 ao fechar o `B-106`, com a pirâmide **derivada** da árvore pela primeira vez: **989 arquivos — unit 73,5%, integração 15,7%, e2e 10,8%**. O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando `infra/quality/test-inventory.json` **declarava 0,1%** — isto é, calibrado contra um número que descrevia 375 de 988 arquivos e excluía a suíte `infra/tests/e2e` inteira.
+why_now: o `B-106` tornou o número visível pela primeira vez, e fazer o gate reprovar contra o alvo do ADR hoje criaria uma trava que o repositório não consegue satisfazer — a mesma recusa do `B-127` (`HARD`) e do `B-119` (enforcement total). Enquanto isso, a catraca já impede piora.
+status: triaged
+dod:
+  - está decidido se `e2e ≤ 5%` continua sendo o alvo, com o número real na frente, ou se o alvo muda — e a decisão cita o ADR D7
+  - se o alvo continuar, existe caminho declarado para sair de 10,8%; se mudar, o ADR é emendado
+  - a distância deixa de ser reportada-e-não-bloqueante: ou ela some, ou ela vira catraca com prazo
+
+> Registrado 2026-08-17 ao fechar o `B-106`. **107 arquivos e2e num produto cujo objeto É implantar não é obviamente um defeito** — pode ser que o alvo é que esteja errado. É decisão do sponsor, não minha.
