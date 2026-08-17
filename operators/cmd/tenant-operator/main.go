@@ -28,12 +28,13 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/environment"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/tenant"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
@@ -91,8 +92,8 @@ func main() {
 	// registry no one read. ContextLogger via NewContextLogger is the
 	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
-	if reconcilehelpers.PprofEnabled() {
-		reconcilehelpers.StartPprofServer()
+	if operatorboot.PprofEnabled() {
+		operatorboot.StartPprofServer()
 	}
 
 	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16 +
@@ -165,7 +166,7 @@ func main() {
 		setupLog.Error(nil, "BUILD_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	buildClient, err := reconcilehelpers.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
+	buildClient, err := cellrouting.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
 	if err != nil {
 		setupLog.Error(err, "failed to create build cluster client")
 		os.Exit(1)
@@ -176,7 +177,7 @@ func main() {
 		setupLog.Error(nil, "CELL_0_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
+	runtimeClient, err := cellrouting.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
 	if err != nil {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)
@@ -275,7 +276,7 @@ func main() {
 
 	// fix-all-platform-issues-plan T1.1: cell-aware Environment reconciler.
 	// Routes namespace/RBAC/NetworkPolicy/Quota writes per tenant.spec.cellID.
-	envFactory := reconcilehelpers.NewCellAwareRuntimeClientFactory(
+	envFactory := cellrouting.NewCellAwareRuntimeClientFactory(
 		mgr.GetClient(), runtimeClient, "loopzero-system")
 	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, envFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")

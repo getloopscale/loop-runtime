@@ -9,23 +9,24 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
+	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
 )
 
 // reconcileNetworkPolicies ensures deny-all + allow-ingress + allow-egress policies exist.
 // fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
 //
-// Phase 3 v37: delegates to reconcilehelpers.ApplyTenantNetworkPolicies which collapses
+// Phase 3 v37: delegates to tenantpolicy.ApplyTenantNetworkPolicies which collapses
 // the 3 reconcile*Policy functions (previously ~100 lines here) into a
 // single cross-package helper shared with the Preview controller.
 func (r *EnvironmentReconciler) reconcileNetworkPolicies(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	ctx, span := reconcilehelpers.StartChildSpan(ctx, "environment.network_policies.ensure")
+	ctx, span := reconcileloop.StartChildSpan(ctx, "environment.network_policies.ensure")
 	defer span.End()
 	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
 	if err != nil {
 		return fmt.Errorf("network policies: cell-aware client: %w", err)
 	}
-	return reconcilehelpers.ApplyTenantNetworkPolicies(ctx, runtimeClient, nsName, r.ingressNS(), "networkpolicy")
+	return tenantpolicy.ApplyTenantNetworkPolicies(ctx, runtimeClient, nsName, r.ingressNS(), "networkpolicy")
 }
 
 // ingressNS returns the namespace where the ingress controller runs.

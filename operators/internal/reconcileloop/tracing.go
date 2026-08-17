@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package reconcilehelpers provides cross-controller utilities shared by all
-// operator binaries. Extracted from internal/controller to enable multi-binary split
-// (ADR D2 — operator-controller-extraction-plan.md).
-package reconcilehelpers
+// Package reconcileloop guarda o que acontece DENTRO de um laço de reconcile: o sumário
+// de prontidão, os predicados de evento, os finalizadores e a observabilidade das
+// próprias reconciliações.
+//
+// # O nome, e o que ele substituiu (B-061)
+//
+// Chamava-se `reconcilehelpers` e pontuou coesão 2/5 — o único pacote da família
+// "helpers" em toda a árvore Go, num limiar respeitado por 148 módulos e 730k LOC.
+// O doc dele ainda o chamava de `shared`, um nome que ele já não tinha: `go doc`
+// renderizava um pacote inexistente.
+//
+// Saíram daqui a política de tenant (`tenantpolicy`), o roteamento de cell
+// (`cellrouting`) e o arranque de binário (`operatorboot`). O que ficou tem uma razão
+// só de mudar, e o nome diz qual.
+package reconcileloop
 
 import (
 	"context"
@@ -54,7 +65,7 @@ func SetSuccess(span trace.Span) {
 // Call with defer at the start of each Reconcile method:
 //
 //	start := time.Now()
-//	defer func() { reconcilehelpers.ReconcileOutcome(controllerName, start, retErr) }()
+//	defer func() { reconcileloop.ReconcileOutcome(controllerName, start, retErr) }()
 func ReconcileOutcome(controller string, start time.Time, err error) {
 	duration := time.Since(start).Seconds()
 	result := "success"

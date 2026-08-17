@@ -35,7 +35,7 @@ spec:
     # enumeration missed — they are `r.Update(ctx, tenant)` (no `&`) and one sits
     # behind a helper, so a grep for `&loopzerov1.Tenant` found none of them:
     #
-    #   tenant_controller.go:200 -> reconcilehelpers.EnsureFinalizer -> c.Update
+    #   tenant_controller.go:200 -> reconcileloop.EnsureFinalizer -> c.Update
     #   tenant_deletion.go:185, :196  (retry-count annotation)
     #   tenant_deletion.go:215        (Update AFTER RemoveFinalizer)
     #

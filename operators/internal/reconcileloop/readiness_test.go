@@ -15,7 +15,7 @@
 // The helper's own doc-comment states it re-fetches *because* other writers
 // exist. That makes the write mechanism the whole point, not an implementation
 // detail — which is what these tests pin.
-package reconcilehelpers
+package reconcileloop
 
 import (
 	"context"

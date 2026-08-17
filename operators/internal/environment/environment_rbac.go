@@ -18,7 +18,7 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
 )
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
@@ -60,7 +60,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	}
 
 	// RoleBinding — bind loopzero-deployer SA to loopzero-deployer Role.
-	if err := reconcilehelpers.ApplySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
+	if err := tenantpolicy.ApplySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
 

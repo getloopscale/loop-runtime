@@ -1,43 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Package cellrouting resolve como um controller ALCANÇA o cluster de uma cell.
 //
-// Cell-aware runtime client factory for the EnvironmentReconciler.
-//
-// cell-1-activation-plan iter 4 BUG-FIX:
-// The pre-existing EnvironmentReconciler held a single `RuntimeClient` field
-// configured at startup pointing to one runtime cluster. When a tenant was
-// pinned to cell-1 (via `loopzero admin tenants pin --cell cell-1`), the
-// reconciler still created Namespace/RBAC/NetworkPolicy/Quota on cell-0 —
-// violating ADR C10 (tenant data isolation) and recreating orphan namespaces
-// on the source cell after re-pin.
-//
-// This factory closes the gap:
-//   1. Reads the parent Tenant CR to determine spec.cellID.
-//   2. For cellID="" → returns the legacy RuntimeClient (preserves the
-//      single-cluster path where no cell was ever resolved).
-//   3. For EVERY named cellID (cell-0, cell-1, ...) → looks up the matching
-//      ClusterCredential CR by spec.cellID, reads its kubeconfig Secret,
-//      builds a controller-runtime client.Client from it, and caches the
-//      result for reuse. Symmetric to api/internal/cellmgr.ClientManager.
-//
-// O atalho do item 2 já cobriu um nome de cell, e isso era um defeito: enquanto a
-// primeira cell se chamou `cell-default`, o nome era ao mesmo tempo uma cell do
-// catálogo e a sentinela de "sem cell". Com a unificação 1:1 (ADR 2026-08-09) ela
-// passou a ser `cell-0`, uma cell real com tenants — e manter o atalho faria TODO
-// lookup dela devolver o cliente legado em vez de resolver o ClusterCredential dela,
-// que é exatamente o isolamento que esta factory existe para garantir. A string
-// vazia é a única sentinela a partir daqui, pelo mesmo motivo que `NULL` passou a
-// ser a única no banco (migração 000061, fase 4).
-//
-// Thread-safe via sync.RWMutex with double-check pattern. Cache eviction
-// is left to operator restart (token rotation triggers staleness; heal
-// script H14+H15 keep ArgoCD + ClusterCredential Secrets in sync, but the
-// in-memory cache here is built from the Secret at first lookup; subsequent
-// rotations require a process restart or invalidate-on-error policy.
-// Future work: integrate ClusterCredential reconcile event watcher to
-// invalidate cache on Secret update).
-
-package reconcilehelpers
+// Separado de `reconcilehelpers` no B-061: rotear para uma cell e reconciliar um
+// recurso mudam por razões diferentes, e estavam no mesmo pacote porque o nome dele
+// não conseguia dizer não a nenhuma das duas.
+package cellrouting
 
 import (
 	"context"

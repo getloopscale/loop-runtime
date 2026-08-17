@@ -179,7 +179,7 @@ func TestApp_BareStatusUpdatesAreConvertedOrDeclared(t *testing.T) {
 //   - It is skipped on early return. Four error paths return before the summary
 //     is computed at all. The helper is a `defer` precisely because ADR-0025 D3
 //     requires the summary to be the last status mutation EVEN ON EARLY RETURN
-//     (reconcilehelpers/readiness.go). Folding it inline means that on any error
+//     (reconcileloop/readiness.go). Folding it inline means that on any error
 //     path the Ready condition stays stale — exactly when a reader needs it.
 //
 //   - Its base is anchored wrong. It re-fetches (application_controller.go:154)
@@ -229,7 +229,7 @@ func TestApp_ReadinessSummaryIsNotHandRolled(t *testing.T) {
 		}
 		if handRolled && !strings.Contains(src, "DeferReadinessSummary") {
 			t.Errorf("%s computes the readiness summary itself instead of calling "+
-				"reconcilehelpers.DeferReadinessSummary. The shared helper carries the optimistic "+
+				"reconcile.DeferReadinessSummary. The shared helper carries the optimistic "+
 				"lock and logs the failure; a local copy is how this package kept the pre-slice-10 "+
 				"shape for months (B-085).", name)
 		}
@@ -682,7 +682,7 @@ func findStatusPersistSites(t *testing.T) []statusPersistSite {
 //	operators/internal/environment         5              1
 //	operators/internal/platform            6              7
 //	operators/internal/preview             0              6
-//	operators/internal/reconcilehelpers    1              0
+//	operators/internal/reconcileloop       1              0
 //	operators/internal/tenant              2              3
 //	                                      ──             ──
 //	                                      16             19

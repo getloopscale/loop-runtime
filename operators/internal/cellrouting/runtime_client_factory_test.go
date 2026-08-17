@@ -4,7 +4,7 @@
 // Unit tests for CellAwareRuntimeClientFactory + StaticRuntimeClientFactory.
 // cell-1-activation-plan iter 4 BUG-FIX. These tests use fake clients (no envtest).
 
-package reconcilehelpers
+package cellrouting
 
 import (
 	"context"

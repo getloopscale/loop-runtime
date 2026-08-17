@@ -26,9 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -65,7 +66,7 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 type EnvironmentReconciler struct {
 	client.Client
 	RuntimeClient    client.Client
-	RuntimeFactory   reconcilehelpers.RuntimeClientFactory // nil = single-cell mode (legacy)
+	RuntimeFactory   cellrouting.RuntimeClientFactory // nil = single-cell mode (legacy)
 	Scheme           *runtime.Scheme
 	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: loopzero-system.
 }
@@ -117,16 +118,16 @@ var environmentDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for Environment resources.
 func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "environment", req.Name, req.Namespace)
+	ctx, span := reconcileloop.StartReconcileSpan(ctx, "environment", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			reconcilehelpers.RecordError(span, retErr)
+			reconcileloop.RecordError(span, retErr)
 		} else {
-			reconcilehelpers.SetSuccess(span)
+			reconcileloop.SetSuccess(span)
 		}
-		reconcilehelpers.ReconcileOutcome("environment", start, retErr)
+		reconcileloop.ReconcileOutcome("environment", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -146,7 +147,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// kstatus universal per ADR-0025 D3 condition #1.
 	// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegates to
 	// pkg/conditions via adapter (same algorithm, shared core).
-	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.Environment { return &loopzerov1.Environment{} },
 		func(x *loopzerov1.Environment) *[]metav1.Condition { return &x.Status.Conditions },
 		environmentDetailTypes)()
@@ -157,7 +158,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Add finalizer if not present
-	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &env, environmentFinalizer, req.NamespacedName); err != nil {
+	if err := reconcileloop.EnsureFinalizer(ctx, r.Client, &env, environmentFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -384,10 +385,10 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 // legacy single-cell path.
 
 // SetupEnvironmentControllerWithFactory is the cell-aware entrypoint.
-func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory reconcilehelpers.RuntimeClientFactory) error {
+func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory cellrouting.RuntimeClientFactory) error {
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.Environment{}, reconcilehelpers.ForOption()).
+		For(&loopzerov1.Environment{}, reconcileloop.ForOption()).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
 			Client:           mgr.GetClient(),

@@ -16,7 +16,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -248,7 +248,7 @@ func assertRepoNameOwnedByTenant(tenantName, repoName string) error {
 
 // reconcileGitRepo ensures the GitOps repository exists via the GitRepoProvisioner.
 func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	ctx, span := reconcilehelpers.StartChildSpan(ctx, "tenant.gitops.ensure")
+	ctx, span := reconcileloop.StartChildSpan(ctx, "tenant.gitops.ensure")
 	defer span.End()
 
 	// Audit gap M10 F2 / §6.E.4c — refuse to act on a RepoName that does
@@ -256,13 +256,13 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 	// from Spec.GitOps.RepoName, so a malformed or adversarial value
 	// would otherwise cause cross-tenant repo creation/conflict.
 	if err := assertRepoNameOwnedByTenant(tenant.Name, tenant.Spec.GitOps.RepoName); err != nil {
-		reconcilehelpers.RecordError(span, err)
+		reconcileloop.RecordError(span, err)
 		return err
 	}
 
 	repoURL, err := r.GitProvisioner.EnsureRepo(ctx, tenant.Spec.GitOps.RepoName, tenant.Spec.GitOps.Branch)
 	if err != nil {
-		reconcilehelpers.RecordError(span, err)
+		reconcileloop.RecordError(span, err)
 		return fmt.Errorf("gitea repo %s: %w", tenant.Spec.GitOps.RepoName, err)
 	}
 
@@ -275,11 +275,11 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 // reconcileArgoCDApp ensures one ArgoCD Application CR exists per environment for the tenant.
 // The Application connects the tenant's Gitea repo to the workload namespace via ArgoCD.
 func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopzerov1.Tenant) (err error) {
-	ctx, span := reconcilehelpers.StartChildSpan(ctx, "tenant.argocd.ensure")
+	ctx, span := reconcileloop.StartChildSpan(ctx, "tenant.argocd.ensure")
 	defer span.End()
 	defer func() {
 		if err != nil {
-			reconcilehelpers.RecordError(span, err)
+			reconcileloop.RecordError(span, err)
 		}
 	}()
 	// arch_op_010: Use tenant.Status.GitOpsRepo (set by reconcileGitRepo, which runs first)
