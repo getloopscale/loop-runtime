@@ -79,7 +79,11 @@ func TestCheck_RenamedTargetWithTheSameEffectIsForbidden(t *testing.T) {
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; a renamed target with the SAME effect must still fail. violations=%v", err, out.Violations)
 	}
-	if len(out.Violations) != 1 || !strings.Contains(out.Violations[0], "mgmt context") {
+	// "core context", não "mgmt": a mensagem passou a nomear o cluster pelo nome que ele
+	// tem desde o rename do B-001. O identificador Go segue com `mgmt` porque
+	// `MGMT_CONTEXT` continua sendo um nome de variável aceito — a mensagem é o que o
+	// operador lê, e ela apontava para um cluster que não existe mais.
+	if len(out.Violations) != 1 || !strings.Contains(out.Violations[0], "core context") {
 		t.Errorf("violations = %v; want the effect-based finding", out.Violations)
 	}
 }

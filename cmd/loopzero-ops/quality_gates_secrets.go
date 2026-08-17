@@ -385,14 +385,14 @@ func runOpenBaoBootstrapInCoreTask(args []string) int {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "OpenBao runs in the SEPARATE loopzero-secrets cluster. Installing it into mgmt is")
+		fmt.Fprintln(os.Stderr, "OpenBao runs in the SEPARATE loopzero-secrets cluster. Installing it into core is")
 		fmt.Fprintln(os.Stderr, "forbidden in EVERY tier — a topology violation, not a shortcut. The canonical")
 		fmt.Fprintln(os.Stderr, "path is `task k3d:secrets:create` + `task k3d:secrets:bootstrap`.")
 		fmt.Fprintln(os.Stderr, "See .claude/rules/cleanroom-up-live-test-mandate.md and")
 		fmt.Fprintln(os.Stderr, "docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md (B-047).")
 		return 1
 	}
-	fmt.Printf("openbao-bootstrap-in-core-task: PASS — no mgmt-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)
+	fmt.Printf("openbao-bootstrap-in-core-task: PASS — no core-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)
 	return 0
 }
 

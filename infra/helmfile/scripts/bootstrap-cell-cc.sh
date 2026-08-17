@@ -5,36 +5,44 @@
 # Canonical bootstrap-cell-cc — consolidates 6 prior scripts into 1
 # parameterized by --cell <id> --env <name>.
 #
-# Plan v1.2 T4.2 / D3 (scripts-param-by-env): replaces:
-#   infra/scripts/bootstrap-cell-0-cc.sh
-#   infra/scripts/bootstrap-cell-0-cc.sh
-#   infra/scripts/bootstrap-cell-1-cc.sh
-#   infra/scripts/bootstrap-cell-0-cc-drill.sh
-#   infra/scripts/bootstrap-cell-0-cc-drill.sh
-#   infra/scripts/bootstrap-cell-1-cc-drill.sh
+# Plan v1.2 T4.2 / D3 (scripts-param-by-env): consolidates os scripts por-cell que
+# existiam antes (`bootstrap-cell-{default,1,2}-cc.sh` e as variantes `-drill`), hoje
+# todos deletados.
 #
-# Cell-to-cluster mapping per EC-4 mitigation:
+# ## Cell ↔ cluster: 1:1, e cada cluster se chama pela cell que hospeda
 #
-#   | Cell ID      | k3d local                       | drill DOKS                   |
-#   |--------------|----------------------------------|------------------------------|
-#   | cell-0 | k3d-loopzero-cell-0 (cluster)      | runtimeCluster (pulumi key)  |
-#   | cell-0       | k3d-loopzero-cell-0 (same default) | runtimeCluster (same default)|
-#   | cell-1       | k3d-loopzero-cell-1 (cluster)     | runtimeCluster2 (pulumi key) |
+#   | Cell ID  | k3d local           | drill DOKS                   |
+#   |----------|---------------------|------------------------------|
+#   | cell-0   | k3d-loopzero-cell-0     | runtimeCluster (pulumi key)  |
+#   | cell-1   | k3d-loopzero-cell-1     | runtimeCluster2 (pulumi key) |
 #
-# Per D3 ADR (multi-cell): cell-0 reuses cell-0's cluster in local k3d
-# (topology limit — k3d host can't sustain a 4th K8s cluster on most laptops);
-# in drill DOKS, both also map to runtimeCluster (mirrors prod posture per
-# multi-cell sticky placement). Cell-2 always maps to a SECOND cluster
-# (runtime-2 / runtimeCluster2).
+# ESTE CABEÇALHO ESTAVA MENTINDO, e o modo como mentia é o registro mais claro do risco
+# que o `B-001` nomeia (*"substituição global cega destrói o repositório"*). Uma
+# substituição de `cell-default` → `cell-0` sobre o texto anterior produziu:
+#
+#   - duas linhas da tabela com o MESMO id (`cell-0` e `cell-0`), porque `cell-default`
+#     e `cell-0` eram linhas distintas que colapsaram numa só;
+#   - dois nomes de arquivo repetidos na lista de substituídos, pela mesma razão;
+#   - a frase *"cell-0 reuses cell-0's cluster"*, que não afirma nada;
+#   - `Cell-2` e `runtime-2` citados na prosa — nenhum dos dois existe;
+#   - e o pior: `--cell <default|1|2>` no Usage, mandando o operador passar valores que
+#     o código **rejeita** (`case "$CELL"` aceita `0` e `1`, e mais nada).
+#
+# O texto acima agora descreve o que o código faz. A relação 2:1 (`cell-default` + `cell-1`
+# no mesmo cluster) foi eliminada pelo `B-005`, e `DefaultCellID` vale `cell-0`
+# (`api/internal/placement/cells.go:30`).
 #
 # Usage:
-#   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <default|1|2> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
+#   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <0|1> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
 #
 # Examples:
 #   # Local k3d, cell-0 → cluster loopzero-cell-0:
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env standalone-multi
 #
 #   # Drill DOKS, cell-1 → runtimeCluster2:
+#   # `mgmt.yaml` aqui NÃO é resíduo do rename: é o nome do arquivo que o drill escreve
+#   # hoje (`drill-helmfile-bootstrap.sh:143`, `evidence-capture.sh:221`). A metade drill
+#   # não foi renomeada, e trocar o nome AQUI sem trocar lá quebraria o exemplo.
 #   DRILL_KUBECONFIG=/tmp/drill-kc/mgmt.yaml \
 #     bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
 #

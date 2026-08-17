@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-135 items — **Open** 73 · **In flight** 0 · **Closed** 62
+136 items — **Open** 74 · **In flight** 0 · **Closed** 62
 
-### Open (73)
+### Open (74)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -147,6 +147,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
+| [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 
 ### In flight (0)
 
@@ -284,6 +285,58 @@ histórico-imutável que o próprio DoD manda preservar.
 > Origem: análise de topologia feita no `loopzero-capsim` em 2026-08-08/09 durante o desenho da solução de
 > CAPI — `../loopzero-capsim/docs/capi-cell-lifecycle-solution-design.md`.
 > Registrado 2026-08-09 por `/backlog-item` (slug: `cluster-topology-naming`).
+
+---
+
+### Medição de 2026-08-17 — o bloqueio caiu por execução, e o que sobrou é outra coisa
+
+**O bloqueio deste item não existe mais, e não porque alguém o decidiu: porque foi executado.**
+`infra/k3d/` hoje tem `core-cluster.yaml`, `secrets-cluster.yaml`, `cell-0-cluster.yaml`,
+`cell-1-cluster.yaml` e `build-cluster.yaml`. As três metades aterrissaram — inclusive a `cell`, que
+dependia do `B-005`, e o `B-005` também foi executado (`fbb246430`, *"funde as três identidades de
+célula nas duas máquinas que existem"*). `DefaultCellID` vale **`cell-0`**
+(`api/internal/placement/cells.go:30`), o `case "$CELL"` aceita `0` e `1`, e a relação é **1:1**.
+
+**A colisão que a medição de 09/08 previu materializou-se — no cabeçalho, não no código.** Uma
+substituição de `cell-default` → `cell-0` produziu, em `bootstrap-cell-cc.sh`, duas linhas da tabela
+com o mesmo id, a frase *"cell-0 reuses cell-0's cluster"* e um Usage mandando passar
+`<default|1|2>`, valores que o script rejeita. É a armadilha que este item escreveu em prosa
+(*"substituição global cega destrói o repositório"*), acontecendo dentro dele. **Corrigido hoje**, com
+o registro do que a substituição fez.
+
+**E eu caí na mesma armadilha ao corrigir**: troquei `mgmt.yaml` por `core.yaml` num exemplo, e o
+arquivo do drill **ainda se chama `mgmt.yaml`** (`drill-helmfile-bootstrap.sh:143`). Revertido, com a
+razão escrita ao lado — a metade drill não foi renomeada.
+
+**DoD-1 re-medido, agora separando execução de histórico.** Sobre `cmd/ api/ operators/ pkg/ infra/
+charts/ taskfiles/ tools/` — isto é, só o que executa — restavam **12** arquivos; hoje restam **8**:
+
+| arquivo | natureza | por que não fechei |
+|---|---|---|
+| `infra/argocd-bootstrap/apps/cell-cluster-issuer.yaml` + `validate-sync-waves.py` | `name: runtime-cluster-issuer` — **nome de Application viva do ArgoCD** | renomear é deletar e recriar recurso vivo; os dois têm de mover juntos |
+| `infra/pulumi-drill/src/index.ts` + `pulumi-shared/__tests__/contracts.test.ts` | `${doProject}-runtime-cluster` — **nome de cluster DOKS real** | Pulumi é legado AS-IS até o AM8 (`CLAUDE.md`); renomear cluster DO é destrutivo |
+| `operators/internal/{argocd,preview,tenant}` | *"single-runtime-cluster"*, *"cell→runtime-cluster mapping"* — o **conceito**, não o identificador | é exatamente o caso que este item manda **parar e levar ao sponsor**: `runtime` como nome de cluster e como termo do domínio no mesmo arquivo |
+| `taskfiles/k3d.yml:136` | comentário que **descreve o bug histórico** (`loopzero-mgmt` inexistente) | o próprio DoD manda preservar o que descreve o passado |
+
+**Fechados hoje** (sem decisão pendente, porque nomeavam coisas que não existem mais): as duas
+mensagens de gate que diziam *"mgmt cluster"* a um operador cujo cluster se chama `core`, e os dois
+comentários citando o contêiner `k3d-loopzero-mgmt-serverlb`. O identificador Go `mgmtContextVars` **ficou**
+— `MGMT_CONTEXT` segue sendo um nome de variável aceito, e renomear o identificador sem renomear o
+que ele casa faria o código dizer uma coisa e verificar outra.
+
+**Por que este item continua ABERTO**, e não é falta de vontade:
+
+1. **A bala do cleanroom não pode ser executada.** O DoD exige *"o ambiente sobe do zero com os nomes
+   novos"*, pelo caminho de `cleanroom-up-live-test-mandate.md`. **Não há cluster k3d local**
+   (`k3d cluster list` vazio), e o droplet compartilhado serve `app-dev.loopzero.example` com dado real —
+   `task clean:all` lá destruiria o ambiente cuja superfície acabou de ser fechada no `B-028`.
+2. **Os quatro arquivos restantes de infra tocam recurso vivo** (Application do ArgoCD, cluster DOKS),
+   e os três de `operators/` são a decisão de desenho que este item manda levar ao sponsor.
+
+**Registrado como `B-136`:** a metade `cell` executou antes da reunião T3 que a bloqueava, e nenhum
+registro dessa reunião foi localizado. O código resultante é o desenho certo — o achado é que a
+decisão certa chegou por um caminho que a governança não viu.
+
 
 ## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [ ]
 
@@ -5711,3 +5764,20 @@ dod:
 > Registrado 2026-08-17 ao fechar o `B-116`, que deliberadamente deixou este assunto de fora — a
 > bala de prontidão do DoD dele era condicional ao desfecho *"pode subir sem banco"*, e o desfecho
 > foi o outro.
+
+## B-136 — A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia.
+evidence: medido 2026-08-17. O `B-005` declara `blocks: a metade cell do B-001` e é **T3 com reunião obrigatória antes de código**. Os três commits `0d9567745` (rename dos clusters), `fbb246430` (fusão das identidades de cell) e `7a4740dc3` (tabela 1:1) executaram as duas coisas. **Não localizei registro de reunião T3 para nenhum dos dois** — nem ADR em `.claude/knowledge-base/decisions/` nem em `docs/wiki/meetings/`. O produto colateral está em `infra/helmfile/scripts/bootstrap-cell-cc.sh`: uma substituição de `cell-default` → `cell-0` sobre o texto anterior deixou **duas linhas da tabela com o mesmo id**, dois nomes de arquivo repetidos, a frase *"cell-0 reuses cell-0's cluster"*, citações a `Cell-2` e `runtime-2` (que não existem) e — o pior — `--cell <default|1|2>` no Usage, mandando o operador passar valores que o `case` do próprio script **rejeita**.
+why_now: o cabeçalho foi corrigido hoje ao medir o `B-001`, então o dano visível acabou. O que não foi tratado é o processo: uma mudança T3 sobre schema, placement e identidade de cluster aconteceu sem o registro que a governança exige, e a única razão de isso ter sido descoberto é alguém ter ido medir outra coisa.
+status: triaged
+dod:
+  - existe registro T3 (retroativo, se for o caso) cobrindo a fusão das identidades de cell e o rename dos clusters, ou está escrito por que ele não é necessário
+  - está medido se mais alguma coisa foi renomeada por substituição cega nos três commits — o cabeçalho foi o que apareceu, não necessariamente o que existe
+  - `pre-release-governance.md` ganha o que faltou: hoje a classificação T2/T3 é honor-system e o `governance-gate.py` cobre arquivos de produção; um `refactor` sobre schema e identidade de cluster passou entre os dois
+
+> Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.

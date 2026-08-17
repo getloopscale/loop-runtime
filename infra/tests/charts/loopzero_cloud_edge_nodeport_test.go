@@ -20,7 +20,7 @@ import (
 // the k3d serverlb through a plain docker port mapping. This test makes `loopzero-cloud`
 // hold the same shape.
 //
-// 30002 is deliberate: `docker port k3d-loopzero-mgmt-serverlb` already publishes
+// 30002 is deliberate: `docker port k3d-loopzero-core-serverlb` already publishes
 // 30002 → host 3002, and 30002 was not taken by any other service in the cluster.
 // Picking an unpublished NodePort would render fine here and still leave the edge
 // unable to reach it.
