@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-137 items — **Open** 73 · **In flight** 0 · **Closed** 64
+137 items — **Open** 72 · **In flight** 0 · **Closed** 65
 
-### Open (73)
+### Open (72)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -133,7 +133,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
-| [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
@@ -152,7 +151,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (64)
+### Closed (65)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -210,6 +209,7 @@ _None._
 | [`B-107`](#b-107--o-checkbox-do-título-e-o-campo-status-são-o-mesmo-fato-e-discordavam-em-23-itens---x) | O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens | `shipped` | média |
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
+| [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis---x) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez---x) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `shipped` | alta |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
@@ -5063,7 +5063,7 @@ patrocinador por nome, e virar a chave sobre uma cobertura cega travaria a entre
 de pods de teste **enquanto continuava sem ver as 7 que importam**. Virou `B-119`.
 
 
-## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [ ]
+## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5071,7 +5071,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-15 ao executar o `B-092`. O gate afirma que todo módulo Go tem seus testes rodados por um alvo do Taskfile. `infra/tests` **passava** — por causa do `./unit/...` — enquanto `scripts/` (12), `config/` (6) e `performance/` (23) não rodavam em alvo nenhum: **41 arquivos de teste invisíveis num módulo que o gate reportava coberto**.
 why_now: o custo da granularidade de pacote está medido e é pequeno. Dos alvos do repositório, **todo módulo tem um `go test ./...` exceto `infra/tests`**; os padrões restritos dos outros (`api ./internal/contract/...`, `cmd/loopzero-ops ./internal/quality/deadlineratchet/...`) são alvos focados **adicionais**, sobre módulos já cobertos por `./...`. Então a mudança morde num módulo só, e ali as subárvores restantes (`e2e`, `chaos`, `charts`, `livetest`) já têm alvo próprio ou exigem cluster — isenção nomeada, que é o mecanismo que o gate já tem.
-status: triaged
+status: shipped
 severity: média — o gate não está errado no que afirma; está errado na granularidade em que afirma, e é a granularidade que decide o que ele consegue ver.
 dod:
   - o gate resolve os padrões de cada alvo para o conjunto de pacotes que eles realmente casam, e compara com os pacotes que têm `_test.go`
@@ -5079,6 +5079,52 @@ dod:
   - existe caso de teste que reprova a forma exata que o `B-092` expôs: módulo com `./sub/...` num alvo e um `./outra/` sem alvo nenhum
 
 > Registrado 2026-08-15. A decisão sobre a granularidade é a terceira bala do DoD do `B-092`, e foi tomada lá com o número acima; este item carrega a implementação.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3, e o quase-erro é o que vale registrar
+
+**Bala 1 — granularidade de pacote.** `runsTests` perguntava *"existe ALGUM `go test` neste módulo?"*
+e nunca olhava o padrão. Agora o gate resolve cada padrão (`./...`, `./sub/...`, `./sub`) para o
+conjunto de pacotes que ele realmente casa, e compara com os pacotes que **têm** `_test.go`. Pacote
+sem teste não exige alvo — exigir transformaria o gate num pedido de escrever teste para tudo, que é
+outra conversa; o que ele afirma é mais estreito e verificável: *o que existe está sendo rodado*.
+
+**Bala 2 — isenção de pacote**, com razão e sunset, pelo mesmo mecanismo que o gate já tinha para
+módulo. Uma isenção de `e2e` cobre `e2e/sub`: obrigar a listar cada pacote produziria uma lista que
+envelhece a cada diretório novo.
+
+**Bala 3 — o teste da forma exata que o `B-092` expôs**: módulo com `./sub/...` num alvo e outra
+subárvore sem alvo nenhum. Ele nomeia a subárvore descoberta e verifica que a coberta **não** aparece.
+
+---
+
+**E aqui está o que quase deu errado, que é o achado.** Com a granularidade nova, a árvore real
+apontou **cinco** subárvores descobertas: `chaos`, `livetest/{chaos,cleanroom,contraprova,dogfood}`.
+Elas casam exatamente com a previsão do item (*"exigem cluster — isenção nomeada"*), e eu ia
+escrever cinco isenções.
+
+**Fui medir antes, e elas são rodadas.** `taskfiles/quality.yml:388` roda
+`./charts/... ./chaos/... ./capacity/... ./livetest/...`. O gate não via porque o comando está em
+**bloco**: o `cd infra/tests` numa linha, o `go test` noutra, com continuação por `\`.
+
+Isentá-las teria **documentado por escrito que não são rodadas, quando são** — e uma isenção falsa é
+pior que a lacuna: ela some com o problema de vez, com a assinatura de alguém embaixo.
+
+O conserto foi normalizar o bloco multi-linha (junta continuações; um `cd` sozinho passa a prefixar
+as linhas seguintes até o próximo `cd` ou o próximo item de lista). E, dentro dele, um segundo
+engano meu: a primeira regra parava de coletar padrões na primeira flag — mas as flags vêm **antes**
+dos padrões na forma real (`go test -race -coverprofile=X ./charts/... ./chaos/...`), então ela
+devolvia **zero** padrões justamente para o alvo que cobre as cinco. O que encerra a lista é um
+operador de shell, não uma flag. **O teste que eu tinha escrito codificava a regra errada** e foi
+reescrito com a razão.
+
+**Zero isenções novas.** Medido depois: `9 módulos, 8 cobertos, 1 isento` — o mesmo veredito de
+antes, agora afirmando algo mais forte.
+
+A descrição do gate no registro dizia *"Granularidade é o MÓDULO, não o pacote"*, o que passou a ser
+falso; foi atualizada, e o oráculo congelado re-congelado conscientemente.
+
 
 ## B-115 — 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35   [x]
 
