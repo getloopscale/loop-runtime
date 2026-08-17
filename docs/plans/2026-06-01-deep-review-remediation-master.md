@@ -12,8 +12,8 @@ title: "Master Plan: Deep Review Remediation — 2026-06-01"
 ### Source of Findings
 
 - **Deep Review Loop** executed 2026-06-01 across 7 phases + Phase 8 final report
-- **Target:** `/home/paulo/loopzero/api/` (~100k LOC, 33 internal packages)
-- **Output:** `/home/paulo/loopzero/api/review-output/` (full DB at `review.db`)
+- **Target:** `<repo>/api/` (~100k LOC, 33 internal packages)
+- **Output:** `<repo>/api/review-output/` (full DB at `review.db`)
 - **Composite C4 health:** 3.15 / 4.0 (Correto 0.72 / Completo 0.68 / Confiável 0.76 / Controlável 0.74)
 - **Quality gates:** 7/7 phases PASSED, scores 0.72–0.91
 

@@ -95,7 +95,7 @@ kratos:
             base_redirect_uri: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}{{ .Values.uiBaseUrl | default "http://localhost:4455" | trimSuffix "/" }}{{ end }}/"
             providers:
               # GitHub OAuth — reads from LOOPZERO_GITHUB_CLIENT_ID / SECRET env vars
-              # (canonical source: /home/paulo/loopzero/.env locally; Pulumi Secret in
+              # (canonical source: <repo>/.env locally; Pulumi Secret in
               # prod/drill). Empty strings disable the provider gracefully —
               # Kratos won't crash, the button just won't work.
               # Per "100% functional" mandate 2026-06-01.

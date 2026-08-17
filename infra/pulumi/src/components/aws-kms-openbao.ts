@@ -45,7 +45,7 @@ import * as pulumi from "@pulumi/pulumi";
  *
  * The bootstrap user "openbao-pulumi-bootstrap" (with permissions to
  * CREATE these resources) is operator-time, NOT Pulumi-managed —
- * created manually in console OR via /home/paulo/openbao-bootstrap-iam-setup.sh
+ * created manually in console OR via the operator's openbao-bootstrap-iam-setup.sh
  * per F1 grill Q2-F1 decision. After this component runs successfully,
  * the bootstrap user is revoked/degraded per the MEET-ASYNC record.
  */

@@ -49,7 +49,9 @@ else
   set --
 fi
 
-REPO_ROOT="${REPO_ROOT:-/home/paulo/loopzero}"
+# Deriva do próprio checkout em vez de fixar a casa de uma pessoa: o script roda
+# em qualquer clone, e o override por env continua valendo.
+REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 DRILL_DIR="$REPO_ROOT/infra/pulumi-drill"
 EVIDENCE_DIR="$REPO_ROOT/.claude/knowledge-base/reviews/dr-drill-$(date +%Y-%m-%d)"
 STAGE="all"

@@ -533,11 +533,11 @@ N/A.
 MEMORY.md já está em 28KB (>24.4KB limit per auto-memory warning system). Adding entry sem compactar = truncamento de entradas antigas no carregamento da próxima sessão. Compactar ANTES de T5.2 evita perda silenciosa.
 
 ##### Evidence
-Confirmed LIVE nesta sessão: `wc -c /home/paulo/.claude/projects/-home-paulo-loopzero/memory/MEMORY.md` = **28085 bytes**. CLAUDE.md auto-memory mensagem warning: "MEMORY.md is 27.1KB (limit: 24.4KB) — index entries are too long. Only part of it was loaded."
+Confirmed LIVE nesta sessão: `wc -c <memoria-do-operador>/MEMORY.md` = **28085 bytes**. CLAUDE.md auto-memory mensagem warning: "MEMORY.md is 27.1KB (limit: 24.4KB) — index entries are too long. Only part of it was loaded."
 
 ##### Files to edit
 ```
-/home/paulo/.claude/projects/-home-paulo-loopzero/memory/MEMORY.md (PRUNE)
+<memoria-do-operador>/MEMORY.md (PRUNE)
 ```
 
 ##### Tasks
@@ -580,7 +580,7 @@ Memory entry indica M07 re-audited; futuras consultas usam novo score.
 
 ##### Files to edit
 ```
-/home/paulo/.claude/projects/-home-paulo-loopzero/memory/reference_m07_reaudit_2026_05_27.md (NEW)
+<memoria-do-operador>/reference_m07_reaudit_2026_05_27.md (NEW)
 ```
 
 ##### Tasks

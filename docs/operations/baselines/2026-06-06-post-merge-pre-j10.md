@@ -222,9 +222,9 @@ this file. Final verdict + measured metrics will be added after the chain.
 **3 bugs latentes resolvidos durante cleanroom recovery** (todos pré-existentes, expostos pela primeira vez por cleanroom canonical):
 
 **Bug 1 — `.env` malformed dotenv ("username executable not found")**
-- `/home/paulo/loopzero/.env` (symlink) tinha linhas 9-14 em formato `key = value` (com espaços ao redor do `=`) que NÃO é dotenv válido. Quando `task setup` faz `set -a; source .env; set +a`, o shell interpreta `username` como command name. PATH lookup falha → exit 127.
+- `<repo>/.env` (symlink) tinha linhas 9-14 em formato `key = value` (com espaços ao redor do `=`) que NÃO é dotenv válido. Quando `task setup` faz `set -a; source .env; set +a`, o shell interpreta `username` como command name. PATH lookup falha → exit 127.
 - Fix: comentar linhas 9-14 (eram PG credentials DigitalOcean copy-paste, não env vars).
-- File: `/home/paulo/loopzero/.env` (fora do repo — backup em `.env.pre-fix`).
+- File: `<repo>/.env` (fora do repo — backup em `.env.pre-fix`).
 
 **Bug 2 — `publicAuthUrl` key missing em standalone-multi.yaml**
 - Template `infra/helm/ory-hydra/values.yaml.gotmpl:47` usa `{{ .Values.publicAuthUrl | default ... }}`. Go template `default` NÃO short-circuit quando parent map lookup falha — só aplica quando key existe com valor empty/zero. standalone-multi nunca declarou a key.

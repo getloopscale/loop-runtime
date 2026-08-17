@@ -227,7 +227,7 @@ sequence is:
 
 ```bash
 # 1. Populate env (one-time on droplet — copy .env from secure source)
-export $(grep -E '^LOOPZERO_|^CLOUDFLARE_|^DROPLET_IP' /home/paulo/loopzero/.env | xargs)
+export $(grep -E '^LOOPZERO_|^CLOUDFLARE_|^DROPLET_IP' <repo>/.env | xargs)
 export DROPLET_IP=165.227.121.20
 
 # 2. Provision DNS + Caddy + (next) helmfile env=dev-public

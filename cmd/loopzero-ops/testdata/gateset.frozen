@@ -79,6 +79,7 @@ postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configu
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.
 proxy-exposure	gates	Every edge reverse_proxy declares what it lets through.
+publish-hygiene	gates	Nenhum arquivo versionado VIVO carrega caminho de workstation. Registro datado e isento por desenho (docs/README.md proibe reescreve-lo). A metade de IP do gate irmao do loopzero-rag NAO foi transportada: contra esta arvore ela deu 104 achados quase todos falsos (strings de versao, CIDRs da Cloudflare, o alvo vivo declarado). B-130.
 pulumi-required-secrets	gates	T1.5 — every Pulumi.<env>.yaml enumerates required secret keys (as `secure:` entry OR comment). Prod=6 keys, staging=4, drill=3 (DO token via env var per D7' sponsor override). Cross-checks prod keys also appear backticked in docs/operations/credentials-required.md. M-Migrate2 2026-07-07 replaces infra/tests/docs/pulumi-required-secrets_test.sh.
 quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
 regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.

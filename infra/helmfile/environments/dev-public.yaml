@@ -15,7 +15,7 @@
 #
 # Operator workflow on this droplet:
 #   1. ssh root@loopzero-e2e-runner (or git clone fresh)
-#   2. cd /home/paulo/loopzero
+#   2. cd <repo>
 #   3. export $(grep -E '^LOOPZERO_|^CLOUDFLARE_' .env | xargs)
 #   4. infra/scripts/local/setup-dev-public-dns.sh --verify
 #   5. infra/scripts/local/caddy-up-dev-public.sh --verify
