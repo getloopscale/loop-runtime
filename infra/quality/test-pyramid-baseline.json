@@ -1,0 +1,8 @@
+{
+  "measured_at": "2026-08-17",
+  "total_files": 989,
+  "ratio_unit_pct": 73.5,
+  "ratio_integration_pct": 15.7,
+  "ratio_e2e_pct": 10.8,
+  "note": "Derivada da arvore por testinventory.Derive, nao declarada. Congelada ao fechar o B-106, que mediu o arquivo anterior descrevendo 375 de 988 arquivos (62% cego) e declarando 99,4% unit. A catraca so permite melhora; a distancia ate o alvo do ADR D7 (e2e \u003c= 5%) e reportada e nao bloqueia, porque aquele alvo foi calibrado contra os 0,1% que o arquivo anterior afirmava."
+}

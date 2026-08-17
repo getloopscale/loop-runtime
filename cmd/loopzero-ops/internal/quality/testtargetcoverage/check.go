@@ -68,6 +68,14 @@ var ErrExemptionWithoutReason = errors.New("an exemption must state WHY the modu
 // ErrExemptionExpired means an exemption is past its sunset.
 var ErrExemptionExpired = errors.New("an exemption is past its sunset; re-measure it or retire it")
 
+// ErrPackageUncovered means a module has a target, but some test-bearing package of
+// it is run by none.
+//
+// Distinto de ErrModuleUncovered de propósito: "este módulo não tem alvo nenhum" e
+// "tem alvo, e ele não alcança estas subárvores" são achados diferentes, e o segundo
+// é o que ficava invisível.
+var ErrPackageUncovered = errors.New("a module has a test target, but some test-bearing package is run by none")
+
 // ErrExemptionWithoutSunset means an exemption carries no date.
 var ErrExemptionWithoutSunset = errors.New("an exemption must carry a sunset (YYYY-MM-DD)")
 
@@ -81,6 +89,13 @@ type Exemption struct {
 	Module string
 	Reason string
 	Sunset string // YYYY-MM-DD, INCLUSIVE — expires the day after
+	// Packages isenta subárvores ESPECÍFICAS do módulo, relativas à raiz dele.
+	// Vazio isenta o módulo inteiro.
+	//
+	// Existe por causa da bala 2 do DoD do B-114: subárvore que exige cluster entra
+	// por isenção NOMEADA com a razão — não por o padrão do módulo acidentalmente
+	// cobri-la, que é como as 41 ficaram invisíveis.
+	Packages []string
 }
 
 // DefaultExemptions are the modules that have no tests by design. Each carries
@@ -101,6 +116,10 @@ type Outcome struct {
 	Covered   []string
 	Exempt    []string
 	Uncovered []string
+	// UncoveredPackages nomeia `<módulo>/<pacote>` que nenhum alvo roda. É a
+	// granularidade que o B-114 acrescentou: um módulo pode ter alvo e ainda deixar
+	// subárvores fora dele.
+	UncoveredPackages []string
 }
 
 // Config controls the check.
@@ -132,6 +151,7 @@ func Check(cfg Config) (Outcome, error) {
 		now = time.Now()
 	}
 	exempt := map[string]bool{}
+	exemptPkgs := map[string][]string{}
 	for _, e := range exemptions {
 		if strings.TrimSpace(e.Reason) == "" {
 			return Outcome{}, fmt.Errorf("%w: %q", ErrExemptionWithoutReason, e.Module)
@@ -145,6 +165,10 @@ func Check(cfg Config) (Outcome, error) {
 		}
 		if now.After(sunset.AddDate(0, 0, 1)) {
 			return Outcome{}, fmt.Errorf("%w: %q (sunset %s)", ErrExemptionExpired, e.Module, e.Sunset)
+		}
+		if len(e.Packages) > 0 {
+			exemptPkgs[e.Module] = append(exemptPkgs[e.Module], e.Packages...)
+			continue
 		}
 		exempt[e.Module] = true
 	}
@@ -168,16 +192,49 @@ func Check(cfg Config) (Outcome, error) {
 		switch {
 		case exempt[m]:
 			out.Exempt = append(out.Exempt, m)
-		case runsTests(targets, m):
-			out.Covered = append(out.Covered, m)
-		default:
+			continue
+		case !runsTests(targets, m):
 			out.Uncovered = append(out.Uncovered, m)
+			continue
+		}
+		out.Covered = append(out.Covered, m)
+
+		// O módulo tem alvo. A pergunta que faltava: o alvo ALCANÇA cada pacote
+		// que tem teste? Medido no B-092, `infra/tests` passava por causa de um
+		// `./unit/...` enquanto 41 arquivos em três subárvores não rodavam.
+		uncov, uerr := uncoveredPackages(root, m, targets)
+		if uerr != nil {
+			return out, uerr
+		}
+		for _, pkg := range uncov {
+			if pkgExempt(exemptPkgs[m], pkg) {
+				out.Exempt = append(out.Exempt, m+"/"+pkg)
+				continue
+			}
+			out.UncoveredPackages = append(out.UncoveredPackages, m+"/"+pkg)
 		}
 	}
 	if len(out.Uncovered) > 0 {
 		return out, ErrModuleUncovered
 	}
+	if len(out.UncoveredPackages) > 0 {
+		return out, ErrPackageUncovered
+	}
 	return out, nil
+}
+
+// pkgExempt reports whether pkg is covered by a declared package exemption.
+//
+// Uma isenção de `e2e` cobre `e2e/sub`: quem isenta uma subárvore por exigir cluster
+// está isentando a subárvore, e obrigar a listar cada pacote dela produziria uma lista
+// que envelhece a cada diretório novo.
+func pkgExempt(exempt []string, pkg string) bool {
+	for _, e := range exempt {
+		if pkg == e || strings.HasPrefix(pkg, e+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // findModules walks the tree for go.mod, pruning the trees in prunedDirs.

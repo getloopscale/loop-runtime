@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-136 items — **Open** 74 · **In flight** 0 · **Closed** 62
+138 items — **Open** 70 · **In flight** 0 · **Closed** 68
 
-### Open (74)
+### Open (70)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -118,7 +118,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
 | [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu----) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `triaged` | média |
 | [`B-086`](#b-086--um-documento-de-decisão-que-registra-a-ausência-de-um-adr-faz-esse-adr-resolver----) | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver | `triaged` | média |
-| [`B-090`](#b-090--a-asserção-de-caixa-do-gate-é-evadível-por-um-refactor-comum----) | A asserção de caixa do gate é evadível por um refactor comum | `triaged` | média |
 | [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor----) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `triaged` | baixa |
 | [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta----) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `triaged` | média |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
@@ -129,18 +128,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push----) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `triaged` | média |
 | [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
-| [`B-106`](#b-106--215-dos-582-caminhos-do-inventário-de-testes-não-existem-e-o-gate-que-o-lê-nunca-verifica----) | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica | `triaged` | média |
-| [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe----) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
-| [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis----) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
-| [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda----) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
-| [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum----) | Dois validadores do ecossistema não são rodados por gate nenhum | `triaged` | média |
 | [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega----) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `triaged` | média |
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
@@ -148,12 +142,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
+| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
+| [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (62)
+### Closed (68)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -202,23 +198,29 @@ _None._
 | [`B-087`](#b-087--task-qualityall-aborta-no-primeiro-passo-contra-um-diretório-que-não-existe-desde-o-m9---x) | `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9 | `shipped` | alta |
 | [`B-088`](#b-088--os-testes-de-cmdloopzero-ops-e-de-tools-não-são-rodados-por-nenhuma-task---x) | Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task | `shipped` | alta |
 | [`B-089`](#b-089--a-mesma-regra-de-env-reservada-tem-uma-terceira-implementação-com-um-terceiro-conjunto---x) | A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto | `shipped` | alta |
+| [`B-090`](#b-090--a-asserção-de-caixa-do-gate-é-evadível-por-um-refactor-comum---x) | A asserção de caixa do gate é evadível por um refactor comum | `shipped` | média |
 | [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
 | [`B-103`](#b-103--43-itens-estão-raw-carregando-evidência-medida-e-o-loop-os-trata-como-não-medidos---x) | 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos | `shipped` | média |
 | [`B-104`](#b-104--o-webhook-do-github-se-desliga-sozinho-em-silêncio-e-optional-true-é-o-que-permite---x) | O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite | `shipped` | alta |
 | [`B-105`](#b-105--o-application_controller-ancora-a-base-depois-de-um-re-fetch-e-pula-o-sumário-em-retorno-antecipado---x) | O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado | `shipped` | média |
+| [`B-106`](#b-106--215-dos-582-caminhos-do-inventário-de-testes-não-existem-e-o-gate-que-o-lê-nunca-verifica---x) | 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica | `shipped` | média |
 | [`B-107`](#b-107--o-checkbox-do-título-e-o-campo-status-são-o-mesmo-fato-e-discordavam-em-23-itens---x) | O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens | `shipped` | média |
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
+| [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe---x) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
+| [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis---x) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez---x) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `shipped` | alta |
 | [`B-117`](#b-117--três-rotas-de-exclusão-de-tenant-existem-no-código-e-nunca-existiram-em-produção---x) | Três rotas de exclusão de tenant existem no código e nunca existiram em produção | `shipped` | alta |
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
+| [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda---x) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `shipped` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
+| [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -4092,7 +4094,7 @@ dod:
 >
 > Nenhum prefixo entrou ou saiu de nenhuma lista. A lacuna que fica aberta é o **B-093**.
 
-## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [ ]
+## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4100,7 +4102,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão da fatia `slice-11`, rodando seis variantes contra `Check` numa árvore temporária — **todas as seis** devolveram `err=nil`: `ToUpper` içado para ACIMA do range e usado dentro dele (a que um refactor normal produz); laço por índice em vez de `range`; `range` sobre uma variável que aliasa o slice; `slices.ContainsFunc`; `import str "strings"`; `bytes.ToUpper`. `casematch.go` só inspeciona `*ast.RangeStmt` cujo `X` é o identificador do símbolo.
 why_now: o eixo da caixa acabou de ser decidido (`B-070`) e a asserção que o protege tem uma porta larga. A variante içada restaura exatamente o comportamento que o ADR proíbe, e o gate segue verde.
-status: triaged
+status: shipped
 severity: média — o passo vazio (site sem loop) já foi fechado, e o teste comportamental do linter pega todas as seis; mas esse teste não roda (`B-088`), e a cópia vigiada é código morto (`B-070`).
 dod:
   - a variante içada é detectada, ou está escrito por que não é
@@ -4109,6 +4111,48 @@ dod:
 
 > Registrado 2026-08-12 pela revisão da fatia `slice-11`. As seis variantes estão enumeradas no
 > doc-comment de `casematch.go` — foram documentadas em vez de implicadas inexistentes.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3, e a árvore real usava uma sétima forma
+
+**Bala 2 é a que resolve as outras duas.** O escopo era *"dentro de um `range` sobre o símbolo"* —
+isto é, **a forma do laço**. Por isso bastava mudar a forma, ou tirar o laço, para escapar. Agora o
+escopo é a **função que compara**, e o que se procura é uma comparação contra um prefixo cujo outro
+lado passou por um fold: direto (`HasPrefix(ToUpper(k), p)`) ou por **uma atribuição**
+(`uk := ToUpper(k)` … `HasPrefix(uk, p)`), que é a variante içada.
+
+Duas restrições caíram junto, e cada uma valia uma variante: casar o **pacote** (`strings`) virou
+casar o **nome do seletor**, porque `str.ToUpper` e `bytes.ToUpper` dobram a caixa exatamente igual; e
+o prefixo passou a ser reconhecido como variável de laço, índice no slice, alias do slice **ou
+parâmetro de closure** — que é a forma `slices.ContainsFunc`.
+
+**Bala 1 — a variante içada é detectada**, e ela é a que o item destaca como *"a que um refactor
+normal produz"*.
+
+**Bala 3 — as seis viraram fixtures.** Estavam enumeradas em prosa no doc-comment; agora são um
+teste de tabela que reprova se qualquer uma voltar a passar.
+
+**A fronteira que impede a mudança de virar ruído:** o fold **legítimo**, sobre a palavra da instrução
+do Dockerfile, que a especificação torna insensível a caixa. Ele vive uma linha acima da comparação da
+chave, e um scan de texto não os separa. O discriminador é o **outro argumento**: literal é instrução,
+variável do laço é chave. Tem teste próprio.
+
+---
+
+**E a árvore real usava uma sétima forma que eu não tinha previsto.** Com a nova detecção, o gate
+reprovou o próprio repositório com *"no comparison against the reserved prefixes was found"* — porque
+`build_plan.go:36` não chama `HasPrefix` coisa nenhuma: ele compara por **fatiamento e `==`**
+(`k[:len(p)] == p`). A primeira versão só conhecia a forma de chamada, e a árvore real não tem
+nenhuma.
+
+É a mesma lição do resto da fatia, virada contra mim: **eu escrevi seis fixtures sintéticas e a
+população real usava a sétima.** Foi o teste contra a árvore real (`B-109`) que pegou — nenhuma das
+seis teria.
+
+**O que continua fora, dito em vez de implicado inexistente:** um fold escondido atrás de uma função
+própria (`normalize(key)`), que exigiria seguir a chamada.
+
 
 ## B-091 — `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor   [ ]
 
@@ -4616,7 +4660,7 @@ dod:
 > por mutante — incluindo os três que a revisão usou para matar a versão anterior.
 status: shipped
 
-## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [ ]
+## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4624,7 +4668,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-14 pelo review da fatia `slice-27`. `infra/quality/test-inventory.json` declara **582** caminhos de arquivo de teste; **215** deles (**37%**) não existem no disco. A causa não é única: repositórios extraídos (`cloud/…` foi para `loopzero-cloud` no M4), testes movidos por fatias de decomposição, e arquivos simplesmente apagados (`operators/internal/conditions/retry_test.go` saiu com o helper proibido na fatia 10). O inventário é **config viva**, lida por `cmd/loopzero-ops/quality_gates_testgov.go:158` — não é trilha de auditoria —, e o gate passa porque **nunca valida existência de caminho**.
 why_now: o review achou isto porque a fatia 19 moveu `repositories_test.go` e não atualizou o inventário; a 27 repetiu com `domains_test.go`. Os dois foram corrigidos nessa fatia, e a medição do resto revelou que eles eram 2 de 217. Um inventário em que 37% dos caminhos são fantasmas não descreve mais a suíte — ele descreve o que a suíte era em algum momento, e nenhum gate percebe a diferença.
-status: triaged
+status: shipped
 severity: média — nada quebra hoje; o custo é um gate de governança de testes que mede uma lista que não corresponde à realidade, e que por isso não pode acusar cobertura perdida
 
 > **Medido em 2026-08-14, e a premissa do item estava errada — o defeito é maior.**
@@ -4663,6 +4707,70 @@ dod:
 
 > Registrado 2026-08-14 pelo review da fatia 27. Os 2 caminhos de `routes/` foram corrigidos naquela
 > fatia; os outros 215 são anteriores a ela e não são dela.
+
+---
+
+### Fechado 2026-08-17 — e a re-medição de 14/08 ainda subestimava
+
+O bloco acima já corrigia o item: os caminhos são dados mortos, e o gate lê três percentuais que o
+próprio arquivo afirma. **A medição de hoje mostra que a cegueira é maior do que qualquer das duas
+contagens anteriores:**
+
+| | |
+|---|---:|
+| arquivos declarados | 710 |
+| desses, **inexistentes no disco** | **335** (47%) |
+| arquivos `_test.go` **no disco** | **988** |
+| no disco e **ausentes do inventário** | **649** |
+
+O inventário descrevia **375 de 988 — 62% cego**. E a pirâmide de 99,4% unit que ele declarava era
+calculada sobre essa amostra, que exclui a suíte `infra/tests/e2e` inteira. Entre os 649 ausentes
+estavam arquivos criados **hoje**.
+
+**Bala 1 — derivado, não declarado.** Consertar 649 entradas à mão consertaria a aparência e não o
+mecanismo: a lista voltaria a divergir na primeira fatia que movesse um teste. O novo pacote
+`testinventory` varre a árvore e classifica cada arquivo por uma regra declarada, nesta ordem:
+**build tag** (o autor declarou: `live` → e2e, `helm_render` → integração), depois **caminho** (as
+subárvores cujo propósito é o próprio nome), depois **unit**. Tag antes de caminho porque a tag é
+declaração de quem escreveu o teste e o caminho é inferência de quem escreveu o classificador. Cada
+entrada carrega a **razão** — um número derivado sem procedência teria o mesmo defeito do declarado.
+
+**A pirâmide real, medida pela primeira vez:**
+
+| | declarado | derivado |
+|---|---:|---:|
+| arquivos | 710 | **989** |
+| unit | 99,4% | **73,5%** |
+| integração | 0,4% | **15,7%** |
+| e2e | 0,1% | **10,8%** |
+
+**Bala 2 — os fantasmas.** Com a derivação eles deixam de existir: não há lista onde um caminho morto
+possa ficar. A triagem por causa que o DoD pedia continua verdadeira como diagnóstico (repositórios
+extraídos no M4, testes movidos por fatias, arquivos apagados), mas deixou de ter função — não há
+destino a decidir para uma entrada que não existe mais.
+
+**Bala 3 — a deriva ficou estruturalmente impossível.** Mover um arquivo de teste sem atualizar o
+inventário não pode mais acontecer, porque não há inventário para atualizar. É mais forte que a
+verificação que o DoD pedia.
+
+**A decisão que a medição forçou, e por que ela não é "ajustar até passar".** O alvo do ADR D7 é
+`e2e ≤ 5%`, e o real é 10,8% — o gate reprovaria a árvore inteira. Mas aquele alvo foi escolhido
+quando o arquivo afirmava **0,1%**: foi calibrado contra ficção. Então o veredito virou **catraca** —
+a linha de base congela o que foi **medido**, e o gate reprova quando um índice **piora**; a distância
+até o alvo do ADR é **reportada** e registrada como **`B-137`**, porque 107 arquivos e2e num produto
+cujo objeto é implantar não é obviamente um defeito, e essa é decisão do sponsor.
+
+Separar *não regredir* (verificável hoje) de *alcançar o alvo* (decisão que ninguém tomou contra dados
+reais) é o que evita as duas saídas ruins: uma trava que o repo não satisfaz, e um número mexido até
+ficar verde.
+
+**Removido:** `infra/quality/test-inventory.json` e o caminho que o lia. Nada mais o lê.
+
+**Onze testes**, RED antes de GREEN, incluindo as duas fronteiras que impedem a catraca de virar
+armadilha (a árvore congelada passa contra si mesma; melhorar não é regredir) e o teste contra a
+**população real** (`B-109`), que é o que impede a linha de base de virar o próximo arquivo que
+descreve o passado.
+
 
 ## B-107 — O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens   [x]
 
@@ -4768,7 +4876,7 @@ garantir, e a razão de cada um ficou escrita para ninguém re-perguntar.
 status permanece `raw` no campo acima; o fechamento aguarda a ratificação do
 `MEET-ASYNC-AMENDMENT-2026-08-16-seeds-ensure-their-namespace`.
 
-## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [ ]
+## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4781,7 +4889,7 @@ evidence: |
 
   Das seis guardas criadas nesta sessão, **cinco** tiveram varredura de população (checkbox 23 achados, marcador de fechamento 6, seeds 7→1, padrão de pacote 1 real, `Status().Update` 83 arquivos) e **uma** não. A que não teve é a que só existia como teste de pacote.
 why_now: mutante sintético prova que a guarda **enxerga** a forma; varredura prova quantas vezes a forma **já aconteceu**. As duas perguntas são diferentes, e a segunda é a que encontra defeito hoje em vez de prevenir defeito amanhã. Esta sessão gastou três correções em cima de itens que mediram o mecanismo e não a população.
-status: triaged
+status: shipped
 severity: média — nenhuma guarda está errada; o que falta é o passo que transforma cada uma de prevenção em achado
 dod:
   - a regra "toda guarda nova roda contra a população real antes de ser declarada pronta" está escrita onde as guardas são escritas
@@ -4789,6 +4897,43 @@ dod:
   - o resultado da varredura fica registrado junto da guarda, mesmo quando é zero — zero medido e zero suposto são fatos diferentes
 
 > Registrado 2026-08-14. A lição é da auditoria, que a aplicou a si mesma antes de eu aplicá-la a mim.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3. E a regra provou-se ao vivo enquanto era escrita
+
+**Bala 1 — a regra está escrita onde as guardas são escritas:** `rules/testing.md § 4.2`. Ela separa
+as duas perguntas que estavam colapsadas — *"a guarda enxerga a forma?"* (mutante sintético) e
+*"quantas vezes a forma já aconteceu?"* (varredura de população) — e torna as duas obrigatórias,
+com o resultado registrado junto da guarda **mesmo quando é zero**.
+
+**A regra encontrou um defeito enquanto era escrita, no mesmo lote.** No `B-090` escrevi **seis**
+variantes de evasão como fixtures sintéticas, todas passaram a ser detectadas — e a **árvore real
+usava uma sétima** que nenhuma previa: comparação por fatiamento (`k[:len(p)] == p`) em vez de
+chamada. O gate reprovou o próprio repositório, e foi o teste contra a população que pegou. Nenhuma
+das seis teria.
+
+Não é anedota: é a regra sendo aplicada a si mesma no dia em que foi escrita, do mesmo jeito que a
+auditoria que a nomeou fez em 2026-08-14.
+
+**Bala 2 — os seis pacotes de operators foram varridos**, e o resultado está registrado. `16 com
+sumário, 19 sem`, distribuídos por pacote, com `preview` em **0 de 6**.
+
+**Bala 3 — o resultado ficou junto da guarda**, no doc-comment de
+`TestApp_EveryStatusPersistFoldsTheReadinessSummary`, **com a limitação da medição escrita**: a
+varredura divide o arquivo por `func ` e procura o sumário por nome, sem seguir chamada, então uma
+função que delega o fold a um helper conta como "sem". Os 19 são **sítios a olhar**, não 19 defeitos.
+
+Dizer isso não é modéstia: afirmar 19 defeitos a partir de uma heurística seria cometer, dentro do
+item que nomeia esse erro, exatamente esse erro. O que o número **estabelece** é o que importa — o
+invariante **não é obviamente universal**, e esta guarda cobre um sexto da população. Ampliar é uma
+fatia própria: **`B-138`**.
+
+**Toda guarda criada neste lote nasceu com o teste de população**, e ele pegou coisa em três delas:
+o `B-123` (a contagem tinha de subir de 42 para 70), o `B-114` (cinco subárvores que eu ia isentar
+sem serem descobertas) e o `B-090` (a sétima forma). É a diferença entre prevenir defeito amanhã e
+encontrar defeito hoje.
+
 
 ## B-110 — O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso   [x]
 
@@ -4998,7 +5143,7 @@ patrocinador por nome, e virar a chave sobre uma cobertura cega travaria a entre
 de pods de teste **enquanto continuava sem ver as 7 que importam**. Virou `B-119`.
 
 
-## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [ ]
+## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5006,7 +5151,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-15 ao executar o `B-092`. O gate afirma que todo módulo Go tem seus testes rodados por um alvo do Taskfile. `infra/tests` **passava** — por causa do `./unit/...` — enquanto `scripts/` (12), `config/` (6) e `performance/` (23) não rodavam em alvo nenhum: **41 arquivos de teste invisíveis num módulo que o gate reportava coberto**.
 why_now: o custo da granularidade de pacote está medido e é pequeno. Dos alvos do repositório, **todo módulo tem um `go test ./...` exceto `infra/tests`**; os padrões restritos dos outros (`api ./internal/contract/...`, `cmd/loopzero-ops ./internal/quality/deadlineratchet/...`) são alvos focados **adicionais**, sobre módulos já cobertos por `./...`. Então a mudança morde num módulo só, e ali as subárvores restantes (`e2e`, `chaos`, `charts`, `livetest`) já têm alvo próprio ou exigem cluster — isenção nomeada, que é o mecanismo que o gate já tem.
-status: triaged
+status: shipped
 severity: média — o gate não está errado no que afirma; está errado na granularidade em que afirma, e é a granularidade que decide o que ele consegue ver.
 dod:
   - o gate resolve os padrões de cada alvo para o conjunto de pacotes que eles realmente casam, e compara com os pacotes que têm `_test.go`
@@ -5014,6 +5159,52 @@ dod:
   - existe caso de teste que reprova a forma exata que o `B-092` expôs: módulo com `./sub/...` num alvo e um `./outra/` sem alvo nenhum
 
 > Registrado 2026-08-15. A decisão sobre a granularidade é a terceira bala do DoD do `B-092`, e foi tomada lá com o número acima; este item carrega a implementação.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3, e o quase-erro é o que vale registrar
+
+**Bala 1 — granularidade de pacote.** `runsTests` perguntava *"existe ALGUM `go test` neste módulo?"*
+e nunca olhava o padrão. Agora o gate resolve cada padrão (`./...`, `./sub/...`, `./sub`) para o
+conjunto de pacotes que ele realmente casa, e compara com os pacotes que **têm** `_test.go`. Pacote
+sem teste não exige alvo — exigir transformaria o gate num pedido de escrever teste para tudo, que é
+outra conversa; o que ele afirma é mais estreito e verificável: *o que existe está sendo rodado*.
+
+**Bala 2 — isenção de pacote**, com razão e sunset, pelo mesmo mecanismo que o gate já tinha para
+módulo. Uma isenção de `e2e` cobre `e2e/sub`: obrigar a listar cada pacote produziria uma lista que
+envelhece a cada diretório novo.
+
+**Bala 3 — o teste da forma exata que o `B-092` expôs**: módulo com `./sub/...` num alvo e outra
+subárvore sem alvo nenhum. Ele nomeia a subárvore descoberta e verifica que a coberta **não** aparece.
+
+---
+
+**E aqui está o que quase deu errado, que é o achado.** Com a granularidade nova, a árvore real
+apontou **cinco** subárvores descobertas: `chaos`, `livetest/{chaos,cleanroom,contraprova,dogfood}`.
+Elas casam exatamente com a previsão do item (*"exigem cluster — isenção nomeada"*), e eu ia
+escrever cinco isenções.
+
+**Fui medir antes, e elas são rodadas.** `taskfiles/quality.yml:388` roda
+`./charts/... ./chaos/... ./capacity/... ./livetest/...`. O gate não via porque o comando está em
+**bloco**: o `cd infra/tests` numa linha, o `go test` noutra, com continuação por `\`.
+
+Isentá-las teria **documentado por escrito que não são rodadas, quando são** — e uma isenção falsa é
+pior que a lacuna: ela some com o problema de vez, com a assinatura de alguém embaixo.
+
+O conserto foi normalizar o bloco multi-linha (junta continuações; um `cd` sozinho passa a prefixar
+as linhas seguintes até o próximo `cd` ou o próximo item de lista). E, dentro dele, um segundo
+engano meu: a primeira regra parava de coletar padrões na primeira flag — mas as flags vêm **antes**
+dos padrões na forma real (`go test -race -coverprofile=X ./charts/... ./chaos/...`), então ela
+devolvia **zero** padrões justamente para o alvo que cobre as cinco. O que encerra a lista é um
+operador de shell, não uma flag. **O teste que eu tinha escrito codificava a regra errada** e foi
+reescrito com a razão.
+
+**Zero isenções novas.** Medido depois: `9 módulos, 8 cobertos, 1 isento` — o mesmo veredito de
+antes, agora afirmando algo mais forte.
+
+A descrição do gate no registro dizia *"Granularidade é o MÓDULO, não o pacote"*, o que passou a ser
+falso; foi atualizada, e o oráculo congelado re-congelado conscientemente.
+
 
 ## B-115 — 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35   [x]
 
@@ -5481,7 +5672,7 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-009`.
 
-## B-123 — O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda   [ ]
+## B-123 — O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5490,7 +5681,7 @@ source: discover-review
 severity: média — o gate protege a asserção de que toda rota pública está atrás de `Auth`, e ele é a única coisa que a protege. Uma queda silenciosa na enumeração não abre um buraco sozinha; ela apaga o aviso de que um buraco foi aberto.
 evidence: medido 2026-08-16. `routeauthcoverage/check.go` enumera por **regex sobre linhas** (`routeCallRE` em `check.go:84`, `routePathRE` em `:87`) de um caminho fixo (`routerPath = "api/internal/server/router.go"`, `:27`), e localiza os grupos por **faixa de linhas** (a saída diz `auth spans 237..327, protected 337..684`). O piso que o `B-040` acrescentou é `outcome.PassCount+len(violations) == 0` (`:171`) — ele recusa a enumeração **vazia** e só ela. Uma mudança que faça o regex perder metade das rotas cai de 42 para 21 e **passa**. Medido no estado atual: as 42 rotas são todas literais e não há `r.Mount(`/`r.Route(` delegando, então o regex acerta hoje — o que está em aberto é o que acontece quando não acertar.
 why_now: o `B-040` registrou este upgrade como trabalho seguinte na sua terceira bala, e nenhum item o carregava — a bala não podia fechar porque apontava para um item que não existia. E o `B-041`/`B-080` estão movendo famílias de `routes` agora, que é exatamente a mudança que reposiciona linhas e caminhos.
-status: triaged
+status: shipped
 dod:
   - a enumeração é AST e não regex, ou o piso passa a ser uma contagem mínima que uma queda derruba
   - existe teste que prova a queda: uma árvore com N rotas onde a forma de registro mudou reprova, em vez de reportar N/2
@@ -5501,6 +5692,70 @@ dod:
 > **Instância medida 2026-08-16 — a fragilidade deixou de ser prospectiva.** Existe **uma rota que o gate nunca viu**: `api/internal/routes/timeline/deploy_timeline_register.go:27` monta `GET /api/v1/deploys/{deployID}/timeline` através de um helper chamado de `router.go:550`. O caminho aparece **zero** vezes no `router.go`, e o gate reporta `42 routes` sobre um sistema com pelo menos 43.
 >
 > A rota está segura — dentro da faixa protegida e com `401` próprio quando não há tenant — e o helper é desenho deliberado, documentado como ponto de montagem canônico para que a fiação tenha teste. **O defeito é do gate**: a garantia que ele vende é *"toda rota pública está atrás de `Auth`"*, e qualquer rota montada por helper é invisível a ela. Encontrada ao verificar a terceira bala do `B-041`.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3. E a preocupação era prospectiva; a realidade era pior
+
+**O registro dizia que o regex acerta hoje. Não acerta.**
+`routeCallRE` exige que `r.` seja seguido **imediatamente** pelo verbo, e a forma mais numerosa do
+roteador real é `r.With(rateLimitMiddlewares...).Post(…)`, em que vem `With`.
+
+| forma | ocorrências | o regex casava? |
+|---|---:|---|
+| `r.Get("/x", h)` | 42 | sim |
+| `r.With(mw...).Post("/x", h)` | **28** | **não** |
+| montada por helper, noutro arquivo | 1 | **não** |
+
+**O gate reportava `42 routes` sobre um sistema com ~71** — vendia *"toda rota pública está atrás de
+`Auth`"* verificando **59%** delas. Nenhuma das 29 invisíveis estava insegura, mas **por posição, não
+por verificação**: 27 caem dentro de `registerProtectedRoutes` e uma está no allowlist. E a linha 202
+(`r.With(middleware.RequireAdminService).Post(`) prova que a forma cega **é usada fora das faixas
+protegidas** — a próxima nessa forma poderia nascer aberta com o gate dizendo `PASS`.
+
+**Bala 1 — AST, e o escopo deixou de ser um arquivo.** A AST enxerga a **chamada**, não a grafia:
+`r.With(a,b).Post(x)` e `r.Post(x)` são o mesmo `*ast.CallExpr` com `Sel.Name == "Post"`, e o receptor
+é irrelevante. As faixas `Auth`/`registerProtectedRoutes` passaram a vir de posições da AST em vez de
+contagem de chaves — uma chave dentro de string ou comentário deslocava o contador e movia a faixa em
+silêncio, que é a classe inteira que esta mudança remove. Medido: a faixa protegida era reportada como
+`337..684` e é `344..684`.
+
+**A varredura da árvore, e por que ela é semântica e não uma lista de caminhos.** A primeira versão
+contava qualquer registro HTTP sob `api/` e achou **10** sítios — nove sem relação com este roteador
+(`/debug/pprof/*` num `ServeMux` dedicado em porta própria, `/healthz`+`/readyz`+`/metrics` no mux do
+binário **controller**, `/metrics` noutro mux). Excluí-los por caminho produziria uma lista de nove
+entradas que cresceria a cada mux novo — exatamente o mecanismo que o contraditor do MEET apontou.
+
+A propriedade que os separa não envelhece: **rota registrada num `chi.Router` recebido como parâmetro
+é ponto de montagem do roteador público; rota num `ServeMux` local é outro servidor.** Com isso a
+lista caiu de 10 para **1** — a instância que o item mediu. E o gate **não decide** se ela está
+protegida: seguir a cadeia de chamadas e errar seria pior que não analisar. Ele recusa a
+invisibilidade.
+
+**Bala 2 — o piso virou contagem mínima**, e há teste dos dois lados: uma árvore de 1 rota sob piso 10
+reprova; exatamente no piso passa. `== 0` recusava só o colapso total, e uma queda de 71 para 35 —
+que é o que uma mudança de forma de registro produz — passava.
+
+**Bala 3 — o caminho do roteador.** `ErrRouterNotFound` já existia; acrescentou-se
+`ErrRouterUnparseable`, porque *"não achei"* e *"achei e não entendi"* são erros de instrumentação
+diferentes, e colapsá-los faz o gate enumerar zero e reportar o erro errado. E o escopo deixou de ser
+o literal: a árvore inteira é varrida.
+
+**Onze testes novos**, RED antes de GREEN, incluindo a fronteira oposta do piso e o teste contra a
+**população real** (`B-109`) — este último é o que fixa a correção, porque a contagem tinha de
+**subir**.
+
+**Um teste existente foi atualizado com a razão escrita**: `TestCheck_RealTreeStillPasses` fixava 42 e
+pedia, no próprio texto, que o número fosse atualizado com a justificativa se mudasse de propósito.
+42 + 28 = **70**.
+
+**Alternativa rejeitada por medição:** perguntar ao roteador em tempo de execução (`chi.Walk`) é a
+verdade absoluta, mas `NewRouter` registra a maioria das rotas **condicionalmente** (36 chamadas a
+`surfaces.Recorded`, 27 dependentes de banco). Com `Config` zerada o walk enumeraria **menos** que o
+regex — o mesmo defeito com aparência de rigor. Fica registrado como o alvo certo para quando a
+construção do roteador for separável das dependências.
+
+**Medido depois:** `route-auth-coverage: PASS — 70 routes` (antes: 42).
 
 
 ## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [x]
@@ -5637,7 +5892,7 @@ dod:
 
 > Registrado 2026-08-16 ao fechar o `B-124`. O `go` está `DEFER` **por causa deste item**, e o comentário na configuração diz isso.
 
-## B-129 — Dois validadores do ecossistema não são rodados por gate nenhum   [ ]
+## B-129 — Dois validadores do ecossistema não são rodados por gate nenhum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5646,13 +5901,48 @@ source: discover-review
 severity: média — eles não guardam produto, guardam **contratos**: referências normativas que resolvem e a cadeia ponta a ponta do `/review`. Um validador que ninguém roda acumula falhas em silêncio, e foi exatamente o que aconteceu.
 evidence: medido 2026-08-17 ao cumprir o `Golden Rule Change Protocol` do `B-127`, que exige `check_xrefs.py` e `test_e2e_smoke.py` verdes. **`grep -rn "check_xrefs" taskfiles/ cmd/loopzero-ops/ .claude/hooks/` não retorna nada** — nenhuma task, nenhum gate, nenhum hook os invoca. E ao rodá-los pela primeira vez, `check_xrefs.py` saiu **`FAIL` com 4 achados**, todos introduzidos no mesmo dia sem que nada acusasse. É a mesma forma do `B-124` (três suítes vermelhas que nenhuma task rodava), noutro par de validadores.
 why_now: o protocolo de mudança de golden rule os nomeia como requisito — *"`check_xrefs.py` and `test_e2e_smoke.py` both PASS"* — mas nada verifica que alguém os rodou. Um requisito de processo sem execução é uma promessa, e o `B-124` acabou de mostrar quanto tempo uma promessa dessas sobrevive vermelha.
-status: triaged
+status: shipped
 dod:
   - `check_xrefs.py` e `test_e2e_smoke.py` rodam num gate, como as suítes pytest passaram a rodar no `skill-suites`
   - os **6 WARN** que o `check_xrefs` reporta hoje foram lidos e ou corrigidos ou declarados aceitáveis — um validador que sempre reporta avisos ensina a ignorá-lo
   - o gate distingue `FAIL` de `WARN`, para que o segundo não vire ruído que apaga o primeiro
 
 > Registrado 2026-08-17 ao fechar o `B-127`.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3
+
+**Bala 1 — os dois rodam num gate.** `ecosystem-validators`, ligado em
+`taskfiles/quality.yml` ao lado do `skill-suites` que o `B-124` criou pela mesma razão.
+Ausência dos scripts é **FALHA**, nunca skip: o gate existe porque ninguém os rodava, e reportar
+verde por não os encontrar reproduziria o defeito com aparência de cobertura. Resolve os **dois
+layouts** (`.claude/` no plugin, raiz no standalone) — fixar um faria o gate reportar ausência no
+outro, que é o defeito do `B-120` noutro lugar.
+
+**E o próprio repositório pegou a versão inicial.** Registrei o gate e ele reprovou em
+`TestEveryGateIsWiredOrExempted`: *"registered but neither wired into taskfiles/quality.yml nor
+declared"*. É a mesma classe do item — **implementado e não ligado lê como cobertura** — apanhada pela
+guarda que existe exatamente para isso.
+
+**Bala 2 — os 6 WARN foram lidos, e eram uma coisa só.** Todos vinham de **três** skills
+(`cnpg-audit`, `cnpg-design`, `multi-cluster-fleet-specialist`), duas linhas cada: sem `Cycle
+contract` e órfãs de ciclo. As três são **especialistas de domínio invocados sob demanda**, não fases
+de ciclo — exatamente a forma dos `cap-loopzerorem-specialist`, `backpressure-specialist` e
+`resilience-specialist` que a `AUXILIARY_SKILLS` já declara. Declaradas, com a razão escrita ao lado.
+
+`check_xrefs.py` agora sai com **zero achados**. Aqueles 6 eram **100% do ruído do checker**, e o
+motivo de fechá-los não é estético: era exatamente entre eles que os **4 FAIL** de hoje iam passar
+despercebidos.
+
+**Bala 3 — FAIL e WARN reportados separados.** O gate reprova em saída não-zero e **conta** os avisos
+sem reprovar. Somar os dois faria o aviso apagar a falha — e um validador que sempre avisa ensina a
+ignorá-lo, que é a forma pela qual este item nasceu.
+
+**Sete testes**, incluindo os dois layouts, o WARN-que-não-reprova, a ausência-que-reprova, e o teste
+contra a **população real** (`B-109`) — este último é o que impede o gate de ficar verde sobre scripts
+sintéticos enquanto os reais estão vermelhos, que é literalmente o estado que o `B-129` mediu.
+
 
 ## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [ ]
 
@@ -5781,3 +6071,37 @@ dod:
   - `pre-release-governance.md` ganha o que faltou: hoje a classificação T2/T3 é honor-system e o `governance-gate.py` cobre arquivos de produção; um `refactor` sobre schema e identidade de cluster passou entre os dois
 
 > Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.
+
+## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+severity: média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número.
+evidence: medido 2026-08-17 ao fechar o `B-106`, com a pirâmide **derivada** da árvore pela primeira vez: **989 arquivos — unit 73,5%, integração 15,7%, e2e 10,8%**. O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando `infra/quality/test-inventory.json` **declarava 0,1%** — isto é, calibrado contra um número que descrevia 375 de 988 arquivos e excluía a suíte `infra/tests/e2e` inteira.
+why_now: o `B-106` tornou o número visível pela primeira vez, e fazer o gate reprovar contra o alvo do ADR hoje criaria uma trava que o repositório não consegue satisfazer — a mesma recusa do `B-127` (`HARD`) e do `B-119` (enforcement total). Enquanto isso, a catraca já impede piora.
+status: triaged
+dod:
+  - está decidido se `e2e ≤ 5%` continua sendo o alvo, com o número real na frente, ou se o alvo muda — e a decisão cita o ADR D7
+  - se o alvo continuar, existe caminho declarado para sair de 10,8%; se mudar, o ADR é emendado
+  - a distância deixa de ser reportada-e-não-bloqueante: ou ela some, ou ela vira catraca com prazo
+
+> Registrado 2026-08-17 ao fechar o `B-106`. **107 arquivos e2e num produto cujo objeto É implantar não é obviamente um defeito** — pode ser que o alvo é que esteja errado. É decisão do sponsor, não minha.
+
+## B-138 — O invariante do sumário de prontidão é afirmado num pacote e existe em seis   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: média — o invariante é de ORDEM (o sumário é a última mutação antes de persistir), e ordem é o que uma tabela de contagem não vê. Foi assim que o `B-105` ficou escondido: a tabela do `B-085` pontuou o pacote como conforme porque contava `Patch` vs `Update`.
+evidence: varrido 2026-08-17 ao fechar o `B-109`. `TestApp_EveryStatusPersistFoldsTheReadinessSummary` afirma o invariante e roda em **um** pacote; a população são **seis**. Heurística sobre os seis (persistência de `.Status().Patch|Update(` cruzada com menção ao sumário na função que a envolve): **16 com sumário, 19 sem** — `app` 2/2, `environment` 5/1, `platform` 6/7, `preview` **0/6**, `reconcilehelpers` 1/0, `tenant` 2/3. **A limitação é parte do resultado:** a varredura divide por `func ` e procura o sumário por nome, sem seguir chamada — os 19 são **sítios a olhar**, não 19 defeitos.
+why_now: o `B-109` acabou de escrever a regra de que toda guarda roda contra a população real, e esta é a guarda que a motivou. O número acima é o que a regra produz quando aplicada a ela: o invariante **não é obviamente universal**, e a guarda cobre um sexto.
+status: triaged
+dod:
+  - cada um dos 19 sítios está classificado — dobra por helper que a heurística não seguiu, ou realmente não dobra
+  - a guarda cobre os seis pacotes, ou está escrito por que cada pacote de fora não precisa dela
+  - o `preview` (0 de 6) tem atenção própria: é o único pacote em que a heurística não achou nenhuma cobertura
+
+> Registrado 2026-08-17 ao fechar o `B-109`. **Ampliar a guarda para seis pacotes é uma fatia, não uma nota de rodapé** — e afirmar que os 19 são defeitos sem classificá-los seria cometer, aqui, o erro que o `B-109` nomeia.

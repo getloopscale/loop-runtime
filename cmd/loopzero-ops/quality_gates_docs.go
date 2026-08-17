@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ecosystemvalidators"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/envprefixparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillscriptpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillsuites"
@@ -143,12 +144,24 @@ func runTestTargetCoverage(args []string) int {
 		fmt.Fprintln(os.Stderr, "internal/quality/testtargetcoverage. `go build` does not count: that is")
 		fmt.Fprintln(os.Stderr, "exactly how cmd/loopzero-ops looked covered while no test of it ever ran (B-088).")
 		return 1
+	case errors.Is(err, testtargetcoverage.ErrPackageUncovered):
+		fmt.Fprintf(os.Stderr, "test-target-coverage: FAIL — %d pacote(s) com teste que nenhum alvo roda:\n", len(out.UncoveredPackages))
+		for _, p := range out.UncoveredPackages {
+			fmt.Fprintf(os.Stderr, "  %s\n", p)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "O MÓDULO tem alvo; ele é que não alcança estas subárvores. Alargue o padrão do")
+		fmt.Fprintln(os.Stderr, "alvo, dê um alvo próprio a elas, ou declare uma isenção de PACOTE com razão e")
+		fmt.Fprintln(os.Stderr, "sunset. Foi exatamente assim que 41 arquivos ficaram invisíveis num módulo que")
+		fmt.Fprintln(os.Stderr, "o gate reportava coberto (B-092/B-114).")
+		return 1
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "test-target-coverage: %v\n", err)
 		return 2
 	}
-	fmt.Printf("test-target-coverage: PASS — %d module(s): %d named by a test target, %d exempt with a "+
-		"dated reason. Granularity is the MODULE, not the package (B-092).\n",
+	fmt.Printf("test-target-coverage: PASS — %d módulo(s), %d cobertos, %d isento(s) com razão datada. "+
+		"A granularidade é o PACOTE: um módulo com alvo ainda reprova se o padrão dele não alcançar "+
+		"uma subárvore que tem teste (B-114).\n",
 		len(out.Modules), len(out.Covered), len(out.Exempt))
 	return 0
 }
@@ -207,5 +220,39 @@ func runEnvPrefixParity(args []string) int {
 	fmt.Printf("env-prefix-parity: PASS — the %d find_sec_004 copies hold the same prefix set and "+
 		"the same case matching. This compares them to each other and says nothing about whether "+
 		"the rule is reachable (B-094).\n", len(out.Declarations))
+	return 0
+}
+
+// runEcosystemValidators roda os dois validadores que o protocolo de mudança de
+// golden rule exige — e que nenhum gate rodava.
+//
+// `rules/cycle-rule-schema.md § Golden Rule Change Protocol` pede que
+// `check_xrefs.py` e `test_e2e_smoke.py` estejam verdes em toda mudança numa regra
+// LOCKED. Medido no B-127: nenhuma task, gate ou hook os invocava, e ao serem
+// rodados pela primeira vez o `check_xrefs` saiu FAIL com 4 achados do mesmo dia.
+func runEcosystemValidators(args []string) int {
+	fs := flag.NewFlagSet("ecosystem-validators", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+
+	out, err := ecosystemvalidators.Check(ecosystemvalidators.Config{RepoRoot: *root})
+	if out.Advisory {
+		fmt.Println("ecosystem-validators: ADVISORY — python3 ausente; nada foi concluído")
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ecosystem-validators: FAIL — %v\n", err)
+		for _, r := range out.Failed() {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", r.Name, r.Tail)
+		}
+		return 1
+	}
+	// FAIL e WARN reportados separados: somá-los faria o aviso apagar a falha, e um
+	// validador que sempre avisa ensina a ignorá-lo.
+	fmt.Printf("ecosystem-validators: PASS — %d validador(es) verdes, %d aviso(s)\n",
+		len(out.Results), out.Warnings())
 	return 0
 }
