@@ -10,7 +10,7 @@ title: "Cluster API como ciclo de vida de cells — infraestrutura interna e BYO
 **Date:** 2026-08-07
 **Tier:** T3 (arquitetura + stack + fluxo crítico — `.claude/rules/pre-release-governance.md`)
 **Status:** **PROPOSED** — não implementar antes da ratificação em reunião T3
-**Meeting:** *pendente* — este documento é o diagnóstico e a pauta
+**Meeting:** **2026-08-17** — data marcada; este documento é o diagnóstico e a pauta. ⚠️ `Status` continua `PROPOSED`: a data agenda a reunião, **não a substitui**, e é a mudança para `RATIFIED` que autoriza implementação
 **Supersedes:** nada. **Interage com:** ADR-0008 / ADR-0021 D3 (placement sticky)
 
 > **Status é PROPOSED por contrato, não por cautela.** A governança exige reunião e ADR
