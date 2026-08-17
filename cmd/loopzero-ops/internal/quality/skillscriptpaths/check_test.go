@@ -112,10 +112,16 @@ func TestRealTreeIsClean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".claude", "skills")); statErr != nil {
-		t.Skip("not running inside a repo with an installed ecosystem")
-	}
 	out, err := Check(Config{RepoRoot: root})
+
+	// No ecosystem installed: the contract is a LOUD refusal, and asserting it beats
+	// vanishing — it proves the gate cannot report green over a tree it never found.
+	if _, statErr := os.Stat(filepath.Join(root, ".claude", "skills")); statErr != nil {
+		if !errors.Is(err, ErrSkillsRootMissing) {
+			t.Fatalf("without a skills tree the gate must fail loudly: %v", err)
+		}
+		return
+	}
 	if err != nil {
 		for _, f := range out.Findings {
 			t.Errorf("%s:%d invokes %q\n  %s", f.File, f.Line, f.Path, f.Text)

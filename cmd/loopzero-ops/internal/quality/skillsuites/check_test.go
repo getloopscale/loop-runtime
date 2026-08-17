@@ -24,22 +24,44 @@ func suite(t *testing.T, root, skill, body string) {
 	}
 }
 
-func requirePytest(t *testing.T) {
-	t.Helper()
+// pytestAvailable reports whether the interpreter this gate shells out to is present.
+//
+// Nothing here SKIPS on its absence, deliberately. `Check` documents that it returns
+// `Advisory: true` when pytest is missing, and that is a contract worth asserting — a
+// test that vanishes in that environment leaves the advisory path unproven exactly where
+// it is the only path that runs. So each test branches and asserts on both sides.
+func pytestAvailable() bool {
 	if _, err := exec.LookPath("python3"); err != nil {
-		t.Skip("python3 absent — the gate is advisory here, and so is its test")
+		return false
 	}
-	if err := exec.Command("python3", "-c", "import pytest").Run(); err != nil {
-		t.Skip("pytest absent")
+	return exec.Command("python3", "-c", "import pytest").Run() == nil
+}
+
+// assertAdvisory locks the documented no-interpreter contract: advisory, and NOT an error
+// — blocking a delivery on a tool the operator may legitimately not have installed is how
+// a gate gets bypassed.
+func assertAdvisory(t *testing.T, out Outcome, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("without pytest the gate must be advisory, not an error: %v", err)
+	}
+	if !out.Advisory {
+		t.Fatal("without pytest the gate must mark itself advisory, so a reader knows nothing was concluded")
+	}
+	if len(out.Results) != 0 {
+		t.Fatalf("without pytest no suite can have run; got %+v", out.Results)
 	}
 }
 
 func TestGreenSuitePasses(t *testing.T) {
-	requirePytest(t)
 	root := t.TempDir()
 	suite(t, root, "ok", "def test_true():\n    assert True\n")
 
 	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	if !pytestAvailable() {
+		assertAdvisory(t, out, err)
+		return
+	}
 	if err != nil {
 		t.Fatalf("a green suite must pass: %v (%+v)", err, out.Results)
 	}
@@ -49,11 +71,14 @@ func TestGreenSuitePasses(t *testing.T) {
 }
 
 func TestRedSuiteFails(t *testing.T) {
-	requirePytest(t)
 	root := t.TempDir()
 	suite(t, root, "broken", "def test_false():\n    assert False\n")
 
 	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	if !pytestAvailable() {
+		assertAdvisory(t, out, err)
+		return
+	}
 	if !errors.Is(err, ErrSuitesFailed) {
 		t.Fatalf("a red suite must fail the gate: %v", err)
 	}
@@ -65,13 +90,16 @@ func TestRedSuiteFails(t *testing.T) {
 // One red among greens must still fail. A gate that reports the majority is a gate that
 // lets the minority through.
 func TestOneRedAmongGreensStillFails(t *testing.T) {
-	requirePytest(t)
 	root := t.TempDir()
 	suite(t, root, "a", "def test_ok():\n    assert True\n")
 	suite(t, root, "b", "def test_bad():\n    assert False\n")
 	suite(t, root, "c", "def test_ok():\n    assert True\n")
 
 	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	if !pytestAvailable() {
+		assertAdvisory(t, out, err)
+		return
+	}
 	if !errors.Is(err, ErrSuitesFailed) {
 		t.Fatalf("one red must fail the whole gate: %v", err)
 	}
@@ -83,7 +111,6 @@ func TestOneRedAmongGreensStillFails(t *testing.T) {
 // A skill without tests/ is not a failure — plenty of skills are prose only. It is simply
 // not a suite, and counting it would make the total meaningless.
 func TestSkillWithoutTestsIsNotASuite(t *testing.T) {
-	requirePytest(t)
 	root := t.TempDir()
 	suite(t, root, "has-tests", "def test_ok():\n    assert True\n")
 	if err := os.MkdirAll(filepath.Join(root, ".claude", "skills", "prose-only"), 0o755); err != nil {
@@ -91,6 +118,10 @@ func TestSkillWithoutTestsIsNotASuite(t *testing.T) {
 	}
 
 	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	if !pytestAvailable() {
+		assertAdvisory(t, out, err)
+		return
+	}
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -120,11 +151,14 @@ func TestMissingSkillsTreeIsAFailure(t *testing.T) {
 // A suite that hangs must not hang the delivery. The bound is per suite, so one stuck
 // suite does not hide the state of the others.
 func TestHangingSuiteIsBoundedAndReportedAsFailure(t *testing.T) {
-	requirePytest(t)
 	root := t.TempDir()
 	suite(t, root, "slow", "import time\n\n\ndef test_sleep():\n    time.sleep(30)\n")
 
 	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 2 * time.Second})
+	if !pytestAvailable() {
+		assertAdvisory(t, out, err)
+		return
+	}
 	if !errors.Is(err, ErrSuitesFailed) {
 		t.Fatalf("a timed-out suite must fail: %v", err)
 	}
@@ -136,17 +170,24 @@ func TestHangingSuiteIsBoundedAndReportedAsFailure(t *testing.T) {
 // The real tree is the population the gate exists for (B-109): a synthetic mutant proves
 // the detector fires; only this proves it fires on what shipped.
 func TestRealTreeIsGreen(t *testing.T) {
-	requirePytest(t)
 	root, err := filepath.Abs("../../../../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".claude", "skills")); statErr != nil {
-		t.Skip("not running inside a repo with an installed ecosystem")
-	}
 	out, checkErr := Check(Config{RepoRoot: root})
-	if out.Advisory {
-		t.Skip("pytest absent")
+
+	// No ecosystem installed: the contract is a LOUD refusal, and asserting it here is
+	// worth more than vanishing — it proves the gate cannot report green over a tree it
+	// never found, which is the property the whole gate defends.
+	if _, statErr := os.Stat(filepath.Join(root, ".claude", "skills")); statErr != nil {
+		if !errors.Is(checkErr, ErrNoSuitesFound) {
+			t.Fatalf("without a skills tree the gate must fail loudly: %v", checkErr)
+		}
+		return
+	}
+	if !pytestAvailable() {
+		assertAdvisory(t, out, checkErr)
+		return
 	}
 	if checkErr != nil {
 		for _, r := range out.Failed() {

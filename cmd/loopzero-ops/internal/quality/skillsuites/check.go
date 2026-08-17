@@ -142,8 +142,22 @@ func runSuite(dir, skill string, timeout time.Duration) Result {
 	// `python3 -m pytest` and not `pytest`: the suites import their own `scripts/` via a
 	// conftest that manipulates sys.path, and the module form keeps the interpreter that
 	// resolves them the same one the operator has.
-	cmd := exec.Command("python3", "-m", "pytest", "tests/", "-q")
+	//
+	// `-p no:cacheprovider` + PYTHONDONTWRITEBYTECODE remove this gate's only shared
+	// mutable state. It runs pytest INSIDE the repository's own directories, so a second
+	// pytest — another operator, a parallel `go test ./...`, a developer in another
+	// terminal — would write the same `.pytest_cache/` and `__pycache__/`. Two processes
+	// writing one cache produce a transient import failure in whichever loses the race.
+	//
+	// Observed once on 2026-08-16: this gate reported `plan-confidence` red inside
+	// `task quality:all` while the same suite ran green immediately before and after, and
+	// four attempts failed to reproduce it. The collision is a MECHANISM that fits, not a
+	// confirmed cause — but a gate whose verdict can depend on who else is running is
+	// worthless either way (`rules/testing.md` § 3), and removing the shared state costs
+	// two flags.
+	cmd := exec.Command("python3", "-m", "pytest", "tests/", "-q", "-p", "no:cacheprovider")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 
 	done := make(chan struct{})
 	var output []byte
