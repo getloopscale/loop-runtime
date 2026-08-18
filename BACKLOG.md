@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-155 items — **Open** 62 · **In flight** 0 · **Closed** 93
+156 items — **Open** 63 · **In flight** 0 · **Closed** 93
 
-### Open (62)
+### Open (63)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -136,6 +136,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
+| [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
 
 ### In flight (0)
 
@@ -7386,3 +7387,34 @@ dod:
   - a mensagem nomeia o diretorio onde procurou e o que fazer
   - decidido e registrado se o lockfile por app e suportado; se for, o install roda no `path`
   - um app com lockfile no proprio subdiretorio constroi, ou reprova dizendo por que nao pode
+
+## B-156 — Um teste de chart depende de rede e reprova o portao de entrega sob carga   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: |
+  Medido 2026-08-18 no portao de entrega. `TestLoopZeroCloudServiceIsNodePortForTheEdge`
+  (`infra/tests/charts/loopzero_cloud_edge_nodeport_test.go:28`) reprovou com
+  `helmfile template failed: exit status 1` apos **123,89s**, e a saida ao redor era uma
+  sequencia de `Adding repo ...` — minio, prometheus-community, grafana, open-telemetry,
+  ory, harbor, nfs-ganesha.
+
+  O mesmo teste, rodado isolado no mesmo checkout minutos depois: **PASS em 7,4s**.
+
+  O commit que o portao estava barrando tocava apenas `CHANGELOG.md` e `BACKLOG.md`.
+why_now: |
+  `rules/testing.md § 6` classifica teste nao-determinístico como bug, e este e o pior
+  lugar possivel para um: `delivery-gate.sh` roda `task quality:all` antes de **todo** push
+  e nao tem bypass. Um teste que depende de `helm repo add` contra sete repositorios
+  remotos transforma indisponibilidade de rede em entrega bloqueada, e o operador nao tem
+  como distinguir isso de um defeito real sem reler o log inteiro.
+
+  E o custo nao e so o bloqueio: um teste que reprova por rede ensina a repetir o push ate
+  passar, que e exatamente o habito que faz uma reprovacao verdadeira ser ignorada.
+status: triaged
+dod:
+  - o teste nao contata rede, ou declara a dependencia e a pula quando ela falta
+  - a diferenca entre reprovacao por rede e reprovacao por conteudo e legivel na saida
+  - medido quantos outros testes do portao contatam rede — a varredura registrada, mesmo se zero
