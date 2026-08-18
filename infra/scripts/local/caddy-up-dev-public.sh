@@ -99,9 +99,17 @@ verify_certs() {
   [[ $VERIFY -eq 1 && $DRY_RUN -eq 0 ]] || return 0
   log "waiting 8s for cert issuance + reload..."
   sleep 8
+  # cloud-dev.loopzero.example saiu desta lista em 2026-08-18. O Caddyfile o removeu
+  # deliberadamente em 2026-08-10 (era host publico servindo redirecionamento, com
+  # superficie de auth concedida a ninguem) e esta lista nao acompanhou. O resultado
+  # foi um verificador que exigia certificado de um hostname que ninguem serve — e
+  # que portanto reprovava 100% das vezes sobre a configuracao correta. Um gate que
+  # nao pode passar e um gate que ninguem roda, e foi assim que o webhook do GitHub
+  # ficou semanas entregando contra `tls: internal error` sem que nada avisasse.
+  # A carga do webhook vive em `app-dev`, que ja tem o handle /api/v1/webhooks/github.
   local hosts=(
     auth.loopzero.example app.loopzero.example cloud.loopzero.example
-    auth-dev.loopzero.example app-dev.loopzero.example cloud-dev.loopzero.example
+    auth-dev.loopzero.example app-dev.loopzero.example
   )
   # tls_ok if openssl handshake succeeds (cert issued + chain valid).
   # http_code informational only — 200/404 means upstream is up, 502 means

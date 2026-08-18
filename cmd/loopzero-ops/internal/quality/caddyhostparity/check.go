@@ -12,33 +12,30 @@
 //	POST https://cloud-dev.loopzero.example/api/v1/webhooks/github
 //	giving up after 1 attempt(s): remote error: tls: internal error   code=500
 //
-// O handshake reproduz fora do GitHub — `openssl s_client -servername cloud-dev.loopzero.example`
-// devolve `tlsv1 alert internal error` (alerta 80, lado servidor), enquanto `app-dev`, no
-// mesmo host e no mesmo Caddy, serve certificado normalmente.
+// A primeira leitura culpou o `Caddyfile` por não declarar bloco para esse hostname. Estava
+// invertida, e a revisão pegou: o `Caddyfile` **removeu** `cloud-dev` deliberadamente em
+// 2026-08-10, com a razão escrita seis linhas abaixo do último bloco — era host público
+// servindo redirecionamento, com superfície de auth concedida a ninguém, e a carga do webhook
+// já vivia em `app-dev`, que tem o `handle /api/v1/webhooks/github`.
 //
-// A causa estava em `infra/local/Caddyfile`: sete blocos de site declarados e **nenhum** para
-// `cloud-dev.loopzero.example`. Sem bloco e sem TLS on-demand, o Caddy não tem certificado para
-// aquele SNI e derruba a conexão antes de qualquer status HTTP. O nome aparecia no arquivo
-// apenas dentro de strings de CSP — citado, nunca servido.
+// O lado obsoleto era `infra/scripts/local/caddy-up-dev-public.sh`, que continuou exigindo
+// certificado de um hostname que ninguém mais serve. Com isso, `--verify` reprovava 100% das
+// vezes sobre a configuração correta — e um verificador que não pode passar é um verificador
+// que ninguém roda. Foi assim que semanas de entregas falhas nunca viraram sinal, e é a
+// divergência, não a ausência, que este gate mede.
 //
-// Não era hostname esquecido: o DNS o provisiona, `infra/quality/proxy-exposure.txt` o lista,
-// e `caddy-up-dev-public.sh` **exige** emissor Let's Encrypt para ele e sai 1 sem isso.
+// # O que este gate verifica
 //
-// # Por que um gate, e não só o conserto
-//
-// Porque o verificador que veria isso não podia passar. Com o nome na lista e fora do
-// Caddyfile, `--verify` reprovava 100% das vezes sobre uma configuração correta — e um gate
-// que não pode passar é um gate que ninguém roda. Foi assim que semanas de entregas falhas
-// nunca viraram sinal. Este gate é hermético: lê a árvore, não a rede, então roda em toda
-// entrega sem depender de certificado emitido.
+// Que todo hostname cobrado pelo verificador de borda tenha, no `Caddyfile`, um endereço de
+// site que o atenda. É hermético — compara duas declarações do repositório, sem rede — então
+// roda em toda entrega sem depender de certificado emitido.
 //
 // # O limite, dito em voz alta
 //
-// Ele compara **duas declarações do repositório** — a lista do verificador e os blocos do
-// Caddyfile. Não prova que o certificado foi emitido, que o DNS resolve, nem que o destino
-// atrás do bloco responde. Um bloco apontando para a porta errada passa aqui e falha ao vivo;
-// essa metade é `B-151`, e prometer o contrário seria a superestimação que este ecossistema
-// já mede em vários itens.
+// Ele compara declarações. Não prova que o certificado foi emitido, que o DNS resolve, nem
+// que o destino atrás do endereço responde. Um bloco apontando para a porta errada passa aqui
+// e falha ao vivo. Quando o `Caddyfile` usa `import`, a visão fica parcial e o gate recusa em
+// vez de relatar paridade sobre metade do arquivo.
 package caddyhostparity
 
 import (
@@ -62,13 +59,10 @@ var ErrVerifierMissing = errors.New("verificador de borda ausente — sem lista 
 // ErrCaddyfileMissing means the served-hosts side of the comparison is absent.
 var ErrCaddyfileMissing = errors.New("arquivo Caddyfile ausente — sem blocos de site não há o que comparar")
 
-// ErrUnownedFreeze means a frozen host names no item that owns fixing it.
+// ErrPartialView means the Caddyfile pulls site blocks this gate cannot see.
 //
-// Congelar sem dono é esconder: a linha some do relatório e ninguém fica responsável.
-var ErrUnownedFreeze = errors.New("hostname congelado sem item que o resolva")
-
-// ErrStaleFreeze means a frozen host is now served — the freeze outlived its reason.
-var ErrStaleFreeze = errors.New("congelamento obsoleto — o hostname já tem bloco de site")
+// Relatar paridade sobre metade do arquivo seria verde sobre o que não foi lido.
+var ErrPartialView = errors.New("o Caddyfile importa outro arquivo — paridade não verificável sobre visão parcial")
 
 // ErrNothingScanned means the host list parsed empty.
 //
@@ -79,18 +73,22 @@ var ErrNothingScanned = errors.New("nenhum hostname exigido varrido — não ach
 const (
 	verifierRel  = "infra/scripts/local/caddy-up-dev-public.sh"
 	caddyfileRel = "infra/local/Caddyfile"
-	baselineRel  = "infra/quality/caddy-unserved-baseline.txt"
 )
 
 var (
-	// hostsArrayRE isola o corpo do array `hosts=( ... )` do verificador.
-	hostsArrayRE = regexp.MustCompile(`(?s)hosts=\(\s*(.*?)\)`)
+	// hostsArrayRE isola o corpo do array `hosts=( ... )` do verificador. Ancorado em
+	// início de linha para não capturar outro array antes dele, e fechando só num `)`
+	// que abre linha — um `)` no corpo (de `$(...)`, de comentário) truncava a lista em
+	// silêncio, e "1 de 6 exigidos" reportava-se igual a "6 exigidos".
+	hostsArrayRE = regexp.MustCompile(`(?m)^\s*(?:local\s+)?hosts=\(\s*$([\s\S]*?)^\s*\)`)
 	// hostRE aceita um hostname, com ou sem rótulo curinga à esquerda.
 	hostRE = regexp.MustCompile(`^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$`)
-	// siteBlockRE casa um bloco de site: hostname na coluna zero abrindo chave.
-	// A âncora de coluna é o que separa um site servido de uma citação dentro de
-	// uma diretiva — foi assim que `cloud-dev` viveu no arquivo sem ser servido.
-	siteBlockRE = regexp.MustCompile(`(?m)^((?:\*\.)?[a-z0-9.*-]+\.[a-z]{2,})\s*\{`)
+	// siteAddrLineRE captura a linha de endereço inteira de um bloco de site: coluna
+	// zero até a chave que abre, na MESMA linha. A âncora de coluna é o que separa um
+	// site servido de uma citação dentro de uma diretiva.
+	siteAddrLineRE = regexp.MustCompile(`(?m)^([^\s{][^{\n]*?)[ \t]*\{[ \t]*$`)
+	// importRE detecta blocos que este gate não enxerga.
+	importRE = regexp.MustCompile(`(?m)^\s*import\s+\S`)
 )
 
 // Config drives the check.
@@ -108,35 +106,18 @@ type Finding struct {
 type Outcome struct {
 	Scanned  int
 	Served   int
-	Frozen   int
 	Findings []Finding
 }
 
-// frozen reads the ratchet: hostnames already known unserved, each naming the item that
-// owns fixing it. Absent file means an empty freeze, which is the strictest state.
-func frozen(root string) (map[string]string, error) {
-	body, err := os.ReadFile(filepath.Clean(filepath.Join(root, baselineRel)))
-	if err != nil {
-		return map[string]string{}, nil
-	}
-	out := map[string]string{}
-	for _, line := range strings.Split(string(body), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		f := strings.Fields(line)
-		if len(f) < 2 {
-			return nil, fmt.Errorf("%w: %q em %s", ErrUnownedFreeze, line, baselineRel)
-		}
-		out[f[0]] = f[1]
-	}
-	return out, nil
-}
-
-// serves reports whether a declared site block covers the hostname, honouring the wildcard
-// form: `*.preview-dev.loopzero.example` serves every single label beneath it.
+// serves reports whether a declared site address covers the hostname, honouring the
+// wildcard form: `*.preview-dev.loopzero.example` serves every single label beneath it, and
+// neither a deeper host nor the apex.
 func serves(block, host string) bool {
+	// O Caddy serve tudo por trás de um catch-all; tratá-lo como não-servido seria
+	// reprovar configuração que funciona.
+	if block == "*" || strings.HasPrefix(block, ":") {
+		return true
+	}
 	if block == host {
 		return true
 	}
@@ -157,7 +138,7 @@ func demandedHosts(root string) ([]string, error) {
 	}
 	m := hostsArrayRE.FindStringSubmatch(string(body))
 	if m == nil {
-		return nil, fmt.Errorf("%w: %s não declara `hosts=(...)`", ErrVerifierMissing, verifierRel)
+		return nil, fmt.Errorf("%w: %s não declara `hosts=(...)` em forma reconhecível", ErrVerifierMissing, verifierRel)
 	}
 	var hosts []string
 	seen := map[string]bool{}
@@ -171,20 +152,43 @@ func demandedHosts(root string) ([]string, error) {
 	return hosts, nil
 }
 
-// servedBlocks parses the site blocks the Caddyfile declares.
+// servedBlocks parses the site addresses the Caddyfile declares.
 func servedBlocks(root string) ([]string, error) {
 	body, err := os.ReadFile(filepath.Clean(filepath.Join(root, caddyfileRel)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrCaddyfileMissing, caddyfileRel)
 	}
+	if importRE.MatchString(string(body)) {
+		return nil, fmt.Errorf("%w: %s", ErrPartialView, caddyfileRel)
+	}
 	var blocks []string
-	for _, m := range siteBlockRE.FindAllStringSubmatch(string(body), -1) {
-		blocks = append(blocks, m[1])
+	for _, m := range siteAddrLineRE.FindAllStringSubmatch(string(body), -1) {
+		// A vírgula é a forma canônica de multi-host no Caddy; cada token é um endereço.
+		for _, tok := range strings.Split(m[1], ",") {
+			if a := normalizeAddr(tok); a != "" {
+				blocks = append(blocks, a)
+			}
+		}
 	}
 	return blocks, nil
 }
 
-// Check compares every demanded hostname against the declared site blocks.
+// normalizeAddr reduces a Caddy site address to the hostname it serves, dropping the
+// scheme and port and folding case — the Caddy address is case-insensitive, and a gate
+// that is not would refuse a working configuration.
+func normalizeAddr(tok string) string {
+	a := strings.ToLower(strings.TrimSpace(tok))
+	if i := strings.Index(a, "://"); i >= 0 {
+		a = a[i+3:]
+	}
+	// Porta sem host (`:443`) é catch-all e sobrevive inteira; com host, cai fora.
+	if i := strings.LastIndex(a, ":"); i > 0 {
+		a = a[:i]
+	}
+	return strings.TrimSuffix(a, "/")
+}
+
+// Check compares every demanded hostname against the declared site addresses.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 	root := cfg.RepoRoot
@@ -204,11 +208,6 @@ func Check(cfg Config) (Outcome, error) {
 		return out, err
 	}
 
-	freeze, err := frozen(root)
-	if err != nil {
-		return out, err
-	}
-
 	out.Scanned = len(hosts)
 	for _, h := range hosts {
 		covered := false
@@ -220,15 +219,6 @@ func Check(cfg Config) (Outcome, error) {
 		}
 		if covered {
 			out.Served++
-			// Um congelamento sobre hostname já servido perdeu a razão de existir, e uma
-			// isenção que ninguém revoga é como um gate volta a mentir devagar.
-			if _, isFrozen := freeze[h]; isFrozen {
-				return out, fmt.Errorf("%w: %s — remova a linha de %s", ErrStaleFreeze, h, baselineRel)
-			}
-			continue
-		}
-		if _, isFrozen := freeze[h]; isFrozen {
-			out.Frozen++
 			continue
 		}
 		out.Findings = append(out.Findings, Finding{Host: h, DemandedBy: verifierRel})

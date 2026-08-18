@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-152 items — **Open** 63 · **In flight** 0 · **Closed** 89
+152 items — **Open** 61 · **In flight** 0 · **Closed** 91
 
-### Open (63)
+### Open (61)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -134,15 +134,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
-| [`B-150`](#b-150--o-webhook-do-github-aponta-para-um-hostname-que-nenhum-servidor-termina----) | O webhook do GitHub aponta para um hostname que nenhum servidor termina | `triaged` | — |
-| [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual----) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `triaged` | — |
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
 
 ### In flight (0)
 
 _None._
 
-### Closed (89)
+### Closed (91)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -235,6 +233,8 @@ _None._
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
 | [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa |
+| [`B-150`](#b-150--o-webhook-apontava-para-um-hostname-que-o-repositório-removeu-de-propósito---x) | O webhook apontava para um hostname que o repositório removeu de propósito | `shipped` | — |
+| [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual---x) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `killed` | — |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -7009,89 +7009,94 @@ dod:
   - está medido quantos dos 318 são supressáveis com razão contra quantos são defeito real
 
 
-## B-150 — O webhook do GitHub aponta para um hostname que nenhum servidor termina   [ ]
+## B-150 — O webhook apontava para um hostname que o repositório removeu de propósito   [x]
 
 domain: engine-go
 repo: loopzero
 suggested_mode: live-test
 source: discover-live-test
 evidence: |
-  Medido 2026-08-18 no droplet, via o log de entregas do próprio App (id 3319955):
+  Medido 2026-08-18 pelo log de entregas do App (id 3319955): toda entrega falhava com
+  `remote error: tls: internal error` contra
+  `https://cloud-dev.loopzero.example/api/v1/webhooks/github`.
 
-      POST https://cloud-dev.loopzero.example/api/v1/webhooks/github
-      giving up after 1 attempt(s): remote error: tls: internal error   code=500
+  **A primeira leitura culpou o artefato errado, e a revisão pegou.** O `Caddyfile` não
+  "esqueceu" de declarar o hostname — ele o **removeu em 2026-08-10**, com a razão escrita
+  seis linhas abaixo do último bloco (`infra/local/Caddyfile:416-426`): era host público
+  servindo redirecionamento, com superfície de auth concedida a ninguém, e a carga do
+  webhook já vivia em `app-dev`, que tem o `handle /api/v1/webhooks/github` apontando para
+  o engine (`infra/local/Caddyfile:343-347`). O fixture concorda desde então
+  (`cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44`).
 
-  Toda entrega registrada falha assim — as cinco mais recentes, cobrindo de
-  18/08 00:12 a 18/08 16:59. O `push` de um commit real (`7cf19217`) está entre
-  elas: o GitHub tentou, e o handshake caiu.
+  O lado obsoleto era `infra/scripts/local/caddy-up-dev-public.sh:104`, que continuou
+  cobrando certificado de um hostname que ninguém serve — e a URL do App, que nunca foi
+  repontada depois da remoção.
+resolution: |
+  A URL do App foi repontada para `https://app-dev.loopzero.example/api/v1/webhooks/github`
+  (`PATCH /app/hook/config`), e o hostname saiu da lista do verificador. O antes e o
+  depois estão na mesma janela do log de entregas:
 
-  O handshake reproduz fora do GitHub — `openssl s_client -servername
-  cloud-dev.loopzero.example` devolve `tlsv1 alert internal error` (alerta 80), lado
-  servidor, enquanto `app-dev.loopzero.example` no mesmo host e no mesmo Caddy serve
-  `CN = app-dev.loopzero.example` normalmente.
+      17:59:57  installation_repositories -> cloud-dev...  code=500
+      18:01:03  push                      -> status=OK     code=200
 
-  A causa está em `infra/local/Caddyfile`: ele declara sete blocos de site
-  (`app`, `cloud`, `auth`, `app-dev`, `auth-dev`, `*.preview-dev`, `*.prod-dev`)
-  e **nenhum** para `cloud-dev.loopzero.example`. Sem bloco e sem TLS on-demand, o
-  Caddy não tem certificado para esse SNI e derruba a conexão. O nome aparece no
-  arquivo apenas dentro de strings de CSP.
+  E o push virou build: `build-6c2159bf89acf415`, sha `0f1ee7f5` — o commit exato enviado.
+  Primeira vez que um push real produz um build nesta instalação.
 
-  Não é um hostname esquecido: o DNS o provisiona
-  (`setup-dev-public-dns.sh`, 3 registros A), o registro de exposição de borda o
-  lista (`infra/quality/proxy-exposure.txt`), o fixture o usa
-  (`connect-canonical-fixture.sh`) e — o mais direto — ele está na lista que
-  `caddy-up-dev-public.sh:104` exige verificar.
+  Gate `caddy-host-parity` recusa hostname cobrado pela verificação e sem endereço de site
+  que o atenda. Varredura da população: 5 exigidos, 5 servidos, 0 sem bloco — medido, não
+  congelado.
 why_now: |
-  O elo 7 da cadeia está verde e provado: o engine loga `github webhook: handler
-  registered` em `/api/v1/webhooks/github`. O que impede o deploy automático não
-  é o produto, é o hostname pelo qual o GitHub tenta alcançá-lo.
+  O elo do produto estava verde e provado — o engine registra o recebedor do aviso no boot.
+  O que impedia a jornada central do produto era o endereço pelo qual o GitHub tentava
+  alcançá-lo, e ele apontava para um host removido três semanas antes.
 
-  E o gate que veria isso não pode passar por construção:
-  `caddy-up-dev-public.sh --verify` exige emissor Let's Encrypt para os seis
-  hostnames e sai 1 sem ele. Com `cloud-dev` na lista e fora do Caddyfile, o
-  verify reprova 100% das vezes sobre uma configuração correta — um gate
-  permanentemente vermelho é um gate que ninguém roda, e foi por isso que
-  semanas de entregas falhas não viraram sinal.
-status: triaged
+  E o verificador que veria isso não podia passar: com o hostname na lista e fora do
+  Caddyfile, `--verify` reprovava sempre sobre a configuração correta. Um gate que não pode
+  passar é um gate que ninguém roda, e foi assim que semanas de entregas falhas nunca
+  viraram sinal.
+
+status: shipped
 dod:
-  - `openssl s_client -servername cloud-dev.loopzero.example` completa o handshake com emissor Let's Encrypt
-  - uma entrega de `push` do App registra status 2xx no log de entregas do GitHub
-  - `caddy-up-dev-public.sh --verify` sai 0 sobre a configuração canônica
-  - um gate recusa hostname exigido pela verificação e ausente do Caddyfile — com varredura da população registrada
+  - handshake completa em todo hostname cobrado — 5/5 servidos, medido pelo gate
+  - uma entrega de `push` registra 200 no log do GitHub — medido 18:01:03
+  - um gate recusa hostname cobrado e sem quem o atenda, com varredura da população registrada
 
-## B-151 — O destino do webhook atravessa dois repositórios e ninguém decidiu qual   [ ]
+## B-151 — O destino do webhook atravessa dois repositórios e ninguém decidiu qual   [x]
 
 domain: engine-go
 repo: loopzero
 suggested_mode: evolve
 source: discover-live-test
 evidence: |
-  Consequência direta de [[B-150]], e a razão de ele não ser um conserto de uma
-  linha. Medido 2026-08-18:
+  Registrado supondo que o destino do webhook fosse decisão em aberto, atravessando os dois
+  repositórios e exigindo MEET T2. Não era: **a decisão já existia e estava escrita.**
 
-  - o App entrega em `https://cloud-dev.loopzero.example/api/v1/webhooks/github`
-  - quem **serve** essa rota é o engine (`loopzero-api`), que a registra no boot
-  - `cloud.loopzero.example`, o irmão de produção do hostname, faz
-    `reverse_proxy localhost:3002` — isto é, **loopzero-cloud**, não o engine
-  - e `localhost:3002` devolve 404 nessa rota: loopzero-cloud não a repassa
+  `infra/local/Caddyfile:416-426` registra a remoção de `cloud-dev` em 2026-08-10 com o
+  motivo, `:343-347` já tem o `handle /api/v1/webhooks/github` em `app-dev` apontando para
+  o engine, e `cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44` já declara
+  `https://app-dev.loopzero.example/api/v1/webhooks/github` como padrão desde então.
 
-  Então o bloco que falta não tem destino óbvio. Copiar o irmão de produção
-  aponta para um serviço que não atende; apontar direto para o engine faz o
-  hostname de loopzero-cloud servir uma rota do engine.
+  O que faltava não era decidir — era aplicar ao App, que continuava apontando para o
+  hostname removido.
+kill_reason: |
+  A premissa foi refutada pela medição: não havia decisão pendente nem fronteira entre
+  repositórios a atravessar. Três artefatos deste mesmo repositório já concordavam sobre o
+  destino, e a leitura que gerou este item não foi seis linhas adiante no arquivo que
+  estava culpando.
+
+  Aplicado em [[B-150]], com prova ao vivo. Registrar isto como `killed` em vez de apagar é
+  o ponto: o item foi medido, refutado, e a refutação é o resultado.
 why_now: |
-  Escrevi o bloco errado seria pior que não escrever nenhum: o handshake passaria
-  a fechar e o GitHub passaria a receber 404 — verde no TLS, entrega ainda
-  perdida, e agora sem o alerta que hoje existe.
+  Registrado porque o destino do webhook parecia indefinido depois de [[B-150]]: o irmão de
+  produção do hostname proxia para loopzero-cloud, que devolve 404 nessa rota, então copiar o
+  padrão fecharia o handshake e trocaria uma falha ruidosa por um 404 silencioso.
 
-  A decisão define por qual superfície o ingresso de webhook entra e é T2 por
-  atravessar a fronteira entre os dois repositórios: exige registro MEET antes do
-  código, per `rules/pre-release-governance.md`.
-status: triaged
+  A medição mostrou que a pergunta já tinha resposta escrita em três artefatos deste
+  repositório, e que o custo real era não tê-los lido.
+
+status: killed
 dod:
-  - registro MEET decidindo a superfície de ingresso do webhook, com a alternativa rejeitada
-  - o bloco de site correspondente na configuração canônica
-  - uma entrega real de `push` alcançando o handler e criando um build
-
+  - a decisão sobre a superfície de ingresso do webhook, localizada — estava em 3 artefatos
 ## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [ ]
 
 domain: engine-go

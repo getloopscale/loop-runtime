@@ -120,66 +120,111 @@ func TestRealTreeIsMeasured(t *testing.T) {
 	if out.Scanned == 0 {
 		t.Fatal("zero hostnames varridos — verde sobre nada")
 	}
-	t.Logf("população real: %d hostnames exigidos, %d sem bloco de site", out.Scanned, len(out.Findings))
+	t.Logf("população real: %d hostnames exigidos, %d servidos, %d sem bloco de site",
+		out.Scanned, out.Served, len(out.Findings))
 	for _, f := range out.Findings {
 		t.Logf("  sem terminador TLS: %s", f.Host)
 	}
 }
 
-// The ratchet: a host already known unserved is frozen with the item that owns it, so the
-// gate is runnable today; a NEW one is refused. Freezing without an owner would be hiding.
-func TestBaselineFreezesKnownAndRefusesNew(t *testing.T) {
+// A `)` inside the array body truncated the lazy match and the rest of the list vanished
+// with no signal — a PASS over hostnames never compared. Reproduced by review 2026-08-18.
+func TestParenInsideArrayDoesNotTruncateTheList(t *testing.T) {
 	root := tree(t,
-		"    app-dev.loopzero.example cloud-dev.loopzero.example novo.loopzero.example",
+		"    # nota $(hostname -f) sobre a lista\n    app-dev.loopzero.example cloud.loopzero.example",
 		"app-dev.loopzero.example {\n}\n")
-	base := filepath.Join(root, "infra/quality/caddy-unserved-baseline.txt")
-	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
+
+	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
+	if out.Scanned != 2 {
+		t.Fatalf("um parêntese no corpo não pode engolir hostnames: esperava 2 varridos, veio %d", out.Scanned)
+	}
+	if !errors.Is(err, caddyhostparity.ErrUnserved) {
+		t.Fatalf("cloud.loopzero.example não tem bloco; esperava ErrUnserved, veio %v", err)
+	}
+}
+
+// An earlier `hosts=(` elsewhere in the script won the match, so the real list was never
+// read and the finding named a hostname nobody demands.
+func TestEarlierArrayDoesNotWin(t *testing.T) {
+	root := t.TempDir()
+	p := filepath.Join(root, "infra/scripts/local/caddy-up-dev-public.sh")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(base, []byte("# congelado\ncloud-dev.loopzero.example B-151\n"), 0o644); err != nil {
+	body := "#!/usr/bin/env bash\nlegacy_hosts=(velho.exemplo.com)\nverify_certs() {\n  local hosts=(\n    app-dev.loopzero.example\n  )\n}\n"
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := filepath.Join(root, "infra/local/Caddyfile")
+	if err := os.MkdirAll(filepath.Dir(c), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(c, []byte("app-dev.loopzero.example {\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
-	if !errors.Is(err, caddyhostparity.ErrUnserved) {
-		t.Fatalf("um hostname NOVO sem bloco deve reprovar, veio %v", err)
+	if err != nil {
+		t.Fatalf("a lista real serve o único host exigido; veio %v", err)
 	}
-	if len(out.Findings) != 1 || out.Findings[0].Host != "novo.loopzero.example" {
-		t.Fatalf("só o novo deve reprovar; o congelado tem dono. veio %+v", out.Findings)
-	}
-	if out.Frozen != 1 {
-		t.Fatalf("esperava 1 congelado contabilizado, veio %d", out.Frozen)
+	if out.Scanned != 1 {
+		t.Fatalf("esperava ler a lista do verify, veio %d varridos", out.Scanned)
 	}
 }
 
-// A frozen entry without an owning item is hiding, not tracking.
-func TestBaselineEntryWithoutOwnerIsRefused(t *testing.T) {
-	root := tree(t, "    cloud-dev.loopzero.example", "app-dev.loopzero.example {\n}\n")
-	base := filepath.Join(root, "infra/quality/caddy-unserved-baseline.txt")
-	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(base, []byte("cloud-dev.loopzero.example\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrUnownedFreeze) {
-		t.Fatalf("esperava ErrUnownedFreeze, veio %v", err)
+// The comma list is the canonical multi-host form in Caddy; refusing it would fail a
+// configuration that works, which is how this gate's own ancestor became permanently red.
+func TestCommaSeparatedSiteAddressesAreServed(t *testing.T) {
+	for _, caddy := range []string{
+		"app-dev.loopzero.example, cloud.loopzero.example {\n}\n",
+		"app-dev.loopzero.example,cloud.loopzero.example {\n}\n",
+		"https://app-dev.loopzero.example, cloud.loopzero.example:8443 {\n}\n",
+		"App-Dev.LoopZero.dev, CLOUD.loopzero.example {\n}\n",
+	} {
+		root := tree(t, "    app-dev.loopzero.example cloud.loopzero.example", caddy)
+		if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); err != nil {
+			t.Fatalf("forma servida pelo Caddy foi reprovada:\n%s\n  -> %v", caddy, err)
+		}
 	}
 }
 
-// A frozen host that has since been served is stale: the freeze outlived its reason.
-func TestStaleFreezeIsRefused(t *testing.T) {
-	root := tree(t, "    app-dev.loopzero.example", "app-dev.loopzero.example {\n}\n")
-	base := filepath.Join(root, "infra/quality/caddy-unserved-baseline.txt")
-	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
-		t.Fatal(err)
+// A catch-all address serves every hostname; treating it as unserved is a false positive.
+func TestCatchAllServesEverything(t *testing.T) {
+	for _, addr := range []string{"*", ":443", ":80"} {
+		root := tree(t, "    qualquer.loopzero.example", addr+" {\n}\n")
+		if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); err != nil {
+			t.Fatalf("catch-all %q deveria servir tudo, veio %v", addr, err)
+		}
 	}
-	if err := os.WriteFile(base, []byte("app-dev.loopzero.example B-151\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+}
 
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrStaleFreeze) {
-		t.Fatalf("esperava ErrStaleFreeze, veio %v", err)
+// An `import` pulls site blocks this gate cannot see. Reporting parity over a partial
+// view is the green-over-nothing this package exists to refuse.
+func TestImportMakesParityUnverifiable(t *testing.T) {
+	root := tree(t, "    app-dev.loopzero.example", "import sites/*.caddyfile\n")
+	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrPartialView) {
+		t.Fatalf("esperava ErrPartialView, veio %v", err)
+	}
+}
+
+// The column anchor is what separates a served site from a mention inside a directive.
+// The earlier fixture passed because the hostname was followed by a quote, not because
+// the anchor existed — it had no coverage at all.
+func TestColumnAnchorIsWhatDiscardsIndentedMentions(t *testing.T) {
+	root := tree(t, "    cloud.loopzero.example",
+		"app-dev.loopzero.example {\n  respond \"veja cloud.loopzero.example {\" 200\n}\n")
+
+	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrUnserved) {
+		t.Fatalf("menção indentada não é bloco de site; esperava ErrUnserved, veio %v", err)
+	}
+}
+
+// The wildcard matches exactly one label: neither a deeper host nor the apex.
+func TestWildcardDoesNotServeDeeperHostsNorApex(t *testing.T) {
+	for _, host := range []string{"a.b.preview-dev.loopzero.example", "preview-dev.loopzero.example"} {
+		root := tree(t, "    "+host, "*.preview-dev.loopzero.example {\n}\n")
+		if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrUnserved) {
+			t.Fatalf("curinga não deveria servir %q, veio %v", host, err)
+		}
 	}
 }

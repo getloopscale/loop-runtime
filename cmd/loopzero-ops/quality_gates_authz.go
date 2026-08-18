@@ -445,8 +445,7 @@ func runCaddyHostParity(args []string) int {
 		}
 		return 2
 	}
-	fmt.Printf("caddy-host-parity: PASS — %d exigidos, %d servidos, %d congelados com dono\n",
-		out.Scanned, out.Served, out.Frozen)
+	fmt.Printf("caddy-host-parity: PASS — %d hostnames exigidos, %d servidos\n", out.Scanned, out.Served)
 	return 0
 }
 
