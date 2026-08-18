@@ -5,13 +5,13 @@
 // Plan: docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md T3.1
 //
 // 4 specs cover:
-//   1. Live fetch overrides snapshot caData (stub returns distinct PEM →
-//      Secret matches stub, NOT envtest kubeconfig snapshot).
-//   2. Fallback to snapshot when fetcher fails (AlwaysFailFetcher → fallback
-//      counter increments → Secret has snapshot caData).
-//   3. spec.tls.insecure=true short-circuits the fetch (stubCAFetcher
-//      CallCount stays 0).
-//   4. Repeated reconciles preserve Secret content (idempotency).
+//  1. Live fetch overrides snapshot caData (stub returns distinct PEM →
+//     Secret matches stub, NOT envtest kubeconfig snapshot).
+//  2. Fallback to snapshot when fetcher fails (AlwaysFailFetcher → fallback
+//     counter increments → Secret has snapshot caData).
+//  3. spec.tls.insecure=true short-circuits the fetch (stubCAFetcher
+//     CallCount stays 0).
+//  4. Repeated reconciles preserve Secret content (idempotency).
 //
 // These specs use NewReconcilerForTesting + RunReconcileArgoCDSecretForTesting
 // to drive the reconcile path directly with injected fakes, instead of going

@@ -69,7 +69,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// esta separado por projeto"): uniformly
 			// `loopzero-<tenant>-<project>-<env>` for all envs including
 			// preview-pr-N (was `<tenant>-<project>-pr-N` pre-refactor).
-			expectedNS  = "loopzero-acme-api-preview-pr-101"
+			expectedNS = "loopzero-acme-api-preview-pr-101"
 		)
 
 		BeforeAll(func() {
@@ -263,7 +263,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			projectSlug = "api"
 			prNumber    = 303
 			// J-23 canonical namespace 2026-06-07.
-			expectedNS  = "loopzero-acme-api-preview-pr-303"
+			expectedNS = "loopzero-acme-api-preview-pr-303"
 		)
 
 		BeforeAll(func() {

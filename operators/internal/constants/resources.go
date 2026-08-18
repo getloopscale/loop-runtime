@@ -26,15 +26,15 @@ const (
 // Keys inside Secret.Data maps. Must match what consumers expect.
 
 const (
-	KeyDockerConfigJSON    = "config.json"
-	KeyGiteaToken          = "GITEA_TOKEN"
-	KeyArgoCDToken         = "ARGOCD_TOKEN" //nolint:gosec // G101 false positive: env var KEY name, not credential value
-	KeyKubeconfig          = "kubeconfig"
-	KeyUsername             = "username"
-	KeyPassword             = "password"
-	KeyAWSAccessKeyID      = "AWS_ACCESS_KEY_ID"
-	KeyAWSSecretAccessKey  = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // G101 false positive: env var KEY name, not credential value
-	KeyMinIOEndpoint       = "MINIO_ENDPOINT"
+	KeyDockerConfigJSON   = "config.json"
+	KeyGiteaToken         = "GITEA_TOKEN"
+	KeyArgoCDToken        = "ARGOCD_TOKEN" //nolint:gosec // G101 false positive: env var KEY name, not credential value
+	KeyKubeconfig         = "kubeconfig"
+	KeyUsername           = "username"
+	KeyPassword           = "password"
+	KeyAWSAccessKeyID     = "AWS_ACCESS_KEY_ID"
+	KeyAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // G101 false positive: env var KEY name, not credential value
+	KeyMinIOEndpoint      = "MINIO_ENDPOINT"
 )
 
 // --- Harbor Secret Names ---
@@ -74,19 +74,19 @@ const (
 	RoleWorkflowSubmitter        = "loopzero-workflow-submitter"
 	RoleBindingWorkflowSubmitter = "loopzero-workflow-submitter"
 	// SAWorkflowSubmitter is the ServiceAccount name used by the API to submit workflows.
-	SAWorkflowSubmitter   = "loopzero-workflow-submitter"
-	NSArgoWorkflows       = "argo"
-	RoleDeployer          = "loopzero-deployer"
-	RoleBindingDeployer   = "loopzero-deployer"
+	SAWorkflowSubmitter = "loopzero-workflow-submitter"
+	NSArgoWorkflows     = "argo"
+	RoleDeployer        = "loopzero-deployer"
+	RoleBindingDeployer = "loopzero-deployer"
 )
 
 // --- NetworkPolicy Names ---
 
 const (
-	NetworkPolicyBuildEgress      = "build-egress-restrict"
-	NetworkPolicyDenyAll          = "deny-all"
-	NetworkPolicyAllowIngress     = "allow-ingress-traefik"
-	NetworkPolicyAllowEgress      = "allow-egress"
+	NetworkPolicyBuildEgress  = "build-egress-restrict"
+	NetworkPolicyDenyAll      = "deny-all"
+	NetworkPolicyAllowIngress = "allow-ingress-traefik"
+	NetworkPolicyAllowEgress  = "allow-egress"
 )
 
 // --- ArgoCD Resource Name Patterns ---
@@ -109,13 +109,13 @@ func ExposedRouteName(appName string) string {
 // --- Default Token Name ---
 
 const (
-	DefaultGiteaTokenName       = "platform-bootstrap-token"
-	DefaultArgoCDUsername        = "admin"
-	DefaultArgoCDRepoUsername    = "loopzero-platform"
+	DefaultGiteaTokenName     = "platform-bootstrap-token"
+	DefaultArgoCDUsername     = "admin"
+	DefaultArgoCDRepoUsername = "loopzero-platform"
 	// ArgoCDAPIAccount is the dedicated ArgoCD service account for the LoopZero API.
 	// Configured in Helm values with capability: apiKey.
 	// RBAC: sync + get on applications (least privilege).
-	ArgoCDAPIAccount            = "loopzero-api"
+	ArgoCDAPIAccount = "loopzero-api"
 )
 
 // --- Probe Thresholds ---

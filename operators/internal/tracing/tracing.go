@@ -7,10 +7,10 @@
 package tracing
 
 import (
-	"fmt"
-	"net"
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"time"

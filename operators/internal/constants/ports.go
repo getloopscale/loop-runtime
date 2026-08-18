@@ -65,4 +65,3 @@ const (
 	TenantLimitDefaultRequestCPU    = "100m"
 	TenantLimitDefaultRequestMemory = "128Mi"
 )
-

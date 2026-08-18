@@ -39,11 +39,11 @@ const (
 // --- Label Values for LabelManagedBy ---
 
 const (
-	ManagedByTenantController              = "tenant-controller"
-	ManagedByEnvironmentController         = "environment-controller"
-	ManagedByClusterCredentialController   = "clustercredential-controller"
-	ManagedByGitRepoBindingController      = "gitrepositorybinding-controller"
-	ManagedByPlatformBootstrapController   = "platformbootstrap-controller"
+	ManagedByTenantController            = "tenant-controller"
+	ManagedByEnvironmentController       = "environment-controller"
+	ManagedByClusterCredentialController = "clustercredential-controller"
+	ManagedByGitRepoBindingController    = "gitrepositorybinding-controller"
+	ManagedByPlatformBootstrapController = "platformbootstrap-controller"
 )
 
 // --- ArgoCD Label Keys and Values ---
