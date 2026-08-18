@@ -18,9 +18,14 @@ const (
 	// to match the canonical LoopZeroKit framework requirement.
 	// Canonical 2026-06-16: node:22.12.0 (full Debian bookworm) for glibc
 	// compatibility with rollup native binaries (Alpine + musl breaks them
-	// per npm bug #4828). The dash-incompat `set -euo pipefail` from
-	// shellgen.SetE is sanitized in wrapWithLoopZeroMarkers (loopzero_log.go) so
-	// every step works under /bin/sh -> dash on Debian.
+	// per npm bug #4828). Toda forma `set -<flags>o pipefail` — a emitida por
+	// shellgen.SetE e a escrita a mao em scripts.go — e saneada em
+	// wrapWithLoopZeroMarkers (loopzero_log.go) para rodar sob /bin/sh -> dash no Debian.
+	//
+	// A afirmacao anterior falava so da forma literal de shellgen.SetE, e por isso era
+	// falsa: scripts.go escreve `set -uo pipefail` sem o `e`, essa forma escapava do
+	// saneador, e no dash a opcao ilegal MATA a concha na linha 1 com codigo 2. Ficou
+	// invisivel enquanto o status morria no cano do tee (B-153).
 	imageNode     = "node:22.12.0"
 	imageGolang   = "golang:1.22-alpine"
 	imagePython   = "python:3.12-alpine"
@@ -75,15 +80,15 @@ const (
 	workspacePVCSize     = "5Gi"
 	workspaceMountPath   = "/workspace"
 	secretRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
-	secretMinIOCreds      = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
-	secretCosignKey       = "cosign-signing-key"
-	cosignKeyMountPath    = "/cosign"
+	secretMinIOCreds     = "loopzero-minio-credentials"   //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	secretCosignKey      = "cosign-signing-key"
+	cosignKeyMountPath   = "/cosign"
 	// Sigstore keyless mode: workflow-level projected SA token volume + mount.
 	// Mounted at /var/run/secrets/sigstore/token (Sigstore standard path).
 	// Added pod-level via buildVolumes() when CosignKeyless=true.
 	sigstoreTokenVolumeName = "sigstore-token"
 	sigstoreTokenMountPath  = "/var/run/secrets/sigstore" //nolint:gosec // G101 filesystem PATH, not credential value
-	s3BucketStaticAssets  = "loopzero-static-assets"
+	s3BucketStaticAssets    = "loopzero-static-assets"
 )
 
 // ---------------------------------------------------------------------------
@@ -91,9 +96,9 @@ const (
 // ---------------------------------------------------------------------------
 
 const (
-	buildkitSocketPath     = "unix:///run/user/1000/buildkitd/buildkitd.sock"
-	buildkitDaemonTimeout  = 60
-	buildkitRegistryMount  = "/home/user/.docker"
+	buildkitSocketPath    = "unix:///run/user/1000/buildkitd/buildkitd.sock"
+	buildkitDaemonTimeout = 60
+	buildkitRegistryMount = "/home/user/.docker"
 )
 
 // ---------------------------------------------------------------------------

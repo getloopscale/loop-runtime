@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-154 items — **Open** 62 · **In flight** 0 · **Closed** 92
+155 items — **Open** 63 · **In flight** 0 · **Closed** 92
 
-### Open (62)
+### Open (63)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -136,6 +136,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
+| [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
 
 ### In flight (0)
 
@@ -7205,6 +7206,44 @@ evidence: |
   o mesmo `failStep`, isto é, o mecanismo inteiro de falha-fechada do runtime não suportado
   é inerte. `build-image-api` foi o único a falhar corretamente, e é justamente o único que
   **não** passa por `buildContainer` (é montado por `buildkitContainer`).
+  Segunda demonstracao, medida no mesmo dia e no passo seguinte da mesma cadeia. Depois de
+  declarar `runtime: python` no fixture (o que fez o pipeline avancar de verdade —
+  restore-cache, install-deps, build-apps, security-scan e save-cache passaram a executar),
+  o `generate-dockerfile` do build `build-03769960000a2d13` imprimiu:
+
+      loopzero: canonical Dockerfile generation failed: app "api" has no declared
+      start command (services.json  is required — no heuristic CMD)
+      ::loopzero:: ... step=generate-dockerfile level=info msg="Generate dockerfile completed in 0s"
+
+  Pod: **Completed**. Este e um caminho de falha diferente do primeiro — vem de
+  `canonicalDockerfileStepOrFail`, nao de `unsupportedStrategy.failStep` — e foi silenciado
+  pelo mesmo invólucro. Duas violacoes de contrato seguidas, dois caminhos de codigo
+  distintos, o mesmo silencio.
+
+  (De passagem, dois defeitos menores na mensagem, ainda nao filados: o log traz
+  `/bin/sh: start: not found`, sinal de expansao indevida na montagem do texto, e
+  `services.json  is required` tem interpolacao vazia entre as duas palavras.)
+
+  **Duas correcoes ao que escrevi antes**, ambas da revisao independente:
+
+  1. Eu listei `clone-repo` entre os passos afetados. Nao e: ele e
+     `cwtTask("clone-repo", "loopzero-clone", ...)` em `workflow_builder.go:361`, um template de
+     cluster que nao passa por `buildContainer`. Sao **cinco** passos, nao seis.
+
+  2. O conserto sozinho teria trocado um defeito por outro maior. `scripts.go:164` e `:251`
+     escrevem `set -uo pipefail` a mao, e o saneador substituia apenas a literal
+     `set -euo pipefail` do shellgen. A imagem do Node e Debian (`/bin/sh` -> dash), onde
+     `set` e builtin especial: a opcao ilegal **mata a concha na linha 1 com codigo 2**.
+     Enquanto o status morria no cano isso era invisivel; ao propagar, **todo build Node**
+     passaria a reprovar no `security-scan`, que e catraca dura de `generate-dockerfile`
+     (`workflow_builder.go:413`). Saneador generalizado para qualquer
+     `set -<flags>o pipefail`, preservando as demais opcoes.
+
+  E o meu teste de populacao estava errado pelo mesmo motivo que a regra § 4.2 existe: os
+  cinco passos de `unsupportedStrategy` sao **o mesmo script** cinco vezes — caso sintetico
+  repetido, nao populacao. A populacao real sao os passos que `NodeStrategy` e
+  `PythonStrategy` constroem, e e ela que teria pego o defeito acima no proprio commit.
+
 why_now: |
   Este é o elo que transforma um erro legível em silêncio: o build segue para o estágio
   seguinte com a árvore sem Dockerfile, o BuildKit falha quatro vezes, não há digest, e o
@@ -7270,3 +7309,50 @@ dod:
   - um `loopzero.yaml` sem `runtime` produz mensagem que nomeia o campo ausente e o que escrever
   - a mensagem distingue "campo ausente" de "valor nao suportado" — sao erros diferentes
   - o `loopzero.yaml` do repositorio de fixture atualizado para `runtime`, e um push real chega ao construtor com runtime nao vazio
+
+## B-155 — O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18, elo seguinte da cadeia de [[B-152]], depois que
+  `generate-dockerfile` passou a funcionar de verdade. O build
+  `build-0397c5b614ee8547` entrou na construcao da imagem e morreu na instalacao de
+  dependencias:
+
+      #12 [build 4/4] RUN set -eu; if [ -f poetry.lock ] ... elif [ -f uv.lock ] ...
+      loopzero: no lockfile (requirements.txt / poetry.lock / uv.lock) found —
+      required for reproducible builds
+
+  O repositorio **tem** o arquivo: `api/requirements.txt`. O app declara `path: api`.
+
+  A causa esta em `renderDockerfile` (`api/internal/argo/canonical_dockerfile.go:98-120`),
+  e o proprio comentario dela declara o desenho: *"EC-1: install happens at the workspace
+  root (COPY . . copies the whole bundle); the build + runtime WORKDIR target appDir for
+  monorepos"*. Na pratica:
+
+      WORKDIR /app
+      COPY . .
+      <install>          <- roda na RAIZ do bundle
+      ...
+      WORKDIR /app/api   <- so o estagio de runtime entra no subdiretorio
+
+  Entao um repositorio cujo lockfile mora no `path` do app — que e a forma comum quando
+  cada app tem suas proprias dependencias — falha por construcao.
+why_now: |
+  Este e o defeito que o usuario encontra depois de [[B-153]] e [[B-154]] resolvidos: e o
+  primeiro erro da cadeia que chega ate ele com o texto certo, e ainda assim nao conduz a
+  acao, porque nao diz **onde** procurou. Quem le "no lockfile found" com o arquivo aberto
+  na frente conclui que o sistema esta quebrado.
+
+  Duas leituras possiveis, e nao decidi qual e: ou o contrato exige lockfile na raiz — e
+  entao a mensagem precisa dizer isso — ou o install deveria entrar no `path` do app, e e
+  defeito de verdade. O comentario EC-1 sugere a primeira, mas nenhuma documentacao
+  consultada declara a exigencia ao usuario.
+status: triaged
+dod:
+  - a mensagem nomeia o diretorio onde procurou e o que fazer
+  - decidido e registrado se o lockfile por app e suportado; se for, o install roda no `path`
+  - um app com lockfile no proprio subdiretorio constroi, ou reprova dizendo por que nao pode
