@@ -1,0 +1,200 @@
+{
+  "note": "Conjunto de candidatos ADJUDICADOS do trufflehog. Um candidato fora daqui REPROVA o gate até alguém regravar com `loopzero-ops quality trufflehog-scan --write` — e é o diff dessa regravação que é a adjudicação. `--write` RECUSA enquanto houver achado vivo: esta lista adjudica \"isto não é segredo\", nunca \"este segredo pode viver aqui\". `id` é sha256(detector+bruto) truncado — nenhum material de segredo mora neste arquivo. Ver B-143.",
+  "entries": [
+    {
+      "id": "e0ae7fcc5b7dad8a",
+      "detector": "Postgres",
+      "first_seen_in": ""
+    },
+    {
+      "id": "7b865a449679d607",
+      "detector": "URI",
+      "first_seen_in": ""
+    },
+    {
+      "id": "2edc404c381aabeb",
+      "detector": "JDBC",
+      "first_seen_in": ".claude/skills/cnpg-audit/okf/ecosystem/external-secrets-integration.md"
+    },
+    {
+      "id": "f54530ae0e617efc",
+      "detector": "PrivateKey",
+      "first_seen_in": ".claude/skills/cnpg-audit/okf/samples/cluster-example-projected-volume.md"
+    },
+    {
+      "id": "34570f0c0dd3ac46",
+      "detector": "DigitalOceanToken",
+      "first_seen_in": "BACKLOG.md"
+    },
+    {
+      "id": "0414b2464cc40598",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "3a8187c21c8603f1",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "6203c9985d04df67",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "fe865d4199dccc08",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "7475a871d8144eae",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/manifests/renderer_test.go"
+    },
+    {
+      "id": "bc35a0dd1ddcbcd7",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/manifests/renderer_test.go"
+    },
+    {
+      "id": "748ba17cbdd2ad9a",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/routes/secrets_backend_error_test.go"
+    },
+    {
+      "id": "dad706e7b2385151",
+      "detector": "URI",
+      "first_seen_in": "api/internal/source/gitea_store.go"
+    },
+    {
+      "id": "4363e90908857b20",
+      "detector": "Gitlab",
+      "first_seen_in": "api/main"
+    },
+    {
+      "id": "a7f0a2be2e2315e4",
+      "detector": "Postgres",
+      "first_seen_in": "api/tests/integration/project_cap_hermetic_m5_test.go"
+    },
+    {
+      "id": "4df01e360d804595",
+      "detector": "Postgres",
+      "first_seen_in": "cli/src/installer/bootstrap.ts"
+    },
+    {
+      "id": "f32b2072e9084d39",
+      "detector": "Postgres",
+      "first_seen_in": "cli/src/installer/components.ts"
+    },
+    {
+      "id": "5f1ae974c1352fa1",
+      "detector": "Postgres",
+      "first_seen_in": "cli/src/installer/profiles/example-values.yaml"
+    },
+    {
+      "id": "abd38b5e3fb0e34e",
+      "detector": "Postgres",
+      "first_seen_in": "code-review-output/code-review.db"
+    },
+    {
+      "id": "126b9cbe3bfbd4fd",
+      "detector": "Eraser",
+      "first_seen_in": "docs/architecture/eraser-diagrams-index.md"
+    },
+    {
+      "id": "6a867b62662cf001",
+      "detector": "Postgres",
+      "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
+    },
+    {
+      "id": "81a963f476bdf6f3",
+      "detector": "Docker",
+      "first_seen_in": "docs/plans/harbor-gaps-resolution.md"
+    },
+    {
+      "id": "f7e813169b5bcf82",
+      "detector": "Postgres",
+      "first_seen_in": "docs/plans/self-hosted-systematization.md"
+    },
+    {
+      "id": "df235625d3592369",
+      "detector": "URI",
+      "first_seen_in": "infra/helm/ory-kratos/values.schema.json"
+    },
+    {
+      "id": "fbad722999310ac4",
+      "detector": "Postgres",
+      "first_seen_in": "infra/helmfile/values/dev-public/loopzero-app-operator.yaml.gotmpl"
+    },
+    {
+      "id": "5eb14252c7251332",
+      "detector": "Postgres",
+      "first_seen_in": "infra/helmfile/values/drill/ory-hydra.yaml.gotmpl"
+    },
+    {
+      "id": "9d65904ff5622d4e",
+      "detector": "Postgres",
+      "first_seen_in": "infra/helmfile/values/drill/ory-kratos.yaml.gotmpl"
+    },
+    {
+      "id": "02c34a9d8d871290",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
+      "id": "55660c405bb1c666",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
+      "id": "8e400d3556571909",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
+      "id": "e71b9a79652dff2a",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
+      "id": "ee7bdad49f94f942",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
+      "id": "f9b037b6a6dd9aae",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
+      "id": "dcfd76e063105df9",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/snapshots/helmfile-drill-phase1.yaml"
+    },
+    {
+      "id": "e48c619900d966b5",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/snapshots/helmfile-drill-phase1.yaml"
+    },
+    {
+      "id": "3752c28fa807eb85",
+      "detector": "Postgres",
+      "first_seen_in": "knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
+    },
+    {
+      "id": "62283828d0b786e1",
+      "detector": "Docker",
+      "first_seen_in": "operators/internal/controller/tenant_harbor_test.go"
+    },
+    {
+      "id": "a355c3dccfdc0e90",
+      "detector": "Docker",
+      "first_seen_in": "operators/internal/tenant/registry_auth_merge_test.go"
+    },
+    {
+      "id": "3e38a9c701abf564",
+      "detector": "Postgres",
+      "first_seen_in": "pkg/pulumi/output/output_test.go"
+    }
+  ]
+}

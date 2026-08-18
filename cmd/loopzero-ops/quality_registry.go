@@ -168,7 +168,7 @@ var gateRegistry = []gateSpec{
 	{"test-targets", "Verifies Taskfile test targets exist and are wired.", runTestTargets},
 	{"transit-coverage", "Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store).", runTransitCoverage},
 	{"trivy-scan", "Runs Trivy CVE scanning on filesystem/images.", runTrivyScan},
-	{"trufflehog-scan", "Runs TruffleHog verified-secret scanning.", runTrufflehogScan},
+	{"trufflehog-scan", "Refuses a new unadjudicated secret candidate, a live secret, or a scan that could not run.", runTrufflehogScan},
 	{"unhomed-logic", "Forbids un-homed operational logic that belongs in a pkg/quality gate.", runUnhomedLogic},
 }
 
