@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-149 items — **Open** 60 · **In flight** 0 · **Closed** 89
+155 items — **Open** 63 · **In flight** 0 · **Closed** 92
 
-### Open (60)
+### Open (63)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -128,18 +128,21 @@ consequência do escopo per-repo declarado acima.
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
-| [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
+| [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
+| [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
+| [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
+| [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
 
 ### In flight (0)
 
 _None._
 
-### Closed (89)
+### Closed (92)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -228,10 +231,13 @@ _None._
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore---x) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `killed` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
+| [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando---x) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `shipped` | alta |
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
 | [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa |
+| [`B-150`](#b-150--o-webhook-apontava-para-um-hostname-que-o-repositório-removeu-de-propósito---x) | O webhook apontava para um hostname que o repositório removeu de propósito | `shipped` | — |
+| [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual---x) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `killed` | — |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -6618,7 +6624,7 @@ dod:
 
 > Registrado 2026-08-17 ao fechar o `B-130`. **Não é texto a corrigir: é migração de ambiente**, e fazê-la dentro de um item de higiene teria acoplado risco de indisponibilidade a uma limpeza de comentários.
 
-## B-140 — Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando   [ ]
+## B-140 — Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6627,7 +6633,44 @@ source: discover-live-test
 severity: alta — é a prova ponta a ponta da jornada central do produto (conectar repositório → push → deploy), e ela **nunca foi feita nesta instância**. Não é regressão: é ausência de evidência.
 evidence: medido no droplet em 2026-08-17, herdando a terceira bala do `B-021`. `select count(*) from builds` = **0**, `projects` = **0** — nunca houve build aqui. A cadeia de seeds que criaria o destino foi percorrida elo a elo hoje: `github-app-dev` **PASS** (o conserto do `B-021` sustentou); `admin-loopzero-dev` estava **FAIL** (`/sessions/whoami` HTTP 401) e **foi re-semeada com sucesso** (identidade `15422d7d…` + sessão persistida) — bloqueio removido; `tenant-fixture` **SKIP**, exige `LOOPZERO_TENANT_ID`, e a identidade admin **não tem linha em `tenants`** (existem só `tn-e2etest` e `tn-1362a887c7c523be`, de `paulohenriquevn`); `github-webhook-fixture` **FAIL** — `gh` não está instalado no droplet. E `connect-canonical-fixture.sh` ainda exige o binário do LoopZero CLI e permissão de escrita no repositório de fixture.
 why_now: o `B-021` fechou com o webhook **provado vivo** (401 sem assinatura, 200 com assinatura válida, 403 com inválida, re-verificado em 2026-08-17). O que sobrou não é sobre o webhook: é sobre existir um destino para ele acionar. Medir um push hoje mediria o estado da cadeia de seeds, e reportar `FAIL` culparia o elo errado.
-status: triaged
+resolution: |
+  Fechado 2026-08-18 com prova ao vivo. `POST /projects/b140-journey/connect` com o
+  `installation_id` do App já instalado, a URL do webhook repontada para a superfície que o
+  repositório já havia escolhido, e um push real (`0f1ee7f5`) entregue com `status=OK` e
+  convertido em `build-6c2159bf89acf415` — o commit exato, o carimbo exato.
+
+  O item pedia `builds > 0` a partir de um push real. Está medido.
+
+  O que continua vermelho é o estágio seguinte, e tem item próprio: os dois builds que esta
+  instalação produziu falham em manifestos ([[B-152]]). Fechar aqui é honesto porque a
+  pergunta deste item era se o push chega e vira build — e chega.
+
+measurement_2026_08_18: |
+  A cadeia foi percorrida ponta a ponta pela primeira vez, e o item estava certo
+  no diagnóstico e errado na contagem: os elos não eram quatro.
+
+  Dois foram fechados nesta medição, sem conceder permissão nenhuma. O App
+  **já estava instalado** — consultado pelo JWT do próprio App (id 3319955), com
+  duas instalações `repos=all`, uma delas na conta `getloopscale`, dona do
+  fixture. O que faltava era o banco saber disso. `POST /projects/b140-journey/connect`
+  com `installation_id=138325349` devolveu 200, e o projeto passou a `connected`
+  com `auto_deploy: true`.
+
+  Com isso um push real foi feito (`7cf19217`), e a medição seguinte é o que
+  importa: **ele não virou build**. O `total=1` que aparece é o deploy inicial do
+  próprio connect, sobre o HEAD *anterior* (`e8108923`) e com carimbo idêntico ao
+  do connect — contá-lo como prova do push seria o verde-sem-verificação que este
+  ciclo existe para recusar.
+
+  O corte está localizado e não é ambíguo: o GitHub **tentou** entregar
+  (`push`, 16:59:26) e o TLS caiu em `cloud-dev.loopzero.example`. O elo do produto
+  está verde — o engine loga `github webhook: handler registered`.
+
+  Sucessores: [[B-150]] (o hostname sem terminador TLS), [[B-151]] (para onde ele
+  deve apontar — T2, atravessa dois repositórios), [[B-152]] (o único build que a
+  instância produziu, e ele falha em manifestos).
+
+status: shipped
 dod:
   - a identidade admin tem tenant, e `tenant-fixture` deixa de sair `SKIP`
   - `gh` disponível onde os seeds rodam, ou o seed que depende dele tem caminho que não o exija
@@ -6980,3 +7023,336 @@ dod:
   - `gofmt` chega a zero em ao menos um módulo, e a linha de base é recongelada
   - está medido quantos dos 318 são supressáveis com razão contra quantos são defeito real
 
+
+## B-150 — O webhook apontava para um hostname que o repositório removeu de propósito   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18 pelo log de entregas do App (id 3319955): toda entrega falhava com
+  `remote error: tls: internal error` contra
+  `https://cloud-dev.loopzero.example/api/v1/webhooks/github`.
+
+  **A primeira leitura culpou o artefato errado, e a revisão pegou.** O `Caddyfile` não
+  "esqueceu" de declarar o hostname — ele o **removeu em 2026-08-10**, com a razão escrita
+  seis linhas abaixo do último bloco (`infra/local/Caddyfile:416-426`): era host público
+  servindo redirecionamento, com superfície de auth concedida a ninguém, e a carga do
+  webhook já vivia em `app-dev`, que tem o `handle /api/v1/webhooks/github` apontando para
+  o engine (`infra/local/Caddyfile:343-347`). O fixture concorda desde então
+  (`cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44`).
+
+  O lado obsoleto era `infra/scripts/local/caddy-up-dev-public.sh:104`, que continuou
+  cobrando certificado de um hostname que ninguém serve — e a URL do App, que nunca foi
+  repontada depois da remoção.
+resolution: |
+  A URL do App foi repontada para `https://app-dev.loopzero.example/api/v1/webhooks/github`
+  (`PATCH /app/hook/config`), e o hostname saiu da lista do verificador. O antes e o
+  depois estão na mesma janela do log de entregas:
+
+      17:59:57  installation_repositories -> cloud-dev...  code=500
+      18:01:03  push                      -> status=OK     code=200
+
+  E o push virou build: `build-6c2159bf89acf415`, sha `0f1ee7f5` — o commit exato enviado.
+  Primeira vez que um push real produz um build nesta instalação.
+
+  Gate `caddy-host-parity` recusa hostname cobrado pela verificação e sem endereço de site
+  que o atenda. Varredura da população: 5 exigidos, 5 servidos, 0 sem bloco — medido, não
+  congelado.
+why_now: |
+  O elo do produto estava verde e provado — o engine registra o recebedor do aviso no boot.
+  O que impedia a jornada central do produto era o endereço pelo qual o GitHub tentava
+  alcançá-lo, e ele apontava para um host removido três semanas antes.
+
+  E o verificador que veria isso não podia passar: com o hostname na lista e fora do
+  Caddyfile, `--verify` reprovava sempre sobre a configuração correta. Um gate que não pode
+  passar é um gate que ninguém roda, e foi assim que semanas de entregas falhas nunca
+  viraram sinal.
+
+status: shipped
+dod:
+  - handshake completa em todo hostname cobrado — 5/5 servidos, medido pelo gate
+  - uma entrega de `push` registra 200 no log do GitHub — medido 18:01:03
+  - um gate recusa hostname cobrado e sem quem o atenda, com varredura da população registrada
+
+## B-151 — O destino do webhook atravessa dois repositórios e ninguém decidiu qual   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-live-test
+evidence: |
+  Registrado supondo que o destino do webhook fosse decisão em aberto, atravessando os dois
+  repositórios e exigindo MEET T2. Não era: **a decisão já existia e estava escrita.**
+
+  `infra/local/Caddyfile:416-426` registra a remoção de `cloud-dev` em 2026-08-10 com o
+  motivo, `:343-347` já tem o `handle /api/v1/webhooks/github` em `app-dev` apontando para
+  o engine, e `cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44` já declara
+  `https://app-dev.loopzero.example/api/v1/webhooks/github` como padrão desde então.
+
+  O que faltava não era decidir — era aplicar ao App, que continuava apontando para o
+  hostname removido.
+kill_reason: |
+  A premissa foi refutada pela medição: não havia decisão pendente nem fronteira entre
+  repositórios a atravessar. Três artefatos deste mesmo repositório já concordavam sobre o
+  destino, e a leitura que gerou este item não foi seis linhas adiante no arquivo que
+  estava culpando.
+
+  Aplicado em [[B-150]], com prova ao vivo. Registrar isto como `killed` em vez de apagar é
+  o ponto: o item foi medido, refutado, e a refutação é o resultado.
+why_now: |
+  Registrado porque o destino do webhook parecia indefinido depois de [[B-150]]: o irmão de
+  produção do hostname proxia para loopzero-cloud, que devolve 404 nessa rota, então copiar o
+  padrão fecharia o handshake e trocaria uma falha ruidosa por um 404 silencioso.
+
+  A medição mostrou que a pergunta já tinha resposta escrita em três artefatos deste
+  repositório, e que o custo real era não tê-los lido.
+
+status: killed
+dod:
+  - a decisão sobre a superfície de ingresso do webhook, localizada — estava em 3 artefatos
+## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18. O `connect` com `auto_deploy` disparou um build inicial do
+  HEAD (`build-923a1bebca0ad023`, sha `e8108923`), que alcançou o sistema sem
+  depender do webhook — e terminou `FAILED` com:
+
+      Failed to build manifests with custom domains
+
+  A mensagem nomeia a etapa e não nomeia o domínio, o app nem o motivo. É o
+  caminho de contorno da cadeia de [[B-150]]: prova que build e submissão
+  funcionam, e que o estágio de manifestos não.
+  Segundo ponto, medido 2026-08-18 depois de repontar o webhook em [[B-150]]:
+  `build-6c2159bf89acf415` (sha `0f1ee7f5`), criado por um **push real**, falha com a
+  mensagem idêntica. Os dois builds que esta instalação produziu — um pelo connect, outro
+  pelo webhook — morrem no mesmo estágio com o mesmo texto. A causa não depende do caminho
+  de entrada, e agora é o único elo vermelho da jornada.
+
+  Cadeia completa, medida 2026-08-18 ao vivo, do fim para o comeco:
+
+    manifest_builder: missing image digest for app "api"   <- o que o usuario ve, embrulhado
+      <- sign-image nunca rodou, porque nao havia imagem
+      <- build-image-api falhou 4x: failed to read dockerfile: open Dockerfile: no such file
+      <- generate-dockerfile terminou Completed sem escrever o arquivo
+      <- ele era um passo de falha-fechada que nao conseguia falhar ([[B-153]])
+      <- porque o runtime resolveu para "unsupported"
+
+  O ultimo elo: `resolveLanguageStrategy` aceita exatamente `node` ou `python`
+  (`api/internal/services/deploycontracts/build_plan.go:179`), lendo `unit.Runtime`. O
+  `loopzero.yaml` do repositorio de fixture declara `framework: python` — o contrato passou a
+  ser keyed em `runtime` e o fixture nao acompanhou.
+
+  Com [[B-153]] consertado, esse caso deixa de morrer tres estagios adiante com uma
+  mensagem que nao o nomeia: o passo reprova dizendo `runtime "unsupported" is not
+  supported`. Resta decidir se o fixture e que esta velho ou se a resolucao deveria
+  aceitar `framework` — questao do contrato LoopZeroKit/LoopZeroCloud, nao deste item.
+
+why_now: |
+  Este é o único build que a instância conseguiu produzir, e ele falha. Enquanto
+  [[B-150]] e [[B-151]] tratam de o evento *chegar*, este trata de o que acontece
+  quando ele chega — e sem ele resolvido, consertar o webhook só faz falhar mais
+  rápido.
+
+  A mensagem sem o domínio é o que torna isso caro: `CLAUDE.md` já registra uma
+  família de falhas nesse estágio (digest ausente por cosign que não rodou), e
+  distinguir qual delas é esta exige ler log de workflow em vez de ler o erro.
+status: triaged
+dod:
+  - a causa da falha de manifestos identificada e coberta por teste que falha no estado atual
+  - a mensagem nomeia o domínio e o app envolvidos
+
+## B-153 — Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido ao vivo 2026-08-18, perseguindo [[B-152]]. O passo `generate-dockerfile` do build
+  `build-8044d982b5a5cc1b` imprimiu o erro e o pod terminou **`Completed`**:
+
+      loopzero: runtime "unsupported" is not supported — LoopZeroCloud deploys the fixed
+      LoopZeroKit stack (python, node) only
+      ::loopzero:: … step=generate-dockerfile level=info msg="Generate dockerfile completed in 0s"
+
+  O script que ele executa é, literalmente, `echo "…" >&2` seguido de `exit 1`
+  (`api/internal/argo/languages.go` — `unsupportedStrategy.failStep`). Ele saiu 0.
+
+  A causa está no invólucro de marcadores de log, `wrapWithLoopZeroMarkers`
+  (`api/internal/argo/`), que executa o script dentro de um **pipeline**:
+
+      { <script> } 2>&1 | tee -a "$__loopzero_log"
+
+  Em shell POSIX o status de um pipeline é o do **último** comando — o `tee`, que sempre
+  sucede. A proteção que existe ali, `(set -o pipefail) 2>/dev/null || true`, está dentro de
+  **parênteses**: liga a opção num subshell e a descarta junto com ele, sem efeito algum
+  sobre o shell que roda o pipeline.
+
+  Reproduzido fora do cluster, no mesmo shell do container:
+
+      $ sh -c '(set -o pipefail) 2>/dev/null || true
+               { echo erro >&2; exit 1; } 2>&1 | tee /dev/null; echo "status: $?"'
+      erro
+      status: 0
+
+  Alcance medido no workflow real: `validate-workspace`, `install-deps`, `build-apps`,
+  `security-scan` e `generate-dockerfile` reportaram **todos** `Succeeded` — e os cinco eram
+  o mesmo `failStep`, isto é, o mecanismo inteiro de falha-fechada do runtime não suportado
+  é inerte. `build-image-api` foi o único a falhar corretamente, e é justamente o único que
+  **não** passa por `buildContainer` (é montado por `buildkitContainer`).
+  Segunda demonstracao, medida no mesmo dia e no passo seguinte da mesma cadeia. Depois de
+  declarar `runtime: python` no fixture (o que fez o pipeline avancar de verdade —
+  restore-cache, install-deps, build-apps, security-scan e save-cache passaram a executar),
+  o `generate-dockerfile` do build `build-03769960000a2d13` imprimiu:
+
+      loopzero: canonical Dockerfile generation failed: app "api" has no declared
+      start command (services.json  is required — no heuristic CMD)
+      ::loopzero:: ... step=generate-dockerfile level=info msg="Generate dockerfile completed in 0s"
+
+  Pod: **Completed**. Este e um caminho de falha diferente do primeiro — vem de
+  `canonicalDockerfileStepOrFail`, nao de `unsupportedStrategy.failStep` — e foi silenciado
+  pelo mesmo invólucro. Duas violacoes de contrato seguidas, dois caminhos de codigo
+  distintos, o mesmo silencio.
+
+  (De passagem, dois defeitos menores na mensagem, ainda nao filados: o log traz
+  `/bin/sh: start: not found`, sinal de expansao indevida na montagem do texto, e
+  `services.json  is required` tem interpolacao vazia entre as duas palavras.)
+
+  **Duas correcoes ao que escrevi antes**, ambas da revisao independente:
+
+  1. Eu listei `clone-repo` entre os passos afetados. Nao e: ele e
+     `cwtTask("clone-repo", "loopzero-clone", ...)` em `workflow_builder.go:361`, um template de
+     cluster que nao passa por `buildContainer`. Sao **cinco** passos, nao seis.
+
+  2. O conserto sozinho teria trocado um defeito por outro maior. `scripts.go:164` e `:251`
+     escrevem `set -uo pipefail` a mao, e o saneador substituia apenas a literal
+     `set -euo pipefail` do shellgen. A imagem do Node e Debian (`/bin/sh` -> dash), onde
+     `set` e builtin especial: a opcao ilegal **mata a concha na linha 1 com codigo 2**.
+     Enquanto o status morria no cano isso era invisivel; ao propagar, **todo build Node**
+     passaria a reprovar no `security-scan`, que e catraca dura de `generate-dockerfile`
+     (`workflow_builder.go:413`). Saneador generalizado para qualquer
+     `set -<flags>o pipefail`, preservando as demais opcoes.
+
+  E o meu teste de populacao estava errado pelo mesmo motivo que a regra § 4.2 existe: os
+  cinco passos de `unsupportedStrategy` sao **o mesmo script** cinco vezes — caso sintetico
+  repetido, nao populacao. A populacao real sao os passos que `NodeStrategy` e
+  `PythonStrategy` constroem, e e ela que teria pego o defeito acima no proprio commit.
+
+why_now: |
+  Este é o elo que transforma um erro legível em silêncio: o build segue para o estágio
+  seguinte com a árvore sem Dockerfile, o BuildKit falha quatro vezes, não há digest, e o
+  usuário recebe `Failed to build manifests with custom domains` — uma mensagem que não
+  nomeia nada do que realmente aconteceu ([[B-152]]).
+
+  E é a mesma classe de defeito que esta sessão vem fechando em outras superfícies: um verde
+  que não distingue "passou" de "não verifiquei". Aqui ele está no caminho por onde todo
+  build do produto passa.
+status: triaged
+dod:
+  - um passo cujo script sai não-zero faz o pod terminar não-zero, provado por teste
+  - a asserção vale no shell do container (POSIX/ash), não só em bash
+  - o mecanismo de falha-fechada do runtime não suportado reprova o build de ponta a ponta
+
+## B-154 — Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported"   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18, ultimo elo da cadeia de [[B-152]].
+
+  O construtor do plano resolve a estrategia por `unit.Runtime`, aceitando exatamente
+  `node` ou `python` (`api/internal/services/deploycontracts/build_plan.go:179`). Ao vivo
+  resolveu `"unsupported"`, e o passo imprimiu
+  `loopzero: runtime "unsupported" is not supported`.
+
+  **Registrei uma hipotese e ela foi refutada pela medicao.** Supus que o caminho do webhook
+  pudesse nunca produzir `services.json`, o que tornaria todo deploy automatico quebrado.
+  Nao e o caso: `api/cmd/autodeploy_adapters.go:70` converte a partir do proprio
+  `loopzero.yaml` via `ConvertLoopZeroYamlApps`, e essa funcao **le `cfg["runtime"]`**
+  (`api/internal/services/deploycontracts/loopzero_yaml_apps.go`). O caminho do webhook nao
+  depende de `services.json`.
+
+  O que sobra, medido:
+
+  - `ConvertLoopZeroYamlApps` le `runtime` e **nao le `framework`** — o fallback de `framework`
+    foi removido de proposito (a nota D1/D2 em `build_plan.go` diz isso)
+  - o `loopzero.yaml` do repositorio de fixture ainda declara `framework: python`
+  - o schema concorda com o codigo: `services.schema.json` exige `runtime` e nao tem
+    propriedade `framework`
+  - com o campo ausente, `app.Runtime` fica vazio e a mensagem que chega ao usuario fala de
+    um runtime `"unsupported"` — sem dizer que o campo faltou, nem que `framework` deixou de
+    ser lido
+
+  Alcance real, portanto: **nao** e todo deploy automatico. E todo `loopzero.yaml` escrito na
+  forma antiga, que falha com uma mensagem sobre um campo que o autor talvez nunca tenha
+  escrito.
+why_now: |
+  Enquanto [[B-153]] estava quebrado, esta causa era invisivel: o passo falhava fechado sem
+  falhar, e o erro chegava ao usuario tres estagios adiante como
+  `Failed to build manifests with custom domains`. Consertado o engolimento, este passa a
+  ser o defeito que o usuario ve — e o que ele ve e uma mensagem sobre um campo que ele
+  talvez nunca tenha escrito.
+
+  A mensagem e o defeito que resta: ela nomeia o valor resolvido ("unsupported") em vez do
+  campo ausente, entao nao conduz a nenhuma acao. O fixture velho e o primeiro caso, nao o
+  unico possivel.
+status: triaged
+dod:
+  - um `loopzero.yaml` sem `runtime` produz mensagem que nomeia o campo ausente e o que escrever
+  - a mensagem distingue "campo ausente" de "valor nao suportado" — sao erros diferentes
+  - o `loopzero.yaml` do repositorio de fixture atualizado para `runtime`, e um push real chega ao construtor com runtime nao vazio
+
+## B-155 — O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18, elo seguinte da cadeia de [[B-152]], depois que
+  `generate-dockerfile` passou a funcionar de verdade. O build
+  `build-0397c5b614ee8547` entrou na construcao da imagem e morreu na instalacao de
+  dependencias:
+
+      #12 [build 4/4] RUN set -eu; if [ -f poetry.lock ] ... elif [ -f uv.lock ] ...
+      loopzero: no lockfile (requirements.txt / poetry.lock / uv.lock) found —
+      required for reproducible builds
+
+  O repositorio **tem** o arquivo: `api/requirements.txt`. O app declara `path: api`.
+
+  A causa esta em `renderDockerfile` (`api/internal/argo/canonical_dockerfile.go:98-120`),
+  e o proprio comentario dela declara o desenho: *"EC-1: install happens at the workspace
+  root (COPY . . copies the whole bundle); the build + runtime WORKDIR target appDir for
+  monorepos"*. Na pratica:
+
+      WORKDIR /app
+      COPY . .
+      <install>          <- roda na RAIZ do bundle
+      ...
+      WORKDIR /app/api   <- so o estagio de runtime entra no subdiretorio
+
+  Entao um repositorio cujo lockfile mora no `path` do app — que e a forma comum quando
+  cada app tem suas proprias dependencias — falha por construcao.
+why_now: |
+  Este e o defeito que o usuario encontra depois de [[B-153]] e [[B-154]] resolvidos: e o
+  primeiro erro da cadeia que chega ate ele com o texto certo, e ainda assim nao conduz a
+  acao, porque nao diz **onde** procurou. Quem le "no lockfile found" com o arquivo aberto
+  na frente conclui que o sistema esta quebrado.
+
+  Duas leituras possiveis, e nao decidi qual e: ou o contrato exige lockfile na raiz — e
+  entao a mensagem precisa dizer isso — ou o install deveria entrar no `path` do app, e e
+  defeito de verdade. O comentario EC-1 sugere a primeira, mas nenhuma documentacao
+  consultada declara a exigencia ao usuario.
+status: triaged
+dod:
+  - a mensagem nomeia o diretorio onde procurou e o que fazer
+  - decidido e registrado se o lockfile por app e suportado; se for, o install roda no `path`
+  - um app com lockfile no proprio subdiretorio constroi, ou reprova dizendo por que nao pode

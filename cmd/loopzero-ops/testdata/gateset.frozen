@@ -10,6 +10,7 @@ baseline-compare	-	Compares a captured steady-state baseline against the current
 baseline-update	-	Updates the committed steady-state baseline artifact.
 billing-layers	gates	As camadas de cobranca precisam ser enumeraveis e com dono; divida fechada sem cobertura reprova.
 billing-secrets	gates	Segredos de cobranca nao podem ter opcionalidade literal; a decisao e por valor.
+caddy-host-parity	gates	Hostname exigido pela verificacao de borda precisa de bloco de site que termine o TLS.
 caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
 caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
