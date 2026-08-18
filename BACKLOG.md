@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-153 items — **Open** 61 · **In flight** 0 · **Closed** 92
+154 items — **Open** 62 · **In flight** 0 · **Closed** 92
 
-### Open (61)
+### Open (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -135,6 +135,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
+| [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 
 ### In flight (0)
 
@@ -7218,3 +7219,54 @@ dod:
   - um passo cujo script sai não-zero faz o pod terminar não-zero, provado por teste
   - a asserção vale no shell do container (POSIX/ash), não só em bash
   - o mecanismo de falha-fechada do runtime não suportado reprova o build de ponta a ponta
+
+## B-154 — Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported"   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18, ultimo elo da cadeia de [[B-152]].
+
+  O construtor do plano resolve a estrategia por `unit.Runtime`, aceitando exatamente
+  `node` ou `python` (`api/internal/services/deploycontracts/build_plan.go:179`). Ao vivo
+  resolveu `"unsupported"`, e o passo imprimiu
+  `loopzero: runtime "unsupported" is not supported`.
+
+  **Registrei uma hipotese e ela foi refutada pela medicao.** Supus que o caminho do webhook
+  pudesse nunca produzir `services.json`, o que tornaria todo deploy automatico quebrado.
+  Nao e o caso: `api/cmd/autodeploy_adapters.go:70` converte a partir do proprio
+  `loopzero.yaml` via `ConvertLoopZeroYamlApps`, e essa funcao **le `cfg["runtime"]`**
+  (`api/internal/services/deploycontracts/loopzero_yaml_apps.go`). O caminho do webhook nao
+  depende de `services.json`.
+
+  O que sobra, medido:
+
+  - `ConvertLoopZeroYamlApps` le `runtime` e **nao le `framework`** — o fallback de `framework`
+    foi removido de proposito (a nota D1/D2 em `build_plan.go` diz isso)
+  - o `loopzero.yaml` do repositorio de fixture ainda declara `framework: python`
+  - o schema concorda com o codigo: `services.schema.json` exige `runtime` e nao tem
+    propriedade `framework`
+  - com o campo ausente, `app.Runtime` fica vazio e a mensagem que chega ao usuario fala de
+    um runtime `"unsupported"` — sem dizer que o campo faltou, nem que `framework` deixou de
+    ser lido
+
+  Alcance real, portanto: **nao** e todo deploy automatico. E todo `loopzero.yaml` escrito na
+  forma antiga, que falha com uma mensagem sobre um campo que o autor talvez nunca tenha
+  escrito.
+why_now: |
+  Enquanto [[B-153]] estava quebrado, esta causa era invisivel: o passo falhava fechado sem
+  falhar, e o erro chegava ao usuario tres estagios adiante como
+  `Failed to build manifests with custom domains`. Consertado o engolimento, este passa a
+  ser o defeito que o usuario ve — e o que ele ve e uma mensagem sobre um campo que ele
+  talvez nunca tenha escrito.
+
+  A mensagem e o defeito que resta: ela nomeia o valor resolvido ("unsupported") em vez do
+  campo ausente, entao nao conduz a nenhuma acao. O fixture velho e o primeiro caso, nao o
+  unico possivel.
+status: triaged
+dod:
+  - um `loopzero.yaml` sem `runtime` produz mensagem que nomeia o campo ausente e o que escrever
+  - a mensagem distingue "campo ausente" de "valor nao suportado" — sao erros diferentes
+  - o `loopzero.yaml` do repositorio de fixture atualizado para `runtime`, e um push real chega ao construtor com runtime nao vazio
