@@ -227,28 +227,44 @@ func runTrivyScan(args []string) int {
 func runTrufflehogScan(args []string) int {
 	fs := flag.NewFlagSet("trufflehog-scan", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory to scan")
-	verified := fs.Bool("only-verified", true, "use --only-verified (network call to validate secrets)")
+	baseline := fs.String("baseline", "", "adjudicated baseline path (default: <root>/"+trufflehogscan.BaselineRelPath+")")
+	write := fs.Bool("write", false, "regenerate the adjudicated baseline (refuses while any candidate is live)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	resolveDotRoot(root)
-	outcome, err := trufflehogscan.Check(context.Background(), trufflehogscan.Config{
-		RepoRoot:     *root,
-		OnlyVerified: *verified,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "trufflehog-scan: %v\n", err)
-		return 5
-	}
-	if outcome.Skipped {
-		fmt.Printf("trufflehog-scan: SKIP — %s\n", outcome.Reason)
+
+	if *write {
+		n, err := trufflehogscan.Generate(context.Background(), trufflehogscan.Config{
+			RepoRoot: *root, BaselinePath: *baseline,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "trufflehog-scan: %v\n", err)
+			return 1
+		}
+		fmt.Printf("trufflehog-scan: linha de base regravada — %d candidato(s) adjudicado(s)\n", n)
 		return 0
 	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "trufflehog-scan: FAIL\n%s\n", outcome.Reason)
+
+	out, err := trufflehogscan.Check(context.Background(), trufflehogscan.Config{
+		RepoRoot: *root, BaselinePath: *baseline,
+	})
+	if err != nil {
+		// NÃO existe ramo que devolva 0 sem veredito. Os três caminhos que antes
+		// terminavam em `exit 0` sem saber se havia segredo — binário ausente, erro de
+		// execução, e o `--only-verified` sem rede — reprovam aqui (B-143).
+		fmt.Fprintf(os.Stderr, "trufflehog-scan: FAIL — %v\n", err)
 		return 1
 	}
-	fmt.Printf("trufflehog-scan: PASS — %s\n", outcome.Reason)
+	fmt.Printf("trufflehog-scan: PASS — %s\n", out.Reason)
+	// Não reprova, e nem sempre é obsolescência: a base é gerada com --no-verification,
+	// que é superconjunto estrito do modo verificado (medido 67 ⊇ 65). Uma entrada sem
+	// achado correspondente pode ser um candidato que a verificação descarta — e é
+	// justamente por ela estar aqui que uma queda de rede não vira vermelho falso.
+	for _, e := range out.StaleEntries {
+		fmt.Printf("  na linha de base sem achado nesta passada (não reprova; a base é superconjunto): %s [%s] %s\n",
+			e.File, e.Detector, e.ID)
+	}
 	return 0
 }
 

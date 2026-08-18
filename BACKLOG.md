@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-143 items — **Open** 72 · **In flight** 0 · **Closed** 71
+143 items — **Open** 71 · **In flight** 0 · **Closed** 72
 
-### Open (72)
+### Open (71)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -145,13 +145,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
-| [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses----) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `triaged` | alta |
 
 ### In flight (0)
 
 _None._
 
-### Closed (71)
+### Closed (72)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -226,6 +225,7 @@ _None._
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
 | [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega---x) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `shipped` | média |
+| [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -6345,7 +6345,7 @@ dod:
 
 > Filado como issue **#323**. Registrado 2026-08-17, ao ser barrado empurrando trabalho alheio (`B-061`).
 
-## B-143 — O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses   [ ]
+## B-143 — O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6354,7 +6354,7 @@ source: discover-review
 severity: alta — é um gate de **segurança** cujo resultado depende de rede e de cache. Ele falhou para o lado inseguro por cinco meses, e o modo de falha é silencioso: um `PASS` não distingue *"não há segredo"* de *"não consegui verificar"*.
 evidence: medido 2026-08-17. O mesmo `trufflehog` passou em **vários pushes no mesmo dia**, sobre o **mesmo histórico**, e reprovou na última execução com um achado de 2026-03-22. A saída registra `verification_caching: {Hits:108, Misses:80}`, e o doc do gate (`trufflehogscan/check.go`) já declara a causa: *"--only-verified requires outbound network to verify discovered secrets… In offline CI, may produce false negatives."*
 why_now: a lacuna deixou de ser teórica — ela custou cinco meses de exposição de uma credencial viva (`B-142`). E a assimetria é a pior possível: o gate reprova quando a rede coopera, e **passa** quando não.
-status: triaged
+status: shipped
 dod:
   - o gate distingue *"verifiquei e não há"* de *"não consegui verificar"*, e o segundo não é `PASS`
   - existe execução sem `--only-verified` em algum ponto do fluxo, ou está escrito por que o falso positivo dela custa mais que o falso negativo de hoje
@@ -6368,3 +6368,13 @@ dod:
 > histórico que contém credencial viva**, e o desenho do gate admite exatamente esse desfecho.
 
 > Registrado 2026-08-17. É a mesma forma dos `B-124`/`B-127`/`B-129` desta sessão — **um veredito verde que não distingue ausência de defeito de ausência de verificação** —, agora num gate de segurança.
+
+> **Entregue 2026-08-18.** A medição encontrou o defeito mais largo que o registro: **três**
+> caminhos terminavam em `exit 0`, e um deles nomeava a rede como causa possível enquanto devolvia
+> sucesso. O conserto tirou a propriedade de segurança de cima da rede — um candidato novo reprova
+> contra uma lista adjudicada e versionada, e essa comparação é offline. Provado ponta a ponta: `PASS`
+> antes, **`FAIL` no commit em que o segredo entra**. A revisão desta própria fatia achou o defeito
+> sendo reintroduzido pela porta dos fundos (base com 39 entradas + varredura com zero candidatos
+> reportava verde) e o fechou antes do merge. Registrado o que **não** ficou coberto: um candidato já
+> adjudicado que se torne vivo com a rede fora.
+
