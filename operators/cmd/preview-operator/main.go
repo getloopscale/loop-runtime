@@ -19,10 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
+	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/preview"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
@@ -71,8 +71,8 @@ func main() {
 	// registry no one read. ContextLogger via NewContextLogger is the
 	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
-	if reconcilehelpers.PprofEnabled() {
-		reconcilehelpers.StartPprofServer()
+	if operatorboot.PprofEnabled() {
+		operatorboot.StartPprofServer()
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -94,7 +94,7 @@ func main() {
 		setupLog.Error(nil, "CELL_0_KUBECONFIG is required")
 		os.Exit(1)
 	}
-	runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
+	runtimeClient, err := cellrouting.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
 	if err != nil {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)

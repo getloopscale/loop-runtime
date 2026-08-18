@@ -34,7 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/operators/internal/vault"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -81,7 +81,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=get;list;watch;create;update;patch
 //
-// FB-#4 (live boot iter 12): tenant-operator's reconcilehelpers.RuntimeClientFactory
+// FB-#4 (live boot iter 12): tenant-operator's cellrouting.RuntimeClientFactory
 // LISTs ClusterCredentials to resolve cell→runtime-cluster mapping.
 // Marker added to satisfy clustercredentials.loopzero.io list permission;
 // otherwise tenant-operator crashes with "User \"system:serviceaccount:
@@ -138,16 +138,16 @@ var tenantDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for Tenant resources.
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "tenant", req.Name, req.Namespace)
+	ctx, span := reconcileloop.StartReconcileSpan(ctx, "tenant", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			reconcilehelpers.RecordError(span, retErr)
+			reconcileloop.RecordError(span, retErr)
 		} else {
-			reconcilehelpers.SetSuccess(span)
+			reconcileloop.SetSuccess(span)
 		}
-		reconcilehelpers.ReconcileOutcome("tenant", start, retErr)
+		reconcileloop.ReconcileOutcome("tenant", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -180,7 +180,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// error discarded. Four sibling controllers already delegate, and slice-10
 	// fixed the helper to use a locked merge patch and to log the failure; keeping
 	// a local copy meant it silently diverged from the fixed one.
-	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.Tenant { return &loopzerov1.Tenant{} },
 		func(t *loopzerov1.Tenant) *[]metav1.Condition { return &t.Status.Conditions },
 		dt)()
@@ -191,7 +191,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	// Add finalizer if not present
-	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &tenant, tenantFinalizer, req.NamespacedName); err != nil {
+	if err := reconcileloop.EnsureFinalizer(ctx, r.Client, &tenant, tenantFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -505,7 +505,7 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.Tenant{}, reconcilehelpers.ForOption()).
+		For(&loopzerov1.Tenant{}, reconcileloop.ForOption()).
 		Owns(&loopzerov1.Environment{}).
 		Watches(&loopzerov1.PreviewEnvironment{}, mapPreviewToTenant).
 		Named("tenant").

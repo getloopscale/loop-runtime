@@ -15,14 +15,14 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // reconcileGiteaPhase handles the ConfiguringGitea phase.
 // Steps: check reachability, validate/create admin token, ensure orgs exist.
 func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
-	ctx, span := reconcilehelpers.StartChildSpan(ctx, "bootstrap.gitea.configure")
+	ctx, span := reconcileloop.StartChildSpan(ctx, "bootstrap.gitea.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
 

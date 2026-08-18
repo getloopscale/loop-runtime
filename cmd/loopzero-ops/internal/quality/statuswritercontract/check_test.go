@@ -167,7 +167,7 @@ func TestDeferredSummaryCoversThePackage(t *testing.T) {
 	// The shape seven controllers use: the defer lives in Reconcile, and the
 	// helpers it calls persist status on their own.
 	write(t, root, "operators/internal/deferred/reconcile.go",
-		preamble+"\tdefer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, key, a, b, c)()\n\treturn nil\n}\n")
+		preamble+"\tdefer reconcileloop.DeferReadinessSummary(ctx, r.Client, key, a, b, c)()\n\treturn nil\n}\n")
 	write(t, root, "operators/internal/deferred/helper.go",
 		preamble+"\tconditions.SetReadinessSummaryViaPkg(&o.Status.Conditions, o.Generation, d)\n"+
 			"\treturn r.Status().Patch(ctx, o, client.MergeFrom(base))\n}\n")

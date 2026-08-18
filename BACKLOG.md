@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-139 items — **Open** 70 · **In flight** 0 · **Closed** 69
+143 items — **Open** 72 · **In flight** 0 · **Closed** 71
 
-### Open (70)
+### Open (72)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -81,7 +81,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream----) | Dois charts apontam para versões que não existem mais no upstream | `triaged` | baixa |
 | [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido----) | O token que puxa as imagens de plataforma do GHCR está inválido | `triaged` | alta |
 | [`B-019`](#b-019--os-quatro-cronworkflows-executam-uma-imagem-cujo-registro-foi-deletado----) | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado | `triaged` | média |
-| [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac----) | O webhook do GitHub está desligado: falta o segredo HMAC | `triaged` | alta |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
@@ -100,7 +99,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
-| [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared----) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `triaged` | baixa |
 | [`B-062`](#b-062--o-vocabulário-do-plano-de-build-está-espalhado-por-quinze-pacotes-incluindo-o-sink-de-domínio----) | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio | `triaged` | média |
 | [`B-063`](#b-063--um-módulo-de-infraestrutura-depende-de-uma-suíte-de-testes-e-tools-está-fora-do-workspace----) | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace | `triaged` | baixa |
 | [`B-064`](#b-064--o-control-plane-alcança-o-plano-de-secrets-por-um-nome-dns-reescrito-em-tempo-de-resolução----) | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução | `triaged` | média |
@@ -144,12 +142,16 @@ consequência do escopo per-repo declarado acima.
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
+| [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
+| [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
+| [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
+| [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses----) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `triaged` | alta |
 
 ### In flight (0)
 
 _None._
 
-### Closed (69)
+### Closed (71)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -166,6 +168,7 @@ _None._
 | [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
 | [`B-018`](#b-018--a-borda-alcança-kratos-e-hydra-por-encaminhamento-de-porta-que-não-sobrevive-a-um-rebuild---x) | A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild | `shipped` | média |
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
+| [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac---x) | O webhook do GitHub está desligado: falta o segredo HMAC | `shipped` | alta |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
 | [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
@@ -187,6 +190,7 @@ _None._
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
+| [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared---x) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `shipped` | baixa |
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
 | [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
@@ -878,7 +882,7 @@ dod:
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor.
 
-## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [ ]
+## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [x]
 
 domain: engine-go
 repo: loopzero
@@ -886,7 +890,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido em 2026-08-10 ao investigar o `cloud-dev`. `POST /api/v1/webhooks/github` devolve **404** por `app-dev` e direto no `loopzero-api` (`localhost:13001`), enquanto `POST /api/v1/health` devolve **405** — ou seja, a rota do webhook nem chega a ser registrada, não é erro de roteamento. O log do `loopzero-api` confirma: *"github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)"*. A causa está em `api/cmd/setup_github.go:152-158`: sem o segredo, `WebhookHandler` fica nil e o roteador não registra a rota. O seed que provisiona o segredo (`5-seed-github-app-dev`) reprovou com `namespaces "loopzero-system" not found` — ele rodou antes do namespace existir, durante a reconstrução.
 why_now: enquanto o segredo existiu no cluster, isto era invisível. A reconstrução total o apagou junto com tudo, e o seed que o recria falhou por ordem. **A consequência é que auto-deploy a partir do GitHub não funciona** — um `git push` no repositório de um cliente não dispara build nenhum. Não apareceu antes porque as sondagens de verificação cobriam `/engine/*` e os fluxos de login, e o webhook é a única superfície que não se testa com um GET.
-status: triaged
+status: shipped
 severity: alta — é uma jornada inteira do produto (conectar repositório → push → deploy) que está morta, e ela falha em silêncio: o GitHub recebe 404 e o usuário não vê erro nenhum no painel.
 
 > **CORREÇÃO 2026-08-14 — a auditoria adversarial de fechamento reprovou este item, e tinha razão.**
@@ -986,6 +990,52 @@ dod:
 >
 > O `B-104` — a invisibilidade que permitiu isto passar despercebido — **continua aberto**: o desenho
 > que fez o pod subir calado com os dois secrets ausentes não mudou.
+
+---
+
+### Fechado 2026-08-17 — re-verificado ao vivo, e a quarta bala virou item próprio
+
+**O defeito que dá nome ao item está consertado e o conserto sustentou por três dias.** Re-medido
+hoje no droplet, com o segredo comparado por hash e nunca impresso:
+
+| requisição | resultado |
+|---|---|
+| sem assinatura | **401** |
+| assinatura **válida** (`X-Hub-Signature-256`) | **200** |
+| assinatura **inválida** | **403** |
+| `POST /health` (controle) | 405 |
+
+E o seed que provisiona os dois Secrets sai **`PASS — both Secrets present with data matching creds`**.
+
+**Balas 1, 2 e 4 fechadas com artefato**, e os artefatos estão no disco:
+`cmd/loopzero-ops/internal/seed/namespace_precondition_test.go` (a ordem: o namespace é garantido antes de
+gravar) e `api/tests/unit/webhook_route_registration_test.go` (a cadeia pelos dois lados — handler
+`nil` ⇒ rota ausente, handler presente ⇒ rota alcançada, os dois verificados por mutante).
+
+---
+
+**A terceira bala foi perseguida elo a elo hoje, e virou `B-140`.** Ela não é sobre o webhook: é
+sobre **existir um destino** para ele acionar. `projects=0`, `builds=0` — nunca houve build nesta
+instância.
+
+Percorrendo a cadeia que criaria esse destino:
+
+| elo | estado |
+|---|---|
+| `github-app-dev` | **PASS** — o conserto do `B-021` sustentou |
+| `admin-loopzero-dev` | estava **FAIL** (`/sessions/whoami` 401) → **re-semeado hoje com sucesso** |
+| `tenant-fixture` | **SKIP** — exige `LOOPZERO_TENANT_ID`, e a identidade admin **não tem tenant** |
+| `github-webhook-fixture` | **FAIL** — `gh` não está instalado no droplet |
+
+Removi um dos bloqueios (a identidade admin, com a razão registrada). Os restantes exigem instalar
+pacote num host compartilhado e conectar um repositório — reconstrução de ambiente, não verificação.
+
+**Por que separar em vez de manter aberto:** o item nomeia *"o webhook está desligado"*, e essa
+condição está morta e enterrada, provada nos três códigos de resposta. A quarta bala é a jornada
+inteira de auto-deploy, com blast radius próprio e bloqueio que nada do `B-021` causou nem pode
+resolver. Mantê-la dentro faria um item fechado parecer aberto por uma razão que não é dele — e
+fechá-la por analogia com as outras três seria a atribuição errada que este item já corrigiu uma vez.
+
 
 ## B-022 — O caminho do motor depende do painel estar de pé   [ ]
 
@@ -2367,7 +2417,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-061 — `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared`   [ ]
+## B-061 — `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared`   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2375,7 +2425,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `operators/internal/reconcilehelpers` pontuou coesão **2/5** e reúne três concerns sem par: bootstrap de binário, templating de recursos de tenant (`limitrange.go:76 ApplyTenantLimitRange`, `networkpolicy.go:34 ApplyTenantNetworkPolicies`) e roteamento de cell. É o **único** pacote com nome da família "helpers" em toda a árvore Go — o limiar `consensus` `generic_folder_names = 0` é respeitado em 148 módulos e 730k LOC, e esta é a única exceção real. E o doc do pacote ainda o chama de `shared`, um nome que ele não tem mais: `go doc` renderiza um nome que não existe.
 why_now: é o pacote que os quatro binários de operator compartilham, então o que entrar nele é imposto aos quatro. Um nome que não consegue recusar nada, num pacote com esse alcance, é onde a próxima mistura entra.
-status: triaged
+status: shipped
 severity: baixa — nenhum defeito de comportamento; é higiene com alcance grande.
 dod:
   - os três assuntos ficam em pacotes que dizem o que guardam
@@ -2383,6 +2433,62 @@ dod:
   - a política de tenant (LimitRange, NetworkPolicy) tem dono declarado — hoje mora no pacote compartilhado por todos
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+---
+
+### Fechado 2026-08-17 — DoD 3/3, e a medição corrigiu o item em dois pontos
+
+**Primeiro ponto: são QUATRO assuntos, não três.** O item agrupou `tracing.go` com o arranque de
+binário. Medido pelo uso externo, não é: `StartReconcileSpan`, `StartChildSpan` e `RecordError` somam
+**34 usos, todos dentro de laços de reconcile**. `pprof.go` exporta duas coisas e sobe um servidor no
+arranque — esse sim é boot. Herdar o agrupamento de quem registrou o item, contra a medição, é como o
+pacote chegou a 2/5.
+
+```
+reconcilehelpers  →  tenantpolicy    LimitRange, NetworkPolicy, RoleBinding
+                     cellrouting     RuntimeClientFactory, CreateClusterClient
+                     operatorboot    pprof
+                     reconcileloop   readiness, predicates, finalizer, tracing
+```
+
+Movidos com `git mv`; o histórico de cada arquivo segue.
+
+**Bala 1 — cada pacote diz o que guarda**, e o critério do corte é *onde o código é chamado*, não o
+que ele parece. **Bala 2 — o doc parou de nomear um pacote inexistente**: ele chamava o pacote de
+`shared`, e `go doc` renderizava um nome que não existe. Agora são quatro docs, cada um com a sua
+razão. **Bala 3 — a política de tenant tem dono declarado**: `ApplyTenantLimitRange` e
+`ApplyTenantNetworkPolicies` decidem *o que um cliente consome e com quem fala*, e moravam num pacote
+cujo nome convida qualquer coisa a entrar. `tenantpolicy` recusa.
+
+**`reconcileloop` e não `reconcile`, e a razão é uma colisão real.** A primeira tentativa quebrou o
+build: `sigs.k8s.io/controller-runtime/pkg/reconcile` já ocupa esse nome e **todo controller o
+importa**. Trocar um nome genérico por um colidente não é progresso — forçaria um alias em cada
+arquivo que usasse os dois.
+
+**Os exemplos de doc eram uma armadilha silenciosa.** Sete doc-comments ensinavam
+`reconcilehelpers.EnsureFinalizer`, `reconcilehelpers.ForOption`, etc. Depois do rename eles não
+compilam — mas nada os verifica, então continuariam ensinando um nome morto. Corrigidos junto, com as
+referências de caminho noutros pacotes (`api/cmd/main.go`, os dois VAP, o controller de aplicação).
+
+**Um gate sobreviveu por desenho, e vale registrar por quê.** `statuswritercontract` tem uma fixture
+com `reconcilehelpers.DeferReadinessSummary` — mas ele casa pelo **nome do seletor**, não pelo do
+pacote (`check.go:205`). Um gate que casasse o pacote teria ficado cego no rename, em silêncio. A
+fixture foi atualizada por precisão, não por necessidade.
+
+---
+
+**Segundo ponto: a afirmação "é o único pacote helpers da árvore Go" era falsa.**
+`infra/tests/helm/helpers` tem **3 arquivos Go e 878 linhas**, importado por ~20 testes de chart.
+
+Não foi renomeado junto, e a razão é medição: ele é **coeso** — `BootstrapChartPath`, `ChartPath`,
+`NewOptions`, `RenderTemplate`, `MustUnmarshalK8SYaml` servem todos a *renderizar um chart para um
+teste*, uma razão só de mudar. O defeito do `B-061` era outro: um nome que não recusa nada, num
+pacote 2/5 imposto a quatro binários. Registrado como **`B-141`**.
+
+**Verificado:** `operators`, `api` e `cmd/loopzero-ops` compilam; suíte dos operators verde; e os cinco
+gates estruturais passam — `unhomed-logic` (64 ≤ 82), `pkg-usage-matrix` em dia, `acyclic-graph`
+acíclico, `status-writer-contract` sobre 82 produtos, `publish-hygiene` 4543 limpos.
+
 
 ## B-062 — O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio   [ ]
 
@@ -6183,3 +6289,82 @@ dod:
   - a isenção de `infra/local/Caddyfile` sai do `publishhygiene.DefaultExemptions` — hoje ela tem sunset **2026-11-17**
 
 > Registrado 2026-08-17 ao fechar o `B-130`. **Não é texto a corrigir: é migração de ambiente**, e fazê-la dentro de um item de higiene teria acoplado risco de indisponibilidade a uma limpeza de comentários.
+
+## B-140 — Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+severity: alta — é a prova ponta a ponta da jornada central do produto (conectar repositório → push → deploy), e ela **nunca foi feita nesta instância**. Não é regressão: é ausência de evidência.
+evidence: medido no droplet em 2026-08-17, herdando a terceira bala do `B-021`. `select count(*) from builds` = **0**, `projects` = **0** — nunca houve build aqui. A cadeia de seeds que criaria o destino foi percorrida elo a elo hoje: `github-app-dev` **PASS** (o conserto do `B-021` sustentou); `admin-loopzero-dev` estava **FAIL** (`/sessions/whoami` HTTP 401) e **foi re-semeada com sucesso** (identidade `15422d7d…` + sessão persistida) — bloqueio removido; `tenant-fixture` **SKIP**, exige `LOOPZERO_TENANT_ID`, e a identidade admin **não tem linha em `tenants`** (existem só `tn-e2etest` e `tn-1362a887c7c523be`, de `paulohenriquevn`); `github-webhook-fixture` **FAIL** — `gh` não está instalado no droplet. E `connect-canonical-fixture.sh` ainda exige o binário do LoopZero CLI e permissão de escrita no repositório de fixture.
+why_now: o `B-021` fechou com o webhook **provado vivo** (401 sem assinatura, 200 com assinatura válida, 403 com inválida, re-verificado em 2026-08-17). O que sobrou não é sobre o webhook: é sobre existir um destino para ele acionar. Medir um push hoje mediria o estado da cadeia de seeds, e reportar `FAIL` culparia o elo errado.
+status: triaged
+dod:
+  - a identidade admin tem tenant, e `tenant-fixture` deixa de sair `SKIP`
+  - `gh` disponível onde os seeds rodam, ou o seed que depende dele tem caminho que não o exija
+  - um push real no repositório de fixture dispara um build, medido ponta a ponta — `builds` deixa de ser 0
+  - existe verificação que reprova quando a jornada quebra, senão a próxima quebra é tão silenciosa quanto a do `B-021`
+
+> Registrado 2026-08-17 ao fechar o `B-021`. **Mutação de ambiente compartilhado**: a re-semeadura da
+> identidade admin foi feita hoje com a razão registrada aqui; o resto da cadeia envolve instalar
+> pacote no host e conectar repositório, e isso é decisão do dono do ambiente.
+
+## B-141 — Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: baixa — o nome é impreciso, mas o pacote é **coeso**: tudo nele serve a renderizar chart em teste. Não é o defeito do `B-061`, que era um pacote 2/5 imposto a quatro binários.
+evidence: medido 2026-08-17 ao fechar o `B-061`. Aquele item afirma ser *"o **único** pacote com nome da família helpers em toda a árvore Go"*. Não é: `infra/tests/helm/helpers` tem **3 arquivos Go, 878 linhas**, e é importado por ~20 testes de chart. (`infra/helmfile/scripts/test_helpers` também casa o nome, mas é shell — fora do escopo.)
+why_now: o limiar `generic_folder_names = 0` é um limiar declarado do projeto, e ele continua violado depois do `B-061`. A diferença é que este aqui **tem uma razão só de mudar** — `BootstrapChartPath`, `ChartPath`, `NewOptions`, `RenderTemplate`, `MustUnmarshalK8SYaml` servem todos a *renderizar um chart para um teste* —, então o nome certo existe (`chartrender`, `helmtest`) e o custo é ~20 arquivos de teste.
+status: triaged
+dod:
+  - o pacote tem um nome que diz o que ele renderiza, ou está escrito por que "helpers" é aceitável num módulo de teste
+  - o limiar `generic_folder_names = 0` volta a ser verdade, ou o limiar registra a exceção com a razão
+  - nenhum teste de chart quebra — a mudança é de nome, e o compilador verifica cada call site
+
+> Registrado 2026-08-17 ao fechar o `B-061`. **A afirmação "é o único" era falsificável e foi falsificada** — exatamente o que uma varredura de população faz (`rules/testing.md § 4.2`). Não foi renomeado junto porque o defeito do `B-061` (nome que não recusa nada, num pacote com alcance de quatro binários) não se aplica a este: ele é coeso e vive num módulo de teste.
+
+## B-142 — Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+severity: **P0** — credencial de conta inteira, válida agora, exposta desde 2026-03-22. Atenuantes que não resolvem: repositório privado, e o valor ausente do `HEAD`.
+evidence: reportado pelo `trufflehog` do delivery gate em 2026-08-17 como `✅ Found verified result` — ele consultou a API do DigitalOcean e a credencial respondeu **ativa**. `DigitalOceanV2`, commit `64fef3336` (*"fix: use DO API token for Kaniko registry auth"*, 2026-03-22), `infra/pulumi/src/components/bootstrap.ts:1040`. Presente em **2** commits do histórico, ausente do `HEAD`. **O valor não está registrado aqui nem no issue, por política.**
+why_now: o token está vivo. Remover o arquivo não resolve — histórico não se desfaz sem reescrita, e o conserto é **revogar**. À época o repositório não tinha gate de segredos no caminho de push: o `trufflehog` foi ligado em `T4.7` dois meses depois.
+status: triaged
+blocked_by: revogação no painel do DigitalOcean — é ação na conta do dono, e nada no repositório a substitui.
+dod:
+  - o token está revogado, e o `trufflehog --only-verified` deixa de reportá-lo
+  - a atividade da API no período foi auditada, ou está escrito por que não foi
+  - se ainda for necessário, o novo token entra por Secret e nunca pelo fonte
+
+> Filado como issue **#323**. Registrado 2026-08-17, ao ser barrado empurrando trabalho alheio (`B-061`).
+
+## B-143 — O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: alta — é um gate de **segurança** cujo resultado depende de rede e de cache. Ele falhou para o lado inseguro por cinco meses, e o modo de falha é silencioso: um `PASS` não distingue *"não há segredo"* de *"não consegui verificar"*.
+evidence: medido 2026-08-17. O mesmo `trufflehog` passou em **vários pushes no mesmo dia**, sobre o **mesmo histórico**, e reprovou na última execução com um achado de 2026-03-22. A saída registra `verification_caching: {Hits:108, Misses:80}`, e o doc do gate (`trufflehogscan/check.go`) já declara a causa: *"--only-verified requires outbound network to verify discovered secrets… In offline CI, may produce false negatives."*
+why_now: a lacuna deixou de ser teórica — ela custou cinco meses de exposição de uma credencial viva (`B-142`). E a assimetria é a pior possível: o gate reprova quando a rede coopera, e **passa** quando não.
+status: triaged
+dod:
+  - o gate distingue *"verifiquei e não há"* de *"não consegui verificar"*, e o segundo não é `PASS`
+  - existe execução sem `--only-verified` em algum ponto do fluxo, ou está escrito por que o falso positivo dela custa mais que o falso negativo de hoje
+  - a decisão fica registrada junto do gate, que hoje declara a limitação e a trata como aceitável sem dizer quem aceitou
+
+> **Segunda medição, minutos depois:** o gate reprovou **de novo**, com o mesmo achado, sem nada ter
+> mudado. Então ele **não é instável agora** — o que está medido é que ele **passou antes**, hoje,
+> sobre este mesmo histórico. Qual dos dois mecanismos declarados no doc produziu aquele verde (rede
+> indisponível, limite de taxa do provedor, ou o gate não ter rodado) **não foi medido**, e não vou
+> afirmar qual foi. O que a evidência sustenta é mais estreito e suficiente: **houve `PASS` sobre um
+> histórico que contém credencial viva**, e o desenho do gate admite exatamente esse desfecho.
+
+> Registrado 2026-08-17. É a mesma forma dos `B-124`/`B-127`/`B-129` desta sessão — **um veredito verde que não distingue ausência de defeito de ausência de verificação** —, agora num gate de segurança.

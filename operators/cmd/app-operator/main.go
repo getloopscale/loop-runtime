@@ -25,10 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/app"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
+	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
@@ -82,8 +82,8 @@ func main() {
 	// via NewContextLogger(baseLogger, spanExtractorFn) and call FromContext
 	// at each reconcile boundary.
 
-	if reconcilehelpers.PprofEnabled() {
-		reconcilehelpers.StartPprofServer()
+	if operatorboot.PprofEnabled() {
+		operatorboot.StartPprofServer()
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -127,11 +127,11 @@ func main() {
 	// observed via task doctor. Pre-flip, the warning + loopzero_app_operator_
 	// cell_factory_disabled_total counter (T1.5/find_arch_007 wired) provides
 	// observability of the degraded mode.
-	var appFactory reconcilehelpers.RuntimeClientFactory
+	var appFactory cellrouting.RuntimeClientFactory
 	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_CELL_0_KUBECONFIG") == "true"
 	cell0Kubeconfig := os.Getenv("CELL_0_KUBECONFIG")
 	if cell0Kubeconfig != "" {
-		runtimeClient, err := reconcilehelpers.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
+		runtimeClient, err := cellrouting.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
 		if err != nil {
 			if requireKubeconfig {
 				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true — refusing to start")
@@ -139,7 +139,7 @@ func main() {
 			}
 			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled (degraded)")
 		} else {
-			appFactory = reconcilehelpers.NewCellAwareRuntimeClientFactory(
+			appFactory = cellrouting.NewCellAwareRuntimeClientFactory(
 				mgr.GetClient(), runtimeClient, "loopzero-system")
 			setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
 		}

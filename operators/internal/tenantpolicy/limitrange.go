@@ -1,7 +1,17 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
-
-package reconcilehelpers
+// Package tenantpolicy applies what the platform IMPOSES on a tenant namespace:
+// resource ceilings (LimitRange), who may talk to whom (NetworkPolicy) and which
+// service account may act (RoleBinding).
+//
+// # Por que isto saiu do pacote compartilhado (B-061)
+//
+// `ApplyTenantLimitRange` e `ApplyTenantNetworkPolicies` decidem **o que um cliente
+// pode consumir e com quem pode falar**, e moravam num pacote chamado
+// `reconcilehelpers` — coesão 2/5, o único nome da família "helpers" em toda a árvore
+// Go, importado pelos quatro binários de operator.
+//
+// Um nome que não recusa nada, com esse alcance, é onde a próxima mistura entra. Este
+// nome recusa: um helper de reconcile não tem por que ser adicionado aqui.
+package tenantpolicy
 
 import (
 	"context"

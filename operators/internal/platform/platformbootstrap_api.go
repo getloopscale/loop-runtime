@@ -15,14 +15,14 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // reconcileAPIPhase handles the WaitingForAPI phase.
 // Steps: check API health, resolve bootstrap secret, call bootstrap endpoint for DB seeding.
 func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
-	ctx, span := reconcilehelpers.StartChildSpan(ctx, "bootstrap.api.configure")
+	ctx, span := reconcileloop.StartChildSpan(ctx, "bootstrap.api.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
 

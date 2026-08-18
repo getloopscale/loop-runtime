@@ -81,7 +81,7 @@ func main() {
 			// to block slowloris. WriteTimeout deliberately ZERO —
 			// `/debug/pprof/profile` runs 30-60s CPU profiles by
 			// design; finite WriteTimeout would truncate them.
-			// Same pattern as operators/internal/reconcilehelpers/pprof.go iter 11.
+			// Same pattern as operators/internal/operatorboot/pprof.go iter 11.
 			srv := &http.Server{
 				Addr:              pprofAddr,
 				Handler:           mux,

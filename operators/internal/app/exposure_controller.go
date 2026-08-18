@@ -22,10 +22,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -71,7 +72,7 @@ type ExposureReconciler struct {
 	// RuntimeFactory resolves a client for the cell where the workload runs. The TLS
 	// secret lives there, next to the app — not in this cluster. Nil means the check
 	// degrades to "not ready", which is the honest answer when we cannot look (#277).
-	RuntimeFactory reconcilehelpers.RuntimeClientFactory
+	RuntimeFactory cellrouting.RuntimeClientFactory
 }
 
 // exposureDetailTypes per ADR-0025 D3.
@@ -83,16 +84,16 @@ var exposureDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for ExposedRoute resources.
 func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "exposure", req.Name, req.Namespace)
+	ctx, span := reconcileloop.StartReconcileSpan(ctx, "exposure", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			reconcilehelpers.RecordError(span, retErr)
+			reconcileloop.RecordError(span, retErr)
 		} else {
-			reconcilehelpers.SetSuccess(span)
+			reconcileloop.SetSuccess(span)
 		}
-		reconcilehelpers.ReconcileOutcome("exposure", start, retErr)
+		reconcileloop.ReconcileOutcome("exposure", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -121,7 +122,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// DeferReadinessSummary carries MergeFromWithOptimisticLock and logs the
 	// failure. Duplicated knowledge is why this file still had the pre-fix shape
 	// months after the fix (B-085).
-	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.ExposedRoute { return &loopzerov1.ExposedRoute{} },
 		func(x *loopzerov1.ExposedRoute) *[]metav1.Condition { return &x.Status.Conditions },
 		exposureDetailTypes)()
@@ -139,7 +140,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	}
 
 	// Add finalizer if not present
-	if err := reconcilehelpers.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
+	if err := reconcileloop.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -209,11 +210,11 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	// Step 3: Perform reachability probe
 	probeURL := r.resolveProbeURL(&route)
-	probeCtx, probeSpan := reconcilehelpers.StartChildSpan(ctx, "exposure.probe",
+	probeCtx, probeSpan := reconcileloop.StartChildSpan(ctx, "exposure.probe",
 		attribute.String("probe.url", probeURL))
 	probeResult, probeErr := r.performProbe(probeCtx, probeURL)
 	if probeErr != nil {
-		reconcilehelpers.RecordError(probeSpan, probeErr)
+		reconcileloop.RecordError(probeSpan, probeErr)
 	}
 	probeSpan.End()
 
@@ -433,7 +434,7 @@ type ExposureControllerConfig struct {
 	// RuntimeFactory resolves the client for the cell where the workload — and its
 	// TLS secret — actually lives. Without it the cert check cannot look in the right
 	// place and reports not-ready, which is the honest answer (#277).
-	RuntimeFactory reconcilehelpers.RuntimeClientFactory
+	RuntimeFactory cellrouting.RuntimeClientFactory
 }
 
 // SetupExposureController registers the ExposureController with the manager.
@@ -443,7 +444,7 @@ func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig)
 		cfg = cfgs[0]
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ExposedRoute{}, reconcilehelpers.ForOption()).
+		For(&loopzerov1.ExposedRoute{}, reconcileloop.ForOption()).
 		Named("exposure").
 		Complete(&ExposureReconciler{
 			Client:                mgr.GetClient(),

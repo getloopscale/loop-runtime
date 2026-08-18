@@ -21,12 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/platform"
 	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
+	"github.com/getloopscale/loopzero/operators/internal/platform"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
 
@@ -75,8 +74,8 @@ func main() {
 	// registry no one read. ContextLogger via NewContextLogger is the
 	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
-	if reconcilehelpers.PprofEnabled() {
-		reconcilehelpers.StartPprofServer()
+	if operatorboot.PprofEnabled() {
+		operatorboot.StartPprofServer()
 	}
 
 	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache

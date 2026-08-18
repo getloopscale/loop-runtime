@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package reconcilehelpers
+package reconcileloop
 
 import (
 	"context"
@@ -32,7 +32,7 @@ import (
 //
 // Usage:
 //
-//	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+//	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 //	    func() *loopzerov1.X { return &loopzerov1.X{} },
 //	    func(x *loopzerov1.X) *[]metav1.Condition { return &x.Status.Conditions },
 //	    xDetailTypes)()

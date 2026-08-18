@@ -25,9 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcilehelpers"
+	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -73,7 +74,7 @@ type PreviewReconciler struct {
 	//   1. preview.Spec.CellID (set by API at PreviewEnvironment creation)
 	//   2. tenant.Spec.CellID (lookup; covers legacy CRs created pre-T1.1)
 	//   3. Empty → fallback RuntimeClient (last resort)
-	RuntimeFactory reconcilehelpers.RuntimeClientFactory
+	RuntimeFactory cellrouting.RuntimeClientFactory
 	Scheme         *runtime.Scheme
 	BaseDomain     string
 	// IngressNamespace is the namespace where Traefik runs.
@@ -150,16 +151,16 @@ var previewDetailTypes = []string{
 
 // Reconcile handles the reconciliation loop for PreviewEnvironment resources.
 func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	ctx, span := reconcilehelpers.StartReconcileSpan(ctx, "preview", req.Name, req.Namespace)
+	ctx, span := reconcileloop.StartReconcileSpan(ctx, "preview", req.Name, req.Namespace)
 	defer span.End()
 	start := time.Now()
 	defer func() {
 		if retErr != nil {
-			reconcilehelpers.RecordError(span, retErr)
+			reconcileloop.RecordError(span, retErr)
 		} else {
-			reconcilehelpers.SetSuccess(span)
+			reconcileloop.SetSuccess(span)
 		}
-		reconcilehelpers.ReconcileOutcome("preview", start, retErr)
+		reconcileloop.ReconcileOutcome("preview", start, retErr)
 	}()
 
 	logger := log.FromContext(ctx)
@@ -177,7 +178,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	ctx = correlation.WithID(ctx, preview.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer reconcilehelpers.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
 		func() *loopzerov1.PreviewEnvironment { return &loopzerov1.PreviewEnvironment{} },
 		func(x *loopzerov1.PreviewEnvironment) *[]metav1.Condition { return &x.Status.Conditions },
 		previewDetailTypes)()
@@ -705,12 +706,12 @@ func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseD
 func setupPreviewControllerWithFactory(
 	mgr ctrl.Manager,
 	runtimeClient client.Client,
-	factory reconcilehelpers.RuntimeClientFactory,
+	factory cellrouting.RuntimeClientFactory,
 	baseDomain string,
 ) error {
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.PreviewEnvironment{}, reconcilehelpers.ForOption()).
+		For(&loopzerov1.PreviewEnvironment{}, reconcileloop.ForOption()).
 		Named("preview").
 		Complete(&PreviewReconciler{
 			Client:           mgr.GetClient(),

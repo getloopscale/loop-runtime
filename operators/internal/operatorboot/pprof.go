@@ -1,11 +1,15 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
-
-package reconcilehelpers
+// Package operatorboot guarda o que roda no ARRANQUE de um binário de operator,
+// antes de o gerenciador começar.
+//
+// É um pacote pequeno de propósito (B-061). Ele é compartilhado pelos quatro
+// binários, então precisa ser um pacote; e o que guarda é a única coisa que roda
+// antes do laço de reconcile existir. A alternativa — devolvê-lo ao pacote de
+// reconcile — é exatamente a mistura que aquele item desfez.
+package operatorboot
 
 import (
-	"net"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
