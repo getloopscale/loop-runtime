@@ -20,6 +20,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/moduleselfcontained"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
@@ -390,6 +391,25 @@ func runBillingSecrets(args []string) int {
 //
 // O irmão `billing-secrets` cobre UMA camada. Este cobre a lista das cinco — e é a lista
 // que o B-038 mede: "a quinta camada nasce sem a verificação que as outras quatro tinham".
+func runModuleSelfContained(args []string) int {
+	fs := flag.NewFlagSet("module-selfcontained", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := moduleselfcontained.Check(moduleselfcontained.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "module-selfcontained: FAIL — %v\n", err)
+		for _, f := range out.Failed {
+			fmt.Fprintf(os.Stderr, "  %s:\n%s\n", f.Module, f.Err)
+		}
+		return 2
+	}
+	fmt.Printf("module-selfcontained: PASS — %s\n", out.Reason)
+	return 0
+}
+
 func runRunbookParity(args []string) int {
 	fs := flag.NewFlagSet("runbook-parity", flag.ContinueOnError)
 	root := fs.String("repo-root", ".", "repository root")
