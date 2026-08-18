@@ -902,6 +902,29 @@ dod:
 > **Aberto:** a bala 1. As três opções (runner de CI · clone+toolchain · aposentar) estão com
 > custo medido no MEET de 2026-08-18. É decisão de superfície de publicação, não minha.
 
+> **Medição adicional 2026-08-18, e ela derrubou a saída que eu ia tomar.** Eu estava prestes a
+> fechar a bala 1 pelo caminho *"aposentar os crons"* — parecia limpeza de configuração morta, e
+> `pre-release-governance.md` manda deletar legado em vez de mantê-lo.
+>
+> **A mesma imagem impossível é usada por DUAS superfícies**, não uma:
+>
+> | superfície | arquivo | disparo |
+> |---|---|---|
+> | os quatro CronWorkflows | `templates/cronworkflows.yaml:9,47` | agendamento |
+> | o WorkflowTemplate de quality gate | `templates/workflowtemplate-quality-gate.yaml:70-71` | **evento** — PR, via o sensor do Gitea |
+>
+> Aposentar só os crons deixaria o defeito idêntico no caminho por evento: meio conserto, com
+> aparência de conserto inteiro. **Não é a bala 1 que está bloqueada — é o subsistema.** O
+> `loopzero-ci-workflows` inteiro depende de uma imagem que nada nesta árvore constrói.
+>
+> E a segunda via da bala (*"ou os crons executam uma imagem que existe"*) **não tem material**:
+> medido, as três imagens de `infra/images/` (`clone-runner`, `cosign-signer`, `syft-scanner`)
+> também **não estão** na matriz de publicação. Não há imagem alcançável para hospedar o
+> trabalho, porque o que falta é um runner com a árvore e o toolchain dentro.
+>
+> A decisão continua sendo de superfície de publicação — agora com escopo maior e medido:
+> construir e publicar o runner, ou aposentar o subsistema de CI in-cluster por completo.
+
 
 ## B-020 — O host `cloud-dev` era um segundo nome para o mesmo painel   [x]
 

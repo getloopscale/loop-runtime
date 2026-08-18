@@ -39,8 +39,19 @@
 // caso o gate reporta a imagem como **não resolvida** em vez de fingir que está tudo certo.
 //
 // E ele mede **o que o chart declara**, não o que um ambiente liga: a sobreposição por
-// `ciCronsEnabled` mora no helmfile. Um chart que embarca `enabled: true` está declarando um
-// agendamento, e é isso que é julgado aqui.
+// `ciCronsEnabled` mora no helmfile. Um chart que embarca `enabled: true` está declarando uma
+// execução, e é isso que é julgado aqui.
+//
+// # Por que `WorkflowTemplate` entra, apesar do nome do gate
+//
+// A primeira versão varria só `CronWorkflow` e `CronJob`. Medido em 2026-08-18: o mesmo
+// `loopzero-ci-workflows` usa a imagem impossível em **duas** superfícies — os quatro crons e o
+// `workflowtemplate-quality-gate.yaml`, disparado por PR via o sensor do Gitea. Um gate que
+// cobrisse metade reportaria verde com o defeito idêntico um arquivo ao lado.
+//
+// O que agendamento e disparo por evento compartilham, e é o que decide o critério: a execução
+// é **autônoma**. A falha aparece longe de quem a causou, então ninguém está olhando no momento
+// em que ela acontece — que é exatamente a condição para apodrecer em silêncio.
 package scheduledimage
 
 import (
@@ -59,7 +70,7 @@ import (
 var ErrNoPublicationPath = errors.New("recurso agendado usa imagem nossa sem caminho de publicação")
 
 // ErrNothingScanned means the scan reached no scheduled manifest.
-var ErrNothingScanned = errors.New("nenhum manifesto agendado varrido — não achar nada não é o mesmo que não achar nada errado")
+var ErrNothingScanned = errors.New("nenhuma declaração de execução autônoma varrida — não achar nada não é o mesmo que não achar nada errado")
 
 // ErrMatrixUnreadable means the publication matrix could not be read.
 //
@@ -81,7 +92,7 @@ var ourRegistries = []string{
 }
 
 var (
-	scheduledKindRE = regexp.MustCompile(`(?m)^kind:\s*(CronWorkflow|CronJob)\s*$`)
+	scheduledKindRE = regexp.MustCompile(`(?m)^kind:\s*(CronWorkflow|CronJob|WorkflowTemplate)\s*$`)
 	imageLineRE     = regexp.MustCompile(`(?m)^\s*-?\s*image:\s*(.+)$`)
 	valuesRefRE     = regexp.MustCompile(`\{\{-?\s*\.Values\.([A-Za-z0-9_.]+)\s*-?\}\}`)
 	// A forma que a árvore real usa: a imagem é montada numa VARIÁVEL e só depois usada.
@@ -109,14 +120,19 @@ var DefaultExemptions = []Exemption{
 	{
 		Image:  "loopzero-ops",
 		Sunset: "2026-11-18",
-		Reason: "Os quatro CronWorkflows do `loopzero-ci-workflows` NÃO executam o binário loopzero-ops: " +
+		Reason: "DUAS superfícies do `loopzero-ci-workflows` usam esta imagem — os quatro CronWorkflows " +
+			"e o `workflowtemplate-quality-gate.yaml`, disparado por PR via o sensor do Gitea. " +
+			"Aposentar só os crons deixaria o defeito idêntico no caminho por evento, então o que " +
+			"está bloqueado é o SUBSISTEMA, não uma bala. E eles NÃO executam o binário loopzero-ops: " +
 			"rodam `task drill:watchdog`, `task quality:coverage:report` e um script bash, sem clone " +
 			"do repositório e sem volume (cronworkflows.yaml:46-55). A imagem nunca foi um binário — " +
 			"era um runner de CI com a árvore e o toolchain dentro. Publicar um Dockerfile de " +
 			"cmd/loopzero-ops entregaria uma imagem que PUXA e falha em seguida, em `task: not found`, " +
 			"trocando um vermelho honesto por um mais caro de diagnosticar. O futuro dos quatro — " +
-			"runner de CI, clone+toolchain, ou aposentadoria — é decisão de superfície de publicação, " +
-			"registrada com custo medido no MEET de 2026-08-18 e aberta em B-019.",
+			"runner de CI, clone+toolchain, ou aposentar o CI in-cluster por completo — é decisão de " +
+			"superfície de publicação, com custo medido no MEET de 2026-08-18 e aberta em B-019. As três " +
+			"imagens de `infra/images/` também não estão publicadas, então não há imagem alcançável para " +
+			"hospedar o trabalho.",
 	},
 }
 
@@ -211,7 +227,7 @@ func Check(cfg Config) (Outcome, error) {
 	if len(out.Findings) > 0 {
 		return out, fmt.Errorf("%w (%d): %s", ErrNoPublicationPath, len(out.Findings), out.Findings[0].Why)
 	}
-	out.Reason = fmt.Sprintf("%d manifesto(s) agendado(s) varrido(s); %d imagem(ns) isenta(s) com razão e prazo", out.Scanned, out.Exempt)
+	out.Reason = fmt.Sprintf("%d declaração(ões) de execução autônoma varrida(s); %d imagem(ns) isenta(s) com razão e prazo", out.Scanned, out.Exempt)
 	return out, nil
 }
 

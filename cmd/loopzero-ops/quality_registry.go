@@ -46,7 +46,7 @@ var gateRegistry = []gateSpec{
 	{"agpl-isolation", "Verifies AGPL-licensed code stays isolated from proprietary import paths.", runAGPLIsolation},
 	{"alert-runbooks", "Every Prometheus alert has a linked runbook annotation.", runAlertRunbooks},
 	{"anonymous-auth", "Forbids anonymous/unauthenticated access on protected API surfaces.", runAnonymousAuth},
-	{"scheduled-image", "Recurso agendado nao pode usar imagem nossa sem caminho de publicacao nesta arvore.", runScheduledImage},
+	{"scheduled-image", "Execucao autonoma (agendada ou por evento) nao pode usar imagem nossa sem caminho de publicacao nesta arvore.", runScheduledImage},
 	{"billing-layers", "As camadas de cobranca precisam ser enumeraveis e com dono; divida fechada sem cobertura reprova.", runBillingLayers},
 	{"billing-secrets", "Segredos de cobranca nao podem ter opcionalidade literal; a decisao e por valor.", runBillingSecrets},
 	{"base-image-digest", "Base images are pinned by digest, not floating tags.", runBaseImageDigest},
