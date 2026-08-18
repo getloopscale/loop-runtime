@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-149 items — **Open** 60 · **In flight** 0 · **Closed** 89
+152 items — **Open** 63 · **In flight** 0 · **Closed** 89
 
-### Open (60)
+### Open (63)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -134,6 +134,9 @@ consequência do escopo per-repo declarado acima.
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
+| [`B-150`](#b-150--o-webhook-do-github-aponta-para-um-hostname-que-nenhum-servidor-termina----) | O webhook do GitHub aponta para um hostname que nenhum servidor termina | `triaged` | — |
+| [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual----) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `triaged` | — |
+| [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
 
 ### In flight (0)
 
@@ -6627,6 +6630,31 @@ source: discover-live-test
 severity: alta — é a prova ponta a ponta da jornada central do produto (conectar repositório → push → deploy), e ela **nunca foi feita nesta instância**. Não é regressão: é ausência de evidência.
 evidence: medido no droplet em 2026-08-17, herdando a terceira bala do `B-021`. `select count(*) from builds` = **0**, `projects` = **0** — nunca houve build aqui. A cadeia de seeds que criaria o destino foi percorrida elo a elo hoje: `github-app-dev` **PASS** (o conserto do `B-021` sustentou); `admin-loopzero-dev` estava **FAIL** (`/sessions/whoami` HTTP 401) e **foi re-semeada com sucesso** (identidade `15422d7d…` + sessão persistida) — bloqueio removido; `tenant-fixture` **SKIP**, exige `LOOPZERO_TENANT_ID`, e a identidade admin **não tem linha em `tenants`** (existem só `tn-e2etest` e `tn-1362a887c7c523be`, de `paulohenriquevn`); `github-webhook-fixture` **FAIL** — `gh` não está instalado no droplet. E `connect-canonical-fixture.sh` ainda exige o binário do LoopZero CLI e permissão de escrita no repositório de fixture.
 why_now: o `B-021` fechou com o webhook **provado vivo** (401 sem assinatura, 200 com assinatura válida, 403 com inválida, re-verificado em 2026-08-17). O que sobrou não é sobre o webhook: é sobre existir um destino para ele acionar. Medir um push hoje mediria o estado da cadeia de seeds, e reportar `FAIL` culparia o elo errado.
+measurement_2026_08_18: |
+  A cadeia foi percorrida ponta a ponta pela primeira vez, e o item estava certo
+  no diagnóstico e errado na contagem: os elos não eram quatro.
+
+  Dois foram fechados nesta medição, sem conceder permissão nenhuma. O App
+  **já estava instalado** — consultado pelo JWT do próprio App (id 3319955), com
+  duas instalações `repos=all`, uma delas na conta `getloopscale`, dona do
+  fixture. O que faltava era o banco saber disso. `POST /projects/b140-journey/connect`
+  com `installation_id=138325349` devolveu 200, e o projeto passou a `connected`
+  com `auto_deploy: true`.
+
+  Com isso um push real foi feito (`7cf19217`), e a medição seguinte é o que
+  importa: **ele não virou build**. O `total=1` que aparece é o deploy inicial do
+  próprio connect, sobre o HEAD *anterior* (`e8108923`) e com carimbo idêntico ao
+  do connect — contá-lo como prova do push seria o verde-sem-verificação que este
+  ciclo existe para recusar.
+
+  O corte está localizado e não é ambíguo: o GitHub **tentou** entregar
+  (`push`, 16:59:26) e o TLS caiu em `cloud-dev.loopzero.example`. O elo do produto
+  está verde — o engine loga `github webhook: handler registered`.
+
+  Sucessores: [[B-150]] (o hostname sem terminador TLS), [[B-151]] (para onde ele
+  deve apontar — T2, atravessa dois repositórios), [[B-152]] (o único build que a
+  instância produziu, e ele falha em manifestos).
+
 status: triaged
 dod:
   - a identidade admin tem tenant, e `tenant-fixture` deixa de sair `SKIP`
@@ -6980,3 +7008,116 @@ dod:
   - `gofmt` chega a zero em ao menos um módulo, e a linha de base é recongelada
   - está medido quantos dos 318 são supressáveis com razão contra quantos são defeito real
 
+
+## B-150 — O webhook do GitHub aponta para um hostname que nenhum servidor termina   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18 no droplet, via o log de entregas do próprio App (id 3319955):
+
+      POST https://cloud-dev.loopzero.example/api/v1/webhooks/github
+      giving up after 1 attempt(s): remote error: tls: internal error   code=500
+
+  Toda entrega registrada falha assim — as cinco mais recentes, cobrindo de
+  18/08 00:12 a 18/08 16:59. O `push` de um commit real (`7cf19217`) está entre
+  elas: o GitHub tentou, e o handshake caiu.
+
+  O handshake reproduz fora do GitHub — `openssl s_client -servername
+  cloud-dev.loopzero.example` devolve `tlsv1 alert internal error` (alerta 80), lado
+  servidor, enquanto `app-dev.loopzero.example` no mesmo host e no mesmo Caddy serve
+  `CN = app-dev.loopzero.example` normalmente.
+
+  A causa está em `infra/local/Caddyfile`: ele declara sete blocos de site
+  (`app`, `cloud`, `auth`, `app-dev`, `auth-dev`, `*.preview-dev`, `*.prod-dev`)
+  e **nenhum** para `cloud-dev.loopzero.example`. Sem bloco e sem TLS on-demand, o
+  Caddy não tem certificado para esse SNI e derruba a conexão. O nome aparece no
+  arquivo apenas dentro de strings de CSP.
+
+  Não é um hostname esquecido: o DNS o provisiona
+  (`setup-dev-public-dns.sh`, 3 registros A), o registro de exposição de borda o
+  lista (`infra/quality/proxy-exposure.txt`), o fixture o usa
+  (`connect-canonical-fixture.sh`) e — o mais direto — ele está na lista que
+  `caddy-up-dev-public.sh:104` exige verificar.
+why_now: |
+  O elo 7 da cadeia está verde e provado: o engine loga `github webhook: handler
+  registered` em `/api/v1/webhooks/github`. O que impede o deploy automático não
+  é o produto, é o hostname pelo qual o GitHub tenta alcançá-lo.
+
+  E o gate que veria isso não pode passar por construção:
+  `caddy-up-dev-public.sh --verify` exige emissor Let's Encrypt para os seis
+  hostnames e sai 1 sem ele. Com `cloud-dev` na lista e fora do Caddyfile, o
+  verify reprova 100% das vezes sobre uma configuração correta — um gate
+  permanentemente vermelho é um gate que ninguém roda, e foi por isso que
+  semanas de entregas falhas não viraram sinal.
+status: triaged
+dod:
+  - `openssl s_client -servername cloud-dev.loopzero.example` completa o handshake com emissor Let's Encrypt
+  - uma entrega de `push` do App registra status 2xx no log de entregas do GitHub
+  - `caddy-up-dev-public.sh --verify` sai 0 sobre a configuração canônica
+  - um gate recusa hostname exigido pela verificação e ausente do Caddyfile — com varredura da população registrada
+
+## B-151 — O destino do webhook atravessa dois repositórios e ninguém decidiu qual   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-live-test
+evidence: |
+  Consequência direta de [[B-150]], e a razão de ele não ser um conserto de uma
+  linha. Medido 2026-08-18:
+
+  - o App entrega em `https://cloud-dev.loopzero.example/api/v1/webhooks/github`
+  - quem **serve** essa rota é o engine (`loopzero-api`), que a registra no boot
+  - `cloud.loopzero.example`, o irmão de produção do hostname, faz
+    `reverse_proxy localhost:3002` — isto é, **loopzero-cloud**, não o engine
+  - e `localhost:3002` devolve 404 nessa rota: loopzero-cloud não a repassa
+
+  Então o bloco que falta não tem destino óbvio. Copiar o irmão de produção
+  aponta para um serviço que não atende; apontar direto para o engine faz o
+  hostname de loopzero-cloud servir uma rota do engine.
+why_now: |
+  Escrevi o bloco errado seria pior que não escrever nenhum: o handshake passaria
+  a fechar e o GitHub passaria a receber 404 — verde no TLS, entrega ainda
+  perdida, e agora sem o alerta que hoje existe.
+
+  A decisão define por qual superfície o ingresso de webhook entra e é T2 por
+  atravessar a fronteira entre os dois repositórios: exige registro MEET antes do
+  código, per `rules/pre-release-governance.md`.
+status: triaged
+dod:
+  - registro MEET decidindo a superfície de ingresso do webhook, com a alternativa rejeitada
+  - o bloco de site correspondente na configuração canônica
+  - uma entrega real de `push` alcançando o handler e criando um build
+
+## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido 2026-08-18. O `connect` com `auto_deploy` disparou um build inicial do
+  HEAD (`build-923a1bebca0ad023`, sha `e8108923`), que alcançou o sistema sem
+  depender do webhook — e terminou `FAILED` com:
+
+      Failed to build manifests with custom domains
+
+  A mensagem nomeia a etapa e não nomeia o domínio, o app nem o motivo. É o
+  caminho de contorno da cadeia de [[B-150]]: prova que build e submissão
+  funcionam, e que o estágio de manifestos não.
+why_now: |
+  Este é o único build que a instância conseguiu produzir, e ele falha. Enquanto
+  [[B-150]] e [[B-151]] tratam de o evento *chegar*, este trata de o que acontece
+  quando ele chega — e sem ele resolvido, consertar o webhook só faz falhar mais
+  rápido.
+
+  A mensagem sem o domínio é o que torna isso caro: `CLAUDE.md` já registra uma
+  família de falhas nesse estágio (digest ausente por cosign que não rodou), e
+  distinguir qual delas é esta exige ler log de workflow em vez de ler o erro.
+status: triaged
+dod:
+  - a causa da falha de manifestos identificada e coberta por teste que falha no estado atual
+  - a mensagem nomeia o domínio e o app envolvidos
