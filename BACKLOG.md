@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-143 items — **Open** 68 · **In flight** 0 · **Closed** 75
+145 items — **Open** 69 · **In flight** 0 · **Closed** 76
 
-### Open (68)
+### Open (69)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -142,12 +142,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
+| [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado----) | Dez itens moram no backlog do projeto errado | `triaged` | — |
 
 ### In flight (0)
 
 _None._
 
-### Closed (75)
+### Closed (76)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -226,6 +227,7 @@ _None._
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
 | [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega---x) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `shipped` | média |
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
+| [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -6410,3 +6412,62 @@ dod:
 > reportava verde) e o fechou antes do merge. Registrado o que **não** ficou coberto: um candidato já
 > adjudicado que se torne vivo com a rede fora.
 
+## B-144 — O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso   [x]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+evidence: |
+  Medido 2026-08-18. `rules/cycle-backlog.md:17,235,238` e `rules/cycle-maintenance.md:19`
+  declaram `BACKLOG.md` na raiz do **umbrella**, e a linha 238 argumenta explicitamente
+  contra o por-projeto. A realidade no disco é o oposto:
+  - `loopzero/`, `loopzero-cloud/`, `loopzero-cluster-management/`, `loopzero-db/` têm o SEU backlog
+  - a raiz do umbrella **não tem nenhum**
+  E a parte mecanizada sempre esteve certa: `scripts/route_domain.py:48-54`
+  (`_find_project_root`) sobe até `.git`/`rules`, resolvendo o PROJETO. Nenhum script impõe
+  o umbrella — as únicas ocorrências em código são comentário e docstring.
+why_now: o contrato contradiz `rules/knowledge-base-location.md`, que declara autonomia por
+  projeto para `ROADMAP.md` e `.claude/knowledge-base/` e proíbe um artefato de ciclo
+  referenciar o de outro projeto. Um item de backlog produz plano, review e release que
+  vivem no knowledge-base do projeto — então o item precisa morar junto. Enquanto a prosa
+  disser umbrella, todo adotante novo é instruído a montar a topologia errada.
+status: shipped
+dod:
+  - a prosa das regras e das skills declara o backlog por projeto, na raiz do projeto
+  - o parágrafo que argumenta a favor do umbrella é substituído pelo argumento medido
+  - a contradição com `knowledge-base-location.md` deixa de existir
+
+> **Entregue 2026-08-18.** A prosa foi corrigida em `rules/cycle-backlog.md` (pré-condições,
+> § Output, G1, tabela de domínios), `rules/cycle-maintenance.md`, `skills/backlog-init/SKILL.md`
+> e `skills/backlog-item/SKILL.md`. **E havia enforcement de verdade**, ao contrário do que a
+> primeira medição desta fatia concluiu: o passo 0.2 do `backlog-init` **recusava rodar** fora de
+> um umbrella (`FATAL: no umbrella detected`). Ele agora exige raiz de projeto. O parágrafo que
+> argumentava a favor da centralização foi substituído pelo argumento medido, e a tabela de
+> domínios ficou intacta — `route_domain.py` a lê, e um projeto pode cruzar domínios por caminho.
+> Verificado: `check_xrefs` PASS, `route_domain loopzero` resolve, `check_backlog_structure`
+> SHIPPABLE_WITH_CAVEATS (o único MINOR é pré-existente, do B-021).
+
+
+## B-145 — Dez itens moram no backlog do projeto errado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: |
+  Medido 2026-08-18 em `loopzero/BACKLOG.md`: 143 itens, dos quais **133 são `repo: loopzero`**
+  (93%). Os outros dez pertencem a outros projetos — 5 `loopzero-rag`, 3 `loopzero-cloud`,
+  1 `loopzero-promptly`, 1 `loopzero-cli` — e entraram aqui porque `cycle-backlog.md` mandava
+  registrar tudo num registro único (o defeito do `B-144`).
+  Três desses repositórios não têm `BACKLOG.md` nenhum: `loopzero-rag`, `loopzero-promptly` e
+  `loopzero-cli`. `loopzero-cloud` tem.
+why_now: com o contrato corrigido pelo `B-144`, esses dez ficam órfãos por definição: eles
+  nunca serão selecionados pelo loop deste projeto (o especialista aqui não abre o código
+  deles) e não existem no registro de quem poderia trabalhá-los. É exatamente o problema
+  de achado órfão que o registro único dizia resolver, criado por ele.
+status: triaged
+dod:
+  - cada um dos dez está registrado no backlog do seu próprio projeto, com o id lá
+  - os blocos aqui apontam para onde o item foi, sem serem renumerados nem apagados
+  - nenhum dos três repositórios sem backlog é deixado sem um
