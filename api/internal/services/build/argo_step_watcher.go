@@ -294,7 +294,15 @@ func (w *ArgoStepWatcher) peekPhase(buildID, nodeName string) ArgoNodePhase {
 func (w *ArgoStepWatcher) ReportWatchError(statusCode int, message string) {
 	switch statusCode {
 	case 401, 403:
-		w.logger.Error("argo step watcher: build cluster auth failed — rotate loopzero-build-sa token",
+		// CORRIGIDO 2026-08-18 (B-140): esta mensagem dizia "rotate loopzero-build-sa token", e o
+		// runbook que ela mesma cita PROIBE isso — `loopzero-build-sa` e o EXECUTOR do workflow,
+		// ligado so a `workflowtaskresults: [create, patch]`. O token dele autentica (o 401
+		// some) e e proibido de listar workflows (403), entao seguir a mensagem trocava um
+		// defeito legivel por um mudo. O SA que submete e observa e `loopzero-workflow-submitter`.
+		//
+		// Encontrado ao seguir o runbook para consertar este erro ao vivo no droplet, onde ele
+		// disparava a cada 2s. O gate `runbook-parity` guarda a paridade daqui para a frente.
+		w.logger.Error("argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token",
 			"status_code", statusCode,
 			"message", message,
 			"runbook", "docs/operations/build-cluster-token-rotation.md",

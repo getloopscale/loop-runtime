@@ -24,6 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runbookparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scheduledimage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantpredicate"
@@ -389,6 +390,25 @@ func runBillingSecrets(args []string) int {
 //
 // O irmão `billing-secrets` cobre UMA camada. Este cobre a lista das cinco — e é a lista
 // que o B-038 mede: "a quinta camada nasce sem a verificação que as outras quatro tinham".
+func runRunbookParity(args []string) int {
+	fs := flag.NewFlagSet("runbook-parity", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := runbookparity.Check(runbookparity.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "runbook-parity: FAIL — %v\n", err)
+		for _, f := range out.Findings {
+			fmt.Fprintf(os.Stderr, "  %s:%d nomeia %q; runbook prescreve %q\n", f.File, f.Line, f.Named, f.Prescribed)
+		}
+		return 2
+	}
+	fmt.Printf("runbook-parity: PASS — %s\n", out.Reason)
+	return 0
+}
+
 func runLintCoverage(args []string) int {
 	fs := flag.NewFlagSet("lint-coverage", flag.ContinueOnError)
 	root := fs.String("repo-root", ".", "repository root")

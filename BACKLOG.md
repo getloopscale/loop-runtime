@@ -6638,6 +6638,30 @@ dod:
 > identidade admin foi feita hoje com a razão registrada aqui; o resto da cadeia envolve instalar
 > pacote no host e conectar repositório, e isso é decisão do dono do ambiente.
 
+> **Um elo vivo consertado e dois novos encontrados, 2026-08-18.**
+>
+> **Consertado:** a API não conseguia autenticar no cluster de build — `status_code: 401` a cada
+> **2 segundos**. Rotacionado seguindo `docs/operations/build-cluster-token-rotation.md`
+> exatamente, preservando `cell-0` e `core` dinamicamente como ele exige. Verificado: credencial
+> nova lista workflows, e o erro caiu para **0 ocorrências**. Sem isso, nenhum build passaria —
+> era um quinto elo que este item não conhecia.
+>
+> **Cadeia de autenticação resolvida:** o JWT precisa de `aud: loopzero-engine` (o validador aceita
+> `loopzero-engine` ou `loopzero-cloud`, `api/cmd/setup_auth.go:71`). Mintado via `loopzero-bootstrap`
+> client_credentials → `GET /api/v1/projects` **HTTP 200**. E o CLI é dispensável: `POST
+> /api/v1/projects` e `POST /api/v1/projects/{name}/connect` existem.
+>
+> **Dois elos novos, medidos:** o tenant `tn-e2etest` devolve **503** (`plan tier resolution
+> failed`), e há **zero instalações do GitHub App** — o `connect` exige `installation_id`.
+> Instalar um GitHub App é concessão de permissão na conta do dono.
+>
+> **Bala 4 entregue, e ela nasceu de seguir o runbook.** `argo_step_watcher.go` logava *"rotate
+> **loopzero-build-sa** token"*, e o runbook diz para **NÃO** mintar esse — ele é o *executor*, cujo
+> token autentica e é **proibido**, trocando um 401 legível por um 403 mudo. A mensagem conduzia
+> o operador ao erro. Corrigida, e o gate **`runbook-parity`** guarda a paridade.
+>
+> **`builds` segue 0.** As balas 1 a 3 dependem do plano do tenant e da instalação do App.
+
 ## B-141 — Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só   [ ]
 
 domain: engine-go
@@ -6672,6 +6696,27 @@ dod:
   - se ainda for necessário, o novo token entra por Secret e nunca pelo fonte
 
 > Filado como issue **#323**. Registrado 2026-08-17, ao ser barrado empurrando trabalho alheio (`B-061`).
+
+> **Bala 2 fechada com dado, 2026-08-18.** Auditada a conta `paulohenriquevn@gmail.com` na
+> janela de exposição (22/mar → 18/ago): **16.501 ações**, sendo 87% `attach_drive`/`detach_drive`
+> e **`create` 1.069 contra `destroy` 1.071** — equilibrado. A atividade **caiu** depois da
+> exposição (abr 12.863 → mai 1.708 → jun 5 → ago 50). Inventário: 4 droplets, todos com nome da
+> convenção do projeto, dois deles nomeados por item de backlog. **Nenhuma assinatura de abuso** —
+> abuso de credencial de nuvem tem forma oposta: pico de `create` **sem** `destroy`.
+>
+> **O limite, e ele importa:** a API do DigitalOcean **não atribui ação a token**, e o endpoint
+> cobre `compute`. Isto enumera **o que aconteceu**, não **quem fez**. É evidência de ausência de
+> padrão de abuso, não prova de não-uso.
+>
+> **Bala 3 fechada:** nenhum literal `dop_v1_` no fonte; o token entra por `DIGITALOCEAN_TOKEN`, e
+> os testes usam `"stub-token"`. A recorrência passou a ser barrada pelo `trufflehog-scan`
+> reconstruído no `B-143` — candidato novo reprova o push.
+>
+> **Bala 1 NÃO fecha, e não vou fingir que fecha.** O `trufflehog` parou de reportá-lo porque o
+> **histórico foi reescrito**, não porque o token foi revogado — são coisas diferentes. O painel
+> do DigitalOcean não está logado, e o valor não é mais recuperável (o objeto `64fef3336` não
+> existe, sem `refs/original`, sem espelhos). **A revogação é ação de conta e nada no repositório
+> a substitui.**
 
 ## B-143 — O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses   [x]
 

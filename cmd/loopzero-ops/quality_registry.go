@@ -46,6 +46,7 @@ var gateRegistry = []gateSpec{
 	{"agpl-isolation", "Verifies AGPL-licensed code stays isolated from proprietary import paths.", runAGPLIsolation},
 	{"alert-runbooks", "Every Prometheus alert has a linked runbook annotation.", runAlertRunbooks},
 	{"anonymous-auth", "Forbids anonymous/unauthenticated access on protected API surfaces.", runAnonymousAuth},
+	{"runbook-parity", "Mensagem de rotacao de token nao pode nomear o ServiceAccount que o runbook proibe.", runRunbookParity},
 	{"lint-coverage", "Todo modulo Go e medido (lint + gofmt), com catraca por modulo contra regressao.", runLintCoverage},
 	{"scheduled-image", "Execucao autonoma (agendada ou por evento) nao pode usar imagem nossa sem caminho de publicacao nesta arvore.", runScheduledImage},
 	{"billing-layers", "As camadas de cobranca precisam ser enumeraveis e com dono; divida fechada sem cobertura reprova.", runBillingLayers},
