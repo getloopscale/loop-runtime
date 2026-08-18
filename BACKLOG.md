@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-146 items — **Open** 62 · **In flight** 0 · **Closed** 84
+147 items — **Open** 62 · **In flight** 0 · **Closed** 85
 
 ### Open (62)
 
@@ -79,7 +79,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
 | [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
 | [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido----) | O token que puxa as imagens de plataforma do GHCR está inválido | `triaged` | alta |
-| [`B-019`](#b-019--os-quatro-cronworkflows-executam-uma-imagem-cujo-registro-foi-deletado----) | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado | `triaged` | média |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
@@ -136,12 +135,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
+| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (84)
+### Closed (85)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -158,6 +158,7 @@ _None._
 | [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream---x) | Dois charts apontam para versões que não existem mais no upstream | `shipped` | baixa |
 | [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
 | [`B-018`](#b-018--a-borda-alcança-kratos-e-hydra-por-encaminhamento-de-porta-que-não-sobrevive-a-um-rebuild---x) | A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild | `shipped` | média |
+| [`B-019`](#b-019--os-quatro-cronworkflows-executam-uma-imagem-cujo-registro-foi-deletado---x) | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado | `shipped` | média |
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
 | [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac---x) | O webhook do GitHub está desligado: falta o segredo HMAC | `shipped` | alta |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
@@ -778,6 +779,31 @@ dod:
 > devolve **`HTTP 401`**. As balas 3 e 4 já estavam fechadas; 1 e 2 exigem um PAT do GitHub com
 > `read:packages` que **só o patrocinador emite**. Nada mais no item depende de engenharia.
 
+> **A bala 3 foi decidida em 2026-08-18, e a medição que a acompanhou fecha a questão do item de
+> forma pior do que ele registrava.**
+>
+> **Decisão:** o `dev-public` adota o **caminho de build local**. A configuração já sustenta —
+> os **seis** componentes leem `LOOPZERO_PLATFORM_IMAGE_PREFIX`
+> (`infra/helmfile/values/dev-public/*.gotmpl`), então apontar o ambiente para o registro do k3d
+> é uma variável, não uma mudança de chart.
+>
+> **E a decisão NÃO destrava o item, porque o caminho local tem o próprio bloqueio de
+> credencial.** Medido hoje, no droplet:
+>
+> | credencial | para quê | resultado |
+> |---|---|---|
+> | `~/.loopzero/ghcr-pull-token.txt` (40 bytes, 19/jun) | **puxar** a imagem publicada | **HTTP 401** |
+> | `~/.loopzero/gomod-token.txt` (40 bytes, 06/jul) | **construir** o `loopzero-api` localmente — `api/Dockerfile` monta o segredo `gomod_token` para buscar o módulo privado `loopzero-contracts` | **HTTP 401** |
+>
+> São duas credenciais **independentes**, com escopos diferentes (`read:packages` contra
+> `Contents:read`), e as duas expiraram. O ambiente não consegue nem puxar nem construir.
+>
+> Isso corrige a nota de 2026-08-14, que dizia *"o token do GHCR deixou de ser condição para o
+> ambiente subir"*: aquilo valeu enquanto as camadas em cache existiam e enquanto o token do
+> `gomod` ainda respondia. Hoje não vale — e o próximo cleanroom prova, como o item previu.
+>
+> **Continua bloqueado, agora em DOIS segredos**, e nenhum deles é produzível por engenharia.
+
 
 ## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
 
@@ -861,7 +887,7 @@ Aplicado sem recriar cluster (`k3d cluster edit --port-add`), então não houve 
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev.
 
-## B-019 — Os quatro CronWorkflows executam uma imagem cujo registro foi deletado   [ ]
+## B-019 — Os quatro CronWorkflows executam uma imagem cujo registro foi deletado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -869,7 +895,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-10, ao perseguir o último pod vermelho da reconstrução. `drill-watchdog-*` ficava em `ImagePullBackOff` no cluster de build; o container falho é `main=registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, declarado em `infra/helm/loopzero-ci-workflows/values.yaml:11`. **Não é credencial**: o `doctl` está autenticado (`paulohenriquevn@gmail.com`) e `doctl registry get` responde **`404 registry does not exist`** — o registro DigitalOcean inteiro foi deletado. Ninguém consegue puxar essa imagem, com token ou sem. Os **quatro** crons do chart (`drillWatchdog` a cada 6h, `weeklySoak`, `coverageReport`, `cosignDeadline`) executam a mesma imagem, então os quatro só podem falhar — o watchdog apenas dispara com mais frequência e por isso apareceu primeiro.
 why_now: enquanto o registro existiu, isto era invisível. A reconstrução total expôs porque destruir os clusters apagou o cache de imagens, e nenhum `imagePullSecret` resolve um registro que não existe. Um agendamento que produz pod vermelho a cada disparo é pior que automação ausente: treina quem olha o cluster a ignorar vermelho — foi exatamente esse ruído que fez este ser o último item investigado.
-status: triaged
+status: shipped
 severity: média — nenhum dos quatro serve o app-dev, mas `cosignDeadline` verifica o prazo do corte keyless do cosign e `coverageReport` alimenta a cobertura; ambos silenciosamente não rodam há tanto tempo quanto o registro não existe.
 dod:
   - `loopzero-ops` está publicada num registro alcançável, ou os crons executam uma imagem que existe
@@ -924,6 +950,31 @@ dod:
 >
 > A decisão continua sendo de superfície de publicação — agora com escopo maior e medido:
 > construir e publicar o runner, ou aposentar o subsistema de CI in-cluster por completo.
+
+> **Entregue 2026-08-18 — pela aposentadoria do subsistema, e a decisão é minha, tomada sob a
+> autonomia concedida e reafirmada.**
+>
+> A bala 1 oferecia duas vias e as duas foram medidas até o fim. *"Publicar `loopzero-ops"*: ela não
+> resolveria, porque os workloads **não executam o binário** — rodam `task ...` e um script bash,
+> sem clone e sem volume; o que falta é um runner com a árvore e o toolchain dentro. *"Ou executar
+> uma imagem que existe"*: **não há** — as três de `infra/images/` também estão fora da matriz de
+> publicação.
+>
+> Sobrava construir e publicar um runner de CI. E aí a medição decide: ele existiria para rodar
+> verificações que **`hooks/delivery-gate.sh` já roda em todo push**, via `task quality:all`, sem
+> cluster nenhum — trava que reprovou quatro pushes meus só nesta sessão. Erguer infraestrutura
+> publicada para duplicar uma trava que funciona é o oposto de conserto.
+>
+> **O chart inteiro era morto, não uma parte dele:** `eventsource-gitea` → `sensor-pr-trigger` →
+> `workflowTemplateRef` → o WorkflowTemplate de quality gate, **mais** os quatro CronWorkflows —
+> todos na mesma imagem impossível. Aposentar só os crons teria deixado o defeito idêntico no
+> caminho por evento.
+>
+> `pre-release-governance.md`: *"legado é erro. Delete."* A intenção dos quatro agendamentos está
+> preservada em **`B-147`**, e o git guarda o chart para quem reconstruir com um runner de
+> verdade. A isenção que o gate carregava por algumas horas **saiu junto** — uma isenção que
+> sobrevive ao defeito que a justificava vira carimbo. `scheduled-image`: 6 declarações varridas,
+> **0 isenções**.
 
 
 ## B-020 — O host `cloud-dev` era um segundo nome para o mesmo painel   [x]
@@ -6665,4 +6716,39 @@ dod:
   - está medido se o prazo do ADR-2026-05-12 já venceu, e em que modo o cosign opera hoje
   - o ConfigMap é provisionado pelo caminho declarativo, ou está escrito por que ele não existe
   - a ausência da entrada deixa de ser silenciosa: o script reprova em vez de não ter o que fazer
+
+## B-147 — Quatro trabalhos periódicos perderam o agendador e precisam de um   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: |
+  O chart `loopzero-ci-workflows` foi aposentado em 2026-08-18 (`B-019`) porque cada uma de suas
+  superfícies executava `registry.digitalocean.com/loopzero-system/loopzero-ops`, imagem sem caminho de
+  publicação nesta árvore. Com ele saíram quatro agendamentos declarados em
+  `values.yaml:128-145` — preservados aqui, com horário e comando, porque a necessidade não
+  morreu com o mecanismo:
+  | trabalho | agenda | comando |
+  |---|---|---|
+  | `drillWatchdog` | `0 */6 * * *` | `task drill:watchdog` |
+  | `weeklySoak` | `0 2 * * 0` | `task drill:l2-scale` |
+  | `coverageReport` | `0 9 * * 1` | `task quality:coverage:report` |
+  | `cosignDeadline` | `0 0 * * *` | `bash infra/scripts/security/check-cosign-cutover-deadline.sh` |
+  Mais o gate de qualidade disparado por PR via o sensor do Gitea, que a `delivery-gate.sh` já
+  cobre em todo push.
+why_now: os quatro **já não rodavam** — a imagem não existe em registro nenhum desde que o DOCR
+  foi deletado, então o agendamento produzia pod vermelho garantido. A aposentadoria não tirou
+  capacidade: tornou visível uma ausência que era mascarada por configuração que parecia ativa.
+  O `cosignDeadline` é o mais sensível: ele guarda o corte keyed→keyless do ADR-2026-05-12 — e
+  o `B-146` mediu que o ConfigMap que ele lê nunca existiu, então ele estaria vazio de qualquer
+  forma.
+status: triaged
+severity: média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e
+  hoje ninguém os executa em lugar nenhum.
+dod:
+  - está decidido onde cada um dos quatro roda — agendador in-cluster com runner publicado, CI
+    externo, ou aposentadoria explícita de cada trabalho
+  - o que ficar sem executor está declarado como tal, e não some em silêncio
+  - o `cosignDeadline` tem entrada válida antes de ser reagendado, ou o `B-146` fecha primeiro
 

@@ -66,7 +66,6 @@ declaração da release, não de convenção de pasta.
 | `static-assets` | cell | próprio | — | `{{ ne .Environment.Name "drill" }}` |
 | `tempo` | core | upstream | 1.14.0 | `sempre` |
 | `loopzero-api` | core | próprio | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
-| `loopzero-ci-workflows` | build | próprio | — | `sempre` |
 | `loopzero-cloud` | core | próprio | — | `{{ and (ne .Environment.Name "drill") (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
 | `loopzero-external-secrets` | — | não declarado | — | `sempre` |
 | `traefik` | cell, core | upstream | 28.3.0 | `sempre` |

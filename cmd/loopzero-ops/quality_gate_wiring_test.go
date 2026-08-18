@@ -238,7 +238,9 @@ var gateWiringExemptions = map[string]wiringReason{
 	// would add noise without enforcement. It exits 0 only in report mode; with
 	// --gate it exits 1, measured 2026-08-06:
 	//   argo-events, loopzero-ci-workflows — NON-CONFORMANT, no ADR exception
-	// Both are real releases in build.helmfile.yaml.gotmpl, not dead POCs. The
+	// loopzero-ci-workflows foi APOSENTADO em 2026-08-18 (B-019): o chart inteiro executava uma
+	// imagem sem caminho de publicacao nesta arvore. Resta argo-events, que segue sendo um
+	// release real em build.helmfile.yaml.gotmpl, nao um POC morto. The
 	// fix is a securityContext on charts whose workloads (argo-events/NATS, the
 	// Argo WorkflowTemplate containers) can break under readOnlyRootFilesystem,
 	// Measured 2026-08-11: reads charts/<name>/templates and infra/helm/<name>/

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- **O sistema de integração contínua que rodava dentro do cluster foi aposentado — ele não funcionava desde que o registro de imagens dele foi apagado.** Tudo nele executava a mesma imagem, e essa imagem não tem como ser construída: não existe receita para ela no projeto, a tarefa que a documentação citava nunca existiu, e ela não está na lista do que é publicado. Mantê-lo exigiria criar e publicar uma imagem nova só para repetir verificações que já rodam a cada envio de código, sem cluster nenhum. Os quatro trabalhos periódicos que ele agendava ficaram registrados com horário e comando, porque a necessidade não morreu com o mecanismo. (B-019, B-147)
+
 ### Fixed
 - **Dois componentes opcionais voltaram a poder ser instalados.** As dependências deles apontavam para coisas que não existem mais no fornecedor: uma versão que sumiu, e um nome de pacote que provavelmente nunca esteve certo. Ninguém percebia porque a falha só aparece em instalação do zero — ou seja, no dia em que alguém já está resolvendo outro problema. Agora as 18 instalações com dependência externa completam sem nenhuma indisponível. (B-015)
 - **Quatro tarefas agendadas pararam de produzir falha garantida no ambiente que serve o painel público.** Elas executam uma imagem que não existe em registro nenhum — e a medição mostrou que não é só o registro que sumiu: não há receita para construí-la, a tarefa de build que a documentação cita não existe, e ela não está na lista do que é publicado. O agendamento passou a exigir declaração explícita em vez de valer por omissão. Um alarme que toca a cada seis horas sem significar nada é pior que alarme nenhum: ensina quem olha a ignorar. (B-019)

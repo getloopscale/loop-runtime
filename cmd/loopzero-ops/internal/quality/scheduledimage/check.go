@@ -115,26 +115,15 @@ type Exemption struct {
 	Sunset string // YYYY-MM-DD
 }
 
-// DefaultExemptions carrega a dívida que este gate não pode resolver sozinho.
-var DefaultExemptions = []Exemption{
-	{
-		Image:  "loopzero-ops",
-		Sunset: "2026-11-18",
-		Reason: "DUAS superfícies do `loopzero-ci-workflows` usam esta imagem — os quatro CronWorkflows " +
-			"e o `workflowtemplate-quality-gate.yaml`, disparado por PR via o sensor do Gitea. " +
-			"Aposentar só os crons deixaria o defeito idêntico no caminho por evento, então o que " +
-			"está bloqueado é o SUBSISTEMA, não uma bala. E eles NÃO executam o binário loopzero-ops: " +
-			"rodam `task drill:watchdog`, `task quality:coverage:report` e um script bash, sem clone " +
-			"do repositório e sem volume (cronworkflows.yaml:46-55). A imagem nunca foi um binário — " +
-			"era um runner de CI com a árvore e o toolchain dentro. Publicar um Dockerfile de " +
-			"cmd/loopzero-ops entregaria uma imagem que PUXA e falha em seguida, em `task: not found`, " +
-			"trocando um vermelho honesto por um mais caro de diagnosticar. O futuro dos quatro — " +
-			"runner de CI, clone+toolchain, ou aposentar o CI in-cluster por completo — é decisão de " +
-			"superfície de publicação, com custo medido no MEET de 2026-08-18 e aberta em B-019. As três " +
-			"imagens de `infra/images/` também não estão publicadas, então não há imagem alcançável para " +
-			"hospedar o trabalho.",
-	},
-}
+// DefaultExemptions está VAZIA de propósito, e isso é o resultado do B-019.
+//
+// Ela carregou uma entrada por algumas horas em 2026-08-18: `loopzero-ops`, com razão e prazo. A
+// entrada morreu junto com o chart `loopzero-ci-workflows`, aposentado no mesmo dia — o subsistema
+// inteiro executava uma imagem que nada nesta árvore constrói, e mantê-lo exigiria erguer um
+// runner de CI para duplicar o que `hooks/delivery-gate.sh` já roda em todo push.
+//
+// Uma isenção que sobrevive ao defeito que a justificava vira carimbo. Esta saiu com ele.
+var DefaultExemptions = []Exemption{}
 
 // Config drives the check.
 type Config struct {
